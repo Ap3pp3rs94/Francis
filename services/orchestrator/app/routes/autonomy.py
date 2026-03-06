@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import time
 from typing import Any
 from pathlib import Path
 from uuid import uuid4
@@ -23,6 +24,7 @@ from services.orchestrator.app.autonomy.event_queue import (
     queue_status,
     read_dispatch_history,
     read_last_dispatch,
+    release_leased_events,
     recover_stale_leased_events,
     write_last_dispatch,
 )
@@ -61,6 +63,8 @@ class AutonomyDispatchRequest(BaseModel):
     max_events: int = Field(default=5, ge=1, le=100)
     max_actions: int = Field(default=2, ge=0, le=10)
     max_runtime_seconds: int = Field(default=10, ge=1, le=120)
+    max_dispatch_actions: int = Field(default=10, ge=0, le=200)
+    max_dispatch_runtime_seconds: int = Field(default=30, ge=1, le=600)
     lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
     recover_stale_leases: bool = True
     allow_medium: bool = False
@@ -196,6 +200,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     body = payload or AutonomyDispatchRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
     role = _role_from_request(request)
+    dispatch_started = time.monotonic()
     _enforce_rbac(request, "autonomy.dispatch")
     _enforce_control("autonomy.dispatch", mutating=True)
     recovery: dict[str, Any] = {
@@ -218,87 +223,149 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     due_count = len(due_preview)
     max_risk = _max_risk_tier(due_preview)
     risk_counts = Counter(str(item.get("risk_tier", "low")).strip().lower() for item in due_preview)
+    critical_incident_count = 0
+    if body.stop_on_critical:
+        event_state = collect_events(_fs)
+        critical_incident_count = int(event_state.get("critical_incident_count", 0))
+
     approval_required = _risk_tier_rank(max_risk) >= _risk_tier_rank("high")
-    approved, approval_detail = ensure_action_approved(
-        _fs,
-        run_id=run_id,
-        action="autonomy.dispatch.high_risk",
-        requested_by=role,
-        reason=(
-            "Autonomy event dispatch includes high-risk events: "
-            f"max_risk={max_risk}, due_count={due_count}, risk_counts={dict(risk_counts)}"
-        ),
-        approval_required=approval_required,
-        approval_id=approval_id,
-        metadata={
-            "max_risk": max_risk,
-            "due_count": due_count,
-            "risk_counts": dict(risk_counts),
-        },
-    )
-    if not approved:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "message": "Autonomy dispatch requires approval for queued high-risk events.",
-                "action": "autonomy.dispatch.high_risk",
-                **approval_detail,
+    approved_request_id: str | None = None
+    if not (body.stop_on_critical and critical_incident_count > 0):
+        approved, approval_detail = ensure_action_approved(
+            _fs,
+            run_id=run_id,
+            action="autonomy.dispatch.high_risk",
+            requested_by=role,
+            reason=(
+                "Autonomy event dispatch includes high-risk events: "
+                f"max_risk={max_risk}, due_count={due_count}, risk_counts={dict(risk_counts)}"
+            ),
+            approval_required=approval_required,
+            approval_id=approval_id,
+            metadata={
+                "max_risk": max_risk,
+                "due_count": due_count,
+                "risk_counts": dict(risk_counts),
             },
         )
-    approved_request_id = str(approval_detail.get("approval_request_id", "")).strip() or None
-
-    leased = lease_due_events(
-        _fs,
-        max_events=body.max_events,
-        lease_owner=f"autonomy.dispatch:{run_id}",
-        lease_ttl_seconds=body.lease_ttl_seconds,
-    )
-    processed: list[dict[str, Any]] = []
-    failed: list[dict[str, Any]] = []
-
-    for event in leased:
-        event_id = str(event.get("id", ""))
-        dispatch_run_id = f"{run_id}:event:{event_id}"
-        try:
-            cycle = run_cycle(
-                run_id=dispatch_run_id,
-                workspace_root=_workspace_root,
-                repo_root=_repo_root,
-                max_actions=body.max_actions,
-                max_runtime_seconds=body.max_runtime_seconds,
-                allow_medium=body.allow_medium,
-                allow_high=body.allow_high,
-                stop_on_critical=body.stop_on_critical,
-            )
-            completed = complete_event(
-                _fs,
-                event_id=event_id,
-                dispatch_run_id=dispatch_run_id,
-                result={
-                    "halted_reason": cycle.get("halted_reason"),
-                    "executed_count": len(cycle.get("executed_actions", [])),
-                    "blocked_count": len(cycle.get("blocked_actions", [])),
+        if not approved:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Autonomy dispatch requires approval for queued high-risk events.",
+                    "action": "autonomy.dispatch.high_risk",
+                    **approval_detail,
                 },
             )
-            processed.append(
-                {
-                    "event": completed if isinstance(completed, dict) else event,
-                    "cycle": {
-                        "run_id": cycle.get("run_id"),
+        approved_request_id = str(approval_detail.get("approval_request_id", "")).strip() or None
+
+    halted_reason = "completed"
+    leased: list[dict[str, Any]] = []
+    processed: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    released: list[dict[str, Any]] = []
+    handled_event_ids: set[str] = set()
+    dispatch_executed_actions = 0
+
+    if body.stop_on_critical and critical_incident_count > 0:
+        halted_reason = "critical_incident_present"
+    else:
+        leased = lease_due_events(
+            _fs,
+            max_events=body.max_events,
+            lease_owner=f"autonomy.dispatch:{run_id}",
+            lease_ttl_seconds=body.lease_ttl_seconds,
+        )
+
+        for index, event in enumerate(leased):
+            elapsed = time.monotonic() - dispatch_started
+            if elapsed >= body.max_dispatch_runtime_seconds:
+                halted_reason = "dispatch_runtime_budget_exceeded"
+                break
+
+            remaining_actions = max(0, body.max_dispatch_actions - dispatch_executed_actions)
+            if remaining_actions <= 0:
+                halted_reason = "dispatch_action_budget_exceeded"
+                break
+
+            event_id = str(event.get("id", ""))
+            dispatch_run_id = f"{run_id}:event:{event_id}"
+            cycle_max_actions = min(body.max_actions, remaining_actions)
+            try:
+                cycle = run_cycle(
+                    run_id=dispatch_run_id,
+                    workspace_root=_workspace_root,
+                    repo_root=_repo_root,
+                    max_actions=cycle_max_actions,
+                    max_runtime_seconds=body.max_runtime_seconds,
+                    allow_medium=body.allow_medium,
+                    allow_high=body.allow_high,
+                    stop_on_critical=body.stop_on_critical,
+                )
+                executed_count = len(cycle.get("executed_actions", []))
+                dispatch_executed_actions += executed_count
+
+                completed = complete_event(
+                    _fs,
+                    event_id=event_id,
+                    dispatch_run_id=dispatch_run_id,
+                    result={
                         "halted_reason": cycle.get("halted_reason"),
-                        "executed_count": len(cycle.get("executed_actions", [])),
+                        "executed_count": executed_count,
                         "blocked_count": len(cycle.get("blocked_actions", [])),
                     },
-                }
-            )
-        except Exception as exc:
-            failed_event = fail_event(
+                )
+                handled_event_ids.add(event_id)
+                processed.append(
+                    {
+                        "event": completed if isinstance(completed, dict) else event,
+                        "cycle": {
+                            "run_id": cycle.get("run_id"),
+                            "halted_reason": cycle.get("halted_reason"),
+                            "executed_count": executed_count,
+                            "blocked_count": len(cycle.get("blocked_actions", [])),
+                        },
+                    }
+                )
+
+                cycle_state = cycle.get("event_state", {})
+                cycle_critical_incidents = (
+                    int(cycle_state.get("critical_incident_count", 0))
+                    if isinstance(cycle_state, dict)
+                    else 0
+                )
+                if body.stop_on_critical and (
+                    str(cycle.get("halted_reason", "")) == "critical_anomaly" or cycle_critical_incidents > 0
+                ):
+                    halted_reason = "critical_anomaly"
+                    break
+
+                remaining_events = len(leased) - (index + 1)
+                if remaining_events > 0 and dispatch_executed_actions >= body.max_dispatch_actions:
+                    halted_reason = "dispatch_action_budget_exceeded"
+                    break
+            except Exception as exc:
+                failed_event = fail_event(
+                    _fs,
+                    event_id=event_id,
+                    dispatch_run_id=dispatch_run_id,
+                    error=str(exc),
+                )
+                handled_event_ids.add(event_id)
+                failed.append({"event": failed_event if isinstance(failed_event, dict) else event, "error": str(exc)})
+
+        remaining_ids = [
+            str(item.get("id", "")).strip()
+            for item in leased
+            if str(item.get("id", "")).strip() and str(item.get("id", "")).strip() not in handled_event_ids
+        ]
+        if remaining_ids:
+            released = release_leased_events(
                 _fs,
-                event_id=event_id,
-                dispatch_run_id=dispatch_run_id,
-                error=str(exc),
+                run_id=run_id,
+                event_ids=remaining_ids,
+                reason=halted_reason if halted_reason != "completed" else "dispatch_partial",
             )
-            failed.append({"event": failed_event if isinstance(failed_event, dict) else event, "error": str(exc)})
 
     dispatch_summary = {
         "status": "ok",
@@ -307,16 +374,24 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         "recovered_count": int(recovery.get("recovered_count", 0)),
         "processed_count": len(processed),
         "failed_count": len(failed),
+        "released_count": len(released),
+        "dispatch_executed_actions": dispatch_executed_actions,
+        "critical_incident_count": critical_incident_count,
+        "halted_reason": halted_reason,
         "approval_id": approved_request_id,
+        "approval_required": approval_required,
         "max_risk_tier": max_risk,
         "due_preview_count": due_count,
         "recovery": recovery,
         "processed": processed,
         "failed": failed,
+        "released": released,
         "config": {
             "max_events": body.max_events,
             "max_actions": body.max_actions,
             "max_runtime_seconds": body.max_runtime_seconds,
+            "max_dispatch_actions": body.max_dispatch_actions,
+            "max_dispatch_runtime_seconds": body.max_dispatch_runtime_seconds,
             "lease_ttl_seconds": body.lease_ttl_seconds,
             "recover_stale_leases": body.recover_stale_leases,
             "allow_medium": body.allow_medium,
