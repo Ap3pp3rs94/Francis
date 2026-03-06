@@ -16,6 +16,7 @@ def capabilities() -> dict:
             "presence.briefing",
             "presence.state",
             "runs",
+            "runs.trace",
             "missions",
             "approvals",
             "tools",

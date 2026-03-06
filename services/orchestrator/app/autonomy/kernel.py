@@ -39,6 +39,7 @@ def _write_last_run(fs: WorkspaceFS, payload: dict[str, Any]) -> None:
 def run_cycle(
     *,
     run_id: str,
+    trace_id: str | None = None,
     workspace_root: Path,
     repo_root: Path,
     max_actions: int = 2,
@@ -55,6 +56,7 @@ def run_cycle(
 
     started_at = utc_now_iso()
     start_monotonic = time.monotonic()
+    normalized_trace_id = str(trace_id or "").strip() or run_id
 
     event_state = collect_events(fs)
     intent_state = collect_intents(fs)
@@ -91,6 +93,7 @@ def run_cycle(
             "id": str(uuid4()),
             "ts": started_at,
             "run_id": run_id,
+            "trace_id": normalized_trace_id,
             "kind": "autonomy.plan",
             "event_state": event_state,
             "intent_count": intent_state.get("intent_count", 0),
@@ -127,6 +130,7 @@ def run_cycle(
                 "id": str(uuid4()),
                 "ts": utc_now_iso(),
                 "run_id": run_id,
+                "trace_id": normalized_trace_id,
                 "kind": "autonomy.action",
                 "action": action,
                 "result": result,
@@ -139,6 +143,7 @@ def run_cycle(
             summary={
                 "action_kind": action.get("kind"),
                 "ok": result.get("ok"),
+                "trace_id": normalized_trace_id,
             },
         )
         budget_state = register_action_execution(budget_state, action=action)
@@ -165,6 +170,7 @@ def run_cycle(
     summary = {
         "status": "ok",
         "run_id": run_id,
+        "trace_id": normalized_trace_id,
         "ts": completed_at,
         "started_at": started_at,
         "duration_ms": duration_ms,
@@ -195,6 +201,7 @@ def run_cycle(
             "executed_count": len(executed_actions),
             "blocked_count": len(summary["blocked_actions"]),
             "halted_reason": halted_reason,
+            "trace_id": normalized_trace_id,
         },
     )
     return summary

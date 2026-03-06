@@ -190,6 +190,7 @@ def autonomy_cycle(request: Request, payload: AutonomyCycleRequest | None = None
     _enforce_control("autonomy.cycle", mutating=True)
     return run_cycle(
         run_id=run_id,
+        trace_id=run_id,
         workspace_root=_workspace_root,
         repo_root=_repo_root,
         max_actions=body.max_actions,
@@ -402,6 +403,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             try:
                 cycle = run_cycle(
                     run_id=dispatch_run_id,
+                    trace_id=trace_id,
                     workspace_root=_workspace_root,
                     repo_root=_repo_root,
                     max_actions=cycle_max_actions,
@@ -432,6 +434,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                         "trace_id": trace_id,
                         "cycle": {
                             "run_id": cycle.get("run_id"),
+                            "trace_id": cycle.get("trace_id"),
                             "halted_reason": cycle.get("halted_reason"),
                             "executed_count": executed_count,
                             "blocked_count": len(cycle.get("blocked_actions", [])),

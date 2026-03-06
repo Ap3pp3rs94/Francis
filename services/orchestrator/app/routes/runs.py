@@ -86,6 +86,33 @@ def _summarize_runs(events: list[dict[str, Any]], limit: int) -> list[dict[str, 
     return ordered[:n]
 
 
+def _derive_trace_id(row: dict[str, Any]) -> str:
+    explicit = str(row.get("trace_id", "")).strip()
+    if explicit:
+        return explicit
+    run_id = str(row.get("run_id", "")).strip()
+    if not run_id:
+        return ""
+    for marker in (
+        ":event:",
+        ":recover",
+        ":observer:",
+        ":mission:",
+        ":worker:",
+        ":worker-recover:",
+    ):
+        if marker in run_id:
+            return run_id.split(marker, 1)[0].strip()
+    if ":" in run_id:
+        return run_id.split(":", 1)[0].strip()
+    return run_id
+
+
+def _tail(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    n = max(0, min(limit, 500))
+    return rows[-n:] if n else []
+
+
 @router.get("/runs")
 def runs(limit: int = 20) -> dict:
     allowed, reason, _state = check_action_allowed(
@@ -111,4 +138,51 @@ def runs(limit: int = 20) -> dict:
         "count": len(summaries),
         "runs": summaries,
         "last_run": last_run,
+    }
+
+
+@router.get("/runs/trace/{trace_id}")
+def runs_trace(trace_id: str, limit: int = 200) -> dict:
+    allowed, reason, _state = check_action_allowed(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        app="receipts",
+        action="runs.read",
+        mutating=False,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
+
+    normalized = str(trace_id).strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="trace_id is required")
+
+    sources = {
+        "ledger_primary": _read_jsonl("runs/run_ledger.jsonl"),
+        "ledger_legacy": _read_jsonl("brain/run_ledger.jsonl"),
+        "decisions": _read_jsonl("journals/decisions.jsonl"),
+        "logs": _read_jsonl("logs/francis.log.jsonl"),
+        "mission_history": _read_jsonl("missions/history.jsonl"),
+        "deadletter": _read_jsonl("queue/deadletter.jsonl"),
+    }
+
+    filtered: dict[str, list[dict[str, Any]]] = {}
+    for source, rows in sources.items():
+        filtered[source] = [
+            row
+            for row in rows
+            if str(row.get("run_id", "")).strip() == normalized or _derive_trace_id(row) == normalized
+        ]
+
+    counts = {name: len(rows) for name, rows in filtered.items()}
+    total = sum(counts.values())
+    return {
+        "status": "ok",
+        "trace_id": normalized,
+        "count": total,
+        "counts": counts,
+        "receipts": {
+            name: _tail(rows, limit) for name, rows in filtered.items()
+        },
     }
