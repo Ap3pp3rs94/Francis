@@ -13,7 +13,10 @@ from francis_forge.catalog import list_entries
 from services.orchestrator.app.approvals_store import pending_count
 from services.orchestrator.app.autonomy.action_budget import check_action_budget, load_state as load_budget_state
 from services.orchestrator.app.autonomy.decision_engine import build_plan
-from services.orchestrator.app.autonomy.event_queue import queue_status as autonomy_queue_status
+from services.orchestrator.app.autonomy.event_queue import (
+    queue_status as autonomy_queue_status,
+    read_last_dispatch as read_autonomy_last_dispatch,
+)
 from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.intent_engine import collect_intents
 from services.orchestrator.app.control_state import check_action_allowed
@@ -74,6 +77,14 @@ def lens_state() -> dict:
     intent_state = collect_intents(_fs)
     telemetry = telemetry_status(_fs)
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
+    autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
+    last_dispatch_config = (
+        autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
+    )
+    halted_reason = str(autonomy_last_dispatch.get("halted_reason", "")).strip()
+    dispatch_halted = bool(halted_reason) and halted_reason != "completed"
+    dispatch_budget_halt = halted_reason in {"dispatch_action_budget_exceeded", "dispatch_runtime_budget_exceeded"}
+    dispatch_critical_halt = halted_reason in {"critical_incident_present", "critical_anomaly"}
     autonomy_high_risk_due = sum(
         1
         for row in autonomy_queue.get("queued", [])
@@ -106,6 +117,20 @@ def lens_state() -> dict:
             "deadletter_count": int(autonomy_queue.get("deadletter_count", 0)),
             "high_risk_due_count": autonomy_high_risk_due,
         },
+        "autonomy_dispatch": {
+            "last_run_id": autonomy_last_dispatch.get("run_id"),
+            "halted_reason": halted_reason or None,
+            "halted": dispatch_halted,
+            "processed_count": int(autonomy_last_dispatch.get("processed_count", 0)),
+            "failed_count": int(autonomy_last_dispatch.get("failed_count", 0)),
+            "retried_count": int(autonomy_last_dispatch.get("retried_count", 0)),
+            "released_count": int(autonomy_last_dispatch.get("released_count", 0)),
+            "dispatch_executed_actions": int(autonomy_last_dispatch.get("dispatch_executed_actions", 0)),
+            "max_dispatch_actions": int(last_dispatch_config.get("max_dispatch_actions", 0)),
+            "max_dispatch_runtime_seconds": int(last_dispatch_config.get("max_dispatch_runtime_seconds", 0)),
+            "max_attempts": int(last_dispatch_config.get("max_attempts", 0)),
+            "retry_backoff_seconds": int(last_dispatch_config.get("retry_backoff_seconds", 0)),
+        },
         "pending_approvals": pending_approvals,
         "blockers": {
             "critical_incidents": event_state.get("critical_incident_count", 0),
@@ -122,6 +147,10 @@ def lens_state() -> dict:
             "autonomy_queue_due": int(autonomy_queue.get("queued_count", 0)),
             "autonomy_queue_high_risk_due": autonomy_high_risk_due,
             "autonomy_queue_leased_expired": autonomy_leased_expired_count,
+            "autonomy_dispatch_halted": dispatch_halted,
+            "autonomy_dispatch_halted_reason": halted_reason or None,
+            "autonomy_dispatch_budget_halt": dispatch_budget_halt,
+            "autonomy_dispatch_critical_halt": dispatch_critical_halt,
             "pending_approvals": pending_approvals,
         },
     }
@@ -143,6 +172,11 @@ def lens_actions(max_actions: int = 6) -> dict:
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
+    autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
+    dispatch_halted_reason = str(autonomy_last_dispatch.get("halted_reason", "")).strip()
+    last_dispatch_config = (
+        autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
+    )
     autonomy_queued_count = int(autonomy_queue.get("queued_count", 0))
     autonomy_high_risk_due = sum(
         1
@@ -232,6 +266,9 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "queue_telemetry": {
                     "queued_count": autonomy_queued_count,
                     "high_risk_due_count": autonomy_high_risk_due,
+                    "last_halted_reason": dispatch_halted_reason or None,
+                    "last_max_dispatch_actions": int(last_dispatch_config.get("max_dispatch_actions", 0)),
+                    "last_max_dispatch_runtime_seconds": int(last_dispatch_config.get("max_dispatch_runtime_seconds", 0)),
                 },
             }
         )
