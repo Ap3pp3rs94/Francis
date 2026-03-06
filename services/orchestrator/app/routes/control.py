@@ -612,6 +612,59 @@ def _build_takeover_sessions(limit: int) -> list[dict[str, Any]]:
     return summaries[: max(0, min(limit, 500))]
 
 
+def _build_remote_feed_rows(session_id: str | None = None) -> list[dict[str, Any]]:
+    normalized_session_id = str(session_id or "").strip()
+    feed_rows: list[dict[str, Any]] = []
+
+    for row in _read_takeover_activity_rows(session_id=normalized_session_id or None):
+        row_session_id = str(row.get("session_id", "")).strip()
+        if normalized_session_id and row_session_id != normalized_session_id:
+            continue
+        feed_rows.append(
+            {
+                "id": str(row.get("id", "")).strip() or f"activity:{uuid4()}",
+                "ts": str(row.get("ts", "")).strip(),
+                "source": "takeover.activity",
+                "kind": str(row.get("kind", "")).strip() or "unknown",
+                "run_id": str(row.get("run_id", "")).strip() or None,
+                "trace_id": str(row.get("trace_id", "")).strip() or None,
+                "session_id": row_session_id or None,
+                "actor": str(row.get("actor", "")).strip() or None,
+                "detail": row.get("detail", {}) if isinstance(row.get("detail"), dict) else {},
+            }
+        )
+
+    for row in _read_jsonl_rows("journals/decisions.jsonl"):
+        kind = str(row.get("kind", "")).strip()
+        if not (kind.startswith("control.remote.") or kind.startswith("control.takeover.")):
+            continue
+        row_session_id = str(row.get("session_id", "")).strip()
+        if normalized_session_id and row_session_id and row_session_id != normalized_session_id:
+            continue
+        feed_rows.append(
+            {
+                "id": str(row.get("id", "")).strip() or f"decision:{uuid4()}",
+                "ts": str(row.get("ts", "")).strip(),
+                "source": "journals.decisions",
+                "kind": kind,
+                "run_id": str(row.get("run_id", "")).strip() or None,
+                "trace_id": str(row.get("trace_id", "")).strip() or None,
+                "session_id": row_session_id or None,
+                "actor": str(row.get("decided_by", "")).strip() or None,
+                "detail": {
+                    "reason": str(row.get("reason", "")).strip() or None,
+                    "before": row.get("before", {}) if isinstance(row.get("before"), dict) else {},
+                    "after": row.get("after", {}) if isinstance(row.get("after"), dict) else {},
+                    "approval_id": str(row.get("approval_id", "")).strip() or None,
+                    "artifact_path": str(row.get("artifact_path", "")).strip() or None,
+                },
+            }
+        )
+
+    feed_rows.sort(key=lambda item: (str(item.get("ts", "")), str(item.get("id", ""))))
+    return feed_rows
+
+
 @router.get("/control/mode")
 def get_control_mode() -> dict:
     state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
@@ -835,6 +888,120 @@ def control_remote_approvals(
         "pending_count": pending_count(_fs),
         "approvals": approvals_list,
     }
+
+
+@router.get("/control/remote/feed")
+def control_remote_feed(
+    request: Request,
+    limit: int = 100,
+    cursor: str | None = None,
+    session_id: str | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "approvals.read")
+    normalized_session_id = str(session_id or "").strip()
+    rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
+    parsed_cursor = _parse_activity_cursor(cursor)
+    if parsed_cursor is None:
+        normalized_limit = max(1, min(limit, 1000))
+        start_cursor = max(0, len(rows) - normalized_limit)
+    else:
+        start_cursor = parsed_cursor
+    chunk, next_cursor, has_more = _slice_activity_rows(rows=rows, cursor=start_cursor, limit=limit)
+    return {
+        "status": "ok",
+        "session_id": normalized_session_id or None,
+        "cursor": str(start_cursor),
+        "next_cursor": str(next_cursor),
+        "has_more": has_more,
+        "total_available": len(rows),
+        "count": len(chunk),
+        "feed": chunk,
+    }
+
+
+@router.get("/control/remote/feed/stream")
+async def control_remote_feed_stream(
+    request: Request,
+    session_id: str | None = None,
+    cursor: str | None = None,
+    limit: int = 100,
+    max_seconds: int = 15,
+    poll_interval_ms: int = 500,
+) -> StreamingResponse:
+    _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "approvals.read")
+    normalized_session_id = str(session_id or "").strip()
+    initial_rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
+    parsed_cursor = _parse_activity_cursor(cursor)
+    start_cursor = parsed_cursor if parsed_cursor is not None else len(initial_rows)
+    max_events = max(1, min(limit, 2000))
+    stream_window_seconds = max(1, min(max_seconds, 120))
+    sleep_seconds = max(0.05, min(float(poll_interval_ms) / 1000.0, 5.0))
+
+    async def _iter_sse():
+        current_cursor = max(0, start_cursor)
+        emitted = 0
+        deadline = time.monotonic() + float(stream_window_seconds)
+        yield _sse_event(
+            "meta",
+            {
+                "session_id": normalized_session_id or None,
+                "cursor": str(current_cursor),
+                "max_events": max_events,
+                "max_seconds": stream_window_seconds,
+            },
+        )
+        while emitted < max_events and time.monotonic() < deadline:
+            rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
+            batch, next_cursor, has_more = _slice_activity_rows(
+                rows=rows,
+                cursor=current_cursor,
+                limit=max_events - emitted,
+            )
+            if batch:
+                for item in batch:
+                    emitted += 1
+                    current_cursor += 1
+                    yield _sse_event(
+                        "feed",
+                        {
+                            "session_id": str(item.get("session_id", "")).strip() or None,
+                            "cursor": str(current_cursor - 1),
+                            "next_cursor": str(current_cursor),
+                            "has_more": has_more,
+                            "entry": item,
+                        },
+                    )
+                    if emitted >= max_events:
+                        break
+                continue
+
+            yield _sse_event(
+                "heartbeat",
+                {
+                    "session_id": normalized_session_id or None,
+                    "cursor": str(current_cursor),
+                },
+            )
+            await asyncio.sleep(sleep_seconds)
+
+        yield _sse_event(
+            "end",
+            {
+                "session_id": normalized_session_id or None,
+                "cursor": str(current_cursor),
+                "emitted": emitted,
+                "max_events": max_events,
+            },
+        )
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(_iter_sse(), media_type="text/event-stream", headers=headers)
 
 
 def _control_remote_approval_decision(

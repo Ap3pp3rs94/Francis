@@ -573,6 +573,7 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         chips_active = actions_active.json().get("action_chips", [])
         assert any(str(chip.get("kind", "")) == "control.remote.state" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.approvals" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.feed" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.approval.approve" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.session" for chip in chips_active)
@@ -594,6 +595,17 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         assert remote_pending_payload["status"] == "ok"
         remote_pending_rows = remote_pending_payload["result"]["summary"]["approvals"]
         assert any(str(row.get("id", "")).strip() == approval_id for row in remote_pending_rows)
+
+        remote_feed = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.remote.feed", "args": {"limit": 100}},
+        )
+        assert remote_feed.status_code == 200
+        remote_feed_payload = remote_feed.json()
+        assert remote_feed_payload["status"] == "ok"
+        remote_feed_summary = remote_feed_payload["result"]["summary"]
+        assert remote_feed_summary["status"] == "ok"
+        assert int(remote_feed_summary.get("count", 0)) >= 1
 
         remote_approve = c.post(
             "/lens/actions/execute",

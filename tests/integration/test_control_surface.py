@@ -483,5 +483,33 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         decision_kinds = [str(row.get("kind", "")) for row in decision_rows]
         assert "control.remote.approval.approved" in decision_kinds
         assert "control.remote.approval.rejected" in decision_kinds
+
+        remote_feed = c.get("/control/remote/feed", headers=headers, params={"limit": 200})
+        assert remote_feed.status_code == 200
+        remote_feed_payload = remote_feed.json()
+        assert remote_feed_payload.get("status") == "ok"
+        assert int(remote_feed_payload.get("count", 0)) >= 2
+        feed_kinds = [str(row.get("kind", "")) for row in remote_feed_payload.get("feed", [])]
+        assert "control.remote.approval.approved" in feed_kinds
+        assert "control.remote.approval.rejected" in feed_kinds
+
+        remote_feed_page_one = c.get("/control/remote/feed", headers=headers, params={"limit": 1, "cursor": "0"})
+        assert remote_feed_page_one.status_code == 200
+        page_one_payload = remote_feed_page_one.json()
+        assert page_one_payload.get("count") == 1
+        next_cursor = str(page_one_payload.get("next_cursor", ""))
+        assert next_cursor.isdigit()
+
+        remote_feed_stream = c.get(
+            "/control/remote/feed/stream",
+            headers=headers,
+            params={"cursor": "0", "limit": 20, "max_seconds": 1, "poll_interval_ms": 25},
+        )
+        assert remote_feed_stream.status_code == 200
+        assert "text/event-stream" in str(remote_feed_stream.headers.get("content-type", ""))
+        stream_body = remote_feed_stream.text
+        assert "event: meta" in stream_body
+        assert "event: feed" in stream_body
+        assert "event: end" in stream_body
     finally:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

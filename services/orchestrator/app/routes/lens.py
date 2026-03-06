@@ -47,6 +47,7 @@ from services.orchestrator.app.routes.control import (
     control_remote_approval_approve,
     control_remote_approval_reject,
     control_remote_approvals,
+    control_remote_feed,
     control_remote_state,
     control_takeover_activity,
     control_takeover_confirm,
@@ -439,6 +440,23 @@ def _execute_lens_action(
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
+    if normalized_kind == "control.remote.feed":
+        _enforce_action_scope(app="control", action="control.remote.read", mutating=False)
+        _enforce_rbac(role, "approvals.read")
+        limit = max(1, min(1000, int(args.get("limit", 100))))
+        cursor = str(args.get("cursor", "")).strip() or None
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"limit": limit, "cursor": cursor, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_feed(
+            request,
+            limit=limit,
+            cursor=cursor,
+            session_id=session_id,
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "control.remote.approval.approve":
         _enforce_action_scope(app="control", action="control.remote.decide", mutating=False)
         _enforce_rbac(role, "approvals.decide")
@@ -796,6 +814,8 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"approval_limit": 10, "session_limit": 5}
     elif kind == "control.remote.approvals":
         hinted["execute_via"]["payload"]["args"] = {"status": "pending", "limit": 50}
+    elif kind == "control.remote.feed":
+        hinted["execute_via"]["payload"]["args"] = {"limit": 100, "cursor": "", "session_id": ""}
     elif kind == "control.remote.approval.approve":
         hinted["execute_via"]["payload"]["args"] = {"approval_id": "<required>", "note": "", "session_id": ""}
     elif kind == "control.remote.approval.reject":
@@ -1206,6 +1226,18 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         )
         approvals_chip["execute_via"]["payload"]["args"]["status"] = "pending"
         action_chips.append(approvals_chip)
+        remote_feed_chip = _with_execute_hint(
+            {
+            "kind": "control.remote.feed",
+            "label": "Remote Feed",
+            "enabled": True,
+            "reason": "Stream recent remote control and takeover events with receipts.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+        action_chips.append(remote_feed_chip)
         first_pending_id = str(remote_pending_rows[0].get("id", "")).strip()
         if first_pending_id:
             approve_chip = _with_execute_hint(
