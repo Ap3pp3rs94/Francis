@@ -308,6 +308,27 @@ def test_control_remote_rbac_separates_read_and_write_permissions() -> None:
         observer_read = c.get("/control/remote/state", headers=observer_headers)
         assert observer_read.status_code == 200
 
+        worker_headers = {"x-francis-role": "worker"}
+        worker_state = c.get("/control/remote/state", headers=worker_headers)
+        assert worker_state.status_code == 403
+        assert "control.remote.read" in str(worker_state.json().get("detail", ""))
+
+        worker_approvals = c.get("/control/remote/approvals", headers=worker_headers)
+        assert worker_approvals.status_code == 403
+        assert "control.remote.read" in str(worker_approvals.json().get("detail", ""))
+
+        worker_feed = c.get("/control/remote/feed", headers=worker_headers)
+        assert worker_feed.status_code == 403
+        assert "control.remote.read" in str(worker_feed.json().get("detail", ""))
+
+        worker_feed_stream = c.get(
+            "/control/remote/feed/stream",
+            headers=worker_headers,
+            params={"cursor": "0", "limit": 5, "max_seconds": 1, "poll_interval_ms": 25},
+        )
+        assert worker_feed_stream.status_code == 403
+        assert "control.remote.read" in str(worker_feed_stream.json().get("detail", ""))
+
         observer_write = c.post("/control/remote/panic", headers=observer_headers, json={"reason": "observer denied"})
         assert observer_write.status_code == 403
         assert "rbac denied" in str(observer_write.json().get("detail", "")).lower()

@@ -906,6 +906,7 @@ def control_resume(request: Request, payload: ControlResumeRequest | None = None
 @router.get("/control/remote/state")
 def control_remote_state(request: Request, approval_limit: int = 10, session_limit: int = 5) -> dict:
     _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     control_state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     takeover_state = _load_or_init_takeover_state()
@@ -960,6 +961,7 @@ def control_remote_approvals(
     limit: int = 50,
 ) -> dict:
     _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     approvals_list = list_requests(
         _fs,
@@ -983,6 +985,7 @@ def control_remote_feed(
     session_id: str | None = None,
 ) -> dict:
     _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     normalized_session_id = str(session_id or "").strip()
     rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
@@ -1015,6 +1018,7 @@ async def control_remote_feed_stream(
     poll_interval_ms: int = 500,
 ) -> StreamingResponse:
     _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     normalized_session_id = str(session_id or "").strip()
     initial_rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
