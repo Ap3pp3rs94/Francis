@@ -30,6 +30,7 @@ _fs = WorkspaceFS(
 )
 _ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
 _takeover_state_path = "control/takeover.json"
+_takeover_history_path = "control/takeover_history.jsonl"
 
 
 class ControlModeRequest(BaseModel):
@@ -211,6 +212,51 @@ def _record_control_receipt(
     return receipt
 
 
+def _append_takeover_history(
+    *,
+    run_id: str,
+    trace_id: str,
+    kind: str,
+    reason: str,
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> None:
+    _append_jsonl(
+        _takeover_history_path,
+        {
+            "id": str(uuid4()),
+            "ts": utc_now_iso(),
+            "run_id": run_id,
+            "trace_id": trace_id,
+            "kind": kind,
+            "reason": reason,
+            "before": before,
+            "after": after,
+        },
+    )
+
+
+def _read_takeover_history(limit: int) -> list[dict[str, Any]]:
+    try:
+        raw = _fs.read_text(_takeover_history_path)
+    except Exception:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+            if isinstance(parsed, dict):
+                rows.append(parsed)
+        except Exception:
+            continue
+    if limit <= 0:
+        return []
+    return rows[-min(limit, 1000) :]
+
+
 @router.get("/control/mode")
 def get_control_mode() -> dict:
     state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
@@ -376,6 +422,12 @@ def control_takeover_state() -> dict:
     return {"status": "ok", "takeover": state}
 
 
+@router.get("/control/takeover/history")
+def control_takeover_history(limit: int = 50) -> dict:
+    rows = _read_takeover_history(limit=limit)
+    return {"status": "ok", "count": len(rows), "history": rows}
+
+
 @router.post("/control/takeover/request")
 def control_takeover_request(request: Request, payload: ControlTakeoverRequest) -> dict:
     run_id = str(getattr(request.state, "run_id", uuid4()))
@@ -425,6 +477,14 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
             "objective": after.get("objective"),
             "requested_by": after.get("requested_by"),
         },
+    )
+    _append_takeover_history(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="control.takeover.request",
+        reason=reason,
+        before={"status": before.get("status"), "objective": before.get("objective")},
+        after={"status": after.get("status"), "objective": after.get("objective")},
     )
     return {
         "status": "ok",
@@ -488,6 +548,14 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
             "mode": control_after.get("mode"),
             "kill_switch": control_after.get("kill_switch"),
         },
+    )
+    _append_takeover_history(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="control.takeover.confirm",
+        reason=reason,
+        before={"status": takeover_before.get("status"), "objective": takeover_before.get("objective")},
+        after={"status": takeover_after.get("status"), "objective": takeover_after.get("objective")},
     )
     return {
         "status": "ok",
@@ -554,6 +622,14 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
             "mode": control_after.get("mode"),
             "kill_switch": control_after.get("kill_switch"),
         },
+    )
+    _append_takeover_history(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="control.takeover.handback",
+        reason=reason,
+        before={"status": takeover_before.get("status"), "objective": takeover_before.get("objective")},
+        after={"status": takeover_after.get("status"), "objective": takeover_after.get("objective")},
     )
     return {
         "status": "ok",

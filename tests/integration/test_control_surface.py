@@ -206,6 +206,14 @@ def test_control_takeover_request_confirm_handback_flow() -> None:
         assert handback_payload["takeover"]["handed_back_at"] is not None
         assert handback_payload["takeover"]["handback_summary"] == "Completed objective and ran verification."
         assert handback_payload["mode"] == "assist"
+
+        history = c.get("/control/takeover/history", params={"limit": 20})
+        assert history.status_code == 200
+        history_rows = history.json().get("history", [])
+        kinds = [str(row.get("kind", "")) for row in history_rows]
+        assert "control.takeover.request" in kinds
+        assert "control.takeover.confirm" in kinds
+        assert "control.takeover.handback" in kinds
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
