@@ -31,6 +31,7 @@ def capabilities() -> dict:
             "autonomy.reactor.tick",
             "autonomy.reactor.last",
             "autonomy.reactor.history",
+            "autonomy.reactor.guardrail",
             "control",
             "receipts",
             "lens",
