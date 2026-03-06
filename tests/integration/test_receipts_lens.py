@@ -451,8 +451,10 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     autonomy_events_path = workspace / "autonomy" / "events.jsonl"
     last_tick_path = workspace / "autonomy" / "last_tick.json"
+    guardrail_path = workspace / "autonomy" / "reactor_guardrail_state.json"
     events_before = autonomy_events_path.read_text(encoding="utf-8") if autonomy_events_path.exists() else ""
     tick_before = last_tick_path.read_text(encoding="utf-8") if last_tick_path.exists() else ""
+    guardrail_before = guardrail_path.read_text(encoding="utf-8") if guardrail_path.exists() else ""
     try:
         autonomy_events_path.parent.mkdir(parents=True, exist_ok=True)
         queued_retry_event = {
@@ -503,6 +505,22 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
             ),
             encoding="utf-8",
         )
+        guardrail_path.write_text(
+            json.dumps(
+                {
+                    "tick_count": 9,
+                    "consecutive_retry_pressure_ticks": 0,
+                    "cooldown_remaining_ticks": 2,
+                    "escalations_count": 3,
+                    "last_retry_pressure_count": 1,
+                    "last_reason": "retry_pressure_cooldown",
+                    "updated_at": "2026-01-01T01:00:00+00:00",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
         c = TestClient(app)
         mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
@@ -518,10 +536,15 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         assert reactor.get("halted_reason") == "dispatch_runtime_budget_exceeded"
         assert int(reactor.get("collect_seen_count", 0)) == 5
         assert int(reactor.get("dispatch_retried_count", 0)) == 1
+        guardrail = reactor.get("guardrail", {})
+        assert int(guardrail.get("cooldown_remaining_ticks", 0)) == 2
+        assert int(guardrail.get("escalations_count", 0)) == 3
+        assert guardrail.get("last_reason") == "retry_pressure_cooldown"
         blockers = payload.get("blockers", {})
         assert int(blockers.get("autonomy_queue_retry_pressure", 0)) >= 1
         assert blockers.get("autonomy_reactor_halted") is True
         assert blockers.get("autonomy_reactor_halted_reason") == "dispatch_runtime_budget_exceeded"
+        assert blockers.get("autonomy_reactor_cooldown_active") is True
 
         actions = c.get("/lens/actions")
         assert actions.status_code == 200
@@ -533,6 +556,11 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         assert int(telemetry.get("queued_retry_count", 0)) >= 1
         assert telemetry.get("last_tick_halted_reason") == "dispatch_runtime_budget_exceeded"
         assert int(telemetry.get("last_tick_retried_count", 0)) == 1
+        assert telemetry.get("guardrail_cooldown_active") is True
+        assert int(telemetry.get("guardrail_cooldown_remaining_ticks", 0)) == 2
+        assert int(telemetry.get("guardrail_escalations_count", 0)) == 3
+        assert "guardrail cooldown active" in str(reactor_chip[0].get("policy_reason", "")).lower()
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
         last_tick_path.write_text(tick_before, encoding="utf-8")
+        guardrail_path.write_text(guardrail_before, encoding="utf-8")
