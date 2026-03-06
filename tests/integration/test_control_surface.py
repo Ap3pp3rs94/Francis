@@ -793,6 +793,28 @@ def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> Non
         assert int(remote_feed_high_payload.get("count", 0)) >= 1
         assert all(str(row.get("risk_tier", "")) == "high" for row in remote_feed_high_payload.get("feed", []))
 
+        remote_feed_activity = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "source": "takeover.activity", "limit": 100},
+        )
+        assert remote_feed_activity.status_code == 200
+        remote_feed_activity_payload = remote_feed_activity.json()
+        assert remote_feed_activity_payload.get("filters", {}).get("source") == "takeover.activity"
+        assert int(remote_feed_activity_payload.get("count", 0)) >= 1
+        assert all(str(row.get("source", "")) == "takeover.activity" for row in remote_feed_activity_payload.get("feed", []))
+
+        remote_feed_decisions = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "source": "journals.decisions", "limit": 100},
+        )
+        assert remote_feed_decisions.status_code == 200
+        remote_feed_decisions_payload = remote_feed_decisions.json()
+        assert remote_feed_decisions_payload.get("filters", {}).get("source") == "journals.decisions"
+        assert int(remote_feed_decisions_payload.get("count", 0)) >= 1
+        assert all(str(row.get("source", "")) == "journals.decisions" for row in remote_feed_decisions_payload.get("feed", []))
+
         remote_feed_invalid_risk = c.get(
             "/control/remote/feed",
             headers=headers,
@@ -800,6 +822,14 @@ def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> Non
         )
         assert remote_feed_invalid_risk.status_code == 400
         assert "Invalid risk_tier" in str(remote_feed_invalid_risk.json().get("detail", ""))
+
+        remote_feed_invalid_source = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "source": "unknown"},
+        )
+        assert remote_feed_invalid_source.status_code == 400
+        assert "Invalid source" in str(remote_feed_invalid_source.json().get("detail", ""))
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

@@ -810,6 +810,27 @@ def test_lens_execute_remote_command_wrappers_supported() -> None:
         assert all(str(row.get("kind", "")) == "control.remote.panic" for row in feed_summary.get("feed", []))
         assert all(str(row.get("risk_tier", "")) == "high" for row in feed_summary.get("feed", []))
 
+        remote_feed_decisions = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.remote.feed",
+                "args": {
+                    "session_id": session_id,
+                    "source": "journals.decisions",
+                    "limit": 100,
+                },
+            },
+        )
+        assert remote_feed_decisions.status_code == 200
+        remote_feed_decisions_payload = remote_feed_decisions.json()
+        assert remote_feed_decisions_payload["status"] == "ok"
+        decisions_summary = remote_feed_decisions_payload["result"]["summary"]
+        assert decisions_summary["status"] == "ok"
+        assert decisions_summary.get("filters", {}).get("source") == "journals.decisions"
+        assert int(decisions_summary.get("count", 0)) >= 1
+        assert all(str(row.get("source", "")) == "journals.decisions" for row in decisions_summary.get("feed", []))
+
         actions_paused = c.get("/lens/actions")
         assert actions_paused.status_code == 200
         chips_paused = actions_paused.json().get("action_chips", [])

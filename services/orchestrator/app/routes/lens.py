@@ -459,12 +459,14 @@ def _execute_lens_action(
         limit = max(1, min(1000, int(args.get("limit", 100))))
         cursor = str(args.get("cursor", "")).strip() or None
         session_id = str(args.get("session_id", "")).strip() or None
+        source = str(args.get("source", "")).strip().lower() or None
         kind = str(args.get("kind", "")).strip() or None
         risk_tier = str(args.get("risk_tier", "")).strip().lower() or None
         execution_args = {
             "limit": limit,
             "cursor": cursor,
             "session_id": session_id,
+            "source": source,
             "kind": kind,
             "risk_tier": risk_tier,
         }
@@ -475,6 +477,7 @@ def _execute_lens_action(
             limit=limit,
             cursor=cursor,
             session_id=session_id,
+            source=source,
             kind=kind,
             risk_tier=risk_tier,
         )
@@ -966,6 +969,7 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
             "limit": 100,
             "cursor": "",
             "session_id": "",
+            "source": "",
             "kind": "",
             "risk_tier": "",
         }

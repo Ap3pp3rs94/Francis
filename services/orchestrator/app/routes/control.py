@@ -39,6 +39,7 @@ _takeover_state_path = "control/takeover.json"
 _takeover_history_path = "control/takeover_history.jsonl"
 _takeover_activity_path = "control/takeover_activity.jsonl"
 _REMOTE_FEED_RISK_TIERS = {"low", "medium", "high", "critical"}
+_REMOTE_FEED_SOURCES = {"takeover.activity", "journals.decisions"}
 
 
 class ControlModeRequest(BaseModel):
@@ -720,74 +721,90 @@ def _normalize_remote_feed_risk_tier(risk_tier: str | None) -> str | None:
     return normalized
 
 
+def _normalize_remote_feed_source(source: str | None) -> str | None:
+    normalized = str(source or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized not in _REMOTE_FEED_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid source: {normalized}. Expected one of {sorted(_REMOTE_FEED_SOURCES)}",
+        )
+    return normalized
+
+
 def _build_remote_feed_rows(
     session_id: str | None = None,
     *,
     kind: str | None = None,
     risk_tier: str | None = None,
+    source: str | None = None,
 ) -> list[dict[str, Any]]:
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip()
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
+    normalized_source = _normalize_remote_feed_source(source)
     feed_rows: list[dict[str, Any]] = []
 
-    for row in _read_takeover_activity_rows(session_id=normalized_session_id or None):
-        row_session_id = str(row.get("session_id", "")).strip()
-        if normalized_session_id and row_session_id != normalized_session_id:
-            continue
-        row_kind = str(row.get("kind", "")).strip() or "unknown"
-        row_risk_tier = _remote_feed_risk_tier(row_kind)
-        if normalized_kind and row_kind != normalized_kind:
-            continue
-        if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
-            continue
-        feed_rows.append(
-            {
-                "id": str(row.get("id", "")).strip() or f"activity:{uuid4()}",
-                "ts": str(row.get("ts", "")).strip(),
-                "source": "takeover.activity",
-                "kind": row_kind,
-                "risk_tier": row_risk_tier,
-                "run_id": str(row.get("run_id", "")).strip() or None,
-                "trace_id": str(row.get("trace_id", "")).strip() or None,
-                "session_id": row_session_id or None,
-                "actor": str(row.get("actor", "")).strip() or None,
-                "detail": row.get("detail", {}) if isinstance(row.get("detail"), dict) else {},
-            }
-        )
+    if normalized_source in {None, "takeover.activity"}:
+        for row in _read_takeover_activity_rows(session_id=normalized_session_id or None):
+            row_session_id = str(row.get("session_id", "")).strip()
+            if normalized_session_id and row_session_id != normalized_session_id:
+                continue
+            row_kind = str(row.get("kind", "")).strip() or "unknown"
+            row_risk_tier = _remote_feed_risk_tier(row_kind)
+            if normalized_kind and row_kind != normalized_kind:
+                continue
+            if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
+                continue
+            feed_rows.append(
+                {
+                    "id": str(row.get("id", "")).strip() or f"activity:{uuid4()}",
+                    "ts": str(row.get("ts", "")).strip(),
+                    "source": "takeover.activity",
+                    "kind": row_kind,
+                    "risk_tier": row_risk_tier,
+                    "run_id": str(row.get("run_id", "")).strip() or None,
+                    "trace_id": str(row.get("trace_id", "")).strip() or None,
+                    "session_id": row_session_id or None,
+                    "actor": str(row.get("actor", "")).strip() or None,
+                    "detail": row.get("detail", {}) if isinstance(row.get("detail"), dict) else {},
+                }
+            )
 
-    for row in _read_jsonl_rows("journals/decisions.jsonl"):
-        row_kind = str(row.get("kind", "")).strip()
-        if not (row_kind.startswith("control.remote.") or row_kind.startswith("control.takeover.")):
-            continue
-        row_session_id = str(row.get("session_id", "")).strip()
-        if normalized_session_id and row_session_id and row_session_id != normalized_session_id:
-            continue
-        row_risk_tier = _remote_feed_risk_tier(row_kind)
-        if normalized_kind and row_kind != normalized_kind:
-            continue
-        if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
-            continue
-        feed_rows.append(
-            {
-                "id": str(row.get("id", "")).strip() or f"decision:{uuid4()}",
-                "ts": str(row.get("ts", "")).strip(),
-                "source": "journals.decisions",
-                "kind": row_kind,
-                "risk_tier": row_risk_tier,
-                "run_id": str(row.get("run_id", "")).strip() or None,
-                "trace_id": str(row.get("trace_id", "")).strip() or None,
-                "session_id": row_session_id or None,
-                "actor": str(row.get("decided_by", "")).strip() or None,
-                "detail": {
-                    "reason": str(row.get("reason", "")).strip() or None,
-                    "before": row.get("before", {}) if isinstance(row.get("before"), dict) else {},
-                    "after": row.get("after", {}) if isinstance(row.get("after"), dict) else {},
-                    "approval_id": str(row.get("approval_id", "")).strip() or None,
-                    "artifact_path": str(row.get("artifact_path", "")).strip() or None,
-                },
-            }
-        )
+    if normalized_source in {None, "journals.decisions"}:
+        for row in _read_jsonl_rows("journals/decisions.jsonl"):
+            row_kind = str(row.get("kind", "")).strip()
+            if not (row_kind.startswith("control.remote.") or row_kind.startswith("control.takeover.")):
+                continue
+            row_session_id = str(row.get("session_id", "")).strip()
+            if normalized_session_id and row_session_id and row_session_id != normalized_session_id:
+                continue
+            row_risk_tier = _remote_feed_risk_tier(row_kind)
+            if normalized_kind and row_kind != normalized_kind:
+                continue
+            if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
+                continue
+            feed_rows.append(
+                {
+                    "id": str(row.get("id", "")).strip() or f"decision:{uuid4()}",
+                    "ts": str(row.get("ts", "")).strip(),
+                    "source": "journals.decisions",
+                    "kind": row_kind,
+                    "risk_tier": row_risk_tier,
+                    "run_id": str(row.get("run_id", "")).strip() or None,
+                    "trace_id": str(row.get("trace_id", "")).strip() or None,
+                    "session_id": row_session_id or None,
+                    "actor": str(row.get("decided_by", "")).strip() or None,
+                    "detail": {
+                        "reason": str(row.get("reason", "")).strip() or None,
+                        "before": row.get("before", {}) if isinstance(row.get("before"), dict) else {},
+                        "after": row.get("after", {}) if isinstance(row.get("after"), dict) else {},
+                        "approval_id": str(row.get("approval_id", "")).strip() or None,
+                        "artifact_path": str(row.get("artifact_path", "")).strip() or None,
+                    },
+                }
+            )
 
     feed_rows.sort(key=lambda item: (str(item.get("ts", "")), str(item.get("id", ""))))
     return feed_rows
@@ -1054,6 +1071,7 @@ def control_remote_feed(
     session_id: str | None = None,
     kind: str | None = None,
     risk_tier: str | None = None,
+    source: str | None = None,
 ) -> dict:
     _enforce_remote_control("control.remote.read")
     _enforce_remote_rbac(request, "control.remote.read")
@@ -1061,10 +1079,12 @@ def control_remote_feed(
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip() or None
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
+    normalized_source = _normalize_remote_feed_source(source)
     rows = _build_remote_feed_rows(
         session_id=normalized_session_id or None,
         kind=normalized_kind,
         risk_tier=normalized_risk_tier,
+        source=normalized_source,
     )
     parsed_cursor = _parse_activity_cursor(cursor)
     if parsed_cursor is None:
@@ -1079,6 +1099,7 @@ def control_remote_feed(
         "filters": {
             "kind": normalized_kind,
             "risk_tier": normalized_risk_tier,
+            "source": normalized_source,
         },
         "cursor": str(start_cursor),
         "next_cursor": str(next_cursor),
@@ -1097,6 +1118,7 @@ async def control_remote_feed_stream(
     limit: int = 100,
     kind: str | None = None,
     risk_tier: str | None = None,
+    source: str | None = None,
     max_seconds: int = 15,
     poll_interval_ms: int = 500,
 ) -> StreamingResponse:
@@ -1106,10 +1128,12 @@ async def control_remote_feed_stream(
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip() or None
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
+    normalized_source = _normalize_remote_feed_source(source)
     initial_rows = _build_remote_feed_rows(
         session_id=normalized_session_id or None,
         kind=normalized_kind,
         risk_tier=normalized_risk_tier,
+        source=normalized_source,
     )
     parsed_cursor = _parse_activity_cursor(cursor)
     start_cursor = parsed_cursor if parsed_cursor is not None else len(initial_rows)
@@ -1127,6 +1151,7 @@ async def control_remote_feed_stream(
                 "session_id": normalized_session_id or None,
                 "kind": normalized_kind,
                 "risk_tier": normalized_risk_tier,
+                "source": normalized_source,
                 "cursor": str(current_cursor),
                 "max_events": max_events,
                 "max_seconds": stream_window_seconds,
@@ -1137,6 +1162,7 @@ async def control_remote_feed_stream(
                 session_id=normalized_session_id or None,
                 kind=normalized_kind,
                 risk_tier=normalized_risk_tier,
+                source=normalized_source,
             )
             batch, next_cursor, has_more = _slice_activity_rows(
                 rows=rows,
@@ -1167,6 +1193,7 @@ async def control_remote_feed_stream(
                     "session_id": normalized_session_id or None,
                     "kind": normalized_kind,
                     "risk_tier": normalized_risk_tier,
+                    "source": normalized_source,
                     "cursor": str(current_cursor),
                 },
             )
@@ -1178,6 +1205,7 @@ async def control_remote_feed_stream(
                 "session_id": normalized_session_id or None,
                 "kind": normalized_kind,
                 "risk_tier": normalized_risk_tier,
+                "source": normalized_source,
                 "cursor": str(current_cursor),
                 "emitted": emitted,
                 "max_events": max_events,
