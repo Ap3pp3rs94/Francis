@@ -37,6 +37,15 @@ from services.orchestrator.app.control_state import (
     load_or_init_control_state,
     set_mode,
 )
+from services.orchestrator.app.routes.control import (
+    ControlTakeoverConfirmRequest,
+    ControlTakeoverHandbackRequest,
+    ControlTakeoverRequest,
+    control_takeover_confirm,
+    control_takeover_handback,
+    control_takeover_request,
+    control_takeover_state,
+)
 from services.orchestrator.app.routes.autonomy import (
     AutonomyDispatchRequest,
     AutonomyReactorTickRequest,
@@ -233,6 +242,88 @@ def _execute_lens_action(
             "after": {"mode": after.get("mode"), "kill_switch": after.get("kill_switch")},
             "reason": reason,
         }
+
+    if normalized_kind == "control.takeover.request":
+        _enforce_action_scope(app="control", action="control.mode", mutating=False)
+        objective = str(args.get("objective", "")).strip()
+        if not objective:
+            raise HTTPException(status_code=400, detail="objective is required for control.takeover.request")
+        reason = str(args.get("reason", "")).strip()
+        repos = [str(item) for item in args.get("repos", []) if isinstance(item, str) and str(item).strip()]
+        workspaces = [
+            str(item) for item in args.get("workspaces", []) if isinstance(item, str) and str(item).strip()
+        ]
+        apps = [str(item) for item in args.get("apps", []) if isinstance(item, str) and str(item).strip()]
+        payload = {
+            "objective": objective,
+            "reason": reason,
+            "repos": repos if repos else None,
+            "workspaces": workspaces if workspaces else None,
+            "apps": apps if apps else None,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": payload}
+        summary = control_takeover_request(
+            request,
+            payload=ControlTakeoverRequest(
+                objective=objective,
+                reason=reason,
+                repos=repos if repos else None,
+                workspaces=workspaces if workspaces else None,
+                apps=apps if apps else None,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "control.takeover.confirm":
+        _enforce_action_scope(app="control", action="control.mode", mutating=False)
+        confirm = bool(args.get("confirm", True))
+        reason = str(args.get("reason", "")).strip()
+        mode = str(args.get("mode", "pilot")).strip().lower() or "pilot"
+        execution_args = {
+            "confirm": confirm,
+            "reason": reason,
+            "mode": mode,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_confirm(
+            request,
+            payload=ControlTakeoverConfirmRequest(
+                confirm=confirm,
+                reason=reason,
+                mode=mode,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "control.takeover.handback":
+        _enforce_action_scope(app="control", action="control.mode", mutating=False)
+        summary_text = str(args.get("summary", "")).strip()
+        verification = args.get("verification", {})
+        pending_approvals = max(0, int(args.get("pending_approvals", 0)))
+        mode = args.get("mode", "assist")
+        reason = str(args.get("reason", "")).strip()
+        execution_args = {
+            "summary": summary_text,
+            "verification": verification if isinstance(verification, dict) else {},
+            "pending_approvals": pending_approvals,
+            "mode": mode,
+            "reason": reason,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_handback(
+            request,
+            payload=ControlTakeoverHandbackRequest(
+                summary=summary_text,
+                verification=verification if isinstance(verification, dict) else {},
+                pending_approvals=pending_approvals,
+                mode=str(mode).strip().lower() if isinstance(mode, str) and str(mode).strip() else None,
+                reason=reason,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
 
     if normalized_kind == "worker.cycle":
         _enforce_rbac(role, "worker.cycle")
@@ -529,6 +620,18 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
     }
     if kind == "mission.tick":
         hinted["execute_via"]["payload"]["args"] = {"mission_id": "<required>"}
+    elif kind == "control.takeover.request":
+        hinted["execute_via"]["payload"]["args"] = {"objective": "<required>", "reason": ""}
+    elif kind == "control.takeover.confirm":
+        hinted["execute_via"]["payload"]["args"] = {"confirm": True, "mode": "pilot", "reason": ""}
+    elif kind == "control.takeover.handback":
+        hinted["execute_via"]["payload"]["args"] = {
+            "summary": "",
+            "verification": {},
+            "pending_approvals": 0,
+            "mode": "assist",
+            "reason": "",
+        }
     return hinted
 
 
@@ -588,6 +691,8 @@ def lens_state() -> dict:
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
+    takeover_state = control_takeover_state().get("takeover", {})
+    takeover_status = str(takeover_state.get("status", "idle")).strip().lower() or "idle"
     pilot_mode_on = mode == "pilot" and not kill_switch
     pilot_indicator_status = "on" if pilot_mode_on else "paused" if mode == "pilot" and kill_switch else "off"
     pilot_indicator_label = (
@@ -617,6 +722,16 @@ def lens_state() -> dict:
                 "status": pilot_indicator_status,
                 "label": pilot_indicator_label,
                 "kill_switch_active": kill_switch,
+            },
+            "takeover": {
+                "status": takeover_status,
+                "active": takeover_status == "active",
+                "pending_confirmation": takeover_status == "requested",
+                "objective": takeover_state.get("objective"),
+                "requested_by": takeover_state.get("requested_by"),
+                "requested_at": takeover_state.get("requested_at"),
+                "confirmed_at": takeover_state.get("confirmed_at"),
+                "handed_back_at": takeover_state.get("handed_back_at"),
             },
         },
         "intent_state": intent_state,
@@ -837,6 +952,8 @@ def lens_actions(max_actions: int = 6) -> dict:
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
+    takeover_state = control_takeover_state().get("takeover", {})
+    takeover_status = str(takeover_state.get("status", "idle")).strip().lower() or "idle"
     action_chips.append(
         _with_execute_hint(
             {
@@ -856,6 +973,55 @@ def lens_actions(max_actions: int = 6) -> dict:
             }
         )
     )
+    if takeover_status == "active":
+        action_chips.append(
+            _with_execute_hint(
+                {
+                "kind": "control.takeover.handback",
+                "label": "Hand Back Pilot Control",
+                "enabled": True,
+                "reason": "Takeover is active; return control with summary and receipts.",
+                "policy_reason": "",
+                "risk_tier": "low",
+                "trust_badge": "Confirmed",
+                "requires_confirmation": True,
+                }
+            )
+        )
+    elif takeover_status == "requested":
+        confirmation_enabled = not kill_switch
+        confirmation_policy = ""
+        if kill_switch:
+            confirmation_policy = "kill switch active; resume before confirming takeover"
+        action_chips.append(
+            _with_execute_hint(
+                {
+                "kind": "control.takeover.confirm",
+                "label": "Confirm Pilot Takeover",
+                "enabled": confirmation_enabled,
+                "reason": "Takeover request is pending explicit confirmation.",
+                "policy_reason": confirmation_policy,
+                "risk_tier": "medium",
+                "trust_badge": "Likely" if confirmation_enabled else "Uncertain",
+                "requires_confirmation": True,
+                }
+            )
+        )
+    else:
+        action_chips.append(
+            _with_execute_hint(
+                {
+                "kind": "control.takeover.request",
+                "label": "Request Pilot Takeover",
+                "enabled": True,
+                "reason": "Start explicit takeover handshake with scoped objective.",
+                "policy_reason": "",
+                "risk_tier": "low",
+                "trust_badge": "Confirmed",
+                "requires_confirmation": True,
+                }
+            )
+        )
 
     if autonomy_queued_count > 0:
         dispatch_enabled = mode in {"pilot", "away"}

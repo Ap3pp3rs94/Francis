@@ -35,6 +35,25 @@ def _set_scope(client: TestClient, scope: dict) -> None:
     assert response.status_code == 200
 
 
+def _get_takeover(client: TestClient) -> dict:
+    response = client.get("/control/takeover")
+    assert response.status_code == 200
+    return response.json()["takeover"]
+
+
+def _ensure_takeover_idle(client: TestClient) -> None:
+    current = _get_takeover(client)
+    status = str(current.get("status", "idle")).strip().lower()
+    if status == "requested":
+        client.post("/control/takeover/confirm", json={"confirm": True, "mode": "pilot", "reason": "test reset"})
+        status = "active"
+    if status == "active":
+        client.post(
+            "/control/takeover/handback",
+            json={"summary": "test reset", "verification": {}, "pending_approvals": 0, "mode": "assist"},
+        )
+
+
 def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
     apps = [str(item) for item in scope.get("apps", []) if isinstance(item, str)]
     lowered = [item.lower() for item in apps]
@@ -301,6 +320,124 @@ def test_lens_execute_forge_propose_supported() -> None:
         assert isinstance(summary.get("proposals", []), list)
         assert "context" in summary
     finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_lens_state_surfaces_takeover_status() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts"]))
+        _ensure_takeover_idle(c)
+
+        requested = c.post(
+            "/control/takeover/request",
+            json={"objective": f"Lens takeover state {uuid4()}", "reason": "lens state test"},
+        )
+        assert requested.status_code == 200
+        requested_objective = requested.json()["takeover"]["objective"]
+
+        state_requested = c.get("/lens/state")
+        assert state_requested.status_code == 200
+        takeover_requested = state_requested.json().get("control_surface", {}).get("takeover", {})
+        assert takeover_requested.get("status") == "requested"
+        assert takeover_requested.get("pending_confirmation") is True
+        assert takeover_requested.get("objective") == requested_objective
+
+        confirmed = c.post("/control/takeover/confirm", json={"confirm": True, "reason": "lens confirm"})
+        assert confirmed.status_code == 200
+
+        state_active = c.get("/lens/state")
+        assert state_active.status_code == 200
+        takeover_active = state_active.json().get("control_surface", {}).get("takeover", {})
+        assert takeover_active.get("status") == "active"
+        assert takeover_active.get("active") is True
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_lens_execute_takeover_flow_supported() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    trace_id = f"lens-takeover-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts"]))
+        _ensure_takeover_idle(c)
+
+        dry_request = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.takeover.request",
+                "dry_run": True,
+                "args": {"objective": "Dry run objective", "reason": "preview"},
+            },
+        )
+        assert dry_request.status_code == 200
+        assert dry_request.json()["status"] == "dry_run"
+
+        requested = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.takeover.request",
+                "args": {"objective": f"Execute takeover {uuid4()}", "reason": "lens execute"},
+            },
+        )
+        assert requested.status_code == 200
+        requested_payload = requested.json()
+        assert requested_payload["status"] == "ok"
+        assert requested_payload["result"]["summary"]["takeover"]["status"] == "requested"
+
+        confirmed = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={"kind": "control.takeover.confirm", "args": {"confirm": True, "mode": "pilot", "reason": "go"}},
+        )
+        assert confirmed.status_code == 200
+        confirmed_payload = confirmed.json()
+        assert confirmed_payload["result"]["summary"]["takeover"]["status"] == "active"
+
+        handed_back = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.takeover.handback",
+                "args": {
+                    "summary": "Lens handback",
+                    "verification": {"tests": "pass"},
+                    "pending_approvals": 0,
+                    "mode": "assist",
+                },
+            },
+        )
+        assert handed_back.status_code == 200
+        handback_payload = handed_back.json()
+        assert handback_payload["result"]["summary"]["takeover"]["status"] == "idle"
+
+        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 100})
+        assert trace.status_code == 200
+        decisions = trace.json().get("receipts", {}).get("decisions", [])
+        assert any(
+            str(row.get("kind", "")) == "lens.action.execute"
+            and str(row.get("action_kind", "")) == "control.takeover.request"
+            for row in decisions
+        )
+        assert any(
+            str(row.get("kind", "")) == "lens.action.execute"
+            and str(row.get("action_kind", "")) == "control.takeover.handback"
+            for row in decisions
+        )
+    finally:
+        _ensure_takeover_idle(c)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
