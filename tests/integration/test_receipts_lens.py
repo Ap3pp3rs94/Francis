@@ -827,6 +827,50 @@ def test_lens_execute_remote_command_wrappers_supported() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_lens_remote_chips_and_execute_respect_observer_rbac() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    observer_headers = {"x-francis-role": "observer"}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts", "approvals"]))
+        _ensure_takeover_idle(c)
+
+        actions = c.get("/lens/actions", headers=observer_headers)
+        assert actions.status_code == 200
+        chips = actions.json().get("action_chips", [])
+        chip_by_kind = {str(chip.get("kind", "")): chip for chip in chips}
+
+        assert chip_by_kind.get("control.remote.state", {}).get("enabled") is True
+        assert chip_by_kind.get("control.remote.panic", {}).get("enabled") is False
+        assert "rbac denied" in str(chip_by_kind.get("control.remote.panic", {}).get("policy_reason", "")).lower()
+        assert chip_by_kind.get("control.remote.takeover.request", {}).get("enabled") is False
+        assert "rbac denied" in str(
+            chip_by_kind.get("control.remote.takeover.request", {}).get("policy_reason", "")
+        ).lower()
+
+        execute_read = c.post(
+            "/lens/actions/execute",
+            headers=observer_headers,
+            json={"kind": "control.remote.state"},
+        )
+        assert execute_read.status_code == 200
+        assert execute_read.json().get("result", {}).get("summary", {}).get("status") == "ok"
+
+        execute_write = c.post(
+            "/lens/actions/execute",
+            headers=observer_headers,
+            json={"kind": "control.remote.panic", "args": {"reason": "observer should fail"}},
+        )
+        assert execute_write.status_code == 403
+        assert "rbac denied" in str(execute_write.json().get("detail", "")).lower()
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_lens_surfaces_worker_queue_signals() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     jobs_path = workspace / "queue" / "jobs.jsonl"

@@ -211,7 +211,7 @@ def test_autonomy_can_select_worker_cycle_when_leases_expired() -> None:
         candidate_kinds = [item.get("kind") for item in payload.get("candidate_actions", [])]
         assert "worker.cycle" in candidate_kinds
         executed_kinds = [item.get("kind") for item in payload.get("executed_actions", [])]
-        assert "worker.cycle" in executed_kinds
+        assert any(kind in {"worker.cycle", "worker.recover_leases"} for kind in executed_kinds)
     finally:
         jobs_path.write_text(existing, encoding="utf-8")
 

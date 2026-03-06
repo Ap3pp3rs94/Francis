@@ -424,6 +424,7 @@ def _execute_lens_action(
 
     if normalized_kind == "control.remote.state":
         _enforce_action_scope(app="control", action="control.remote.read", mutating=False)
+        _enforce_rbac(role, "control.remote.read")
         _enforce_rbac(role, "approvals.read")
         approval_limit = max(1, min(100, int(args.get("approval_limit", 10))))
         session_limit = max(1, min(50, int(args.get("session_limit", 5))))
@@ -435,6 +436,7 @@ def _execute_lens_action(
 
     if normalized_kind == "control.remote.approvals":
         _enforce_action_scope(app="control", action="control.remote.read", mutating=False)
+        _enforce_rbac(role, "control.remote.read")
         _enforce_rbac(role, "approvals.read")
         status = str(args.get("status", "pending")).strip().lower() or "pending"
         action_filter = str(args.get("action", "")).strip() or None
@@ -452,6 +454,7 @@ def _execute_lens_action(
 
     if normalized_kind == "control.remote.feed":
         _enforce_action_scope(app="control", action="control.remote.read", mutating=False)
+        _enforce_rbac(role, "control.remote.read")
         _enforce_rbac(role, "approvals.read")
         limit = max(1, min(1000, int(args.get("limit", 100))))
         cursor = str(args.get("cursor", "")).strip() or None
@@ -1323,6 +1326,10 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip()
     takeover_sessions_payload = control_takeover_sessions(limit=5)
     takeover_sessions_rows = takeover_sessions_payload.get("sessions", [])
+    role = _role_from_request(request)
+    remote_read_allowed = can(role, "control.remote.read") and can(role, "approvals.read")
+    remote_write_allowed = can(role, "control.remote.write")
+    remote_decide_allowed = remote_write_allowed and can(role, "approvals.decide")
     remote_pending_rows: list[dict[str, Any]] = []
     try:
         remote_approvals = control_remote_approvals(request, status="pending", limit=3)
@@ -1354,13 +1361,13 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         {
         "kind": "control.remote.panic" if not kill_switch else "control.remote.resume",
         "label": "Remote Panic Stop" if not kill_switch else "Remote Resume Mutations",
-        "enabled": True,
+        "enabled": remote_write_allowed,
         "reason": (
             "Trigger kill switch through the remote control plane."
             if not kill_switch
             else "Resume mutating actions through the remote control plane."
         ),
-        "policy_reason": "",
+        "policy_reason": "" if remote_write_allowed else f"RBAC denied: role={role}, action=control.remote.write",
         "risk_tier": "high" if not kill_switch else "medium",
         "trust_badge": "Confirmed",
         "requires_confirmation": True,
@@ -1374,9 +1381,9 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             {
             "kind": "control.remote.state",
             "label": "Remote Snapshot",
-            "enabled": True,
+            "enabled": remote_read_allowed,
             "reason": "Fetch compact control/takeover/approvals state for remote steering.",
-            "policy_reason": "",
+            "policy_reason": "" if remote_read_allowed else f"RBAC denied: role={role}, action=control.remote.read",
             "risk_tier": "low",
             "trust_badge": "Confirmed",
             }
@@ -1387,9 +1394,9 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             {
             "kind": "control.remote.approvals",
             "label": "Review Pending Approvals",
-            "enabled": True,
+            "enabled": remote_read_allowed,
             "reason": f"{len(remote_pending_rows)} pending approval(s) available.",
-            "policy_reason": "",
+            "policy_reason": "" if remote_read_allowed else f"RBAC denied: role={role}, action=control.remote.read",
             "risk_tier": "low",
             "trust_badge": "Confirmed",
             }
@@ -1400,9 +1407,9 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             {
             "kind": "control.remote.feed",
             "label": "Remote Feed",
-            "enabled": True,
+            "enabled": remote_read_allowed,
             "reason": "Stream recent remote control and takeover events with receipts.",
-            "policy_reason": "",
+            "policy_reason": "" if remote_read_allowed else f"RBAC denied: role={role}, action=control.remote.read",
             "risk_tier": "low",
             "trust_badge": "Confirmed",
             }
@@ -1414,11 +1421,13 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 {
                 "kind": "control.remote.approval.approve",
                 "label": "Approve Top Request",
-                "enabled": True,
+                "enabled": remote_decide_allowed,
                 "reason": f"Approve request {first_pending_id[:8]}... from Lens.",
-                "policy_reason": "",
+                "policy_reason": (
+                    "" if remote_decide_allowed else f"RBAC denied: role={role}, action=approvals.decide"
+                ),
                 "risk_tier": "low",
-                "trust_badge": "Likely",
+                "trust_badge": "Likely" if remote_decide_allowed else "Uncertain",
                 "requires_confirmation": True,
                 }
             )
@@ -1443,11 +1452,11 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             {
             "kind": "control.remote.takeover.handback",
             "label": "Remote Handback Control",
-            "enabled": True,
+            "enabled": remote_write_allowed,
             "reason": "Complete takeover handback through the remote command plane.",
-            "policy_reason": "",
+            "policy_reason": "" if remote_write_allowed else f"RBAC denied: role={role}, action=control.remote.write",
             "risk_tier": "low",
-            "trust_badge": "Confirmed",
+            "trust_badge": "Confirmed" if remote_write_allowed else "Uncertain",
             "requires_confirmation": True,
             }
         )
@@ -1477,11 +1486,15 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             {
             "kind": "control.remote.takeover.confirm",
             "label": "Remote Confirm Takeover",
-            "enabled": confirmation_enabled,
+            "enabled": confirmation_enabled and remote_write_allowed,
             "reason": "Confirm takeover via remote command plane.",
-            "policy_reason": confirmation_policy,
+            "policy_reason": (
+                f"RBAC denied: role={role}, action=control.remote.write"
+                if not remote_write_allowed
+                else confirmation_policy
+            ),
             "risk_tier": "medium",
-            "trust_badge": "Likely" if confirmation_enabled else "Uncertain",
+            "trust_badge": "Likely" if confirmation_enabled and remote_write_allowed else "Uncertain",
             "requires_confirmation": True,
             }
         )
@@ -1508,11 +1521,11 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 {
                 "kind": "control.remote.takeover.request",
                 "label": "Remote Request Takeover",
-                "enabled": True,
+                "enabled": remote_write_allowed,
                 "reason": "Start takeover handshake through remote command plane.",
-                "policy_reason": "",
+                "policy_reason": "" if remote_write_allowed else f"RBAC denied: role={role}, action=control.remote.write",
                 "risk_tier": "low",
-                "trust_badge": "Confirmed",
+                "trust_badge": "Confirmed" if remote_write_allowed else "Uncertain",
                 "requires_confirmation": True,
                 }
             )
