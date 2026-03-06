@@ -79,6 +79,7 @@ def lens_state() -> dict:
         for row in autonomy_queue.get("queued", [])
         if str(row.get("risk_tier", "")).strip().lower() in {"high", "critical"}
     )
+    autonomy_leased_expired_count = int(autonomy_queue.get("leased_expired_count", 0))
     catalog_entries = list_entries(_fs)
     staged_count = sum(1 for entry in catalog_entries if str(entry.get("status", "")).lower() == "staged")
     pending_approvals = pending_count(_fs) + len(_read_jsonl("queue/deadletter.jsonl")) + staged_count
@@ -99,6 +100,7 @@ def lens_state() -> dict:
         "autonomy_queue": {
             "queued_count": int(autonomy_queue.get("queued_count", 0)),
             "leased_count": int(autonomy_queue.get("leased_count", 0)),
+            "leased_expired_count": autonomy_leased_expired_count,
             "dispatched_count": int(autonomy_queue.get("dispatched_count", 0)),
             "failed_count": int(autonomy_queue.get("failed_count", 0)),
             "deadletter_count": int(autonomy_queue.get("deadletter_count", 0)),
@@ -119,6 +121,7 @@ def lens_state() -> dict:
             "worker_last_lease_conflict": event_state.get("worker_last_lease_conflict_count", 0),
             "autonomy_queue_due": int(autonomy_queue.get("queued_count", 0)),
             "autonomy_queue_high_risk_due": autonomy_high_risk_due,
+            "autonomy_queue_leased_expired": autonomy_leased_expired_count,
             "pending_approvals": pending_approvals,
         },
     }
@@ -146,6 +149,7 @@ def lens_actions(max_actions: int = 6) -> dict:
         for row in autonomy_queue.get("queued", [])
         if str(row.get("risk_tier", "")).strip().lower() in {"high", "critical"}
     )
+    autonomy_leased_expired_count = int(autonomy_queue.get("leased_expired_count", 0))
     allow_medium, allow_high = _mode_allows_medium_high(str(control.get("mode", "observe")))
     plan = build_plan(
         event_state=event_state,
@@ -228,6 +232,25 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "queue_telemetry": {
                     "queued_count": autonomy_queued_count,
                     "high_risk_due_count": autonomy_high_risk_due,
+                },
+            }
+        )
+    if autonomy_leased_expired_count > 0:
+        mode = str(control.get("mode", "observe")).strip().lower()
+        recover_enabled = mode in {"pilot", "away"}
+        recover_policy_reason = ""
+        if not recover_enabled:
+            recover_policy_reason = f"mutating action autonomy.recover not allowed in {mode} mode"
+        action_chips.append(
+            {
+                "kind": "autonomy.recover",
+                "label": "Recover Stale Autonomy Leases",
+                "enabled": recover_enabled,
+                "reason": f"{autonomy_leased_expired_count} stale leased autonomy event(s)",
+                "policy_reason": recover_policy_reason,
+                "risk_tier": "low",
+                "queue_telemetry": {
+                    "leased_expired_count": autonomy_leased_expired_count,
                 },
             }
         )
