@@ -584,6 +584,7 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         assert actions_idle.status_code == 200
         chips_idle = actions_idle.json().get("action_chips", [])
         assert any(str(chip.get("kind", "")) == "control.takeover.handback.package" for chip in chips_idle)
+        assert any(str(chip.get("kind", "")) == "control.takeover.handback.export" for chip in chips_idle)
 
         read_package = c.post(
             "/lens/actions/execute",
@@ -596,6 +597,18 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         assert package_summary["status"] == "ok"
         assert package_summary["session_id"] == session_id
         assert int(package_summary.get("summary", {}).get("counts", {}).get("transitions", 0)) >= 3
+
+        export_package = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.takeover.handback.export", "args": {"session_id": session_id, "limit": 80}},
+        )
+        assert export_package.status_code == 200
+        export_payload = export_package.json()
+        assert export_payload["status"] == "ok"
+        export_summary = export_payload["result"]["summary"]
+        assert export_summary["status"] == "ok"
+        assert export_summary["session_id"] == session_id
+        assert str(export_summary.get("export", {}).get("path", "")).startswith("control/handback_exports/")
     finally:
         _ensure_takeover_idle(c)
         _set_scope(c, original_scope)

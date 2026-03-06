@@ -39,11 +39,13 @@ from services.orchestrator.app.control_state import (
 )
 from services.orchestrator.app.routes.control import (
     ControlTakeoverConfirmRequest,
+    ControlTakeoverHandbackExportRequest,
     ControlTakeoverHandbackRequest,
     ControlTakeoverRequest,
     append_takeover_activity,
     control_takeover_activity,
     control_takeover_confirm,
+    control_takeover_handback_export,
     control_takeover_handback,
     control_takeover_handback_package,
     control_takeover_request,
@@ -363,6 +365,24 @@ def _execute_lens_action(
         summary = control_takeover_handback_package(limit=limit, session_id=session_id)
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
+    if normalized_kind == "control.takeover.handback.export":
+        _enforce_action_scope(app="control", action="control.takeover.read", mutating=False)
+        limit = max(1, min(5000, int(args.get("limit", 300))))
+        session_id = str(args.get("session_id", "")).strip() or None
+        reason = str(args.get("reason", "")).strip()
+        execution_args = {"limit": limit, "session_id": session_id, "reason": reason}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_handback_export(
+            request,
+            payload=ControlTakeoverHandbackExportRequest(
+                session_id=session_id,
+                limit=limit,
+                reason=reason,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "worker.cycle":
         _enforce_rbac(role, "worker.cycle")
         _enforce_action_scope(app="worker", action="worker.cycle")
@@ -674,6 +694,8 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"limit": 50, "session_id": ""}
     elif kind == "control.takeover.handback.package":
         hinted["execute_via"]["payload"]["args"] = {"limit": 120, "session_id": ""}
+    elif kind == "control.takeover.handback.export":
+        hinted["execute_via"]["payload"]["args"] = {"limit": 300, "session_id": "", "reason": ""}
     return hinted
 
 
@@ -1116,6 +1138,19 @@ def lens_actions(max_actions: int = 6) -> dict:
         )
         package_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_last_session_id
         action_chips.append(package_chip)
+        export_chip = _with_execute_hint(
+            {
+            "kind": "control.takeover.handback.export",
+            "label": "Export Handback Bundle",
+            "enabled": True,
+            "reason": "Write a durable handback bundle to workspace/control/handback_exports.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+        export_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_last_session_id
+        action_chips.append(export_chip)
 
     if autonomy_queued_count > 0:
         dispatch_enabled = mode in {"pilot", "away"}
