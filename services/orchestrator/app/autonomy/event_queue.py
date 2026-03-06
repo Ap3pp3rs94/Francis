@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -13,6 +13,7 @@ AUTONOMY_DEADLETTER_PATH = "autonomy/deadletter.jsonl"
 AUTONOMY_LAST_DISPATCH_PATH = "autonomy/last_dispatch.json"
 VALID_PRIORITIES = {"low", "normal", "high", "critical"}
 VALID_RISK_TIERS = {"low", "medium", "high", "critical"}
+DEFAULT_LEASE_TTL_SECONDS = 300
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -20,6 +21,10 @@ def _safe_int(value: Any, default: int) -> int:
         return int(value)
     except Exception:
         return default
+
+
+def _normalize_lease_ttl_seconds(value: int | None) -> int:
+    return max(15, min(3600, _safe_int(value, DEFAULT_LEASE_TTL_SECONDS)))
 
 
 def _parse_ts(ts: str | None) -> datetime | None:
@@ -119,6 +124,17 @@ def _sort_due_events(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(rows, key=key_fn)
 
 
+def _lease_expires_at(row: dict[str, Any], *, lease_ttl_seconds: int) -> datetime | None:
+    explicit = _parse_ts(str(row.get("lease_expires_at", "")).strip() or None)
+    if explicit is not None:
+        return explicit
+    leased_at = _parse_ts(str(row.get("leased_at", "")).strip() or None)
+    if leased_at is None:
+        return None
+    ttl = _normalize_lease_ttl_seconds(lease_ttl_seconds)
+    return leased_at + timedelta(seconds=ttl)
+
+
 def enqueue_event(
     fs: WorkspaceFS,
     *,
@@ -187,6 +203,7 @@ def lease_due_events(
     *,
     max_events: int,
     lease_owner: str,
+    lease_ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
 ) -> list[dict[str, Any]]:
     rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
     now = datetime.now(timezone.utc)
@@ -203,7 +220,10 @@ def lease_due_events(
         return []
 
     lease_id = str(uuid4())
-    leased_at = utc_now_iso()
+    now = datetime.now(timezone.utc)
+    leased_at = now.isoformat()
+    ttl = _normalize_lease_ttl_seconds(lease_ttl_seconds)
+    lease_expires_at = (now + timedelta(seconds=ttl)).isoformat()
     leased_events: list[dict[str, Any]] = []
     updated_rows: list[dict[str, Any]] = []
     for row in rows:
@@ -217,6 +237,7 @@ def lease_due_events(
                 "lease_id": lease_id,
                 "lease_owner": str(lease_owner).strip() or "autonomy.dispatch",
                 "leased_at": leased_at,
+                "lease_expires_at": lease_expires_at,
             }
             leased_events.append(leased)
             updated_rows.append(leased)
@@ -224,6 +245,55 @@ def lease_due_events(
             updated_rows.append(row)
     _write_jsonl(fs, AUTONOMY_EVENTS_PATH, updated_rows)
     return leased_events
+
+
+def recover_stale_leased_events(
+    fs: WorkspaceFS,
+    *,
+    run_id: str,
+    lease_ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
+    max_recover: int = 100,
+) -> dict[str, Any]:
+    rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
+    now = datetime.now(timezone.utc)
+    ttl = _normalize_lease_ttl_seconds(lease_ttl_seconds)
+    recover_budget = max(0, _safe_int(max_recover, 0))
+    recovered: list[dict[str, Any]] = []
+    updated_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("status", "")).strip().lower() != "leased":
+            updated_rows.append(row)
+            continue
+        expires_at = _lease_expires_at(row, lease_ttl_seconds=ttl)
+        if expires_at is None or expires_at > now or len(recovered) >= recover_budget:
+            updated_rows.append(row)
+            continue
+        queued = {
+            **row,
+            "status": "queued",
+            "next_run_after": utc_now_iso(),
+            "lease_id": None,
+            "lease_owner": None,
+            "leased_at": None,
+            "lease_expires_at": None,
+            "recovered_at": utc_now_iso(),
+            "recovered_by_run_id": run_id,
+            "error": None,
+        }
+        recovered.append(queued)
+        updated_rows.append(queued)
+
+    if recovered:
+        _write_jsonl(fs, AUTONOMY_EVENTS_PATH, updated_rows)
+
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "checked_count": len(rows),
+        "recovered_count": len(recovered),
+        "lease_ttl_seconds": ttl,
+        "recovered": recovered,
+    }
 
 
 def complete_event(
@@ -299,19 +369,27 @@ def fail_event(
 def queue_status(fs: WorkspaceFS, *, limit: int = 100) -> dict[str, Any]:
     rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
     deadletters = _read_jsonl(fs, AUTONOMY_DEADLETTER_PATH)
+    now = datetime.now(timezone.utc)
     queued = [row for row in rows if str(row.get("status", "")).strip().lower() == "queued"]
     leased = [row for row in rows if str(row.get("status", "")).strip().lower() == "leased"]
+    leased_expired = [
+        row
+        for row in leased
+        if (_lease_expires_at(row, lease_ttl_seconds=DEFAULT_LEASE_TTL_SECONDS) or now) <= now
+    ]
     dispatched = [row for row in rows if str(row.get("status", "")).strip().lower() == "dispatched"]
     failed = [row for row in rows if str(row.get("status", "")).strip().lower() == "failed"]
     return {
         "events_total": len(rows),
         "queued_count": len(queued),
         "leased_count": len(leased),
+        "leased_expired_count": len(leased_expired),
         "dispatched_count": len(dispatched),
         "failed_count": len(failed),
         "deadletter_count": len(deadletters),
         "queued": _sort_due_events(queued)[-max(0, limit) :],
         "leased": leased[-max(0, limit) :],
+        "leased_expired": leased_expired[-max(0, limit) :],
         "recent_dispatched": dispatched[-max(0, limit) :],
         "recent_failed": failed[-max(0, limit) :],
         "recent_deadletter": deadletters[-max(0, limit) :],
