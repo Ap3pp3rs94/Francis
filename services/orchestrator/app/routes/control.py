@@ -72,7 +72,7 @@ class ControlTakeoverHandbackRequest(BaseModel):
     summary: str = ""
     verification: dict[str, Any] = Field(default_factory=dict)
     pending_approvals: int = Field(default=0, ge=0)
-    mode: str | None = Field(default="assist", description="Optional control mode to apply at handback.")
+    mode: str | None = Field(default=None, description="Optional control mode to apply at handback.")
     reason: str = ""
 
 
@@ -102,6 +102,10 @@ def _default_takeover_state() -> dict[str, Any]:
         "objective": "",
         "reason": "",
         "scope": control.get("scopes", {}),
+        "previous_mode": control.get("mode"),
+        "previous_kill_switch": control.get("kill_switch"),
+        "previous_scope": control.get("scopes", {}),
+        "applied_scope": control.get("scopes", {}),
         "requested_by": "",
         "requested_at": None,
         "confirmed_at": None,
@@ -142,6 +146,12 @@ def _load_or_init_takeover_state() -> dict[str, Any]:
             merged["scope"] = _sanitize_scope(
                 merged.get("scope", {}) if isinstance(merged.get("scope"), dict) else {}
             )
+            merged["previous_scope"] = _sanitize_scope(
+                merged.get("previous_scope", {}) if isinstance(merged.get("previous_scope"), dict) else {}
+            )
+            merged["applied_scope"] = _sanitize_scope(
+                merged.get("applied_scope", {}) if isinstance(merged.get("applied_scope"), dict) else {}
+            )
             _fs.write_text(_takeover_state_path, json.dumps(merged, ensure_ascii=False, indent=2))
             return merged
     except Exception:
@@ -154,6 +164,12 @@ def _save_takeover_state(state: dict[str, Any]) -> dict[str, Any]:
     baseline = _default_takeover_state()
     merged = {**baseline, **state}
     merged["scope"] = _sanitize_scope(merged.get("scope", {}) if isinstance(merged.get("scope"), dict) else {})
+    merged["previous_scope"] = _sanitize_scope(
+        merged.get("previous_scope", {}) if isinstance(merged.get("previous_scope"), dict) else {}
+    )
+    merged["applied_scope"] = _sanitize_scope(
+        merged.get("applied_scope", {}) if isinstance(merged.get("applied_scope"), dict) else {}
+    )
     merged["updated_at"] = utc_now_iso()
     _fs.write_text(_takeover_state_path, json.dumps(merged, ensure_ascii=False, indent=2))
     return merged
@@ -434,6 +450,7 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
     trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     role = _role_from_request(request)
     before = _load_or_init_takeover_state()
+    control_before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     if str(before.get("status", "idle")).strip().lower() == "active":
         raise HTTPException(status_code=409, detail="Takeover already active; handback before requesting again.")
 
@@ -449,6 +466,10 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
             "objective": objective,
             "reason": reason,
             "scope": _resolve_takeover_scope(payload),
+            "previous_mode": control_before.get("mode"),
+            "previous_kill_switch": control_before.get("kill_switch"),
+            "previous_scope": control_before.get("scopes", {}),
+            "applied_scope": control_before.get("scopes", {}),
             "requested_by": role,
             "requested_at": now,
             "confirmed_at": None,
@@ -514,6 +535,17 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
         raise HTTPException(status_code=409, detail="Cannot confirm takeover while kill switch is active.")
 
     reason = str(body.reason).strip() or "manual_takeover_confirm"
+    requested_scope = _sanitize_scope(
+        takeover_before.get("scope", {}) if isinstance(takeover_before.get("scope"), dict) else {}
+    )
+    scoped_control = set_scope(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        repos=requested_scope.get("repos", []),
+        workspaces=requested_scope.get("workspaces", []),
+        apps=requested_scope.get("apps", []),
+    )
     control_after = set_mode(
         _fs,
         repo_root=_repo_root,
@@ -529,6 +561,7 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
             "confirmation_reason": reason,
             "confirm_run_id": run_id,
             "confirm_trace_id": trace_id,
+            "applied_scope": control_after.get("scopes", scoped_control.get("scopes", requested_scope)),
         }
     )
     receipt = _record_control_receipt(
@@ -578,18 +611,37 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
         raise HTTPException(status_code=409, detail="No active takeover to hand back.")
 
     control_before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
-    control_after = control_before
-    if body.mode is not None:
+    restore_scope = _sanitize_scope(
+        takeover_before.get("previous_scope", {})
+        if isinstance(takeover_before.get("previous_scope"), dict)
+        else control_before.get("scopes", {})
+        if isinstance(control_before.get("scopes"), dict)
+        else {}
+    )
+    scoped_control = set_scope(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        repos=restore_scope.get("repos", []),
+        workspaces=restore_scope.get("workspaces", []),
+        apps=restore_scope.get("apps", []),
+    )
+
+    if body.mode is None:
+        mode_after = str(takeover_before.get("previous_mode", scoped_control.get("mode", "assist"))).strip().lower()
+        kill_switch_after = bool(takeover_before.get("previous_kill_switch", False))
+    else:
         mode_after = str(body.mode).strip().lower()
-        if mode_after not in VALID_MODES:
-            raise HTTPException(status_code=400, detail=f"Invalid mode: {mode_after}")
-        control_after = set_mode(
-            _fs,
-            repo_root=_repo_root,
-            workspace_root=_workspace_root,
-            mode=mode_after,
-            kill_switch=False,
-        )
+        kill_switch_after = False
+    if mode_after not in VALID_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid mode: {mode_after}")
+    control_after = set_mode(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        mode=mode_after,
+        kill_switch=kill_switch_after,
+    )
 
     reason = str(body.reason).strip() or "manual_takeover_handback"
     takeover_after = _save_takeover_state(
@@ -603,6 +655,7 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
             "handback_pending_approvals": int(body.pending_approvals),
             "handback_run_id": run_id,
             "handback_trace_id": trace_id,
+            "applied_scope": control_after.get("scopes", scoped_control.get("scopes", restore_scope)),
         }
     )
     receipt = _record_control_receipt(

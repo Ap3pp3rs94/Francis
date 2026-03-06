@@ -168,6 +168,7 @@ def test_control_takeover_request_confirm_handback_flow() -> None:
     try:
         _set_mode(c, "assist", kill_switch=False)
         _ensure_takeover_idle(c)
+        scope_before_takeover = _get_scope(c)
         request_payload = {
             "objective": f"Implement feature {uuid4()}",
             "reason": "user takeover request",
@@ -189,6 +190,12 @@ def test_control_takeover_request_confirm_handback_flow() -> None:
         assert confirmed_payload["kill_switch"] is False
         assert confirmed_payload["takeover"]["status"] == "active"
         assert confirmed_payload["takeover"]["confirmed_at"] is not None
+        scope_during_takeover = _get_scope(c)
+        takeover_apps = [str(item).lower() for item in scope_during_takeover.get("apps", [])]
+        assert "missions" in takeover_apps
+        assert "forge" in takeover_apps
+        assert "approvals" in takeover_apps
+        assert "control" in takeover_apps
 
         handed_back = c.post(
             "/control/takeover/handback",
@@ -196,7 +203,6 @@ def test_control_takeover_request_confirm_handback_flow() -> None:
                 "summary": "Completed objective and ran verification.",
                 "verification": {"tests": "pass"},
                 "pending_approvals": 0,
-                "mode": "assist",
                 "reason": "control returned",
             },
         )
@@ -206,6 +212,8 @@ def test_control_takeover_request_confirm_handback_flow() -> None:
         assert handback_payload["takeover"]["handed_back_at"] is not None
         assert handback_payload["takeover"]["handback_summary"] == "Completed objective and ran verification."
         assert handback_payload["mode"] == "assist"
+        scope_after_handback = _get_scope(c)
+        assert scope_after_handback == scope_before_takeover
 
         history = c.get("/control/takeover/history", params={"limit": 20})
         assert history.status_code == 200
