@@ -23,6 +23,10 @@ def _last_dispatch_file() -> Path:
     return _workspace_root() / "autonomy" / "last_dispatch.json"
 
 
+def _dispatch_history_file() -> Path:
+    return _workspace_root() / "autonomy" / "dispatch_history.jsonl"
+
+
 def _incidents_file() -> Path:
     return _workspace_root() / "incidents" / "incidents.jsonl"
 
@@ -388,5 +392,66 @@ def test_autonomy_recover_requeues_expired_leases() -> None:
         assert int(queue.get("leased_count", 0)) == 0
     finally:
         _restore(_events_file(), events_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_dispatch_history_endpoint_returns_receipts() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+    history_before = _stash(_dispatch_history_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+        _restore(_dispatch_history_file(), "")
+
+        enqueue = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.history_test",
+                "source": "pytest",
+                "priority": "normal",
+                "payload": {"test": True},
+            },
+        )
+        assert enqueue.status_code == 200
+
+        dispatch = c.post(
+            "/autonomy/events/dispatch",
+            json={
+                "max_events": 1,
+                "max_actions": 0,
+                "max_runtime_seconds": 5,
+                "allow_medium": False,
+                "allow_high": False,
+                "stop_on_critical": False,
+            },
+        )
+        assert dispatch.status_code == 200
+        dispatch_payload = dispatch.json()
+        assert dispatch_payload["status"] == "ok"
+        run_id = dispatch_payload["run_id"]
+
+        history = c.get("/autonomy/events/history", params={"limit": 10})
+        assert history.status_code == 200
+        payload = history.json()
+        assert payload["status"] == "ok"
+        assert payload["count"] >= 1
+        rows = payload.get("history", [])
+        assert any(str(item.get("run_id", "")) == run_id for item in rows)
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _restore(_dispatch_history_file(), history_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
