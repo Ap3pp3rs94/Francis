@@ -413,3 +413,75 @@ def test_control_takeover_activity_and_handback_package() -> None:
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_remote_state_and_approval_decision_flow() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    trace_id = f"remote-approval-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+
+        request_one = c.post(
+            "/approvals/request",
+            json={"action": "forge.promote", "reason": "remote approve test", "metadata": {"source": "pytest"}},
+        )
+        assert request_one.status_code == 200
+        approval_id_one = str(request_one.json().get("approval", {}).get("id", "")).strip()
+        assert approval_id_one
+
+        remote_state = c.get("/control/remote/state", headers=headers, params={"approval_limit": 10, "session_limit": 5})
+        assert remote_state.status_code == 200
+        remote_payload = remote_state.json()
+        assert remote_payload.get("status") == "ok"
+        assert int(remote_payload.get("approvals", {}).get("pending_count", 0)) >= 1
+        pending_rows = remote_payload.get("approvals", {}).get("pending", [])
+        assert any(str(row.get("id", "")).strip() == approval_id_one for row in pending_rows)
+
+        remote_approvals = c.get("/control/remote/approvals", headers=headers, params={"status": "pending", "limit": 20})
+        assert remote_approvals.status_code == 200
+        approvals_rows = remote_approvals.json().get("approvals", [])
+        assert any(str(row.get("id", "")).strip() == approval_id_one for row in approvals_rows)
+
+        approved = c.post(
+            f"/control/remote/approvals/{approval_id_one}/approve",
+            headers=headers,
+            json={"note": "remote approve"},
+        )
+        assert approved.status_code == 200
+        approved_payload = approved.json()
+        assert approved_payload.get("status") == "ok"
+        assert approved_payload.get("approval", {}).get("status") == "approved"
+
+        approval_after_approve = c.get(f"/approvals/{approval_id_one}")
+        assert approval_after_approve.status_code == 200
+        assert approval_after_approve.json().get("approval", {}).get("status") == "approved"
+
+        request_two = c.post(
+            "/approvals/request",
+            json={"action": "tools.run", "reason": "remote reject test", "metadata": {"source": "pytest"}},
+        )
+        assert request_two.status_code == 200
+        approval_id_two = str(request_two.json().get("approval", {}).get("id", "")).strip()
+        assert approval_id_two
+
+        rejected = c.post(
+            f"/control/remote/approvals/{approval_id_two}/reject",
+            headers=headers,
+            json={"note": "remote reject"},
+        )
+        assert rejected.status_code == 200
+        rejected_payload = rejected.json()
+        assert rejected_payload.get("status") == "ok"
+        assert rejected_payload.get("approval", {}).get("status") == "rejected"
+
+        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 200})
+        assert trace.status_code == 200
+        trace_payload = trace.json()
+        decision_rows = trace_payload.get("receipts", {}).get("decisions", [])
+        decision_kinds = [str(row.get("kind", "")) for row in decision_rows]
+        assert "control.remote.approval.approved" in decision_kinds
+        assert "control.remote.approval.rejected" in decision_kinds
+    finally:
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

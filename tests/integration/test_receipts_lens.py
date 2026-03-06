@@ -330,7 +330,7 @@ def test_lens_state_surfaces_takeover_status() -> None:
     original_scope = _get_scope(c)
     try:
         _set_mode(c, "assist", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts"]))
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts", "approvals"]))
         _ensure_takeover_idle(c)
 
         requested = c.post(
@@ -560,12 +560,53 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         )
         assert confirmed.status_code == 200
 
+        approval_request = c.post(
+            "/approvals/request",
+            json={"action": "forge.promote", "reason": "lens remote approve test", "metadata": {"source": "pytest"}},
+        )
+        assert approval_request.status_code == 200
+        approval_id = str(approval_request.json().get("approval", {}).get("id", "")).strip()
+        assert approval_id
+
         actions_active = c.get("/lens/actions")
         assert actions_active.status_code == 200
         chips_active = actions_active.json().get("action_chips", [])
+        assert any(str(chip.get("kind", "")) == "control.remote.state" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.approvals" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.approval.approve" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.session" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.activity" for chip in chips_active)
+
+        remote_state = c.post("/lens/actions/execute", json={"kind": "control.remote.state"})
+        assert remote_state.status_code == 200
+        remote_state_payload = remote_state.json()
+        assert remote_state_payload["status"] == "ok"
+        assert remote_state_payload["result"]["summary"]["status"] == "ok"
+        assert int(remote_state_payload["result"]["summary"]["approvals"]["pending_count"]) >= 1
+
+        remote_pending = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.remote.approvals", "args": {"status": "pending", "limit": 20}},
+        )
+        assert remote_pending.status_code == 200
+        remote_pending_payload = remote_pending.json()
+        assert remote_pending_payload["status"] == "ok"
+        remote_pending_rows = remote_pending_payload["result"]["summary"]["approvals"]
+        assert any(str(row.get("id", "")).strip() == approval_id for row in remote_pending_rows)
+
+        remote_approve = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.remote.approval.approve", "args": {"approval_id": approval_id, "note": "lens approve"}},
+        )
+        assert remote_approve.status_code == 200
+        remote_approve_payload = remote_approve.json()
+        assert remote_approve_payload["status"] == "ok"
+        assert remote_approve_payload["result"]["summary"]["approval"]["status"] == "approved"
+
+        approval_after = c.get(f"/approvals/{approval_id}")
+        assert approval_after.status_code == 200
+        assert approval_after.json().get("approval", {}).get("status") == "approved"
 
         read_sessions = c.post(
             "/lens/actions/execute",

@@ -38,11 +38,16 @@ from services.orchestrator.app.control_state import (
     set_mode,
 )
 from services.orchestrator.app.routes.control import (
+    ControlRemoteApprovalDecisionRequest,
     ControlTakeoverConfirmRequest,
     ControlTakeoverHandbackExportRequest,
     ControlTakeoverHandbackRequest,
     ControlTakeoverRequest,
     append_takeover_activity,
+    control_remote_approval_approve,
+    control_remote_approval_reject,
+    control_remote_approvals,
+    control_remote_state,
     control_takeover_activity,
     control_takeover_confirm,
     control_takeover_handback_export,
@@ -406,6 +411,70 @@ def _execute_lens_action(
         summary = control_takeover_session(session_id=session_id, limit=limit)
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
+    if normalized_kind == "control.remote.state":
+        _enforce_action_scope(app="control", action="control.remote.read", mutating=False)
+        _enforce_rbac(role, "approvals.read")
+        approval_limit = max(1, min(100, int(args.get("approval_limit", 10))))
+        session_limit = max(1, min(50, int(args.get("session_limit", 5))))
+        execution_args = {"approval_limit": approval_limit, "session_limit": session_limit}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_state(request, approval_limit=approval_limit, session_limit=session_limit)
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.approvals":
+        _enforce_action_scope(app="control", action="control.remote.read", mutating=False)
+        _enforce_rbac(role, "approvals.read")
+        status = str(args.get("status", "pending")).strip().lower() or "pending"
+        action_filter = str(args.get("action", "")).strip() or None
+        limit = max(1, min(200, int(args.get("limit", 50))))
+        execution_args = {"status": status, "action": action_filter, "limit": limit}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_approvals(
+            request,
+            status=status,
+            action=action_filter,
+            limit=limit,
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.approval.approve":
+        _enforce_action_scope(app="control", action="control.remote.decide", mutating=False)
+        _enforce_rbac(role, "approvals.decide")
+        approval_id = str(args.get("approval_id", "")).strip()
+        if not approval_id:
+            raise HTTPException(status_code=400, detail="approval_id is required for control.remote.approval.approve")
+        note = str(args.get("note", "")).strip()
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"approval_id": approval_id, "note": note, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_approval_approve(
+            approval_id=approval_id,
+            request=request,
+            payload=ControlRemoteApprovalDecisionRequest(note=note, session_id=session_id),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.approval.reject":
+        _enforce_action_scope(app="control", action="control.remote.decide", mutating=False)
+        _enforce_rbac(role, "approvals.decide")
+        approval_id = str(args.get("approval_id", "")).strip()
+        if not approval_id:
+            raise HTTPException(status_code=400, detail="approval_id is required for control.remote.approval.reject")
+        note = str(args.get("note", "")).strip()
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"approval_id": approval_id, "note": note, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_approval_reject(
+            approval_id=approval_id,
+            request=request,
+            payload=ControlRemoteApprovalDecisionRequest(note=note, session_id=session_id),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "worker.cycle":
         _enforce_rbac(role, "worker.cycle")
         _enforce_action_scope(app="worker", action="worker.cycle")
@@ -723,11 +792,19 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"limit": 20}
     elif kind == "control.takeover.session":
         hinted["execute_via"]["payload"]["args"] = {"session_id": "<required>", "limit": 200}
+    elif kind == "control.remote.state":
+        hinted["execute_via"]["payload"]["args"] = {"approval_limit": 10, "session_limit": 5}
+    elif kind == "control.remote.approvals":
+        hinted["execute_via"]["payload"]["args"] = {"status": "pending", "limit": 50}
+    elif kind == "control.remote.approval.approve":
+        hinted["execute_via"]["payload"]["args"] = {"approval_id": "<required>", "note": "", "session_id": ""}
+    elif kind == "control.remote.approval.reject":
+        hinted["execute_via"]["payload"]["args"] = {"approval_id": "<required>", "note": "", "session_id": ""}
     return hinted
 
 
 @router.get("/lens/state")
-def lens_state() -> dict:
+def lens_state(request: Request) -> dict:
     allowed, reason, control = check_action_allowed(
         _fs,
         repo_root=_repo_root,
@@ -791,6 +868,7 @@ def lens_state() -> dict:
     takeover_recent_activity = takeover_activity_payload.get("activity", [])
     takeover_sessions_payload = control_takeover_sessions(limit=3)
     takeover_recent_sessions = takeover_sessions_payload.get("sessions", [])
+    remote_state = control_remote_state(request, approval_limit=10, session_limit=3)
     handback_package_available = False
     handback_package_summary: dict[str, Any] | None = None
     if takeover_last_session_id:
@@ -857,6 +935,7 @@ def lens_state() -> dict:
             "active_streams_horizon": list(telemetry.get("active_streams_horizon", [])),
             "last_event_ts": telemetry.get("last_event_ts"),
         },
+        "remote": remote_state,
         "autonomy_queue": {
             "queued_count": int(autonomy_queue.get("queued_count", 0)),
             "queued_retry_count": autonomy_retry_pressure,
@@ -957,7 +1036,7 @@ def lens_state() -> dict:
 
 
 @router.get("/lens/actions")
-def lens_actions(max_actions: int = 6) -> dict:
+def lens_actions(request: Request, max_actions: int = 6) -> dict:
     allowed, reason, control = check_action_allowed(
         _fs,
         repo_root=_repo_root,
@@ -1073,6 +1152,14 @@ def lens_actions(max_actions: int = 6) -> dict:
     takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip()
     takeover_sessions_payload = control_takeover_sessions(limit=5)
     takeover_sessions_rows = takeover_sessions_payload.get("sessions", [])
+    remote_pending_rows: list[dict[str, Any]] = []
+    try:
+        remote_approvals = control_remote_approvals(request, status="pending", limit=3)
+        remote_pending_rows = [
+            row for row in remote_approvals.get("approvals", []) if isinstance(row, dict)
+        ]
+    except HTTPException:
+        remote_pending_rows = []
     action_chips.append(
         _with_execute_hint(
             {
@@ -1092,6 +1179,49 @@ def lens_actions(max_actions: int = 6) -> dict:
             }
         )
     )
+    action_chips.append(
+        _with_execute_hint(
+            {
+            "kind": "control.remote.state",
+            "label": "Remote Snapshot",
+            "enabled": True,
+            "reason": "Fetch compact control/takeover/approvals state for remote steering.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+    )
+    if remote_pending_rows:
+        approvals_chip = _with_execute_hint(
+            {
+            "kind": "control.remote.approvals",
+            "label": "Review Pending Approvals",
+            "enabled": True,
+            "reason": f"{len(remote_pending_rows)} pending approval(s) available.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+        approvals_chip["execute_via"]["payload"]["args"]["status"] = "pending"
+        action_chips.append(approvals_chip)
+        first_pending_id = str(remote_pending_rows[0].get("id", "")).strip()
+        if first_pending_id:
+            approve_chip = _with_execute_hint(
+                {
+                "kind": "control.remote.approval.approve",
+                "label": "Approve Top Request",
+                "enabled": True,
+                "reason": f"Approve request {first_pending_id[:8]}... from Lens.",
+                "policy_reason": "",
+                "risk_tier": "low",
+                "trust_badge": "Likely",
+                "requires_confirmation": True,
+                }
+            )
+            approve_chip["execute_via"]["payload"]["args"]["approval_id"] = first_pending_id
+            action_chips.append(approve_chip)
     if takeover_status == "active":
         action_chips.append(
             _with_execute_hint(

@@ -15,9 +15,12 @@ from francis_brain.ledger import RunLedger
 from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
+from francis_policy.rbac import can
+from services.orchestrator.app.approvals_store import add_decision, get_request, list_requests, pending_count
 
 from services.orchestrator.app.control_state import (
     VALID_MODES,
+    check_action_allowed,
     load_or_init_control_state,
     set_mode,
     set_scope,
@@ -86,6 +89,11 @@ class ControlTakeoverHandbackExportRequest(BaseModel):
     reason: str = ""
 
 
+class ControlRemoteApprovalDecisionRequest(BaseModel):
+    note: str = ""
+    session_id: str | None = None
+
+
 def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
     try:
         raw = _fs.read_text(rel_path)
@@ -103,6 +111,26 @@ def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
 
 def _role_from_request(request: Request) -> str:
     return request.headers.get("x-francis-role", "architect").strip().lower()
+
+
+def _enforce_remote_rbac(request: Request, action: str) -> str:
+    role = _role_from_request(request)
+    if not can(role, action):
+        raise HTTPException(status_code=403, detail=f"RBAC denied: role={role}, action={action}")
+    return role
+
+
+def _enforce_remote_control(action: str) -> None:
+    allowed, reason, _state = check_action_allowed(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        app="control",
+        action=action,
+        mutating=False,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
 
 
 def _default_takeover_state() -> dict[str, Any]:
@@ -741,6 +769,183 @@ def control_resume(request: Request, payload: ControlResumeRequest | None = None
         "receipt_id": receipt.get("id"),
         "reason": reason,
     }
+
+
+@router.get("/control/remote/state")
+def control_remote_state(request: Request, approval_limit: int = 10, session_limit: int = 5) -> dict:
+    _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "approvals.read")
+    control_state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    takeover_state = _load_or_init_takeover_state()
+    sessions = _build_takeover_sessions(limit=session_limit)
+    pending_approvals = list_requests(_fs, status="pending", limit=approval_limit)
+    latest_session = sessions[0] if sessions else {}
+    return {
+        "status": "ok",
+        "control": {
+            "mode": control_state.get("mode"),
+            "kill_switch": bool(control_state.get("kill_switch", False)),
+            "updated_at": control_state.get("updated_at"),
+        },
+        "takeover": {
+            "status": str(takeover_state.get("status", "idle")).strip().lower() or "idle",
+            "session_id": str(takeover_state.get("session_id") or "").strip() or None,
+            "last_session_id": str(takeover_state.get("last_session_id") or "").strip() or None,
+            "objective": str(takeover_state.get("objective", "")).strip() or None,
+            "requested_at": takeover_state.get("requested_at"),
+            "confirmed_at": takeover_state.get("confirmed_at"),
+            "handed_back_at": takeover_state.get("handed_back_at"),
+            "latest_session": latest_session,
+        },
+        "approvals": {
+            "pending_count": pending_count(_fs),
+            "pending": pending_approvals,
+        },
+        "sessions": {
+            "count": len(sessions),
+            "recent": sessions,
+        },
+        "remote_actions": [
+            "control.remote.state",
+            "control.remote.approvals",
+            "control.remote.approval.approve",
+            "control.remote.approval.reject",
+        ],
+    }
+
+
+@router.get("/control/remote/approvals")
+def control_remote_approvals(
+    request: Request,
+    status: str = "pending",
+    action: str | None = None,
+    limit: int = 50,
+) -> dict:
+    _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "approvals.read")
+    approvals_list = list_requests(
+        _fs,
+        status=str(status).strip().lower() or None,
+        action=str(action).strip() if action is not None else None,
+        limit=limit,
+    )
+    return {
+        "status": "ok",
+        "count": len(approvals_list),
+        "pending_count": pending_count(_fs),
+        "approvals": approvals_list,
+    }
+
+
+def _control_remote_approval_decision(
+    *,
+    request: Request,
+    approval_id: str,
+    decision: str,
+    payload: ControlRemoteApprovalDecisionRequest | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.decide")
+    role = _enforce_remote_rbac(request, "approvals.decide")
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
+    body = payload or ControlRemoteApprovalDecisionRequest()
+    normalized_approval_id = str(approval_id).strip()
+    if not normalized_approval_id:
+        raise HTTPException(status_code=400, detail="approval_id is required")
+
+    before = get_request(_fs, normalized_approval_id)
+    if before is None:
+        raise HTTPException(status_code=404, detail=f"Approval not found: {normalized_approval_id}")
+
+    try:
+        decision_event = add_decision(
+            _fs,
+            run_id=run_id,
+            approval_id=normalized_approval_id,
+            decision=decision,
+            decided_by=role,
+            note=str(body.note).strip(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if decision_event is None:
+        raise HTTPException(status_code=404, detail=f"Approval not found: {normalized_approval_id}")
+    after = get_request(_fs, normalized_approval_id)
+    if after is None:
+        raise HTTPException(status_code=404, detail=f"Approval not found after decision: {normalized_approval_id}")
+
+    normalized_session_id = str(body.session_id or "").strip() or None
+    receipt = _record_control_receipt(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind=f"control.remote.approval.{str(after.get('status', '')).strip().lower()}",
+        reason="remote.approvals.decision",
+        before={
+            "approval_id": normalized_approval_id,
+            "status": before.get("status"),
+            "action": before.get("action"),
+        },
+        after={
+            "approval_id": normalized_approval_id,
+            "status": after.get("status"),
+            "action": after.get("action"),
+            "decided_by": role,
+        },
+        session_id=normalized_session_id,
+        metadata={"approval_id": normalized_approval_id},
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=role,
+        kind=f"control.remote.approval.{str(after.get('status', '')).strip().lower()}",
+        detail={
+            "approval_id": normalized_approval_id,
+            "action": after.get("action"),
+            "status": after.get("status"),
+            "note": str(body.note).strip(),
+        },
+        ok=True,
+        session_id=normalized_session_id,
+        allow_inactive=True,
+    )
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "approval": after,
+        "decision": decision_event,
+        "receipt_id": receipt.get("id"),
+    }
+
+
+@router.post("/control/remote/approvals/{approval_id}/approve")
+def control_remote_approval_approve(
+    approval_id: str,
+    request: Request,
+    payload: ControlRemoteApprovalDecisionRequest | None = None,
+) -> dict:
+    return _control_remote_approval_decision(
+        request=request,
+        approval_id=approval_id,
+        decision="approved",
+        payload=payload,
+    )
+
+
+@router.post("/control/remote/approvals/{approval_id}/reject")
+def control_remote_approval_reject(
+    approval_id: str,
+    request: Request,
+    payload: ControlRemoteApprovalDecisionRequest | None = None,
+) -> dict:
+    return _control_remote_approval_decision(
+        request=request,
+        approval_id=approval_id,
+        decision="rejected",
+        payload=payload,
+    )
 
 
 @router.get("/control/takeover")
