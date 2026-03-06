@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -684,6 +685,183 @@ def test_autonomy_dispatch_runtime_budget_requeues_remaining_events() -> None:
     finally:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_dispatch_failure_retries_with_backoff() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+
+        enqueue = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.retry_test",
+                "source": "pytest",
+                "priority": "normal",
+            },
+        )
+        assert enqueue.status_code == 200
+
+        with patch("services.orchestrator.app.routes.autonomy.run_cycle", side_effect=RuntimeError("dispatch boom")):
+            dispatch = c.post(
+                "/autonomy/events/dispatch",
+                json={
+                    "max_events": 1,
+                    "max_actions": 1,
+                    "max_runtime_seconds": 5,
+                    "max_attempts": 2,
+                    "retry_backoff_seconds": 120,
+                    "allow_medium": False,
+                    "allow_high": False,
+                    "stop_on_critical": False,
+                },
+            )
+        assert dispatch.status_code == 200
+        payload = dispatch.json()
+        assert payload["status"] == "ok"
+        assert payload["processed_count"] == 0
+        assert payload["failed_count"] == 0
+        assert payload["retried_count"] == 1
+        queue = payload.get("queue", {})
+        assert int(queue.get("queued_count", 0)) >= 1
+        assert int(queue.get("deadletter_count", 0)) == 0
+        queued_rows = queue.get("queued", [])
+        assert queued_rows
+        retry_row = queued_rows[-1]
+        assert int(retry_row.get("retry_backoff_seconds", 0)) == 120
+        next_run_after = str(retry_row.get("next_run_after", ""))
+        parsed = datetime.fromisoformat(next_run_after.replace("Z", "+00:00"))
+        assert parsed > datetime.now(timezone.utc)
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_dispatch_failure_exhausts_attempts_to_deadletter() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+
+        enqueue = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.retry_exhausted_test",
+                "source": "pytest",
+                "priority": "normal",
+            },
+        )
+        assert enqueue.status_code == 200
+
+        with patch("services.orchestrator.app.routes.autonomy.run_cycle", side_effect=RuntimeError("dispatch boom")):
+            dispatch = c.post(
+                "/autonomy/events/dispatch",
+                json={
+                    "max_events": 1,
+                    "max_actions": 1,
+                    "max_runtime_seconds": 5,
+                    "max_attempts": 1,
+                    "retry_backoff_seconds": 60,
+                    "allow_medium": False,
+                    "allow_high": False,
+                    "stop_on_critical": False,
+                },
+            )
+        assert dispatch.status_code == 200
+        payload = dispatch.json()
+        assert payload["status"] == "ok"
+        assert payload["processed_count"] == 0
+        assert payload["failed_count"] == 1
+        assert payload["retried_count"] == 0
+        queue = payload.get("queue", {})
+        assert int(queue.get("failed_count", 0)) >= 1
+        assert int(queue.get("deadletter_count", 0)) >= 1
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    worker_deadletter_before = _stash(_worker_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+        _restore(
+            _worker_deadletter_file(),
+            (
+                '{"id":"queue-dl-reactor","ts":"2026-01-01T00:00:00+00:00","run_id":"r-reactor",'
+                '"kind":"job.deadletter","action":"mission.tick","error":"reactor signal"}\n'
+            ),
+        )
+
+        tick = c.post(
+            "/autonomy/reactor/tick",
+            json={
+                "max_collect_events": 10,
+                "include_types": ["queue.deadletter_present"],
+                "max_events": 5,
+                "max_actions": 0,
+                "max_runtime_seconds": 5,
+                "allow_medium": True,
+                "allow_high": False,
+                "stop_on_critical": False,
+            },
+        )
+        assert tick.status_code == 200
+        payload = tick.json()
+        assert payload["status"] == "ok"
+        collect = payload.get("collect", {})
+        dispatch = payload.get("dispatch", {})
+        assert collect.get("status") == "ok"
+        assert int(collect.get("queued_count", 0)) >= 1
+        assert dispatch.get("status") == "ok"
+        assert int(dispatch.get("leased_count", 0)) >= 1
+        assert int(dispatch.get("processed_count", 0)) >= 1
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_worker_deadletter_file(), worker_deadletter_before)
         _restore(_last_dispatch_file(), last_dispatch_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
