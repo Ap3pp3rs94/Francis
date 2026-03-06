@@ -16,11 +16,13 @@ def execute(
     run_id: str,
     fs: WorkspaceFS,
 ) -> dict[str, Any]:
+    trace_id = str(job.get("trace_id", "")).strip() or run_id
     action = str(job.get("action", "")).strip().lower()
     if action != "forge.propose":
         return {
             "ok": False,
             "run_id": run_id,
+            "trace_id": trace_id,
             "job_id": str(job.get("id", "")),
             "action": action,
             "error": f"unsupported forge worker action: {action}",
@@ -40,6 +42,7 @@ def execute(
             {
                 "ts": ts,
                 "run_id": run_id,
+                "trace_id": trace_id,
                 "job_id": str(job.get("id", "")),
                 "action": action,
                 "context": context,
@@ -53,6 +56,7 @@ def execute(
     return {
         "ok": True,
         "run_id": run_id,
+        "trace_id": trace_id,
         "job_id": str(job.get("id", "")),
         "action": action,
         "proposal_count": len(proposals),

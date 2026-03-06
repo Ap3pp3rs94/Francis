@@ -37,6 +37,11 @@ class WorkerRecoverRequest(BaseModel):
     action_classes: list[str] | None = None
 
 
+def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
+    normalized = str(trace_id or "").strip()
+    return normalized or fallback_run_id
+
+
 def _role_from_request(request: Request) -> str:
     return request.headers.get("x-francis-role", "architect").strip().lower()
 
@@ -51,6 +56,7 @@ def _enforce_rbac(request: Request, action: str) -> None:
 def worker_cycle(request: Request, payload: WorkerCycleRequest | None = None) -> dict:
     body = payload or WorkerCycleRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     _enforce_rbac(request, "worker.cycle")
 
     allowed, reason, _state = check_action_allowed(
@@ -77,6 +83,7 @@ def worker_cycle(request: Request, payload: WorkerCycleRequest | None = None) ->
     }
     return run_worker_cycle(
         run_id=run_id,
+        trace_id=trace_id,
         max_jobs=body.max_jobs,
         max_runtime_seconds=body.max_runtime_seconds,
         lease_ttl_seconds=body.lease_ttl_seconds,
@@ -92,6 +99,7 @@ def worker_cycle(request: Request, payload: WorkerCycleRequest | None = None) ->
 def worker_recover(request: Request, payload: WorkerRecoverRequest | None = None) -> dict:
     body = payload or WorkerRecoverRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     _enforce_rbac(request, "worker.cycle")
     allowed, reason, _state = check_action_allowed(
         _fs,
@@ -106,6 +114,7 @@ def worker_recover(request: Request, payload: WorkerRecoverRequest | None = None
     classes = {str(item).strip().lower() for item in (body.action_classes or []) if str(item).strip()}
     return recover_stale_leased_jobs(
         run_id=run_id,
+        trace_id=trace_id,
         action_classes=classes if classes else None,
     )
 

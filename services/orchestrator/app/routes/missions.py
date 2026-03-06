@@ -103,17 +103,25 @@ def _append_history(event: dict) -> None:
     _append_jsonl("missions/history.jsonl", event)
 
 
+def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
+    normalized = str(trace_id or "").strip()
+    return normalized or fallback_run_id
+
+
 def _queue_job(
     *,
     run_id: str,
     mission_id: str,
     action: str = "mission.tick",
     priority: str = "normal",
+    trace_id: str | None = None,
 ) -> dict:
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
     job = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
         "run_id": run_id,
+        "trace_id": normalized_trace_id,
         "mission_id": mission_id,
         "action": action,
         "priority": priority,
@@ -144,6 +152,7 @@ def _lease_or_replay_job(
     lease_key: str,
     lease_owner: str,
     run_id: str,
+    trace_id: str | None = None,
     ttl_seconds: int = 30,
 ) -> tuple[str, dict]:
     """
@@ -153,6 +162,7 @@ def _lease_or_replay_job(
     jobs = _read_jsonl("queue/jobs.jsonl")
 
     now = datetime.now(timezone.utc)
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
     selected_idx: int | None = None
 
     for i, job in enumerate(jobs):
@@ -181,11 +191,13 @@ def _lease_or_replay_job(
             break
 
     if selected_idx is None:
-        jobs.append(_queue_job(run_id=run_id, mission_id=mission_id))
+        jobs.append(_queue_job(run_id=run_id, mission_id=mission_id, trace_id=normalized_trace_id))
         selected_idx = len(jobs) - 1
 
     job = jobs[selected_idx]
     job["status"] = "leased"
+    if not str(job.get("trace_id", "")).strip():
+        job["trace_id"] = normalized_trace_id
     job["lease_key"] = lease_key
     job["lease_owner"] = lease_owner
     job["lease_expires_at"] = (now + timedelta(seconds=ttl_seconds)).isoformat()
@@ -281,6 +293,7 @@ def create_mission(request: Request, payload: MissionCreate) -> dict:
     _enforce_rbac(request, "missions.create")
     _enforce_policy("missions.create")
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     now = utc_now_iso()
 
     missions = _load_missions()
@@ -304,6 +317,7 @@ def create_mission(request: Request, payload: MissionCreate) -> dict:
         "id": str(uuid4()),
         "ts": now,
         "run_id": run_id,
+        "trace_id": trace_id,
         "mission_id": mission["id"],
         "event": "mission.created",
         "status": mission["status"],
@@ -314,6 +328,7 @@ def create_mission(request: Request, payload: MissionCreate) -> dict:
         run_id=run_id,
         mission_id=mission["id"],
         priority=str(mission.get("priority", "normal")),
+        trace_id=trace_id,
     )
     _ledger.append(
         run_id=run_id,
@@ -322,11 +337,13 @@ def create_mission(request: Request, payload: MissionCreate) -> dict:
             "mission_id": mission["id"],
             "status": mission["status"],
             "steps": len(mission["steps"]),
+            "trace_id": trace_id,
         },
     )
     return {
         "status": "ok",
         "run_id": run_id,
+        "trace_id": trace_id,
         "mission": mission,
         "queued_job": queued_job,
     }
@@ -336,11 +353,13 @@ def create_mission(request: Request, payload: MissionCreate) -> dict:
 def tick_mission(mission_id: str, request: Request, payload: MissionTickRequest | None = None) -> dict:
     body = payload or MissionTickRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     role = _role_from_request(request)
     lease_key = body.idempotency_key or request.headers.get("x-idempotency-key")
     return execute_mission_tick(
         mission_id=mission_id,
         run_id=run_id,
+        trace_id=trace_id,
         role=role,
         force_fail=body.force_fail,
         reason=body.reason,
@@ -352,6 +371,7 @@ def execute_mission_tick(
     *,
     mission_id: str,
     run_id: str,
+    trace_id: str | None = None,
     role: str = "architect",
     force_fail: bool = False,
     reason: str = "",
@@ -361,25 +381,34 @@ def execute_mission_tick(
     _enforce_rbac_role(role, "missions.tick")
     _enforce_policy("missions.tick")
     now = utc_now_iso()
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
     lease_key = idempotency_key or f"{mission_id}:{run_id}"
 
     missions = _load_missions()
     idx, mission = _find_mission(missions, mission_id)
 
     if mission.get("status") in {"completed", "failed", "cancelled", "canceled"}:
-        return {"status": "ok", "run_id": run_id, "mission": mission, "tick": "skipped"}
+        return {
+            "status": "ok",
+            "run_id": run_id,
+            "trace_id": normalized_trace_id,
+            "mission": mission,
+            "tick": "skipped",
+        }
 
     lease_state, leased_job = _lease_or_replay_job(
         mission_id=mission_id,
         lease_key=lease_key,
         lease_owner=run_id,
         run_id=run_id,
+        trace_id=normalized_trace_id,
     )
     if lease_state == "busy":
         raise HTTPException(status_code=409, detail="Mission job is currently leased by another run.")
     if lease_state == "replay":
         replay = leased_job.get("last_result")
         if isinstance(replay, dict):
+            replay.setdefault("trace_id", normalized_trace_id)
             return replay
 
     if force_fail:
@@ -393,6 +422,7 @@ def execute_mission_tick(
             "id": str(uuid4()),
             "ts": now,
             "run_id": run_id,
+            "trace_id": normalized_trace_id,
             "mission_id": mission_id,
             "reason": mission["last_error"],
             "job": leased_job,
@@ -404,6 +434,7 @@ def execute_mission_tick(
                 "id": str(uuid4()),
                 "ts": now,
                 "run_id": run_id,
+                "trace_id": normalized_trace_id,
                 "mission_id": mission_id,
                 "event": "mission.failed",
                 "status": "failed",
@@ -413,9 +444,19 @@ def execute_mission_tick(
         _ledger.append(
             run_id=run_id,
             kind="mission.failed",
-            summary={"mission_id": mission_id, "reason": mission["last_error"]},
+            summary={
+                "mission_id": mission_id,
+                "reason": mission["last_error"],
+                "trace_id": normalized_trace_id,
+            },
         )
-        result = {"status": "ok", "run_id": run_id, "mission": mission, "deadletter": dead}
+        result = {
+            "status": "ok",
+            "run_id": run_id,
+            "trace_id": normalized_trace_id,
+            "mission": mission,
+            "deadletter": dead,
+        }
         _complete_lease(
             job_id=str(leased_job.get("id")),
             lease_key=lease_key,
@@ -451,6 +492,7 @@ def execute_mission_tick(
             run_id=run_id,
             mission_id=mission_id,
             priority=str(mission.get("priority", "normal")),
+            trace_id=normalized_trace_id,
         )
 
     _append_history(
@@ -458,6 +500,7 @@ def execute_mission_tick(
             "id": str(uuid4()),
             "ts": now,
             "run_id": run_id,
+            "trace_id": normalized_trace_id,
             "mission_id": mission_id,
             "event": "mission.tick",
             "status": mission["status"],
@@ -472,11 +515,13 @@ def execute_mission_tick(
             "status": mission["status"],
             "step_executed": step_executed,
             "queued_next": queued_job is not None,
+            "trace_id": normalized_trace_id,
         },
     )
     result = {
         "status": "ok",
         "run_id": run_id,
+        "trace_id": normalized_trace_id,
         "mission": mission,
         "step_executed": step_executed,
         "queued_job": queued_job,

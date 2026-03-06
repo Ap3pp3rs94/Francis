@@ -117,6 +117,7 @@ def run_cycle(
         result = execute_action(
             action=action,
             run_id=run_id,
+            trace_id=normalized_trace_id,
             fs=fs,
             workspace_root=workspace_root,
             repo_root=repo_root,

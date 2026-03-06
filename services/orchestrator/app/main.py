@@ -48,7 +48,9 @@ def _build_app() -> FastAPI:
 
     @app.middleware("http")
     async def attach_run_id(request: Request, call_next):
-        request.state.run_id = uuid4()
+        run_id = uuid4()
+        request.state.run_id = run_id
+        request.state.trace_id = request.headers.get("x-trace-id", "").strip() or str(run_id)
         return await call_next(request)
 
     app.include_router(health_router)

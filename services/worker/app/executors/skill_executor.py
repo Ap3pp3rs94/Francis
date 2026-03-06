@@ -15,11 +15,13 @@ def execute(
     fs: WorkspaceFS,
     repo_root: Path,
 ) -> dict[str, Any]:
+    trace_id = str(job.get("trace_id", "")).strip() or run_id
     skill_name = str(job.get("skill", "")).strip()
     if not skill_name:
         return {
             "ok": False,
             "run_id": run_id,
+            "trace_id": trace_id,
             "job_id": str(job.get("id", "")),
             "action": str(job.get("action", "")),
             "error": "missing skill name",
@@ -33,6 +35,7 @@ def execute(
     return {
         "ok": result.ok,
         "run_id": run_id,
+        "trace_id": trace_id,
         "job_id": str(job.get("id", "")),
         "action": str(job.get("action", "")),
         "skill": skill_name,

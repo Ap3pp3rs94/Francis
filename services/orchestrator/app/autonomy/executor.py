@@ -17,12 +17,14 @@ def execute_action(
     *,
     action: dict[str, Any],
     run_id: str,
+    trace_id: str | None = None,
     fs: WorkspaceFS,
     workspace_root: Path,
     repo_root: Path,
 ) -> dict[str, Any]:
     kind = str(action.get("kind", ""))
     ts = utc_now_iso()
+    normalized_trace_id = str(trace_id or "").strip() or run_id
 
     if kind == "observer.scan":
         result = run_observer_cycle(
@@ -30,19 +32,27 @@ def execute_action(
             repo_root=repo_root,
             workspace_root=workspace_root,
         )
-        return {"ok": True, "kind": kind, "ts": ts, "result": result}
+        return {"ok": True, "kind": kind, "ts": ts, "trace_id": normalized_trace_id, "result": result}
 
     if kind == "mission.tick":
         mission_id = str(action.get("mission_id", ""))
         if not mission_id:
-            return {"ok": False, "kind": kind, "ts": ts, "error": "missing mission_id"}
+            return {"ok": False, "kind": kind, "ts": ts, "trace_id": normalized_trace_id, "error": "missing mission_id"}
         result = execute_mission_tick(
             mission_id=mission_id,
             run_id=f"{run_id}:mission:{uuid4()}",
+            trace_id=normalized_trace_id,
             role="architect",
             idempotency_key=f"autonomy:{run_id}:{mission_id}",
         )
-        return {"ok": True, "kind": kind, "ts": ts, "mission_id": mission_id, "result": result}
+        return {
+            "ok": True,
+            "kind": kind,
+            "ts": ts,
+            "trace_id": normalized_trace_id,
+            "mission_id": mission_id,
+            "result": result,
+        }
 
     if kind == "forge.propose":
         context = action.get("context") if isinstance(action.get("context"), dict) else {}
@@ -50,6 +60,7 @@ def execute_action(
         report = {
             "ts": ts,
             "run_id": run_id,
+            "trace_id": normalized_trace_id,
             "kind": kind,
             "context": context,
             "proposals": proposals,
@@ -60,6 +71,7 @@ def execute_action(
             "ok": True,
             "kind": kind,
             "ts": ts,
+            "trace_id": normalized_trace_id,
             "report_path": f"forge/reports/{report_name}",
             "proposal_count": len(proposals),
         }
@@ -75,6 +87,7 @@ def execute_action(
         )
         summary = run_worker_cycle(
             run_id=f"{run_id}:worker:{uuid4()}",
+            trace_id=normalized_trace_id,
             max_jobs=int(action.get("max_jobs", 10)),
             max_runtime_seconds=int(action.get("max_runtime_seconds", 30)),
             lease_ttl_seconds=int(action.get("lease_ttl_seconds", 120)),
@@ -86,6 +99,7 @@ def execute_action(
             "ok": True,
             "kind": kind,
             "ts": ts,
+            "trace_id": normalized_trace_id,
             "result": summary,
             "processed_count": summary.get("processed_count", 0),
             "error_count": summary.get("error_count", 0),
@@ -102,14 +116,22 @@ def execute_action(
         )
         summary = recover_stale_leased_jobs(
             run_id=f"{run_id}:worker-recover:{uuid4()}",
+            trace_id=normalized_trace_id,
             action_classes=action_classes if action_classes else None,
         )
         return {
             "ok": True,
             "kind": kind,
             "ts": ts,
+            "trace_id": normalized_trace_id,
             "result": summary,
             "recovered_count": summary.get("recovered_count", 0),
         }
 
-    return {"ok": False, "kind": kind, "ts": ts, "error": f"unknown action kind: {kind}"}
+    return {
+        "ok": False,
+        "kind": kind,
+        "ts": ts,
+        "trace_id": normalized_trace_id,
+        "error": f"unknown action kind: {kind}",
+    }

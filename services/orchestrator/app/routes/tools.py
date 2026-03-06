@@ -61,6 +61,11 @@ def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
     _fs.write_text(rel_path, raw + json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
+    normalized = str(trace_id or "").strip()
+    return normalized or fallback_run_id
+
+
 def _read_json(rel_path: str, default: Any) -> Any:
     try:
         raw = _fs.read_text(rel_path)
@@ -268,13 +273,22 @@ def _apply_rollback_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "path": path, "restored": "empty_placeholder"}
 
 
-def _log_tool_run(*, run_id: str, spec: dict[str, Any], result: dict[str, Any], approval_id: str | None = None) -> None:
+def _log_tool_run(
+    *,
+    run_id: str,
+    trace_id: str | None,
+    spec: dict[str, Any],
+    result: dict[str, Any],
+    approval_id: str | None = None,
+) -> None:
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
     _append_jsonl(
         "logs/francis.log.jsonl",
         {
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": run_id,
+            "trace_id": normalized_trace_id,
             "kind": "tool.run",
             "skill": spec.get("name"),
             "source": spec.get("source", "builtin"),
@@ -291,6 +305,7 @@ def _log_tool_run(*, run_id: str, spec: dict[str, Any], result: dict[str, Any], 
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": run_id,
+            "trace_id": normalized_trace_id,
             "kind": "tool.decision",
             "skill": spec.get("name"),
             "source": spec.get("source", "builtin"),
@@ -309,6 +324,7 @@ def _log_tool_run(*, run_id: str, spec: dict[str, Any], result: dict[str, Any], 
             "risk_tier": spec.get("risk_tier", "low"),
             "mutating": bool(spec.get("mutating", False)),
             "approval_id": approval_id,
+            "trace_id": normalized_trace_id,
         },
     )
 
@@ -335,6 +351,7 @@ def list_tools(request: Request) -> dict:
 @router.post("/tools/run")
 def run_tool(request: Request, payload: ToolRunRequest) -> dict:
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     _enforce_rbac(request, "tools.run")
     spec = _resolve_tool_spec(payload.skill.strip())
     if spec is None:
@@ -349,13 +366,14 @@ def run_tool(request: Request, payload: ToolRunRequest) -> dict:
         approval_id=request.headers.get("x-approval-id", "").strip() or None,
     )
     result = _execute_tool(spec, payload.args)
-    _log_tool_run(run_id=run_id, spec=spec, result=result, approval_id=approval_id)
-    return {"status": "ok", "run_id": run_id, "skill": spec, "result": result}
+    _log_tool_run(run_id=run_id, trace_id=trace_id, spec=spec, result=result, approval_id=approval_id)
+    return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "skill": spec, "result": result}
 
 
 @router.post("/tools/chain")
 def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     _enforce_rbac(request, "tools.run")
     if not payload.steps:
         raise HTTPException(status_code=400, detail="steps cannot be empty")
@@ -408,13 +426,14 @@ def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
             rollback_snapshots.append(snapshot)
 
         result = _execute_tool(spec, step.args)
-        _log_tool_run(run_id=run_id, spec=spec, result=result, approval_id=approval_id)
+        _log_tool_run(run_id=run_id, trace_id=trace_id, spec=spec, result=result, approval_id=approval_id)
         step_receipt = {
             "index": index,
             "label": step.label or f"step-{index + 1}",
             "skill": spec.get("name"),
             "source": spec.get("source", "builtin"),
             "approval_id": approval_id,
+            "trace_id": trace_id,
             "ok": bool(result.get("ok")),
             "result": result,
         }
@@ -439,6 +458,7 @@ def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
     response = {
         "status": status,
         "run_id": run_id,
+        "trace_id": trace_id,
         "chain_id": chain_id,
         "mission_id": payload.mission_id,
         "goal": payload.goal,
@@ -465,6 +485,7 @@ def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
                 "id": str(uuid4()),
                 "ts": utc_now_iso(),
                 "run_id": run_id,
+                "trace_id": trace_id,
                 "mission_id": mission.get("id"),
                 "event": "mission.tool_chain",
                 "status": status,
@@ -481,6 +502,7 @@ def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": run_id,
+            "trace_id": trace_id,
             "kind": "tool.chain",
             "chain_id": chain_id,
             "mission_id": payload.mission_id,
@@ -500,6 +522,7 @@ def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
             "steps_total": len(payload.steps),
             "steps_executed": len(executed),
             "rollback_count": len(rollback_actions),
+            "trace_id": trace_id,
         },
     )
     return response

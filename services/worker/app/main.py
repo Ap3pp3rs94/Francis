@@ -47,6 +47,11 @@ def _safe_int(value: Any, default: int) -> int:
         return default
 
 
+def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
+    normalized = str(trace_id or "").strip()
+    return normalized or fallback_run_id
+
+
 def _action_policy(action: str) -> dict[str, int | None]:
     policy: dict[str, int | None] = {
         "max_attempts": DEFAULT_MAX_ATTEMPTS,
@@ -125,7 +130,12 @@ def _record_deadletter(
     job: dict[str, Any],
     reason: str,
     result: dict[str, Any],
+    trace_id: str | None = None,
 ) -> None:
+    normalized_trace_id = _normalize_trace_id(
+        str(job.get("trace_id", "")).strip() or trace_id,
+        fallback_run_id=parent_run_id,
+    )
     _append_jsonl(
         fs,
         DEADLETTER_PATH,
@@ -133,6 +143,7 @@ def _record_deadletter(
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": parent_run_id,
+            "trace_id": normalized_trace_id,
             "mission_id": job.get("mission_id"),
             "reason": reason,
             "job": job,
@@ -267,6 +278,7 @@ def _acquire_non_mission_lease(
     job_id: str,
     lease_owner: str,
     lease_ttl_seconds: int,
+    trace_id: str | None = None,
 ) -> tuple[bool, dict[str, Any] | None, str]:
     with QUEUE_LOCK:
         jobs = _read_jsonl(fs, QUEUE_PATH)
@@ -299,6 +311,11 @@ def _acquire_non_mission_lease(
         if next_run_after is not None and next_run_after > now:
             return (False, row, "backoff")
 
+        normalized_trace_id = _normalize_trace_id(
+            str(row.get("trace_id", "")).strip() or trace_id,
+            fallback_run_id=lease_owner,
+        )
+        row["trace_id"] = normalized_trace_id
         lease_key = str(uuid4())
         row["status"] = "leased"
         row["lease_key"] = lease_key
@@ -388,6 +405,7 @@ def _finalize_non_mission_job(
     action_policy: dict[str, int | None],
     lease_owner: str,
     lease_key: str,
+    trace_id: str | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     with QUEUE_LOCK:
         jobs = _read_jsonl(fs, QUEUE_PATH)
@@ -416,6 +434,10 @@ def _finalize_non_mission_job(
         row["attempts"] = attempts
         row["last_result"] = result
         row["last_error"] = str(result.get("error", ""))
+        row["trace_id"] = _normalize_trace_id(
+            str(row.get("trace_id", "")).strip() or trace_id,
+            fallback_run_id=parent_run_id,
+        )
         row["lease_key"] = None
         row["lease_owner"] = None
         row["lease_expires_at"] = None
@@ -436,7 +458,14 @@ def _finalize_non_mission_job(
             row["next_run_after"] = None
             jobs[idx] = row
             _write_jsonl(fs, QUEUE_PATH, jobs)
-            _record_deadletter(fs, parent_run_id=parent_run_id, job=row, reason=row["last_error"], result=result)
+            _record_deadletter(
+                fs,
+                parent_run_id=parent_run_id,
+                job=row,
+                reason=row["last_error"],
+                result=result,
+                trace_id=str(row.get("trace_id", "")).strip() or trace_id,
+            )
             return ("deadlettered", row)
 
         default_backoff = _safe_int(action_policy.get("base_backoff_seconds", DEFAULT_BACKOFF_SECONDS), DEFAULT_BACKOFF_SECONDS)
@@ -454,9 +483,11 @@ def _finalize_non_mission_job(
 def recover_stale_leased_jobs(
     *,
     run_id: str | None = None,
+    trace_id: str | None = None,
     action_classes: set[str] | None = None,
 ) -> dict[str, Any]:
     effective_run_id = (run_id or str(uuid4())).strip()
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=effective_run_id)
     workspace_root = Path(settings.workspace_root).resolve()
     repo_root = workspace_root.parent.resolve()
     ensure_local_first(repo_root=repo_root, workspace_root=workspace_root)
@@ -475,6 +506,7 @@ def recover_stale_leased_jobs(
     summary = {
         "status": "ok",
         "run_id": effective_run_id,
+        "trace_id": normalized_trace_id,
         "recovered_count": recovered_count,
         "action_classes": normalized_classes,
         "recovered_by_action_class": by_action_class,
@@ -488,6 +520,7 @@ def recover_stale_leased_jobs(
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": effective_run_id,
+            "trace_id": normalized_trace_id,
             "kind": "worker.recover_leases",
             "recovered_count": recovered_count,
             "recovered_by_action_class": by_action_class,
@@ -502,6 +535,7 @@ def recover_stale_leased_jobs(
             "recovered_count": recovered_count,
             "recovered_by_action_class": by_action_class,
             "action_classes": normalized_classes,
+            "trace_id": normalized_trace_id,
         },
     )
     return summary
@@ -510,6 +544,7 @@ def recover_stale_leased_jobs(
 def run_worker_cycle(
     *,
     run_id: str | None = None,
+    trace_id: str | None = None,
     max_jobs: int = 20,
     max_runtime_seconds: int = 60,
     action_allowlist: set[str] | None = None,
@@ -520,6 +555,7 @@ def run_worker_cycle(
     max_concurrent_cycles: int = DEFAULT_MAX_CONCURRENT_CYCLES,
 ) -> dict[str, Any]:
     effective_run_id = (run_id or str(uuid4())).strip()
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=effective_run_id)
     workspace_root = Path(settings.workspace_root).resolve()
     repo_root = workspace_root.parent.resolve()
     ensure_local_first(repo_root=repo_root, workspace_root=workspace_root)
@@ -565,6 +601,7 @@ def run_worker_cycle(
         summary = {
             "status": "blocked",
             "run_id": effective_run_id,
+            "trace_id": normalized_trace_id,
             "reason": "max concurrent worker cycles reached",
             "active_worker_cycles": active_cycles,
             "max_concurrent_cycles": max_concurrent_cycles,
@@ -594,6 +631,7 @@ def run_worker_cycle(
                 "id": str(uuid4()),
                 "ts": utc_now_iso(),
                 "run_id": effective_run_id,
+                "trace_id": normalized_trace_id,
                 "kind": "worker.cycle.blocked",
                 "reason": summary["reason"],
                 "active_worker_cycles": active_cycles,
@@ -607,6 +645,7 @@ def run_worker_cycle(
                 "reason": summary["reason"],
                 "active_worker_cycles": active_cycles,
                 "max_concurrent_cycles": max_concurrent_cycles,
+                "trace_id": normalized_trace_id,
             },
         )
         return summary
@@ -638,6 +677,10 @@ def run_worker_cycle(
                 break
 
             action = str(job.get("action", "")).strip().lower()
+            job_trace_id = _normalize_trace_id(
+                str(job.get("trace_id", "")).strip() or normalized_trace_id,
+                fallback_run_id=normalized_trace_id,
+            )
             job_run_id = f"{effective_run_id}:job:{job.get('id', uuid4())}"
             action_policy = _action_policy(action)
 
@@ -650,7 +693,7 @@ def run_worker_cycle(
             action_started = time.monotonic()
 
             if action == "mission.tick":
-                result = execute_mission_job(job, run_id=job_run_id)
+                result = execute_mission_job(job, run_id=job_run_id, trace_id=job_trace_id)
                 queue_outcome = "delegated"
             else:
                 leased, leased_job, lease_state = _acquire_non_mission_lease(
@@ -658,6 +701,7 @@ def run_worker_cycle(
                     job_id=str(job.get("id", "")),
                     lease_owner=effective_run_id,
                     lease_ttl_seconds=lease_ttl_seconds,
+                    trace_id=job_trace_id,
                 )
                 if not leased:
                     if lease_state == "busy":
@@ -665,13 +709,17 @@ def run_worker_cycle(
                     deferred_by_action[action] = deferred_by_action.get(action, 0) + 1
                     continue
 
-                leased_ref = leased_job or job
+                leased_ref = dict(leased_job or job)
+                leased_ref["trace_id"] = _normalize_trace_id(
+                    str(leased_ref.get("trace_id", "")).strip() or job_trace_id,
+                    fallback_run_id=normalized_trace_id,
+                )
                 lease_key = str(leased_ref.get("lease_key", ""))
                 leased_job_id = str(leased_ref.get("id", "")) or str(job.get("id", ""))
 
                 if action.startswith("forge."):
                     result, renewals, lease_lost = _execute_with_lease_heartbeat(
-                        lambda: execute_forge_job(job, run_id=job_run_id, fs=fs),
+                        lambda: execute_forge_job(leased_ref, run_id=job_run_id, fs=fs),
                         fs=fs,
                         job_id=leased_job_id,
                         lease_owner=effective_run_id,
@@ -681,7 +729,7 @@ def run_worker_cycle(
                     )
                 elif action == "skill.run":
                     result, renewals, lease_lost = _execute_with_lease_heartbeat(
-                        lambda: execute_skill_job(job, run_id=job_run_id, fs=fs, repo_root=repo_root),
+                        lambda: execute_skill_job(leased_ref, run_id=job_run_id, fs=fs, repo_root=repo_root),
                         fs=fs,
                         job_id=leased_job_id,
                         lease_owner=effective_run_id,
@@ -693,6 +741,7 @@ def run_worker_cycle(
                     result = {
                         "ok": False,
                         "run_id": job_run_id,
+                        "trace_id": job_trace_id,
                         "job_id": str(job.get("id", "")),
                         "action": action,
                         "error": f"unsupported action: {action}",
@@ -724,6 +773,7 @@ def run_worker_cycle(
                         "timed_out": True,
                         "error": f"action runtime exceeded timeout ({elapsed_ms}ms >= {timeout_seconds * 1000}ms)",
                     }
+                result.setdefault("trace_id", job_trace_id)
                 queue_outcome, _job_after = _finalize_non_mission_job(
                     fs,
                     parent_run_id=effective_run_id,
@@ -732,6 +782,7 @@ def run_worker_cycle(
                     action_policy=action_policy,
                     lease_owner=effective_run_id,
                     lease_key=lease_key,
+                    trace_id=job_trace_id,
                 )
                 if queue_outcome in {"missing", "not_leased", "lease_owner_mismatch", "lease_key_mismatch"}:
                     lease_finalize_conflict_count += 1
@@ -744,6 +795,7 @@ def run_worker_cycle(
                         "error": f"{existing_error}; {finalize_error}" if existing_error else finalize_error,
                     }
 
+            result.setdefault("trace_id", job_trace_id)
             if bool(result.get("ok")):
                 success_count += 1
             else:
@@ -760,6 +812,7 @@ def run_worker_cycle(
                     "id": str(uuid4()),
                     "ts": utc_now_iso(),
                     "run_id": effective_run_id,
+                    "trace_id": job_trace_id,
                     "kind": "worker.job",
                     "action": action,
                     "job_id": str(job.get("id", "")),
@@ -772,6 +825,7 @@ def run_worker_cycle(
             processed.append(
                 {
                     "job_id": str(job.get("id", "")),
+                    "trace_id": job_trace_id,
                     "action": action,
                     "mission_id": str(job.get("mission_id", "")),
                     "queue_outcome": queue_outcome,
@@ -789,6 +843,7 @@ def run_worker_cycle(
         summary = {
             "status": "ok",
             "run_id": effective_run_id,
+            "trace_id": normalized_trace_id,
             "started_at": started_at,
             "completed_at": completed_at,
             "duration_ms": duration_ms,
@@ -833,6 +888,7 @@ def run_worker_cycle(
                 "id": str(uuid4()),
                 "ts": utc_now_iso(),
                 "run_id": effective_run_id,
+                "trace_id": normalized_trace_id,
                 "kind": "worker.cycle",
                 "queue_before": queue_before,
                 "queue_due_before": queue_due_before,
@@ -875,6 +931,7 @@ def run_worker_cycle(
                 "reclaimed_leases_count": reclaimed_leases_count,
                 "recovered_leases_by_action_class": recovered_by_action_class,
                 "halted_reason": halted_reason,
+                "trace_id": normalized_trace_id,
             },
         )
         return summary
