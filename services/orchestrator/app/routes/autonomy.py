@@ -20,6 +20,7 @@ from services.orchestrator.app.autonomy.event_queue import (
     preview_due_events,
     queue_status,
     read_last_dispatch,
+    recover_stale_leased_events,
     write_last_dispatch,
 )
 from services.orchestrator.app.autonomy.event_reactor import collect_events
@@ -57,6 +58,8 @@ class AutonomyDispatchRequest(BaseModel):
     max_events: int = Field(default=5, ge=1, le=100)
     max_actions: int = Field(default=2, ge=0, le=10)
     max_runtime_seconds: int = Field(default=10, ge=1, le=120)
+    lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
+    recover_stale_leases: bool = True
     allow_medium: bool = False
     allow_high: bool = False
     stop_on_critical: bool = True
@@ -65,6 +68,11 @@ class AutonomyDispatchRequest(BaseModel):
 class AutonomyCollectRequest(BaseModel):
     max_events: int = Field(default=20, ge=1, le=100)
     include_types: list[str] | None = None
+
+
+class AutonomyRecoverRequest(BaseModel):
+    max_recover: int = Field(default=100, ge=1, le=1000)
+    lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
 
 
 def _role_from_request(request: Request) -> str:
@@ -179,6 +187,21 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     role = _role_from_request(request)
     _enforce_rbac(request, "autonomy.dispatch")
     _enforce_control("autonomy.dispatch", mutating=True)
+    recovery: dict[str, Any] = {
+        "status": "skipped",
+        "run_id": run_id,
+        "checked_count": 0,
+        "recovered_count": 0,
+        "lease_ttl_seconds": body.lease_ttl_seconds,
+        "recovered": [],
+    }
+    if body.recover_stale_leases:
+        recovery = recover_stale_leased_events(
+            _fs,
+            run_id=f"{run_id}:recover",
+            lease_ttl_seconds=body.lease_ttl_seconds,
+            max_recover=max(1, body.max_events * 5),
+        )
     approval_id = request.headers.get("x-approval-id", "").strip() or None
     due_preview = preview_due_events(_fs, max_events=body.max_events)
     due_count = len(due_preview)
@@ -217,6 +240,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         _fs,
         max_events=body.max_events,
         lease_owner=f"autonomy.dispatch:{run_id}",
+        lease_ttl_seconds=body.lease_ttl_seconds,
     )
     processed: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
@@ -269,17 +293,21 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         "status": "ok",
         "run_id": run_id,
         "leased_count": len(leased),
+        "recovered_count": int(recovery.get("recovered_count", 0)),
         "processed_count": len(processed),
         "failed_count": len(failed),
         "approval_id": approved_request_id,
         "max_risk_tier": max_risk,
         "due_preview_count": due_count,
+        "recovery": recovery,
         "processed": processed,
         "failed": failed,
         "config": {
             "max_events": body.max_events,
             "max_actions": body.max_actions,
             "max_runtime_seconds": body.max_runtime_seconds,
+            "lease_ttl_seconds": body.lease_ttl_seconds,
+            "recover_stale_leases": body.recover_stale_leases,
             "allow_medium": body.allow_medium,
             "allow_high": body.allow_high,
             "stop_on_critical": body.stop_on_critical,
@@ -288,6 +316,21 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     write_last_dispatch(_fs, payload=dispatch_summary)
     dispatch_summary["queue"] = queue_status(_fs, limit=100)
     return dispatch_summary
+
+
+@router.post("/autonomy/events/recover")
+def autonomy_recover_events(request: Request, payload: AutonomyRecoverRequest | None = None) -> dict:
+    body = payload or AutonomyRecoverRequest()
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    _enforce_rbac(request, "autonomy.recover")
+    _enforce_control("autonomy.recover", mutating=True)
+    recovery = recover_stale_leased_events(
+        _fs,
+        run_id=run_id,
+        lease_ttl_seconds=body.lease_ttl_seconds,
+        max_recover=body.max_recover,
+    )
+    return {"status": "ok", "run_id": run_id, "recovery": recovery, "queue": queue_status(_fs, limit=100)}
 
 
 @router.post("/autonomy/events/collect")
