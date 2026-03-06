@@ -215,6 +215,96 @@ def test_lens_execute_worker_cycle_dry_run_records_trace_receipt() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_lens_execute_autonomy_dispatch_dry_run_supported() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "pilot", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "autonomy", "receipts"]))
+
+        execute = c.post(
+            "/lens/actions/execute",
+            json={
+                "kind": "autonomy.dispatch",
+                "dry_run": True,
+                "args": {
+                    "max_events": 2,
+                    "max_actions": 1,
+                    "max_runtime_seconds": 5,
+                    "max_dispatch_actions": 2,
+                    "max_dispatch_runtime_seconds": 10,
+                },
+            },
+        )
+        assert execute.status_code == 200
+        payload = execute.json()
+        assert payload["status"] == "dry_run"
+        assert payload["result"]["kind"] == "autonomy.dispatch"
+        assert payload["result"]["execution_args"]["max_events"] == 2
+    finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_lens_execute_autonomy_reactor_tick_dry_run_supported() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "pilot", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "autonomy", "receipts"]))
+
+        execute = c.post(
+            "/lens/actions/execute",
+            json={
+                "kind": "autonomy.reactor.tick",
+                "dry_run": True,
+                "args": {
+                    "max_collect_events": 4,
+                    "max_events": 2,
+                    "max_actions": 1,
+                    "max_runtime_seconds": 5,
+                    "max_dispatch_actions": 2,
+                    "max_dispatch_runtime_seconds": 10,
+                },
+            },
+        )
+        assert execute.status_code == 200
+        payload = execute.json()
+        assert payload["status"] == "dry_run"
+        assert payload["result"]["kind"] == "autonomy.reactor.tick"
+        assert payload["result"]["execution_args"]["max_collect_events"] == 4
+    finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_lens_execute_forge_propose_supported() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "pilot", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "forge", "receipts"]))
+
+        execute = c.post(
+            "/lens/actions/execute",
+            json={"kind": "forge.propose"},
+        )
+        assert execute.status_code == 200
+        payload = execute.json()
+        assert payload["status"] == "ok"
+        assert payload["result"]["kind"] == "forge.propose"
+        summary = payload["result"]["summary"]
+        assert summary["status"] == "ok"
+        assert isinstance(summary.get("proposals", []), list)
+        assert "context" in summary
+    finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_lens_surfaces_worker_queue_signals() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     jobs_path = workspace / "queue" / "jobs.jsonl"

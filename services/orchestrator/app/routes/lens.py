@@ -37,6 +37,13 @@ from services.orchestrator.app.control_state import (
     load_or_init_control_state,
     set_mode,
 )
+from services.orchestrator.app.routes.autonomy import (
+    AutonomyDispatchRequest,
+    AutonomyReactorTickRequest,
+    autonomy_dispatch_events,
+    autonomy_reactor_tick,
+)
+from services.orchestrator.app.routes.forge import forge_proposals
 from services.orchestrator.app.routes.missions import execute_mission_tick
 from services.orchestrator.app.telemetry_store import status as telemetry_status
 from services.worker.app.main import recover_stale_leased_jobs, run_worker_cycle
@@ -160,6 +167,7 @@ def _record_lens_execution(
 
 def _execute_lens_action(
     *,
+    request: Request,
     kind: str,
     args: dict[str, Any],
     dry_run: bool,
@@ -295,6 +303,127 @@ def _execute_lens_action(
         )
         return {"status": "ok", "kind": normalized_kind, "recovery": recovery}
 
+    if normalized_kind == "autonomy.dispatch":
+        _enforce_rbac(role, "autonomy.dispatch")
+        _enforce_action_scope(app="autonomy", action="autonomy.dispatch")
+        max_events = max(1, min(100, int(args.get("max_events", 5))))
+        max_actions = max(0, min(10, int(args.get("max_actions", 2))))
+        max_runtime_seconds = max(1, min(120, int(args.get("max_runtime_seconds", 10))))
+        max_dispatch_actions = max(0, min(200, int(args.get("max_dispatch_actions", 10))))
+        max_dispatch_runtime_seconds = max(1, min(600, int(args.get("max_dispatch_runtime_seconds", 30))))
+        max_attempts = max(1, min(20, int(args.get("max_attempts", 3))))
+        retry_backoff_seconds = max(0, min(3600, int(args.get("retry_backoff_seconds", 60))))
+        lease_ttl_seconds = max(15, min(3600, int(args.get("lease_ttl_seconds", 300))))
+        recover_stale_leases = bool(args.get("recover_stale_leases", True))
+        allow_medium = bool(args.get("allow_medium", False))
+        allow_high = bool(args.get("allow_high", False))
+        stop_on_critical = bool(args.get("stop_on_critical", True))
+        execution_args = {
+            "max_events": max_events,
+            "max_actions": max_actions,
+            "max_runtime_seconds": max_runtime_seconds,
+            "max_dispatch_actions": max_dispatch_actions,
+            "max_dispatch_runtime_seconds": max_dispatch_runtime_seconds,
+            "max_attempts": max_attempts,
+            "retry_backoff_seconds": retry_backoff_seconds,
+            "lease_ttl_seconds": lease_ttl_seconds,
+            "recover_stale_leases": recover_stale_leases,
+            "allow_medium": allow_medium,
+            "allow_high": allow_high,
+            "stop_on_critical": stop_on_critical,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = autonomy_dispatch_events(
+            request,
+            payload=AutonomyDispatchRequest(
+                max_events=max_events,
+                max_actions=max_actions,
+                max_runtime_seconds=max_runtime_seconds,
+                max_dispatch_actions=max_dispatch_actions,
+                max_dispatch_runtime_seconds=max_dispatch_runtime_seconds,
+                max_attempts=max_attempts,
+                retry_backoff_seconds=retry_backoff_seconds,
+                lease_ttl_seconds=lease_ttl_seconds,
+                recover_stale_leases=recover_stale_leases,
+                allow_medium=allow_medium,
+                allow_high=allow_high,
+                stop_on_critical=stop_on_critical,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "autonomy.reactor.tick":
+        _enforce_rbac(role, "autonomy.enqueue")
+        _enforce_rbac(role, "autonomy.dispatch")
+        _enforce_action_scope(app="autonomy", action="autonomy.enqueue")
+        _enforce_action_scope(app="autonomy", action="autonomy.dispatch")
+        max_collect_events = max(1, min(100, int(args.get("max_collect_events", 20))))
+        max_events = max(1, min(100, int(args.get("max_events", 5))))
+        max_actions = max(0, min(10, int(args.get("max_actions", 2))))
+        max_runtime_seconds = max(1, min(120, int(args.get("max_runtime_seconds", 10))))
+        max_dispatch_actions = max(0, min(200, int(args.get("max_dispatch_actions", 10))))
+        max_dispatch_runtime_seconds = max(1, min(600, int(args.get("max_dispatch_runtime_seconds", 30))))
+        max_attempts = max(1, min(20, int(args.get("max_attempts", 3))))
+        retry_backoff_seconds = max(0, min(3600, int(args.get("retry_backoff_seconds", 60))))
+        retry_pressure_threshold = max(0, min(500, int(args.get("retry_pressure_threshold", 5))))
+        retry_pressure_consecutive_ticks = max(1, min(50, int(args.get("retry_pressure_consecutive_ticks", 3))))
+        retry_pressure_cooldown_ticks = max(1, min(50, int(args.get("retry_pressure_cooldown_ticks", 2))))
+        lease_ttl_seconds = max(15, min(3600, int(args.get("lease_ttl_seconds", 300))))
+        recover_stale_leases = bool(args.get("recover_stale_leases", True))
+        allow_medium = bool(args.get("allow_medium", False))
+        allow_high = bool(args.get("allow_high", False))
+        stop_on_critical = bool(args.get("stop_on_critical", True))
+        include_types = [
+            str(item).strip()
+            for item in args.get("include_types", [])
+            if isinstance(item, str) and str(item).strip()
+        ]
+        execution_args = {
+            "max_collect_events": max_collect_events,
+            "include_types": include_types,
+            "max_events": max_events,
+            "max_actions": max_actions,
+            "max_runtime_seconds": max_runtime_seconds,
+            "max_dispatch_actions": max_dispatch_actions,
+            "max_dispatch_runtime_seconds": max_dispatch_runtime_seconds,
+            "max_attempts": max_attempts,
+            "retry_backoff_seconds": retry_backoff_seconds,
+            "retry_pressure_threshold": retry_pressure_threshold,
+            "retry_pressure_consecutive_ticks": retry_pressure_consecutive_ticks,
+            "retry_pressure_cooldown_ticks": retry_pressure_cooldown_ticks,
+            "lease_ttl_seconds": lease_ttl_seconds,
+            "recover_stale_leases": recover_stale_leases,
+            "allow_medium": allow_medium,
+            "allow_high": allow_high,
+            "stop_on_critical": stop_on_critical,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = autonomy_reactor_tick(
+            request,
+            payload=AutonomyReactorTickRequest(
+                max_collect_events=max_collect_events,
+                include_types=include_types,
+                max_events=max_events,
+                max_actions=max_actions,
+                max_runtime_seconds=max_runtime_seconds,
+                max_dispatch_actions=max_dispatch_actions,
+                max_dispatch_runtime_seconds=max_dispatch_runtime_seconds,
+                max_attempts=max_attempts,
+                retry_backoff_seconds=retry_backoff_seconds,
+                retry_pressure_threshold=retry_pressure_threshold,
+                retry_pressure_consecutive_ticks=retry_pressure_consecutive_ticks,
+                retry_pressure_cooldown_ticks=retry_pressure_cooldown_ticks,
+                lease_ttl_seconds=lease_ttl_seconds,
+                recover_stale_leases=recover_stale_leases,
+                allow_medium=allow_medium,
+                allow_high=allow_high,
+                stop_on_critical=stop_on_critical,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "observer.scan":
         _enforce_action_scope(app="observer", action="observer.scan")
         if dry_run:
@@ -335,6 +464,14 @@ def _execute_lens_action(
             reason=reason,
             idempotency_key=idempotency_key,
         )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "forge.propose":
+        _enforce_rbac(role, "forge.propose")
+        _enforce_action_scope(app="forge", action="forge.propose", mutating=False)
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind}
+        summary = forge_proposals(request)
         return {"status": "ok", "kind": normalized_kind, "summary": summary}
 
     if normalized_kind == "autonomy.reactor.guardrail.reset":
@@ -867,6 +1004,7 @@ def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
 
     try:
         result = _execute_lens_action(
+            request=request,
             kind=kind,
             args=args,
             dry_run=dry_run,
