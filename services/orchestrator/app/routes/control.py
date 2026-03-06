@@ -94,6 +94,26 @@ class ControlRemoteApprovalDecisionRequest(BaseModel):
     session_id: str | None = None
 
 
+class ControlRemotePanicRequest(ControlPanicRequest):
+    session_id: str | None = None
+
+
+class ControlRemoteResumeRequest(ControlResumeRequest):
+    session_id: str | None = None
+
+
+class ControlRemoteTakeoverRequest(ControlTakeoverRequest):
+    pass
+
+
+class ControlRemoteTakeoverConfirmRequest(ControlTakeoverConfirmRequest):
+    session_id: str | None = None
+
+
+class ControlRemoteTakeoverHandbackRequest(ControlTakeoverHandbackRequest):
+    session_id: str | None = None
+
+
 def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
     try:
         raw = _fs.read_text(rel_path)
@@ -861,6 +881,12 @@ def control_remote_state(request: Request, approval_limit: int = 10, session_lim
         "remote_actions": [
             "control.remote.state",
             "control.remote.approvals",
+            "control.remote.feed",
+            "control.remote.panic",
+            "control.remote.resume",
+            "control.remote.takeover.request",
+            "control.remote.takeover.confirm",
+            "control.remote.takeover.handback",
             "control.remote.approval.approve",
             "control.remote.approval.reject",
         ],
@@ -1004,6 +1030,321 @@ async def control_remote_feed_stream(
     return StreamingResponse(_iter_sse(), media_type="text/event-stream", headers=headers)
 
 
+@router.post("/control/remote/panic")
+def control_remote_panic(
+    request: Request,
+    payload: ControlRemotePanicRequest | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    body = payload or ControlRemotePanicRequest()
+    state_before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    summary = control_panic(
+        request,
+        payload=ControlPanicRequest(reason=str(body.reason).strip()),
+    )
+    state_after = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    takeover_state = _load_or_init_takeover_state()
+    resolved_session_id = (
+        str(body.session_id or takeover_state.get("session_id") or takeover_state.get("last_session_id") or "").strip()
+        or None
+    )
+    reason = str(body.reason).strip() or "remote.panic"
+    receipt = _record_control_receipt(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        kind="control.remote.panic",
+        reason=reason,
+        before={"mode": state_before.get("mode"), "kill_switch": state_before.get("kill_switch")},
+        after={"mode": state_after.get("mode"), "kill_switch": state_after.get("kill_switch")},
+        session_id=resolved_session_id,
+        metadata={"remote_command": "control.panic"},
+    )
+    append_takeover_activity(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        actor=role,
+        kind="control.remote.panic",
+        detail={
+            "remote_command": "control.panic",
+            "reason": reason,
+            "mode": state_after.get("mode"),
+            "kill_switch": bool(state_after.get("kill_switch", False)),
+        },
+        ok=True,
+        session_id=resolved_session_id,
+        allow_inactive=True,
+        takeover_state=takeover_state,
+    )
+    return {
+        "status": "ok",
+        "run_id": summary.get("run_id"),
+        "trace_id": summary.get("trace_id"),
+        "command": "control.panic",
+        "session_id": resolved_session_id,
+        "summary": summary,
+        "receipt_id": receipt.get("id"),
+    }
+
+
+@router.post("/control/remote/resume")
+def control_remote_resume(
+    request: Request,
+    payload: ControlRemoteResumeRequest | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    body = payload or ControlRemoteResumeRequest()
+    state_before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    summary = control_resume(
+        request,
+        payload=ControlResumeRequest(
+            reason=str(body.reason).strip(),
+            mode=str(body.mode).strip().lower() if body.mode is not None else None,
+        ),
+    )
+    state_after = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    takeover_state = _load_or_init_takeover_state()
+    resolved_session_id = (
+        str(body.session_id or takeover_state.get("session_id") or takeover_state.get("last_session_id") or "").strip()
+        or None
+    )
+    reason = str(body.reason).strip() or "remote.resume"
+    receipt = _record_control_receipt(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        kind="control.remote.resume",
+        reason=reason,
+        before={"mode": state_before.get("mode"), "kill_switch": state_before.get("kill_switch")},
+        after={"mode": state_after.get("mode"), "kill_switch": state_after.get("kill_switch")},
+        session_id=resolved_session_id,
+        metadata={"remote_command": "control.resume"},
+    )
+    append_takeover_activity(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        actor=role,
+        kind="control.remote.resume",
+        detail={
+            "remote_command": "control.resume",
+            "reason": reason,
+            "mode": state_after.get("mode"),
+            "kill_switch": bool(state_after.get("kill_switch", False)),
+        },
+        ok=True,
+        session_id=resolved_session_id,
+        allow_inactive=True,
+        takeover_state=takeover_state,
+    )
+    return {
+        "status": "ok",
+        "run_id": summary.get("run_id"),
+        "trace_id": summary.get("trace_id"),
+        "command": "control.resume",
+        "session_id": resolved_session_id,
+        "summary": summary,
+        "receipt_id": receipt.get("id"),
+    }
+
+
+@router.post("/control/remote/takeover/request")
+def control_remote_takeover_request(request: Request, payload: ControlRemoteTakeoverRequest) -> dict:
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    before = _load_or_init_takeover_state()
+    summary = control_takeover_request(
+        request,
+        payload=ControlTakeoverRequest(
+            objective=str(payload.objective).strip(),
+            reason=str(payload.reason).strip(),
+            repos=payload.repos,
+            workspaces=payload.workspaces,
+            apps=payload.apps,
+        ),
+    )
+    takeover_after = summary.get("takeover", {}) if isinstance(summary.get("takeover"), dict) else {}
+    resolved_session_id = str(takeover_after.get("session_id") or "").strip() or None
+    reason = str(payload.reason).strip() or "remote.takeover.request"
+    receipt = _record_control_receipt(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        kind="control.remote.takeover.request",
+        reason=reason,
+        before={"status": before.get("status"), "objective": before.get("objective")},
+        after={
+            "status": takeover_after.get("status"),
+            "objective": takeover_after.get("objective"),
+            "session_id": resolved_session_id,
+        },
+        session_id=resolved_session_id,
+        metadata={"remote_command": "control.takeover.request"},
+    )
+    append_takeover_activity(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        actor=role,
+        kind="control.remote.takeover.request",
+        detail={
+            "remote_command": "control.takeover.request",
+            "reason": reason,
+            "objective": takeover_after.get("objective"),
+            "session_id": resolved_session_id,
+        },
+        ok=True,
+        session_id=resolved_session_id,
+        allow_inactive=True,
+        takeover_state=takeover_after if isinstance(takeover_after, dict) else None,
+    )
+    return {
+        "status": "ok",
+        "run_id": summary.get("run_id"),
+        "trace_id": summary.get("trace_id"),
+        "command": "control.takeover.request",
+        "session_id": resolved_session_id,
+        "summary": summary,
+        "receipt_id": receipt.get("id"),
+    }
+
+
+@router.post("/control/remote/takeover/confirm")
+def control_remote_takeover_confirm(
+    request: Request,
+    payload: ControlRemoteTakeoverConfirmRequest | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    body = payload or ControlRemoteTakeoverConfirmRequest()
+    before = _load_or_init_takeover_state()
+    summary = control_takeover_confirm(
+        request,
+        payload=ControlTakeoverConfirmRequest(
+            confirm=bool(body.confirm),
+            reason=str(body.reason).strip(),
+            mode=str(body.mode).strip().lower() or "pilot",
+        ),
+    )
+    takeover_after = summary.get("takeover", {}) if isinstance(summary.get("takeover"), dict) else {}
+    resolved_session_id = (
+        str(body.session_id or takeover_after.get("session_id") or before.get("session_id") or "").strip() or None
+    )
+    reason = str(body.reason).strip() or "remote.takeover.confirm"
+    receipt = _record_control_receipt(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        kind="control.remote.takeover.confirm",
+        reason=reason,
+        before={"status": before.get("status"), "objective": before.get("objective"), "session_id": before.get("session_id")},
+        after={
+            "status": takeover_after.get("status"),
+            "objective": takeover_after.get("objective"),
+            "session_id": takeover_after.get("session_id"),
+            "mode": summary.get("mode"),
+        },
+        session_id=resolved_session_id,
+        metadata={"remote_command": "control.takeover.confirm"},
+    )
+    append_takeover_activity(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        actor=role,
+        kind="control.remote.takeover.confirm",
+        detail={
+            "remote_command": "control.takeover.confirm",
+            "reason": reason,
+            "mode": summary.get("mode"),
+            "session_id": resolved_session_id,
+        },
+        ok=True,
+        session_id=resolved_session_id,
+        allow_inactive=True,
+        takeover_state=takeover_after if isinstance(takeover_after, dict) else None,
+    )
+    return {
+        "status": "ok",
+        "run_id": summary.get("run_id"),
+        "trace_id": summary.get("trace_id"),
+        "command": "control.takeover.confirm",
+        "session_id": resolved_session_id,
+        "summary": summary,
+        "receipt_id": receipt.get("id"),
+    }
+
+
+@router.post("/control/remote/takeover/handback")
+def control_remote_takeover_handback(
+    request: Request,
+    payload: ControlRemoteTakeoverHandbackRequest | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    body = payload or ControlRemoteTakeoverHandbackRequest()
+    before = _load_or_init_takeover_state()
+    summary = control_takeover_handback(
+        request,
+        payload=ControlTakeoverHandbackRequest(
+            summary=str(body.summary).strip(),
+            verification=body.verification if isinstance(body.verification, dict) else {},
+            pending_approvals=int(body.pending_approvals),
+            mode=str(body.mode).strip().lower() if body.mode is not None else None,
+            reason=str(body.reason).strip(),
+        ),
+    )
+    takeover_after = summary.get("takeover", {}) if isinstance(summary.get("takeover"), dict) else {}
+    resolved_session_id = (
+        str(
+            body.session_id
+            or before.get("session_id")
+            or takeover_after.get("last_session_id")
+            or takeover_after.get("session_id")
+            or ""
+        ).strip()
+        or None
+    )
+    reason = str(body.reason).strip() or "remote.takeover.handback"
+    receipt = _record_control_receipt(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        kind="control.remote.takeover.handback",
+        reason=reason,
+        before={"status": before.get("status"), "objective": before.get("objective"), "session_id": before.get("session_id")},
+        after={
+            "status": takeover_after.get("status"),
+            "objective": takeover_after.get("objective"),
+            "session_id": takeover_after.get("session_id"),
+            "last_session_id": takeover_after.get("last_session_id"),
+            "mode": summary.get("mode"),
+        },
+        session_id=resolved_session_id,
+        metadata={"remote_command": "control.takeover.handback"},
+    )
+    append_takeover_activity(
+        run_id=str(summary.get("run_id", "")),
+        trace_id=str(summary.get("trace_id", "")),
+        actor=role,
+        kind="control.remote.takeover.handback",
+        detail={
+            "remote_command": "control.takeover.handback",
+            "reason": reason,
+            "mode": summary.get("mode"),
+            "pending_approvals": int(body.pending_approvals),
+            "session_id": resolved_session_id,
+        },
+        ok=True,
+        session_id=resolved_session_id,
+        allow_inactive=True,
+        takeover_state=takeover_after if isinstance(takeover_after, dict) else None,
+    )
+    return {
+        "status": "ok",
+        "run_id": summary.get("run_id"),
+        "trace_id": summary.get("trace_id"),
+        "command": "control.takeover.handback",
+        "session_id": resolved_session_id,
+        "summary": summary,
+        "receipt_id": receipt.get("id"),
+    }
+
+
 def _control_remote_approval_decision(
     *,
     request: Request,
@@ -1011,8 +1352,10 @@ def _control_remote_approval_decision(
     decision: str,
     payload: ControlRemoteApprovalDecisionRequest | None = None,
 ) -> dict:
-    _enforce_remote_control("control.remote.decide")
-    role = _enforce_remote_rbac(request, "approvals.decide")
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    if not can(role, "approvals.decide"):
+        raise HTTPException(status_code=403, detail=f"RBAC denied: role={role}, action=approvals.decide")
     run_id = str(getattr(request.state, "run_id", uuid4()))
     trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     body = payload or ControlRemoteApprovalDecisionRequest()

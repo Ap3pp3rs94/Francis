@@ -39,6 +39,11 @@ from services.orchestrator.app.control_state import (
 )
 from services.orchestrator.app.routes.control import (
     ControlRemoteApprovalDecisionRequest,
+    ControlRemotePanicRequest,
+    ControlRemoteResumeRequest,
+    ControlRemoteTakeoverConfirmRequest,
+    ControlRemoteTakeoverHandbackRequest,
+    ControlRemoteTakeoverRequest,
     ControlTakeoverConfirmRequest,
     ControlTakeoverHandbackExportRequest,
     ControlTakeoverHandbackRequest,
@@ -48,7 +53,12 @@ from services.orchestrator.app.routes.control import (
     control_remote_approval_reject,
     control_remote_approvals,
     control_remote_feed,
+    control_remote_panic,
+    control_remote_resume,
     control_remote_state,
+    control_remote_takeover_confirm,
+    control_remote_takeover_handback,
+    control_remote_takeover_request,
     control_takeover_activity,
     control_takeover_confirm,
     control_takeover_handback_export,
@@ -457,8 +467,131 @@ def _execute_lens_action(
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
+    if normalized_kind == "control.remote.panic":
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
+        reason = str(args.get("reason", "")).strip()
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"reason": reason, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_panic(
+            request,
+            payload=ControlRemotePanicRequest(reason=reason, session_id=session_id),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.resume":
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
+        reason = str(args.get("reason", "")).strip()
+        mode = str(args.get("mode", "pilot")).strip().lower()
+        if mode not in VALID_MODES:
+            raise HTTPException(status_code=400, detail=f"Invalid mode: {mode}")
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"reason": reason, "mode": mode, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_resume(
+            request,
+            payload=ControlRemoteResumeRequest(reason=reason, mode=mode, session_id=session_id),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.takeover.request":
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
+        objective = str(args.get("objective", "")).strip()
+        if not objective:
+            raise HTTPException(status_code=400, detail="objective is required for control.remote.takeover.request")
+        reason = str(args.get("reason", "")).strip()
+        repos = [str(item) for item in args.get("repos", []) if isinstance(item, str) and str(item).strip()]
+        workspaces = [
+            str(item) for item in args.get("workspaces", []) if isinstance(item, str) and str(item).strip()
+        ]
+        apps = [str(item) for item in args.get("apps", []) if isinstance(item, str) and str(item).strip()]
+        execution_args = {
+            "objective": objective,
+            "reason": reason,
+            "repos": repos if repos else None,
+            "workspaces": workspaces if workspaces else None,
+            "apps": apps if apps else None,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_takeover_request(
+            request,
+            payload=ControlRemoteTakeoverRequest(
+                objective=objective,
+                reason=reason,
+                repos=repos if repos else None,
+                workspaces=workspaces if workspaces else None,
+                apps=apps if apps else None,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.takeover.confirm":
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
+        confirm = bool(args.get("confirm", True))
+        reason = str(args.get("reason", "")).strip()
+        mode = str(args.get("mode", "pilot")).strip().lower() or "pilot"
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {
+            "confirm": confirm,
+            "reason": reason,
+            "mode": mode,
+            "session_id": session_id,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_takeover_confirm(
+            request,
+            payload=ControlRemoteTakeoverConfirmRequest(
+                confirm=confirm,
+                reason=reason,
+                mode=mode,
+                session_id=session_id,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.takeover.handback":
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
+        summary_text = str(args.get("summary", "")).strip()
+        verification = args.get("verification", {})
+        pending_approvals = max(0, int(args.get("pending_approvals", 0)))
+        mode = args.get("mode", "assist")
+        reason = str(args.get("reason", "")).strip()
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {
+            "summary": summary_text,
+            "verification": verification if isinstance(verification, dict) else {},
+            "pending_approvals": pending_approvals,
+            "mode": mode,
+            "reason": reason,
+            "session_id": session_id,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_takeover_handback(
+            request,
+            payload=ControlRemoteTakeoverHandbackRequest(
+                summary=summary_text,
+                verification=verification if isinstance(verification, dict) else {},
+                pending_approvals=pending_approvals,
+                mode=str(mode).strip().lower() if isinstance(mode, str) and str(mode).strip() else None,
+                reason=reason,
+                session_id=session_id,
+            ),
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "control.remote.approval.approve":
-        _enforce_action_scope(app="control", action="control.remote.decide", mutating=False)
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
         _enforce_rbac(role, "approvals.decide")
         approval_id = str(args.get("approval_id", "")).strip()
         if not approval_id:
@@ -476,7 +609,8 @@ def _execute_lens_action(
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
     if normalized_kind == "control.remote.approval.reject":
-        _enforce_action_scope(app="control", action="control.remote.decide", mutating=False)
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
         _enforce_rbac(role, "approvals.decide")
         approval_id = str(args.get("approval_id", "")).strip()
         if not approval_id:
@@ -816,6 +950,23 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"status": "pending", "limit": 50}
     elif kind == "control.remote.feed":
         hinted["execute_via"]["payload"]["args"] = {"limit": 100, "cursor": "", "session_id": ""}
+    elif kind == "control.remote.panic":
+        hinted["execute_via"]["payload"]["args"] = {"reason": "", "session_id": ""}
+    elif kind == "control.remote.resume":
+        hinted["execute_via"]["payload"]["args"] = {"reason": "", "mode": "pilot", "session_id": ""}
+    elif kind == "control.remote.takeover.request":
+        hinted["execute_via"]["payload"]["args"] = {"objective": "<required>", "reason": ""}
+    elif kind == "control.remote.takeover.confirm":
+        hinted["execute_via"]["payload"]["args"] = {"confirm": True, "mode": "pilot", "reason": "", "session_id": ""}
+    elif kind == "control.remote.takeover.handback":
+        hinted["execute_via"]["payload"]["args"] = {
+            "summary": "",
+            "verification": {},
+            "pending_approvals": 0,
+            "mode": "assist",
+            "reason": "",
+            "session_id": "",
+        }
     elif kind == "control.remote.approval.approve":
         hinted["execute_via"]["payload"]["args"] = {"approval_id": "<required>", "note": "", "session_id": ""}
     elif kind == "control.remote.approval.reject":
@@ -1199,6 +1350,25 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             }
         )
     )
+    remote_control_chip = _with_execute_hint(
+        {
+        "kind": "control.remote.panic" if not kill_switch else "control.remote.resume",
+        "label": "Remote Panic Stop" if not kill_switch else "Remote Resume Mutations",
+        "enabled": True,
+        "reason": (
+            "Trigger kill switch through the remote control plane."
+            if not kill_switch
+            else "Resume mutating actions through the remote control plane."
+        ),
+        "policy_reason": "",
+        "risk_tier": "high" if not kill_switch else "medium",
+        "trust_badge": "Confirmed",
+        "requires_confirmation": True,
+        }
+    )
+    if takeover_session_id:
+        remote_control_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_session_id
+    action_chips.append(remote_control_chip)
     action_chips.append(
         _with_execute_hint(
             {
@@ -1269,6 +1439,21 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 }
             )
         )
+        remote_handback_chip = _with_execute_hint(
+            {
+            "kind": "control.remote.takeover.handback",
+            "label": "Remote Handback Control",
+            "enabled": True,
+            "reason": "Complete takeover handback through the remote command plane.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            "requires_confirmation": True,
+            }
+        )
+        if takeover_session_id:
+            remote_handback_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_session_id
+        action_chips.append(remote_handback_chip)
     elif takeover_status == "requested":
         confirmation_enabled = not kill_switch
         confirmation_policy = ""
@@ -1288,6 +1473,21 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 }
             )
         )
+        remote_confirm_chip = _with_execute_hint(
+            {
+            "kind": "control.remote.takeover.confirm",
+            "label": "Remote Confirm Takeover",
+            "enabled": confirmation_enabled,
+            "reason": "Confirm takeover via remote command plane.",
+            "policy_reason": confirmation_policy,
+            "risk_tier": "medium",
+            "trust_badge": "Likely" if confirmation_enabled else "Uncertain",
+            "requires_confirmation": True,
+            }
+        )
+        if takeover_session_id:
+            remote_confirm_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_session_id
+        action_chips.append(remote_confirm_chip)
     else:
         action_chips.append(
             _with_execute_hint(
@@ -1296,6 +1496,20 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 "label": "Request Pilot Takeover",
                 "enabled": True,
                 "reason": "Start explicit takeover handshake with scoped objective.",
+                "policy_reason": "",
+                "risk_tier": "low",
+                "trust_badge": "Confirmed",
+                "requires_confirmation": True,
+                }
+            )
+        )
+        action_chips.append(
+            _with_execute_hint(
+                {
+                "kind": "control.remote.takeover.request",
+                "label": "Remote Request Takeover",
+                "enabled": True,
+                "reason": "Start takeover handshake through remote command plane.",
                 "policy_reason": "",
                 "risk_tier": "low",
                 "trust_badge": "Confirmed",

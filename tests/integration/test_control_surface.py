@@ -513,3 +513,108 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         assert "event: end" in stream_body
     finally:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    trace_id = f"remote-command-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+
+        remote_request = c.post(
+            "/control/remote/takeover/request",
+            headers=headers,
+            json={"objective": f"Remote takeover {uuid4()}", "reason": "remote request"},
+        )
+        assert remote_request.status_code == 200
+        remote_request_payload = remote_request.json()
+        assert remote_request_payload.get("status") == "ok"
+        assert remote_request_payload.get("command") == "control.takeover.request"
+        session_id = str(remote_request_payload.get("summary", {}).get("takeover", {}).get("session_id", "")).strip()
+        assert session_id
+
+        remote_confirm = c.post(
+            "/control/remote/takeover/confirm",
+            headers=headers,
+            json={"confirm": True, "reason": "remote confirm", "mode": "pilot", "session_id": session_id},
+        )
+        assert remote_confirm.status_code == 200
+        remote_confirm_payload = remote_confirm.json()
+        assert remote_confirm_payload.get("status") == "ok"
+        assert remote_confirm_payload.get("command") == "control.takeover.confirm"
+        assert remote_confirm_payload.get("summary", {}).get("mode") == "pilot"
+        assert remote_confirm_payload.get("summary", {}).get("takeover", {}).get("status") == "active"
+
+        remote_panic = c.post(
+            "/control/remote/panic",
+            headers=headers,
+            json={"reason": "remote panic", "session_id": session_id},
+        )
+        assert remote_panic.status_code == 200
+        remote_panic_payload = remote_panic.json()
+        assert remote_panic_payload.get("status") == "ok"
+        assert remote_panic_payload.get("command") == "control.panic"
+        assert remote_panic_payload.get("summary", {}).get("kill_switch") is True
+
+        blocked = c.post(
+            "/missions",
+            json={"title": f"RemotePanic-{uuid4()}", "objective": "blocked", "steps": ["s1"]},
+        )
+        assert blocked.status_code == 403
+
+        remote_resume = c.post(
+            "/control/remote/resume",
+            headers=headers,
+            json={"reason": "remote resume", "mode": "pilot", "session_id": session_id},
+        )
+        assert remote_resume.status_code == 200
+        remote_resume_payload = remote_resume.json()
+        assert remote_resume_payload.get("status") == "ok"
+        assert remote_resume_payload.get("command") == "control.resume"
+        assert remote_resume_payload.get("summary", {}).get("kill_switch") is False
+        assert remote_resume_payload.get("summary", {}).get("mode") == "pilot"
+
+        remote_handback = c.post(
+            "/control/remote/takeover/handback",
+            headers=headers,
+            json={
+                "summary": "remote handback",
+                "verification": {"tests": "pass"},
+                "pending_approvals": 0,
+                "mode": "assist",
+                "reason": "remote handback",
+                "session_id": session_id,
+            },
+        )
+        assert remote_handback.status_code == 200
+        remote_handback_payload = remote_handback.json()
+        assert remote_handback_payload.get("status") == "ok"
+        assert remote_handback_payload.get("command") == "control.takeover.handback"
+        assert remote_handback_payload.get("summary", {}).get("takeover", {}).get("status") == "idle"
+
+        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 300})
+        assert trace.status_code == 200
+        trace_payload = trace.json()
+        decision_rows = trace_payload.get("receipts", {}).get("decisions", [])
+        decision_kinds = [str(row.get("kind", "")) for row in decision_rows]
+        assert "control.remote.takeover.request" in decision_kinds
+        assert "control.remote.takeover.confirm" in decision_kinds
+        assert "control.remote.panic" in decision_kinds
+        assert "control.remote.resume" in decision_kinds
+        assert "control.remote.takeover.handback" in decision_kinds
+
+        remote_feed = c.get("/control/remote/feed", headers=headers, params={"session_id": session_id, "limit": 400})
+        assert remote_feed.status_code == 200
+        remote_feed_payload = remote_feed.json()
+        feed_kinds = [str(row.get("kind", "")) for row in remote_feed_payload.get("feed", [])]
+        assert "control.remote.takeover.request" in feed_kinds
+        assert "control.remote.takeover.confirm" in feed_kinds
+        assert "control.remote.panic" in feed_kinds
+        assert "control.remote.resume" in feed_kinds
+        assert "control.remote.takeover.handback" in feed_kinds
+    finally:
+        _ensure_takeover_idle(c)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

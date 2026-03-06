@@ -575,6 +575,8 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         assert any(str(chip.get("kind", "")) == "control.remote.approvals" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.feed" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.approval.approve" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.panic" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.takeover.handback" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.session" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.activity" for chip in chips_active)
@@ -664,6 +666,7 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         actions_idle = c.get("/lens/actions")
         assert actions_idle.status_code == 200
         chips_idle = actions_idle.json().get("action_chips", [])
+        assert any(str(chip.get("kind", "")) == "control.remote.takeover.request" for chip in chips_idle)
         assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_idle)
         assert any(str(chip.get("kind", "")) == "control.takeover.session" for chip in chips_idle)
         assert any(str(chip.get("kind", "")) == "control.takeover.handback.package" for chip in chips_idle)
@@ -692,6 +695,132 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         assert export_summary["status"] == "ok"
         assert export_summary["session_id"] == session_id
         assert str(export_summary.get("export", {}).get("path", "")).startswith("control/handback_exports/")
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_lens_execute_remote_command_wrappers_supported() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    trace_id = f"lens-remote-command-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts"]))
+        _ensure_takeover_idle(c)
+
+        remote_request = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.remote.takeover.request",
+                "args": {"objective": f"Lens remote takeover {uuid4()}", "reason": "lens remote request"},
+            },
+        )
+        assert remote_request.status_code == 200
+        remote_request_payload = remote_request.json()
+        assert remote_request_payload["status"] == "ok"
+        remote_request_summary = remote_request_payload["result"]["summary"]
+        assert remote_request_summary["status"] == "ok"
+        assert remote_request_summary["command"] == "control.takeover.request"
+        session_id = str(remote_request_summary.get("session_id", "")).strip()
+        assert session_id
+
+        remote_confirm = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.remote.takeover.confirm",
+                "args": {"confirm": True, "mode": "pilot", "reason": "lens remote confirm", "session_id": session_id},
+            },
+        )
+        assert remote_confirm.status_code == 200
+        remote_confirm_payload = remote_confirm.json()
+        assert remote_confirm_payload["status"] == "ok"
+        remote_confirm_summary = remote_confirm_payload["result"]["summary"]
+        assert remote_confirm_summary["status"] == "ok"
+        assert remote_confirm_summary["command"] == "control.takeover.confirm"
+        assert remote_confirm_summary["summary"]["takeover"]["status"] == "active"
+
+        actions_active = c.get("/lens/actions")
+        assert actions_active.status_code == 200
+        chips_active = actions_active.json().get("action_chips", [])
+        assert any(str(chip.get("kind", "")) == "control.remote.panic" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.takeover.handback" for chip in chips_active)
+
+        remote_panic = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={"kind": "control.remote.panic", "args": {"reason": "lens remote panic", "session_id": session_id}},
+        )
+        assert remote_panic.status_code == 200
+        remote_panic_payload = remote_panic.json()
+        assert remote_panic_payload["status"] == "ok"
+        remote_panic_summary = remote_panic_payload["result"]["summary"]
+        assert remote_panic_summary["status"] == "ok"
+        assert remote_panic_summary["command"] == "control.panic"
+        assert remote_panic_summary["summary"]["kill_switch"] is True
+
+        actions_paused = c.get("/lens/actions")
+        assert actions_paused.status_code == 200
+        chips_paused = actions_paused.json().get("action_chips", [])
+        assert any(str(chip.get("kind", "")) == "control.remote.resume" for chip in chips_paused)
+
+        remote_resume = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.remote.resume",
+                "args": {"reason": "lens remote resume", "mode": "pilot", "session_id": session_id},
+            },
+        )
+        assert remote_resume.status_code == 200
+        remote_resume_payload = remote_resume.json()
+        assert remote_resume_payload["status"] == "ok"
+        remote_resume_summary = remote_resume_payload["result"]["summary"]
+        assert remote_resume_summary["status"] == "ok"
+        assert remote_resume_summary["command"] == "control.resume"
+        assert remote_resume_summary["summary"]["kill_switch"] is False
+
+        remote_handback = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.remote.takeover.handback",
+                "args": {
+                    "summary": "lens remote handback",
+                    "verification": {"tests": "pass"},
+                    "pending_approvals": 0,
+                    "mode": "assist",
+                    "reason": "lens remote done",
+                    "session_id": session_id,
+                },
+            },
+        )
+        assert remote_handback.status_code == 200
+        remote_handback_payload = remote_handback.json()
+        assert remote_handback_payload["status"] == "ok"
+        remote_handback_summary = remote_handback_payload["result"]["summary"]
+        assert remote_handback_summary["status"] == "ok"
+        assert remote_handback_summary["command"] == "control.takeover.handback"
+        assert remote_handback_summary["summary"]["takeover"]["status"] == "idle"
+
+        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 300})
+        assert trace.status_code == 200
+        decision_rows = trace.json().get("receipts", {}).get("decisions", [])
+        assert any(
+            str(row.get("kind", "")) == "lens.action.execute"
+            and str(row.get("action_kind", "")) == "control.remote.takeover.request"
+            for row in decision_rows
+        )
+        assert any(str(row.get("kind", "")) == "control.remote.takeover.request" for row in decision_rows)
+        assert any(str(row.get("kind", "")) == "control.remote.takeover.confirm" for row in decision_rows)
+        assert any(str(row.get("kind", "")) == "control.remote.panic" for row in decision_rows)
+        assert any(str(row.get("kind", "")) == "control.remote.resume" for row in decision_rows)
+        assert any(str(row.get("kind", "")) == "control.remote.takeover.handback" for row in decision_rows)
     finally:
         _ensure_takeover_idle(c)
         _set_scope(c, original_scope)
