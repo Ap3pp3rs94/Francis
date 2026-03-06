@@ -15,6 +15,7 @@ from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from services.orchestrator.app.approvals_store import ensure_action_approved
 from services.orchestrator.app.autonomy.event_queue import (
+    append_tick_history,
     append_dispatch_history,
     complete_event,
     enqueue_event,
@@ -22,10 +23,13 @@ from services.orchestrator.app.autonomy.event_queue import (
     lease_due_events,
     preview_due_events,
     queue_status,
+    read_last_tick,
+    read_tick_history,
     read_dispatch_history,
     read_last_dispatch,
     release_leased_events,
     recover_stale_leased_events,
+    write_last_tick,
     write_last_dispatch,
 )
 from services.orchestrator.app.autonomy.event_reactor import collect_events
@@ -211,6 +215,21 @@ def autonomy_dispatch_history(request: Request, limit: int = 50) -> dict:
     _enforce_rbac(request, "autonomy.read")
     _enforce_control("autonomy.read", mutating=False)
     history = read_dispatch_history(_fs, limit=limit)
+    return {"status": "ok", "count": len(history), "history": history}
+
+
+@router.get("/autonomy/reactor/last")
+def autonomy_reactor_last(request: Request) -> dict:
+    _enforce_rbac(request, "autonomy.read")
+    _enforce_control("autonomy.read", mutating=False)
+    return {"status": "ok", "last_tick": read_last_tick(_fs)}
+
+
+@router.get("/autonomy/reactor/history")
+def autonomy_reactor_history(request: Request, limit: int = 50) -> dict:
+    _enforce_rbac(request, "autonomy.read")
+    _enforce_control("autonomy.read", mutating=False)
+    history = read_tick_history(_fs, limit=limit)
     return {"status": "ok", "count": len(history), "history": history}
 
 
@@ -484,11 +503,49 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
             stop_on_critical=body.stop_on_critical,
         ),
     )
+    tick_summary = {
+        "id": str(uuid4()),
+        "ts": utc_now_iso(),
+        "run_id": run_id,
+        "kind": "autonomy.reactor.tick",
+        "collect": {
+            "seen_count": int(collect_result.get("seen_count", 0)),
+            "queued_count": int(collect_result.get("queued_count", 0)),
+            "duplicate_count": int(collect_result.get("duplicate_count", 0)),
+        },
+        "dispatch": {
+            "leased_count": int(dispatch_result.get("leased_count", 0)),
+            "processed_count": int(dispatch_result.get("processed_count", 0)),
+            "failed_count": int(dispatch_result.get("failed_count", 0)),
+            "retried_count": int(dispatch_result.get("retried_count", 0)),
+            "released_count": int(dispatch_result.get("released_count", 0)),
+            "halted_reason": dispatch_result.get("halted_reason"),
+        },
+        "config": {
+            "max_collect_events": body.max_collect_events,
+            "include_types": body.include_types or [],
+            "max_events": body.max_events,
+            "max_actions": body.max_actions,
+            "max_runtime_seconds": body.max_runtime_seconds,
+            "max_dispatch_actions": body.max_dispatch_actions,
+            "max_dispatch_runtime_seconds": body.max_dispatch_runtime_seconds,
+            "max_attempts": body.max_attempts,
+            "retry_backoff_seconds": body.retry_backoff_seconds,
+            "lease_ttl_seconds": body.lease_ttl_seconds,
+            "recover_stale_leases": body.recover_stale_leases,
+            "allow_medium": body.allow_medium,
+            "allow_high": body.allow_high,
+            "stop_on_critical": body.stop_on_critical,
+        },
+    }
+    write_last_tick(_fs, payload=tick_summary)
+    append_tick_history(_fs, payload=tick_summary)
     return {
         "status": "ok",
         "run_id": run_id,
         "collect": collect_result,
         "dispatch": dispatch_result,
+        "tick": tick_summary,
         "queue": dispatch_result.get("queue", queue_status(_fs, limit=100)),
     }
 
