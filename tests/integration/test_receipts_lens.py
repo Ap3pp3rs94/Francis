@@ -359,3 +359,89 @@ def test_lens_surfaces_autonomy_stale_lease_recovery_chip() -> None:
         assert int(telemetry.get("leased_expired_count", 0)) >= 1
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
+
+
+def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    autonomy_events_path = workspace / "autonomy" / "events.jsonl"
+    last_dispatch_path = workspace / "autonomy" / "last_dispatch.json"
+    events_before = autonomy_events_path.read_text(encoding="utf-8") if autonomy_events_path.exists() else ""
+    last_before = last_dispatch_path.read_text(encoding="utf-8") if last_dispatch_path.exists() else ""
+    try:
+        autonomy_events_path.parent.mkdir(parents=True, exist_ok=True)
+        queued_event = {
+            "id": str(uuid4()),
+            "ts": "2026-01-01T00:00:00+00:00",
+            "run_id": str(uuid4()),
+            "kind": "autonomy.event",
+            "event_type": "manual.lens_dispatch_halt",
+            "source": "pytest",
+            "priority": "normal",
+            "risk_tier": "low",
+            "payload": {},
+            "status": "queued",
+            "attempts": 0,
+            "next_run_after": "2020-01-01T00:00:00+00:00",
+            "dedupe_key": "lens-dispatch-halt",
+            "lease_id": None,
+            "lease_owner": None,
+            "leased_at": None,
+            "completed_at": None,
+            "dispatch_run_id": None,
+            "error": None,
+        }
+        autonomy_events_path.write_text(json.dumps(queued_event, ensure_ascii=False) + "\n", encoding="utf-8")
+        last_dispatch_path.write_text(
+            json.dumps(
+                {
+                    "run_id": str(uuid4()),
+                    "halted_reason": "dispatch_action_budget_exceeded",
+                    "processed_count": 0,
+                    "failed_count": 0,
+                    "retried_count": 1,
+                    "released_count": 2,
+                    "dispatch_executed_actions": 0,
+                    "config": {
+                        "max_dispatch_actions": 2,
+                        "max_dispatch_runtime_seconds": 45,
+                        "max_attempts": 3,
+                        "retry_backoff_seconds": 120,
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        c = TestClient(app)
+        mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
+        assert mode.status_code == 200
+
+        state = c.get("/lens/state")
+        assert state.status_code == 200
+        payload = state.json()
+        dispatch = payload.get("autonomy_dispatch", {})
+        assert dispatch.get("halted") is True
+        assert dispatch.get("halted_reason") == "dispatch_action_budget_exceeded"
+        assert int(dispatch.get("max_dispatch_actions", 0)) == 2
+        assert int(dispatch.get("max_dispatch_runtime_seconds", 0)) == 45
+        assert int(dispatch.get("max_attempts", 0)) == 3
+        assert int(dispatch.get("retry_backoff_seconds", 0)) == 120
+        blockers = payload.get("blockers", {})
+        assert blockers.get("autonomy_dispatch_halted") is True
+        assert blockers.get("autonomy_dispatch_budget_halt") is True
+        assert blockers.get("autonomy_dispatch_critical_halt") is False
+
+        actions = c.get("/lens/actions")
+        assert actions.status_code == 200
+        chips = actions.json().get("action_chips", [])
+        dispatch_chip = [chip for chip in chips if chip.get("kind") == "autonomy.dispatch"]
+        assert dispatch_chip
+        queue_telemetry = dispatch_chip[0].get("queue_telemetry", {})
+        assert queue_telemetry.get("last_halted_reason") == "dispatch_action_budget_exceeded"
+        assert int(queue_telemetry.get("last_max_dispatch_actions", 0)) == 2
+        assert int(queue_telemetry.get("last_max_dispatch_runtime_seconds", 0)) == 45
+    finally:
+        autonomy_events_path.write_text(events_before, encoding="utf-8")
+        last_dispatch_path.write_text(last_before, encoding="utf-8")
