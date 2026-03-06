@@ -238,6 +238,34 @@ def _sanitize_scope(scope: dict[str, Any]) -> dict[str, list[str]]:
     }
 
 
+def _normalize_scope_paths(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if not stripped:
+            continue
+        normalized.append(str(Path(stripped).resolve()))
+    return sorted(set(normalized))
+
+
+def _normalize_scope_apps(values: list[str]) -> list[str]:
+    normalized = [str(item).strip().lower() for item in values if isinstance(item, str) and str(item).strip()]
+    return sorted(set(normalized))
+
+
+def _path_in_allowed_roots(path_value: str, allowed_roots: list[str]) -> bool:
+    target = Path(path_value).resolve()
+    for root in allowed_roots:
+        try:
+            target.relative_to(Path(root).resolve())
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def _load_or_init_takeover_state() -> dict[str, Any]:
     baseline = _default_takeover_state()
     try:
@@ -280,14 +308,45 @@ def _save_takeover_state(state: dict[str, Any]) -> dict[str, Any]:
 def _resolve_takeover_scope(payload: ControlTakeoverRequest) -> dict[str, list[str]]:
     control = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     scope = _sanitize_scope(control.get("scopes", {}) if isinstance(control.get("scopes"), dict) else {})
+    scope["repos"] = _normalize_scope_paths(scope.get("repos", []))
+    scope["workspaces"] = _normalize_scope_paths(scope.get("workspaces", []))
+    scope["apps"] = _normalize_scope_apps(scope.get("apps", []))
+    allowed_apps = set(scope.get("apps", []))
     if payload.repos is not None:
-        scope["repos"] = [str(item) for item in payload.repos if isinstance(item, str) and str(item).strip()]
+        requested_repos = _normalize_scope_paths(
+            [str(item) for item in payload.repos if isinstance(item, str) and str(item).strip()]
+        )
+        outside_repos = [repo for repo in requested_repos if not _path_in_allowed_roots(repo, scope.get("repos", []))]
+        if outside_repos:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Takeover repo scope outside control contract: {outside_repos[0]}",
+            )
+        scope["repos"] = requested_repos
     if payload.workspaces is not None:
-        scope["workspaces"] = [
-            str(item) for item in payload.workspaces if isinstance(item, str) and str(item).strip()
+        requested_workspaces = _normalize_scope_paths(
+            [str(item) for item in payload.workspaces if isinstance(item, str) and str(item).strip()]
+        )
+        outside_workspaces = [
+            workspace for workspace in requested_workspaces if not _path_in_allowed_roots(workspace, scope.get("workspaces", []))
         ]
+        if outside_workspaces:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Takeover workspace scope outside control contract: {outside_workspaces[0]}",
+            )
+        scope["workspaces"] = requested_workspaces
     if payload.apps is not None:
-        scope["apps"] = [str(item) for item in payload.apps if isinstance(item, str) and str(item).strip()]
+        requested_apps = _normalize_scope_apps(
+            [str(item) for item in payload.apps if isinstance(item, str) and str(item).strip()]
+        )
+        outside_apps = [app for app in requested_apps if app not in allowed_apps]
+        if outside_apps:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Takeover app scope outside control contract: {outside_apps[0]}",
+            )
+        scope["apps"] = requested_apps
     return scope
 
 

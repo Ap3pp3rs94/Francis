@@ -228,6 +228,76 @@ def test_control_takeover_request_confirm_handback_flow() -> None:
         _set_scope(c, original_scope)
 
 
+def test_control_takeover_request_rejects_scope_expansion() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+        _set_scope(
+            c,
+            {
+                "repos": original_scope.get("repos", []),
+                "workspaces": original_scope.get("workspaces", []),
+                "apps": ["missions", "control", "receipts", "lens", "approvals"],
+            },
+        )
+
+        denied = c.post(
+            "/control/takeover/request",
+            json={
+                "objective": f"Denied takeover {uuid4()}",
+                "reason": "scope expansion test",
+                "apps": ["missions", "forge", "control", "receipts", "lens", "approvals"],
+            },
+        )
+        assert denied.status_code == 403
+        assert "outside control contract" in str(denied.json().get("detail", "")).lower()
+
+        takeover = _get_takeover(c)
+        assert str(takeover.get("status", "")).strip().lower() == "idle"
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_remote_takeover_request_rejects_scope_expansion() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+        _set_scope(
+            c,
+            {
+                "repos": original_scope.get("repos", []),
+                "workspaces": original_scope.get("workspaces", []),
+                "apps": ["missions", "control", "receipts", "lens", "approvals"],
+            },
+        )
+
+        denied = c.post(
+            "/control/remote/takeover/request",
+            json={
+                "objective": f"Remote denied takeover {uuid4()}",
+                "reason": "remote scope expansion test",
+                "apps": ["missions", "forge", "control", "receipts", "lens", "approvals"],
+            },
+        )
+        assert denied.status_code == 403
+        assert "outside control contract" in str(denied.json().get("detail", "")).lower()
+
+        takeover = _get_takeover(c)
+        assert str(takeover.get("status", "")).strip().lower() == "idle"
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_control_takeover_receipts_are_traceable_via_runs_trace() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
