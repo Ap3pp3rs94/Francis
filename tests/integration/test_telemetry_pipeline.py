@@ -1,8 +1,45 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+
+
+def _workspace_root() -> Path:
+    return Path(__file__).resolve().parents[2] / "workspace"
+
+
+def _autonomy_events_file() -> Path:
+    return _workspace_root() / "autonomy" / "events.jsonl"
+
+
+def _stash(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _restore(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    rows: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            rows.append(parsed)
+    return rows
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -331,6 +368,54 @@ def test_telemetry_retention_enforced() -> None:
         assert telemetry["retention_max_age_hours"] == 1
         assert telemetry["event_count_total"] <= 2
     finally:
+        _set_scope(c, test_scope)
+        _set_telemetry_config(c, original_config)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_telemetry_auto_enqueues_autonomy_signal_on_critical() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    with_telemetry = _scope_with_app(original_scope, "telemetry")
+    test_scope = _scope_with_app(with_telemetry, "autonomy")
+    _set_scope(c, test_scope)
+    original_config = _get_telemetry_config(c)
+    events_before = _stash(_autonomy_events_file())
+
+    try:
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_autonomy_events_file(), "")
+        _set_telemetry_config(
+            c,
+            {
+                "enabled": True,
+                "allowed_streams": ["dev_server"],
+            },
+        )
+
+        post = c.post(
+            "/telemetry/connectors/dev-server",
+            json={
+                "source": "pytest",
+                "service": "api",
+                "level": "critical",
+                "message": "service crashed",
+                "port": 8000,
+            },
+        )
+        assert post.status_code == 200
+        payload = post.json()
+        assert payload["status"] == "ok"
+        auto = payload.get("autonomy_signal")
+        assert isinstance(auto, dict)
+        assert auto.get("status") in {"ok", "duplicate"}
+
+        events = _read_jsonl(_autonomy_events_file())
+        assert any(str(row.get("event_type", "")) == "telemetry.critical_present" for row in events)
+    finally:
+        _restore(_autonomy_events_file(), events_before)
         _set_scope(c, test_scope)
         _set_telemetry_config(c, original_config)
         _set_scope(c, original_scope)
