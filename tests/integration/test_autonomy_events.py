@@ -33,6 +33,14 @@ def _dispatch_history_file() -> Path:
     return _workspace_root() / "autonomy" / "dispatch_history.jsonl"
 
 
+def _last_tick_file() -> Path:
+    return _workspace_root() / "autonomy" / "last_tick.json"
+
+
+def _tick_history_file() -> Path:
+    return _workspace_root() / "autonomy" / "tick_history.jsonl"
+
+
 def _incidents_file() -> Path:
     return _workspace_root() / "incidents" / "incidents.jsonl"
 
@@ -820,6 +828,8 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
     deadletter_before = _stash(_deadletter_file())
     worker_deadletter_before = _stash(_worker_deadletter_file())
     last_dispatch_before = _stash(_last_dispatch_file())
+    last_tick_before = _stash(_last_tick_file())
+    tick_history_before = _stash(_tick_history_file())
 
     try:
         _set_scope(c, test_scope)
@@ -827,6 +837,8 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         _restore(_events_file(), "")
         _restore(_deadletter_file(), "")
         _restore(_last_dispatch_file(), "{}")
+        _restore(_last_tick_file(), "{}")
+        _restore(_tick_history_file(), "")
         _restore(
             _worker_deadletter_file(),
             (
@@ -858,10 +870,30 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         assert dispatch.get("status") == "ok"
         assert int(dispatch.get("leased_count", 0)) >= 1
         assert int(dispatch.get("processed_count", 0)) >= 1
+
+        tick_summary = payload.get("tick", {})
+        assert tick_summary.get("kind") == "autonomy.reactor.tick"
+        assert tick_summary.get("run_id") == payload.get("run_id")
+
+        last = c.get("/autonomy/reactor/last")
+        assert last.status_code == 200
+        last_tick = last.json().get("last_tick", {})
+        assert last_tick.get("run_id") == payload.get("run_id")
+        assert last_tick.get("kind") == "autonomy.reactor.tick"
+
+        history = c.get("/autonomy/reactor/history", params={"limit": 10})
+        assert history.status_code == 200
+        history_payload = history.json()
+        assert history_payload.get("status") == "ok"
+        assert int(history_payload.get("count", 0)) >= 1
+        rows = history_payload.get("history", [])
+        assert any(str(item.get("run_id", "")) == str(payload.get("run_id")) for item in rows)
     finally:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
         _restore(_worker_deadletter_file(), worker_deadletter_before)
         _restore(_last_dispatch_file(), last_dispatch_before)
+        _restore(_last_tick_file(), last_tick_before)
+        _restore(_tick_history_file(), tick_history_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
