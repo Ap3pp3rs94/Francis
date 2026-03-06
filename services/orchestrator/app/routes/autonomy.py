@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 from pathlib import Path
 from uuid import uuid4
@@ -10,11 +11,13 @@ from pydantic import BaseModel, Field
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
+from services.orchestrator.app.approvals_store import ensure_action_approved
 from services.orchestrator.app.autonomy.event_queue import (
     complete_event,
     enqueue_event,
     fail_event,
     lease_due_events,
+    preview_due_events,
     queue_status,
     read_last_dispatch,
     write_last_dispatch,
@@ -81,6 +84,24 @@ def _enforce_control(action: str, *, mutating: bool) -> None:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
 
 
+def _risk_tier_rank(value: str | None) -> int:
+    risk = str(value or "").strip().lower()
+    if risk == "critical":
+        return 4
+    if risk == "high":
+        return 3
+    if risk == "medium":
+        return 2
+    return 1
+
+
+def _max_risk_tier(events: list[dict[str, Any]]) -> str:
+    if not events:
+        return "low"
+    tiers = [str(item.get("risk_tier", "low")).strip().lower() for item in events]
+    return max(tiers, key=_risk_tier_rank)
+
+
 @router.post("/autonomy/cycle")
 def autonomy_cycle(request: Request, payload: AutonomyCycleRequest | None = None) -> dict:
     body = payload or AutonomyCycleRequest()
@@ -132,8 +153,42 @@ def autonomy_queue_status(request: Request, limit: int = 100) -> dict:
 def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest | None = None) -> dict:
     body = payload or AutonomyDispatchRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    role = _role_from_request(request)
     _enforce_rbac(request, "autonomy.dispatch")
     _enforce_control("autonomy.dispatch", mutating=True)
+    approval_id = request.headers.get("x-approval-id", "").strip() or None
+    due_preview = preview_due_events(_fs, max_events=body.max_events)
+    due_count = len(due_preview)
+    max_risk = _max_risk_tier(due_preview)
+    risk_counts = Counter(str(item.get("risk_tier", "low")).strip().lower() for item in due_preview)
+    approval_required = _risk_tier_rank(max_risk) >= _risk_tier_rank("high")
+    approved, approval_detail = ensure_action_approved(
+        _fs,
+        run_id=run_id,
+        action="autonomy.dispatch.high_risk",
+        requested_by=role,
+        reason=(
+            "Autonomy event dispatch includes high-risk events: "
+            f"max_risk={max_risk}, due_count={due_count}, risk_counts={dict(risk_counts)}"
+        ),
+        approval_required=approval_required,
+        approval_id=approval_id,
+        metadata={
+            "max_risk": max_risk,
+            "due_count": due_count,
+            "risk_counts": dict(risk_counts),
+        },
+    )
+    if not approved:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Autonomy dispatch requires approval for queued high-risk events.",
+                "action": "autonomy.dispatch.high_risk",
+                **approval_detail,
+            },
+        )
+    approved_request_id = str(approval_detail.get("approval_request_id", "")).strip() or None
 
     leased = lease_due_events(
         _fs,
@@ -193,6 +248,9 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         "leased_count": len(leased),
         "processed_count": len(processed),
         "failed_count": len(failed),
+        "approval_id": approved_request_id,
+        "max_risk_tier": max_risk,
+        "due_preview_count": due_count,
         "processed": processed,
         "failed": failed,
         "config": {
