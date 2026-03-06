@@ -12,6 +12,7 @@ AUTONOMY_EVENTS_PATH = "autonomy/events.jsonl"
 AUTONOMY_DEADLETTER_PATH = "autonomy/deadletter.jsonl"
 AUTONOMY_LAST_DISPATCH_PATH = "autonomy/last_dispatch.json"
 VALID_PRIORITIES = {"low", "normal", "high", "critical"}
+VALID_RISK_TIERS = {"low", "medium", "high", "critical"}
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -97,6 +98,20 @@ def _priority_rank(value: str | None) -> int:
     return ranks.get(_normalize_priority(value), 2)
 
 
+def _normalize_risk_tier(value: str | None, *, priority: str | None = None) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in VALID_RISK_TIERS:
+        return raw
+    normalized_priority = _normalize_priority(priority)
+    if normalized_priority == "critical":
+        return "critical"
+    if normalized_priority == "high":
+        return "high"
+    if normalized_priority == "normal":
+        return "medium"
+    return "low"
+
+
 def _sort_due_events(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def key_fn(item: dict[str, Any]) -> tuple[int, str]:
         return (_priority_rank(str(item.get("priority", "normal"))), str(item.get("ts", "")))
@@ -114,6 +129,7 @@ def enqueue_event(
     payload: dict[str, Any] | None = None,
     dedupe_key: str | None = None,
     next_run_after: str | None = None,
+    risk_tier: str | None = None,
 ) -> dict[str, Any]:
     now_iso = utc_now_iso()
     rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
@@ -135,6 +151,7 @@ def enqueue_event(
         "event_type": str(event_type).strip(),
         "source": str(source or "api").strip() or "api",
         "priority": _normalize_priority(priority),
+        "risk_tier": _normalize_risk_tier(risk_tier, priority=priority),
         "payload": payload if isinstance(payload, dict) else {},
         "status": "queued",
         "attempts": 0,
@@ -150,6 +167,19 @@ def enqueue_event(
     rows.append(event)
     _write_jsonl(fs, AUTONOMY_EVENTS_PATH, rows)
     return {"status": "ok", "event": event}
+
+
+def preview_due_events(fs: WorkspaceFS, *, max_events: int) -> list[dict[str, Any]]:
+    rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
+    now = datetime.now(timezone.utc)
+    due_queued: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("status", "")).strip().lower() != "queued":
+            continue
+        next_run_after = _parse_ts(str(row.get("next_run_after", "")).strip() or None)
+        if next_run_after is None or next_run_after <= now:
+            due_queued.append(row)
+    return _sort_due_events(due_queued)[: max(0, _safe_int(max_events, 0))]
 
 
 def lease_due_events(
