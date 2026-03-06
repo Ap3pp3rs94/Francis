@@ -275,3 +275,71 @@ def test_control_takeover_receipts_are_traceable_via_runs_trace() -> None:
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_takeover_activity_and_handback_package() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+
+        requested = c.post(
+            "/control/takeover/request",
+            json={"objective": f"Package takeover {uuid4()}", "reason": "package test"},
+        )
+        assert requested.status_code == 200
+        session_id = str(requested.json()["takeover"].get("session_id", "")).strip()
+        assert session_id
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            json={"confirm": True, "reason": "package confirm", "mode": "pilot"},
+        )
+        assert confirmed.status_code == 200
+        assert str(confirmed.json()["takeover"].get("session_id", "")).strip() == session_id
+
+        activity_active = c.get("/control/takeover/activity", params={"session_id": session_id, "limit": 50})
+        assert activity_active.status_code == 200
+        rows_active = activity_active.json().get("activity", [])
+        assert rows_active
+        kinds_active = [str(row.get("kind", "")) for row in rows_active]
+        assert "control.takeover.requested" in kinds_active
+        assert "control.takeover.confirmed" in kinds_active
+
+        handed_back = c.post(
+            "/control/takeover/handback",
+            json={"summary": "package handback", "verification": {"tests": "pass"}, "pending_approvals": 0},
+        )
+        assert handed_back.status_code == 200
+        takeover_after = handed_back.json()["takeover"]
+        assert takeover_after.get("session_id") in (None, "")
+        assert str(takeover_after.get("last_session_id", "")).strip() == session_id
+
+        activity_after = c.get("/control/takeover/activity", params={"session_id": session_id, "limit": 50})
+        assert activity_after.status_code == 200
+        rows_after = activity_after.json().get("activity", [])
+        kinds_after = [str(row.get("kind", "")) for row in rows_after]
+        assert "control.takeover.handed_back" in kinds_after
+
+        package = c.get("/control/takeover/handback/package", params={"session_id": session_id, "limit": 100})
+        assert package.status_code == 200
+        package_payload = package.json()
+        assert package_payload["session_id"] == session_id
+        timeline = package_payload.get("timeline", {})
+        transitions = timeline.get("transitions", [])
+        transition_kinds = [str(row.get("kind", "")) for row in transitions]
+        assert "control.takeover.request" in transition_kinds
+        assert "control.takeover.confirm" in transition_kinds
+        assert "control.takeover.handback" in transition_kinds
+        summary_counts = package_payload.get("summary", {}).get("counts", {})
+        assert int(summary_counts.get("activity", 0)) >= 3
+        assert int(summary_counts.get("decisions", 0)) >= 1
+        assert int(summary_counts.get("ledger", 0)) >= 1
+
+        default_package = c.get("/control/takeover/handback/package")
+        assert default_package.status_code == 200
+        assert default_package.json().get("session_id") == session_id
+    finally:
+        _ensure_takeover_idle(c)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

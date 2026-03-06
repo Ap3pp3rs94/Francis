@@ -41,6 +41,7 @@ from services.orchestrator.app.routes.control import (
     ControlTakeoverConfirmRequest,
     ControlTakeoverHandbackRequest,
     ControlTakeoverRequest,
+    append_takeover_activity,
     control_takeover_confirm,
     control_takeover_handback,
     control_takeover_request,
@@ -143,16 +144,31 @@ def _record_lens_execution(
     *,
     run_id: str,
     trace_id: str,
+    role: str,
     action_kind: str,
     dry_run: bool,
     ok: bool,
     detail: dict[str, Any],
 ) -> None:
+    takeover_activity = append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=f"lens:{str(role).strip().lower() or 'architect'}",
+        kind="lens.action.execute",
+        detail={
+            "action_kind": action_kind,
+            "dry_run": dry_run,
+            "ok": ok,
+            "result_status": detail.get("status"),
+        },
+        ok=ok,
+    )
     receipt = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
         "run_id": run_id,
         "trace_id": trace_id,
+        "session_id": takeover_activity.get("session_id") if isinstance(takeover_activity, dict) else None,
         "kind": "lens.action.execute",
         "action_kind": action_kind,
         "dry_run": dry_run,
@@ -1182,6 +1198,7 @@ def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
         _record_lens_execution(
             run_id=run_id,
             trace_id=trace_id,
+            role=role,
             action_kind=kind,
             dry_run=dry_run,
             ok=False,
@@ -1192,6 +1209,7 @@ def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
         _record_lens_execution(
             run_id=run_id,
             trace_id=trace_id,
+            role=role,
             action_kind=kind,
             dry_run=dry_run,
             ok=False,
@@ -1202,6 +1220,7 @@ def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
     _record_lens_execution(
         run_id=run_id,
         trace_id=trace_id,
+        role=role,
         action_kind=kind,
         dry_run=dry_run,
         ok=True,

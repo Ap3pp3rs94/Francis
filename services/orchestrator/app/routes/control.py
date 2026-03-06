@@ -31,6 +31,7 @@ _fs = WorkspaceFS(
 _ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
 _takeover_state_path = "control/takeover.json"
 _takeover_history_path = "control/takeover_history.jsonl"
+_takeover_activity_path = "control/takeover_activity.jsonl"
 
 
 class ControlModeRequest(BaseModel):
@@ -99,6 +100,8 @@ def _default_takeover_state() -> dict[str, Any]:
     control = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     return {
         "status": "idle",
+        "session_id": None,
+        "last_session_id": None,
         "objective": "",
         "reason": "",
         "scope": control.get("scopes", {}),
@@ -123,6 +126,48 @@ def _default_takeover_state() -> dict[str, Any]:
         "handback_trace_id": None,
         "updated_at": utc_now_iso(),
     }
+
+
+def _read_jsonl_rows(rel_path: str) -> list[dict[str, Any]]:
+    try:
+        raw = _fs.read_text(rel_path)
+    except Exception:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+            if isinstance(parsed, dict):
+                rows.append(parsed)
+        except Exception:
+            continue
+    return rows
+
+
+def _tail_rows(rows: list[dict[str, Any]], limit: int, cap: int = 2000) -> list[dict[str, Any]]:
+    n = max(0, min(limit, cap))
+    if n == 0:
+        return []
+    return rows[-n:]
+
+
+def _derive_trace_id(row: dict[str, Any]) -> str:
+    explicit = str(row.get("trace_id", "")).strip()
+    if explicit:
+        return explicit
+    summary = row.get("summary", {}) if isinstance(row.get("summary"), dict) else {}
+    summary_trace = str(summary.get("trace_id", "")).strip()
+    if summary_trace:
+        return summary_trace
+    run_id = str(row.get("run_id", "")).strip()
+    if not run_id:
+        return ""
+    if ":" in run_id:
+        return run_id.split(":", 1)[0].strip()
+    return run_id
 
 
 def _sanitize_scope(scope: dict[str, Any]) -> dict[str, list[str]]:
@@ -197,7 +242,10 @@ def _record_control_receipt(
     reason: str,
     before: dict[str, Any],
     after: dict[str, Any],
+    session_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    normalized_session_id = str(session_id or "").strip()
     receipt = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
@@ -207,7 +255,12 @@ def _record_control_receipt(
         "reason": reason,
         "before": before,
         "after": after,
+        "session_id": normalized_session_id or None,
     }
+    if isinstance(metadata, dict):
+        for key, value in metadata.items():
+            if key not in receipt:
+                receipt[key] = value
     _append_jsonl("logs/francis.log.jsonl", receipt)
     _append_jsonl("journals/decisions.jsonl", receipt)
     _ledger.append(
@@ -218,12 +271,13 @@ def _record_control_receipt(
             "reason": reason,
             "before_mode": before.get("mode"),
             "before_kill_switch": before.get("kill_switch"),
-            "after_mode": after.get("mode"),
-            "after_kill_switch": after.get("kill_switch"),
-            "before_status": before.get("status"),
-            "after_status": after.get("status"),
-            "objective": after.get("objective") or before.get("objective"),
-        },
+                "after_mode": after.get("mode"),
+                "after_kill_switch": after.get("kill_switch"),
+                "before_status": before.get("status"),
+                "after_status": after.get("status"),
+                "objective": after.get("objective") or before.get("objective"),
+                "session_id": normalized_session_id or None,
+            },
     )
     return receipt
 
@@ -236,41 +290,122 @@ def _append_takeover_history(
     reason: str,
     before: dict[str, Any],
     after: dict[str, Any],
+    session_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
+    row = {
+        "id": str(uuid4()),
+        "ts": utc_now_iso(),
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "kind": kind,
+        "reason": reason,
+        "before": before,
+        "after": after,
+        "session_id": str(session_id or "").strip() or None,
+    }
+    if isinstance(metadata, dict):
+        for key, value in metadata.items():
+            if key not in row:
+                row[key] = value
     _append_jsonl(
         _takeover_history_path,
-        {
-            "id": str(uuid4()),
-            "ts": utc_now_iso(),
-            "run_id": run_id,
-            "trace_id": trace_id,
-            "kind": kind,
-            "reason": reason,
-            "before": before,
-            "after": after,
-        },
+        row,
     )
 
 
 def _read_takeover_history(limit: int) -> list[dict[str, Any]]:
-    try:
-        raw = _fs.read_text(_takeover_history_path)
-    except Exception:
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            parsed = json.loads(line)
-            if isinstance(parsed, dict):
-                rows.append(parsed)
-        except Exception:
-            continue
-    if limit <= 0:
-        return []
-    return rows[-min(limit, 1000) :]
+    return _tail_rows(_read_jsonl_rows(_takeover_history_path), limit=limit, cap=1000)
+
+
+def _read_takeover_activity(limit: int, session_id: str | None = None) -> list[dict[str, Any]]:
+    rows = _read_jsonl_rows(_takeover_activity_path)
+    normalized_session_id = str(session_id or "").strip()
+    if normalized_session_id:
+        rows = [row for row in rows if str(row.get("session_id", "")).strip() == normalized_session_id]
+    return _tail_rows(rows, limit=limit, cap=5000)
+
+
+def append_takeover_activity(
+    *,
+    run_id: str,
+    trace_id: str,
+    actor: str,
+    kind: str,
+    detail: dict[str, Any] | None = None,
+    ok: bool | None = None,
+    session_id: str | None = None,
+    allow_inactive: bool = False,
+    takeover_state: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    state = takeover_state if isinstance(takeover_state, dict) else _load_or_init_takeover_state()
+    status = str(state.get("status", "idle")).strip().lower()
+    resolved_session_id = str(session_id or state.get("session_id") or "").strip()
+    if not resolved_session_id:
+        return None
+    if status != "active" and not allow_inactive:
+        return None
+
+    row = {
+        "id": str(uuid4()),
+        "ts": utc_now_iso(),
+        "session_id": resolved_session_id,
+        "status": status,
+        "objective": str(state.get("objective", "")).strip(),
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "actor": str(actor).strip() or "system",
+        "kind": str(kind).strip() or "unknown",
+        "ok": bool(ok) if ok is not None else None,
+        "detail": detail if isinstance(detail, dict) else {},
+    }
+    _append_jsonl(_takeover_activity_path, row)
+    return row
+
+
+def _collect_handback_receipts_for_session(session_id: str, limit: int) -> dict[str, list[dict[str, Any]]]:
+    normalized_session_id = str(session_id).strip()
+    transitions = [
+        row
+        for row in _read_jsonl_rows(_takeover_history_path)
+        if str(row.get("session_id", "")).strip() == normalized_session_id
+    ]
+    activity = _read_takeover_activity(limit=limit, session_id=normalized_session_id)
+
+    run_ids: set[str] = set()
+    trace_ids: set[str] = set()
+    for row in [*transitions, *activity]:
+        run_id = str(row.get("run_id", "")).strip()
+        trace_id = str(row.get("trace_id", "")).strip()
+        if run_id:
+            run_ids.add(run_id)
+        if trace_id:
+            trace_ids.add(trace_id)
+            run_ids.add(trace_id)
+
+    def should_include(row: dict[str, Any]) -> bool:
+        row_session_id = str(row.get("session_id", "")).strip()
+        if row_session_id and row_session_id == normalized_session_id:
+            return True
+        run_id = str(row.get("run_id", "")).strip()
+        if run_id and run_id in run_ids:
+            return True
+        row_trace_id = _derive_trace_id(row)
+        return bool(row_trace_id and row_trace_id in trace_ids)
+
+    decisions = [row for row in _read_jsonl_rows("journals/decisions.jsonl") if should_include(row)]
+    logs = [row for row in _read_jsonl_rows("logs/francis.log.jsonl") if should_include(row)]
+    ledger = [row for row in _read_jsonl_rows("runs/run_ledger.jsonl") if should_include(row)]
+    legacy_ledger = [row for row in _read_jsonl_rows("brain/run_ledger.jsonl") if should_include(row)]
+    combined_ledger = sorted([*legacy_ledger, *ledger], key=lambda row: str(row.get("ts", "")))
+
+    return {
+        "transitions": _tail_rows(transitions, limit=limit, cap=1000),
+        "activity": _tail_rows(activity, limit=limit, cap=5000),
+        "decisions": _tail_rows(decisions, limit=limit, cap=2000),
+        "logs": _tail_rows(logs, limit=limit, cap=2000),
+        "ledger": _tail_rows(combined_ledger, limit=limit, cap=2000),
+    }
 
 
 @router.get("/control/mode")
@@ -444,6 +579,65 @@ def control_takeover_history(limit: int = 50) -> dict:
     return {"status": "ok", "count": len(rows), "history": rows}
 
 
+@router.get("/control/takeover/activity")
+def control_takeover_activity(limit: int = 100, session_id: str | None = None) -> dict:
+    state = _load_or_init_takeover_state()
+    resolved_session_id = str(session_id or "").strip()
+    if not resolved_session_id:
+        resolved_session_id = str(state.get("session_id") or "").strip() or str(state.get("last_session_id") or "").strip()
+    rows = _read_takeover_activity(limit=limit, session_id=resolved_session_id or None)
+    return {
+        "status": "ok",
+        "takeover_status": str(state.get("status", "idle")).strip().lower() or "idle",
+        "session_id": resolved_session_id or None,
+        "count": len(rows),
+        "activity": rows,
+    }
+
+
+@router.get("/control/takeover/handback/package")
+def control_takeover_handback_package(limit: int = 200, session_id: str | None = None) -> dict:
+    state = _load_or_init_takeover_state()
+    resolved_session_id = str(session_id or "").strip()
+    if not resolved_session_id:
+        resolved_session_id = str(state.get("last_session_id") or "").strip()
+    if not resolved_session_id:
+        resolved_session_id = str(state.get("session_id") or "").strip()
+    if not resolved_session_id:
+        raise HTTPException(status_code=404, detail="No takeover session available for handback package.")
+
+    receipts = _collect_handback_receipts_for_session(session_id=resolved_session_id, limit=limit)
+    latest_transition = receipts["transitions"][-1] if receipts["transitions"] else {}
+    latest_activity = receipts["activity"][-1] if receipts["activity"] else {}
+
+    return {
+        "status": "ok",
+        "session_id": resolved_session_id,
+        "summary": {
+            "latest_transition_kind": latest_transition.get("kind"),
+            "latest_transition_ts": latest_transition.get("ts"),
+            "latest_activity_kind": latest_activity.get("kind"),
+            "latest_activity_ts": latest_activity.get("ts"),
+            "counts": {
+                "transitions": len(receipts["transitions"]),
+                "activity": len(receipts["activity"]),
+                "decisions": len(receipts["decisions"]),
+                "logs": len(receipts["logs"]),
+                "ledger": len(receipts["ledger"]),
+            },
+        },
+        "timeline": {
+            "transitions": receipts["transitions"],
+            "activity": receipts["activity"],
+        },
+        "receipts": {
+            "decisions": receipts["decisions"],
+            "logs": receipts["logs"],
+            "ledger": receipts["ledger"],
+        },
+    }
+
+
 @router.post("/control/takeover/request")
 def control_takeover_request(request: Request, payload: ControlTakeoverRequest) -> dict:
     run_id = str(getattr(request.state, "run_id", uuid4()))
@@ -459,10 +653,12 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
         raise HTTPException(status_code=400, detail="objective is required")
     reason = str(payload.reason).strip() or "manual_takeover_request"
     now = utc_now_iso()
+    session_id = str(uuid4())
     after = _save_takeover_state(
         {
             **before,
             "status": "requested",
+            "session_id": session_id,
             "objective": objective,
             "reason": reason,
             "scope": _resolve_takeover_scope(payload),
@@ -497,7 +693,9 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
             "status": after.get("status"),
             "objective": after.get("objective"),
             "requested_by": after.get("requested_by"),
+            "session_id": after.get("session_id"),
         },
+        session_id=session_id,
     )
     _append_takeover_history(
         run_id=run_id,
@@ -505,7 +703,27 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
         kind="control.takeover.request",
         reason=reason,
         before={"status": before.get("status"), "objective": before.get("objective")},
-        after={"status": after.get("status"), "objective": after.get("objective")},
+        after={
+            "status": after.get("status"),
+            "objective": after.get("objective"),
+            "session_id": after.get("session_id"),
+        },
+        session_id=session_id,
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=role,
+        kind="control.takeover.requested",
+        detail={
+            "objective": objective,
+            "reason": reason,
+            "scope": after.get("scope", {}),
+        },
+        ok=True,
+        session_id=session_id,
+        allow_inactive=True,
+        takeover_state=after,
     )
     return {
         "status": "ok",
@@ -535,6 +753,7 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
         raise HTTPException(status_code=409, detail="Cannot confirm takeover while kill switch is active.")
 
     reason = str(body.reason).strip() or "manual_takeover_confirm"
+    session_id = str(takeover_before.get("session_id") or "").strip() or str(uuid4())
     requested_scope = _sanitize_scope(
         takeover_before.get("scope", {}) if isinstance(takeover_before.get("scope"), dict) else {}
     )
@@ -557,6 +776,7 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
         {
             **takeover_before,
             "status": "active",
+            "session_id": session_id,
             "confirmed_at": utc_now_iso(),
             "confirmation_reason": reason,
             "confirm_run_id": run_id,
@@ -580,7 +800,9 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
             "objective": takeover_after.get("objective"),
             "mode": control_after.get("mode"),
             "kill_switch": control_after.get("kill_switch"),
+            "session_id": takeover_after.get("session_id"),
         },
+        session_id=session_id,
     )
     _append_takeover_history(
         run_id=run_id,
@@ -588,7 +810,28 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
         kind="control.takeover.confirm",
         reason=reason,
         before={"status": takeover_before.get("status"), "objective": takeover_before.get("objective")},
-        after={"status": takeover_after.get("status"), "objective": takeover_after.get("objective")},
+        after={
+            "status": takeover_after.get("status"),
+            "objective": takeover_after.get("objective"),
+            "session_id": takeover_after.get("session_id"),
+        },
+        session_id=session_id,
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=_role_from_request(request),
+        kind="control.takeover.confirmed",
+        detail={
+            "objective": str(takeover_after.get("objective", "")).strip(),
+            "reason": reason,
+            "mode": control_after.get("mode"),
+            "scope": takeover_after.get("applied_scope", {}),
+        },
+        ok=True,
+        session_id=session_id,
+        allow_inactive=True,
+        takeover_state=takeover_after,
     )
     return {
         "status": "ok",
@@ -609,6 +852,7 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
     takeover_before = _load_or_init_takeover_state()
     if str(takeover_before.get("status", "idle")).strip().lower() != "active":
         raise HTTPException(status_code=409, detail="No active takeover to hand back.")
+    session_id = str(takeover_before.get("session_id") or "").strip()
 
     control_before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     restore_scope = _sanitize_scope(
@@ -648,6 +892,8 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
         {
             **takeover_before,
             "status": "idle",
+            "session_id": None,
+            "last_session_id": session_id or takeover_before.get("last_session_id"),
             "handed_back_at": utc_now_iso(),
             "handback_reason": reason,
             "handback_summary": str(body.summary).strip(),
@@ -674,7 +920,9 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
             "objective": takeover_after.get("objective"),
             "mode": control_after.get("mode"),
             "kill_switch": control_after.get("kill_switch"),
+            "session_id": session_id or None,
         },
+        session_id=session_id or None,
     )
     _append_takeover_history(
         run_id=run_id,
@@ -682,7 +930,29 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
         kind="control.takeover.handback",
         reason=reason,
         before={"status": takeover_before.get("status"), "objective": takeover_before.get("objective")},
-        after={"status": takeover_after.get("status"), "objective": takeover_after.get("objective")},
+        after={
+            "status": takeover_after.get("status"),
+            "objective": takeover_after.get("objective"),
+            "session_id": session_id or None,
+        },
+        session_id=session_id or None,
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=_role_from_request(request),
+        kind="control.takeover.handed_back",
+        detail={
+            "summary": str(body.summary).strip(),
+            "verification": body.verification if isinstance(body.verification, dict) else {},
+            "pending_approvals": int(body.pending_approvals),
+            "reason": reason,
+            "mode": control_after.get("mode"),
+        },
+        ok=True,
+        session_id=session_id or None,
+        allow_inactive=True,
+        takeover_state=takeover_after,
     )
     return {
         "status": "ok",

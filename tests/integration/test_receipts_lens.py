@@ -442,6 +442,70 @@ def test_lens_execute_takeover_flow_supported() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_lens_execute_appends_takeover_activity_and_handback_package() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts"]))
+        _ensure_takeover_idle(c)
+
+        requested = c.post(
+            "/control/takeover/request",
+            json={"objective": f"Activity takeover {uuid4()}", "reason": "activity test"},
+        )
+        assert requested.status_code == 200
+        session_id = str(requested.json()["takeover"].get("session_id", "")).strip()
+        assert session_id
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            json={"confirm": True, "reason": "activity confirm", "mode": "pilot"},
+        )
+        assert confirmed.status_code == 200
+
+        execute = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.resume", "dry_run": True, "args": {"mode": "pilot", "reason": "activity dry run"}},
+        )
+        assert execute.status_code == 200
+        assert execute.json()["status"] == "dry_run"
+
+        activity = c.get("/control/takeover/activity", params={"session_id": session_id, "limit": 100})
+        assert activity.status_code == 200
+        rows = activity.json().get("activity", [])
+        lens_rows = [row for row in rows if str(row.get("kind", "")) == "lens.action.execute"]
+        assert lens_rows
+        assert any(
+            str(row.get("detail", {}).get("action_kind", "")) == "control.resume"
+            and bool(row.get("detail", {}).get("dry_run", False))
+            for row in lens_rows
+        )
+
+        handed_back = c.post(
+            "/control/takeover/handback",
+            json={"summary": "Activity handback", "verification": {"tests": "pass"}, "pending_approvals": 0},
+        )
+        assert handed_back.status_code == 200
+
+        package = c.get("/control/takeover/handback/package", params={"session_id": session_id, "limit": 120})
+        assert package.status_code == 200
+        payload = package.json()
+        package_activity = payload.get("timeline", {}).get("activity", [])
+        assert any(str(row.get("kind", "")) == "lens.action.execute" for row in package_activity)
+        decisions = payload.get("receipts", {}).get("decisions", [])
+        assert any(
+            str(row.get("kind", "")) == "lens.action.execute"
+            and str(row.get("session_id", "")).strip() == session_id
+            for row in decisions
+        )
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_lens_surfaces_worker_queue_signals() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     jobs_path = workspace / "queue" / "jobs.jsonl"
