@@ -23,6 +23,7 @@ def capabilities() -> dict:
             "observer",
             "forge",
             "autonomy",
+            "autonomy.events",
             "control",
             "receipts",
             "lens",
