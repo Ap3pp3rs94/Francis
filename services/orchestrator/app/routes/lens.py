@@ -13,6 +13,7 @@ from francis_forge.catalog import list_entries
 from services.orchestrator.app.approvals_store import pending_count
 from services.orchestrator.app.autonomy.action_budget import check_action_budget, load_state as load_budget_state
 from services.orchestrator.app.autonomy.decision_engine import build_plan
+from services.orchestrator.app.autonomy.event_queue import queue_status as autonomy_queue_status
 from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.intent_engine import collect_intents
 from services.orchestrator.app.control_state import check_action_allowed
@@ -72,6 +73,12 @@ def lens_state() -> dict:
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
     telemetry = telemetry_status(_fs)
+    autonomy_queue = autonomy_queue_status(_fs, limit=200)
+    autonomy_high_risk_due = sum(
+        1
+        for row in autonomy_queue.get("queued", [])
+        if str(row.get("risk_tier", "")).strip().lower() in {"high", "critical"}
+    )
     catalog_entries = list_entries(_fs)
     staged_count = sum(1 for entry in catalog_entries if str(entry.get("status", "")).lower() == "staged")
     pending_approvals = pending_count(_fs) + len(_read_jsonl("queue/deadletter.jsonl")) + staged_count
@@ -89,6 +96,14 @@ def lens_state() -> dict:
             "active_streams_horizon": list(telemetry.get("active_streams_horizon", [])),
             "last_event_ts": telemetry.get("last_event_ts"),
         },
+        "autonomy_queue": {
+            "queued_count": int(autonomy_queue.get("queued_count", 0)),
+            "leased_count": int(autonomy_queue.get("leased_count", 0)),
+            "dispatched_count": int(autonomy_queue.get("dispatched_count", 0)),
+            "failed_count": int(autonomy_queue.get("failed_count", 0)),
+            "deadletter_count": int(autonomy_queue.get("deadletter_count", 0)),
+            "high_risk_due_count": autonomy_high_risk_due,
+        },
         "pending_approvals": pending_approvals,
         "blockers": {
             "critical_incidents": event_state.get("critical_incident_count", 0),
@@ -102,6 +117,8 @@ def lens_state() -> dict:
             "worker_cycle_gate_saturated": event_state.get("worker_cycle_gate_saturated", False),
             "worker_last_lease_lost": event_state.get("worker_last_lease_lost_count", 0),
             "worker_last_lease_conflict": event_state.get("worker_last_lease_conflict_count", 0),
+            "autonomy_queue_due": int(autonomy_queue.get("queued_count", 0)),
+            "autonomy_queue_high_risk_due": autonomy_high_risk_due,
             "pending_approvals": pending_approvals,
         },
     }
@@ -122,6 +139,13 @@ def lens_actions(max_actions: int = 6) -> dict:
 
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
+    autonomy_queue = autonomy_queue_status(_fs, limit=200)
+    autonomy_queued_count = int(autonomy_queue.get("queued_count", 0))
+    autonomy_high_risk_due = sum(
+        1
+        for row in autonomy_queue.get("queued", [])
+        if str(row.get("risk_tier", "")).strip().lower() in {"high", "critical"}
+    )
     allow_medium, allow_high = _mode_allows_medium_high(str(control.get("mode", "observe")))
     plan = build_plan(
         event_state=event_state,
@@ -184,6 +208,29 @@ def lens_actions(max_actions: int = 6) -> dict:
         if kind == "worker.recover_leases":
             chip["recovery_scope"] = action.get("action_classes", [])
         action_chips.append(chip)
+
+    if autonomy_queued_count > 0:
+        mode = str(control.get("mode", "observe")).strip().lower()
+        dispatch_enabled = mode in {"pilot", "away"}
+        policy_reason = ""
+        if not dispatch_enabled:
+            policy_reason = f"mutating action autonomy.dispatch not allowed in {mode} mode"
+        elif autonomy_high_risk_due > 0:
+            policy_reason = "approval required for queued high-risk autonomy events"
+        action_chips.append(
+            {
+                "kind": "autonomy.dispatch",
+                "label": "Dispatch Autonomy Events",
+                "enabled": dispatch_enabled,
+                "reason": f"{autonomy_queued_count} queued autonomy event(s)",
+                "policy_reason": policy_reason,
+                "risk_tier": "medium" if autonomy_high_risk_due == 0 else "high",
+                "queue_telemetry": {
+                    "queued_count": autonomy_queued_count,
+                    "high_risk_due_count": autonomy_high_risk_due,
+                },
+            }
+        )
 
     return {
         "status": "ok",
