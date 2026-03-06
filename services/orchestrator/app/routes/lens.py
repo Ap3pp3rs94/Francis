@@ -459,7 +459,15 @@ def _execute_lens_action(
         limit = max(1, min(1000, int(args.get("limit", 100))))
         cursor = str(args.get("cursor", "")).strip() or None
         session_id = str(args.get("session_id", "")).strip() or None
-        execution_args = {"limit": limit, "cursor": cursor, "session_id": session_id}
+        kind = str(args.get("kind", "")).strip() or None
+        risk_tier = str(args.get("risk_tier", "")).strip().lower() or None
+        execution_args = {
+            "limit": limit,
+            "cursor": cursor,
+            "session_id": session_id,
+            "kind": kind,
+            "risk_tier": risk_tier,
+        }
         if dry_run:
             return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
         summary = control_remote_feed(
@@ -467,6 +475,8 @@ def _execute_lens_action(
             limit=limit,
             cursor=cursor,
             session_id=session_id,
+            kind=kind,
+            risk_tier=risk_tier,
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
@@ -952,7 +962,13 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
     elif kind == "control.remote.approvals":
         hinted["execute_via"]["payload"]["args"] = {"status": "pending", "limit": 50}
     elif kind == "control.remote.feed":
-        hinted["execute_via"]["payload"]["args"] = {"limit": 100, "cursor": "", "session_id": ""}
+        hinted["execute_via"]["payload"]["args"] = {
+            "limit": 100,
+            "cursor": "",
+            "session_id": "",
+            "kind": "",
+            "risk_tier": "",
+        }
     elif kind == "control.remote.panic":
         hinted["execute_via"]["payload"]["args"] = {"reason": "", "session_id": ""}
     elif kind == "control.remote.resume":

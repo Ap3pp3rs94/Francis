@@ -769,6 +769,37 @@ def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> Non
         assert "control.remote.panic" in feed_kinds
         assert "control.remote.resume" in feed_kinds
         assert "control.remote.takeover.handback" in feed_kinds
+
+        remote_feed_panic = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "kind": "control.remote.panic", "limit": 100},
+        )
+        assert remote_feed_panic.status_code == 200
+        remote_feed_panic_payload = remote_feed_panic.json()
+        assert remote_feed_panic_payload.get("filters", {}).get("kind") == "control.remote.panic"
+        assert int(remote_feed_panic_payload.get("count", 0)) >= 1
+        assert all(str(row.get("kind", "")) == "control.remote.panic" for row in remote_feed_panic_payload.get("feed", []))
+        assert all(str(row.get("risk_tier", "")) == "high" for row in remote_feed_panic_payload.get("feed", []))
+
+        remote_feed_high = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "risk_tier": "high", "limit": 100},
+        )
+        assert remote_feed_high.status_code == 200
+        remote_feed_high_payload = remote_feed_high.json()
+        assert remote_feed_high_payload.get("filters", {}).get("risk_tier") == "high"
+        assert int(remote_feed_high_payload.get("count", 0)) >= 1
+        assert all(str(row.get("risk_tier", "")) == "high" for row in remote_feed_high_payload.get("feed", []))
+
+        remote_feed_invalid_risk = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "risk_tier": "invalid"},
+        )
+        assert remote_feed_invalid_risk.status_code == 400
+        assert "Invalid risk_tier" in str(remote_feed_invalid_risk.json().get("detail", ""))
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

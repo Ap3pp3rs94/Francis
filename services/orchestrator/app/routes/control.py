@@ -38,6 +38,7 @@ _ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
 _takeover_state_path = "control/takeover.json"
 _takeover_history_path = "control/takeover_history.jsonl"
 _takeover_activity_path = "control/takeover_activity.jsonl"
+_REMOTE_FEED_RISK_TIERS = {"low", "medium", "high", "critical"}
 
 
 class ControlModeRequest(BaseModel):
@@ -691,20 +692,62 @@ def _build_takeover_sessions(limit: int) -> list[dict[str, Any]]:
     return summaries[: max(0, min(limit, 500))]
 
 
-def _build_remote_feed_rows(session_id: str | None = None) -> list[dict[str, Any]]:
+def _remote_feed_risk_tier(kind: str) -> str:
+    normalized_kind = str(kind).strip().lower()
+    if "panic" in normalized_kind:
+        return "high"
+    if normalized_kind in {
+        "control.takeover.confirm",
+        "control.remote.takeover.confirm",
+        "control.takeover.request",
+        "control.remote.takeover.request",
+    }:
+        return "medium"
+    if "critical" in normalized_kind:
+        return "critical"
+    return "low"
+
+
+def _normalize_remote_feed_risk_tier(risk_tier: str | None) -> str | None:
+    normalized = str(risk_tier or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized not in _REMOTE_FEED_RISK_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid risk_tier: {normalized}. Expected one of {sorted(_REMOTE_FEED_RISK_TIERS)}",
+        )
+    return normalized
+
+
+def _build_remote_feed_rows(
+    session_id: str | None = None,
+    *,
+    kind: str | None = None,
+    risk_tier: str | None = None,
+) -> list[dict[str, Any]]:
     normalized_session_id = str(session_id or "").strip()
+    normalized_kind = str(kind or "").strip()
+    normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     feed_rows: list[dict[str, Any]] = []
 
     for row in _read_takeover_activity_rows(session_id=normalized_session_id or None):
         row_session_id = str(row.get("session_id", "")).strip()
         if normalized_session_id and row_session_id != normalized_session_id:
             continue
+        row_kind = str(row.get("kind", "")).strip() or "unknown"
+        row_risk_tier = _remote_feed_risk_tier(row_kind)
+        if normalized_kind and row_kind != normalized_kind:
+            continue
+        if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
+            continue
         feed_rows.append(
             {
                 "id": str(row.get("id", "")).strip() or f"activity:{uuid4()}",
                 "ts": str(row.get("ts", "")).strip(),
                 "source": "takeover.activity",
-                "kind": str(row.get("kind", "")).strip() or "unknown",
+                "kind": row_kind,
+                "risk_tier": row_risk_tier,
                 "run_id": str(row.get("run_id", "")).strip() or None,
                 "trace_id": str(row.get("trace_id", "")).strip() or None,
                 "session_id": row_session_id or None,
@@ -714,18 +757,24 @@ def _build_remote_feed_rows(session_id: str | None = None) -> list[dict[str, Any
         )
 
     for row in _read_jsonl_rows("journals/decisions.jsonl"):
-        kind = str(row.get("kind", "")).strip()
-        if not (kind.startswith("control.remote.") or kind.startswith("control.takeover.")):
+        row_kind = str(row.get("kind", "")).strip()
+        if not (row_kind.startswith("control.remote.") or row_kind.startswith("control.takeover.")):
             continue
         row_session_id = str(row.get("session_id", "")).strip()
         if normalized_session_id and row_session_id and row_session_id != normalized_session_id:
+            continue
+        row_risk_tier = _remote_feed_risk_tier(row_kind)
+        if normalized_kind and row_kind != normalized_kind:
+            continue
+        if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
             continue
         feed_rows.append(
             {
                 "id": str(row.get("id", "")).strip() or f"decision:{uuid4()}",
                 "ts": str(row.get("ts", "")).strip(),
                 "source": "journals.decisions",
-                "kind": kind,
+                "kind": row_kind,
+                "risk_tier": row_risk_tier,
                 "run_id": str(row.get("run_id", "")).strip() or None,
                 "trace_id": str(row.get("trace_id", "")).strip() or None,
                 "session_id": row_session_id or None,
@@ -1003,12 +1052,20 @@ def control_remote_feed(
     limit: int = 100,
     cursor: str | None = None,
     session_id: str | None = None,
+    kind: str | None = None,
+    risk_tier: str | None = None,
 ) -> dict:
     _enforce_remote_control("control.remote.read")
     _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     normalized_session_id = str(session_id or "").strip()
-    rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
+    normalized_kind = str(kind or "").strip() or None
+    normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
+    rows = _build_remote_feed_rows(
+        session_id=normalized_session_id or None,
+        kind=normalized_kind,
+        risk_tier=normalized_risk_tier,
+    )
     parsed_cursor = _parse_activity_cursor(cursor)
     if parsed_cursor is None:
         normalized_limit = max(1, min(limit, 1000))
@@ -1019,6 +1076,10 @@ def control_remote_feed(
     return {
         "status": "ok",
         "session_id": normalized_session_id or None,
+        "filters": {
+            "kind": normalized_kind,
+            "risk_tier": normalized_risk_tier,
+        },
         "cursor": str(start_cursor),
         "next_cursor": str(next_cursor),
         "has_more": has_more,
@@ -1034,6 +1095,8 @@ async def control_remote_feed_stream(
     session_id: str | None = None,
     cursor: str | None = None,
     limit: int = 100,
+    kind: str | None = None,
+    risk_tier: str | None = None,
     max_seconds: int = 15,
     poll_interval_ms: int = 500,
 ) -> StreamingResponse:
@@ -1041,7 +1104,13 @@ async def control_remote_feed_stream(
     _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     normalized_session_id = str(session_id or "").strip()
-    initial_rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
+    normalized_kind = str(kind or "").strip() or None
+    normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
+    initial_rows = _build_remote_feed_rows(
+        session_id=normalized_session_id or None,
+        kind=normalized_kind,
+        risk_tier=normalized_risk_tier,
+    )
     parsed_cursor = _parse_activity_cursor(cursor)
     start_cursor = parsed_cursor if parsed_cursor is not None else len(initial_rows)
     max_events = max(1, min(limit, 2000))
@@ -1056,13 +1125,19 @@ async def control_remote_feed_stream(
             "meta",
             {
                 "session_id": normalized_session_id or None,
+                "kind": normalized_kind,
+                "risk_tier": normalized_risk_tier,
                 "cursor": str(current_cursor),
                 "max_events": max_events,
                 "max_seconds": stream_window_seconds,
             },
         )
         while emitted < max_events and time.monotonic() < deadline:
-            rows = _build_remote_feed_rows(session_id=normalized_session_id or None)
+            rows = _build_remote_feed_rows(
+                session_id=normalized_session_id or None,
+                kind=normalized_kind,
+                risk_tier=normalized_risk_tier,
+            )
             batch, next_cursor, has_more = _slice_activity_rows(
                 rows=rows,
                 cursor=current_cursor,
@@ -1090,6 +1165,8 @@ async def control_remote_feed_stream(
                 "heartbeat",
                 {
                     "session_id": normalized_session_id or None,
+                    "kind": normalized_kind,
+                    "risk_tier": normalized_risk_tier,
                     "cursor": str(current_cursor),
                 },
             )
@@ -1099,6 +1176,8 @@ async def control_remote_feed_stream(
             "end",
             {
                 "session_id": normalized_session_id or None,
+                "kind": normalized_kind,
+                "risk_tier": normalized_risk_tier,
                 "cursor": str(current_cursor),
                 "emitted": emitted,
                 "max_events": max_events,
