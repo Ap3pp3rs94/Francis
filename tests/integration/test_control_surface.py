@@ -307,6 +307,12 @@ def test_control_remote_rbac_separates_read_and_write_permissions() -> None:
         observer_headers = {"x-francis-role": "observer"}
         observer_read = c.get("/control/remote/state", headers=observer_headers)
         assert observer_read.status_code == 200
+        observer_state_payload = observer_read.json()
+        observer_permissions = observer_state_payload.get("permissions", {})
+        assert observer_permissions.get("role") == "observer"
+        assert observer_permissions.get("control_remote_write") is False
+        assert "control.remote.panic" not in observer_state_payload.get("remote_actions", [])
+        assert "control.remote.approval.approve" not in observer_state_payload.get("remote_actions", [])
 
         worker_headers = {"x-francis-role": "worker"}
         worker_state = c.get("/control/remote/state", headers=worker_headers)
@@ -342,6 +348,15 @@ def test_control_remote_rbac_separates_read_and_write_permissions() -> None:
         assert "rbac denied" in str(observer_takeover.json().get("detail", "")).lower()
 
         operator_headers = {"x-francis-role": "operator"}
+        operator_read = c.get("/control/remote/state", headers=operator_headers)
+        assert operator_read.status_code == 200
+        operator_payload = operator_read.json()
+        operator_permissions = operator_payload.get("permissions", {})
+        assert operator_permissions.get("role") == "operator"
+        assert operator_permissions.get("control_remote_write") is True
+        assert "control.remote.panic" in operator_payload.get("remote_actions", [])
+        assert "control.remote.approval.approve" not in operator_payload.get("remote_actions", [])
+
         operator_panic = c.post("/control/remote/panic", headers=operator_headers, json={"reason": "operator panic"})
         assert operator_panic.status_code == 200
         assert operator_panic.json().get("summary", {}).get("kill_switch") is True

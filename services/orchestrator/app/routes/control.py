@@ -906,15 +906,46 @@ def control_resume(request: Request, payload: ControlResumeRequest | None = None
 @router.get("/control/remote/state")
 def control_remote_state(request: Request, approval_limit: int = 10, session_limit: int = 5) -> dict:
     _enforce_remote_control("control.remote.read")
-    _enforce_remote_rbac(request, "control.remote.read")
+    role = _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     control_state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     takeover_state = _load_or_init_takeover_state()
     sessions = _build_takeover_sessions(limit=session_limit)
     pending_approvals = list_requests(_fs, status="pending", limit=approval_limit)
     latest_session = sessions[0] if sessions else {}
+    remote_write_allowed = can(role, "control.remote.write")
+    approvals_decide_allowed = can(role, "approvals.decide")
+    remote_actions = [
+        "control.remote.state",
+        "control.remote.approvals",
+        "control.remote.feed",
+    ]
+    if remote_write_allowed:
+        remote_actions.extend(
+            [
+                "control.remote.panic",
+                "control.remote.resume",
+                "control.remote.takeover.request",
+                "control.remote.takeover.confirm",
+                "control.remote.takeover.handback",
+            ]
+        )
+    if remote_write_allowed and approvals_decide_allowed:
+        remote_actions.extend(
+            [
+                "control.remote.approval.approve",
+                "control.remote.approval.reject",
+            ]
+        )
     return {
         "status": "ok",
+        "permissions": {
+            "role": role,
+            "control_remote_read": True,
+            "control_remote_write": remote_write_allowed,
+            "approvals_read": True,
+            "approvals_decide": approvals_decide_allowed,
+        },
         "control": {
             "mode": control_state.get("mode"),
             "kill_switch": bool(control_state.get("kill_switch", False)),
@@ -938,18 +969,7 @@ def control_remote_state(request: Request, approval_limit: int = 10, session_lim
             "count": len(sessions),
             "recent": sessions,
         },
-        "remote_actions": [
-            "control.remote.state",
-            "control.remote.approvals",
-            "control.remote.feed",
-            "control.remote.panic",
-            "control.remote.resume",
-            "control.remote.takeover.request",
-            "control.remote.takeover.confirm",
-            "control.remote.takeover.handback",
-            "control.remote.approval.approve",
-            "control.remote.approval.reject",
-        ],
+        "remote_actions": remote_actions,
     }
 
 
