@@ -32,6 +32,25 @@ def _set_scope(client: TestClient, scope: dict) -> None:
     assert response.status_code == 200
 
 
+def _get_takeover(client: TestClient) -> dict:
+    response = client.get("/control/takeover")
+    assert response.status_code == 200
+    return response.json()["takeover"]
+
+
+def _ensure_takeover_idle(client: TestClient) -> None:
+    current = _get_takeover(client)
+    status = str(current.get("status", "idle")).strip().lower()
+    if status == "requested":
+        client.post("/control/takeover/confirm", json={"confirm": True, "mode": "pilot", "reason": "test reset"})
+        status = "active"
+    if status == "active":
+        client.post(
+            "/control/takeover/handback",
+            json={"summary": "test reset", "verification": {}, "pending_approvals": 0, "mode": "assist"},
+        )
+
+
 def test_control_mode_blocks_mission_create_in_observe() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
@@ -139,4 +158,104 @@ def test_control_receipts_are_traceable_via_runs_trace() -> None:
         assert any(str(row.get("kind", "")) == "control.panic" for row in decisions)
         assert any(str(row.get("kind", "")) == "control.panic" for row in logs)
     finally:
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_takeover_request_confirm_handback_flow() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+        request_payload = {
+            "objective": f"Implement feature {uuid4()}",
+            "reason": "user takeover request",
+            "apps": ["missions", "forge", "control", "receipts", "lens"],
+        }
+        requested = c.post("/control/takeover/request", json=request_payload)
+        assert requested.status_code == 200
+        requested_takeover = requested.json()["takeover"]
+        assert requested_takeover["status"] == "requested"
+        assert requested_takeover["objective"] == request_payload["objective"]
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            json={"confirm": True, "reason": "explicit confirm", "mode": "pilot"},
+        )
+        assert confirmed.status_code == 200
+        confirmed_payload = confirmed.json()
+        assert confirmed_payload["mode"] == "pilot"
+        assert confirmed_payload["kill_switch"] is False
+        assert confirmed_payload["takeover"]["status"] == "active"
+        assert confirmed_payload["takeover"]["confirmed_at"] is not None
+
+        handed_back = c.post(
+            "/control/takeover/handback",
+            json={
+                "summary": "Completed objective and ran verification.",
+                "verification": {"tests": "pass"},
+                "pending_approvals": 0,
+                "mode": "assist",
+                "reason": "control returned",
+            },
+        )
+        assert handed_back.status_code == 200
+        handback_payload = handed_back.json()
+        assert handback_payload["takeover"]["status"] == "idle"
+        assert handback_payload["takeover"]["handed_back_at"] is not None
+        assert handback_payload["takeover"]["handback_summary"] == "Completed objective and ran verification."
+        assert handback_payload["mode"] == "assist"
+    finally:
+        _ensure_takeover_idle(c)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+        _set_scope(c, original_scope)
+
+
+def test_control_takeover_receipts_are_traceable_via_runs_trace() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    trace_id = f"takeover-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+
+        requested = c.post(
+            "/control/takeover/request",
+            headers=headers,
+            json={"objective": f"Trace takeover {uuid4()}", "reason": "trace request"},
+        )
+        assert requested.status_code == 200
+        assert requested.json()["trace_id"] == trace_id
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            headers=headers,
+            json={"confirm": True, "reason": "trace confirm", "mode": "pilot"},
+        )
+        assert confirmed.status_code == 200
+        assert confirmed.json()["trace_id"] == trace_id
+
+        handback = c.post(
+            "/control/takeover/handback",
+            headers=headers,
+            json={"summary": "trace handback", "verification": {"tests": "pass"}, "pending_approvals": 1},
+        )
+        assert handback.status_code == 200
+        assert handback.json()["trace_id"] == trace_id
+
+        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 100})
+        assert trace.status_code == 200
+        payload = trace.json()
+        decisions = payload.get("receipts", {}).get("decisions", [])
+        logs = payload.get("receipts", {}).get("logs", [])
+        decision_kinds = [str(row.get("kind", "")) for row in decisions]
+        log_kinds = [str(row.get("kind", "")) for row in logs]
+        assert "control.takeover.request" in decision_kinds
+        assert "control.takeover.confirm" in decision_kinds
+        assert "control.takeover.handback" in decision_kinds
+        assert "control.takeover.handback" in log_kinds
+    finally:
+        _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

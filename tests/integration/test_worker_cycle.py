@@ -93,10 +93,14 @@ def test_worker_cycle_processes_mission_queue() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
     original_scope = _get_scope(c)
+    jobs_path = _workspace_root() / "queue" / "jobs.jsonl"
+    jobs_before = jobs_path.read_text(encoding="utf-8") if jobs_path.exists() else ""
 
     try:
         _set_mode(c, "pilot", kill_switch=False)
         _set_scope(c, _enable_apps(original_scope, ["missions", "worker", "receipts"]))
+        jobs_path.parent.mkdir(parents=True, exist_ok=True)
+        jobs_path.write_text("", encoding="utf-8")
 
         create = c.post(
             "/missions",
@@ -132,6 +136,7 @@ def test_worker_cycle_processes_mission_queue() -> None:
         ledger_rows = receipts.json()["receipts"]["ledger"]
         assert any(row.get("kind") == "worker.cycle" for row in ledger_rows)
     finally:
+        jobs_path.write_text(jobs_before, encoding="utf-8")
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
