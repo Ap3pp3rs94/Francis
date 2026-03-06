@@ -298,6 +298,44 @@ def test_control_remote_takeover_request_rejects_scope_expansion() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_control_remote_rbac_separates_read_and_write_permissions() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+
+        observer_headers = {"x-francis-role": "observer"}
+        observer_read = c.get("/control/remote/state", headers=observer_headers)
+        assert observer_read.status_code == 200
+
+        observer_write = c.post("/control/remote/panic", headers=observer_headers, json={"reason": "observer denied"})
+        assert observer_write.status_code == 403
+        assert "rbac denied" in str(observer_write.json().get("detail", "")).lower()
+
+        observer_takeover = c.post(
+            "/control/remote/takeover/request",
+            headers=observer_headers,
+            json={"objective": f"Observer denied {uuid4()}", "reason": "observer denied"},
+        )
+        assert observer_takeover.status_code == 403
+        assert "rbac denied" in str(observer_takeover.json().get("detail", "")).lower()
+
+        operator_headers = {"x-francis-role": "operator"}
+        operator_panic = c.post("/control/remote/panic", headers=operator_headers, json={"reason": "operator panic"})
+        assert operator_panic.status_code == 200
+        assert operator_panic.json().get("summary", {}).get("kill_switch") is True
+
+        operator_resume = c.post(
+            "/control/remote/resume",
+            headers=operator_headers,
+            json={"reason": "operator resume", "mode": "assist"},
+        )
+        assert operator_resume.status_code == 200
+        assert operator_resume.json().get("summary", {}).get("kill_switch") is False
+    finally:
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_control_takeover_receipts_are_traceable_via_runs_trace() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
