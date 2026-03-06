@@ -15,6 +15,7 @@ AUTONOMY_DISPATCH_HISTORY_PATH = "autonomy/dispatch_history.jsonl"
 AUTONOMY_LAST_TICK_PATH = "autonomy/last_tick.json"
 AUTONOMY_TICK_HISTORY_PATH = "autonomy/tick_history.jsonl"
 AUTONOMY_REACTOR_GUARDRAIL_PATH = "autonomy/reactor_guardrail_state.json"
+AUTONOMY_REACTOR_GUARDRAIL_HISTORY_PATH = "autonomy/reactor_guardrail_history.jsonl"
 VALID_PRIORITIES = {"low", "normal", "high", "critical"}
 VALID_RISK_TIERS = {"low", "medium", "high", "critical"}
 DEFAULT_LEASE_TTL_SECONDS = 300
@@ -555,3 +556,15 @@ def write_reactor_guardrail_state(fs: WorkspaceFS, *, payload: dict[str, Any]) -
     state["updated_at"] = utc_now_iso()
     _write_json(fs, AUTONOMY_REACTOR_GUARDRAIL_PATH, state)
     return state
+
+
+def append_reactor_guardrail_history(fs: WorkspaceFS, *, payload: dict[str, Any]) -> None:
+    _append_jsonl(fs, AUTONOMY_REACTOR_GUARDRAIL_HISTORY_PATH, payload)
+
+
+def read_reactor_guardrail_history(fs: WorkspaceFS, *, limit: int = 50) -> list[dict[str, Any]]:
+    rows = _read_jsonl(fs, AUTONOMY_REACTOR_GUARDRAIL_HISTORY_PATH)
+    n = max(0, min(_safe_int(limit, 50), 500))
+    if n == 0:
+        return []
+    return rows[-n:]
