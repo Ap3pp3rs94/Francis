@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from francis_brain.ledger import RunLedger
@@ -74,6 +77,12 @@ class ControlTakeoverHandbackRequest(BaseModel):
     verification: dict[str, Any] = Field(default_factory=dict)
     pending_approvals: int = Field(default=0, ge=0)
     mode: str | None = Field(default=None, description="Optional control mode to apply at handback.")
+    reason: str = ""
+
+
+class ControlTakeoverHandbackExportRequest(BaseModel):
+    session_id: str | None = None
+    limit: int = Field(default=300, ge=1, le=5000)
     reason: str = ""
 
 
@@ -318,12 +327,63 @@ def _read_takeover_history(limit: int) -> list[dict[str, Any]]:
     return _tail_rows(_read_jsonl_rows(_takeover_history_path), limit=limit, cap=1000)
 
 
-def _read_takeover_activity(limit: int, session_id: str | None = None) -> list[dict[str, Any]]:
+def _read_takeover_activity_rows(session_id: str | None = None) -> list[dict[str, Any]]:
     rows = _read_jsonl_rows(_takeover_activity_path)
     normalized_session_id = str(session_id or "").strip()
     if normalized_session_id:
         rows = [row for row in rows if str(row.get("session_id", "")).strip() == normalized_session_id]
+    return rows
+
+
+def _read_takeover_activity(limit: int, session_id: str | None = None) -> list[dict[str, Any]]:
+    rows = _read_takeover_activity_rows(session_id=session_id)
     return _tail_rows(rows, limit=limit, cap=5000)
+
+
+def _resolve_takeover_session_id(
+    *,
+    state: dict[str, Any],
+    requested_session_id: str | None = None,
+    prefer_last: bool = False,
+) -> str:
+    requested = str(requested_session_id or "").strip()
+    if requested:
+        return requested
+    active = str(state.get("session_id") or "").strip()
+    last = str(state.get("last_session_id") or "").strip()
+    if prefer_last:
+        return last or active
+    return active or last
+
+
+def _parse_activity_cursor(raw_cursor: str | None) -> int | None:
+    value = str(raw_cursor or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except Exception:
+        return None
+    return max(0, parsed)
+
+
+def _slice_activity_rows(
+    *,
+    rows: list[dict[str, Any]],
+    cursor: int,
+    limit: int,
+) -> tuple[list[dict[str, Any]], int, bool]:
+    normalized_limit = max(1, min(limit, 1000))
+    start = max(0, min(cursor, len(rows)))
+    chunk = rows[start : start + normalized_limit]
+    next_cursor = start + len(chunk)
+    has_more = next_cursor < len(rows)
+    return chunk, next_cursor, has_more
+
+
+def _sse_event(event: str, data: dict[str, Any]) -> str:
+    payload = json.dumps(data, ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n"
 
 
 def append_takeover_activity(
@@ -406,6 +466,10 @@ def _collect_handback_receipts_for_session(session_id: str, limit: int) -> dict[
         "logs": _tail_rows(logs, limit=limit, cap=2000),
         "ledger": _tail_rows(combined_ledger, limit=limit, cap=2000),
     }
+
+
+def _safe_export_timestamp(ts: str) -> str:
+    return str(ts).replace(":", "-")
 
 
 @router.get("/control/mode")
@@ -580,29 +644,126 @@ def control_takeover_history(limit: int = 50) -> dict:
 
 
 @router.get("/control/takeover/activity")
-def control_takeover_activity(limit: int = 100, session_id: str | None = None) -> dict:
+def control_takeover_activity(
+    limit: int = 100,
+    session_id: str | None = None,
+    cursor: str | None = None,
+) -> dict:
     state = _load_or_init_takeover_state()
-    resolved_session_id = str(session_id or "").strip()
-    if not resolved_session_id:
-        resolved_session_id = str(state.get("session_id") or "").strip() or str(state.get("last_session_id") or "").strip()
-    rows = _read_takeover_activity(limit=limit, session_id=resolved_session_id or None)
+    resolved_session_id = _resolve_takeover_session_id(state=state, requested_session_id=session_id)
+    rows = _read_takeover_activity_rows(session_id=resolved_session_id or None)
+
+    parsed_cursor = _parse_activity_cursor(cursor)
+    if parsed_cursor is None:
+        normalized_limit = max(1, min(limit, 1000))
+        start_cursor = max(0, len(rows) - normalized_limit)
+    else:
+        start_cursor = parsed_cursor
+    chunk, next_cursor, has_more = _slice_activity_rows(rows=rows, cursor=start_cursor, limit=limit)
+
     return {
         "status": "ok",
         "takeover_status": str(state.get("status", "idle")).strip().lower() or "idle",
         "session_id": resolved_session_id or None,
-        "count": len(rows),
-        "activity": rows,
+        "cursor": str(start_cursor),
+        "next_cursor": str(next_cursor),
+        "has_more": has_more,
+        "total_available": len(rows),
+        "count": len(chunk),
+        "activity": chunk,
     }
+
+
+@router.get("/control/takeover/activity/stream")
+async def control_takeover_activity_stream(
+    session_id: str | None = None,
+    cursor: str | None = None,
+    limit: int = 100,
+    max_seconds: int = 15,
+    poll_interval_ms: int = 500,
+) -> StreamingResponse:
+    state = _load_or_init_takeover_state()
+    resolved_session_id = _resolve_takeover_session_id(state=state, requested_session_id=session_id)
+    initial_rows = _read_takeover_activity_rows(session_id=resolved_session_id or None)
+    parsed_cursor = _parse_activity_cursor(cursor)
+    start_cursor = parsed_cursor if parsed_cursor is not None else len(initial_rows)
+    max_events = max(1, min(limit, 2000))
+    stream_window_seconds = max(1, min(max_seconds, 120))
+    sleep_seconds = max(0.05, min(float(poll_interval_ms) / 1000.0, 5.0))
+
+    async def _iter_sse():
+        current_cursor = max(0, start_cursor)
+        emitted = 0
+        deadline = time.monotonic() + float(stream_window_seconds)
+        yield _sse_event(
+            "meta",
+            {
+                "session_id": resolved_session_id or None,
+                "takeover_status": str(state.get("status", "idle")).strip().lower() or "idle",
+                "cursor": str(current_cursor),
+                "max_events": max_events,
+                "max_seconds": stream_window_seconds,
+            },
+        )
+        while emitted < max_events and time.monotonic() < deadline:
+            rows = _read_takeover_activity_rows(session_id=resolved_session_id or None)
+            batch, next_cursor, has_more = _slice_activity_rows(
+                rows=rows,
+                cursor=current_cursor,
+                limit=max_events - emitted,
+            )
+            if batch:
+                for item in batch:
+                    emitted += 1
+                    current_cursor += 1
+                    yield _sse_event(
+                        "activity",
+                        {
+                            "session_id": str(item.get("session_id") or resolved_session_id or "").strip() or None,
+                            "cursor": str(current_cursor - 1),
+                            "next_cursor": str(current_cursor),
+                            "has_more": has_more,
+                            "activity": item,
+                        },
+                    )
+                    if emitted >= max_events:
+                        break
+                continue
+
+            yield _sse_event(
+                "heartbeat",
+                {
+                    "session_id": resolved_session_id or None,
+                    "cursor": str(current_cursor),
+                },
+            )
+            await asyncio.sleep(sleep_seconds)
+        yield _sse_event(
+            "end",
+            {
+                "session_id": resolved_session_id or None,
+                "cursor": str(current_cursor),
+                "emitted": emitted,
+                "max_events": max_events,
+            },
+        )
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(_iter_sse(), media_type="text/event-stream", headers=headers)
 
 
 @router.get("/control/takeover/handback/package")
 def control_takeover_handback_package(limit: int = 200, session_id: str | None = None) -> dict:
     state = _load_or_init_takeover_state()
-    resolved_session_id = str(session_id or "").strip()
-    if not resolved_session_id:
-        resolved_session_id = str(state.get("last_session_id") or "").strip()
-    if not resolved_session_id:
-        resolved_session_id = str(state.get("session_id") or "").strip()
+    resolved_session_id = _resolve_takeover_session_id(
+        state=state,
+        requested_session_id=session_id,
+        prefer_last=True,
+    )
     if not resolved_session_id:
         raise HTTPException(status_code=404, detail="No takeover session available for handback package.")
 
@@ -635,6 +796,110 @@ def control_takeover_handback_package(limit: int = 200, session_id: str | None =
             "logs": receipts["logs"],
             "ledger": receipts["ledger"],
         },
+    }
+
+
+@router.get("/control/takeover/handback/exports")
+def control_takeover_handback_exports(limit: int = 20, session_id: str | None = None) -> dict:
+    rows = _read_jsonl_rows("control/handback_exports/index.jsonl")
+    resolved_session_id = str(session_id or "").strip()
+    if resolved_session_id:
+        rows = [row for row in rows if str(row.get("session_id", "")).strip() == resolved_session_id]
+    exports = _tail_rows(rows, limit=limit, cap=2000)
+    return {
+        "status": "ok",
+        "session_id": resolved_session_id or None,
+        "count": len(exports),
+        "exports": exports,
+    }
+
+
+@router.post("/control/takeover/handback/export")
+def control_takeover_handback_export(
+    request: Request,
+    payload: ControlTakeoverHandbackExportRequest | None = None,
+) -> dict:
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
+    body = payload or ControlTakeoverHandbackExportRequest()
+    state = _load_or_init_takeover_state()
+    resolved_session_id = _resolve_takeover_session_id(
+        state=state,
+        requested_session_id=body.session_id,
+        prefer_last=True,
+    )
+    if not resolved_session_id:
+        raise HTTPException(status_code=404, detail="No takeover session available to export.")
+
+    package = control_takeover_handback_package(limit=int(body.limit), session_id=resolved_session_id)
+    export_id = str(uuid4())
+    exported_at = utc_now_iso()
+    export_rel_path = (
+        f"control/handback_exports/{_safe_export_timestamp(exported_at)}_{resolved_session_id}_{export_id}.json"
+    )
+    export_doc = {
+        "id": export_id,
+        "ts": exported_at,
+        "session_id": resolved_session_id,
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "source": "control.takeover.handback.package",
+        "package": package,
+    }
+    _fs.write_text(export_rel_path, json.dumps(export_doc, ensure_ascii=False, indent=2))
+
+    index_row = {
+        "id": export_id,
+        "ts": exported_at,
+        "session_id": resolved_session_id,
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "path": export_rel_path,
+        "summary": package.get("summary", {}),
+    }
+    _append_jsonl("control/handback_exports/index.jsonl", index_row)
+    reason = str(body.reason).strip() or "manual_takeover_handback_export"
+    receipt = _record_control_receipt(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="control.takeover.handback.export",
+        reason=reason,
+        before={"session_id": resolved_session_id, "status": state.get("status")},
+        after={
+            "session_id": resolved_session_id,
+            "export_id": export_id,
+            "path": export_rel_path,
+        },
+        session_id=resolved_session_id,
+        metadata={"artifact_path": export_rel_path, "export_id": export_id},
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=_role_from_request(request),
+        kind="control.takeover.handback.exported",
+        detail={
+            "export_id": export_id,
+            "path": export_rel_path,
+            "counts": package.get("summary", {}).get("counts", {}),
+        },
+        ok=True,
+        session_id=resolved_session_id,
+        allow_inactive=True,
+        takeover_state=state,
+    )
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "session_id": resolved_session_id,
+        "export": {
+            "id": export_id,
+            "path": export_rel_path,
+            "ts": exported_at,
+        },
+        "summary": package.get("summary", {}),
+        "receipt_id": receipt.get("id"),
     }
 
 

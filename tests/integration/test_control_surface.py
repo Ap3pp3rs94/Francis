@@ -306,6 +306,40 @@ def test_control_takeover_activity_and_handback_package() -> None:
         kinds_active = [str(row.get("kind", "")) for row in rows_active]
         assert "control.takeover.requested" in kinds_active
         assert "control.takeover.confirmed" in kinds_active
+        page_one = c.get(
+            "/control/takeover/activity",
+            params={"session_id": session_id, "limit": 1, "cursor": "0"},
+        )
+        assert page_one.status_code == 200
+        page_one_payload = page_one.json()
+        assert page_one_payload.get("count") == 1
+        assert page_one_payload.get("cursor") == "0"
+        next_cursor = page_one_payload.get("next_cursor")
+        assert str(next_cursor).isdigit()
+        page_two = c.get(
+            "/control/takeover/activity",
+            params={"session_id": session_id, "limit": 50, "cursor": str(next_cursor)},
+        )
+        assert page_two.status_code == 200
+        assert int(page_two.json().get("total_available", 0)) >= 2
+        assert int(page_two.json().get("count", 0)) >= 1
+
+        stream = c.get(
+            "/control/takeover/activity/stream",
+            params={
+                "session_id": session_id,
+                "cursor": "0",
+                "limit": 10,
+                "max_seconds": 1,
+                "poll_interval_ms": 25,
+            },
+        )
+        assert stream.status_code == 200
+        assert "text/event-stream" in str(stream.headers.get("content-type", ""))
+        stream_body = stream.text
+        assert "event: meta" in stream_body
+        assert "event: activity" in stream_body
+        assert "event: end" in stream_body
 
         handed_back = c.post(
             "/control/takeover/handback",
@@ -340,6 +374,22 @@ def test_control_takeover_activity_and_handback_package() -> None:
         default_package = c.get("/control/takeover/handback/package")
         assert default_package.status_code == 200
         assert default_package.json().get("session_id") == session_id
+
+        exported = c.post(
+            "/control/takeover/handback/export",
+            json={"session_id": session_id, "limit": 120, "reason": "integration export"},
+        )
+        assert exported.status_code == 200
+        exported_payload = exported.json()
+        assert exported_payload.get("session_id") == session_id
+        export_info = exported_payload.get("export", {})
+        assert str(export_info.get("id", "")).strip()
+        assert str(export_info.get("path", "")).startswith("control/handback_exports/")
+
+        exports = c.get("/control/takeover/handback/exports", params={"session_id": session_id, "limit": 20})
+        assert exports.status_code == 200
+        export_rows = exports.json().get("exports", [])
+        assert any(str(row.get("id", "")) == str(export_info.get("id", "")) for row in export_rows)
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
