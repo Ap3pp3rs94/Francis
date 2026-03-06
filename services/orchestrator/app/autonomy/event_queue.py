@@ -448,6 +448,7 @@ def queue_status(fs: WorkspaceFS, *, limit: int = 100) -> dict[str, Any]:
     deadletters = _read_jsonl(fs, AUTONOMY_DEADLETTER_PATH)
     now = datetime.now(timezone.utc)
     queued = [row for row in rows if str(row.get("status", "")).strip().lower() == "queued"]
+    queued_retry = [row for row in queued if str(row.get("last_failed_at", "")).strip()]
     leased = [row for row in rows if str(row.get("status", "")).strip().lower() == "leased"]
     leased_expired = [
         row
@@ -459,6 +460,7 @@ def queue_status(fs: WorkspaceFS, *, limit: int = 100) -> dict[str, Any]:
     return {
         "events_total": len(rows),
         "queued_count": len(queued),
+        "queued_retry_count": len(queued_retry),
         "leased_count": len(leased),
         "leased_expired_count": len(leased_expired),
         "dispatched_count": len(dispatched),
