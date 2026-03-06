@@ -1042,7 +1042,18 @@ def lens_state(request: Request) -> dict:
     takeover_recent_activity = takeover_activity_payload.get("activity", [])
     takeover_sessions_payload = control_takeover_sessions(limit=3)
     takeover_recent_sessions = takeover_sessions_payload.get("sessions", [])
-    remote_state = control_remote_state(request, approval_limit=10, session_limit=3)
+    try:
+        remote_state = control_remote_state(request, approval_limit=10, session_limit=3)
+    except HTTPException as exc:
+        remote_state = {
+            "status": "unavailable",
+            "policy_reason": str(getattr(exc, "detail", "remote state unavailable")),
+            "remote_actions": [],
+            "control": {},
+            "takeover": {},
+            "approvals": {"pending_count": 0, "pending": []},
+            "sessions": {"count": 0, "recent": []},
+        }
     handback_package_available = False
     handback_package_summary: dict[str, Any] | None = None
     if takeover_last_session_id:

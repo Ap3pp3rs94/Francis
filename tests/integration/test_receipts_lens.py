@@ -893,6 +893,26 @@ def test_lens_remote_chips_and_execute_respect_observer_rbac() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_lens_state_degrades_when_remote_read_denied() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    worker_headers = {"x-francis-role": "worker"}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "receipts", "approvals"]))
+
+        state = c.get("/lens/state", headers=worker_headers)
+        assert state.status_code == 200
+        payload = state.json()
+        remote = payload.get("remote", {})
+        assert remote.get("status") == "unavailable"
+        assert "control.remote.read" in str(remote.get("policy_reason", ""))
+    finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_lens_surfaces_worker_queue_signals() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     jobs_path = workspace / "queue" / "jobs.jsonl"
