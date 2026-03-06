@@ -39,6 +39,11 @@ from services.orchestrator.app.autonomy.event_queue import (
 )
 from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.kernel import run_cycle
+from services.orchestrator.app.autonomy.trust_calibration import (
+    calibrate_cycle_result,
+    calibrate_dispatch_result,
+    calibrate_reactor_tick,
+)
 from services.orchestrator.app.control_state import check_action_allowed
 
 router = APIRouter(tags=["autonomy"])
@@ -403,6 +408,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                 )
                 executed_count = len(cycle.get("executed_actions", []))
                 dispatch_executed_actions += executed_count
+                cycle_verification = calibrate_cycle_result(cycle if isinstance(cycle, dict) else {})
 
                 completed = complete_event(
                     _fs,
@@ -412,6 +418,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                         "halted_reason": cycle.get("halted_reason"),
                         "executed_count": executed_count,
                         "blocked_count": len(cycle.get("blocked_actions", [])),
+                        "verification": cycle_verification,
                     },
                 )
                 handled_event_ids.add(event_id)
@@ -424,6 +431,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                             "executed_count": executed_count,
                             "blocked_count": len(cycle.get("blocked_actions", [])),
                         },
+                        "verification": cycle_verification,
                     }
                 )
 
@@ -509,6 +517,16 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             "stop_on_critical": body.stop_on_critical,
         },
     }
+    dispatch_summary["verification"] = calibrate_dispatch_result(
+        halted_reason=halted_reason,
+        processed_count=len(processed),
+        failed_count=len(failed),
+        retried_count=len(retried),
+        released_count=len(released),
+        due_preview_count=due_count,
+        critical_incident_count=critical_incident_count,
+        processed=processed,
+    )
     write_last_dispatch(_fs, payload=dispatch_summary)
     append_dispatch_history(
         _fs,
@@ -528,6 +546,10 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             "approval_id": approved_request_id,
             "max_risk_tier": max_risk,
             "due_preview_count": due_count,
+            "verification_status": dispatch_summary["verification"].get("verification_status"),
+            "confidence": dispatch_summary["verification"].get("confidence"),
+            "can_claim_done": dispatch_summary["verification"].get("can_claim_done"),
+            "claim": dispatch_summary["verification"].get("claim"),
             "config": dispatch_summary.get("config", {}),
         },
     )
@@ -716,6 +738,11 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         },
         "guardrail": guardrail_receipt,
     }
+    tick_summary["verification"] = calibrate_reactor_tick(
+        collect_result=collect_result if isinstance(collect_result, dict) else {},
+        dispatch_result=dispatch_result if isinstance(dispatch_result, dict) else {},
+        guardrail_receipt=guardrail_receipt,
+    )
     write_last_tick(_fs, payload=tick_summary)
     append_tick_history(_fs, payload=tick_summary)
     return {
@@ -724,6 +751,7 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         "collect": collect_result,
         "dispatch": dispatch_result,
         "guardrail": guardrail_receipt,
+        "verification": tick_summary["verification"],
         "tick": tick_summary,
         "queue": queue_after,
     }

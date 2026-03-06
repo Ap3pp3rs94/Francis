@@ -194,6 +194,10 @@ def test_autonomy_event_dispatch_processes_due_event() -> None:
         assert payload["leased_count"] >= 1
         assert payload["processed_count"] >= 1
         assert payload["failed_count"] == 0
+        verification = payload.get("verification", {})
+        assert verification.get("verification_status") in {"verified", "partial", "uncertain"}
+        assert verification.get("confidence") in {"confirmed", "likely", "uncertain"}
+        assert isinstance(verification.get("can_claim_done"), bool)
 
         queue = c.get("/autonomy/events/queue")
         assert queue.status_code == 200
@@ -531,6 +535,10 @@ def test_autonomy_dispatch_halts_when_critical_incident_open() -> None:
         assert payload["processed_count"] == 0
         assert payload["failed_count"] == 0
         assert int(payload.get("critical_incident_count", 0)) >= 1
+        verification = payload.get("verification", {})
+        assert verification.get("verification_status") == "blocked"
+        assert verification.get("confidence") == "uncertain"
+        assert verification.get("can_claim_done") is False
 
         queue = payload.get("queue", {})
         assert int(queue.get("queued_count", 0)) >= 1
@@ -873,15 +881,21 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         assert payload["status"] == "ok"
         collect = payload.get("collect", {})
         dispatch = payload.get("dispatch", {})
+        verification = payload.get("verification", {})
         assert collect.get("status") == "ok"
         assert int(collect.get("queued_count", 0)) >= 1
         assert dispatch.get("status") == "ok"
         assert int(dispatch.get("leased_count", 0)) >= 1
         assert int(dispatch.get("processed_count", 0)) >= 1
+        assert verification.get("verification_status") in {"verified", "partial", "uncertain"}
+        assert verification.get("confidence") in {"confirmed", "likely", "uncertain"}
 
         tick_summary = payload.get("tick", {})
         assert tick_summary.get("kind") == "autonomy.reactor.tick"
         assert tick_summary.get("run_id") == payload.get("run_id")
+        tick_verification = tick_summary.get("verification", {})
+        assert tick_verification.get("verification_status") in {"verified", "partial", "uncertain", "blocked"}
+        assert tick_verification.get("confidence") in {"confirmed", "likely", "uncertain"}
 
         last = c.get("/autonomy/reactor/last")
         assert last.status_code == 200

@@ -428,6 +428,9 @@ def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
         assert int(dispatch.get("max_dispatch_runtime_seconds", 0)) == 45
         assert int(dispatch.get("max_attempts", 0)) == 3
         assert int(dispatch.get("retry_backoff_seconds", 0)) == 120
+        assert "verification_status" in dispatch
+        assert "confidence" in dispatch
+        assert "can_claim_done" in dispatch
         blockers = payload.get("blockers", {})
         assert blockers.get("autonomy_dispatch_halted") is True
         assert blockers.get("autonomy_dispatch_budget_halt") is True
@@ -442,6 +445,9 @@ def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
         assert queue_telemetry.get("last_halted_reason") == "dispatch_action_budget_exceeded"
         assert int(queue_telemetry.get("last_max_dispatch_actions", 0)) == 2
         assert int(queue_telemetry.get("last_max_dispatch_runtime_seconds", 0)) == 45
+        assert "last_verification_status" in queue_telemetry
+        assert "last_confidence" in queue_telemetry
+        assert "last_can_claim_done" in queue_telemetry
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
         last_dispatch_path.write_text(last_before, encoding="utf-8")
@@ -536,6 +542,9 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         assert reactor.get("halted_reason") == "dispatch_runtime_budget_exceeded"
         assert int(reactor.get("collect_seen_count", 0)) == 5
         assert int(reactor.get("dispatch_retried_count", 0)) == 1
+        assert "verification_status" in reactor
+        assert "confidence" in reactor
+        assert "can_claim_done" in reactor
         guardrail = reactor.get("guardrail", {})
         assert int(guardrail.get("cooldown_remaining_ticks", 0)) == 2
         assert int(guardrail.get("escalations_count", 0)) == 3
@@ -556,6 +565,9 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         telemetry = reactor_chip[0].get("queue_telemetry", {})
         assert int(telemetry.get("queued_retry_count", 0)) >= 1
         assert telemetry.get("last_tick_halted_reason") == "dispatch_runtime_budget_exceeded"
+        assert "last_tick_verification_status" in telemetry
+        assert "last_tick_confidence" in telemetry
+        assert "last_tick_can_claim_done" in telemetry
         assert int(telemetry.get("last_tick_retried_count", 0)) == 1
         assert telemetry.get("guardrail_cooldown_active") is True
         assert int(telemetry.get("guardrail_cooldown_remaining_ticks", 0)) == 2

@@ -82,6 +82,16 @@ def lens_state() -> dict:
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
     autonomy_last_tick = read_autonomy_last_tick(_fs)
     autonomy_guardrail = read_autonomy_reactor_guardrail_state(_fs)
+    dispatch_verification = (
+        autonomy_last_dispatch.get("verification", {})
+        if isinstance(autonomy_last_dispatch.get("verification"), dict)
+        else {}
+    )
+    tick_verification = (
+        autonomy_last_tick.get("verification", {})
+        if isinstance(autonomy_last_tick.get("verification"), dict)
+        else {}
+    )
     last_dispatch_config = (
         autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
     )
@@ -142,6 +152,10 @@ def lens_state() -> dict:
             "max_dispatch_runtime_seconds": int(last_dispatch_config.get("max_dispatch_runtime_seconds", 0)),
             "max_attempts": int(last_dispatch_config.get("max_attempts", 0)),
             "retry_backoff_seconds": int(last_dispatch_config.get("retry_backoff_seconds", 0)),
+            "verification_status": dispatch_verification.get("verification_status"),
+            "confidence": dispatch_verification.get("confidence"),
+            "can_claim_done": bool(dispatch_verification.get("can_claim_done", False)),
+            "claim": dispatch_verification.get("claim"),
         },
         "autonomy_reactor": {
             "last_run_id": autonomy_last_tick.get("run_id"),
@@ -154,6 +168,10 @@ def lens_state() -> dict:
             "dispatch_failed_count": int(tick_dispatch.get("failed_count", 0)),
             "dispatch_retried_count": int(tick_dispatch.get("retried_count", 0)),
             "dispatch_released_count": int(tick_dispatch.get("released_count", 0)),
+            "verification_status": tick_verification.get("verification_status"),
+            "confidence": tick_verification.get("confidence"),
+            "can_claim_done": bool(tick_verification.get("can_claim_done", False)),
+            "claim": tick_verification.get("claim"),
             "guardrail": {
                 "tick_count": int(autonomy_guardrail.get("tick_count", 0)),
                 "consecutive_retry_pressure_ticks": int(
@@ -188,9 +206,13 @@ def lens_state() -> dict:
             "autonomy_dispatch_halted_reason": halted_reason or None,
             "autonomy_dispatch_budget_halt": dispatch_budget_halt,
             "autonomy_dispatch_critical_halt": dispatch_critical_halt,
+            "autonomy_dispatch_claim_confidence": dispatch_verification.get("confidence"),
+            "autonomy_dispatch_can_claim_done": bool(dispatch_verification.get("can_claim_done", False)),
             "autonomy_reactor_halted": tick_halted,
             "autonomy_reactor_halted_reason": tick_halted_reason or None,
             "autonomy_reactor_cooldown_active": guardrail_cooldown_active,
+            "autonomy_reactor_claim_confidence": tick_verification.get("confidence"),
+            "autonomy_reactor_can_claim_done": bool(tick_verification.get("can_claim_done", False)),
             "pending_approvals": pending_approvals,
         },
     }
@@ -216,10 +238,20 @@ def lens_actions(max_actions: int = 6) -> dict:
     autonomy_last_tick = read_autonomy_last_tick(_fs)
     autonomy_guardrail = read_autonomy_reactor_guardrail_state(_fs)
     dispatch_halted_reason = str(autonomy_last_dispatch.get("halted_reason", "")).strip()
+    dispatch_verification = (
+        autonomy_last_dispatch.get("verification", {})
+        if isinstance(autonomy_last_dispatch.get("verification"), dict)
+        else {}
+    )
     last_dispatch_config = (
         autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
     )
     tick_dispatch = autonomy_last_tick.get("dispatch", {}) if isinstance(autonomy_last_tick, dict) else {}
+    tick_verification = (
+        autonomy_last_tick.get("verification", {})
+        if isinstance(autonomy_last_tick.get("verification"), dict)
+        else {}
+    )
     tick_halted_reason = str(tick_dispatch.get("halted_reason", "")).strip()
     guardrail_cooldown_remaining = int(autonomy_guardrail.get("cooldown_remaining_ticks", 0))
     guardrail_cooldown_active = guardrail_cooldown_remaining > 0
@@ -316,6 +348,9 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "last_halted_reason": dispatch_halted_reason or None,
                     "last_max_dispatch_actions": int(last_dispatch_config.get("max_dispatch_actions", 0)),
                     "last_max_dispatch_runtime_seconds": int(last_dispatch_config.get("max_dispatch_runtime_seconds", 0)),
+                    "last_verification_status": dispatch_verification.get("verification_status"),
+                    "last_confidence": dispatch_verification.get("confidence"),
+                    "last_can_claim_done": bool(dispatch_verification.get("can_claim_done", False)),
                 },
             }
         )
@@ -370,6 +405,9 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "guardrail_cooldown_active": guardrail_cooldown_active,
                     "guardrail_cooldown_remaining_ticks": guardrail_cooldown_remaining,
                     "guardrail_escalations_count": int(autonomy_guardrail.get("escalations_count", 0)),
+                    "last_tick_verification_status": tick_verification.get("verification_status"),
+                    "last_tick_confidence": tick_verification.get("confidence"),
+                    "last_tick_can_claim_done": bool(tick_verification.get("can_claim_done", False)),
                     "last_tick_processed_count": int(tick_dispatch.get("processed_count", 0)),
                     "last_tick_failed_count": int(tick_dispatch.get("failed_count", 0)),
                     "last_tick_retried_count": int(tick_dispatch.get("retried_count", 0)),
