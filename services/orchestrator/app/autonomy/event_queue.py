@@ -297,6 +297,48 @@ def recover_stale_leased_events(
     }
 
 
+def release_leased_events(
+    fs: WorkspaceFS,
+    *,
+    run_id: str,
+    event_ids: list[str],
+    reason: str = "dispatch_halted",
+) -> list[dict[str, Any]]:
+    ids = {str(item).strip() for item in event_ids if str(item).strip()}
+    if not ids:
+        return []
+
+    rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
+    released_at = utc_now_iso()
+    released: list[dict[str, Any]] = []
+    updated_rows: list[dict[str, Any]] = []
+    for row in rows:
+        row_id = str(row.get("id", "")).strip()
+        if row_id in ids and str(row.get("status", "")).strip().lower() == "leased":
+            queued = {
+                **row,
+                "status": "queued",
+                "next_run_after": released_at,
+                "lease_id": None,
+                "lease_owner": None,
+                "leased_at": None,
+                "lease_expires_at": None,
+                "released_at": released_at,
+                "released_by_run_id": run_id,
+                "release_reason": str(reason or "dispatch_halted"),
+                "error": None,
+            }
+            released.append(queued)
+            updated_rows.append(queued)
+        else:
+            updated_rows.append(row)
+
+    if released:
+        _write_jsonl(fs, AUTONOMY_EVENTS_PATH, updated_rows)
+
+    return released
+
+
 def complete_event(
     fs: WorkspaceFS,
     *,
