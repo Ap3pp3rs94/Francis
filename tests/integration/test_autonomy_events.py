@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -601,6 +602,88 @@ def test_autonomy_dispatch_action_budget_requeues_remaining_events() -> None:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
         _restore(_worker_deadletter_file(), worker_deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_dispatch_runtime_budget_requeues_remaining_events() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+
+        enqueue_one = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.dispatch_runtime_test.1",
+                "source": "pytest",
+                "priority": "normal",
+            },
+        )
+        assert enqueue_one.status_code == 200
+
+        enqueue_two = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.dispatch_runtime_test.2",
+                "source": "pytest",
+                "priority": "normal",
+            },
+        )
+        assert enqueue_two.status_code == 200
+
+        monotonic_tick = {"value": 0}
+
+        def _fake_monotonic() -> float:
+            monotonic_tick["value"] += 1
+            return float(monotonic_tick["value"] * 100)
+
+        with patch(
+            "services.orchestrator.app.routes.autonomy.time.monotonic",
+            side_effect=_fake_monotonic,
+        ):
+            dispatch = c.post(
+                "/autonomy/events/dispatch",
+                json={
+                    "max_events": 2,
+                    "max_actions": 1,
+                    "max_runtime_seconds": 10,
+                    "max_dispatch_actions": 10,
+                    "max_dispatch_runtime_seconds": 30,
+                    "allow_medium": False,
+                    "allow_high": False,
+                    "stop_on_critical": False,
+                },
+            )
+
+        assert dispatch.status_code == 200
+        payload = dispatch.json()
+        assert payload["status"] == "ok"
+        assert payload["leased_count"] == 2
+        assert payload["processed_count"] == 0
+        assert payload["failed_count"] == 0
+        assert payload["released_count"] == 2
+        assert payload["halted_reason"] == "dispatch_runtime_budget_exceeded"
+
+        queue = c.get("/autonomy/events/queue")
+        assert queue.status_code == 200
+        q = queue.json().get("queue", {})
+        assert int(q.get("queued_count", 0)) >= 2
+        assert int(q.get("dispatched_count", 0)) == 0
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
         _restore(_last_dispatch_file(), last_dispatch_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
