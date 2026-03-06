@@ -42,8 +42,10 @@ from services.orchestrator.app.routes.control import (
     ControlTakeoverHandbackRequest,
     ControlTakeoverRequest,
     append_takeover_activity,
+    control_takeover_activity,
     control_takeover_confirm,
     control_takeover_handback,
+    control_takeover_handback_package,
     control_takeover_request,
     control_takeover_state,
 )
@@ -709,6 +711,21 @@ def lens_state() -> dict:
     kill_switch = bool(control.get("kill_switch", False))
     takeover_state = control_takeover_state().get("takeover", {})
     takeover_status = str(takeover_state.get("status", "idle")).strip().lower() or "idle"
+    takeover_session_id = str(takeover_state.get("session_id") or "").strip() or None
+    takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip() or None
+    activity_session_id = takeover_session_id or takeover_last_session_id
+    takeover_activity_payload = control_takeover_activity(limit=10, session_id=activity_session_id)
+    takeover_recent_activity = takeover_activity_payload.get("activity", [])
+    handback_package_available = False
+    handback_package_summary: dict[str, Any] | None = None
+    if takeover_last_session_id:
+        try:
+            handback_package = control_takeover_handback_package(limit=20, session_id=takeover_last_session_id)
+            handback_package_available = True
+            handback_package_summary = handback_package.get("summary", {})
+        except HTTPException:
+            handback_package_available = False
+            handback_package_summary = None
     pilot_mode_on = mode == "pilot" and not kill_switch
     pilot_indicator_status = "on" if pilot_mode_on else "paused" if mode == "pilot" and kill_switch else "off"
     pilot_indicator_label = (
@@ -743,11 +760,16 @@ def lens_state() -> dict:
                 "status": takeover_status,
                 "active": takeover_status == "active",
                 "pending_confirmation": takeover_status == "requested",
+                "session_id": takeover_session_id,
+                "last_session_id": takeover_last_session_id,
                 "objective": takeover_state.get("objective"),
                 "requested_by": takeover_state.get("requested_by"),
                 "requested_at": takeover_state.get("requested_at"),
                 "confirmed_at": takeover_state.get("confirmed_at"),
                 "handed_back_at": takeover_state.get("handed_back_at"),
+                "recent_activity": takeover_recent_activity,
+                "handback_package_available": handback_package_available,
+                "handback_package_summary": handback_package_summary,
             },
         },
         "intent_state": intent_state,

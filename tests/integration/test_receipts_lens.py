@@ -339,6 +339,8 @@ def test_lens_state_surfaces_takeover_status() -> None:
         )
         assert requested.status_code == 200
         requested_objective = requested.json()["takeover"]["objective"]
+        requested_session_id = str(requested.json()["takeover"].get("session_id", "")).strip()
+        assert requested_session_id
 
         state_requested = c.get("/lens/state")
         assert state_requested.status_code == 200
@@ -346,6 +348,11 @@ def test_lens_state_surfaces_takeover_status() -> None:
         assert takeover_requested.get("status") == "requested"
         assert takeover_requested.get("pending_confirmation") is True
         assert takeover_requested.get("objective") == requested_objective
+        assert str(takeover_requested.get("session_id", "")).strip() == requested_session_id
+        assert any(
+            str(row.get("kind", "")) == "control.takeover.requested"
+            for row in takeover_requested.get("recent_activity", [])
+        )
 
         confirmed = c.post("/control/takeover/confirm", json={"confirm": True, "reason": "lens confirm"})
         assert confirmed.status_code == 200
@@ -355,6 +362,11 @@ def test_lens_state_surfaces_takeover_status() -> None:
         takeover_active = state_active.json().get("control_surface", {}).get("takeover", {})
         assert takeover_active.get("status") == "active"
         assert takeover_active.get("active") is True
+        assert str(takeover_active.get("session_id", "")).strip() == requested_session_id
+        assert any(
+            str(row.get("kind", "")) == "control.takeover.confirmed"
+            for row in takeover_active.get("recent_activity", [])
+        )
     finally:
         _ensure_takeover_idle(c)
         _set_scope(c, original_scope)
@@ -471,6 +483,15 @@ def test_lens_execute_appends_takeover_activity_and_handback_package() -> None:
         )
         assert execute.status_code == 200
         assert execute.json()["status"] == "dry_run"
+        state_active = c.get("/lens/state")
+        assert state_active.status_code == 200
+        takeover_active = state_active.json().get("control_surface", {}).get("takeover", {})
+        assert str(takeover_active.get("session_id", "")).strip() == session_id
+        assert any(
+            str(row.get("kind", "")) == "lens.action.execute"
+            and str(row.get("detail", {}).get("action_kind", "")) == "control.resume"
+            for row in takeover_active.get("recent_activity", [])
+        )
 
         activity = c.get("/control/takeover/activity", params={"session_id": session_id, "limit": 100})
         assert activity.status_code == 200
@@ -488,6 +509,13 @@ def test_lens_execute_appends_takeover_activity_and_handback_package() -> None:
             json={"summary": "Activity handback", "verification": {"tests": "pass"}, "pending_approvals": 0},
         )
         assert handed_back.status_code == 200
+        state_handed_back = c.get("/lens/state")
+        assert state_handed_back.status_code == 200
+        takeover_handed_back = state_handed_back.json().get("control_surface", {}).get("takeover", {})
+        assert takeover_handed_back.get("status") == "idle"
+        assert str(takeover_handed_back.get("last_session_id", "")).strip() == session_id
+        assert takeover_handed_back.get("handback_package_available") is True
+        assert isinstance(takeover_handed_back.get("handback_package_summary"), dict)
 
         package = c.get("/control/takeover/handback/package", params={"session_id": session_id, "limit": 120})
         assert package.status_code == 200
