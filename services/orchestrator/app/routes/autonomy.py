@@ -8,17 +8,20 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from services.orchestrator.app.approvals_store import ensure_action_approved
 from services.orchestrator.app.autonomy.event_queue import (
+    append_dispatch_history,
     complete_event,
     enqueue_event,
     fail_event,
     lease_due_events,
     preview_due_events,
     queue_status,
+    read_dispatch_history,
     read_last_dispatch,
     recover_stale_leased_events,
     write_last_dispatch,
@@ -180,6 +183,14 @@ def autonomy_queue_status(request: Request, limit: int = 100) -> dict:
     }
 
 
+@router.get("/autonomy/events/history")
+def autonomy_dispatch_history(request: Request, limit: int = 50) -> dict:
+    _enforce_rbac(request, "autonomy.read")
+    _enforce_control("autonomy.read", mutating=False)
+    history = read_dispatch_history(_fs, limit=limit)
+    return {"status": "ok", "count": len(history), "history": history}
+
+
 @router.post("/autonomy/events/dispatch")
 def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest | None = None) -> dict:
     body = payload or AutonomyDispatchRequest()
@@ -314,6 +325,23 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         },
     }
     write_last_dispatch(_fs, payload=dispatch_summary)
+    append_dispatch_history(
+        _fs,
+        payload={
+            "id": str(uuid4()),
+            "ts": utc_now_iso(),
+            "run_id": run_id,
+            "kind": "autonomy.dispatch",
+            "leased_count": len(leased),
+            "recovered_count": int(recovery.get("recovered_count", 0)),
+            "processed_count": len(processed),
+            "failed_count": len(failed),
+            "approval_id": approved_request_id,
+            "max_risk_tier": max_risk,
+            "due_preview_count": due_count,
+            "config": dispatch_summary.get("config", {}),
+        },
+    )
     dispatch_summary["queue"] = queue_status(_fs, limit=100)
     return dispatch_summary
 
