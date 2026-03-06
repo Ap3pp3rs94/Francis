@@ -1,23 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "francis.schemas.events.agent_message",
-  "title": "Francis Agent Message Envelope",
+  "title": "Francis Inter-Unit Message Envelope",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "message_id",
+    "id",
     "ts",
     "from",
     "to",
-    "role",
     "kind",
     "run_id",
     "trace_id",
-    "payload",
-    "risk_tier"
+    "risk_tier",
+    "scope",
+    "payload"
   ],
   "properties": {
-    "message_id": {
+    "id": {
       "type": "string",
       "minLength": 1
     },
@@ -33,10 +33,6 @@
       "type": "string",
       "minLength": 1
     },
-    "role": {
-      "type": "string",
-      "minLength": 1
-    },
     "kind": {
       "type": "string",
       "minLength": 1
@@ -49,9 +45,6 @@
       "type": "string",
       "minLength": 1
     },
-    "payload": {
-      "type": "object"
-    },
     "risk_tier": {
       "type": "string",
       "enum": [
@@ -61,8 +54,49 @@
         "critical"
       ]
     },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "payload": {
+      "type": "object"
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1
+    },
     "idempotency_key": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
     }
   }
 }

@@ -3,6 +3,17 @@
 ## Francis Operator Layer
 Francis is an operator layer over the PC: a 4th-wall AI presence that understands what the user is building and assists directly inside the real work context.
 
+## Master Spec Alignment
+- Francis is not a health tool and not a chat wrapper; it is an operator layer and digital twin overlay for real work.
+- The user is always pilot across explicit modes: Observe, Assist, Pilot, and Away.
+- Governance is non-optional architecture: scoped authority, approvals for risky actions, and receipts for every meaningful action.
+- Autonomy follows an event-driven reactor model with bounded dispatch and explicit stop conditions, not generic autonomous loops.
+- Trust language must match evidence: Confirmed, Likely, and Uncertain claims with verification gates before "done."
+- Lens is the signature product surface: overlay HUD, command palette, contextual action chips, and visible Pilot indicator.
+- Telemetry is opt-in and high-signal (terminal, git, IDE/build streams) with redaction and visible activity indicators.
+- Swarm and federation scale the operator safely: trace propagation, scoped trust, revocation, and zero-trust defaults.
+- Business evolution is service-first: managed isolated copies, federated deltas without raw data sharing, and rogue kill/replace safeguards.
+
 ## Francis Lens Experience
 Francis Lens is the visible overlay/control surface across development and operations workflows. It should expose mission intent, current state, blockers, and high-value next actions in place, not in disconnected dashboards.
 

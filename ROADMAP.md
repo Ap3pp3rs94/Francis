@@ -18,6 +18,18 @@ This file is the canonical build guide for Codex. Every build step should:
 
 ---
 
+## Master Spec Alignment (Canonical)
+- Autonomy is event-driven reactor dispatch with budgets, stop conditions, receipts, and deadletter handling (no generic loops).
+- Lens overlay is the signature product surface with command palette, contextual action chips, and always-visible Pilot indicator.
+- Work telemetry is opt-in, high-signal, and scope-bound with redaction and explicit user visibility.
+- Takeover follows a strict ritual (request, scope, confirm, pilot-on, live feed, handback receipts) with panic/kill revocation.
+- Adversarial hardening is first-class: untrusted input handling, quarantine model, policy bypass tests, and red-team gates.
+- Swarm and federation require trace propagation (`run_id`/`trace_id`), scoped trust, and revocation by default.
+- Apprenticeship and Forge require staged outputs, tests/docs/risk tier metadata, and explicit promotion gates.
+- Business evolution is managed copies, federated deltas (no raw customer data), and rogue kill/replace from clean baselines.
+
+---
+
 ## Roadmap legend
 - **P0** = foundational, blocks other work  
 - **P1** = major capability / signature experience  
@@ -626,6 +638,38 @@ Francis gets better without drifting into chaos:
 ## Acceptance criteria
 - New features cannot regress safety, truthfulness, or receipts
 - Improvement is measurable and repeatable
+
+---
+
+# Stage 19 (P2/P3)  Managed Copies + Federated Learning + Rogue Recovery
+## Goal (user experience)
+Francis scales as a service model without selling core IP:
+- each customer gets an isolated Francis copy
+- improvements compound safely across copies
+- rogue behavior is auto-contained and recoverable
+
+## Deliverables
+- Managed copies framework:
+  - isolated tenant copies with scoped connectors and independent policy envelopes
+  - recurring service model for creation, hosting, support, and premium features
+- Federated delta pipeline:
+  - share capability/performance deltas only
+  - never share raw customer artifacts, secrets, or private telemetry
+- Rogue detection and recovery:
+  - anomaly detection for scope escapes/repeated critical halts/policy violations
+  - kill instance and replace from clean baseline + approved global state
+- SLA tiering:
+  - baseline support, priority incident response, and rogue protection options
+
+## Acceptance criteria
+- Core Francis IP remains centralized and is not sold as transferable ownership.
+- Customer instances are isolated, auditable, and revokeable without cross-tenant leakage.
+- Shared learning uses federated deltas with no raw data exfiltration.
+- Rogue instances can be halted and re-provisioned with deterministic recovery receipts.
+
+## Quality gates
+- Security and isolation review checklist for managed copy boundaries
+- Recovery drill tests for kill/replace from clean baseline snapshots
 
 ---
 
