@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from services.orchestrator.app.telemetry_connectors import (
     adapt_git_event,
     adapt_terminal_event,
 )
+from services.orchestrator.app.autonomy.event_queue import enqueue_event as enqueue_autonomy_event
 from services.orchestrator.app.telemetry_store import (
     ingest_event,
     load_or_init_config,
@@ -102,6 +104,90 @@ def _enforce_control(action: str, *, mutating: bool) -> None:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
 
 
+def _autonomy_enqueue_allowed() -> tuple[bool, str]:
+    allowed, reason, _state = check_action_allowed(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        app="autonomy",
+        action="autonomy.enqueue",
+        mutating=True,
+    )
+    return (allowed, reason)
+
+
+def _dedupe_bucket_10m() -> str:
+    now = datetime.now(timezone.utc)
+    return f"{now.year:04d}{now.month:02d}{now.day:02d}{now.hour:02d}{(now.minute // 10):01d}"
+
+
+def _autonomy_trigger_from_telemetry(result: dict, *, run_id: str) -> dict | None:
+    if str(result.get("status", "")).strip().lower() != "ok":
+        return None
+    event = result.get("event", {})
+    if not isinstance(event, dict):
+        return None
+    severity = str(event.get("severity", "info")).strip().lower()
+    stream = str(event.get("stream", "unknown")).strip().lower() or "unknown"
+    telemetry_snapshot = result.get("config")
+    # Read live status for horizon counts used by trigger thresholds.
+    telemetry_state = telemetry_status(_fs)
+    error_count = int(telemetry_state.get("error_count_horizon", 0))
+    critical_count = int(telemetry_state.get("critical_count_horizon", 0))
+
+    trigger: dict | None = None
+    if severity == "critical":
+        trigger = {
+            "event_type": "telemetry.critical_present",
+            "source": f"telemetry:{stream}",
+            "priority": "critical",
+            "risk_tier": "high",
+            "payload": {
+                "stream": stream,
+                "severity": severity,
+                "critical_count_horizon": critical_count,
+                "event_id": event.get("id"),
+                "telemetry_config": telemetry_snapshot,
+            },
+            "dedupe_key": f"telemetry:critical:{stream}:{_dedupe_bucket_10m()}",
+        }
+    elif severity == "error" and error_count >= 3:
+        trigger = {
+            "event_type": "telemetry.errors_present",
+            "source": f"telemetry:{stream}",
+            "priority": "high",
+            "risk_tier": "medium",
+            "payload": {
+                "stream": stream,
+                "severity": severity,
+                "error_count_horizon": error_count,
+                "event_id": event.get("id"),
+            },
+            "dedupe_key": f"telemetry:error:{stream}:{_dedupe_bucket_10m()}",
+        }
+    if trigger is None:
+        return None
+
+    allowed, reason = _autonomy_enqueue_allowed()
+    if not allowed:
+        return {
+            "status": "skipped",
+            "reason": f"autonomy enqueue denied by control: {reason}",
+            "trigger": trigger,
+        }
+
+    return enqueue_autonomy_event(
+        _fs,
+        run_id=run_id,
+        event_type=trigger["event_type"],
+        source=trigger["source"],
+        priority=trigger["priority"],
+        risk_tier=trigger["risk_tier"],
+        payload=trigger["payload"],
+        dedupe_key=trigger["dedupe_key"],
+    )
+
+
 @router.get("/telemetry/config")
 def get_telemetry_config(request: Request) -> dict:
     _enforce_rbac(request, "telemetry.read")
@@ -139,7 +225,8 @@ def post_telemetry_event(request: Request, payload: TelemetryEventRequest) -> di
         fields=payload.fields,
         ts=payload.ts,
     )
-    return {"run_id": run_id, **result}
+    autonomy_signal = _autonomy_trigger_from_telemetry(result, run_id=run_id)
+    return {"run_id": run_id, **result, "autonomy_signal": autonomy_signal}
 
 
 @router.post("/telemetry/connectors/terminal")
@@ -167,7 +254,8 @@ def post_terminal_connector_event(request: Request, payload: TerminalConnectorRe
         fields=adapted["fields"],
         ts=adapted.get("ts"),
     )
-    return {"run_id": run_id, "connector": "terminal", **result}
+    autonomy_signal = _autonomy_trigger_from_telemetry(result, run_id=run_id)
+    return {"run_id": run_id, "connector": "terminal", **result, "autonomy_signal": autonomy_signal}
 
 
 @router.post("/telemetry/connectors/git")
@@ -194,7 +282,8 @@ def post_git_connector_event(request: Request, payload: GitConnectorRequest) -> 
         fields=adapted["fields"],
         ts=adapted.get("ts"),
     )
-    return {"run_id": run_id, "connector": "git", **result}
+    autonomy_signal = _autonomy_trigger_from_telemetry(result, run_id=run_id)
+    return {"run_id": run_id, "connector": "git", **result, "autonomy_signal": autonomy_signal}
 
 
 @router.post("/telemetry/connectors/dev-server")
@@ -220,7 +309,8 @@ def post_dev_server_connector_event(request: Request, payload: DevServerConnecto
         fields=adapted["fields"],
         ts=adapted.get("ts"),
     )
-    return {"run_id": run_id, "connector": "dev_server", **result}
+    autonomy_signal = _autonomy_trigger_from_telemetry(result, run_id=run_id)
+    return {"run_id": run_id, "connector": "dev_server", **result, "autonomy_signal": autonomy_signal}
 
 
 @router.get("/telemetry/status")
