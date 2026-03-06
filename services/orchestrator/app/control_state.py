@@ -31,6 +31,7 @@ AWAY_MUTATING_ACTIONS = {
     "autonomy.cycle",
     "autonomy.enqueue",
     "autonomy.dispatch",
+    "autonomy.recover",
     "worker.cycle",
     "worker.recover",
 }
