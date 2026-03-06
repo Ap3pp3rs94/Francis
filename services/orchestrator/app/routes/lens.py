@@ -16,6 +16,7 @@ from services.orchestrator.app.autonomy.decision_engine import build_plan
 from services.orchestrator.app.autonomy.event_queue import (
     queue_status as autonomy_queue_status,
     read_last_dispatch as read_autonomy_last_dispatch,
+    read_last_tick as read_autonomy_last_tick,
 )
 from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.intent_engine import collect_intents
@@ -78,6 +79,7 @@ def lens_state() -> dict:
     telemetry = telemetry_status(_fs)
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
+    autonomy_last_tick = read_autonomy_last_tick(_fs)
     last_dispatch_config = (
         autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
     )
@@ -85,12 +87,17 @@ def lens_state() -> dict:
     dispatch_halted = bool(halted_reason) and halted_reason != "completed"
     dispatch_budget_halt = halted_reason in {"dispatch_action_budget_exceeded", "dispatch_runtime_budget_exceeded"}
     dispatch_critical_halt = halted_reason in {"critical_incident_present", "critical_anomaly"}
+    tick_dispatch = autonomy_last_tick.get("dispatch", {}) if isinstance(autonomy_last_tick, dict) else {}
+    tick_collect = autonomy_last_tick.get("collect", {}) if isinstance(autonomy_last_tick, dict) else {}
+    tick_halted_reason = str(tick_dispatch.get("halted_reason", "")).strip()
+    tick_halted = bool(tick_halted_reason) and tick_halted_reason != "completed"
     autonomy_high_risk_due = sum(
         1
         for row in autonomy_queue.get("queued", [])
         if str(row.get("risk_tier", "")).strip().lower() in {"high", "critical"}
     )
     autonomy_leased_expired_count = int(autonomy_queue.get("leased_expired_count", 0))
+    autonomy_retry_pressure = int(autonomy_queue.get("queued_retry_count", 0))
     catalog_entries = list_entries(_fs)
     staged_count = sum(1 for entry in catalog_entries if str(entry.get("status", "")).lower() == "staged")
     pending_approvals = pending_count(_fs) + len(_read_jsonl("queue/deadletter.jsonl")) + staged_count
@@ -110,6 +117,7 @@ def lens_state() -> dict:
         },
         "autonomy_queue": {
             "queued_count": int(autonomy_queue.get("queued_count", 0)),
+            "queued_retry_count": autonomy_retry_pressure,
             "leased_count": int(autonomy_queue.get("leased_count", 0)),
             "leased_expired_count": autonomy_leased_expired_count,
             "dispatched_count": int(autonomy_queue.get("dispatched_count", 0)),
@@ -131,6 +139,18 @@ def lens_state() -> dict:
             "max_attempts": int(last_dispatch_config.get("max_attempts", 0)),
             "retry_backoff_seconds": int(last_dispatch_config.get("retry_backoff_seconds", 0)),
         },
+        "autonomy_reactor": {
+            "last_run_id": autonomy_last_tick.get("run_id"),
+            "last_ts": autonomy_last_tick.get("ts"),
+            "halted": tick_halted,
+            "halted_reason": tick_halted_reason or None,
+            "collect_seen_count": int(tick_collect.get("seen_count", 0)),
+            "collect_queued_count": int(tick_collect.get("queued_count", 0)),
+            "dispatch_processed_count": int(tick_dispatch.get("processed_count", 0)),
+            "dispatch_failed_count": int(tick_dispatch.get("failed_count", 0)),
+            "dispatch_retried_count": int(tick_dispatch.get("retried_count", 0)),
+            "dispatch_released_count": int(tick_dispatch.get("released_count", 0)),
+        },
         "pending_approvals": pending_approvals,
         "blockers": {
             "critical_incidents": event_state.get("critical_incident_count", 0),
@@ -146,11 +166,14 @@ def lens_state() -> dict:
             "worker_last_lease_conflict": event_state.get("worker_last_lease_conflict_count", 0),
             "autonomy_queue_due": int(autonomy_queue.get("queued_count", 0)),
             "autonomy_queue_high_risk_due": autonomy_high_risk_due,
+            "autonomy_queue_retry_pressure": autonomy_retry_pressure,
             "autonomy_queue_leased_expired": autonomy_leased_expired_count,
             "autonomy_dispatch_halted": dispatch_halted,
             "autonomy_dispatch_halted_reason": halted_reason or None,
             "autonomy_dispatch_budget_halt": dispatch_budget_halt,
             "autonomy_dispatch_critical_halt": dispatch_critical_halt,
+            "autonomy_reactor_halted": tick_halted,
+            "autonomy_reactor_halted_reason": tick_halted_reason or None,
             "pending_approvals": pending_approvals,
         },
     }
@@ -173,11 +196,15 @@ def lens_actions(max_actions: int = 6) -> dict:
     intent_state = collect_intents(_fs)
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
+    autonomy_last_tick = read_autonomy_last_tick(_fs)
     dispatch_halted_reason = str(autonomy_last_dispatch.get("halted_reason", "")).strip()
     last_dispatch_config = (
         autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
     )
+    tick_dispatch = autonomy_last_tick.get("dispatch", {}) if isinstance(autonomy_last_tick, dict) else {}
+    tick_halted_reason = str(tick_dispatch.get("halted_reason", "")).strip()
     autonomy_queued_count = int(autonomy_queue.get("queued_count", 0))
+    autonomy_retry_pressure = int(autonomy_queue.get("queued_retry_count", 0))
     autonomy_high_risk_due = sum(
         1
         for row in autonomy_queue.get("queued", [])
@@ -288,6 +315,36 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "risk_tier": "low",
                 "queue_telemetry": {
                     "leased_expired_count": autonomy_leased_expired_count,
+                },
+            }
+        )
+    if tick_halted_reason or autonomy_retry_pressure > 0:
+        mode = str(control.get("mode", "observe")).strip().lower()
+        tick_enabled = mode in {"pilot", "away"}
+        tick_policy_reason = ""
+        if not tick_enabled:
+            tick_policy_reason = f"mutating action autonomy.reactor.tick not allowed in {mode} mode"
+        risk_tier = "high" if tick_halted_reason in {"critical_incident_present", "critical_anomaly"} else "medium"
+        reason_parts: list[str] = []
+        if tick_halted_reason:
+            reason_parts.append(f"last tick halted: {tick_halted_reason}")
+        if autonomy_retry_pressure > 0:
+            reason_parts.append(f"{autonomy_retry_pressure} queued retry event(s)")
+        action_chips.append(
+            {
+                "kind": "autonomy.reactor.tick",
+                "label": "Run Reactor Tick",
+                "enabled": tick_enabled,
+                "reason": "; ".join(reason_parts) if reason_parts else "reactor health check",
+                "policy_reason": tick_policy_reason,
+                "risk_tier": risk_tier,
+                "queue_telemetry": {
+                    "queued_retry_count": autonomy_retry_pressure,
+                    "last_tick_halted_reason": tick_halted_reason or None,
+                    "last_tick_processed_count": int(tick_dispatch.get("processed_count", 0)),
+                    "last_tick_failed_count": int(tick_dispatch.get("failed_count", 0)),
+                    "last_tick_retried_count": int(tick_dispatch.get("retried_count", 0)),
+                    "last_tick_released_count": int(tick_dispatch.get("released_count", 0)),
                 },
             }
         )
