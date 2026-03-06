@@ -23,6 +23,10 @@ def _last_dispatch_file() -> Path:
     return _workspace_root() / "autonomy" / "last_dispatch.json"
 
 
+def _incidents_file() -> Path:
+    return _workspace_root() / "incidents" / "incidents.jsonl"
+
+
 def _approvals_file() -> Path:
     return _workspace_root() / "approvals" / "requests.jsonl"
 
@@ -302,5 +306,50 @@ def test_autonomy_dispatch_high_risk_requires_approval() -> None:
         _restore(_last_dispatch_file(), last_dispatch_before)
         _restore(_approvals_file(), approvals_before)
         _restore(_decisions_file(), decisions_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_collect_events_enqueues_filtered_reactor_signals() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    incidents_before = _stash(_incidents_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(
+            _incidents_file(),
+            (
+                '{"id":"inc-1","ts":"2026-01-01T00:00:00+00:00","run_id":"r-1",'
+                '"severity":"critical","kind":"incident.test","message":"collect test","status":"open"}\n'
+            ),
+        )
+
+        collected = c.post(
+            "/autonomy/events/collect",
+            json={"max_events": 10, "include_types": ["incident.critical_open"]},
+        )
+        assert collected.status_code == 200
+        payload = collected.json()
+        assert payload["status"] == "ok"
+        assert payload["seen_count"] >= 1
+        assert payload["queued_count"] >= 1
+        assert any(str(item.get("event_type", "")) == "incident.critical_open" for item in payload.get("queued", []))
+
+        collected_again = c.post(
+            "/autonomy/events/collect",
+            json={"max_events": 10, "include_types": ["incident.critical_open"]},
+        )
+        assert collected_again.status_code == 200
+        second_payload = collected_again.json()
+        assert second_payload["duplicate_count"] >= 1
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_incidents_file(), incidents_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
