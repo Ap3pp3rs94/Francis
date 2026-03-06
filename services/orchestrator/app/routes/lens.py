@@ -16,6 +16,7 @@ from services.orchestrator.app.autonomy.decision_engine import build_plan
 from services.orchestrator.app.autonomy.event_queue import (
     queue_status as autonomy_queue_status,
     read_last_dispatch as read_autonomy_last_dispatch,
+    read_reactor_guardrail_state as read_autonomy_reactor_guardrail_state,
     read_last_tick as read_autonomy_last_tick,
 )
 from services.orchestrator.app.autonomy.event_reactor import collect_events
@@ -80,6 +81,7 @@ def lens_state() -> dict:
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
     autonomy_last_tick = read_autonomy_last_tick(_fs)
+    autonomy_guardrail = read_autonomy_reactor_guardrail_state(_fs)
     last_dispatch_config = (
         autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
     )
@@ -91,6 +93,7 @@ def lens_state() -> dict:
     tick_collect = autonomy_last_tick.get("collect", {}) if isinstance(autonomy_last_tick, dict) else {}
     tick_halted_reason = str(tick_dispatch.get("halted_reason", "")).strip()
     tick_halted = bool(tick_halted_reason) and tick_halted_reason != "completed"
+    guardrail_cooldown_active = int(autonomy_guardrail.get("cooldown_remaining_ticks", 0)) > 0
     autonomy_high_risk_due = sum(
         1
         for row in autonomy_queue.get("queued", [])
@@ -150,6 +153,17 @@ def lens_state() -> dict:
             "dispatch_failed_count": int(tick_dispatch.get("failed_count", 0)),
             "dispatch_retried_count": int(tick_dispatch.get("retried_count", 0)),
             "dispatch_released_count": int(tick_dispatch.get("released_count", 0)),
+            "guardrail": {
+                "tick_count": int(autonomy_guardrail.get("tick_count", 0)),
+                "consecutive_retry_pressure_ticks": int(
+                    autonomy_guardrail.get("consecutive_retry_pressure_ticks", 0)
+                ),
+                "cooldown_remaining_ticks": int(autonomy_guardrail.get("cooldown_remaining_ticks", 0)),
+                "escalations_count": int(autonomy_guardrail.get("escalations_count", 0)),
+                "last_retry_pressure_count": int(autonomy_guardrail.get("last_retry_pressure_count", 0)),
+                "last_reason": autonomy_guardrail.get("last_reason"),
+                "updated_at": autonomy_guardrail.get("updated_at"),
+            },
         },
         "pending_approvals": pending_approvals,
         "blockers": {
@@ -174,6 +188,7 @@ def lens_state() -> dict:
             "autonomy_dispatch_critical_halt": dispatch_critical_halt,
             "autonomy_reactor_halted": tick_halted,
             "autonomy_reactor_halted_reason": tick_halted_reason or None,
+            "autonomy_reactor_cooldown_active": guardrail_cooldown_active,
             "pending_approvals": pending_approvals,
         },
     }
@@ -197,12 +212,15 @@ def lens_actions(max_actions: int = 6) -> dict:
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
     autonomy_last_tick = read_autonomy_last_tick(_fs)
+    autonomy_guardrail = read_autonomy_reactor_guardrail_state(_fs)
     dispatch_halted_reason = str(autonomy_last_dispatch.get("halted_reason", "")).strip()
     last_dispatch_config = (
         autonomy_last_dispatch.get("config", {}) if isinstance(autonomy_last_dispatch, dict) else {}
     )
     tick_dispatch = autonomy_last_tick.get("dispatch", {}) if isinstance(autonomy_last_tick, dict) else {}
     tick_halted_reason = str(tick_dispatch.get("halted_reason", "")).strip()
+    guardrail_cooldown_remaining = int(autonomy_guardrail.get("cooldown_remaining_ticks", 0))
+    guardrail_cooldown_active = guardrail_cooldown_remaining > 0
     autonomy_queued_count = int(autonomy_queue.get("queued_count", 0))
     autonomy_retry_pressure = int(autonomy_queue.get("queued_retry_count", 0))
     autonomy_high_risk_due = sum(
@@ -318,18 +336,24 @@ def lens_actions(max_actions: int = 6) -> dict:
                 },
             }
         )
-    if tick_halted_reason or autonomy_retry_pressure > 0:
+    if tick_halted_reason or autonomy_retry_pressure > 0 or guardrail_cooldown_active:
         mode = str(control.get("mode", "observe")).strip().lower()
         tick_enabled = mode in {"pilot", "away"}
         tick_policy_reason = ""
         if not tick_enabled:
             tick_policy_reason = f"mutating action autonomy.reactor.tick not allowed in {mode} mode"
+        elif guardrail_cooldown_active:
+            tick_policy_reason = (
+                "guardrail cooldown active; dispatch will remain suppressed until cooldown clears"
+            )
         risk_tier = "high" if tick_halted_reason in {"critical_incident_present", "critical_anomaly"} else "medium"
         reason_parts: list[str] = []
         if tick_halted_reason:
             reason_parts.append(f"last tick halted: {tick_halted_reason}")
         if autonomy_retry_pressure > 0:
             reason_parts.append(f"{autonomy_retry_pressure} queued retry event(s)")
+        if guardrail_cooldown_active:
+            reason_parts.append(f"cooldown active ({guardrail_cooldown_remaining} tick(s) remaining)")
         action_chips.append(
             {
                 "kind": "autonomy.reactor.tick",
@@ -341,6 +365,9 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "queue_telemetry": {
                     "queued_retry_count": autonomy_retry_pressure,
                     "last_tick_halted_reason": tick_halted_reason or None,
+                    "guardrail_cooldown_active": guardrail_cooldown_active,
+                    "guardrail_cooldown_remaining_ticks": guardrail_cooldown_remaining,
+                    "guardrail_escalations_count": int(autonomy_guardrail.get("escalations_count", 0)),
                     "last_tick_processed_count": int(tick_dispatch.get("processed_count", 0)),
                     "last_tick_failed_count": int(tick_dispatch.get("failed_count", 0)),
                     "last_tick_retried_count": int(tick_dispatch.get("retried_count", 0)),
