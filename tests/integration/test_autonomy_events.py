@@ -353,3 +353,40 @@ def test_autonomy_collect_events_enqueues_filtered_reactor_signals() -> None:
         _restore(_incidents_file(), incidents_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_recover_requeues_expired_leases() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(
+            _events_file(),
+            (
+                '{"id":"evt-1","ts":"2026-01-01T00:00:00+00:00","run_id":"r-1","kind":"autonomy.event",'
+                '"event_type":"manual.recover","source":"pytest","priority":"high","risk_tier":"medium",'
+                '"payload":{"x":1},"status":"leased","attempts":1,"next_run_after":"2026-01-01T00:00:00+00:00",'
+                '"dedupe_key":"recover-test","lease_id":"lease-1","lease_owner":"worker-x",'
+                '"leased_at":"2020-01-01T00:00:00+00:00","lease_expires_at":"2020-01-01T00:05:00+00:00",'
+                '"completed_at":null,"dispatch_run_id":null,"error":null}\n'
+            ),
+        )
+
+        recovered = c.post("/autonomy/events/recover", json={"max_recover": 10, "lease_ttl_seconds": 60})
+        assert recovered.status_code == 200
+        payload = recovered.json()
+        assert payload["status"] == "ok"
+        recovery = payload.get("recovery", {})
+        assert int(recovery.get("recovered_count", 0)) >= 1
+        queue = payload.get("queue", {})
+        assert int(queue.get("queued_count", 0)) >= 1
+        assert int(queue.get("leased_count", 0)) == 0
+    finally:
+        _restore(_events_file(), events_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
