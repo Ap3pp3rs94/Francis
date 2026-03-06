@@ -540,6 +540,7 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         assert int(guardrail.get("cooldown_remaining_ticks", 0)) == 2
         assert int(guardrail.get("escalations_count", 0)) == 3
         assert guardrail.get("last_reason") == "retry_pressure_cooldown"
+        assert guardrail.get("manual_reset_available") is True
         blockers = payload.get("blockers", {})
         assert int(blockers.get("autonomy_queue_retry_pressure", 0)) >= 1
         assert blockers.get("autonomy_reactor_halted") is True
@@ -560,6 +561,12 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         assert int(telemetry.get("guardrail_cooldown_remaining_ticks", 0)) == 2
         assert int(telemetry.get("guardrail_escalations_count", 0)) == 3
         assert "guardrail cooldown active" in str(reactor_chip[0].get("policy_reason", "")).lower()
+        reset_chip = [chip for chip in chips if chip.get("kind") == "autonomy.reactor.guardrail.reset"]
+        assert reset_chip
+        assert reset_chip[0].get("enabled") is True
+        reset_telemetry = reset_chip[0].get("queue_telemetry", {})
+        assert reset_telemetry.get("guardrail_cooldown_active") is True
+        assert int(reset_telemetry.get("guardrail_cooldown_remaining_ticks", 0)) == 2
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
         last_tick_path.write_text(tick_before, encoding="utf-8")
