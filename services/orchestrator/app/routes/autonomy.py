@@ -15,6 +15,7 @@ from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from services.orchestrator.app.approvals_store import ensure_action_approved
 from services.orchestrator.app.autonomy.event_queue import (
+    append_reactor_guardrail_history,
     append_tick_history,
     append_dispatch_history,
     complete_event,
@@ -24,6 +25,7 @@ from services.orchestrator.app.autonomy.event_queue import (
     lease_due_events,
     preview_due_events,
     queue_status,
+    read_reactor_guardrail_history,
     read_reactor_guardrail_state,
     read_last_tick,
     read_tick_history,
@@ -109,6 +111,10 @@ class AutonomyReactorTickRequest(BaseModel):
     allow_medium: bool = False
     allow_high: bool = False
     stop_on_critical: bool = True
+
+
+class AutonomyReactorGuardrailResetRequest(BaseModel):
+    reason: str | None = None
 
 
 def _role_from_request(request: Request) -> str:
@@ -244,6 +250,47 @@ def autonomy_reactor_guardrail(request: Request) -> dict:
     _enforce_rbac(request, "autonomy.read")
     _enforce_control("autonomy.read", mutating=False)
     return {"status": "ok", "guardrail": read_reactor_guardrail_state(_fs)}
+
+
+@router.get("/autonomy/reactor/guardrail/history")
+def autonomy_reactor_guardrail_history(request: Request, limit: int = 50) -> dict:
+    _enforce_rbac(request, "autonomy.read")
+    _enforce_control("autonomy.read", mutating=False)
+    history = read_reactor_guardrail_history(_fs, limit=limit)
+    return {"status": "ok", "count": len(history), "history": history}
+
+
+@router.post("/autonomy/reactor/guardrail/reset")
+def autonomy_reactor_guardrail_reset(
+    request: Request,
+    payload: AutonomyReactorGuardrailResetRequest | None = None,
+) -> dict:
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    _enforce_rbac(request, "autonomy.guardrail.reset")
+    _enforce_control("autonomy.guardrail.reset", mutating=True)
+    body = payload or AutonomyReactorGuardrailResetRequest()
+    reason = str(body.reason or "").strip() or "manual_reset"
+    before = read_reactor_guardrail_state(_fs)
+    after = write_reactor_guardrail_state(
+        _fs,
+        payload={
+            **before,
+            "consecutive_retry_pressure_ticks": 0,
+            "cooldown_remaining_ticks": 0,
+            "last_reason": reason,
+        },
+    )
+    receipt = {
+        "id": str(uuid4()),
+        "ts": utc_now_iso(),
+        "run_id": run_id,
+        "kind": "autonomy.reactor.guardrail.reset",
+        "reason": reason,
+        "before": before,
+        "after": after,
+    }
+    append_reactor_guardrail_history(_fs, payload=receipt)
+    return {"status": "ok", "run_id": run_id, "receipt": receipt}
 
 
 @router.post("/autonomy/events/dispatch")
@@ -620,6 +667,16 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         "state_before": guardrail_before,
         "state_after": guardrail_after,
     }
+    append_reactor_guardrail_history(
+        _fs,
+        payload={
+            "id": str(uuid4()),
+            "ts": utc_now_iso(),
+            "run_id": run_id,
+            "kind": "autonomy.reactor.guardrail.tick",
+            **guardrail_receipt,
+        },
+    )
     tick_summary = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
