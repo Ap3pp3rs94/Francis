@@ -65,6 +65,8 @@ class AutonomyDispatchRequest(BaseModel):
     max_runtime_seconds: int = Field(default=10, ge=1, le=120)
     max_dispatch_actions: int = Field(default=10, ge=0, le=200)
     max_dispatch_runtime_seconds: int = Field(default=30, ge=1, le=600)
+    max_attempts: int = Field(default=3, ge=1, le=20)
+    retry_backoff_seconds: int = Field(default=60, ge=0, le=3600)
     lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
     recover_stale_leases: bool = True
     allow_medium: bool = False
@@ -80,6 +82,23 @@ class AutonomyCollectRequest(BaseModel):
 class AutonomyRecoverRequest(BaseModel):
     max_recover: int = Field(default=100, ge=1, le=1000)
     lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
+
+
+class AutonomyReactorTickRequest(BaseModel):
+    max_collect_events: int = Field(default=20, ge=1, le=100)
+    include_types: list[str] | None = None
+    max_events: int = Field(default=5, ge=1, le=100)
+    max_actions: int = Field(default=2, ge=0, le=10)
+    max_runtime_seconds: int = Field(default=10, ge=1, le=120)
+    max_dispatch_actions: int = Field(default=10, ge=0, le=200)
+    max_dispatch_runtime_seconds: int = Field(default=30, ge=1, le=600)
+    max_attempts: int = Field(default=3, ge=1, le=20)
+    retry_backoff_seconds: int = Field(default=60, ge=0, le=3600)
+    lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
+    recover_stale_leases: bool = True
+    allow_medium: bool = False
+    allow_high: bool = False
+    stop_on_critical: bool = True
 
 
 def _role_from_request(request: Request) -> str:
@@ -263,6 +282,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     leased: list[dict[str, Any]] = []
     processed: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
+    retried: list[dict[str, Any]] = []
     released: list[dict[str, Any]] = []
     handled_event_ids: set[str] = set()
     dispatch_executed_actions = 0
@@ -350,9 +370,16 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                     event_id=event_id,
                     dispatch_run_id=dispatch_run_id,
                     error=str(exc),
+                    max_attempts=body.max_attempts,
+                    retry_backoff_seconds=body.retry_backoff_seconds,
                 )
                 handled_event_ids.add(event_id)
-                failed.append({"event": failed_event if isinstance(failed_event, dict) else event, "error": str(exc)})
+                event_row = failed_event if isinstance(failed_event, dict) else event
+                failed_status = str(event_row.get("status", "")).strip().lower()
+                if failed_status == "queued":
+                    retried.append({"event": event_row, "error": str(exc)})
+                else:
+                    failed.append({"event": event_row, "error": str(exc)})
 
         remaining_ids = [
             str(item.get("id", "")).strip()
@@ -374,6 +401,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         "recovered_count": int(recovery.get("recovered_count", 0)),
         "processed_count": len(processed),
         "failed_count": len(failed),
+        "retried_count": len(retried),
         "released_count": len(released),
         "dispatch_executed_actions": dispatch_executed_actions,
         "critical_incident_count": critical_incident_count,
@@ -385,6 +413,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         "recovery": recovery,
         "processed": processed,
         "failed": failed,
+        "retried": retried,
         "released": released,
         "config": {
             "max_events": body.max_events,
@@ -392,6 +421,8 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             "max_runtime_seconds": body.max_runtime_seconds,
             "max_dispatch_actions": body.max_dispatch_actions,
             "max_dispatch_runtime_seconds": body.max_dispatch_runtime_seconds,
+            "max_attempts": body.max_attempts,
+            "retry_backoff_seconds": body.retry_backoff_seconds,
             "lease_ttl_seconds": body.lease_ttl_seconds,
             "recover_stale_leases": body.recover_stale_leases,
             "allow_medium": body.allow_medium,
@@ -411,6 +442,10 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             "recovered_count": int(recovery.get("recovered_count", 0)),
             "processed_count": len(processed),
             "failed_count": len(failed),
+            "retried_count": len(retried),
+            "released_count": len(released),
+            "dispatch_executed_actions": dispatch_executed_actions,
+            "halted_reason": halted_reason,
             "approval_id": approved_request_id,
             "max_risk_tier": max_risk,
             "due_preview_count": due_count,
@@ -419,6 +454,43 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     )
     dispatch_summary["queue"] = queue_status(_fs, limit=100)
     return dispatch_summary
+
+
+@router.post("/autonomy/reactor/tick")
+def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest | None = None) -> dict:
+    body = payload or AutonomyReactorTickRequest()
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    collect_result = autonomy_collect_events(
+        request,
+        payload=AutonomyCollectRequest(
+            max_events=body.max_collect_events,
+            include_types=body.include_types,
+        ),
+    )
+    dispatch_result = autonomy_dispatch_events(
+        request,
+        payload=AutonomyDispatchRequest(
+            max_events=body.max_events,
+            max_actions=body.max_actions,
+            max_runtime_seconds=body.max_runtime_seconds,
+            max_dispatch_actions=body.max_dispatch_actions,
+            max_dispatch_runtime_seconds=body.max_dispatch_runtime_seconds,
+            max_attempts=body.max_attempts,
+            retry_backoff_seconds=body.retry_backoff_seconds,
+            lease_ttl_seconds=body.lease_ttl_seconds,
+            recover_stale_leases=body.recover_stale_leases,
+            allow_medium=body.allow_medium,
+            allow_high=body.allow_high,
+            stop_on_critical=body.stop_on_critical,
+        ),
+    )
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "collect": collect_result,
+        "dispatch": dispatch_result,
+        "queue": dispatch_result.get("queue", queue_status(_fs, limit=100)),
+    }
 
 
 @router.post("/autonomy/events/recover")
