@@ -28,6 +28,10 @@ def _normalize_lease_ttl_seconds(value: int | None) -> int:
     return max(15, min(3600, _safe_int(value, DEFAULT_LEASE_TTL_SECONDS)))
 
 
+def _normalize_retry_backoff_seconds(value: int | None) -> int:
+    return max(0, min(3600, _safe_int(value, 60)))
+
+
 def _parse_ts(ts: str | None) -> datetime | None:
     if not ts:
         return None
@@ -375,37 +379,65 @@ def fail_event(
     dispatch_run_id: str,
     error: str,
     deadletter_reason: str = "dispatch_failed",
+    max_attempts: int = 3,
+    retry_backoff_seconds: int = 60,
 ) -> dict[str, Any] | None:
     rows = _read_jsonl(fs, AUTONOMY_EVENTS_PATH)
-    completed_at = utc_now_iso()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    attempts_limit = max(1, _safe_int(max_attempts, 3))
+    backoff_seconds = _normalize_retry_backoff_seconds(retry_backoff_seconds)
     target: dict[str, Any] | None = None
     updated_rows: list[dict[str, Any]] = []
     for row in rows:
         if str(row.get("id", "")) == str(event_id):
-            target = {
-                **row,
-                "status": "failed",
-                "completed_at": completed_at,
-                "dispatch_run_id": dispatch_run_id,
-                "error": str(error),
-            }
+            attempts = max(0, _safe_int(row.get("attempts", 0), 0))
+            exhausted = attempts >= attempts_limit
+            if exhausted:
+                target = {
+                    **row,
+                    "status": "failed",
+                    "completed_at": now_iso,
+                    "dispatch_run_id": dispatch_run_id,
+                    "error": str(error),
+                    "max_attempts": attempts_limit,
+                }
+            else:
+                next_run_after = (now + timedelta(seconds=backoff_seconds)).isoformat()
+                target = {
+                    **row,
+                    "status": "queued",
+                    "next_run_after": next_run_after,
+                    "lease_id": None,
+                    "lease_owner": None,
+                    "leased_at": None,
+                    "lease_expires_at": None,
+                    "completed_at": None,
+                    "dispatch_run_id": dispatch_run_id,
+                    "error": str(error),
+                    "last_error": str(error),
+                    "last_failed_at": now_iso,
+                    "retry_backoff_seconds": backoff_seconds,
+                    "max_attempts": attempts_limit,
+                }
             updated_rows.append(target)
         else:
             updated_rows.append(row)
     if target is not None:
         _write_jsonl(fs, AUTONOMY_EVENTS_PATH, updated_rows)
-        _append_jsonl(
-            fs,
-            AUTONOMY_DEADLETTER_PATH,
-            {
-                "id": str(uuid4()),
-                "ts": completed_at,
-                "kind": "autonomy.event.deadletter",
-                "reason": deadletter_reason,
-                "dispatch_run_id": dispatch_run_id,
-                "event": target,
-            },
-        )
+        if str(target.get("status", "")).strip().lower() == "failed":
+            _append_jsonl(
+                fs,
+                AUTONOMY_DEADLETTER_PATH,
+                {
+                    "id": str(uuid4()),
+                    "ts": now_iso,
+                    "kind": "autonomy.event.deadletter",
+                    "reason": deadletter_reason,
+                    "dispatch_run_id": dispatch_run_id,
+                    "event": target,
+                },
+            )
     return target
 
 
