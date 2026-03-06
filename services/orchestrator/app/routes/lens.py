@@ -343,6 +343,26 @@ def _execute_lens_action(
         )
         return {"status": "ok", "kind": normalized_kind, "summary": summary}
 
+    if normalized_kind == "control.takeover.activity":
+        _enforce_action_scope(app="control", action="control.takeover.read", mutating=False)
+        limit = max(1, min(500, int(args.get("limit", 100))))
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"limit": limit, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_activity(limit=limit, session_id=session_id)
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.takeover.handback.package":
+        _enforce_action_scope(app="control", action="control.takeover.read", mutating=False)
+        limit = max(1, min(500, int(args.get("limit", 200))))
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {"limit": limit, "session_id": session_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_handback_package(limit=limit, session_id=session_id)
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "worker.cycle":
         _enforce_rbac(role, "worker.cycle")
         _enforce_action_scope(app="worker", action="worker.cycle")
@@ -650,6 +670,10 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
             "mode": "assist",
             "reason": "",
         }
+    elif kind == "control.takeover.activity":
+        hinted["execute_via"]["payload"]["args"] = {"limit": 50, "session_id": ""}
+    elif kind == "control.takeover.handback.package":
+        hinted["execute_via"]["payload"]["args"] = {"limit": 120, "session_id": ""}
     return hinted
 
 
@@ -992,6 +1016,8 @@ def lens_actions(max_actions: int = 6) -> dict:
     kill_switch = bool(control.get("kill_switch", False))
     takeover_state = control_takeover_state().get("takeover", {})
     takeover_status = str(takeover_state.get("status", "idle")).strip().lower() or "idle"
+    takeover_session_id = str(takeover_state.get("session_id") or "").strip()
+    takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip()
     action_chips.append(
         _with_execute_hint(
             {
@@ -1060,6 +1086,36 @@ def lens_actions(max_actions: int = 6) -> dict:
                 }
             )
         )
+
+    activity_session_id = takeover_session_id or takeover_last_session_id
+    if activity_session_id:
+        activity_chip = _with_execute_hint(
+            {
+            "kind": "control.takeover.activity",
+            "label": "View Takeover Activity",
+            "enabled": True,
+            "reason": "Review the latest takeover session action feed.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+        activity_chip["execute_via"]["payload"]["args"]["session_id"] = activity_session_id
+        action_chips.append(activity_chip)
+    if takeover_last_session_id:
+        package_chip = _with_execute_hint(
+            {
+            "kind": "control.takeover.handback.package",
+            "label": "Open Handback Package",
+            "enabled": True,
+            "reason": "Load the latest handback receipts bundle for review.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+        package_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_last_session_id
+        action_chips.append(package_chip)
 
     if autonomy_queued_count > 0:
         dispatch_enabled = mode in {"pilot", "away"}
