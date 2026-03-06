@@ -3,18 +3,27 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
+from francis_brain.ledger import RunLedger
+from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
+from francis_policy.rbac import can
+from services.observer.app.main import run_cycle as run_observer_cycle
 
 from services.orchestrator.app.approvals_store import pending_count
 from services.orchestrator.app.autonomy.action_budget import check_action_budget, load_state as load_budget_state
 from services.orchestrator.app.autonomy.decision_engine import build_plan
 from services.orchestrator.app.autonomy.event_queue import (
+    append_reactor_guardrail_history,
     queue_status as autonomy_queue_status,
+    recover_stale_leased_events,
+    write_reactor_guardrail_state,
     read_last_dispatch as read_autonomy_last_dispatch,
     read_reactor_guardrail_state as read_autonomy_reactor_guardrail_state,
     read_last_tick as read_autonomy_last_tick,
@@ -22,8 +31,15 @@ from services.orchestrator.app.autonomy.event_queue import (
 from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.intent_engine import collect_intents
 from services.orchestrator.app.autonomy.trust_calibration import trust_badge
-from services.orchestrator.app.control_state import check_action_allowed
+from services.orchestrator.app.control_state import (
+    VALID_MODES,
+    check_action_allowed,
+    load_or_init_control_state,
+    set_mode,
+)
+from services.orchestrator.app.routes.missions import execute_mission_tick
 from services.orchestrator.app.telemetry_store import status as telemetry_status
+from services.worker.app.main import recover_stale_leased_jobs, run_worker_cycle
 
 router = APIRouter(tags=["lens"])
 
@@ -33,6 +49,13 @@ _fs = WorkspaceFS(
     roots=[_workspace_root],
     journal_path=(_workspace_root / "journals" / "fs.jsonl").resolve(),
 )
+_ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
+
+
+class LensExecuteRequest(BaseModel):
+    kind: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    dry_run: bool = False
 
 
 def _read_jsonl(rel_path: str) -> list[dict[str, Any]]:
@@ -61,6 +84,315 @@ def _mode_allows_medium_high(mode: str) -> tuple[bool, bool]:
     if lowered == "away":
         return (True, False)
     return (False, False)
+
+
+def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
+    try:
+        raw = _fs.read_text(rel_path)
+    except Exception:
+        raw = ""
+    if raw and not raw.endswith("\n"):
+        raw += "\n"
+    _fs.write_text(rel_path, raw + json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
+    normalized = str(trace_id or "").strip()
+    return normalized or fallback_run_id
+
+
+def _role_from_request(request: Request) -> str:
+    return request.headers.get("x-francis-role", "architect").strip().lower()
+
+
+def _enforce_action_scope(*, app: str, action: str, mutating: bool = True) -> None:
+    allowed, reason, _state = check_action_allowed(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        app=app,
+        action=action,
+        mutating=mutating,
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
+
+
+def _enforce_rbac(role: str, action: str) -> None:
+    if not can(role, action):
+        raise HTTPException(status_code=403, detail=f"RBAC denied: role={role}, action={action}")
+
+
+def _record_lens_execution(
+    *,
+    run_id: str,
+    trace_id: str,
+    action_kind: str,
+    dry_run: bool,
+    ok: bool,
+    detail: dict[str, Any],
+) -> None:
+    receipt = {
+        "id": str(uuid4()),
+        "ts": utc_now_iso(),
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "kind": "lens.action.execute",
+        "action_kind": action_kind,
+        "dry_run": dry_run,
+        "ok": ok,
+        "detail": detail,
+    }
+    _append_jsonl("logs/francis.log.jsonl", receipt)
+    _append_jsonl("journals/decisions.jsonl", receipt)
+    _ledger.append(
+        run_id=run_id,
+        kind="lens.action.execute",
+        summary={
+            "trace_id": trace_id,
+            "action_kind": action_kind,
+            "dry_run": dry_run,
+            "ok": ok,
+            "result_status": detail.get("status"),
+        },
+    )
+
+
+def _execute_lens_action(
+    *,
+    kind: str,
+    args: dict[str, Any],
+    dry_run: bool,
+    run_id: str,
+    trace_id: str,
+    role: str,
+) -> dict[str, Any]:
+    normalized_kind = str(kind or "").strip().lower()
+
+    if normalized_kind == "control.panic":
+        _enforce_action_scope(app="control", action="control.mode", mutating=False)
+        before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+        reason = str(args.get("reason", "")).strip() or "lens.action.panic"
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "before": {"mode": before.get("mode"), "kill_switch": before.get("kill_switch")},
+                "after": {"mode": before.get("mode"), "kill_switch": True},
+                "reason": reason,
+            }
+        after = set_mode(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            mode=str(before.get("mode", "pilot")).strip().lower(),
+            kill_switch=True,
+        )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "before": {"mode": before.get("mode"), "kill_switch": before.get("kill_switch")},
+            "after": {"mode": after.get("mode"), "kill_switch": after.get("kill_switch")},
+            "reason": reason,
+        }
+
+    if normalized_kind == "control.resume":
+        _enforce_action_scope(app="control", action="control.mode", mutating=False)
+        before = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+        requested_mode = str(args.get("mode", before.get("mode", "pilot"))).strip().lower()
+        if requested_mode not in VALID_MODES:
+            raise HTTPException(status_code=400, detail=f"Invalid mode: {requested_mode}")
+        reason = str(args.get("reason", "")).strip() or "lens.action.resume"
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "before": {"mode": before.get("mode"), "kill_switch": before.get("kill_switch")},
+                "after": {"mode": requested_mode, "kill_switch": False},
+                "reason": reason,
+            }
+        after = set_mode(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            mode=requested_mode,
+            kill_switch=False,
+        )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "before": {"mode": before.get("mode"), "kill_switch": before.get("kill_switch")},
+            "after": {"mode": after.get("mode"), "kill_switch": after.get("kill_switch")},
+            "reason": reason,
+        }
+
+    if normalized_kind == "worker.cycle":
+        _enforce_rbac(role, "worker.cycle")
+        _enforce_action_scope(app="worker", action="worker.cycle")
+        max_jobs = max(1, min(500, int(args.get("max_jobs", 20))))
+        max_runtime_seconds = max(1, min(600, int(args.get("max_runtime_seconds", 60))))
+        allowlist = {
+            str(item).strip().lower()
+            for item in args.get("action_allowlist", [])
+            if isinstance(item, str) and str(item).strip()
+        }
+        execution_args = {
+            "max_jobs": max_jobs,
+            "max_runtime_seconds": max_runtime_seconds,
+            "action_allowlist": sorted(allowlist) if allowlist else None,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = run_worker_cycle(
+            run_id=f"{run_id}:lens-worker:{uuid4()}",
+            trace_id=trace_id,
+            max_jobs=max_jobs,
+            max_runtime_seconds=max_runtime_seconds,
+            action_allowlist=allowlist if allowlist else None,
+        )
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "worker.recover_leases":
+        _enforce_rbac(role, "worker.cycle")
+        _enforce_action_scope(app="worker", action="worker.recover")
+        action_classes = {
+            str(item).strip().lower()
+            for item in args.get("action_classes", [])
+            if isinstance(item, str) and str(item).strip()
+        }
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "execution_args": {"action_classes": sorted(action_classes) if action_classes else None},
+            }
+        summary = recover_stale_leased_jobs(
+            run_id=f"{run_id}:lens-worker-recover:{uuid4()}",
+            trace_id=trace_id,
+            action_classes=action_classes if action_classes else None,
+        )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "autonomy.recover":
+        _enforce_rbac(role, "autonomy.recover")
+        _enforce_action_scope(app="autonomy", action="autonomy.recover")
+        lease_ttl_seconds = max(15, min(3600, int(args.get("lease_ttl_seconds", 300))))
+        max_recover = max(1, min(1000, int(args.get("max_recover", 100))))
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "execution_args": {
+                    "lease_ttl_seconds": lease_ttl_seconds,
+                    "max_recover": max_recover,
+                },
+            }
+        recovery = recover_stale_leased_events(
+            _fs,
+            run_id=f"{run_id}:lens-autonomy-recover:{uuid4()}",
+            lease_ttl_seconds=lease_ttl_seconds,
+            max_recover=max_recover,
+        )
+        return {"status": "ok", "kind": normalized_kind, "recovery": recovery}
+
+    if normalized_kind == "observer.scan":
+        _enforce_action_scope(app="observer", action="observer.scan")
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind}
+        summary = run_observer_cycle(
+            run_id=f"{run_id}:lens-observer:{uuid4()}",
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+        )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "mission.tick":
+        _enforce_rbac(role, "missions.tick")
+        _enforce_action_scope(app="missions", action="missions.tick")
+        mission_id = str(args.get("mission_id", "")).strip()
+        if not mission_id:
+            raise HTTPException(status_code=400, detail="mission_id is required for mission.tick")
+        force_fail = bool(args.get("force_fail", False))
+        reason = str(args.get("reason", "")).strip()
+        idempotency_key = str(args.get("idempotency_key", "")).strip() or None
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "execution_args": {
+                    "mission_id": mission_id,
+                    "force_fail": force_fail,
+                    "reason": reason,
+                    "idempotency_key": idempotency_key,
+                },
+            }
+        summary = execute_mission_tick(
+            mission_id=mission_id,
+            run_id=f"{run_id}:lens-mission:{uuid4()}",
+            trace_id=trace_id,
+            role=role,
+            force_fail=force_fail,
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "autonomy.reactor.guardrail.reset":
+        _enforce_rbac(role, "autonomy.guardrail.reset")
+        _enforce_action_scope(app="autonomy", action="autonomy.guardrail.reset")
+        reason = str(args.get("reason", "")).strip() or "lens.guardrail.reset"
+        before = read_autonomy_reactor_guardrail_state(_fs)
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "reason": reason,
+                "before": before,
+                "after": {
+                    **before,
+                    "consecutive_retry_pressure_ticks": 0,
+                    "cooldown_remaining_ticks": 0,
+                    "last_reason": reason,
+                },
+            }
+        after = write_reactor_guardrail_state(
+            _fs,
+            payload={
+                **before,
+                "consecutive_retry_pressure_ticks": 0,
+                "cooldown_remaining_ticks": 0,
+                "last_reason": reason,
+            },
+        )
+        receipt = {
+            "id": str(uuid4()),
+            "ts": utc_now_iso(),
+            "run_id": run_id,
+            "trace_id": trace_id,
+            "kind": "autonomy.reactor.guardrail.reset",
+            "reason": reason,
+            "before": before,
+            "after": after,
+        }
+        append_reactor_guardrail_history(_fs, payload=receipt)
+        return {"status": "ok", "kind": normalized_kind, "receipt": receipt}
+
+    raise HTTPException(status_code=400, detail=f"Unsupported lens action kind: {normalized_kind}")
+
+
+def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
+    kind = str(chip.get("kind", "")).strip()
+    hinted = {
+        **chip,
+        "execute_via": {
+            "endpoint": "/lens/actions/execute",
+            "method": "POST",
+            "payload": {"kind": kind, "args": {}},
+        },
+    }
+    if kind == "mission.tick":
+        hinted["execute_via"]["payload"]["args"] = {"mission_id": "<required>"}
+    return hinted
 
 
 @router.get("/lens/state")
@@ -364,12 +696,13 @@ def lens_actions(max_actions: int = 6) -> dict:
             }
         if kind == "worker.recover_leases":
             chip["recovery_scope"] = action.get("action_classes", [])
-        action_chips.append(chip)
+        action_chips.append(_with_execute_hint(chip))
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
     action_chips.append(
-        {
+        _with_execute_hint(
+            {
             "kind": "control.panic" if not kill_switch else "control.resume",
             "label": "Panic Stop (Kill Switch)" if not kill_switch else "Resume Mutations",
             "enabled": True,
@@ -381,10 +714,10 @@ def lens_actions(max_actions: int = 6) -> dict:
             "policy_reason": "",
             "risk_tier": "high" if not kill_switch else "medium",
             "trust_badge": "Confirmed",
-            "endpoint": "/control/panic" if not kill_switch else "/control/resume",
             "requires_confirmation": True,
             "mode": mode,
-        }
+            }
+        )
     )
 
     if autonomy_queued_count > 0:
@@ -395,7 +728,8 @@ def lens_actions(max_actions: int = 6) -> dict:
         elif autonomy_high_risk_due > 0:
             policy_reason = "approval required for queued high-risk autonomy events"
         action_chips.append(
-            {
+            _with_execute_hint(
+                {
                 "kind": "autonomy.dispatch",
                 "label": "Dispatch Autonomy Events",
                 "enabled": dispatch_enabled,
@@ -417,7 +751,8 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "last_can_claim_done": bool(dispatch_verification.get("can_claim_done", False)),
                     "last_completion_state": autonomy_last_dispatch.get("completion_state"),
                 },
-            }
+                }
+            )
         )
     if autonomy_leased_expired_count > 0:
         recover_enabled = mode in {"pilot", "away"}
@@ -425,7 +760,8 @@ def lens_actions(max_actions: int = 6) -> dict:
         if not recover_enabled:
             recover_policy_reason = f"mutating action autonomy.recover not allowed in {mode} mode"
         action_chips.append(
-            {
+            _with_execute_hint(
+                {
                 "kind": "autonomy.recover",
                 "label": "Recover Stale Autonomy Leases",
                 "enabled": recover_enabled,
@@ -436,7 +772,8 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "queue_telemetry": {
                     "leased_expired_count": autonomy_leased_expired_count,
                 },
-            }
+                }
+            )
         )
     if tick_halted_reason or autonomy_retry_pressure > 0 or guardrail_cooldown_active:
         tick_enabled = mode in {"pilot", "away"}
@@ -456,7 +793,8 @@ def lens_actions(max_actions: int = 6) -> dict:
         if guardrail_cooldown_active:
             reason_parts.append(f"cooldown active ({guardrail_cooldown_remaining} tick(s) remaining)")
         action_chips.append(
-            {
+            _with_execute_hint(
+                {
                 "kind": "autonomy.reactor.tick",
                 "label": "Run Reactor Tick",
                 "enabled": tick_enabled,
@@ -482,7 +820,8 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "last_tick_retried_count": int(tick_dispatch.get("retried_count", 0)),
                     "last_tick_released_count": int(tick_dispatch.get("released_count", 0)),
                 },
-            }
+                }
+            )
         )
     if guardrail_cooldown_active:
         reset_enabled = mode == "pilot"
@@ -490,7 +829,8 @@ def lens_actions(max_actions: int = 6) -> dict:
         if not reset_enabled:
             reset_policy_reason = "manual guardrail reset requires pilot mode"
         action_chips.append(
-            {
+            _with_execute_hint(
+                {
                 "kind": "autonomy.reactor.guardrail.reset",
                 "label": "Reset Reactor Cooldown",
                 "enabled": reset_enabled,
@@ -503,7 +843,8 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "guardrail_cooldown_remaining_ticks": guardrail_cooldown_remaining,
                     "guardrail_escalations_count": int(autonomy_guardrail.get("escalations_count", 0)),
                 },
-            }
+                }
+            )
         )
 
     return {
@@ -512,4 +853,60 @@ def lens_actions(max_actions: int = 6) -> dict:
         "action_chips": action_chips,
         "selected_actions": selected_actions,
         "blocked_actions": blocked_actions,
+    }
+
+
+@router.post("/lens/actions/execute")
+def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
+    role = _role_from_request(request)
+    kind = str(payload.kind).strip().lower()
+    args = payload.args if isinstance(payload.args, dict) else {}
+    dry_run = bool(payload.dry_run)
+
+    try:
+        result = _execute_lens_action(
+            kind=kind,
+            args=args,
+            dry_run=dry_run,
+            run_id=run_id,
+            trace_id=trace_id,
+            role=role,
+        )
+    except HTTPException as exc:
+        _record_lens_execution(
+            run_id=run_id,
+            trace_id=trace_id,
+            action_kind=kind,
+            dry_run=dry_run,
+            ok=False,
+            detail={"status": "error", "error": exc.detail, "status_code": exc.status_code},
+        )
+        raise
+    except Exception as exc:
+        _record_lens_execution(
+            run_id=run_id,
+            trace_id=trace_id,
+            action_kind=kind,
+            dry_run=dry_run,
+            ok=False,
+            detail={"status": "error", "error": str(exc), "status_code": 500},
+        )
+        raise HTTPException(status_code=500, detail=f"Lens action execution failed: {exc}")
+
+    _record_lens_execution(
+        run_id=run_id,
+        trace_id=trace_id,
+        action_kind=kind,
+        dry_run=dry_run,
+        ok=True,
+        detail={"status": str(result.get("status", "ok")), "kind": kind},
+    )
+    return {
+        "status": "ok" if not dry_run else "dry_run",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "action": {"kind": kind, "dry_run": dry_run, "args": args},
+        "result": result,
     }

@@ -10,6 +10,45 @@ from fastapi.testclient import TestClient
 from apps.api.main import app
 
 
+def _get_mode(client: TestClient) -> dict:
+    response = client.get("/control/mode")
+    assert response.status_code == 200
+    return response.json()
+
+
+def _set_mode(client: TestClient, mode: str, kill_switch: bool | None = None) -> None:
+    payload: dict[str, object] = {"mode": mode}
+    if kill_switch is not None:
+        payload["kill_switch"] = kill_switch
+    response = client.put("/control/mode", json=payload)
+    assert response.status_code == 200
+
+
+def _get_scope(client: TestClient) -> dict:
+    response = client.get("/control/scope")
+    assert response.status_code == 200
+    return response.json()["scope"]
+
+
+def _set_scope(client: TestClient, scope: dict) -> None:
+    response = client.put("/control/scope", json=scope)
+    assert response.status_code == 200
+
+
+def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
+    apps = [str(item) for item in scope.get("apps", []) if isinstance(item, str)]
+    lowered = [item.lower() for item in apps]
+    for app_name in required_apps:
+        if app_name.lower() not in lowered:
+            apps.append(app_name)
+            lowered.append(app_name.lower())
+    return {
+        "repos": scope.get("repos", []),
+        "workspaces": scope.get("workspaces", []),
+        "apps": apps,
+    }
+
+
 def test_receipts_and_run_lookup() -> None:
     c = TestClient(app)
 
@@ -81,6 +120,99 @@ def test_lens_state_and_actions() -> None:
     assert "selected_actions" in actions_payload
     assert "blocked_actions" in actions_payload
     assert any(chip.get("kind") == "control.panic" for chip in actions_payload.get("action_chips", []))
+
+
+def test_lens_execute_control_panic_resume_and_indicator() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _set_mode(c, "pilot", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "missions", "receipts"]))
+
+        dry_run = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.panic", "dry_run": True, "args": {"reason": "dry run"}},
+        )
+        assert dry_run.status_code == 200
+        assert dry_run.json()["status"] == "dry_run"
+        assert _get_mode(c).get("kill_switch") is False
+
+        panic = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.panic", "args": {"reason": "lens panic"}},
+        )
+        assert panic.status_code == 200
+        panic_payload = panic.json()
+        assert panic_payload["status"] == "ok"
+        assert panic_payload["result"]["after"]["kill_switch"] is True
+
+        state_after_panic = c.get("/lens/state")
+        assert state_after_panic.status_code == 200
+        indicator = state_after_panic.json().get("control_surface", {}).get("pilot_indicator", {})
+        assert indicator.get("status") == "paused"
+
+        blocked = c.post(
+            "/missions",
+            json={"title": f"LensPanic-{uuid4()}", "objective": "blocked", "steps": ["s1"]},
+        )
+        assert blocked.status_code == 403
+
+        resume = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.resume", "args": {"mode": "pilot", "reason": "lens resume"}},
+        )
+        assert resume.status_code == 200
+        resume_payload = resume.json()
+        assert resume_payload["status"] == "ok"
+        assert resume_payload["result"]["after"]["kill_switch"] is False
+
+        state_after_resume = c.get("/lens/state")
+        assert state_after_resume.status_code == 200
+        indicator_after_resume = state_after_resume.json().get("control_surface", {}).get("pilot_indicator", {})
+        assert indicator_after_resume.get("status") == "on"
+    finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_lens_execute_worker_cycle_dry_run_records_trace_receipt() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    trace_id = f"lens-exec-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "pilot", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["lens", "worker", "receipts"]))
+
+        execute = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "worker.cycle",
+                "dry_run": True,
+                "args": {"max_jobs": 3, "max_runtime_seconds": 10, "action_allowlist": ["mission.tick"]},
+            },
+        )
+        assert execute.status_code == 200
+        payload = execute.json()
+        assert payload["status"] == "dry_run"
+        assert payload["trace_id"] == trace_id
+        assert payload["result"]["kind"] == "worker.cycle"
+
+        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 100})
+        assert trace.status_code == 200
+        decisions = trace.json().get("receipts", {}).get("decisions", [])
+        assert any(
+            str(row.get("kind", "")) == "lens.action.execute"
+            and str(row.get("action_kind", "")) == "worker.cycle"
+            and bool(row.get("dry_run", False))
+            for row in decisions
+        )
+    finally:
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
 def test_lens_surfaces_worker_queue_signals() -> None:
