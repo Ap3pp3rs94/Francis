@@ -18,17 +18,20 @@ from services.orchestrator.app.autonomy.event_queue import (
     append_tick_history,
     append_dispatch_history,
     complete_event,
+    default_reactor_guardrail_state,
     enqueue_event,
     fail_event,
     lease_due_events,
     preview_due_events,
     queue_status,
+    read_reactor_guardrail_state,
     read_last_tick,
     read_tick_history,
     read_dispatch_history,
     read_last_dispatch,
     release_leased_events,
     recover_stale_leased_events,
+    write_reactor_guardrail_state,
     write_last_tick,
     write_last_dispatch,
 )
@@ -98,6 +101,9 @@ class AutonomyReactorTickRequest(BaseModel):
     max_dispatch_runtime_seconds: int = Field(default=30, ge=1, le=600)
     max_attempts: int = Field(default=3, ge=1, le=20)
     retry_backoff_seconds: int = Field(default=60, ge=0, le=3600)
+    retry_pressure_threshold: int = Field(default=5, ge=0, le=500)
+    retry_pressure_consecutive_ticks: int = Field(default=3, ge=1, le=50)
+    retry_pressure_cooldown_ticks: int = Field(default=2, ge=1, le=50)
     lease_ttl_seconds: int = Field(default=300, ge=15, le=3600)
     recover_stale_leases: bool = True
     allow_medium: bool = False
@@ -231,6 +237,13 @@ def autonomy_reactor_history(request: Request, limit: int = 50) -> dict:
     _enforce_control("autonomy.read", mutating=False)
     history = read_tick_history(_fs, limit=limit)
     return {"status": "ok", "count": len(history), "history": history}
+
+
+@router.get("/autonomy/reactor/guardrail")
+def autonomy_reactor_guardrail(request: Request) -> dict:
+    _enforce_rbac(request, "autonomy.read")
+    _enforce_control("autonomy.read", mutating=False)
+    return {"status": "ok", "guardrail": read_reactor_guardrail_state(_fs)}
 
 
 @router.post("/autonomy/events/dispatch")
@@ -479,6 +492,41 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
 def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest | None = None) -> dict:
     body = payload or AutonomyReactorTickRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    queue_before = queue_status(_fs, limit=100)
+    retry_pressure_count_before = int(queue_before.get("queued_retry_count", 0))
+    guardrail_before = read_reactor_guardrail_state(_fs)
+    guardrail_state = {**default_reactor_guardrail_state(), **guardrail_before}
+    guardrail_state["tick_count"] = int(guardrail_state.get("tick_count", 0)) + 1
+
+    threshold = max(0, int(body.retry_pressure_threshold))
+    consecutive_target = max(1, int(body.retry_pressure_consecutive_ticks))
+    cooldown_ticks = max(1, int(body.retry_pressure_cooldown_ticks))
+    in_retry_pressure = threshold > 0 and retry_pressure_count_before >= threshold
+
+    if in_retry_pressure:
+        guardrail_state["consecutive_retry_pressure_ticks"] = int(
+            guardrail_state.get("consecutive_retry_pressure_ticks", 0)
+        ) + 1
+    else:
+        guardrail_state["consecutive_retry_pressure_ticks"] = 0
+
+    cooldown_active = False
+    trigger_reason: str | None = None
+    escalated = False
+    cooldown_remaining = int(guardrail_state.get("cooldown_remaining_ticks", 0))
+    if cooldown_remaining > 0:
+        cooldown_active = True
+        trigger_reason = "retry_pressure_cooldown"
+        guardrail_state["cooldown_remaining_ticks"] = max(0, cooldown_remaining - 1)
+        guardrail_state["consecutive_retry_pressure_ticks"] = 0
+    elif int(guardrail_state.get("consecutive_retry_pressure_ticks", 0)) >= consecutive_target:
+        cooldown_active = True
+        escalated = True
+        trigger_reason = "retry_pressure_cooldown"
+        guardrail_state["escalations_count"] = int(guardrail_state.get("escalations_count", 0)) + 1
+        guardrail_state["cooldown_remaining_ticks"] = max(0, cooldown_ticks - 1)
+        guardrail_state["consecutive_retry_pressure_ticks"] = 0
+
     collect_result = autonomy_collect_events(
         request,
         payload=AutonomyCollectRequest(
@@ -486,23 +534,92 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
             include_types=body.include_types,
         ),
     )
-    dispatch_result = autonomy_dispatch_events(
-        request,
-        payload=AutonomyDispatchRequest(
-            max_events=body.max_events,
-            max_actions=body.max_actions,
-            max_runtime_seconds=body.max_runtime_seconds,
-            max_dispatch_actions=body.max_dispatch_actions,
-            max_dispatch_runtime_seconds=body.max_dispatch_runtime_seconds,
-            max_attempts=body.max_attempts,
-            retry_backoff_seconds=body.retry_backoff_seconds,
-            lease_ttl_seconds=body.lease_ttl_seconds,
-            recover_stale_leases=body.recover_stale_leases,
-            allow_medium=body.allow_medium,
-            allow_high=body.allow_high,
-            stop_on_critical=body.stop_on_critical,
-        ),
-    )
+    if cooldown_active:
+        _enforce_rbac(request, "autonomy.dispatch")
+        _enforce_control("autonomy.dispatch", mutating=True)
+        queue_after_collect = queue_status(_fs, limit=100)
+        dispatch_result = {
+            "status": "ok",
+            "run_id": run_id,
+            "leased_count": 0,
+            "recovered_count": 0,
+            "processed_count": 0,
+            "failed_count": 0,
+            "retried_count": 0,
+            "released_count": 0,
+            "dispatch_executed_actions": 0,
+            "critical_incident_count": 0,
+            "halted_reason": "retry_pressure_cooldown",
+            "approval_id": None,
+            "approval_required": False,
+            "max_risk_tier": "low",
+            "due_preview_count": int(queue_after_collect.get("queued_count", 0)),
+            "recovery": {
+                "status": "skipped",
+                "run_id": run_id,
+                "checked_count": 0,
+                "recovered_count": 0,
+                "lease_ttl_seconds": body.lease_ttl_seconds,
+                "recovered": [],
+            },
+            "processed": [],
+            "failed": [],
+            "retried": [],
+            "released": [],
+            "config": {
+                "max_events": body.max_events,
+                "max_actions": body.max_actions,
+                "max_runtime_seconds": body.max_runtime_seconds,
+                "max_dispatch_actions": body.max_dispatch_actions,
+                "max_dispatch_runtime_seconds": body.max_dispatch_runtime_seconds,
+                "max_attempts": body.max_attempts,
+                "retry_backoff_seconds": body.retry_backoff_seconds,
+                "lease_ttl_seconds": body.lease_ttl_seconds,
+                "recover_stale_leases": body.recover_stale_leases,
+                "allow_medium": body.allow_medium,
+                "allow_high": body.allow_high,
+                "stop_on_critical": body.stop_on_critical,
+            },
+            "queue": queue_after_collect,
+            "guardrail_cooldown": True,
+        }
+    else:
+        dispatch_result = autonomy_dispatch_events(
+            request,
+            payload=AutonomyDispatchRequest(
+                max_events=body.max_events,
+                max_actions=body.max_actions,
+                max_runtime_seconds=body.max_runtime_seconds,
+                max_dispatch_actions=body.max_dispatch_actions,
+                max_dispatch_runtime_seconds=body.max_dispatch_runtime_seconds,
+                max_attempts=body.max_attempts,
+                retry_backoff_seconds=body.retry_backoff_seconds,
+                lease_ttl_seconds=body.lease_ttl_seconds,
+                recover_stale_leases=body.recover_stale_leases,
+                allow_medium=body.allow_medium,
+                allow_high=body.allow_high,
+                stop_on_critical=body.stop_on_critical,
+            ),
+        )
+
+    queue_after = dispatch_result.get("queue", queue_status(_fs, limit=100))
+    retry_pressure_count_after = int(queue_after.get("queued_retry_count", 0))
+    guardrail_state["last_retry_pressure_count"] = retry_pressure_count_after
+    guardrail_state["last_reason"] = trigger_reason if cooldown_active else None
+    guardrail_after = write_reactor_guardrail_state(_fs, payload=guardrail_state)
+
+    guardrail_receipt = {
+        "cooldown_active": cooldown_active,
+        "trigger_reason": trigger_reason,
+        "escalated": escalated,
+        "retry_pressure_threshold": threshold,
+        "retry_pressure_consecutive_ticks": consecutive_target,
+        "retry_pressure_cooldown_ticks": cooldown_ticks,
+        "retry_pressure_count_before": retry_pressure_count_before,
+        "retry_pressure_count_after": retry_pressure_count_after,
+        "state_before": guardrail_before,
+        "state_after": guardrail_after,
+    }
     tick_summary = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
@@ -531,12 +648,16 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
             "max_dispatch_runtime_seconds": body.max_dispatch_runtime_seconds,
             "max_attempts": body.max_attempts,
             "retry_backoff_seconds": body.retry_backoff_seconds,
+            "retry_pressure_threshold": body.retry_pressure_threshold,
+            "retry_pressure_consecutive_ticks": body.retry_pressure_consecutive_ticks,
+            "retry_pressure_cooldown_ticks": body.retry_pressure_cooldown_ticks,
             "lease_ttl_seconds": body.lease_ttl_seconds,
             "recover_stale_leases": body.recover_stale_leases,
             "allow_medium": body.allow_medium,
             "allow_high": body.allow_high,
             "stop_on_critical": body.stop_on_critical,
         },
+        "guardrail": guardrail_receipt,
     }
     write_last_tick(_fs, payload=tick_summary)
     append_tick_history(_fs, payload=tick_summary)
@@ -545,8 +666,9 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         "run_id": run_id,
         "collect": collect_result,
         "dispatch": dispatch_result,
+        "guardrail": guardrail_receipt,
         "tick": tick_summary,
-        "queue": dispatch_result.get("queue", queue_status(_fs, limit=100)),
+        "queue": queue_after,
     }
 
 
