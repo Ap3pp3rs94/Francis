@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "anomaly_detected",
+  "type": "object",
+  "required": ["id", "ts", "run_id", "severity", "kind", "message"],
+  "properties": {
+    "id": { "type": "string" },
+    "ts": { "type": "string" },
+    "run_id": { "type": "string" },
+    "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+    "kind": { "type": "string" },
+    "message": { "type": "string" },
+    "evidence": { "type": "object" },
+    "status": { "type": "string" }
+  }
+}

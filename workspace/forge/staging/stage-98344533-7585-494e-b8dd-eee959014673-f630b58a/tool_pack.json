@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skill_name": "forge.pack.stage-98344533-7585-494e-b8dd-eee959014673",
+  "description": "Capability staged by integration test.",
+  "risk_tier": "low",
+  "mutating": false,
+  "requires_approval": false,
+  "args_schema": {
+    "payload": "optional:dict"
+  },
+  "tags": [
+    "stage-98344533-7585-494e-b8dd-eee959014673",
+    "forge",
+    "tool-pack"
+  ],
+  "behavior": {
+    "type": "echo",
+    "message": "Stage-98344533-7585-494e-b8dd-eee959014673 capability pack executed."
+  }
+}

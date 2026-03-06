@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skill_name": "forge.pack.pack-236ec887-ece6-41da-a1dc-c3cd71d57526",
+  "description": "Tool-pack auto registration integration test.",
+  "risk_tier": "low",
+  "mutating": false,
+  "requires_approval": false,
+  "args_schema": {
+    "payload": "optional:dict"
+  },
+  "tags": [
+    "pack-236ec887-ece6-41da-a1dc-c3cd71d57526",
+    "forge",
+    "tool-pack"
+  ],
+  "behavior": {
+    "type": "echo",
+    "message": "Pack-236ec887-ece6-41da-a1dc-c3cd71d57526 capability pack executed."
+  }
+}

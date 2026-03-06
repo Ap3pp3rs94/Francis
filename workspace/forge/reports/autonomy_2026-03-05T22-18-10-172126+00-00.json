@@ -1,0 +1,36 @@
+{
+  "ts": "2026-03-05T22:18:10.172126+00:00",
+  "run_id": "283905c9-ec82-4829-9827-07499c462fb5",
+  "kind": "forge.propose",
+  "context": {
+    "deadletter_count": 53,
+    "open_incident_count": 265,
+    "active_mission_count": 2
+  },
+  "proposals": [
+    {
+      "name": "Deadletter Triager",
+      "description": "Automatically classify and summarize deadletter mission jobs.",
+      "rationale": "Detected 53 deadletter jobs.",
+      "tags": [
+        "ops",
+        "queue",
+        "reliability"
+      ],
+      "risk_tier": "medium",
+      "source": "queue.deadletter"
+    },
+    {
+      "name": "Incident Digest Generator",
+      "description": "Generate concise incident digests from open anomaly evidence.",
+      "rationale": "Detected 265 open incidents.",
+      "tags": [
+        "observer",
+        "incident",
+        "reporting"
+      ],
+      "risk_tier": "low",
+      "source": "incidents.open"
+    }
+  ]
+}

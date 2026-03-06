@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+router = APIRouter(tags=["capabilities"])
+
+
+@router.get("/capabilities")
+def capabilities() -> dict:
+    return {
+        "status": "ok",
+        "capabilities": [
+            "health",
+            "capabilities",
+            "inbox",
+            "presence.briefing",
+            "presence.state",
+            "runs",
+            "missions",
+            "approvals",
+            "tools",
+            "worker",
+            "observer",
+            "forge",
+            "autonomy",
+            "control",
+            "receipts",
+            "lens",
+            "telemetry",
+        ],
+    }

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skill_name": "forge.pack.pack-db0f660e-2b80-42de-927a-26ffe86fcfe4",
+  "description": "Tool-pack auto registration integration test.",
+  "risk_tier": "low",
+  "mutating": false,
+  "requires_approval": false,
+  "args_schema": {
+    "payload": "optional:dict"
+  },
+  "tags": [
+    "pack-db0f660e-2b80-42de-927a-26ffe86fcfe4",
+    "forge",
+    "tool-pack"
+  ],
+  "behavior": {
+    "type": "echo",
+    "message": "Pack-db0f660e-2b80-42de-927a-26ffe86fcfe4 capability pack executed."
+  }
+}

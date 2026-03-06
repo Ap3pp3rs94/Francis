@@ -1,0 +1,25 @@
+{
+  "ts": "2026-03-05T21:52:41.588460+00:00",
+  "run_id": "bf72a6e6-52dd-4f04-8a13-9d6c5f41f8a1:job:efaf3c76-c598-41b8-a7a3-d901ee3609dd",
+  "job_id": "efaf3c76-c598-41b8-a7a3-d901ee3609dd",
+  "action": "forge.propose",
+  "context": {
+    "deadletter_count": 1,
+    "open_incident_count": 0,
+    "active_mission_count": 1
+  },
+  "proposals": [
+    {
+      "name": "Deadletter Triager",
+      "description": "Automatically classify and summarize deadletter mission jobs.",
+      "rationale": "Detected 1 deadletter jobs.",
+      "tags": [
+        "ops",
+        "queue",
+        "reliability"
+      ],
+      "risk_tier": "medium",
+      "source": "queue.deadletter"
+    }
+  ]
+}

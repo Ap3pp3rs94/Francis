@@ -1,0 +1,14 @@
+{
+  "date": "2026-03-06",
+  "counts": {
+    "observer.scan": 1,
+    "worker.recover_leases": 1,
+    "worker.cycle": 1
+  },
+  "last_executed_at": {
+    "observer.scan": "2026-03-06T01:19:21.480651+00:00",
+    "worker.recover_leases": "2026-03-06T01:19:24.077297+00:00",
+    "worker.cycle": "2026-03-06T01:19:25.866792+00:00"
+  },
+  "updated_at": "2026-03-06T01:19:48.733620+00:00"
+}

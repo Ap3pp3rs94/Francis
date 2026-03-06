@@ -1,0 +1,24 @@
+{
+  "ts": "2026-03-05T22:40:18.341132+00:00",
+  "run_id": "61c3a028-1054-4297-8c3c-a3a71a4fc18b:job:f9dfd9a6-efac-4d06-8a1b-41cb9ca08847",
+  "job_id": "f9dfd9a6-efac-4d06-8a1b-41cb9ca08847",
+  "action": "forge.propose",
+  "context": {
+    "deadletter_count": 0,
+    "open_incident_count": 0,
+    "active_mission_count": 0
+  },
+  "proposals": [
+    {
+      "name": "Workspace Signal Scanner",
+      "description": "Scan workspace journals and produce a daily signal summary.",
+      "rationale": "No pressing friction detected; propose a general utility capability.",
+      "tags": [
+        "workspace",
+        "signals"
+      ],
+      "risk_tier": "low",
+      "source": "baseline"
+    }
+  ]
+}

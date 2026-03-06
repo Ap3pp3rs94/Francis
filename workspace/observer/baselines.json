@@ -1,0 +1,6 @@
+{
+  "disk_free_percent_min": 100.0,
+  "memory_available_percent_min": 100.0,
+  "repo_dirty_files_warn": 200,
+  "cpu_normalized_load_warn": 90.0
+}
