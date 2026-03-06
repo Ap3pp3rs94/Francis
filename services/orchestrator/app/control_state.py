@@ -29,6 +29,8 @@ AWAY_MUTATING_ACTIONS = {
     "observer.scan",
     "forge.stage",
     "autonomy.cycle",
+    "autonomy.enqueue",
+    "autonomy.dispatch",
     "worker.cycle",
     "worker.recover",
 }
