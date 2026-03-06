@@ -357,6 +357,16 @@ def test_control_remote_rbac_separates_read_and_write_permissions() -> None:
         assert "control.remote.panic" in operator_payload.get("remote_actions", [])
         assert "control.remote.approval.approve" not in operator_payload.get("remote_actions", [])
 
+        architect_read = c.get("/control/remote/state")
+        assert architect_read.status_code == 200
+        architect_payload = architect_read.json()
+        architect_permissions = architect_payload.get("permissions", {})
+        assert architect_permissions.get("role") == "architect"
+        assert architect_permissions.get("control_remote_write") is True
+        assert architect_permissions.get("approvals_decide") is True
+        assert "control.remote.approval.approve" in architect_payload.get("remote_actions", [])
+        assert "control.remote.approval.reject" in architect_payload.get("remote_actions", [])
+
         operator_panic = c.post("/control/remote/panic", headers=operator_headers, json={"reason": "operator panic"})
         assert operator_panic.status_code == 200
         assert operator_panic.json().get("summary", {}).get("kill_switch") is True
