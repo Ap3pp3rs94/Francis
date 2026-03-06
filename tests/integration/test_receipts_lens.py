@@ -66,6 +66,12 @@ def test_lens_state_and_actions() -> None:
     assert "scope" in state_payload
     assert "intent_state" in state_payload
     assert "event_state" in state_payload
+    assert "control_surface" in state_payload
+    control_surface = state_payload["control_surface"]
+    assert control_surface.get("pilot_mode_on") is True
+    pilot_indicator = control_surface.get("pilot_indicator", {})
+    assert pilot_indicator.get("visible") is True
+    assert pilot_indicator.get("status") == "on"
 
     actions = c.get("/lens/actions")
     assert actions.status_code == 200
@@ -74,6 +80,7 @@ def test_lens_state_and_actions() -> None:
     assert isinstance(actions_payload.get("action_chips"), list)
     assert "selected_actions" in actions_payload
     assert "blocked_actions" in actions_payload
+    assert any(chip.get("kind") == "control.panic" for chip in actions_payload.get("action_chips", []))
 
 
 def test_lens_surfaces_worker_queue_signals() -> None:

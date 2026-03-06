@@ -117,11 +117,39 @@ def lens_state() -> dict:
     staged_count = sum(1 for entry in catalog_entries if str(entry.get("status", "")).lower() == "staged")
     pending_approvals = pending_count(_fs) + len(_read_jsonl("queue/deadletter.jsonl")) + staged_count
 
+    mode = str(control.get("mode", "observe")).strip().lower()
+    kill_switch = bool(control.get("kill_switch", False))
+    pilot_mode_on = mode == "pilot" and not kill_switch
+    pilot_indicator_status = "on" if pilot_mode_on else "paused" if mode == "pilot" and kill_switch else "off"
+    pilot_indicator_label = (
+        "PILOT MODE ON"
+        if pilot_indicator_status == "on"
+        else "PILOT MODE PAUSED"
+        if pilot_indicator_status == "paused"
+        else "PILOT MODE OFF"
+    )
+    panic_available = not kill_switch
+    resume_available = kill_switch
+
     return {
         "status": "ok",
         "mode": control.get("mode"),
         "kill_switch": control.get("kill_switch"),
         "scope": control.get("scopes", {}),
+        "control_surface": {
+            "mode": mode,
+            "kill_switch": kill_switch,
+            "panic_available": panic_available,
+            "resume_available": resume_available,
+            "mutating_actions_blocked": kill_switch,
+            "pilot_mode_on": pilot_mode_on,
+            "pilot_indicator": {
+                "visible": True,
+                "status": pilot_indicator_status,
+                "label": pilot_indicator_label,
+                "kill_switch_active": kill_switch,
+            },
+        },
         "intent_state": intent_state,
         "event_state": event_state,
         "telemetry": {
@@ -338,8 +366,28 @@ def lens_actions(max_actions: int = 6) -> dict:
             chip["recovery_scope"] = action.get("action_classes", [])
         action_chips.append(chip)
 
+    mode = str(control.get("mode", "observe")).strip().lower()
+    kill_switch = bool(control.get("kill_switch", False))
+    action_chips.append(
+        {
+            "kind": "control.panic" if not kill_switch else "control.resume",
+            "label": "Panic Stop (Kill Switch)" if not kill_switch else "Resume Mutations",
+            "enabled": True,
+            "reason": (
+                "Instantly block all mutating actions."
+                if not kill_switch
+                else "Kill switch is active; resume mutating actions when ready."
+            ),
+            "policy_reason": "",
+            "risk_tier": "high" if not kill_switch else "medium",
+            "trust_badge": "Confirmed",
+            "endpoint": "/control/panic" if not kill_switch else "/control/resume",
+            "requires_confirmation": True,
+            "mode": mode,
+        }
+    )
+
     if autonomy_queued_count > 0:
-        mode = str(control.get("mode", "observe")).strip().lower()
         dispatch_enabled = mode in {"pilot", "away"}
         policy_reason = ""
         if not dispatch_enabled:
@@ -372,7 +420,6 @@ def lens_actions(max_actions: int = 6) -> dict:
             }
         )
     if autonomy_leased_expired_count > 0:
-        mode = str(control.get("mode", "observe")).strip().lower()
         recover_enabled = mode in {"pilot", "away"}
         recover_policy_reason = ""
         if not recover_enabled:
@@ -392,7 +439,6 @@ def lens_actions(max_actions: int = 6) -> dict:
             }
         )
     if tick_halted_reason or autonomy_retry_pressure > 0 or guardrail_cooldown_active:
-        mode = str(control.get("mode", "observe")).strip().lower()
         tick_enabled = mode in {"pilot", "away"}
         tick_policy_reason = ""
         if not tick_enabled:
@@ -439,7 +485,6 @@ def lens_actions(max_actions: int = 6) -> dict:
             }
         )
     if guardrail_cooldown_active:
-        mode = str(control.get("mode", "observe")).strip().lower()
         reset_enabled = mode == "pilot"
         reset_policy_reason = ""
         if not reset_enabled:
