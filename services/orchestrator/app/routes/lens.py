@@ -48,6 +48,8 @@ from services.orchestrator.app.routes.control import (
     control_takeover_handback_export,
     control_takeover_handback,
     control_takeover_handback_package,
+    control_takeover_session,
+    control_takeover_sessions,
     control_takeover_request,
     control_takeover_state,
 )
@@ -383,6 +385,27 @@ def _execute_lens_action(
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
+    if normalized_kind == "control.takeover.sessions":
+        _enforce_action_scope(app="control", action="control.takeover.read", mutating=False)
+        limit = max(1, min(200, int(args.get("limit", 20))))
+        execution_args = {"limit": limit}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_sessions(limit=limit)
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.takeover.session":
+        _enforce_action_scope(app="control", action="control.takeover.read", mutating=False)
+        session_id = str(args.get("session_id", "")).strip()
+        if not session_id:
+            raise HTTPException(status_code=400, detail="session_id is required for control.takeover.session")
+        limit = max(1, min(500, int(args.get("limit", 200))))
+        execution_args = {"session_id": session_id, "limit": limit}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_session(session_id=session_id, limit=limit)
+        return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
     if normalized_kind == "worker.cycle":
         _enforce_rbac(role, "worker.cycle")
         _enforce_action_scope(app="worker", action="worker.cycle")
@@ -696,6 +719,10 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"limit": 120, "session_id": ""}
     elif kind == "control.takeover.handback.export":
         hinted["execute_via"]["payload"]["args"] = {"limit": 300, "session_id": "", "reason": ""}
+    elif kind == "control.takeover.sessions":
+        hinted["execute_via"]["payload"]["args"] = {"limit": 20}
+    elif kind == "control.takeover.session":
+        hinted["execute_via"]["payload"]["args"] = {"session_id": "<required>", "limit": 200}
     return hinted
 
 
@@ -762,6 +789,8 @@ def lens_state() -> dict:
     activity_session_id = takeover_session_id or takeover_last_session_id
     takeover_activity_payload = control_takeover_activity(limit=10, session_id=activity_session_id)
     takeover_recent_activity = takeover_activity_payload.get("activity", [])
+    takeover_sessions_payload = control_takeover_sessions(limit=3)
+    takeover_recent_sessions = takeover_sessions_payload.get("sessions", [])
     handback_package_available = False
     handback_package_summary: dict[str, Any] | None = None
     if takeover_last_session_id:
@@ -814,6 +843,8 @@ def lens_state() -> dict:
                 "confirmed_at": takeover_state.get("confirmed_at"),
                 "handed_back_at": takeover_state.get("handed_back_at"),
                 "recent_activity": takeover_recent_activity,
+                "recent_sessions": takeover_recent_sessions,
+                "session_count": int(takeover_sessions_payload.get("count", len(takeover_recent_sessions))),
                 "handback_package_available": handback_package_available,
                 "handback_package_summary": handback_package_summary,
             },
@@ -1040,6 +1071,8 @@ def lens_actions(max_actions: int = 6) -> dict:
     takeover_status = str(takeover_state.get("status", "idle")).strip().lower() or "idle"
     takeover_session_id = str(takeover_state.get("session_id") or "").strip()
     takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip()
+    takeover_sessions_payload = control_takeover_sessions(limit=5)
+    takeover_sessions_rows = takeover_sessions_payload.get("sessions", [])
     action_chips.append(
         _with_execute_hint(
             {
@@ -1110,6 +1143,19 @@ def lens_actions(max_actions: int = 6) -> dict:
         )
 
     activity_session_id = takeover_session_id or takeover_last_session_id
+    sessions_chip = _with_execute_hint(
+        {
+        "kind": "control.takeover.sessions",
+        "label": "Browse Takeover Sessions",
+        "enabled": True,
+        "reason": "Inspect recent takeover sessions and handback outcomes.",
+        "policy_reason": "",
+        "risk_tier": "low",
+        "trust_badge": "Confirmed",
+        }
+    )
+    sessions_chip["execute_via"]["payload"]["args"]["limit"] = 20
+    action_chips.append(sessions_chip)
     if activity_session_id:
         activity_chip = _with_execute_hint(
             {
@@ -1124,6 +1170,35 @@ def lens_actions(max_actions: int = 6) -> dict:
         )
         activity_chip["execute_via"]["payload"]["args"]["session_id"] = activity_session_id
         action_chips.append(activity_chip)
+        session_chip = _with_execute_hint(
+            {
+            "kind": "control.takeover.session",
+            "label": "Open Current Session",
+            "enabled": True,
+            "reason": "Load full session timeline, receipts, and exports.",
+            "policy_reason": "",
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            }
+        )
+        session_chip["execute_via"]["payload"]["args"]["session_id"] = activity_session_id
+        action_chips.append(session_chip)
+    elif takeover_sessions_rows:
+        latest_session_id = str(takeover_sessions_rows[0].get("session_id", "")).strip()
+        if latest_session_id:
+            latest_chip = _with_execute_hint(
+                {
+                "kind": "control.takeover.session",
+                "label": "Open Latest Session",
+                "enabled": True,
+                "reason": "Review the latest session timeline and receipts.",
+                "policy_reason": "",
+                "risk_tier": "low",
+                "trust_badge": "Confirmed",
+                }
+            )
+            latest_chip["execute_via"]["payload"]["args"]["session_id"] = latest_session_id
+            action_chips.append(latest_chip)
     if takeover_last_session_id:
         package_chip = _with_execute_hint(
             {

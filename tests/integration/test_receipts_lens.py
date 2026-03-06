@@ -349,6 +349,8 @@ def test_lens_state_surfaces_takeover_status() -> None:
         assert takeover_requested.get("pending_confirmation") is True
         assert takeover_requested.get("objective") == requested_objective
         assert str(takeover_requested.get("session_id", "")).strip() == requested_session_id
+        assert int(takeover_requested.get("session_count", 0)) >= 1
+        assert isinstance(takeover_requested.get("recent_sessions", []), list)
         assert any(
             str(row.get("kind", "")) == "control.takeover.requested"
             for row in takeover_requested.get("recent_activity", [])
@@ -363,6 +365,7 @@ def test_lens_state_surfaces_takeover_status() -> None:
         assert takeover_active.get("status") == "active"
         assert takeover_active.get("active") is True
         assert str(takeover_active.get("session_id", "")).strip() == requested_session_id
+        assert int(takeover_active.get("session_count", 0)) >= 1
         assert any(
             str(row.get("kind", "")) == "control.takeover.confirmed"
             for row in takeover_active.get("recent_activity", [])
@@ -560,7 +563,32 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         actions_active = c.get("/lens/actions")
         assert actions_active.status_code == 200
         chips_active = actions_active.json().get("action_chips", [])
+        assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.takeover.session" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.activity" for chip in chips_active)
+
+        read_sessions = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.takeover.sessions", "args": {"limit": 20}},
+        )
+        assert read_sessions.status_code == 200
+        sessions_payload = read_sessions.json()
+        assert sessions_payload["status"] == "ok"
+        sessions_summary = sessions_payload["result"]["summary"]
+        assert sessions_summary["status"] == "ok"
+        assert int(sessions_summary.get("count", 0)) >= 1
+        assert any(str(row.get("session_id", "")).strip() == session_id for row in sessions_summary.get("sessions", []))
+
+        read_session = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.takeover.session", "args": {"session_id": session_id, "limit": 120}},
+        )
+        assert read_session.status_code == 200
+        read_session_payload = read_session.json()
+        assert read_session_payload["status"] == "ok"
+        session_summary = read_session_payload["result"]["summary"]
+        assert session_summary["status"] == "ok"
+        assert session_summary.get("session", {}).get("session_id") == session_id
 
         read_activity = c.post(
             "/lens/actions/execute",
@@ -583,6 +611,8 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         actions_idle = c.get("/lens/actions")
         assert actions_idle.status_code == 200
         chips_idle = actions_idle.json().get("action_chips", [])
+        assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_idle)
+        assert any(str(chip.get("kind", "")) == "control.takeover.session" for chip in chips_idle)
         assert any(str(chip.get("kind", "")) == "control.takeover.handback.package" for chip in chips_idle)
         assert any(str(chip.get("kind", "")) == "control.takeover.handback.export" for chip in chips_idle)
 

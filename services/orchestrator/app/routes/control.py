@@ -472,6 +472,118 @@ def _safe_export_timestamp(ts: str) -> str:
     return str(ts).replace(":", "-")
 
 
+def _read_handback_export_index_rows() -> list[dict[str, Any]]:
+    return _read_jsonl_rows("control/handback_exports/index.jsonl")
+
+
+def _session_event_ts(row: dict[str, Any]) -> str:
+    return str(row.get("ts", "")).strip()
+
+
+def _build_takeover_session_summary(
+    *,
+    session_id: str,
+    state: dict[str, Any],
+    transitions: list[dict[str, Any]],
+    activity: list[dict[str, Any]],
+    exports: list[dict[str, Any]],
+) -> dict[str, Any]:
+    ordered_transitions = sorted(transitions, key=_session_event_ts)
+    ordered_activity = sorted(activity, key=_session_event_ts)
+    ordered_exports = sorted(exports, key=_session_event_ts)
+    request_row = next((row for row in ordered_transitions if str(row.get("kind", "")) == "control.takeover.request"), {})
+    confirm_row = next((row for row in ordered_transitions if str(row.get("kind", "")) == "control.takeover.confirm"), {})
+    handback_row = next((row for row in ordered_transitions if str(row.get("kind", "")) == "control.takeover.handback"), {})
+    requested_activity = next((row for row in ordered_activity if str(row.get("kind", "")) == "control.takeover.requested"), {})
+    handback_activity = next((row for row in ordered_activity if str(row.get("kind", "")) == "control.takeover.handed_back"), {})
+
+    request_after = request_row.get("after", {}) if isinstance(request_row.get("after"), dict) else {}
+    objective = str(request_after.get("objective", "")).strip()
+    if not objective:
+        objective = str(ordered_activity[-1].get("objective", "")).strip() if ordered_activity else ""
+    requested_by = str(requested_activity.get("actor", "")).strip() or None
+    requested_at = _session_event_ts(request_row) or _session_event_ts(requested_activity) or None
+    confirmed_at = _session_event_ts(confirm_row) or None
+    handed_back_at = _session_event_ts(handback_row) or _session_event_ts(handback_activity) or None
+    handback_detail = (
+        handback_activity.get("detail", {}) if isinstance(handback_activity.get("detail"), dict) else {}
+    )
+    pending_approvals = int(handback_detail.get("pending_approvals", 0))
+
+    active_session_id = str(state.get("session_id") or "").strip()
+    if active_session_id == session_id:
+        status = str(state.get("status", "idle")).strip().lower() or "idle"
+    else:
+        status = "idle"
+
+    last_activity = ordered_activity[-1] if ordered_activity else {}
+    last_transition = ordered_transitions[-1] if ordered_transitions else {}
+    last_export = ordered_exports[-1] if ordered_exports else {}
+    last_event_ts = max(
+        [
+            str(last_activity.get("ts", "")).strip(),
+            str(last_transition.get("ts", "")).strip(),
+            str(last_export.get("ts", "")).strip(),
+        ]
+    )
+
+    return {
+        "session_id": session_id,
+        "status": status,
+        "objective": objective or None,
+        "requested_by": requested_by,
+        "requested_at": requested_at,
+        "confirmed_at": confirmed_at,
+        "handed_back_at": handed_back_at,
+        "pending_approvals": pending_approvals,
+        "counts": {
+            "transitions": len(ordered_transitions),
+            "activity": len(ordered_activity),
+            "exports": len(ordered_exports),
+        },
+        "last_event_ts": last_event_ts or None,
+        "last_transition_kind": str(last_transition.get("kind", "")).strip() or None,
+        "last_activity_kind": str(last_activity.get("kind", "")).strip() or None,
+        "last_export_id": str(last_export.get("id", "")).strip() or None,
+    }
+
+
+def _build_takeover_sessions(limit: int) -> list[dict[str, Any]]:
+    state = _load_or_init_takeover_state()
+    transitions = _read_jsonl_rows(_takeover_history_path)
+    activity_rows = _read_jsonl_rows(_takeover_activity_path)
+    export_rows = _read_handback_export_index_rows()
+    active_session_id = str(state.get("session_id") or "").strip()
+    last_session_id = str(state.get("last_session_id") or "").strip()
+
+    session_ids: set[str] = set()
+    for row in [*transitions, *activity_rows, *export_rows]:
+        session_id = str(row.get("session_id", "")).strip()
+        if session_id:
+            session_ids.add(session_id)
+    if active_session_id:
+        session_ids.add(active_session_id)
+    if last_session_id:
+        session_ids.add(last_session_id)
+
+    summaries: list[dict[str, Any]] = []
+    for session_id in session_ids:
+        session_transitions = [row for row in transitions if str(row.get("session_id", "")).strip() == session_id]
+        session_activity = [row for row in activity_rows if str(row.get("session_id", "")).strip() == session_id]
+        session_exports = [row for row in export_rows if str(row.get("session_id", "")).strip() == session_id]
+        summaries.append(
+            _build_takeover_session_summary(
+                session_id=session_id,
+                state=state,
+                transitions=session_transitions,
+                activity=session_activity,
+                exports=session_exports,
+            )
+        )
+    summaries.sort(key=lambda row: str(row.get("last_event_ts", "")), reverse=True)
+    return summaries[: max(0, min(limit, 500))]
+
+
 @router.get("/control/mode")
 def get_control_mode() -> dict:
     state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
@@ -643,6 +755,66 @@ def control_takeover_history(limit: int = 50) -> dict:
     return {"status": "ok", "count": len(rows), "history": rows}
 
 
+@router.get("/control/takeover/sessions")
+def control_takeover_sessions(limit: int = 20) -> dict:
+    sessions = _build_takeover_sessions(limit=limit)
+    return {"status": "ok", "count": len(sessions), "sessions": sessions}
+
+
+@router.get("/control/takeover/sessions/{session_id}")
+def control_takeover_session(session_id: str, limit: int = 200) -> dict:
+    normalized_session_id = str(session_id).strip()
+    if not normalized_session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    state = _load_or_init_takeover_state()
+    transitions = [
+        row
+        for row in _read_jsonl_rows(_takeover_history_path)
+        if str(row.get("session_id", "")).strip() == normalized_session_id
+    ]
+    activity = _read_takeover_activity_rows(session_id=normalized_session_id)
+    exports = [
+        row
+        for row in _read_handback_export_index_rows()
+        if str(row.get("session_id", "")).strip() == normalized_session_id
+    ]
+    active_session_id = str(state.get("session_id") or "").strip()
+    last_session_id = str(state.get("last_session_id") or "").strip()
+    if not transitions and not activity and not exports and normalized_session_id not in {active_session_id, last_session_id}:
+        raise HTTPException(status_code=404, detail=f"Takeover session not found: {normalized_session_id}")
+
+    summary = _build_takeover_session_summary(
+        session_id=normalized_session_id,
+        state=state,
+        transitions=transitions,
+        activity=activity,
+        exports=exports,
+    )
+    receipts = _collect_handback_receipts_for_session(session_id=normalized_session_id, limit=limit)
+    package_summary: dict[str, Any] | None = None
+    try:
+        package = control_takeover_handback_package(limit=limit, session_id=normalized_session_id)
+        package_summary = package.get("summary", {})
+    except HTTPException:
+        package_summary = None
+
+    return {
+        "status": "ok",
+        "session": summary,
+        "timeline": {
+            "transitions": _tail_rows(sorted(transitions, key=_session_event_ts), limit=limit, cap=1000),
+            "activity": _tail_rows(sorted(activity, key=_session_event_ts), limit=limit, cap=5000),
+        },
+        "exports": _tail_rows(sorted(exports, key=_session_event_ts), limit=limit, cap=2000),
+        "receipt_counts": {
+            "decisions": len(receipts.get("decisions", [])),
+            "logs": len(receipts.get("logs", [])),
+            "ledger": len(receipts.get("ledger", [])),
+        },
+        "handback_package_summary": package_summary,
+    }
+
+
 @router.get("/control/takeover/activity")
 def control_takeover_activity(
     limit: int = 100,
@@ -812,6 +984,26 @@ def control_takeover_handback_exports(limit: int = 20, session_id: str | None = 
         "count": len(exports),
         "exports": exports,
     }
+
+
+@router.get("/control/takeover/handback/exports/{export_id}")
+def control_takeover_handback_export_by_id(export_id: str) -> dict:
+    normalized_export_id = str(export_id).strip()
+    if not normalized_export_id:
+        raise HTTPException(status_code=400, detail="export_id is required")
+    rows = _read_handback_export_index_rows()
+    match = next((row for row in rows if str(row.get("id", "")).strip() == normalized_export_id), None)
+    if not isinstance(match, dict):
+        raise HTTPException(status_code=404, detail=f"Handback export not found: {normalized_export_id}")
+    rel_path = str(match.get("path", "")).strip()
+    if not rel_path:
+        raise HTTPException(status_code=404, detail=f"Handback export path missing: {normalized_export_id}")
+    try:
+        raw = _fs.read_text(rel_path)
+        doc = json.loads(raw)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read handback export {normalized_export_id}: {exc}")
+    return {"status": "ok", "export": match, "document": doc}
 
 
 @router.post("/control/takeover/handback/export")

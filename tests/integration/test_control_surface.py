@@ -390,6 +390,26 @@ def test_control_takeover_activity_and_handback_package() -> None:
         assert exports.status_code == 200
         export_rows = exports.json().get("exports", [])
         assert any(str(row.get("id", "")) == str(export_info.get("id", "")) for row in export_rows)
+
+        exported_by_id = c.get(f"/control/takeover/handback/exports/{export_info.get('id')}")
+        assert exported_by_id.status_code == 200
+        exported_doc = exported_by_id.json()
+        assert exported_doc.get("export", {}).get("id") == export_info.get("id")
+        assert exported_doc.get("document", {}).get("id") == export_info.get("id")
+
+        sessions = c.get("/control/takeover/sessions", params={"limit": 20})
+        assert sessions.status_code == 200
+        sessions_payload = sessions.json()
+        assert int(sessions_payload.get("count", 0)) >= 1
+        assert any(str(row.get("session_id", "")).strip() == session_id for row in sessions_payload.get("sessions", []))
+
+        session_detail = c.get(f"/control/takeover/sessions/{session_id}", params={"limit": 100})
+        assert session_detail.status_code == 200
+        session_detail_payload = session_detail.json()
+        assert session_detail_payload.get("session", {}).get("session_id") == session_id
+        assert int(session_detail_payload.get("session", {}).get("counts", {}).get("exports", 0)) >= 1
+        assert int(session_detail_payload.get("receipt_counts", {}).get("decisions", 0)) >= 1
+        assert isinstance(session_detail_payload.get("timeline", {}).get("activity", []), list)
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
