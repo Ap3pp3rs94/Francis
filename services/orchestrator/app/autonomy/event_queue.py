@@ -14,6 +14,7 @@ AUTONOMY_LAST_DISPATCH_PATH = "autonomy/last_dispatch.json"
 AUTONOMY_DISPATCH_HISTORY_PATH = "autonomy/dispatch_history.jsonl"
 AUTONOMY_LAST_TICK_PATH = "autonomy/last_tick.json"
 AUTONOMY_TICK_HISTORY_PATH = "autonomy/tick_history.jsonl"
+AUTONOMY_REACTOR_GUARDRAIL_PATH = "autonomy/reactor_guardrail_state.json"
 VALID_PRIORITIES = {"low", "normal", "high", "critical"}
 VALID_RISK_TIERS = {"low", "medium", "high", "critical"}
 DEFAULT_LEASE_TTL_SECONDS = 300
@@ -515,3 +516,42 @@ def read_tick_history(fs: WorkspaceFS, *, limit: int = 50) -> list[dict[str, Any
     if n == 0:
         return []
     return rows[-n:]
+
+
+def default_reactor_guardrail_state() -> dict[str, Any]:
+    return {
+        "tick_count": 0,
+        "consecutive_retry_pressure_ticks": 0,
+        "cooldown_remaining_ticks": 0,
+        "escalations_count": 0,
+        "last_retry_pressure_count": 0,
+        "last_reason": None,
+        "updated_at": utc_now_iso(),
+    }
+
+
+def read_reactor_guardrail_state(fs: WorkspaceFS) -> dict[str, Any]:
+    parsed = _read_json(fs, AUTONOMY_REACTOR_GUARDRAIL_PATH, {})
+    if not isinstance(parsed, dict):
+        return default_reactor_guardrail_state()
+    merged = {**default_reactor_guardrail_state(), **parsed}
+    merged["tick_count"] = max(0, _safe_int(merged.get("tick_count", 0), 0))
+    merged["consecutive_retry_pressure_ticks"] = max(
+        0, _safe_int(merged.get("consecutive_retry_pressure_ticks", 0), 0)
+    )
+    merged["cooldown_remaining_ticks"] = max(0, _safe_int(merged.get("cooldown_remaining_ticks", 0), 0))
+    merged["escalations_count"] = max(0, _safe_int(merged.get("escalations_count", 0), 0))
+    merged["last_retry_pressure_count"] = max(0, _safe_int(merged.get("last_retry_pressure_count", 0), 0))
+    return merged
+
+
+def write_reactor_guardrail_state(fs: WorkspaceFS, *, payload: dict[str, Any]) -> dict[str, Any]:
+    state = {**default_reactor_guardrail_state(), **payload}
+    state["tick_count"] = max(0, _safe_int(state.get("tick_count", 0), 0))
+    state["consecutive_retry_pressure_ticks"] = max(0, _safe_int(state.get("consecutive_retry_pressure_ticks", 0), 0))
+    state["cooldown_remaining_ticks"] = max(0, _safe_int(state.get("cooldown_remaining_ticks", 0), 0))
+    state["escalations_count"] = max(0, _safe_int(state.get("escalations_count", 0), 0))
+    state["last_retry_pressure_count"] = max(0, _safe_int(state.get("last_retry_pressure_count", 0), 0))
+    state["updated_at"] = utc_now_iso()
+    _write_json(fs, AUTONOMY_REACTOR_GUARDRAIL_PATH, state)
+    return state
