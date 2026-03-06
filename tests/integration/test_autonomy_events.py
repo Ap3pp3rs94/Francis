@@ -45,6 +45,10 @@ def _guardrail_file() -> Path:
     return _workspace_root() / "autonomy" / "reactor_guardrail_state.json"
 
 
+def _guardrail_history_file() -> Path:
+    return _workspace_root() / "autonomy" / "reactor_guardrail_history.jsonl"
+
+
 def _incidents_file() -> Path:
     return _workspace_root() / "incidents" / "incidents.jsonl"
 
@@ -914,6 +918,7 @@ def test_autonomy_reactor_guardrail_cooldown_on_retry_pressure() -> None:
     last_tick_before = _stash(_last_tick_file())
     tick_history_before = _stash(_tick_history_file())
     guardrail_before = _stash(_guardrail_file())
+    guardrail_history_before = _stash(_guardrail_history_file())
 
     try:
         _set_scope(c, test_scope)
@@ -934,6 +939,7 @@ def test_autonomy_reactor_guardrail_cooldown_on_retry_pressure() -> None:
         _restore(_last_tick_file(), "{}")
         _restore(_tick_history_file(), "")
         _restore(_guardrail_file(), "{}")
+        _restore(_guardrail_history_file(), "")
 
         tick1 = c.post(
             "/autonomy/reactor/tick",
@@ -1001,6 +1007,14 @@ def test_autonomy_reactor_guardrail_cooldown_on_retry_pressure() -> None:
         g = guardrail_read.json().get("guardrail", {})
         assert int(g.get("escalations_count", 0)) >= 1
         assert int(g.get("tick_count", 0)) >= 3
+
+        guardrail_history = c.get("/autonomy/reactor/guardrail/history", params={"limit": 20})
+        assert guardrail_history.status_code == 200
+        history_payload = guardrail_history.json()
+        assert history_payload.get("status") == "ok"
+        rows = history_payload.get("history", [])
+        assert len(rows) >= 3
+        assert any(str(item.get("kind", "")) == "autonomy.reactor.guardrail.tick" for item in rows)
     finally:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
@@ -1008,5 +1022,69 @@ def test_autonomy_reactor_guardrail_cooldown_on_retry_pressure() -> None:
         _restore(_last_tick_file(), last_tick_before)
         _restore(_tick_history_file(), tick_history_before)
         _restore(_guardrail_file(), guardrail_before)
+        _restore(_guardrail_history_file(), guardrail_history_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_reactor_guardrail_reset_requires_pilot_and_updates_receipts() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    guardrail_before = _stash(_guardrail_file())
+    guardrail_history_before = _stash(_guardrail_history_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(
+            _guardrail_file(),
+            (
+                '{'
+                '"tick_count":12,'
+                '"consecutive_retry_pressure_ticks":0,'
+                '"cooldown_remaining_ticks":2,'
+                '"escalations_count":4,'
+                '"last_retry_pressure_count":3,'
+                '"last_reason":"retry_pressure_cooldown"'
+                '}'
+            ),
+        )
+        _restore(_guardrail_history_file(), "")
+
+        denied = c.post(
+            "/autonomy/reactor/guardrail/reset",
+            headers={"x-francis-role": "observer"},
+            json={"reason": "observer denied"},
+        )
+        assert denied.status_code == 403
+        assert "RBAC denied" in str(denied.json().get("detail", ""))
+
+        away_mode = c.put("/control/mode", json={"mode": "away", "kill_switch": False})
+        assert away_mode.status_code == 200
+        blocked = c.post("/autonomy/reactor/guardrail/reset", json={"reason": "away denied"})
+        assert blocked.status_code == 403
+        assert "Control denied" in str(blocked.json().get("detail", ""))
+
+        _set_mode(c, "pilot", kill_switch=False)
+        reset = c.post("/autonomy/reactor/guardrail/reset", json={"reason": "manual recovery"})
+        assert reset.status_code == 200
+        payload = reset.json()
+        receipt = payload.get("receipt", {})
+        assert receipt.get("kind") == "autonomy.reactor.guardrail.reset"
+        assert receipt.get("reason") == "manual recovery"
+        after = receipt.get("after", {})
+        assert int(after.get("cooldown_remaining_ticks", 0)) == 0
+        assert int(after.get("consecutive_retry_pressure_ticks", 0)) == 0
+        assert int(after.get("escalations_count", 0)) == 4
+
+        history = c.get("/autonomy/reactor/guardrail/history", params={"limit": 10})
+        assert history.status_code == 200
+        rows = history.json().get("history", [])
+        assert any(str(item.get("kind", "")) == "autonomy.reactor.guardrail.reset" for item in rows)
+    finally:
+        _restore(_guardrail_file(), guardrail_before)
+        _restore(_guardrail_history_file(), guardrail_history_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
