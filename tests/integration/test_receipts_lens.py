@@ -40,6 +40,19 @@ def test_receipts_and_run_lookup() -> None:
     assert run_payload["count"] >= 1
 
 
+def test_receipts_trust_latest_endpoint_available() -> None:
+    c = TestClient(app)
+    mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
+    assert mode.status_code == 200
+
+    trust = c.get("/receipts/trust/latest", params={"limit": 10})
+    assert trust.status_code == 200
+    payload = trust.json()
+    assert payload["status"] == "ok"
+    assert "trust_receipts" in payload
+    assert "filters" in payload
+
+
 def test_lens_state_and_actions() -> None:
     c = TestClient(app)
     mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
@@ -431,6 +444,8 @@ def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
         assert "verification_status" in dispatch
         assert "confidence" in dispatch
         assert "can_claim_done" in dispatch
+        assert dispatch.get("completion_state") in {"done", "incomplete", None}
+        assert dispatch.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
         blockers = payload.get("blockers", {})
         assert blockers.get("autonomy_dispatch_halted") is True
         assert blockers.get("autonomy_dispatch_budget_halt") is True
@@ -441,6 +456,7 @@ def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
         chips = actions.json().get("action_chips", [])
         dispatch_chip = [chip for chip in chips if chip.get("kind") == "autonomy.dispatch"]
         assert dispatch_chip
+        assert dispatch_chip[0].get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
         queue_telemetry = dispatch_chip[0].get("queue_telemetry", {})
         assert queue_telemetry.get("last_halted_reason") == "dispatch_action_budget_exceeded"
         assert int(queue_telemetry.get("last_max_dispatch_actions", 0)) == 2
@@ -448,6 +464,7 @@ def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
         assert "last_verification_status" in queue_telemetry
         assert "last_confidence" in queue_telemetry
         assert "last_can_claim_done" in queue_telemetry
+        assert "last_completion_state" in queue_telemetry
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
         last_dispatch_path.write_text(last_before, encoding="utf-8")
@@ -545,6 +562,8 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         assert "verification_status" in reactor
         assert "confidence" in reactor
         assert "can_claim_done" in reactor
+        assert reactor.get("completion_state") in {"done", "incomplete", None}
+        assert reactor.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
         guardrail = reactor.get("guardrail", {})
         assert int(guardrail.get("cooldown_remaining_ticks", 0)) == 2
         assert int(guardrail.get("escalations_count", 0)) == 3
@@ -562,12 +581,14 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         reactor_chip = [chip for chip in chips if chip.get("kind") == "autonomy.reactor.tick"]
         assert reactor_chip
         assert reactor_chip[0].get("enabled") is True
+        assert reactor_chip[0].get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
         telemetry = reactor_chip[0].get("queue_telemetry", {})
         assert int(telemetry.get("queued_retry_count", 0)) >= 1
         assert telemetry.get("last_tick_halted_reason") == "dispatch_runtime_budget_exceeded"
         assert "last_tick_verification_status" in telemetry
         assert "last_tick_confidence" in telemetry
         assert "last_tick_can_claim_done" in telemetry
+        assert "last_tick_completion_state" in telemetry
         assert int(telemetry.get("last_tick_retried_count", 0)) == 1
         assert telemetry.get("guardrail_cooldown_active") is True
         assert int(telemetry.get("guardrail_cooldown_remaining_ticks", 0)) == 2
@@ -576,6 +597,7 @@ def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
         reset_chip = [chip for chip in chips if chip.get("kind") == "autonomy.reactor.guardrail.reset"]
         assert reset_chip
         assert reset_chip[0].get("enabled") is True
+        assert reset_chip[0].get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
         reset_telemetry = reset_chip[0].get("queue_telemetry", {})
         assert reset_telemetry.get("guardrail_cooldown_active") is True
         assert int(reset_telemetry.get("guardrail_cooldown_remaining_ticks", 0)) == 2

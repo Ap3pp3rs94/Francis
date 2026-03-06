@@ -36,6 +36,7 @@ def capabilities() -> dict:
             "autonomy.reactor.guardrail.reset",
             "control",
             "receipts",
+            "receipts.trust.latest",
             "lens",
             "telemetry",
         ],

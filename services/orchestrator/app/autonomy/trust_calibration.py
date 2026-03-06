@@ -29,6 +29,26 @@ def _count_cycle_blocked(cycle: dict[str, Any]) -> int:
     return _safe_int(cycle.get("blocked_count"), 0)
 
 
+def trust_badge(*, confidence: str | None, can_claim_done: bool | None = None) -> str:
+    normalized = str(confidence or "").strip().lower()
+    if normalized == "confirmed" and bool(can_claim_done):
+        return "Confirmed"
+    if normalized == "likely":
+        return "Likely"
+    if normalized == "confirmed":
+        return "Likely"
+    return "Uncertain"
+
+
+def completion_state(verification: dict[str, Any] | None) -> str:
+    row = verification if isinstance(verification, dict) else {}
+    status = str(row.get("verification_status", "")).strip().lower()
+    can_claim_done = bool(row.get("can_claim_done"))
+    if status == "verified" and can_claim_done:
+        return "done"
+    return "incomplete"
+
+
 def calibrate_cycle_result(cycle: dict[str, Any]) -> dict[str, Any]:
     halted_reason = _normalized_halted_reason(cycle.get("halted_reason"))
     executed_count = _count_cycle_executed(cycle)

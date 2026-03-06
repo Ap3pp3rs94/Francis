@@ -198,6 +198,8 @@ def test_autonomy_event_dispatch_processes_due_event() -> None:
         assert verification.get("verification_status") in {"verified", "partial", "uncertain"}
         assert verification.get("confidence") in {"confirmed", "likely", "uncertain"}
         assert isinstance(verification.get("can_claim_done"), bool)
+        assert payload.get("completion_state") in {"done", "incomplete"}
+        assert payload.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
 
         queue = c.get("/autonomy/events/queue")
         assert queue.status_code == 200
@@ -539,6 +541,8 @@ def test_autonomy_dispatch_halts_when_critical_incident_open() -> None:
         assert verification.get("verification_status") == "blocked"
         assert verification.get("confidence") == "uncertain"
         assert verification.get("can_claim_done") is False
+        assert payload.get("completion_state") == "incomplete"
+        assert payload.get("trust_badge") == "Uncertain"
 
         queue = payload.get("queue", {})
         assert int(queue.get("queued_count", 0)) >= 1
@@ -889,6 +893,8 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         assert int(dispatch.get("processed_count", 0)) >= 1
         assert verification.get("verification_status") in {"verified", "partial", "uncertain"}
         assert verification.get("confidence") in {"confirmed", "likely", "uncertain"}
+        assert payload.get("completion_state") in {"done", "incomplete"}
+        assert payload.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
 
         tick_summary = payload.get("tick", {})
         assert tick_summary.get("kind") == "autonomy.reactor.tick"
@@ -896,6 +902,8 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         tick_verification = tick_summary.get("verification", {})
         assert tick_verification.get("verification_status") in {"verified", "partial", "uncertain", "blocked"}
         assert tick_verification.get("confidence") in {"confirmed", "likely", "uncertain"}
+        assert tick_summary.get("completion_state") in {"done", "incomplete"}
+        assert tick_summary.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
 
         last = c.get("/autonomy/reactor/last")
         assert last.status_code == 200
@@ -1100,5 +1108,88 @@ def test_autonomy_reactor_guardrail_reset_requires_pilot_and_updates_receipts() 
     finally:
         _restore(_guardrail_file(), guardrail_before)
         _restore(_guardrail_history_file(), guardrail_history_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_receipts_trust_latest_filters_by_run_and_trace() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+    dispatch_history_before = _stash(_dispatch_history_file())
+    last_tick_before = _stash(_last_tick_file())
+    tick_history_before = _stash(_tick_history_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+        _restore(_dispatch_history_file(), "")
+        _restore(_last_tick_file(), "{}")
+        _restore(_tick_history_file(), "")
+
+        enqueue = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.trust_receipt_test",
+                "source": "pytest",
+                "priority": "normal",
+                "payload": {"test": True},
+            },
+        )
+        assert enqueue.status_code == 200
+
+        dispatch = c.post(
+            "/autonomy/events/dispatch",
+            json={
+                "max_events": 1,
+                "max_actions": 0,
+                "max_runtime_seconds": 5,
+                "allow_medium": False,
+                "allow_high": False,
+                "stop_on_critical": False,
+            },
+        )
+        assert dispatch.status_code == 200
+        dispatch_payload = dispatch.json()
+        dispatch_run_id = str(dispatch_payload.get("run_id", ""))
+        assert dispatch_run_id
+        assert str(dispatch_payload.get("trace_id", "")) == dispatch_run_id
+
+        all_rows = c.get("/receipts/trust/latest", params={"limit": 50})
+        assert all_rows.status_code == 200
+        all_payload = all_rows.json()
+        assert all_payload["status"] == "ok"
+        rows = all_payload.get("trust_receipts", [])
+        assert any(str(item.get("run_id", "")) == dispatch_run_id for item in rows)
+
+        by_run = c.get("/receipts/trust/latest", params={"run_id": dispatch_run_id, "limit": 50})
+        assert by_run.status_code == 200
+        by_run_rows = by_run.json().get("trust_receipts", [])
+        assert by_run_rows
+        assert all(
+            str(item.get("run_id", "")) == dispatch_run_id or str(item.get("trace_id", "")) == dispatch_run_id
+            for item in by_run_rows
+        )
+
+        by_trace = c.get("/receipts/trust/latest", params={"trace_id": dispatch_run_id, "limit": 50})
+        assert by_trace.status_code == 200
+        by_trace_rows = by_trace.json().get("trust_receipts", [])
+        assert by_trace_rows
+        assert all(str(item.get("trace_id", "")) == dispatch_run_id for item in by_trace_rows)
+        assert all("verification_status" in item and "confidence" in item for item in by_trace_rows)
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _restore(_dispatch_history_file(), dispatch_history_before)
+        _restore(_last_tick_file(), last_tick_before)
+        _restore(_tick_history_file(), tick_history_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

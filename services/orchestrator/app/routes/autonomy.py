@@ -43,6 +43,8 @@ from services.orchestrator.app.autonomy.trust_calibration import (
     calibrate_cycle_result,
     calibrate_dispatch_result,
     calibrate_reactor_tick,
+    completion_state,
+    trust_badge,
 )
 from services.orchestrator.app.control_state import check_action_allowed
 
@@ -289,6 +291,7 @@ def autonomy_reactor_guardrail_reset(
         "id": str(uuid4()),
         "ts": utc_now_iso(),
         "run_id": run_id,
+        "trace_id": run_id,
         "kind": "autonomy.reactor.guardrail.reset",
         "reason": reason,
         "before": before,
@@ -302,6 +305,7 @@ def autonomy_reactor_guardrail_reset(
 def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest | None = None) -> dict:
     body = payload or AutonomyDispatchRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = run_id
     role = _role_from_request(request)
     dispatch_started = time.monotonic()
     _enforce_rbac(request, "autonomy.dispatch")
@@ -425,6 +429,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                 processed.append(
                     {
                         "event": completed if isinstance(completed, dict) else event,
+                        "trace_id": trace_id,
                         "cycle": {
                             "run_id": cycle.get("run_id"),
                             "halted_reason": cycle.get("halted_reason"),
@@ -484,6 +489,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     dispatch_summary = {
         "status": "ok",
         "run_id": run_id,
+        "trace_id": trace_id,
         "leased_count": len(leased),
         "recovered_count": int(recovery.get("recovered_count", 0)),
         "processed_count": len(processed),
@@ -527,6 +533,11 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         critical_incident_count=critical_incident_count,
         processed=processed,
     )
+    dispatch_summary["completion_state"] = completion_state(dispatch_summary["verification"])
+    dispatch_summary["trust_badge"] = trust_badge(
+        confidence=str(dispatch_summary["verification"].get("confidence", "")),
+        can_claim_done=bool(dispatch_summary["verification"].get("can_claim_done")),
+    )
     write_last_dispatch(_fs, payload=dispatch_summary)
     append_dispatch_history(
         _fs,
@@ -534,6 +545,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": run_id,
+            "trace_id": trace_id,
             "kind": "autonomy.dispatch",
             "leased_count": len(leased),
             "recovered_count": int(recovery.get("recovered_count", 0)),
@@ -550,6 +562,8 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
             "confidence": dispatch_summary["verification"].get("confidence"),
             "can_claim_done": dispatch_summary["verification"].get("can_claim_done"),
             "claim": dispatch_summary["verification"].get("claim"),
+            "completion_state": dispatch_summary.get("completion_state"),
+            "trust_badge": dispatch_summary.get("trust_badge"),
             "config": dispatch_summary.get("config", {}),
         },
     )
@@ -561,6 +575,7 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
 def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest | None = None) -> dict:
     body = payload or AutonomyReactorTickRequest()
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = run_id
     queue_before = queue_status(_fs, limit=100)
     retry_pressure_count_before = int(queue_before.get("queued_retry_count", 0))
     guardrail_before = read_reactor_guardrail_state(_fs)
@@ -695,6 +710,7 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
             "id": str(uuid4()),
             "ts": utc_now_iso(),
             "run_id": run_id,
+            "trace_id": trace_id,
             "kind": "autonomy.reactor.guardrail.tick",
             **guardrail_receipt,
         },
@@ -703,6 +719,7 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         "id": str(uuid4()),
         "ts": utc_now_iso(),
         "run_id": run_id,
+        "trace_id": trace_id,
         "kind": "autonomy.reactor.tick",
         "collect": {
             "seen_count": int(collect_result.get("seen_count", 0)),
@@ -743,15 +760,23 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         dispatch_result=dispatch_result if isinstance(dispatch_result, dict) else {},
         guardrail_receipt=guardrail_receipt,
     )
+    tick_summary["completion_state"] = completion_state(tick_summary["verification"])
+    tick_summary["trust_badge"] = trust_badge(
+        confidence=str(tick_summary["verification"].get("confidence", "")),
+        can_claim_done=bool(tick_summary["verification"].get("can_claim_done")),
+    )
     write_last_tick(_fs, payload=tick_summary)
     append_tick_history(_fs, payload=tick_summary)
     return {
         "status": "ok",
         "run_id": run_id,
+        "trace_id": trace_id,
         "collect": collect_result,
         "dispatch": dispatch_result,
         "guardrail": guardrail_receipt,
         "verification": tick_summary["verification"],
+        "completion_state": tick_summary["completion_state"],
+        "trust_badge": tick_summary["trust_badge"],
         "tick": tick_summary,
         "queue": queue_after,
     }

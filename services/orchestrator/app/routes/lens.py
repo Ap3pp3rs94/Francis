@@ -21,6 +21,7 @@ from services.orchestrator.app.autonomy.event_queue import (
 )
 from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.intent_engine import collect_intents
+from services.orchestrator.app.autonomy.trust_calibration import trust_badge
 from services.orchestrator.app.control_state import check_action_allowed
 from services.orchestrator.app.telemetry_store import status as telemetry_status
 
@@ -156,6 +157,11 @@ def lens_state() -> dict:
             "confidence": dispatch_verification.get("confidence"),
             "can_claim_done": bool(dispatch_verification.get("can_claim_done", False)),
             "claim": dispatch_verification.get("claim"),
+            "completion_state": autonomy_last_dispatch.get("completion_state"),
+            "trust_badge": trust_badge(
+                confidence=str(dispatch_verification.get("confidence", "")),
+                can_claim_done=bool(dispatch_verification.get("can_claim_done", False)),
+            ),
         },
         "autonomy_reactor": {
             "last_run_id": autonomy_last_tick.get("run_id"),
@@ -172,6 +178,11 @@ def lens_state() -> dict:
             "confidence": tick_verification.get("confidence"),
             "can_claim_done": bool(tick_verification.get("can_claim_done", False)),
             "claim": tick_verification.get("claim"),
+            "completion_state": autonomy_last_tick.get("completion_state"),
+            "trust_badge": trust_badge(
+                confidence=str(tick_verification.get("confidence", "")),
+                can_claim_done=bool(tick_verification.get("can_claim_done", False)),
+            ),
             "guardrail": {
                 "tick_count": int(autonomy_guardrail.get("tick_count", 0)),
                 "consecutive_retry_pressure_ticks": int(
@@ -311,6 +322,7 @@ def lens_actions(max_actions: int = 6) -> dict:
             "reason": action.get("reason", ""),
             "policy_reason": action.get("policy_reason", ""),
             "risk_tier": action.get("risk_tier", "low"),
+            "trust_badge": "Likely" if bool(action.get("allowed")) else "Uncertain",
         }
         if kind == "worker.cycle":
             chip["lease_telemetry"] = {
@@ -342,6 +354,10 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "reason": f"{autonomy_queued_count} queued autonomy event(s)",
                 "policy_reason": policy_reason,
                 "risk_tier": "medium" if autonomy_high_risk_due == 0 else "high",
+                "trust_badge": trust_badge(
+                    confidence=str(dispatch_verification.get("confidence", "")),
+                    can_claim_done=bool(dispatch_verification.get("can_claim_done", False)),
+                ),
                 "queue_telemetry": {
                     "queued_count": autonomy_queued_count,
                     "high_risk_due_count": autonomy_high_risk_due,
@@ -351,6 +367,7 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "last_verification_status": dispatch_verification.get("verification_status"),
                     "last_confidence": dispatch_verification.get("confidence"),
                     "last_can_claim_done": bool(dispatch_verification.get("can_claim_done", False)),
+                    "last_completion_state": autonomy_last_dispatch.get("completion_state"),
                 },
             }
         )
@@ -368,6 +385,7 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "reason": f"{autonomy_leased_expired_count} stale leased autonomy event(s)",
                 "policy_reason": recover_policy_reason,
                 "risk_tier": "low",
+                "trust_badge": "Likely" if recover_enabled else "Uncertain",
                 "queue_telemetry": {
                     "leased_expired_count": autonomy_leased_expired_count,
                 },
@@ -399,6 +417,10 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "reason": "; ".join(reason_parts) if reason_parts else "reactor health check",
                 "policy_reason": tick_policy_reason,
                 "risk_tier": risk_tier,
+                "trust_badge": trust_badge(
+                    confidence=str(tick_verification.get("confidence", "")),
+                    can_claim_done=bool(tick_verification.get("can_claim_done", False)),
+                ),
                 "queue_telemetry": {
                     "queued_retry_count": autonomy_retry_pressure,
                     "last_tick_halted_reason": tick_halted_reason or None,
@@ -408,6 +430,7 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "last_tick_verification_status": tick_verification.get("verification_status"),
                     "last_tick_confidence": tick_verification.get("confidence"),
                     "last_tick_can_claim_done": bool(tick_verification.get("can_claim_done", False)),
+                    "last_tick_completion_state": autonomy_last_tick.get("completion_state"),
                     "last_tick_processed_count": int(tick_dispatch.get("processed_count", 0)),
                     "last_tick_failed_count": int(tick_dispatch.get("failed_count", 0)),
                     "last_tick_retried_count": int(tick_dispatch.get("retried_count", 0)),
@@ -429,6 +452,7 @@ def lens_actions(max_actions: int = 6) -> dict:
                 "reason": f"cooldown active ({guardrail_cooldown_remaining} tick(s) remaining)",
                 "policy_reason": reset_policy_reason,
                 "risk_tier": "low",
+                "trust_badge": "Likely" if reset_enabled else "Uncertain",
                 "queue_telemetry": {
                     "guardrail_cooldown_active": guardrail_cooldown_active,
                     "guardrail_cooldown_remaining_ticks": guardrail_cooldown_remaining,
