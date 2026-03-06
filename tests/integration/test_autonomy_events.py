@@ -23,6 +23,14 @@ def _last_dispatch_file() -> Path:
     return _workspace_root() / "autonomy" / "last_dispatch.json"
 
 
+def _approvals_file() -> Path:
+    return _workspace_root() / "approvals" / "requests.jsonl"
+
+
+def _decisions_file() -> Path:
+    return _workspace_root() / "journals" / "decisions.jsonl"
+
+
 def _get_mode(client: TestClient) -> dict:
     response = client.get("/control/mode")
     assert response.status_code == 200
@@ -210,5 +218,89 @@ def test_autonomy_event_queue_rbac_and_control_enforced() -> None:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
         _restore(_last_dispatch_file(), last_dispatch_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_dispatch_high_risk_requires_approval() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    with_autonomy = _scope_with_app(original_scope, "autonomy")
+    test_scope = _scope_with_app(with_autonomy, "approvals")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+    approvals_before = _stash(_approvals_file())
+    decisions_before = _stash(_decisions_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+        _restore(_approvals_file(), "")
+        _restore(_decisions_file(), "")
+
+        enqueue = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "telemetry.critical_present",
+                "source": "telemetry",
+                "priority": "critical",
+                "payload": {"count": 1},
+            },
+        )
+        assert enqueue.status_code == 200
+        assert enqueue.json()["event"]["risk_tier"] in {"high", "critical"}
+
+        blocked = c.post(
+            "/autonomy/events/dispatch",
+            json={
+                "max_events": 1,
+                "max_actions": 0,
+                "max_runtime_seconds": 5,
+                "allow_medium": False,
+                "allow_high": False,
+                "stop_on_critical": False,
+            },
+        )
+        assert blocked.status_code == 403
+        detail = blocked.json().get("detail", {})
+        assert isinstance(detail, dict)
+        assert detail.get("action") == "autonomy.dispatch.high_risk"
+        approval_id = str(detail.get("approval_request_id", ""))
+        assert approval_id
+
+        decided = c.post(
+            f"/approvals/{approval_id}/decision",
+            json={"decision": "approved", "note": "allow high-risk autonomy dispatch"},
+        )
+        assert decided.status_code == 200
+
+        dispatched = c.post(
+            "/autonomy/events/dispatch",
+            headers={"x-approval-id": approval_id},
+            json={
+                "max_events": 1,
+                "max_actions": 0,
+                "max_runtime_seconds": 5,
+                "allow_medium": False,
+                "allow_high": False,
+                "stop_on_critical": False,
+            },
+        )
+        assert dispatched.status_code == 200
+        payload = dispatched.json()
+        assert payload["status"] == "ok"
+        assert payload["processed_count"] >= 1
+        assert payload.get("approval_id") == approval_id
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _restore(_approvals_file(), approvals_before)
+        _restore(_decisions_file(), decisions_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
