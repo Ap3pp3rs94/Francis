@@ -1433,6 +1433,22 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             )
             approve_chip["execute_via"]["payload"]["args"]["approval_id"] = first_pending_id
             action_chips.append(approve_chip)
+            reject_chip = _with_execute_hint(
+                {
+                "kind": "control.remote.approval.reject",
+                "label": "Reject Top Request",
+                "enabled": remote_decide_allowed,
+                "reason": f"Reject request {first_pending_id[:8]}... from Lens.",
+                "policy_reason": (
+                    "" if remote_decide_allowed else f"RBAC denied: role={role}, action=approvals.decide"
+                ),
+                "risk_tier": "low",
+                "trust_badge": "Likely" if remote_decide_allowed else "Uncertain",
+                "requires_confirmation": True,
+                }
+            )
+            reject_chip["execute_via"]["payload"]["args"]["approval_id"] = first_pending_id
+            action_chips.append(reject_chip)
     if takeover_status == "active":
         action_chips.append(
             _with_execute_hint(

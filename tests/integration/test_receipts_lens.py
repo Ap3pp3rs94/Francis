@@ -568,6 +568,14 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         approval_id = str(approval_request.json().get("approval", {}).get("id", "")).strip()
         assert approval_id
 
+        approval_request_two = c.post(
+            "/approvals/request",
+            json={"action": "tools.run", "reason": "lens remote reject test", "metadata": {"source": "pytest"}},
+        )
+        assert approval_request_two.status_code == 200
+        approval_id_two = str(approval_request_two.json().get("approval", {}).get("id", "")).strip()
+        assert approval_id_two
+
         actions_active = c.get("/lens/actions")
         assert actions_active.status_code == 200
         chips_active = actions_active.json().get("action_chips", [])
@@ -575,6 +583,7 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         assert any(str(chip.get("kind", "")) == "control.remote.approvals" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.feed" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.approval.approve" for chip in chips_active)
+        assert any(str(chip.get("kind", "")) == "control.remote.approval.reject" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.panic" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.remote.takeover.handback" for chip in chips_active)
         assert any(str(chip.get("kind", "")) == "control.takeover.sessions" for chip in chips_active)
@@ -621,6 +630,19 @@ def test_lens_execute_takeover_activity_and_package_reads_supported() -> None:
         approval_after = c.get(f"/approvals/{approval_id}")
         assert approval_after.status_code == 200
         assert approval_after.json().get("approval", {}).get("status") == "approved"
+
+        remote_reject = c.post(
+            "/lens/actions/execute",
+            json={"kind": "control.remote.approval.reject", "args": {"approval_id": approval_id_two, "note": "lens reject"}},
+        )
+        assert remote_reject.status_code == 200
+        remote_reject_payload = remote_reject.json()
+        assert remote_reject_payload["status"] == "ok"
+        assert remote_reject_payload["result"]["summary"]["approval"]["status"] == "rejected"
+
+        approval_after_reject = c.get(f"/approvals/{approval_id_two}")
+        assert approval_after_reject.status_code == 200
+        assert approval_after_reject.json().get("approval", {}).get("status") == "rejected"
 
         read_sessions = c.post(
             "/lens/actions/execute",
