@@ -11,6 +11,7 @@ from francis_core.workspace_fs import WorkspaceFS
 AUTONOMY_EVENTS_PATH = "autonomy/events.jsonl"
 AUTONOMY_DEADLETTER_PATH = "autonomy/deadletter.jsonl"
 AUTONOMY_LAST_DISPATCH_PATH = "autonomy/last_dispatch.json"
+AUTONOMY_DISPATCH_HISTORY_PATH = "autonomy/dispatch_history.jsonl"
 VALID_PRIORITIES = {"low", "normal", "high", "critical"}
 VALID_RISK_TIERS = {"low", "medium", "high", "critical"}
 DEFAULT_LEASE_TTL_SECONDS = 300
@@ -403,3 +404,15 @@ def write_last_dispatch(fs: WorkspaceFS, *, payload: dict[str, Any]) -> None:
 def read_last_dispatch(fs: WorkspaceFS) -> dict[str, Any]:
     parsed = _read_json(fs, AUTONOMY_LAST_DISPATCH_PATH, {})
     return parsed if isinstance(parsed, dict) else {}
+
+
+def append_dispatch_history(fs: WorkspaceFS, *, payload: dict[str, Any]) -> None:
+    _append_jsonl(fs, AUTONOMY_DISPATCH_HISTORY_PATH, payload)
+
+
+def read_dispatch_history(fs: WorkspaceFS, *, limit: int = 50) -> list[dict[str, Any]]:
+    rows = _read_jsonl(fs, AUTONOMY_DISPATCH_HISTORY_PATH)
+    n = max(0, min(_safe_int(limit, 50), 500))
+    if n == 0:
+        return []
+    return rows[-n:]
