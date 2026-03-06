@@ -28,6 +28,7 @@ def capabilities() -> dict:
             "autonomy.events.dispatch",
             "autonomy.events.recover",
             "autonomy.events.history",
+            "autonomy.reactor.tick",
             "control",
             "receipts",
             "lens",
