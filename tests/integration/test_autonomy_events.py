@@ -575,7 +575,7 @@ def test_autonomy_dispatch_action_budget_requeues_remaining_events() -> None:
                 "max_events": 2,
                 "max_actions": 1,
                 "max_runtime_seconds": 10,
-                "max_dispatch_actions": 1,
+                "max_dispatch_actions": 0,
                 "max_dispatch_runtime_seconds": 30,
                 "allow_medium": False,
                 "allow_high": False,
@@ -586,17 +586,17 @@ def test_autonomy_dispatch_action_budget_requeues_remaining_events() -> None:
         payload = dispatch.json()
         assert payload["status"] == "ok"
         assert payload["leased_count"] == 2
-        assert payload["processed_count"] >= 1
+        assert payload["processed_count"] == 0
         assert payload["failed_count"] == 0
-        assert payload["released_count"] >= 1
+        assert payload["released_count"] == 2
         assert payload["halted_reason"] == "dispatch_action_budget_exceeded"
-        assert int(payload.get("dispatch_executed_actions", 0)) >= 1
+        assert int(payload.get("dispatch_executed_actions", 0)) == 0
 
         queue = c.get("/autonomy/events/queue")
         assert queue.status_code == 200
         q = queue.json().get("queue", {})
-        assert int(q.get("queued_count", 0)) >= 1
-        assert int(q.get("dispatched_count", 0)) >= 1
+        assert int(q.get("queued_count", 0)) >= 2
+        assert int(q.get("dispatched_count", 0)) == 0
     finally:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
