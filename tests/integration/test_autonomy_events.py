@@ -41,6 +41,10 @@ def _tick_history_file() -> Path:
     return _workspace_root() / "autonomy" / "tick_history.jsonl"
 
 
+def _guardrail_file() -> Path:
+    return _workspace_root() / "autonomy" / "reactor_guardrail_state.json"
+
+
 def _incidents_file() -> Path:
     return _workspace_root() / "incidents" / "incidents.jsonl"
 
@@ -895,5 +899,114 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         _restore(_last_dispatch_file(), last_dispatch_before)
         _restore(_last_tick_file(), last_tick_before)
         _restore(_tick_history_file(), tick_history_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_reactor_guardrail_cooldown_on_retry_pressure() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+    last_tick_before = _stash(_last_tick_file())
+    tick_history_before = _stash(_tick_history_file())
+    guardrail_before = _stash(_guardrail_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(
+            _events_file(),
+            (
+                '{"id":"evt-retry-1","ts":"2026-01-01T00:00:00+00:00","run_id":"r-retry","kind":"autonomy.event",'
+                '"event_type":"manual.retry_pressure","source":"pytest","priority":"normal","risk_tier":"low",'
+                '"payload":{},"status":"queued","attempts":2,"next_run_after":"2020-01-01T00:00:00+00:00",'
+                '"dedupe_key":"retry-pressure","lease_id":null,"lease_owner":null,"leased_at":null,'
+                '"completed_at":null,"dispatch_run_id":null,"error":"retry pending","last_error":"retry pending",'
+                '"last_failed_at":"2026-01-01T00:00:00+00:00","retry_backoff_seconds":120,"max_attempts":3}\n'
+            ),
+        )
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+        _restore(_last_tick_file(), "{}")
+        _restore(_tick_history_file(), "")
+        _restore(_guardrail_file(), "{}")
+
+        tick1 = c.post(
+            "/autonomy/reactor/tick",
+            json={
+                "max_collect_events": 1,
+                "include_types": ["observer.scan_due"],
+                "max_events": 1,
+                "max_actions": 0,
+                "max_dispatch_actions": 0,
+                "stop_on_critical": False,
+                "retry_pressure_threshold": 1,
+                "retry_pressure_consecutive_ticks": 2,
+                "retry_pressure_cooldown_ticks": 2,
+            },
+        )
+        assert tick1.status_code == 200
+        payload1 = tick1.json()
+        guardrail1 = payload1.get("guardrail", {})
+        assert guardrail1.get("cooldown_active") is False
+        assert int(guardrail1.get("state_after", {}).get("consecutive_retry_pressure_ticks", 0)) == 1
+
+        tick2 = c.post(
+            "/autonomy/reactor/tick",
+            json={
+                "max_collect_events": 1,
+                "include_types": ["observer.scan_due"],
+                "max_events": 1,
+                "max_actions": 0,
+                "max_dispatch_actions": 0,
+                "stop_on_critical": False,
+                "retry_pressure_threshold": 1,
+                "retry_pressure_consecutive_ticks": 2,
+                "retry_pressure_cooldown_ticks": 2,
+            },
+        )
+        assert tick2.status_code == 200
+        payload2 = tick2.json()
+        guardrail2 = payload2.get("guardrail", {})
+        assert guardrail2.get("cooldown_active") is True
+        assert guardrail2.get("escalated") is True
+        assert payload2.get("dispatch", {}).get("halted_reason") == "retry_pressure_cooldown"
+
+        tick3 = c.post(
+            "/autonomy/reactor/tick",
+            json={
+                "max_collect_events": 1,
+                "include_types": ["observer.scan_due"],
+                "max_events": 1,
+                "max_actions": 0,
+                "max_dispatch_actions": 0,
+                "stop_on_critical": False,
+                "retry_pressure_threshold": 1,
+                "retry_pressure_consecutive_ticks": 2,
+                "retry_pressure_cooldown_ticks": 2,
+            },
+        )
+        assert tick3.status_code == 200
+        payload3 = tick3.json()
+        guardrail3 = payload3.get("guardrail", {})
+        assert guardrail3.get("cooldown_active") is True
+        assert payload3.get("dispatch", {}).get("halted_reason") == "retry_pressure_cooldown"
+
+        guardrail_read = c.get("/autonomy/reactor/guardrail")
+        assert guardrail_read.status_code == 200
+        g = guardrail_read.json().get("guardrail", {})
+        assert int(g.get("escalations_count", 0)) >= 1
+        assert int(g.get("tick_count", 0)) >= 3
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _restore(_last_tick_file(), last_tick_before)
+        _restore(_tick_history_file(), tick_history_before)
+        _restore(_guardrail_file(), guardrail_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
