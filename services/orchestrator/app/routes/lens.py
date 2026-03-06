@@ -94,6 +94,7 @@ def lens_state() -> dict:
     tick_halted_reason = str(tick_dispatch.get("halted_reason", "")).strip()
     tick_halted = bool(tick_halted_reason) and tick_halted_reason != "completed"
     guardrail_cooldown_active = int(autonomy_guardrail.get("cooldown_remaining_ticks", 0)) > 0
+    manual_reset_available = str(control.get("mode", "observe")).strip().lower() == "pilot"
     autonomy_high_risk_due = sum(
         1
         for row in autonomy_queue.get("queued", [])
@@ -162,6 +163,7 @@ def lens_state() -> dict:
                 "escalations_count": int(autonomy_guardrail.get("escalations_count", 0)),
                 "last_retry_pressure_count": int(autonomy_guardrail.get("last_retry_pressure_count", 0)),
                 "last_reason": autonomy_guardrail.get("last_reason"),
+                "manual_reset_available": manual_reset_available,
                 "updated_at": autonomy_guardrail.get("updated_at"),
             },
         },
@@ -372,6 +374,27 @@ def lens_actions(max_actions: int = 6) -> dict:
                     "last_tick_failed_count": int(tick_dispatch.get("failed_count", 0)),
                     "last_tick_retried_count": int(tick_dispatch.get("retried_count", 0)),
                     "last_tick_released_count": int(tick_dispatch.get("released_count", 0)),
+                },
+            }
+        )
+    if guardrail_cooldown_active:
+        mode = str(control.get("mode", "observe")).strip().lower()
+        reset_enabled = mode == "pilot"
+        reset_policy_reason = ""
+        if not reset_enabled:
+            reset_policy_reason = "manual guardrail reset requires pilot mode"
+        action_chips.append(
+            {
+                "kind": "autonomy.reactor.guardrail.reset",
+                "label": "Reset Reactor Cooldown",
+                "enabled": reset_enabled,
+                "reason": f"cooldown active ({guardrail_cooldown_remaining} tick(s) remaining)",
+                "policy_reason": reset_policy_reason,
+                "risk_tier": "low",
+                "queue_telemetry": {
+                    "guardrail_cooldown_active": guardrail_cooldown_active,
+                    "guardrail_cooldown_remaining_ticks": guardrail_cooldown_remaining,
+                    "guardrail_escalations_count": int(autonomy_guardrail.get("escalations_count", 0)),
                 },
             }
         )
