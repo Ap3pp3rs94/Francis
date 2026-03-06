@@ -305,3 +305,57 @@ def test_lens_surfaces_autonomy_event_queue_and_dispatch_chip() -> None:
         assert "approval required" in str(dispatch_chip[0].get("policy_reason", "")).lower()
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
+
+
+def test_lens_surfaces_autonomy_stale_lease_recovery_chip() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    autonomy_events_path = workspace / "autonomy" / "events.jsonl"
+    events_before = autonomy_events_path.read_text(encoding="utf-8") if autonomy_events_path.exists() else ""
+    try:
+        autonomy_events_path.parent.mkdir(parents=True, exist_ok=True)
+        leased_expired_event = {
+            "id": str(uuid4()),
+            "ts": "2026-01-01T00:00:00+00:00",
+            "run_id": str(uuid4()),
+            "kind": "autonomy.event",
+            "event_type": "manual.recover_test",
+            "source": "pytest",
+            "priority": "high",
+            "risk_tier": "medium",
+            "payload": {"x": 1},
+            "status": "leased",
+            "attempts": 1,
+            "next_run_after": "2026-01-01T00:00:00+00:00",
+            "dedupe_key": "lens-recover-test",
+            "lease_id": str(uuid4()),
+            "lease_owner": "worker-x",
+            "leased_at": "2020-01-01T00:00:00+00:00",
+            "lease_expires_at": "2020-01-01T00:05:00+00:00",
+            "completed_at": None,
+            "dispatch_run_id": None,
+            "error": None,
+        }
+        autonomy_events_path.write_text(json.dumps(leased_expired_event, ensure_ascii=False) + "\n", encoding="utf-8")
+
+        c = TestClient(app)
+        mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
+        assert mode.status_code == 200
+
+        state = c.get("/lens/state")
+        assert state.status_code == 200
+        payload = state.json()
+        autonomy_queue = payload.get("autonomy_queue", {})
+        assert int(autonomy_queue.get("leased_expired_count", 0)) >= 1
+        blockers = payload.get("blockers", {})
+        assert int(blockers.get("autonomy_queue_leased_expired", 0)) >= 1
+
+        actions = c.get("/lens/actions")
+        assert actions.status_code == 200
+        chips = actions.json().get("action_chips", [])
+        recover_chip = [chip for chip in chips if chip.get("kind") == "autonomy.recover"]
+        assert recover_chip
+        assert recover_chip[0].get("enabled") is True
+        telemetry = recover_chip[0].get("queue_telemetry", {})
+        assert int(telemetry.get("leased_expired_count", 0)) >= 1
+    finally:
+        autonomy_events_path.write_text(events_before, encoding="utf-8")
