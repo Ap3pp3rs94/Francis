@@ -22,6 +22,7 @@ from services.orchestrator.app.autonomy.event_queue import (
     read_last_dispatch,
     write_last_dispatch,
 )
+from services.orchestrator.app.autonomy.event_reactor import collect_events
 from services.orchestrator.app.autonomy.kernel import run_cycle
 from services.orchestrator.app.control_state import check_action_allowed
 
@@ -59,6 +60,11 @@ class AutonomyDispatchRequest(BaseModel):
     allow_medium: bool = False
     allow_high: bool = False
     stop_on_critical: bool = True
+
+
+class AutonomyCollectRequest(BaseModel):
+    max_events: int = Field(default=20, ge=1, le=100)
+    include_types: list[str] | None = None
 
 
 def _role_from_request(request: Request) -> str:
@@ -100,6 +106,23 @@ def _max_risk_tier(events: list[dict[str, Any]]) -> str:
         return "low"
     tiers = [str(item.get("risk_tier", "low")).strip().lower() for item in events]
     return max(tiers, key=_risk_tier_rank)
+
+
+def _event_signal_policy(event_type: str) -> tuple[str, str]:
+    normalized = str(event_type).strip().lower()
+    if normalized in {"incident.critical_open", "telemetry.critical_present"}:
+        return ("critical", "high")
+    if normalized in {
+        "telemetry.errors_present",
+        "queue.deadletter_present",
+        "worker.queue_due",
+        "worker.lease_expired",
+        "mission.jobs_queued",
+    }:
+        return ("high", "medium")
+    if normalized in {"observer.scan_due", "inbox.alerts_present", "worker.queue_backoff"}:
+        return ("normal", "low")
+    return ("normal", "low")
 
 
 @router.post("/autonomy/cycle")
@@ -265,3 +288,55 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
     write_last_dispatch(_fs, payload=dispatch_summary)
     dispatch_summary["queue"] = queue_status(_fs, limit=100)
     return dispatch_summary
+
+
+@router.post("/autonomy/events/collect")
+def autonomy_collect_events(request: Request, payload: AutonomyCollectRequest | None = None) -> dict:
+    body = payload or AutonomyCollectRequest()
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    _enforce_rbac(request, "autonomy.enqueue")
+    _enforce_control("autonomy.enqueue", mutating=True)
+
+    include_types = {
+        str(item).strip().lower()
+        for item in (body.include_types or [])
+        if isinstance(item, str) and str(item).strip()
+    }
+    snapshot = collect_events(_fs)
+    raw_events = snapshot.get("events", []) if isinstance(snapshot, dict) else []
+    event_signals = [item for item in raw_events if isinstance(item, dict) and str(item.get("type", "")).strip()]
+    if include_types:
+        event_signals = [item for item in event_signals if str(item.get("type", "")).strip().lower() in include_types]
+    event_signals = event_signals[: body.max_events]
+
+    queued: list[dict[str, Any]] = []
+    duplicates: list[dict[str, Any]] = []
+    for signal in event_signals:
+        event_type = str(signal.get("type", "")).strip().lower()
+        priority, risk_tier = _event_signal_policy(event_type)
+        dedupe_key = f"reactor:{event_type}:{str(signal.get('count', signal.get('reason', '1')))}"
+        result = enqueue_event(
+            _fs,
+            run_id=run_id,
+            event_type=event_type,
+            source="event_reactor",
+            priority=priority,
+            risk_tier=risk_tier,
+            payload=signal,
+            dedupe_key=dedupe_key,
+        )
+        if str(result.get("status", "")).strip().lower() == "duplicate":
+            duplicates.append(result.get("event", {}))
+        elif str(result.get("status", "")).strip().lower() == "ok":
+            queued.append(result.get("event", {}))
+
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "seen_count": len(event_signals),
+        "queued_count": len(queued),
+        "duplicate_count": len(duplicates),
+        "queued": queued,
+        "duplicates": duplicates,
+        "queue": queue_status(_fs, limit=100),
+    }
