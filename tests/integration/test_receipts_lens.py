@@ -445,3 +445,94 @@ def test_lens_surfaces_autonomy_dispatch_halt_and_budget_telemetry() -> None:
     finally:
         autonomy_events_path.write_text(events_before, encoding="utf-8")
         last_dispatch_path.write_text(last_before, encoding="utf-8")
+
+
+def test_lens_surfaces_autonomy_reactor_state_and_health_chip() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    autonomy_events_path = workspace / "autonomy" / "events.jsonl"
+    last_tick_path = workspace / "autonomy" / "last_tick.json"
+    events_before = autonomy_events_path.read_text(encoding="utf-8") if autonomy_events_path.exists() else ""
+    tick_before = last_tick_path.read_text(encoding="utf-8") if last_tick_path.exists() else ""
+    try:
+        autonomy_events_path.parent.mkdir(parents=True, exist_ok=True)
+        queued_retry_event = {
+            "id": str(uuid4()),
+            "ts": "2026-01-01T00:00:00+00:00",
+            "run_id": str(uuid4()),
+            "kind": "autonomy.event",
+            "event_type": "manual.retry_pressure",
+            "source": "pytest",
+            "priority": "normal",
+            "risk_tier": "low",
+            "payload": {},
+            "status": "queued",
+            "attempts": 2,
+            "next_run_after": "2020-01-01T00:00:00+00:00",
+            "dedupe_key": "lens-reactor-retry",
+            "lease_id": None,
+            "lease_owner": None,
+            "leased_at": None,
+            "completed_at": None,
+            "dispatch_run_id": None,
+            "error": "retry pending",
+            "last_error": "retry pending",
+            "last_failed_at": "2026-01-01T00:00:00+00:00",
+            "retry_backoff_seconds": 120,
+            "max_attempts": 3,
+        }
+        autonomy_events_path.write_text(json.dumps(queued_retry_event, ensure_ascii=False) + "\n", encoding="utf-8")
+        last_tick_path.write_text(
+            json.dumps(
+                {
+                    "id": str(uuid4()),
+                    "ts": "2026-01-01T01:00:00+00:00",
+                    "run_id": str(uuid4()),
+                    "kind": "autonomy.reactor.tick",
+                    "collect": {"seen_count": 5, "queued_count": 2, "duplicate_count": 1},
+                    "dispatch": {
+                        "leased_count": 2,
+                        "processed_count": 0,
+                        "failed_count": 1,
+                        "retried_count": 1,
+                        "released_count": 1,
+                        "halted_reason": "dispatch_runtime_budget_exceeded",
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        c = TestClient(app)
+        mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
+        assert mode.status_code == 200
+
+        state = c.get("/lens/state")
+        assert state.status_code == 200
+        payload = state.json()
+        autonomy_queue = payload.get("autonomy_queue", {})
+        assert int(autonomy_queue.get("queued_retry_count", 0)) >= 1
+        reactor = payload.get("autonomy_reactor", {})
+        assert reactor.get("halted") is True
+        assert reactor.get("halted_reason") == "dispatch_runtime_budget_exceeded"
+        assert int(reactor.get("collect_seen_count", 0)) == 5
+        assert int(reactor.get("dispatch_retried_count", 0)) == 1
+        blockers = payload.get("blockers", {})
+        assert int(blockers.get("autonomy_queue_retry_pressure", 0)) >= 1
+        assert blockers.get("autonomy_reactor_halted") is True
+        assert blockers.get("autonomy_reactor_halted_reason") == "dispatch_runtime_budget_exceeded"
+
+        actions = c.get("/lens/actions")
+        assert actions.status_code == 200
+        chips = actions.json().get("action_chips", [])
+        reactor_chip = [chip for chip in chips if chip.get("kind") == "autonomy.reactor.tick"]
+        assert reactor_chip
+        assert reactor_chip[0].get("enabled") is True
+        telemetry = reactor_chip[0].get("queue_telemetry", {})
+        assert int(telemetry.get("queued_retry_count", 0)) >= 1
+        assert telemetry.get("last_tick_halted_reason") == "dispatch_runtime_budget_exceeded"
+        assert int(telemetry.get("last_tick_retried_count", 0)) == 1
+    finally:
+        autonomy_events_path.write_text(events_before, encoding="utf-8")
+        last_tick_path.write_text(tick_before, encoding="utf-8")
