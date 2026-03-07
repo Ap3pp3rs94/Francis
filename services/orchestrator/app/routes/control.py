@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import time
 from pathlib import Path
@@ -733,6 +734,33 @@ def _normalize_remote_feed_source(source: str | None) -> str | None:
     return normalized
 
 
+def _parse_remote_feed_timestamp(value: str | None) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    candidate = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _normalize_remote_feed_timestamp(value: str | None, *, field_name: str) -> str | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    parsed = _parse_remote_feed_timestamp(normalized)
+    if parsed is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {field_name}: {normalized}. Expected ISO-8601 timestamp.",
+        )
+    return parsed.isoformat()
+
+
 def _build_remote_feed_rows(
     session_id: str | None = None,
     *,
@@ -740,18 +768,41 @@ def _build_remote_feed_rows(
     kind_prefix: str | None = None,
     risk_tier: str | None = None,
     source: str | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
 ) -> list[dict[str, Any]]:
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip()
     normalized_kind_prefix = str(kind_prefix or "").strip()
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     normalized_source = _normalize_remote_feed_source(source)
+    normalized_since_ts = _normalize_remote_feed_timestamp(since_ts, field_name="since_ts")
+    normalized_until_ts = _normalize_remote_feed_timestamp(until_ts, field_name="until_ts")
+    if normalized_since_ts and normalized_until_ts and normalized_since_ts > normalized_until_ts:
+        raise HTTPException(status_code=400, detail="since_ts must be <= until_ts")
+    since_dt = _parse_remote_feed_timestamp(normalized_since_ts)
+    until_dt = _parse_remote_feed_timestamp(normalized_until_ts)
     feed_rows: list[dict[str, Any]] = []
+
+    def _within_window(row_ts: str) -> bool:
+        if since_dt is None and until_dt is None:
+            return True
+        row_dt = _parse_remote_feed_timestamp(row_ts)
+        if row_dt is None:
+            return False
+        if since_dt is not None and row_dt < since_dt:
+            return False
+        if until_dt is not None and row_dt > until_dt:
+            return False
+        return True
 
     if normalized_source in {None, "takeover.activity"}:
         for row in _read_takeover_activity_rows(session_id=normalized_session_id or None):
             row_session_id = str(row.get("session_id", "")).strip()
             if normalized_session_id and row_session_id != normalized_session_id:
+                continue
+            row_ts = str(row.get("ts", "")).strip()
+            if not _within_window(row_ts):
                 continue
             row_kind = str(row.get("kind", "")).strip() or "unknown"
             row_risk_tier = _remote_feed_risk_tier(row_kind)
@@ -764,7 +815,7 @@ def _build_remote_feed_rows(
             feed_rows.append(
                 {
                     "id": str(row.get("id", "")).strip() or f"activity:{uuid4()}",
-                    "ts": str(row.get("ts", "")).strip(),
+                    "ts": row_ts,
                     "source": "takeover.activity",
                     "kind": row_kind,
                     "risk_tier": row_risk_tier,
@@ -784,6 +835,9 @@ def _build_remote_feed_rows(
             row_session_id = str(row.get("session_id", "")).strip()
             if normalized_session_id and row_session_id and row_session_id != normalized_session_id:
                 continue
+            row_ts = str(row.get("ts", "")).strip()
+            if not _within_window(row_ts):
+                continue
             row_risk_tier = _remote_feed_risk_tier(row_kind)
             if normalized_kind and row_kind != normalized_kind:
                 continue
@@ -794,7 +848,7 @@ def _build_remote_feed_rows(
             feed_rows.append(
                 {
                     "id": str(row.get("id", "")).strip() or f"decision:{uuid4()}",
-                    "ts": str(row.get("ts", "")).strip(),
+                    "ts": row_ts,
                     "source": "journals.decisions",
                     "kind": row_kind,
                     "risk_tier": row_risk_tier,
@@ -1079,6 +1133,8 @@ def control_remote_feed(
     kind_prefix: str | None = None,
     risk_tier: str | None = None,
     source: str | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
 ) -> dict:
     _enforce_remote_control("control.remote.read")
     _enforce_remote_rbac(request, "control.remote.read")
@@ -1088,12 +1144,18 @@ def control_remote_feed(
     normalized_kind_prefix = str(kind_prefix or "").strip() or None
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     normalized_source = _normalize_remote_feed_source(source)
+    normalized_since_ts = _normalize_remote_feed_timestamp(since_ts, field_name="since_ts")
+    normalized_until_ts = _normalize_remote_feed_timestamp(until_ts, field_name="until_ts")
+    if normalized_since_ts and normalized_until_ts and normalized_since_ts > normalized_until_ts:
+        raise HTTPException(status_code=400, detail="since_ts must be <= until_ts")
     rows = _build_remote_feed_rows(
         session_id=normalized_session_id or None,
         kind=normalized_kind,
         kind_prefix=normalized_kind_prefix,
         risk_tier=normalized_risk_tier,
         source=normalized_source,
+        since_ts=normalized_since_ts,
+        until_ts=normalized_until_ts,
     )
     parsed_cursor = _parse_activity_cursor(cursor)
     if parsed_cursor is None:
@@ -1110,6 +1172,8 @@ def control_remote_feed(
             "kind_prefix": normalized_kind_prefix,
             "risk_tier": normalized_risk_tier,
             "source": normalized_source,
+            "since_ts": normalized_since_ts,
+            "until_ts": normalized_until_ts,
         },
         "cursor": str(start_cursor),
         "next_cursor": str(next_cursor),
@@ -1130,6 +1194,8 @@ async def control_remote_feed_stream(
     kind_prefix: str | None = None,
     risk_tier: str | None = None,
     source: str | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
     max_seconds: int = 15,
     poll_interval_ms: int = 500,
 ) -> StreamingResponse:
@@ -1141,12 +1207,18 @@ async def control_remote_feed_stream(
     normalized_kind_prefix = str(kind_prefix or "").strip() or None
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     normalized_source = _normalize_remote_feed_source(source)
+    normalized_since_ts = _normalize_remote_feed_timestamp(since_ts, field_name="since_ts")
+    normalized_until_ts = _normalize_remote_feed_timestamp(until_ts, field_name="until_ts")
+    if normalized_since_ts and normalized_until_ts and normalized_since_ts > normalized_until_ts:
+        raise HTTPException(status_code=400, detail="since_ts must be <= until_ts")
     initial_rows = _build_remote_feed_rows(
         session_id=normalized_session_id or None,
         kind=normalized_kind,
         kind_prefix=normalized_kind_prefix,
         risk_tier=normalized_risk_tier,
         source=normalized_source,
+        since_ts=normalized_since_ts,
+        until_ts=normalized_until_ts,
     )
     parsed_cursor = _parse_activity_cursor(cursor)
     start_cursor = parsed_cursor if parsed_cursor is not None else len(initial_rows)
@@ -1166,6 +1238,8 @@ async def control_remote_feed_stream(
                 "kind_prefix": normalized_kind_prefix,
                 "risk_tier": normalized_risk_tier,
                 "source": normalized_source,
+                "since_ts": normalized_since_ts,
+                "until_ts": normalized_until_ts,
                 "cursor": str(current_cursor),
                 "max_events": max_events,
                 "max_seconds": stream_window_seconds,
@@ -1178,6 +1252,8 @@ async def control_remote_feed_stream(
                 kind_prefix=normalized_kind_prefix,
                 risk_tier=normalized_risk_tier,
                 source=normalized_source,
+                since_ts=normalized_since_ts,
+                until_ts=normalized_until_ts,
             )
             batch, next_cursor, has_more = _slice_activity_rows(
                 rows=rows,
@@ -1210,6 +1286,8 @@ async def control_remote_feed_stream(
                     "kind_prefix": normalized_kind_prefix,
                     "risk_tier": normalized_risk_tier,
                     "source": normalized_source,
+                    "since_ts": normalized_since_ts,
+                    "until_ts": normalized_until_ts,
                     "cursor": str(current_cursor),
                 },
             )
@@ -1223,6 +1301,8 @@ async def control_remote_feed_stream(
                 "kind_prefix": normalized_kind_prefix,
                 "risk_tier": normalized_risk_tier,
                 "source": normalized_source,
+                "since_ts": normalized_since_ts,
+                "until_ts": normalized_until_ts,
                 "cursor": str(current_cursor),
                 "emitted": emitted,
                 "max_events": max_events,

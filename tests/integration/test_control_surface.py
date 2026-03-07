@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from uuid import uuid4
 
@@ -71,6 +72,16 @@ def _sse_event_payloads(body: str, event_name: str) -> list[dict]:
         if isinstance(parsed, dict):
             payloads.append(parsed)
     return payloads
+
+
+def _to_utc(ts: str) -> datetime:
+    normalized = ts.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def test_control_mode_blocks_mission_create_in_observe() -> None:
@@ -669,6 +680,48 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         assert "control.remote.approval.approved" in feed_kinds
         assert "control.remote.approval.rejected" in feed_kinds
 
+        approved_rows = [
+            row
+            for row in remote_feed_payload.get("feed", [])
+            if str(row.get("kind", "")) == "control.remote.approval.approved"
+            and str(row.get("source", "")) == "journals.decisions"
+            and str(row.get("risk_tier", "")) == "low"
+        ]
+        assert approved_rows
+        since_ts = str(approved_rows[0].get("ts", "")).strip()
+        until_ts = str(approved_rows[-1].get("ts", "")).strip()
+        assert since_ts
+        assert until_ts
+
+        remote_feed_window = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={
+                "cursor": "0",
+                "kind": "control.remote.approval.approved",
+                "source": "journals.decisions",
+                "risk_tier": "low",
+                "since_ts": since_ts,
+                "until_ts": until_ts,
+                "limit": 200,
+            },
+        )
+        assert remote_feed_window.status_code == 200
+        remote_feed_window_payload = remote_feed_window.json()
+        assert remote_feed_window_payload.get("filters", {}).get("since_ts")
+        assert remote_feed_window_payload.get("filters", {}).get("until_ts")
+        window_rows = remote_feed_window_payload.get("feed", [])
+        assert window_rows
+        for row in window_rows:
+            assert str(row.get("kind", "")) == "control.remote.approval.approved"
+            assert str(row.get("source", "")) == "journals.decisions"
+            assert str(row.get("risk_tier", "")) == "low"
+            ts = str(row.get("ts", "")).strip()
+            assert ts
+            ts_dt = _to_utc(ts)
+            assert ts_dt >= _to_utc(since_ts)
+            assert ts_dt <= _to_utc(until_ts)
+
         remote_feed_page_one = c.get("/control/remote/feed", headers=headers, params={"limit": 1, "cursor": "0"})
         assert remote_feed_page_one.status_code == 200
         page_one_payload = remote_feed_page_one.json()
@@ -696,6 +749,8 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
                 "kind": "control.remote.approval.approved",
                 "source": "journals.decisions",
                 "risk_tier": "low",
+                "since_ts": since_ts,
+                "until_ts": until_ts,
                 "limit": 20,
                 "max_seconds": 1,
                 "poll_interval_ms": 25,
@@ -708,12 +763,16 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         assert filtered_meta[0].get("kind") == "control.remote.approval.approved"
         assert filtered_meta[0].get("source") == "journals.decisions"
         assert filtered_meta[0].get("risk_tier") == "low"
+        assert filtered_meta[0].get("since_ts")
+        assert filtered_meta[0].get("until_ts")
         filtered_feed_payloads = _sse_event_payloads(filtered_body, "feed")
         filtered_entries = [row.get("entry", {}) for row in filtered_feed_payloads if isinstance(row.get("entry"), dict)]
         assert filtered_entries
         assert all(str(entry.get("kind", "")) == "control.remote.approval.approved" for entry in filtered_entries)
         assert all(str(entry.get("source", "")) == "journals.decisions" for entry in filtered_entries)
         assert all(str(entry.get("risk_tier", "")) == "low" for entry in filtered_entries)
+        assert all(_to_utc(str(entry.get("ts", "")).strip()) >= _to_utc(since_ts) for entry in filtered_entries)
+        assert all(_to_utc(str(entry.get("ts", "")).strip()) <= _to_utc(until_ts) for entry in filtered_entries)
     finally:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
