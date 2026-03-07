@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -49,6 +50,27 @@ def _ensure_takeover_idle(client: TestClient) -> None:
             "/control/takeover/handback",
             json={"summary": "test reset", "verification": {}, "pending_approvals": 0, "mode": "assist"},
         )
+
+
+def _sse_event_payloads(body: str, event_name: str) -> list[dict]:
+    payloads: list[dict] = []
+    current_event = ""
+    for line in body.splitlines():
+        if line.startswith("event:"):
+            current_event = line.split(":", 1)[1].strip()
+            continue
+        if not line.startswith("data:"):
+            continue
+        if current_event != event_name:
+            continue
+        raw = line.split(":", 1)[1].strip()
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            payloads.append(parsed)
+    return payloads
 
 
 def test_control_mode_blocks_mission_create_in_observe() -> None:
@@ -665,6 +687,33 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         assert "event: meta" in stream_body
         assert "event: feed" in stream_body
         assert "event: end" in stream_body
+
+        remote_feed_stream_filtered = c.get(
+            "/control/remote/feed/stream",
+            headers=headers,
+            params={
+                "cursor": "0",
+                "kind": "control.remote.approval.approved",
+                "source": "journals.decisions",
+                "risk_tier": "low",
+                "limit": 20,
+                "max_seconds": 1,
+                "poll_interval_ms": 25,
+            },
+        )
+        assert remote_feed_stream_filtered.status_code == 200
+        filtered_body = remote_feed_stream_filtered.text
+        filtered_meta = _sse_event_payloads(filtered_body, "meta")
+        assert filtered_meta
+        assert filtered_meta[0].get("kind") == "control.remote.approval.approved"
+        assert filtered_meta[0].get("source") == "journals.decisions"
+        assert filtered_meta[0].get("risk_tier") == "low"
+        filtered_feed_payloads = _sse_event_payloads(filtered_body, "feed")
+        filtered_entries = [row.get("entry", {}) for row in filtered_feed_payloads if isinstance(row.get("entry"), dict)]
+        assert filtered_entries
+        assert all(str(entry.get("kind", "")) == "control.remote.approval.approved" for entry in filtered_entries)
+        assert all(str(entry.get("source", "")) == "journals.decisions" for entry in filtered_entries)
+        assert all(str(entry.get("risk_tier", "")) == "low" for entry in filtered_entries)
     finally:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 

@@ -159,7 +159,12 @@ def test_autonomy_can_select_worker_cycle_when_queue_due() -> None:
         c = TestClient(app)
         cycle = c.post(
             "/autonomy/cycle",
-            json={"max_actions": 3, "allow_medium": True, "stop_on_critical": False},
+            json={
+                "max_actions": 10,
+                "max_runtime_seconds": 120,
+                "allow_medium": True,
+                "stop_on_critical": False,
+            },
         )
         assert cycle.status_code == 200
         payload = cycle.json()
@@ -204,7 +209,12 @@ def test_autonomy_can_select_worker_cycle_when_leases_expired() -> None:
         c = TestClient(app)
         cycle = c.post(
             "/autonomy/cycle",
-            json={"max_actions": 3, "allow_medium": True, "stop_on_critical": False},
+            json={
+                "max_actions": 10,
+                "max_runtime_seconds": 120,
+                "allow_medium": True,
+                "stop_on_critical": False,
+            },
         )
         assert cycle.status_code == 200
         payload = cycle.json()
