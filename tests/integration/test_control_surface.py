@@ -777,6 +777,39 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_control_remote_feed_rejects_invalid_timestamp_window() -> None:
+    c = TestClient(app)
+
+    invalid_since = c.get("/control/remote/feed", params={"since_ts": "not-a-timestamp"})
+    assert invalid_since.status_code == 400
+    assert "Invalid since_ts" in str(invalid_since.json().get("detail", ""))
+
+    invalid_until = c.get("/control/remote/feed", params={"until_ts": "still-not-a-timestamp"})
+    assert invalid_until.status_code == 400
+    assert "Invalid until_ts" in str(invalid_until.json().get("detail", ""))
+
+    window_order = c.get(
+        "/control/remote/feed",
+        params={
+            "since_ts": "2026-01-02T00:00:00+00:00",
+            "until_ts": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    assert window_order.status_code == 400
+    assert "since_ts must be <= until_ts" in str(window_order.json().get("detail", ""))
+
+    stream_window_order = c.get(
+        "/control/remote/feed/stream",
+        params={
+            "since_ts": "2026-01-02T00:00:00+00:00",
+            "until_ts": "2026-01-01T00:00:00+00:00",
+            "max_seconds": 1,
+        },
+    )
+    assert stream_window_order.status_code == 400
+    assert "since_ts must be <= until_ts" in str(stream_window_order.json().get("detail", ""))
+
+
 def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
