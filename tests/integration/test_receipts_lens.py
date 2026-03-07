@@ -831,6 +831,27 @@ def test_lens_execute_remote_command_wrappers_supported() -> None:
         assert int(decisions_summary.get("count", 0)) >= 1
         assert all(str(row.get("source", "")) == "journals.decisions" for row in decisions_summary.get("feed", []))
 
+        remote_feed_prefix = c.post(
+            "/lens/actions/execute",
+            headers=headers,
+            json={
+                "kind": "control.remote.feed",
+                "args": {
+                    "session_id": session_id,
+                    "kind_prefix": "control.remote.takeover.",
+                    "limit": 100,
+                },
+            },
+        )
+        assert remote_feed_prefix.status_code == 200
+        remote_feed_prefix_payload = remote_feed_prefix.json()
+        assert remote_feed_prefix_payload["status"] == "ok"
+        prefix_summary = remote_feed_prefix_payload["result"]["summary"]
+        assert prefix_summary["status"] == "ok"
+        assert prefix_summary.get("filters", {}).get("kind_prefix") == "control.remote.takeover."
+        assert int(prefix_summary.get("count", 0)) >= 1
+        assert all(str(row.get("kind", "")).startswith("control.remote.takeover.") for row in prefix_summary.get("feed", []))
+
         actions_paused = c.get("/lens/actions")
         assert actions_paused.status_code == 200
         chips_paused = actions_paused.json().get("action_chips", [])

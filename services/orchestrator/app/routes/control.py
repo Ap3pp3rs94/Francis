@@ -737,11 +737,13 @@ def _build_remote_feed_rows(
     session_id: str | None = None,
     *,
     kind: str | None = None,
+    kind_prefix: str | None = None,
     risk_tier: str | None = None,
     source: str | None = None,
 ) -> list[dict[str, Any]]:
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip()
+    normalized_kind_prefix = str(kind_prefix or "").strip()
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     normalized_source = _normalize_remote_feed_source(source)
     feed_rows: list[dict[str, Any]] = []
@@ -754,6 +756,8 @@ def _build_remote_feed_rows(
             row_kind = str(row.get("kind", "")).strip() or "unknown"
             row_risk_tier = _remote_feed_risk_tier(row_kind)
             if normalized_kind and row_kind != normalized_kind:
+                continue
+            if normalized_kind_prefix and not row_kind.startswith(normalized_kind_prefix):
                 continue
             if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
                 continue
@@ -782,6 +786,8 @@ def _build_remote_feed_rows(
                 continue
             row_risk_tier = _remote_feed_risk_tier(row_kind)
             if normalized_kind and row_kind != normalized_kind:
+                continue
+            if normalized_kind_prefix and not row_kind.startswith(normalized_kind_prefix):
                 continue
             if normalized_risk_tier and row_risk_tier != normalized_risk_tier:
                 continue
@@ -1070,6 +1076,7 @@ def control_remote_feed(
     cursor: str | None = None,
     session_id: str | None = None,
     kind: str | None = None,
+    kind_prefix: str | None = None,
     risk_tier: str | None = None,
     source: str | None = None,
 ) -> dict:
@@ -1078,11 +1085,13 @@ def control_remote_feed(
     _enforce_remote_rbac(request, "approvals.read")
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip() or None
+    normalized_kind_prefix = str(kind_prefix or "").strip() or None
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     normalized_source = _normalize_remote_feed_source(source)
     rows = _build_remote_feed_rows(
         session_id=normalized_session_id or None,
         kind=normalized_kind,
+        kind_prefix=normalized_kind_prefix,
         risk_tier=normalized_risk_tier,
         source=normalized_source,
     )
@@ -1098,6 +1107,7 @@ def control_remote_feed(
         "session_id": normalized_session_id or None,
         "filters": {
             "kind": normalized_kind,
+            "kind_prefix": normalized_kind_prefix,
             "risk_tier": normalized_risk_tier,
             "source": normalized_source,
         },
@@ -1117,6 +1127,7 @@ async def control_remote_feed_stream(
     cursor: str | None = None,
     limit: int = 100,
     kind: str | None = None,
+    kind_prefix: str | None = None,
     risk_tier: str | None = None,
     source: str | None = None,
     max_seconds: int = 15,
@@ -1127,11 +1138,13 @@ async def control_remote_feed_stream(
     _enforce_remote_rbac(request, "approvals.read")
     normalized_session_id = str(session_id or "").strip()
     normalized_kind = str(kind or "").strip() or None
+    normalized_kind_prefix = str(kind_prefix or "").strip() or None
     normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
     normalized_source = _normalize_remote_feed_source(source)
     initial_rows = _build_remote_feed_rows(
         session_id=normalized_session_id or None,
         kind=normalized_kind,
+        kind_prefix=normalized_kind_prefix,
         risk_tier=normalized_risk_tier,
         source=normalized_source,
     )
@@ -1150,6 +1163,7 @@ async def control_remote_feed_stream(
             {
                 "session_id": normalized_session_id or None,
                 "kind": normalized_kind,
+                "kind_prefix": normalized_kind_prefix,
                 "risk_tier": normalized_risk_tier,
                 "source": normalized_source,
                 "cursor": str(current_cursor),
@@ -1161,6 +1175,7 @@ async def control_remote_feed_stream(
             rows = _build_remote_feed_rows(
                 session_id=normalized_session_id or None,
                 kind=normalized_kind,
+                kind_prefix=normalized_kind_prefix,
                 risk_tier=normalized_risk_tier,
                 source=normalized_source,
             )
@@ -1192,6 +1207,7 @@ async def control_remote_feed_stream(
                 {
                     "session_id": normalized_session_id or None,
                     "kind": normalized_kind,
+                    "kind_prefix": normalized_kind_prefix,
                     "risk_tier": normalized_risk_tier,
                     "source": normalized_source,
                     "cursor": str(current_cursor),
@@ -1204,6 +1220,7 @@ async def control_remote_feed_stream(
             {
                 "session_id": normalized_session_id or None,
                 "kind": normalized_kind,
+                "kind_prefix": normalized_kind_prefix,
                 "risk_tier": normalized_risk_tier,
                 "source": normalized_source,
                 "cursor": str(current_cursor),

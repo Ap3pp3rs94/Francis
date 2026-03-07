@@ -461,6 +461,7 @@ def _execute_lens_action(
         session_id = str(args.get("session_id", "")).strip() or None
         source = str(args.get("source", "")).strip().lower() or None
         kind = str(args.get("kind", "")).strip() or None
+        kind_prefix = str(args.get("kind_prefix", "")).strip() or None
         risk_tier = str(args.get("risk_tier", "")).strip().lower() or None
         execution_args = {
             "limit": limit,
@@ -468,6 +469,7 @@ def _execute_lens_action(
             "session_id": session_id,
             "source": source,
             "kind": kind,
+            "kind_prefix": kind_prefix,
             "risk_tier": risk_tier,
         }
         if dry_run:
@@ -479,6 +481,7 @@ def _execute_lens_action(
             session_id=session_id,
             source=source,
             kind=kind,
+            kind_prefix=kind_prefix,
             risk_tier=risk_tier,
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
@@ -971,6 +974,7 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
             "session_id": "",
             "source": "",
             "kind": "",
+            "kind_prefix": "",
             "risk_tier": "",
         }
     elif kind == "control.remote.panic":

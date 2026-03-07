@@ -830,6 +830,20 @@ def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> Non
         )
         assert remote_feed_invalid_source.status_code == 400
         assert "Invalid source" in str(remote_feed_invalid_source.json().get("detail", ""))
+
+        remote_feed_prefix = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"session_id": session_id, "kind_prefix": "control.remote.takeover.", "limit": 100},
+        )
+        assert remote_feed_prefix.status_code == 200
+        remote_feed_prefix_payload = remote_feed_prefix.json()
+        assert remote_feed_prefix_payload.get("filters", {}).get("kind_prefix") == "control.remote.takeover."
+        assert int(remote_feed_prefix_payload.get("count", 0)) >= 1
+        assert all(
+            str(row.get("kind", "")).startswith("control.remote.takeover.")
+            for row in remote_feed_prefix_payload.get("feed", [])
+        )
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
