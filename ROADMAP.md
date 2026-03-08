@@ -22985,6 +22985,7 @@ Section 25 is satisfied only if the roadmap, build cadence, Codex instructions, 
 * Swarm and Federation arrive only after core governance, trace continuity, and operator law are strong enough to survive specialization and topology
 * Managed Copies are introduced only after the platform is mature enough to commercialize without surrendering the core or weakening trust
 * Productization is treated as the embodiment of a real system, not as superficial polish over fragile internals
+* provider strategy, secret handling, migration discipline, degraded-mode behavior, accessibility, supply-chain provenance, and decommissioning are treated as cross-cutting realities rather than postponed cleanup work
 * the build plan actively resists stage-order shortcuts that would create fake progress, hidden fragility, or trust debt
 
 # 26.0 Quality Gates Across All Stages
@@ -23717,6 +23718,7 @@ Section 26 is satisfied only if the roadmap, build cadence, CI discipline, runti
 * gate culture resists charisma, novelty, and schedule pressure when they conflict with operator law
 * the build cadence always includes running gates and returning receipts
 * gate failure modes are explicitly recognized and corrected during buildout
+* provider routing, secret handling, schema migration, degraded-mode behavior, accessibility, supply-chain provenance, and decommissioning are tested strongly enough that operational realism does not remain a doctrine-only promise
 * Francis never degrades into a system that is technically impressive but weakly verified, under-governed, or product-misleading under the excuse of moving fast
 
 
@@ -23737,3 +23739,284 @@ And Francis can do that:
 - **without turning into a generic runaway agent**
 
 That is the north star.
+
+# 28.0 Operating Realism Addendum
+
+Francis already covers most of the conceptual and governance-heavy hurdles that kill ambitious systems early.
+
+This addendum exists for a different class of problem:
+
+the smaller, operationally brutal realities that usually do not destroy a system in the idea phase, but do destroy it later in production, during upgrades, across provider outages, inside customer environments, or during long-term daily use.
+
+If these realities are left under-specified, Francis could still become:
+
+* philosophically strong but operationally brittle
+* governed in theory but weak under provider or state failures
+* powerful in demos but expensive or exhausting in daily use
+* trustworthy in architecture but sloppy around secrets, upgrades, or imports
+
+That must not happen.
+
+This section defines the doctrine of Operating Realism:
+
+* how model and provider strategy must remain governed
+* how human identity, machine identity, and secret handling must stay explicit
+* how long-lived state must survive migrations and version change
+* how Francis must degrade safely under latency, outage, quota, or upstream failure
+* how the product must remain accessible and physically usable under daily pressure
+* how imported capability and dependency surfaces must preserve provenance
+* how users and customers must be able to leave, purge, decommission, and recover cleanly
+
+The central question of this section is:
+
+> What additional disciplines become necessary once Francis is not only conceptually strong, but operationally durable under real providers, real secrets, real migrations, real outages, and real long-term use?
+
+The answer is:
+
+**treat provider strategy, secret and identity handling, state migration, degraded-mode behavior, accessibility, supply-chain provenance, and clean decommissioning as first-class product law rather than late cleanup work.**
+
+That is the Operating Realism addendum.
+
+---
+
+## 28.1 Model, Provider, and Inference Strategy
+
+Francis is an intelligence system. That means its behavior will always be shaped partly by the models and providers underneath it.
+
+If the roadmap treats those layers as invisible implementation details, then important truths become unstable:
+
+* cost
+* latency
+* failure behavior
+* privacy posture
+* recency limits
+* context-window limits
+* output quality
+* reliability under load
+
+Francis therefore needs an explicit provider doctrine.
+
+That doctrine should include:
+
+* model routing by task class, risk, and verification burden
+* explicit fallbacks when a preferred provider is unavailable or degraded
+* clear separation between local inference, private hosted inference, and third-party cloud inference
+* visible degraded-mode behavior rather than silent quality collapse
+* prompt, policy, and model-version traceability in receipts where appropriate
+* cost and quota awareness so the system does not spend recklessly in the name of helpfulness
+
+Most importantly, Francis must never silently turn:
+
+* a strong model into a weak model
+* a private path into a cloud path
+* a verified capability into an unverified approximation
+* a safe continuation into a best-effort gamble
+
+without making that change legible to the user or operator.
+
+---
+
+## 28.2 Secret, Credential, and Identity Handling
+
+Privacy is broader than secrets, but secrets are still a specialized class of operational risk.
+
+Francis must explicitly model:
+
+* user identity
+* node identity
+* service identity
+* connector identity
+* support or operator identity in managed environments
+* machine-held credentials and tokens
+
+This matters because many failures happen not when a system reads private data, but when it holds durable authority material carelessly.
+
+Francis needs a strong identity and secret-handling posture that includes:
+
+* scoped credentials rather than broad standing tokens
+* rotation and revocation paths
+* explicit binding of credentials to nodes, copies, connectors, or capability classes
+* no raw secret exposure in Lens, logs, receipts, or replay surfaces
+* approval and audit trails for credential creation, attachment, elevation, and replacement
+* separation between user-facing authority and backend service authority
+
+For managed copies and federated deployments, this also means roles must not remain fuzzy.
+
+Francis should be able to distinguish at minimum:
+
+* end user
+* tenant admin
+* support operator
+* automation principal
+* paired node
+
+Otherwise, the system risks becoming operationally powerful while being dangerously unclear about who actually holds which authority.
+
+---
+
+## 28.3 State, Schema, and Migration Discipline
+
+Francis is designed to be continuity-bearing.
+
+That means it will accumulate durable state:
+
+* Missions
+* receipts
+* run ledgers
+* Fabric entries
+* capability metadata
+* approvals
+* pairings
+* user preferences
+* managed-copy configuration
+
+Any long-lived system with that much state eventually faces one of the hardest practical realities in software:
+
+schema change.
+
+The roadmap should therefore explicitly require:
+
+* versioned state contracts
+* deterministic migrations
+* backward-compatibility strategy where practical
+* export/import compatibility rules
+* state repair paths for partially corrupted or stale records
+* upgrade receipts that say what changed in storage or contract shape
+* rollback and restore procedures when migrations fail
+
+Without this, Francis could become a victim of its own continuity:
+
+the more history it carries, the harder it becomes to safely evolve.
+
+That is an unacceptable long-term fragility for an operator layer.
+
+---
+
+## 28.4 Performance, Availability, and Graceful Degradation
+
+If Francis is meant to feel like an OS-layer presence, then speed and failure posture are product truths, not backend trivia.
+
+The user should not have to wonder:
+
+* is Francis slow because the provider is slow?
+* is it silent because the queue is jammed?
+* is it gone because the overlay crashed?
+* is it still acting even though upstream verification is unavailable?
+
+Francis needs explicit expectations for:
+
+* summon latency
+* re-entry latency
+* approval responsiveness
+* queue health
+* provider outage behavior
+* node unavailability behavior
+* quota exhaustion behavior
+* safe stale-state handling
+
+Most importantly, failure should collapse toward safer, more honest modes.
+
+For example:
+
+* full execution may collapse to Assist
+* cloud-backed synthesis may collapse to local observation
+* Away Mode may collapse to monitoring and queued recommendations
+* provider uncertainty may collapse to narrower claims and stronger approval gating
+
+Graceful degradation is part of trust.
+
+Silent degradation is not.
+
+---
+
+## 28.5 Accessibility and Human Factors
+
+Francis is supposed to become a daily-layer system.
+
+That means accessibility is not an optional polish track and not a later enterprise checkbox.
+
+It is part of whether the system can actually be lived with.
+
+The roadmap should explicitly preserve:
+
+* keyboard-first control for critical flows
+* screen-reader legibility where surfaces allow it
+* high-contrast clarity for status, scope, and approval states
+* reduced-motion support for users who should not have to tolerate theatrical motion
+* font and density choices that preserve long-session readability
+* visible, reachable panic and revoke controls under stress
+* interface discipline that reduces cognitive load rather than adding ambient friction
+
+This matters especially because Francis uses overlays, feeds, indicators, and contextual surfaces.
+
+A system can be lawful and still become exhausting.
+
+That kind of failure would not violate doctrine on paper, but it would still weaken adoption, trust, and long-term use.
+
+---
+
+## 28.6 Supply Chain, Imports, and Capability Provenance
+
+Francis is designed to grow through:
+
+* Forge
+* Apprenticeship
+* internal libraries
+* later domain packs
+* managed-copy customization
+* connectors
+* third-party dependencies
+
+That means the system will not only execute capability. It will ingest capability.
+
+This creates a supply-chain problem.
+
+The roadmap should explicitly require:
+
+* provenance for imported capabilities, packs, and connectors
+* version pinning and compatibility tracking for dependencies
+* quarantine and review for untrusted or externally sourced capability
+* distinction between internally generated, locally approved, vendor-provided, and third-party capability
+* promotion discipline for dependency upgrades, not only internal features
+* the ability to retire, disable, or revoke compromised capability cleanly
+
+Without this, Francis could preserve internal governance while quietly becoming porous through imports.
+
+That would be a very ordinary failure in a system trying to be extraordinary.
+
+---
+
+## 28.7 Deletion, Decommissioning, and the Right to Leave
+
+A trusted system must not only support onboarding, growth, continuity, and recovery.
+
+It must also support exit.
+
+That means the roadmap should explicitly preserve lawful ways to:
+
+* purge selected telemetry or Fabric data where policy allows
+* revoke credentials and node pairings
+* decommission managed copies
+* export before deletion
+* delete tenant-specific state without weakening other copies
+* uninstall without haunted residual authority
+* prove what was deleted, retained, rotated, or transferred
+
+This matters because privacy without exit rights is incomplete, and productization without decommission discipline becomes vendor gravity.
+
+Francis must not trap users, tenants, or operators inside continuity they can no longer govern.
+
+---
+
+## 28.8 Operating Realism Acceptance Criteria
+
+Section 28 is satisfied only if the roadmap, implementation discipline, productization plan, and managed-scale strategy remain aligned to all of the following:
+
+* model and provider behavior is governed explicitly enough that fallback, cost, quota, privacy path, and degraded-mode changes never become invisible product drift
+* secret, credential, and identity handling distinguishes human authority, machine authority, connector authority, and support authority clearly enough to avoid dangerous ambiguity
+* long-lived state has versioning, migration, repair, export/import, and rollback discipline strong enough to survive real upgrades
+* outages, latency spikes, quota exhaustion, and stale-state conditions collapse Francis toward safer and more honest behavior rather than silent overclaim or brittle failure
+* accessibility and ergonomic discipline are treated as core to daily-layer usability rather than later decoration
+* imported capabilities, dependencies, connectors, and packs preserve provenance, reviewability, and revocation paths
+* users and managed-copy operators can revoke, export, purge, decommission, and leave cleanly without hidden residual authority or trapped state
+* Francis never degrades into a system that is conceptually profound but operationally careless around providers, secrets, upgrades, imports, performance, or exit paths
