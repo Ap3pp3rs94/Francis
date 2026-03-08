@@ -676,13 +676,28 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
         remote_feed_payload = remote_feed.json()
         assert remote_feed_payload.get("status") == "ok"
         assert int(remote_feed_payload.get("count", 0)) >= 2
-        feed_kinds = [str(row.get("kind", "")) for row in remote_feed_payload.get("feed", [])]
+        remote_feed_rows = remote_feed_payload.get("feed", [])
+        feed_kinds = [str(row.get("kind", "")) for row in remote_feed_rows]
         assert "control.remote.approval.approved" in feed_kinds
         assert "control.remote.approval.rejected" in feed_kinds
 
+        first_feed_id = str(remote_feed_rows[0].get("id", "")).strip()
+        assert first_feed_id
+        remote_feed_after = c.get(
+            "/control/remote/feed",
+            headers=headers,
+            params={"after_id": first_feed_id, "limit": 200},
+        )
+        assert remote_feed_after.status_code == 200
+        remote_feed_after_payload = remote_feed_after.json()
+        assert remote_feed_after_payload.get("after_id") == first_feed_id
+        assert remote_feed_after_payload.get("after_id_found") is True
+        after_ids = [str(row.get("id", "")).strip() for row in remote_feed_after_payload.get("feed", [])]
+        assert first_feed_id not in after_ids
+
         approved_rows = [
             row
-            for row in remote_feed_payload.get("feed", [])
+            for row in remote_feed_rows
             if str(row.get("kind", "")) == "control.remote.approval.approved"
             and str(row.get("source", "")) == "journals.decisions"
             and str(row.get("risk_tier", "")) == "low"
@@ -780,6 +795,17 @@ def test_control_remote_state_and_approval_decision_flow() -> None:
 def test_control_remote_feed_rejects_invalid_timestamp_window() -> None:
     c = TestClient(app)
 
+    cursor_after_conflict = c.get("/control/remote/feed", params={"cursor": "0", "after_id": "any-id"})
+    assert cursor_after_conflict.status_code == 400
+    assert "Provide only one of cursor or after_id" in str(cursor_after_conflict.json().get("detail", ""))
+
+    stream_cursor_after_conflict = c.get(
+        "/control/remote/feed/stream",
+        params={"cursor": "0", "after_id": "any-id", "max_seconds": 1},
+    )
+    assert stream_cursor_after_conflict.status_code == 400
+    assert "Provide only one of cursor or after_id" in str(stream_cursor_after_conflict.json().get("detail", ""))
+
     invalid_since = c.get("/control/remote/feed", params={"since_ts": "not-a-timestamp"})
     assert invalid_since.status_code == 400
     assert "Invalid since_ts" in str(invalid_since.json().get("detail", ""))
@@ -808,6 +834,13 @@ def test_control_remote_feed_rejects_invalid_timestamp_window() -> None:
     )
     assert stream_window_order.status_code == 400
     assert "since_ts must be <= until_ts" in str(stream_window_order.json().get("detail", ""))
+
+    missing_after = c.get("/control/remote/feed", params={"after_id": "missing-id", "limit": 10})
+    assert missing_after.status_code == 200
+    missing_after_payload = missing_after.json()
+    assert missing_after_payload.get("after_id") == "missing-id"
+    assert missing_after_payload.get("after_id_found") is False
+    assert int(missing_after_payload.get("count", 0)) == 0
 
 
 def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> None:

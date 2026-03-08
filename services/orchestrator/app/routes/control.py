@@ -477,6 +477,22 @@ def _parse_activity_cursor(raw_cursor: str | None) -> int | None:
     return max(0, parsed)
 
 
+def _resolve_activity_cursor_from_after_id(
+    *,
+    rows: list[dict[str, Any]],
+    after_id: str | None,
+) -> tuple[int | None, bool]:
+    normalized = str(after_id or "").strip()
+    if not normalized:
+        return (None, False)
+    for idx, row in enumerate(rows):
+        row_id = str(row.get("id", "")).strip()
+        if row_id == normalized:
+            return (idx + 1, True)
+    # If the id is not in the current filtered window, move cursor to tail.
+    return (len(rows), False)
+
+
 def _slice_activity_rows(
     *,
     rows: list[dict[str, Any]],
@@ -1128,6 +1144,7 @@ def control_remote_feed(
     request: Request,
     limit: int = 100,
     cursor: str | None = None,
+    after_id: str | None = None,
     session_id: str | None = None,
     kind: str | None = None,
     kind_prefix: str | None = None,
@@ -1146,6 +1163,7 @@ def control_remote_feed(
     normalized_source = _normalize_remote_feed_source(source)
     normalized_since_ts = _normalize_remote_feed_timestamp(since_ts, field_name="since_ts")
     normalized_until_ts = _normalize_remote_feed_timestamp(until_ts, field_name="until_ts")
+    normalized_after_id = str(after_id or "").strip() or None
     if normalized_since_ts and normalized_until_ts and normalized_since_ts > normalized_until_ts:
         raise HTTPException(status_code=400, detail="since_ts must be <= until_ts")
     rows = _build_remote_feed_rows(
@@ -1158,15 +1176,27 @@ def control_remote_feed(
         until_ts=normalized_until_ts,
     )
     parsed_cursor = _parse_activity_cursor(cursor)
-    if parsed_cursor is None:
+    if parsed_cursor is not None and normalized_after_id:
+        raise HTTPException(status_code=400, detail="Provide only one of cursor or after_id.")
+    if parsed_cursor is None and normalized_after_id:
+        resolved_after_cursor, after_id_found = _resolve_activity_cursor_from_after_id(
+            rows=rows,
+            after_id=normalized_after_id,
+        )
+        start_cursor = int(resolved_after_cursor or 0)
+    elif parsed_cursor is None:
         normalized_limit = max(1, min(limit, 1000))
         start_cursor = max(0, len(rows) - normalized_limit)
+        after_id_found = False
     else:
         start_cursor = parsed_cursor
+        after_id_found = False
     chunk, next_cursor, has_more = _slice_activity_rows(rows=rows, cursor=start_cursor, limit=limit)
     return {
         "status": "ok",
         "session_id": normalized_session_id or None,
+        "after_id": normalized_after_id,
+        "after_id_found": after_id_found if normalized_after_id else None,
         "filters": {
             "kind": normalized_kind,
             "kind_prefix": normalized_kind_prefix,
@@ -1189,6 +1219,7 @@ async def control_remote_feed_stream(
     request: Request,
     session_id: str | None = None,
     cursor: str | None = None,
+    after_id: str | None = None,
     limit: int = 100,
     kind: str | None = None,
     kind_prefix: str | None = None,
@@ -1209,6 +1240,7 @@ async def control_remote_feed_stream(
     normalized_source = _normalize_remote_feed_source(source)
     normalized_since_ts = _normalize_remote_feed_timestamp(since_ts, field_name="since_ts")
     normalized_until_ts = _normalize_remote_feed_timestamp(until_ts, field_name="until_ts")
+    normalized_after_id = str(after_id or "").strip() or None
     if normalized_since_ts and normalized_until_ts and normalized_since_ts > normalized_until_ts:
         raise HTTPException(status_code=400, detail="since_ts must be <= until_ts")
     initial_rows = _build_remote_feed_rows(
@@ -1221,7 +1253,20 @@ async def control_remote_feed_stream(
         until_ts=normalized_until_ts,
     )
     parsed_cursor = _parse_activity_cursor(cursor)
-    start_cursor = parsed_cursor if parsed_cursor is not None else len(initial_rows)
+    if parsed_cursor is not None and normalized_after_id:
+        raise HTTPException(status_code=400, detail="Provide only one of cursor or after_id.")
+    if parsed_cursor is not None:
+        start_cursor = parsed_cursor
+        after_id_found = False
+    elif normalized_after_id:
+        resolved_after_cursor, after_id_found = _resolve_activity_cursor_from_after_id(
+            rows=initial_rows,
+            after_id=normalized_after_id,
+        )
+        start_cursor = int(resolved_after_cursor or 0)
+    else:
+        start_cursor = len(initial_rows)
+        after_id_found = False
     max_events = max(1, min(limit, 2000))
     stream_window_seconds = max(1, min(max_seconds, 120))
     sleep_seconds = max(0.05, min(float(poll_interval_ms) / 1000.0, 5.0))
@@ -1240,6 +1285,8 @@ async def control_remote_feed_stream(
                 "source": normalized_source,
                 "since_ts": normalized_since_ts,
                 "until_ts": normalized_until_ts,
+                "after_id": normalized_after_id,
+                "after_id_found": after_id_found if normalized_after_id else None,
                 "cursor": str(current_cursor),
                 "max_events": max_events,
                 "max_seconds": stream_window_seconds,
@@ -1288,6 +1335,7 @@ async def control_remote_feed_stream(
                     "source": normalized_source,
                     "since_ts": normalized_since_ts,
                     "until_ts": normalized_until_ts,
+                    "after_id": normalized_after_id,
                     "cursor": str(current_cursor),
                 },
             )
@@ -1303,6 +1351,7 @@ async def control_remote_feed_stream(
                 "source": normalized_source,
                 "since_ts": normalized_since_ts,
                 "until_ts": normalized_until_ts,
+                "after_id": normalized_after_id,
                 "cursor": str(current_cursor),
                 "emitted": emitted,
                 "max_events": max_events,
