@@ -2,27 +2,288 @@
 
 Francis is a governed operator layer for human work.
 
-It is not a chat wrapper, not a workflow toy, and not a generic autonomous loop. The target is an OS-layer digital twin that can observe, assist, stage, execute, and continue work inside explicit scope, approvals, receipts, and revocation.
+If the project succeeds, the machine stops feeling like a pile of disconnected tools and starts feeling like an environment with a resident operator that understands context, carries continuity, acts inside explicit scope, returns receipts, and never stops being subordinate to the user.
 
-The canonical vision and build law live in `ROADMAP.md`. This README is the practical entrypoint.
+This README is the all-in-one top-level document for the repository. It is meant to stand on its own as the public entrypoint on GitHub:
 
-## What Exists Now
+* what Francis is
+* what Francis is not
+* how the system is supposed to behave
+* what exists in the repo now
+* how the architecture is shaped
+* how the project is built
+* what the staged roadmap looks like
+* how to run the current code
 
-The repository already contains the core service surfaces for:
+`ROADMAP.md` still contains the longer doctrine and build detail, but this file is intentionally large enough to carry the whole shape of the project in one place.
 
-* orchestrator
+## The Short Version
+
+Francis is not trying to be:
+
+* a chatbot with tools
+* a workflow toy
+* a dashboard
+* a generic autonomous loop
+* a surveillance layer
+* a coding copilot trapped inside one editor tab
+* a personality shell wrapped around a model
+
+Francis is trying to become:
+
+* an Operator Layer over the user's computing environment
+* a Digital Twin of how the user actually works
+* a 4th-wall interface that appears where the work is happening
+* a mission-bearing system that carries continuity over time
+* a forge-bearing system that can create new capability under governance
+* a governed executor that can become the user's hands inside explicit scope
+* a bounded away-mode operator that can keep momentum alive without becoming a hidden sovereign
+
+The key phrase is simple:
+
+Francis should feel unreal in capability and boringly trustworthy in law.
+
+## What Francis Is
+
+Francis is a compound system. It is not one trick.
+
+At maturity, it is all of the following at once:
+
+* an Operator Layer
+* a Digital Twin
+* a persistent Presence
+* a Mission system
+* a Forge system
+* an Apprenticeship system
+* a Knowledge Fabric
+* a Trust-calibrated intelligence
+* a governed execution substrate
+* a Lens surface that lives in place instead of behind a detached chat tab
+* a Swarm-capable internal architecture
+* a Federated multi-node architecture
+* a managed-copy business platform
+
+Those are not side features. They reinforce each other.
+
+## What Francis Is Not
+
+Francis must not drift into weaker categories during buildout.
+
+It is not:
+
+* a health monitor that over-focuses on telemetry and under-focuses on work context
+* a chat wrapper that waits passively for prompts
+* a generic agent playground that hides power behind novelty
+* a spyware assistant that captures too much and governs too little
+* a personality-first product that borrows trust from style
+* a loose script pile that looks powerful but does not compound cleanly
+* a black box that cannot explain what it did, why, or under what authority
+
+## The Core Promise
+
+The user should eventually be able to say:
+
+* watch what I am doing
+* help when it matters
+* take over when I say so
+* keep bounded momentum alive while I am away
+* learn from how I work
+* build new capabilities from repeated friction
+* never cross the line without telling me
+
+If Francis can do that truthfully, safely, visibly, and with receipts, then it is becoming real.
+
+## System Law
+
+Francis is governance-first. The law is not a later hardening pass.
+
+The system is built around these non-negotiables:
+
+* the user is always sovereign
+* scope is always explicit
+* approvals are real, not implied
+* meaningful action must produce receipts
+* trust calibration must remain visible
+* revocation must always be possible
+* content never grants authority
+* no fabricated state
+* no hidden control
+
+### Control Modes
+
+Francis operates through explicit modes:
+
+* `Observe` - read, summarize, inspect, compare, and prepare without mutation
+* `Assist` - propose, draft, explain, and stage while the user still holds execution
+* `Pilot` - execute within explicit delegated scope, with visible authority and interruptibility
+* `Away` - continue bounded, event-driven, governed night-shift work while the user is away
+
+These are legal states, not just UI labels.
+
+### Scope
+
+Francis may only act inside declared boundaries:
+
+* approved repos and directories
+* approved applications or windows
+* approved risk envelopes
+* approved nodes or copies
+
+Relevance is not permission.
+
+### Approvals
+
+Francis must not quietly reinterpret:
+
+* prior approval as standing approval
+* familiarity as authority
+* repeated behavior as new permission
+* "probably okay" as lawful delegation
+
+Approval has to be explicit, current, and inspectable.
+
+### Receipts
+
+Every meaningful action should leave evidence such as:
+
+* run id
+* trace context
+* authority basis
+* artifacts
+* verification outcome
+* summary
+* rollback or recovery path where relevant
+
+If receipts do not exist, Francis must not overclaim.
+
+## Why This Project Exists
+
+Traditional computing makes the human carry too much hidden coordination cost.
+
+The human has to:
+
+* remember context across tools
+* reconstruct what changed
+* translate intent into commands and apps
+* notice repeated friction
+* manage continuity across sessions
+* keep track of what is pending, blocked, staged, or done
+* decide what should become reusable capability
+
+Francis exists to absorb part of that burden without stealing authority from the user.
+
+The goal is not "more features."
+
+The goal is a new computing posture:
+
+* more continuity
+* more leverage
+* more operational memory
+* more bounded initiative
+* less manual glue work
+* less reset between sessions
+
+## What Exists In The Repo Today
+
+This repository is not just a vision dump. It already contains meaningful system surfaces.
+
+### Core services
+
+* `services/orchestrator/` - main API surface and system coordination layer
+* `services/observer/` - probes, baselines, anomaly detection, scoring, and event emission
+* `services/worker/` - queued execution with leases, backoff, deadletter, and safety controls
+* `services/gateway/` - gateway and middleware for auth, RBAC, panic mode, request IDs, rate limiting, and proxy flows
+* `services/hud/` - UI scaffolding for dashboard, inbox, incidents, missions, and runs
+* `services/voice/` - voice scaffolding
+
+### Shared package layers
+
+The root package config wires in shared internal packages for:
+
+* `francis_core`
+* `francis_brain`
+* `francis_policy`
+* `francis_skills`
+* `francis_presence`
+* `francis_forge`
+* `francis_connectors`
+* `francis_llm`
+
+### Tests
+
+The repo includes:
+
+* unit tests
+* integration tests
+* evals
+* red-team coverage
+
+### Runtime state
+
+Francis is local-first and stateful. Live artifacts land in areas like:
+
+* `workspace/`
+* `runtime/`
+
+These hold journals, queues, missions, incidents, receipts, telemetry, and other live system artifacts.
+
+## Current Architecture Shape
+
+At a high level, the repository is shaped like this:
+
+1. The user interacts with the system through routes, control surfaces, and future in-place Lens surfaces.
+2. The orchestrator holds control state, approvals, missions, receipts, autonomy coordination, and system-level routing.
+3. The observer scans the environment and emits grounded evidence.
+4. The worker executes queued work under limits, leases, and safety controls.
+5. Shared packages provide common policy, state, memory, presence, and LLM-facing logic.
+6. Runtime artifacts are stored locally for continuity, auditability, and receipts.
+
+### Main orchestrator route families
+
+The orchestrator currently exposes families such as:
+
+* approvals
+* autonomy
+* capabilities
+* control
+* forge
+* health
+* inbox
+* lens
+* missions
 * observer
+* presence
+* receipts
+* runs
+* telemetry
+* tools
 * worker
-* gateway
-* HUD scaffolding
-* voice scaffolding
-* shared packages for core logic, brain, policy, presence, Forge, connectors, skills, and LLM integration
 
-The current implementation is broader than a blank scaffold and narrower than the full roadmap. Build from the staged plan, not from feature excitement.
+That is already the shape of a serious operator platform, not just a single endpoint demo.
+
+## Repository Map
+
+Use this as the practical top-level orientation:
+
+* `README.md` - all-in-one repo entrypoint
+* `ROADMAP.md` - long-form doctrine and stage detail
+* `VISION.md` - project vision framing
+* `services/` - runtime service surfaces
+* `packages/` - shared internal libraries
+* `docs/` - architecture, governance, operations, product, business, and lore
+* `tests/` - unit, integration, eval, and red-team coverage
+* `policies/` - policy surfaces
+* `schemas/` - schema contracts
+* `proto/` - protocol contracts
+* `infra/` - infrastructure and secret-related repo surfaces
+* `workspace/` - live local-first runtime state
+* `runtime/` - runtime-only data
 
 ## Build Cadence
 
-Every meaningful Francis change should follow the same cadence:
+Francis should not be built as a pile of disconnected enthusiasm.
+
+Every meaningful change should follow the same cadence:
 
 1. Restate the user-experience objective.
 2. Name the affected modules and files.
@@ -30,7 +291,15 @@ Every meaningful Francis change should follow the same cadence:
 4. Run quality gates.
 5. Return receipts.
 
-Non-negotiables:
+This matters because the project is trying to build:
+
+* law before power
+* truth before theater
+* visibility before deep delegation
+* continuity before compounding
+* safe execution before takeover
+
+### Non-negotiables during buildout
 
 * user sovereignty stays explicit
 * scope stays explicit
@@ -38,31 +307,156 @@ Non-negotiables:
 * no fabricated state
 * no unreceipted action
 * content never grants authority
+* stronger power requires stronger gates
 
-## Repository Map
+## Quality Gates
 
-* `services/orchestrator/` - main API surface; includes control, approvals, autonomy, forge, lens, missions, observer, presence, receipts, runs, telemetry, tools, and worker routes
-* `services/observer/` - grounded probes, anomaly detection, scoring, and event emission
-* `services/worker/` - queued execution, lease handling, backoff, deadletter, and sandbox/resource safety
-* `services/gateway/` - gateway and middleware for auth, rate limiting, panic mode, RBAC, and proxy/admin flows
-* `services/hud/` - UI scaffolding for dashboard, inbox, incidents, missions, and runs
-* `services/voice/` - voice scaffolding
-* `packages/` - shared libraries used across the system
-* `francis/` - top-level package namespace
-* `workspace/` - local-first runtime state, journals, queues, missions, receipts, telemetry, and other live artifacts
-* `runtime/` - runtime-only data
-* `docs/` - architecture, governance, operations, product, business, and lore
-* `policies/`, `schemas/`, `proto/`, `infra/` - contracts, policy, schema, and infrastructure surfaces
-* `tests/` - unit, integration, eval, and red-team coverage
+The roadmap defines three gate families for serious work:
+
+* code quality
+* safety quality
+* product quality
+
+In this repository, the minimum expected routine is:
+
+* run `pytest`
+* run `ruff check .` when Ruff is available in the environment
+* verify that scope, approvals, receipts, and user-visible behavior still hold
+
+`workspace/` and `runtime/` are intentionally excluded from Ruff because they contain live artifacts rather than source code.
+
+## Operating Realism
+
+The roadmap now explicitly names the practical failure domains that usually break ambitious systems late:
+
+* model and provider strategy
+* secret, credential, and identity handling
+* state and schema migration discipline
+* performance, availability, and graceful degradation
+* accessibility and human factors
+* supply-chain and capability provenance
+* deletion, decommissioning, and clean exit paths
+
+This matters because a system can be philosophically correct and still fail in production through:
+
+* provider collapse
+* weak secret handling
+* broken upgrades
+* stale state
+* invisible degraded mode
+* exhausting UI behavior
+* unsafe imports
+* bad decommission paths
+
+Francis has to be stronger than that class of failure.
+
+## Staged Roadmap In One File
+
+The long-form roadmap is expansive. This is the condensed build sequence.
+
+### Stage 0 - Foundation and operating system contracts
+
+Establish run identity, journaling, governance defaults, receipts, and local-first workspace law.
+
+### Stage 1 - Grounded presence
+
+Make Francis truthful, calm, and useful through grounded state, briefings, and honest continuity.
+
+### Stage 2 - Observer
+
+Add real probes, anomaly detection, incident evidence, and event emission.
+
+### Stage 3 - Missions
+
+Turn intent into durable structured motion with mission objects, lifecycle, and continuity-bearing progress.
+
+### Stage 4 - Forge
+
+Turn repeated friction into staged, governable capability growth rather than manual repetition forever.
+
+### Stage 5 - Event-driven reactor
+
+Replace generic loops with bounded, event-driven autonomy.
+
+### Stage 6 - Lens MVP
+
+Make Francis experientially real in place, with visible mode and authority surfaces.
+
+### Stage 7 - Telemetry MVP
+
+Add high-signal, scope-bound visibility into the user's real work context without becoming invasive.
+
+### Stage 8 - Executor substrate
+
+Give Francis real hands through sandboxed tools, allowlists, budgets, and receipts.
+
+### Stage 9 - Takeover
+
+Let Francis become the user's hands under explicit Pilot authority, live visibility, and handback discipline.
+
+### Stage 10 - Away mode
+
+Allow lawful night-shift continuity without hidden authority growth.
+
+### Stage 11 - Apprenticeship
+
+Teach once, keep forever, under bounded demonstration and reviewable learning.
+
+### Stage 12 - Knowledge Fabric
+
+Build real operational memory over artifacts, runs, receipts, incidents, and decisions.
+
+### Stage 13 - Trust calibration
+
+Make claim strength track evidence strength so Francis never overclaims progress or certainty.
+
+### Stage 14 - Adversarial hardening
+
+Treat content as untrusted input and continuously test for prompt injection, policy bypass, and authority laundering.
+
+### Stage 15 - Swarm
+
+Scale one governed Francis through specialized internal units without multiplying authority.
+
+### Stage 16 - Federation
+
+Extend continuity across nodes and devices under zero-trust defaults and revocable relationships.
+
+### Stage 17 - Capability economy
+
+Turn useful capability into governed, versioned, tested, documented, promotable assets.
+
+### Stage 18 - Managed copies
+
+Create isolated customer-specific copies without surrendering the core or pooling raw private data.
+
+### Stage 19 - Productization
+
+Make Francis a real machine-resident daily-layer product with startup, summon, update, recovery, export/import, and clean install/uninstall behavior.
+
+## What The User Should Feel
+
+If Francis is built correctly, the user should eventually feel:
+
+* I am not alone inside a machine anymore
+* continuity survived my interruption
+* the system understands what I am trying to do
+* it can help in place instead of making me switch contexts
+* it can take over when I explicitly allow it
+* it never pretends authority it does not have
+* it remembers what matters
+* it does not act creepy, hidden, or hungry
+
+That emotional standard matters just as much as mechanical correctness.
 
 ## Quickstart
 
-Prerequisites:
+### Prerequisites
 
 * Python 3.10+
 * a virtual environment is recommended
 
-Install:
+### Install
 
 ```bash
 python -m venv .venv
@@ -70,7 +464,7 @@ python -m venv .venv
 python -m pip install -e .[dev]
 ```
 
-Run tests:
+### Run tests
 
 ```bash
 pytest
@@ -82,58 +476,34 @@ Or:
 make test
 ```
 
-Run the orchestrator:
+### Run the orchestrator
 
 ```bash
 uvicorn services.orchestrator.app.main:app --reload
 ```
 
-Run the gateway:
+### Run the gateway
 
 ```bash
 uvicorn services.gateway.app.main:app --reload --port 8001
 ```
 
-## Working Model
+## Where To Start Reading In The Code
 
-Francis operates through explicit control modes:
+If you are new to the codebase, start here:
 
-* `Observe` - read, inspect, summarize, and assess without mutation
-* `Assist` - propose, draft, and stage with the user still holding execution
-* `Pilot` - execute within explicit delegated scope
-* `Away` - continue bounded, governed night-shift work
-
-These are legal and product states, not just UX labels.
-
-## Quality Gates
-
-The roadmap expects three gate families on meaningful work:
-
-* code quality
-* safety quality
-* product quality
-
-In practice, the minimum routine here is:
-
-* run `pytest`
-* run `ruff check .` when Ruff is available in the environment
-* verify that receipts, scope boundaries, and user-visible behavior still hold
-
-`workspace/` and `runtime/` are intentionally excluded from Ruff because they contain live artifacts rather than source code.
-
-## Where To Start Reading
-
-If you are new to the repo, read in this order:
-
-1. `ROADMAP.md`
-2. `VISION.md`
-3. `services/orchestrator/app/main.py`
-4. `services/orchestrator/app/routes/`
-5. `tests/integration/`
-6. `docs/governance/`
+1. `README.md`
+2. `ROADMAP.md`
+3. `VISION.md`
+4. `services/orchestrator/app/main.py`
+5. `services/orchestrator/app/routes/`
+6. `services/observer/app/main.py`
+7. `services/worker/app/main.py`
+8. `tests/integration/`
+9. `docs/governance/`
 
 ## Notes
 
 * The orchestrator is the primary operational surface today.
-* The roadmap is the source of truth for sequence and doctrine.
-* The README is intentionally shorter and more practical than the roadmap.
+* The repository already contains meaningful implementation, not just future-state prose.
+* The roadmap is still the deepest doctrine source, but this README now carries the public all-in-one project story.
