@@ -36,6 +36,7 @@ def _run(cmd: list[str], *, cwd: Path, timeout_seconds: int = 120, max_chars: in
 def run_pytest(
     repo_root: Path,
     *,
+    lane: str = "full",
     target: str = "",
     max_failures: int = 1,
     quiet: bool = True,
@@ -46,6 +47,15 @@ def run_pytest(
         cmd.append("-q")
     if max_failures > 0:
         cmd.append(f"--maxfail={max_failures}")
+    normalized_lane = str(lane).strip().lower() or "full"
+    if normalized_lane == "fast":
+        cmd.extend(["-m", "not slow and not redteam and not evals"])
+    elif normalized_lane == "integration":
+        cmd.extend(["-m", "integration and not slow"])
+    elif normalized_lane == "redteam":
+        cmd.extend(["-m", "redteam"])
+    elif normalized_lane == "evals":
+        cmd.extend(["-m", "evals"])
     if target.strip():
         cmd.append(target.strip())
     return _run(cmd, cwd=repo_root, timeout_seconds=timeout_seconds)

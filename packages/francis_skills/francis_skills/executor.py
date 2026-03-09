@@ -71,10 +71,15 @@ def build_default_registry() -> SkillRegistry:
     registry.register_spec(
         SkillSpec(
             name="repo.tests",
-            description="Run pytest in the repository.",
-            risk_tier="medium",
+            description="Run pytest in the repository using fast/full lanes.",
+            risk_tier="low",
             mutating=False,
-            args_schema={"target": "optional:str", "max_failures": "optional:int", "quiet": "optional:bool"},
+            args_schema={
+                "lane": "optional:str",
+                "target": "optional:str",
+                "max_failures": "optional:int",
+                "quiet": "optional:bool",
+            },
             tags=["repo", "tests"],
         )
     )
@@ -132,6 +137,7 @@ def _repo_diff_handler(args: dict[str, Any], _fs: WorkspaceFS, repo_root: Path) 
 def _repo_tests_handler(args: dict[str, Any], _fs: WorkspaceFS, repo_root: Path) -> dict[str, Any]:
     return run_pytest(
         repo_root,
+        lane=str(args.get("lane", "full")),
         target=str(args.get("target", "")),
         max_failures=int(args.get("max_failures", 1)),
         quiet=bool(args.get("quiet", True)),

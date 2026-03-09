@@ -320,8 +320,9 @@ The roadmap defines three gate families for serious work:
 
 In this repository, the minimum expected routine is:
 
-* run `pytest`
-* run `ruff check .` when Ruff is available in the environment
+* run the fast lane with `./scripts/test.ps1 -Lane fast`
+* run `./scripts/lint.ps1`
+* run the full lane with `./scripts/test.ps1 -Lane full` before shipping major slices
 * verify that scope, approvals, receipts, and user-visible behavior still hold
 
 `workspace/` and `runtime/` are intentionally excluded from Ruff because they contain live artifacts rather than source code.
@@ -469,13 +470,20 @@ python -m pip install -e .[dev]
 ### Run tests
 
 ```bash
-pytest
+./scripts/test.ps1 -Lane fast
 ```
 
-Or:
+Full sweep:
 
 ```bash
-make test
+./scripts/test.ps1 -Lane full
+```
+
+Make targets:
+
+```bash
+make test-fast
+make test-full
 ```
 
 ### Run the orchestrator
