@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from francis_brain.calibration import summarize_fabric_posture
+from francis_brain.recall import summarize_fabric, summarize_fabric_scope
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 
@@ -49,6 +51,35 @@ def _combine_ledger(
     combined = [*ledger_primary, *ledger_legacy]
     combined.sort(key=lambda row: str(row.get("ts", "")))
     return combined
+
+
+def _receipt_bundle_summary(
+    *,
+    ledger: list[dict[str, Any]],
+    decisions: list[dict[str, Any]],
+    logs: list[dict[str, Any]],
+    mission_history: list[dict[str, Any]],
+    deadletter: list[dict[str, Any]],
+    fabric_summary: dict[str, Any],
+    evidence_scope: str,
+) -> dict[str, Any]:
+    return {
+        "evidence_scope": evidence_scope,
+        "counts": {
+            "ledger": len(ledger),
+            "decisions": len(decisions),
+            "logs": len(logs),
+            "mission_history": len(mission_history),
+            "deadletter": len(deadletter),
+        },
+        "fabric": {
+            "artifact_count": int(fabric_summary.get("artifact_count", 0) or 0),
+            "citation_ready_count": int(fabric_summary.get("citation_ready_count", 0) or 0),
+            "source_count": int(fabric_summary.get("source_count", 0) or 0),
+            "generated_at": fabric_summary.get("generated_at"),
+            "trust": summarize_fabric_posture(fabric_summary),
+        },
+    }
 
 
 def _read_json(rel_path: str, default: object) -> object:
@@ -149,10 +180,20 @@ def receipts_latest(limit: int = 20) -> dict:
         if row.get("run_id"):
             latest_run_id = str(row["run_id"])
             break
+    fabric_summary = summarize_fabric(_fs, refresh=False)
 
     return {
         "status": "ok",
         "latest_run_id": latest_run_id,
+        "summary": _receipt_bundle_summary(
+            ledger=ledger,
+            decisions=decisions,
+            logs=logs,
+            mission_history=mission_history,
+            deadletter=queue_deadletter,
+            fabric_summary=fabric_summary,
+            evidence_scope="workspace",
+        ),
         "receipts": {
             "ledger": _tail(ledger, limit),
             "decisions": _tail(decisions, limit),
@@ -183,10 +224,20 @@ def run_receipts(run_id: str, limit: int = 100) -> dict:
         + len(mission_history)
         + len(deadletter)
     )
+    fabric_summary = summarize_fabric_scope(_fs, run_id=run_id, refresh=False)
     return {
         "status": "ok",
         "run_id": run_id,
         "count": combined_count,
+        "summary": _receipt_bundle_summary(
+            ledger=ledger,
+            decisions=decisions,
+            logs=logs,
+            mission_history=mission_history,
+            deadletter=deadletter,
+            fabric_summary=fabric_summary,
+            evidence_scope="run",
+        ),
         "receipts": {
             "ledger": _tail(ledger, limit),
             "decisions": _tail(decisions, limit),

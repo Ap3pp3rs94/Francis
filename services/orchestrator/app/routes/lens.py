@@ -1412,6 +1412,16 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip()
     takeover_sessions_payload = control_takeover_sessions(limit=5)
     takeover_sessions_rows = takeover_sessions_payload.get("sessions", [])
+    latest_handback_posture = next(
+        (
+            row.get("handback_fabric_posture", {})
+            for row in takeover_sessions_rows
+            if str(row.get("session_id", "")).strip() == takeover_last_session_id
+            and isinstance(row.get("handback_fabric_posture"), dict)
+        ),
+        {},
+    )
+    handback_trust_badge = str(latest_handback_posture.get("trust", "Likely")).strip() or "Likely"
     role = _role_from_request(request)
     remote_read_allowed = can(role, "control.remote.read") and can(role, "approvals.read")
     remote_write_allowed = can(role, "control.remote.write")
@@ -1618,7 +1628,7 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 "reason": "Takeover is active; return control with summary and receipts.",
                 "policy_reason": "",
                 "risk_tier": "low",
-                "trust_badge": "Confirmed",
+                "trust_badge": "Likely",
                 "requires_confirmation": True,
                 }
             )
@@ -1631,7 +1641,7 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             "reason": "Complete takeover handback through the remote command plane.",
             "policy_reason": "" if remote_write_allowed else f"RBAC denied: role={role}, action=control.remote.write",
             "risk_tier": "low",
-            "trust_badge": "Confirmed" if remote_write_allowed else "Uncertain",
+            "trust_badge": "Likely" if remote_write_allowed else "Uncertain",
             "requires_confirmation": True,
             }
         )
@@ -1772,7 +1782,7 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             "reason": "Load the latest handback receipts bundle for review.",
             "policy_reason": "",
             "risk_tier": "low",
-            "trust_badge": "Confirmed",
+            "trust_badge": handback_trust_badge,
             }
         )
         package_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_last_session_id
@@ -1785,7 +1795,7 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             "reason": "Write a durable handback bundle to workspace/control/handback_exports.",
             "policy_reason": "",
             "risk_tier": "low",
-            "trust_badge": "Confirmed",
+            "trust_badge": handback_trust_badge,
             }
         )
         export_chip["execute_via"]["payload"]["args"]["session_id"] = takeover_last_session_id

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -179,4 +180,45 @@ def summarize_calibrated_artifacts(
         "local_provenance_count": local_provenance_count,
         "anchored_provenance_count": anchored_provenance_count,
         "fresh_provenance_count": fresh_provenance_count,
+    }
+
+
+def summarize_fabric_posture(summary: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = summary if isinstance(summary, Mapping) else {}
+    calibration = payload.get("calibration", {})
+    calibration = calibration if isinstance(calibration, Mapping) else {}
+    counts = calibration.get("confidence_counts", {})
+    counts = counts if isinstance(counts, Mapping) else {}
+
+    confirmed = int(counts.get("confirmed", 0) or 0)
+    likely = int(counts.get("likely", 0) or 0)
+    uncertain = int(counts.get("uncertain", 0) or 0)
+    citation_ready_count = int(payload.get("citation_ready_count", 0) or 0)
+    stale_current_state_count = int(calibration.get("stale_current_state_count", 0) or 0)
+    done_claim_ready_count = int(calibration.get("done_claim_ready_count", 0) or 0)
+
+    trust = "Uncertain"
+    if citation_ready_count > 0 and confirmed > 0 and uncertain == 0 and stale_current_state_count == 0:
+        trust = "Confirmed"
+    elif citation_ready_count > 0 or confirmed > 0 or likely > 0:
+        trust = "Likely"
+
+    warning = ""
+    if stale_current_state_count > 0:
+        warning = (
+            f"Refresh {stale_current_state_count} stale current-state artifact(s) "
+            "before treating memory as current proof."
+        )
+    elif citation_ready_count == 0:
+        warning = "Knowledge Fabric has no citation-ready evidence yet; memory claims stay uncertain."
+
+    return {
+        "trust": trust,
+        "citation_ready_count": citation_ready_count,
+        "confirmed_count": confirmed,
+        "likely_count": likely,
+        "uncertain_count": uncertain,
+        "stale_current_state_count": stale_current_state_count,
+        "done_claim_ready_count": done_claim_ready_count,
+        "warning": warning,
     }

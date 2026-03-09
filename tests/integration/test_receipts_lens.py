@@ -85,6 +85,10 @@ def test_receipts_and_run_lookup() -> None:
     assert latest.status_code == 200
     latest_payload = latest.json()
     assert latest_payload["status"] == "ok"
+    summary = latest_payload["summary"]
+    assert summary["evidence_scope"] == "workspace"
+    assert "fabric" in summary
+    assert "trust" in summary["fabric"]
     receipts = latest_payload["receipts"]
     assert "ledger" in receipts
     assert "decisions" in receipts
@@ -96,6 +100,10 @@ def test_receipts_and_run_lookup() -> None:
     assert run_payload["status"] == "ok"
     assert run_payload["run_id"] == run_id
     assert run_payload["count"] >= 1
+    run_summary = run_payload["summary"]
+    assert run_summary["evidence_scope"] == "run"
+    assert "fabric" in run_summary
+    assert "trust" in run_summary["fabric"]
 
 
 def test_receipts_trust_latest_endpoint_available() -> None:
@@ -437,9 +445,16 @@ def test_lens_execute_takeover_flow_supported() -> None:
         assert handed_back.status_code == 200
         handback_payload = handed_back.json()
         assert handback_payload["result"]["summary"]["takeover"]["status"] == "idle"
+        assert handback_payload["result"]["summary"]["handback_ritual"]["fabric"]["trust"] in {
+            "Likely",
+            "Confirmed",
+            "Uncertain",
+        }
 
         trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 100})
         assert trace.status_code == 200
+        assert trace.json()["summary"]["evidence_scope"] == "trace"
+        assert "trust" in trace.json()["summary"]["fabric"]
         decisions = trace.json().get("receipts", {}).get("decisions", [])
         assert any(
             str(row.get("kind", "")) == "lens.action.execute"
@@ -523,6 +538,8 @@ def test_lens_execute_appends_takeover_activity_and_handback_package() -> None:
         package = c.get("/control/takeover/handback/package", params={"session_id": session_id, "limit": 120})
         assert package.status_code == 200
         payload = package.json()
+        assert payload["summary"]["handback"]["fabric_posture"]["trust"] in {"Likely", "Confirmed", "Uncertain"}
+        assert payload["handback_ritual"]["fabric"]["trust"] in {"Likely", "Confirmed", "Uncertain"}
         package_activity = payload.get("timeline", {}).get("activity", [])
         assert any(str(row.get("kind", "")) == "lens.action.execute" for row in package_activity)
         decisions = payload.get("receipts", {}).get("decisions", [])

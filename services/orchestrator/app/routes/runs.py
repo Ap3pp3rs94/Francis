@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from francis_brain.calibration import summarize_fabric_posture
+from francis_brain.recall import summarize_fabric_scope
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from services.orchestrator.app.control_state import check_action_allowed
@@ -177,11 +179,22 @@ def runs_trace(trace_id: str, limit: int = 200) -> dict:
 
     counts = {name: len(rows) for name, rows in filtered.items()}
     total = sum(counts.values())
+    fabric_summary = summarize_fabric_scope(_fs, trace_id=normalized, refresh=False)
     return {
         "status": "ok",
         "trace_id": normalized,
         "count": total,
         "counts": counts,
+        "summary": {
+            "evidence_scope": "trace",
+            "fabric": {
+                "artifact_count": int(fabric_summary.get("artifact_count", 0) or 0),
+                "citation_ready_count": int(fabric_summary.get("citation_ready_count", 0) or 0),
+                "source_count": int(fabric_summary.get("source_count", 0) or 0),
+                "generated_at": fabric_summary.get("generated_at"),
+                "trust": summarize_fabric_posture(fabric_summary),
+            },
+        },
         "receipts": {
             name: _tail(rows, limit) for name, rows in filtered.items()
         },

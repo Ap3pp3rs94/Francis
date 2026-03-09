@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from francis_brain.calibration import summarize_fabric_posture
+
 from .notifications import build_notification_digest
 from .tone import MODE_OPENERS, normalize_mode
 from .triggers import detect_presence_triggers
@@ -21,40 +23,8 @@ def _count(snapshot: Mapping[str, Any], section_name: str, field: str) -> int:
         return 0
 
 
-def _fabric_calibration(snapshot: Mapping[str, Any]) -> Mapping[str, Any]:
-    fabric = _section(snapshot, "fabric")
-    calibration = fabric.get("calibration", {})
-    return calibration if isinstance(calibration, Mapping) else {}
-
-
-def _fabric_confidence_counts(snapshot: Mapping[str, Any]) -> Mapping[str, Any]:
-    calibration = _fabric_calibration(snapshot)
-    counts = calibration.get("confidence_counts", {})
-    return counts if isinstance(counts, Mapping) else {}
-
-
 def _fabric_trust(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    fabric = _section(snapshot, "fabric")
-    calibration = _fabric_calibration(snapshot)
-    counts = _fabric_confidence_counts(snapshot)
-    confirmed = int(counts.get("confirmed", 0) or 0)
-    likely = int(counts.get("likely", 0) or 0)
-    uncertain = int(counts.get("uncertain", 0) or 0)
-    citation_ready_count = int(fabric.get("citation_ready_count", 0) or 0)
-    stale_current_state_count = int(calibration.get("stale_current_state_count", 0) or 0)
-    trust = "Uncertain"
-    if citation_ready_count > 0 and confirmed > 0 and uncertain == 0 and stale_current_state_count == 0:
-        trust = "Confirmed"
-    elif citation_ready_count > 0 or confirmed > 0 or likely > 0:
-        trust = "Likely"
-    return {
-        "trust": trust,
-        "citation_ready_count": citation_ready_count,
-        "confirmed_count": confirmed,
-        "likely_count": likely,
-        "uncertain_count": uncertain,
-        "stale_current_state_count": stale_current_state_count,
-    }
+    return summarize_fabric_posture(_section(snapshot, "fabric"))
 
 
 def build_presence_headline(snapshot: Mapping[str, Any]) -> str:
@@ -120,13 +90,8 @@ def build_presence_lines(
         f"{fabric_trust['likely_count']} likely, and "
         f"{fabric_trust['uncertain_count']} uncertain artifacts."
     )
-    if fabric_trust["stale_current_state_count"] > 0:
-        lines.append(
-            f"Refresh {fabric_trust['stale_current_state_count']} stale current-state artifact(s) "
-            "before treating memory as current proof."
-        )
-    elif fabric_trust["citation_ready_count"] == 0:
-        lines.append("Knowledge Fabric has no citation-ready evidence yet; memory claims stay uncertain.")
+    if fabric_trust["warning"]:
+        lines.append(str(fabric_trust["warning"]))
     action_labels = ", ".join(str(action.get("label", "")).strip() for action in actions[:3] if action.get("label"))
     if action_labels:
         lines.append(f"Recommended next actions: {action_labels}.")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from francis_brain.calibration import calibrate_fabric_artifact
+from francis_brain.calibration import calibrate_fabric_artifact, summarize_fabric_posture
 from francis_brain.memory_store import SNAPSHOT_PATH
 from francis_brain.recall import query_fabric, rebuild_fabric, summarize_fabric
 from francis_brain.snapshots import build_fabric_snapshot
@@ -313,3 +313,21 @@ def test_fabric_calibration_degrades_stale_volatile_evidence() -> None:
     assert calibration["can_claim_done"] is False
     assert calibration["freshness"] == "stale"
     assert any("current-state source is not fresh enough" in item for item in calibration["caveats"])
+
+
+def test_summarize_fabric_posture_flags_stale_current_state() -> None:
+    posture = summarize_fabric_posture(
+        {
+            "citation_ready_count": 2,
+            "calibration": {
+                "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
+                "stale_current_state_count": 2,
+                "done_claim_ready_count": 1,
+            },
+        }
+    )
+
+    assert posture["trust"] == "Likely"
+    assert posture["done_claim_ready_count"] == 1
+    assert posture["stale_current_state_count"] == 2
+    assert "Refresh 2 stale current-state artifact" in posture["warning"]

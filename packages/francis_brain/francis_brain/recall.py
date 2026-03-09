@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from francis_brain.calibration import calibrate_fabric_artifact, summarize_calibrated_artifacts
@@ -54,6 +55,59 @@ def rebuild_fabric(fs: WorkspaceFS) -> dict[str, Any]:
 def summarize_fabric(fs: WorkspaceFS, *, refresh: bool = False, now: object | None = None) -> dict[str, Any]:
     snapshot = _load_snapshot_for_query(fs, refresh=refresh, persist=False)
     return _summarize_snapshot_with_calibration(snapshot, now=now)
+
+
+def summarize_fabric_scope(
+    fs: WorkspaceFS,
+    *,
+    run_id: str | None = None,
+    trace_id: str | None = None,
+    mission_id: str | None = None,
+    refresh: bool = False,
+    now: object | None = None,
+) -> dict[str, Any]:
+    snapshot = _load_snapshot_for_query(fs, refresh=refresh, persist=False)
+    artifacts = snapshot.get("artifacts", []) if isinstance(snapshot.get("artifacts"), list) else []
+    filtered_artifacts = [
+        artifact
+        for artifact in artifacts
+        if _matches_filters(
+            artifact,
+            sources=set(),
+            run_id=str(run_id or "").strip(),
+            trace_id=str(trace_id or "").strip(),
+            mission_id=str(mission_id or "").strip(),
+        )
+    ]
+    source_counts = Counter(
+        str(artifact.get("source", "")).strip()
+        for artifact in filtered_artifacts
+        if artifact.get("source")
+    )
+    lane_counts = Counter(
+        str(artifact.get("retention_lane", "cold")).strip().lower() or "cold"
+        for artifact in filtered_artifacts
+    )
+    scoped_snapshot = {
+        "generated_at": snapshot.get("generated_at"),
+        "summary": {
+            "artifact_count": len(filtered_artifacts),
+            "citation_ready_count": sum(
+                1
+                for artifact in filtered_artifacts
+                if isinstance(artifact.get("provenance"), dict)
+                and str(artifact["provenance"].get("rel_path", "")).strip()
+            ),
+            "source_counts": dict(source_counts),
+            "lane_counts": {
+                "hot": int(lane_counts.get("hot", 0)),
+                "warm": int(lane_counts.get("warm", 0)),
+                "cold": int(lane_counts.get("cold", 0)),
+            },
+        },
+        "artifacts": filtered_artifacts,
+    }
+    return _summarize_snapshot_with_calibration(scoped_snapshot, now=now)
 
 
 def _matches_filters(artifact: dict[str, Any], *, sources: set[str], run_id: str, trace_id: str, mission_id: str) -> bool:

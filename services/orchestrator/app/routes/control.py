@@ -14,10 +14,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from francis_brain.ledger import RunLedger
+from francis_brain.calibration import summarize_fabric_posture
+from francis_brain.recall import summarize_fabric
 from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
+from francis_presence.rituals import build_handback_ritual
 from services.orchestrator.app.approvals_store import add_decision, get_request, list_requests, pending_count
 
 from services.orchestrator.app.control_state import (
@@ -179,6 +182,7 @@ def _default_takeover_state() -> dict[str, Any]:
         "handback_reason": "",
         "handback_summary": "",
         "handback_verification": {},
+        "handback_fabric_posture": {},
         "handback_pending_approvals": 0,
         "request_run_id": None,
         "request_trace_id": None,
@@ -637,6 +641,9 @@ def _build_takeover_session_summary(
         handback_activity.get("detail", {}) if isinstance(handback_activity.get("detail"), dict) else {}
     )
     pending_approvals = int(handback_detail.get("pending_approvals", 0))
+    handback_fabric_posture = (
+        handback_detail.get("fabric_posture", {}) if isinstance(handback_detail.get("fabric_posture"), dict) else {}
+    )
 
     active_session_id = str(state.get("session_id") or "").strip()
     if active_session_id == session_id:
@@ -664,6 +671,7 @@ def _build_takeover_session_summary(
         "confirmed_at": confirmed_at,
         "handed_back_at": handed_back_at,
         "pending_approvals": pending_approvals,
+        "handback_fabric_posture": handback_fabric_posture or None,
         "counts": {
             "transitions": len(ordered_transitions),
             "activity": len(ordered_activity),
@@ -2266,6 +2274,49 @@ def control_takeover_handback_package(limit: int = 200, session_id: str | None =
     receipts = _collect_handback_receipts_for_session(session_id=resolved_session_id, limit=limit)
     latest_transition = receipts["transitions"][-1] if receipts["transitions"] else {}
     latest_activity = receipts["activity"][-1] if receipts["activity"] else {}
+    handback_activity = next(
+        (row for row in reversed(receipts["activity"]) if str(row.get("kind", "")).strip() == "control.takeover.handed_back"),
+        {},
+    )
+    handback_detail = handback_activity.get("detail", {}) if isinstance(handback_activity.get("detail"), dict) else {}
+    handback_summary = str(handback_detail.get("summary", state.get("handback_summary", ""))).strip()
+    handback_verification = (
+        handback_detail.get("verification", {})
+        if isinstance(handback_detail.get("verification"), dict)
+        else state.get("handback_verification", {})
+        if isinstance(state.get("handback_verification"), dict)
+        else {}
+    )
+    handback_pending_approvals = int(
+        handback_detail.get("pending_approvals", state.get("handback_pending_approvals", 0)) or 0
+    )
+    stored_posture = (
+        handback_detail.get("fabric_posture", {})
+        if isinstance(handback_detail.get("fabric_posture"), dict)
+        else state.get("handback_fabric_posture", {})
+        if isinstance(state.get("handback_fabric_posture"), dict)
+        else {}
+    )
+    fabric_posture = stored_posture or summarize_fabric_posture(summarize_fabric(_fs, refresh=False))
+    handback_ritual = build_handback_ritual(
+        mode=str(state.get("previous_mode", "pilot")),
+        run_id=str(state.get("handback_run_id") or "").strip() or "unknown",
+        summary=handback_summary,
+        pending_approvals=handback_pending_approvals,
+        verification=handback_verification,
+        fabric_summary={
+            "citation_ready_count": fabric_posture.get("citation_ready_count", 0),
+            "calibration": {
+                "confidence_counts": {
+                    "confirmed": fabric_posture.get("confirmed_count", 0),
+                    "likely": fabric_posture.get("likely_count", 0),
+                    "uncertain": fabric_posture.get("uncertain_count", 0),
+                },
+                "stale_current_state_count": fabric_posture.get("stale_current_state_count", 0),
+                "done_claim_ready_count": fabric_posture.get("done_claim_ready_count", 0),
+            },
+        },
+    )
 
     return {
         "status": "ok",
@@ -2282,7 +2333,14 @@ def control_takeover_handback_package(limit: int = 200, session_id: str | None =
                 "logs": len(receipts["logs"]),
                 "ledger": len(receipts["ledger"]),
             },
+            "handback": {
+                "summary": handback_summary or None,
+                "pending_approvals": handback_pending_approvals,
+                "verification": handback_verification,
+                "fabric_posture": fabric_posture,
+            },
         },
+        "handback_ritual": handback_ritual,
         "timeline": {
             "transitions": receipts["transitions"],
             "activity": receipts["activity"],
@@ -2455,6 +2513,7 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
             "handback_reason": "",
             "handback_summary": "",
             "handback_verification": {},
+            "handback_fabric_posture": {},
             "handback_pending_approvals": 0,
             "request_run_id": run_id,
             "request_trace_id": trace_id,
@@ -2669,6 +2728,16 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
     )
 
     reason = str(body.reason).strip() or "manual_takeover_handback"
+    fabric_summary = summarize_fabric(_fs, refresh=True)
+    fabric_posture = summarize_fabric_posture(fabric_summary)
+    handback_ritual = build_handback_ritual(
+        mode=mode_after,
+        run_id=run_id,
+        summary=str(body.summary).strip(),
+        pending_approvals=int(body.pending_approvals),
+        verification=body.verification if isinstance(body.verification, dict) else {},
+        fabric_summary=fabric_summary,
+    )
     takeover_after = _save_takeover_state(
         {
             **takeover_before,
@@ -2679,6 +2748,7 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
             "handback_reason": reason,
             "handback_summary": str(body.summary).strip(),
             "handback_verification": body.verification if isinstance(body.verification, dict) else {},
+            "handback_fabric_posture": fabric_posture,
             "handback_pending_approvals": int(body.pending_approvals),
             "handback_run_id": run_id,
             "handback_trace_id": trace_id,
@@ -2726,6 +2796,7 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
         detail={
             "summary": str(body.summary).strip(),
             "verification": body.verification if isinstance(body.verification, dict) else {},
+            "fabric_posture": fabric_posture,
             "pending_approvals": int(body.pending_approvals),
             "reason": reason,
             "mode": control_after.get("mode"),
@@ -2742,5 +2813,6 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
         "mode": control_after.get("mode"),
         "kill_switch": control_after.get("kill_switch"),
         "takeover": takeover_after,
+        "handback_ritual": handback_ritual,
         "receipt_id": receipt.get("id"),
     }
