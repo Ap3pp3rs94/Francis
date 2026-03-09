@@ -1,3 +1,37 @@
 name: security
-on: [push, pull_request]
-jobs: {}
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Audit Tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev] pip-audit
+      - name: Audit Python Dependencies
+        run: python -m pip_audit --progress-spinner off
