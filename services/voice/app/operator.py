@@ -8,8 +8,8 @@ from uuid import uuid4
 from francis_brain.ledger import RunLedger
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
-from services.hud.app.orchestrator_bridge import get_lens_actions
-from services.hud.app.state import build_lens_snapshot
+from services.orchestrator.app.lens_operator import compact_action_chip, get_lens_actions
+from services.orchestrator.app.lens_snapshot import build_lens_snapshot
 from services.voice.app.stt import preview_transcription
 from services.voice.app.tts import MODE_OPENERS
 
@@ -60,18 +60,6 @@ def _tokenize(text: str) -> set[str]:
 
 def _log_receipt(*, run_id: str, kind: str, summary: dict[str, Any]) -> None:
     _ledger.append(run_id=run_id, kind=kind, summary=summary)
-
-
-def _compact_action(chip: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "kind": str(chip.get("kind", "")).strip(),
-        "label": str(chip.get("label", "")).strip(),
-        "risk_tier": str(chip.get("risk_tier", "")).strip(),
-        "trust_badge": str(chip.get("trust_badge", "")).strip(),
-        "requires_confirmation": bool(chip.get("requires_confirmation", False)),
-        "reason": str(chip.get("reason", "")).strip(),
-        "execute_via": chip.get("execute_via", {}),
-    }
 
 
 def _briefing_headline(snapshot: dict[str, Any]) -> str:
@@ -130,12 +118,18 @@ def _briefing_lines(snapshot: dict[str, Any], actions: list[dict[str, Any]], *, 
     return lines
 
 
-def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) -> dict[str, Any]:
+def build_operator_presence(
+    *,
+    mode: str = "assist",
+    max_actions: int = 3,
+    snapshot: dict[str, Any] | None = None,
+    actions_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     normalized_mode = _normalize_mode(mode)
-    snapshot = build_lens_snapshot()
-    actions_payload = get_lens_actions(max_actions=max_actions)
+    snapshot = snapshot if isinstance(snapshot, dict) else build_lens_snapshot()
+    actions_payload = actions_payload if isinstance(actions_payload, dict) else get_lens_actions(max_actions=max_actions)
     action_chips = [
-        _compact_action(chip)
+        compact_action_chip(chip)
         for chip in actions_payload.get("action_chips", [])
         if isinstance(chip, dict)
     ][: max(0, min(int(max_actions), 8))]
@@ -144,7 +138,6 @@ def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) 
     headline = _briefing_headline(snapshot)
     lines = _briefing_lines(snapshot, action_chips, mode=normalized_mode)
     body = " ".join([opener, headline, *lines])
-    run_id = str(uuid4())
     grounding = {
         "trust": "Confirmed",
         "workspace_root": snapshot.get("workspace_root"),
@@ -154,30 +147,39 @@ def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) 
         "active_missions": int(snapshot.get("missions", {}).get("active_count", 0)),
     }
 
+    return {
+        "surface": "voice",
+        "mode": normalized_mode,
+        "headline": headline,
+        "body": body,
+        "lines": lines,
+        "grounding": grounding,
+        "actions": action_chips,
+        "receipt_mode": "explicit",
+    }
+
+
+def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) -> dict[str, Any]:
+    briefing = build_operator_presence(mode=mode, max_actions=max_actions)
+    run_id = str(uuid4())
+
     _log_receipt(
         run_id=run_id,
         kind="voice.live_briefing",
         summary={
-            "mode": normalized_mode,
-            "headline": headline,
-            "incident_count": grounding["incident_count"],
-            "pending_approvals": grounding["pending_approvals"],
-            "active_missions": grounding["active_missions"],
-            "suggested_action_kind": action_chips[0]["kind"] if action_chips else "",
+            "mode": briefing["mode"],
+            "headline": briefing["headline"],
+            "incident_count": briefing["grounding"]["incident_count"],
+            "pending_approvals": briefing["grounding"]["pending_approvals"],
+            "active_missions": briefing["grounding"]["active_missions"],
+            "suggested_action_kind": briefing["actions"][0]["kind"] if briefing["actions"] else "",
         },
     )
 
     return {
         "status": "ok",
         "run_id": run_id,
-        "briefing": {
-            "mode": normalized_mode,
-            "headline": headline,
-            "body": body,
-            "lines": lines,
-            "grounding": grounding,
-            "actions": action_chips,
-        },
+        "briefing": briefing,
     }
 
 
@@ -236,7 +238,7 @@ def preview_operator_command(*, utterance: str, locale: str = "en-US", max_actio
         }
 
     if any(hint in normalized_text for hint in _BRIEFING_HINTS):
-        briefing = build_live_operator_briefing(mode="assist", max_actions=max_actions)
+        briefing = build_operator_presence(mode="assist", max_actions=max_actions)
         _log_receipt(
             run_id=run_id,
             kind="voice.command.preview",
@@ -252,7 +254,7 @@ def preview_operator_command(*, utterance: str, locale: str = "en-US", max_actio
             "preview": preview,
             "intent": {"kind": "briefing.request", "trust": "Likely"},
             "matches": [],
-            "briefing": briefing["briefing"],
+            "briefing": briefing,
             "governance": {
                 "execution": "not_performed",
                 "requires_explicit_execution": True,
@@ -281,7 +283,7 @@ def preview_operator_command(*, utterance: str, locale: str = "en-US", max_actio
 
     matches = []
     for score, chip, why in ranked[: max(1, min(int(max_actions), 5))]:
-        compact = _compact_action(chip)
+        compact = compact_action_chip(chip)
         compact["match_score"] = score
         compact["why"] = why
         matches.append(compact)

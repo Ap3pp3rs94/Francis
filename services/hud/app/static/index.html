@@ -262,6 +262,16 @@
         cursor: not-allowed;
       }
 
+      input[type="text"] {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 12px 14px;
+        font: inherit;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.92);
+      }
+
       .btn-primary {
         background: var(--ink);
         color: white;
@@ -346,6 +356,38 @@
         </article>
       </section>
 
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Voice Presence</h2>
+            <button class="btn-secondary" type="button" onclick="loadVoiceBriefing()">Refresh Briefing</button>
+          </div>
+          <p id="voice-headline" class="hero-copy">
+            Voice briefings stay grounded to live Lens state and visible receipts.
+          </p>
+          <ul class="list" id="voice-lines">
+            <li class="muted-empty">Loading the first live briefing.</li>
+          </ul>
+          <p class="meta tiny" id="voice-meta">No voice receipt loaded yet.</p>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Command Preview</h2>
+            <button class="btn-primary" type="button" onclick="previewVoiceCommand()">Preview Command</button>
+          </div>
+          <input
+            id="voice-command"
+            type="text"
+            maxlength="240"
+            placeholder="Say it plainly: panic stop the system, scan the observer, continue mission"
+          />
+          <p class="meta tiny" id="voice-intent">No voice command preview yet.</p>
+          <ul class="list" id="voice-matches">
+            <li class="muted-empty">No ranked matches yet.</li>
+          </ul>
+        </article>
+      </section>
+
       <section class="stack">
         <article class="panel">
           <h2>Mission Stack</h2>
@@ -368,6 +410,7 @@
 
     <script>
       let currentActions = { action_chips: [], blocked_actions: [] };
+      let currentSnapshot = null;
       let streamSource = null;
       let streamReconnectTimer = null;
 
@@ -400,6 +443,7 @@
 
       function renderBootstrap(payload) {
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
+        currentSnapshot = payload.snapshot || null;
 
         const mode = payload.dashboard.mode;
         const modeRow = document.getElementById("mode-row");
@@ -434,6 +478,38 @@
           `Run: ${payload.runs.active_run.run_id} | Phase: ${payload.runs.active_run.phase}`;
 
         renderActions(currentActions);
+        renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+      }
+
+      function renderVoiceBriefing(briefing, meta = {}) {
+        const lines = Array.isArray(briefing.lines) ? briefing.lines : [];
+        const actions = Array.isArray(briefing.actions) ? briefing.actions : [];
+        document.getElementById("voice-headline").textContent =
+          briefing.headline || "No grounded voice briefing is available.";
+        const receipt = meta.runId ? `Run ${meta.runId}` : "Live stream";
+        document.getElementById("voice-meta").textContent =
+          `Mode ${briefing.mode || "assist"} | ${receipt} | ${actions.length} suggested action(s)`;
+        document.getElementById("voice-lines").innerHTML = lines.length
+          ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
+          : `<li class="muted-empty">No briefing lines were produced.</li>`;
+      }
+
+      function renderVoicePreview(payload) {
+        const intent = payload.intent || {};
+        const matches = Array.isArray(payload.matches) ? payload.matches : [];
+        const governance = payload.governance || {};
+        document.getElementById("voice-intent").textContent =
+          `${intent.kind || "unknown"} | ${intent.trust || "Uncertain"} | ${governance.reason || "No governance note."}`;
+        document.getElementById("voice-matches").innerHTML = matches.length
+          ? matches
+              .map((match) => {
+                const why = Array.isArray(match.why) && match.why.length
+                  ? ` | ${match.why.join("; ")}`
+                  : "";
+                return `<li>${escapeHtml(match.label || match.kind)} <span class="meta">${escapeHtml(match.kind || "unknown")} | risk ${escapeHtml(match.risk_tier || "low")} | score ${escapeHtml(match.match_score || 0)}${escapeHtml(why)}</span></li>`;
+              })
+              .join("")
+          : `<li class="muted-empty">No Lens actions matched that utterance.</li>`;
       }
 
       function renderActions(actions) {
@@ -526,6 +602,41 @@
         await loadSurface();
       }
 
+      async function loadVoiceBriefing() {
+        const mode = currentSnapshot?.control?.mode || "assist";
+        const response = await fetch(`/api/voice/briefing?mode=${encodeURIComponent(mode)}&max_actions=3`);
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("voice-meta").textContent = `Voice briefing failed for ${mode}`;
+          document.getElementById("voice-lines").innerHTML =
+            `<li class="muted-empty">${escapeHtml(payload.detail || "Unknown voice briefing failure.")}</li>`;
+          return;
+        }
+        renderVoiceBriefing(payload.briefing || {}, { runId: payload.run_id || "" });
+      }
+
+      async function previewVoiceCommand() {
+        const input = document.getElementById("voice-command");
+        const utterance = String(input?.value || "").trim();
+        if (!utterance) {
+          document.getElementById("voice-intent").textContent = "Enter a command to preview against live Lens actions.";
+          return;
+        }
+        const response = await fetch("/api/voice/command/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ utterance, locale: "en-US", max_actions: 5 }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("voice-intent").textContent = `Voice preview failed: ${payload.detail || "unknown error"}`;
+          document.getElementById("voice-matches").innerHTML =
+            `<li class="muted-empty">${escapeHtml(payload.detail || "Unknown voice preview failure.")}</li>`;
+          return;
+        }
+        renderVoicePreview(payload);
+      }
+
       async function loadSurface() {
         const response = await fetch("/api/bootstrap");
         const payload = await response.json();
@@ -590,3 +701,5 @@
     </script>
   </body>
 </html>
+
+

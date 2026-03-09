@@ -110,6 +110,42 @@ def test_voice_live_briefing_uses_live_lens_state(monkeypatch) -> None:
     assert receipts[-1]["kind"] == "voice.live_briefing"
 
 
+def test_voice_operator_presence_is_pure(monkeypatch) -> None:
+    receipts: list[dict[str, object]] = []
+
+    class StubLedger:
+        def append(self, *, run_id: str, kind: str, summary: dict[str, object]) -> None:
+            receipts.append({"run_id": run_id, "kind": kind, "summary": summary})
+
+    monkeypatch.setattr(voice_operator, "_ledger", StubLedger())
+    monkeypatch.setattr(
+        voice_operator,
+        "build_lens_snapshot",
+        lambda: {
+            "workspace_root": "D:/francis/workspace",
+            "control": {"mode": "assist", "kill_switch": False},
+            "incidents": {"open_count": 0, "highest_severity": "nominal"},
+            "approvals": {"pending_count": 0},
+            "missions": {"active_count": 0, "active": []},
+            "inbox": {"alert_count": 0},
+            "runs": {"last_run": {}},
+            "objective": {"label": "Systematically build Francis"},
+        },
+    )
+    monkeypatch.setattr(
+        voice_operator,
+        "get_lens_actions",
+        lambda max_actions=3: {"status": "ok", "action_chips": [], "blocked_actions": []},
+    )
+
+    presence = voice_operator.build_operator_presence(mode="assist", max_actions=2)
+
+    assert presence["surface"] == "voice"
+    assert presence["mode"] == "assist"
+    assert presence["receipt_mode"] == "explicit"
+    assert receipts == []
+
+
 def test_voice_command_preview_ranks_real_lens_actions(monkeypatch) -> None:
     receipts: list[dict[str, object]] = []
 
@@ -160,3 +196,43 @@ def test_voice_command_preview_ranks_real_lens_actions(monkeypatch) -> None:
     assert payload["matches"][0]["requires_confirmation"] is True
     assert payload["governance"]["execution"] == "not_performed"
     assert receipts[-1]["kind"] == "voice.command.preview"
+
+
+def test_voice_command_preview_briefing_request_does_not_emit_live_briefing_receipt(monkeypatch) -> None:
+    receipts: list[dict[str, object]] = []
+
+    class StubLedger:
+        def append(self, *, run_id: str, kind: str, summary: dict[str, object]) -> None:
+            receipts.append({"run_id": run_id, "kind": kind, "summary": summary})
+
+    monkeypatch.setattr(voice_operator, "_ledger", StubLedger())
+    monkeypatch.setattr(
+        voice_operator,
+        "build_lens_snapshot",
+        lambda: {
+            "workspace_root": "D:/francis/workspace",
+            "control": {"mode": "assist", "kill_switch": False},
+            "incidents": {"open_count": 0, "highest_severity": "nominal"},
+            "approvals": {"pending_count": 1},
+            "missions": {"active_count": 1, "active": [{"title": "Live Lens", "status": "active"}]},
+            "inbox": {"alert_count": 0},
+            "runs": {"last_run": {"summary": "Lens state is flowing live."}},
+            "objective": {"label": "Live Lens"},
+        },
+    )
+    monkeypatch.setattr(
+        voice_operator,
+        "get_lens_actions",
+        lambda max_actions=5: {"status": "ok", "action_chips": [], "blocked_actions": []},
+    )
+
+    response = client.post(
+        "/voice/command/preview",
+        json={"utterance": "status report", "locale": "en-US", "max_actions": 3},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"]["kind"] == "briefing.request"
+    assert payload["briefing"]["surface"] == "voice"
+    assert [receipt["kind"] for receipt in receipts] == ["voice.command.preview"]

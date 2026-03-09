@@ -5,10 +5,10 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,7 @@ from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
 from services.hud.app.views.missions import get_missions_view
 from services.hud.app.views.runs import get_runs_view
+from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
 SERVICE_VERSION = "0.2.0"
 STATIC_INDEX = Path(__file__).resolve().parent / "static" / "index.html"
@@ -32,14 +33,27 @@ class HudActionExecuteRequest(BaseModel):
     user: str = "hud.operator"
 
 
+class HudVoiceCommandPreviewRequest(BaseModel):
+    utterance: str = Field(min_length=1, max_length=240)
+    locale: str = Field(default="en-US")
+    max_actions: int = Field(default=5, ge=1, le=8)
+
+
 def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
     snapshot = build_lens_snapshot()
+    actions = get_lens_actions(max_actions=max_actions)
     return {
         "status": "ok",
         "service": "hud",
         "version": SERVICE_VERSION,
         "snapshot": snapshot,
-        "actions": get_lens_actions(max_actions=max_actions),
+        "actions": actions,
+        "voice": build_operator_presence(
+            mode=str(snapshot.get("control", {}).get("mode", "assist")),
+            max_actions=min(max_actions, 3),
+            snapshot=snapshot,
+            actions_payload=actions,
+        ),
         "dashboard": get_dashboard_view(),
         "missions": get_missions_view(),
         "incidents": get_incidents_view(),
@@ -101,6 +115,27 @@ def _build_app() -> FastAPI:
             role=payload.role,
             user=payload.user,
         )
+
+    @app.get("/api/voice/briefing")
+    def voice_briefing(
+        mode: Literal["observe", "assist", "pilot", "away"] = "assist",
+        max_actions: int = 3,
+    ) -> dict[str, object]:
+        try:
+            return build_live_operator_briefing(mode=mode, max_actions=max_actions)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/voice/command/preview")
+    def voice_command_preview(payload: HudVoiceCommandPreviewRequest) -> dict[str, object]:
+        try:
+            return preview_operator_command(
+                utterance=payload.utterance,
+                locale=payload.locale,
+                max_actions=payload.max_actions,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/stream")
     async def stream(max_actions: int = 8, max_seconds: int = 45, poll_interval_ms: int = 1000) -> StreamingResponse:

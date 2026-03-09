@@ -92,6 +92,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["missions"]["surface"] == "missions"
     assert body["inbox"]["surface"] == "inbox"
     assert body["runs"]["surface"] == "runs"
+    assert body["voice"]["surface"] == "voice"
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -199,6 +200,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["incidents"]["open_count"] == 1
     assert body["inbox"]["alert_count"] == 1
     assert body["runs"]["active_run"]["run_id"] == "run-live"
+    assert body["voice"]["mode"] == "away"
+    assert "Incident pressure is high." in body["voice"]["headline"]
 
 
 def test_hud_actions_endpoint_proxies_lens_actions() -> None:
@@ -254,6 +257,7 @@ def test_hud_stream_emits_sse_bootstrap_updates(monkeypatch) -> None:
             "version": "0.2.0",
             "snapshot": {"count": calls["count"], "max_actions": max_actions},
             "actions": {"status": "ok", "action_chips": [], "blocked_actions": []},
+            "voice": {"surface": "voice", "mode": "pilot", "headline": "Stable", "lines": [], "actions": []},
             "dashboard": {"surface": "dashboard", "mode": {"current": "pilot", "available": ["pilot"]}, "cards": []},
             "missions": {"surface": "missions", "active": [], "backlog": []},
             "incidents": {"surface": "incidents", "items": [{"summary": "none"}]},
@@ -269,3 +273,74 @@ def test_hud_stream_emits_sse_bootstrap_updates(monkeypatch) -> None:
     assert response.headers["content-type"].startswith("text/event-stream")
     assert response.text.count("event: bootstrap") >= 2
     assert "event: end" in response.text
+
+
+def test_hud_root_mentions_voice_presence() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Voice Presence" in response.text
+
+
+
+def test_hud_voice_briefing_surface_uses_voice_operator(monkeypatch) -> None:
+    monkeypatch.setattr(
+        hud_main,
+        "build_live_operator_briefing",
+        lambda mode="assist", max_actions=3: {
+            "status": "ok",
+            "run_id": "voice-run-1",
+            "briefing": {
+                "mode": mode,
+                "headline": "System state is stable.",
+                "lines": ["Control mode is assist."],
+                "actions": [{"kind": "observer.scan", "label": "Run Observer Scan"}],
+            },
+        },
+    )
+
+    response = client.get("/api/voice/briefing", params={"mode": "assist", "max_actions": 2})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == "voice-run-1"
+    assert payload["briefing"]["mode"] == "assist"
+    assert payload["briefing"]["actions"][0]["kind"] == "observer.scan"
+
+
+
+def test_hud_voice_command_preview_surface_uses_voice_operator(monkeypatch) -> None:
+    monkeypatch.setattr(
+        hud_main,
+        "preview_operator_command",
+        lambda utterance, locale="en-US", max_actions=5: {
+            "status": "ok",
+            "run_id": "voice-preview-1",
+            "intent": {"kind": "action.suggestion", "trust": "Likely"},
+            "matches": [
+                {
+                    "kind": "control.panic",
+                    "label": "Panic Stop (Kill Switch)",
+                    "risk_tier": "high",
+                    "match_score": 12,
+                    "why": ["matched alias 'panic'"],
+                }
+            ],
+            "governance": {
+                "execution": "not_performed",
+                "requires_explicit_execution": True,
+                "reason": "Voice preview cannot execute actions implicitly.",
+            },
+        },
+    )
+
+    response = client.post(
+        "/api/voice/command/preview",
+        json={"utterance": "panic stop the system", "locale": "en-US", "max_actions": 3},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == "voice-preview-1"
+    assert payload["intent"]["kind"] == "action.suggestion"
+    assert payload["matches"][0]["kind"] == "control.panic"
