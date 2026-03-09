@@ -8,10 +8,11 @@ from uuid import uuid4
 from francis_brain.ledger import RunLedger
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
+from francis_presence.narrator import compose_operator_presence
+from francis_presence.tone import normalize_mode
 from services.orchestrator.app.lens_operator import compact_action_chip, get_lens_actions
 from services.orchestrator.app.lens_snapshot import build_lens_snapshot
 from services.voice.app.stt import preview_transcription
-from services.voice.app.tts import MODE_OPENERS
 
 DEFAULT_WORKSPACE_ROOT = Path(settings.workspace_root).resolve()
 _fs = WorkspaceFS(
@@ -47,75 +48,12 @@ _BRIEFING_HINTS = (
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
-def _normalize_mode(mode: str) -> str:
-    normalized = str(mode).strip().lower()
-    if normalized not in MODE_OPENERS:
-        raise ValueError(f"Unsupported mode: {mode}")
-    return normalized
-
-
 def _tokenize(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(str(text).strip().lower()))
 
 
 def _log_receipt(*, run_id: str, kind: str, summary: dict[str, Any]) -> None:
     _ledger.append(run_id=run_id, kind=kind, summary=summary)
-
-
-def _briefing_headline(snapshot: dict[str, Any]) -> str:
-    control = snapshot.get("control", {})
-    incidents = snapshot.get("incidents", {})
-    approvals = snapshot.get("approvals", {})
-    missions = snapshot.get("missions", {})
-    mode = str(control.get("mode", "pilot")).strip().lower() or "pilot"
-    objective = str(snapshot.get("objective", {}).get("label", "Systematically build Francis")).strip()
-
-    if bool(control.get("kill_switch")):
-        return f"Kill switch is active. {objective} is paused in {mode} mode."
-    if int(incidents.get("open_count", 0)) > 0:
-        highest = str(incidents.get("highest_severity", "unknown")).strip() or "unknown"
-        return f"Incident pressure is {highest}. {objective} remains the current objective."
-    if int(approvals.get("pending_count", 0)) > 0:
-        pending = int(approvals.get("pending_count", 0))
-        noun = "approval" if pending == 1 else "approvals"
-        return f"{pending} pending {noun} are waiting on the current objective: {objective}."
-    if int(missions.get("active_count", 0)) > 0:
-        return f"Mission focus is active: {objective}."
-    return f"System state is stable. Current objective: {objective}."
-
-
-def _briefing_lines(snapshot: dict[str, Any], actions: list[dict[str, Any]], *, mode: str) -> list[str]:
-    control = snapshot.get("control", {})
-    incidents = snapshot.get("incidents", {})
-    approvals = snapshot.get("approvals", {})
-    missions = snapshot.get("missions", {})
-    inbox = snapshot.get("inbox", {})
-    runs = snapshot.get("runs", {})
-
-    active_mission = missions.get("active", [])
-    top_mission = active_mission[0] if active_mission else {}
-    last_run = runs.get("last_run", {})
-    lines = [
-        f"Control mode is {str(control.get('mode', mode)).strip().lower()} with kill switch "
-        f"{'engaged' if bool(control.get('kill_switch')) else 'disengaged'}.",
-        f"Incidents: {int(incidents.get('open_count', 0))} open, highest severity "
-        f"{str(incidents.get('highest_severity', 'nominal')).strip() or 'nominal'}.",
-        f"Approvals: {int(approvals.get('pending_count', 0))} pending. Inbox alerts: {int(inbox.get('alert_count', 0))}.",
-    ]
-    if top_mission:
-        title = str(top_mission.get("title", "Untitled mission")).strip() or "Untitled mission"
-        status = str(top_mission.get("status", "active")).strip().lower() or "active"
-        lines.append(f"Primary mission is {title} with status {status}.")
-    if isinstance(last_run, dict) and last_run:
-        summary = str(last_run.get("summary", "")).strip()
-        if summary:
-            lines.append(f"Latest recorded run: {summary}")
-    if actions:
-        action_labels = ", ".join(str(action.get("label", "")).strip() for action in actions[:3] if action.get("label"))
-        if action_labels:
-            lines.append(f"Recommended next actions: {action_labels}.")
-    lines.append("Claims remain tied to visible receipts and current scope.")
-    return lines
 
 
 def build_operator_presence(
@@ -125,7 +63,7 @@ def build_operator_presence(
     snapshot: dict[str, Any] | None = None,
     actions_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    normalized_mode = _normalize_mode(mode)
+    normalized_mode = normalize_mode(mode)
     snapshot = snapshot if isinstance(snapshot, dict) else build_lens_snapshot()
     actions_payload = actions_payload if isinstance(actions_payload, dict) else get_lens_actions(max_actions=max_actions)
     action_chips = [
@@ -133,30 +71,13 @@ def build_operator_presence(
         for chip in actions_payload.get("action_chips", [])
         if isinstance(chip, dict)
     ][: max(0, min(int(max_actions), 8))]
-
-    opener = MODE_OPENERS[normalized_mode]
-    headline = _briefing_headline(snapshot)
-    lines = _briefing_lines(snapshot, action_chips, mode=normalized_mode)
-    body = " ".join([opener, headline, *lines])
-    grounding = {
-        "trust": "Confirmed",
-        "workspace_root": snapshot.get("workspace_root"),
-        "objective": snapshot.get("objective", {}),
-        "incident_count": int(snapshot.get("incidents", {}).get("open_count", 0)),
-        "pending_approvals": int(snapshot.get("approvals", {}).get("pending_count", 0)),
-        "active_missions": int(snapshot.get("missions", {}).get("active_count", 0)),
-    }
-
-    return {
-        "surface": "voice",
-        "mode": normalized_mode,
-        "headline": headline,
-        "body": body,
-        "lines": lines,
-        "grounding": grounding,
-        "actions": action_chips,
-        "receipt_mode": "explicit",
-    }
+    return compose_operator_presence(
+        mode=normalized_mode,
+        snapshot=snapshot,
+        actions=action_chips,
+        surface="voice",
+        receipt_mode="explicit",
+    )
 
 
 def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) -> dict[str, Any]:

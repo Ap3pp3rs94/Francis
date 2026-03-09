@@ -104,8 +104,10 @@ def test_voice_live_briefing_uses_live_lens_state(monkeypatch) -> None:
     briefing = payload["briefing"]
     assert briefing["mode"] == "away"
     assert "Incident pressure is high." in briefing["headline"]
+    assert briefing["notification"]["kind"] == "incident.pressure"
     assert any("Control mode is away" in line for line in briefing["lines"])
     assert any("Recommended next actions: Run Observer Scan" in line for line in briefing["lines"])
+    assert any(trigger["kind"] == "incident.pressure.increased" for trigger in briefing["triggers"])
     assert briefing["grounding"]["trust"] == "Confirmed"
     assert receipts[-1]["kind"] == "voice.live_briefing"
 
@@ -142,6 +144,8 @@ def test_voice_operator_presence_is_pure(monkeypatch) -> None:
 
     assert presence["surface"] == "voice"
     assert presence["mode"] == "assist"
+    assert presence["notification"]["kind"] == "system.stable"
+    assert presence["triggers"] == []
     assert presence["receipt_mode"] == "explicit"
     assert receipts == []
 

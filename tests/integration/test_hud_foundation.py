@@ -202,6 +202,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["runs"]["active_run"]["run_id"] == "run-live"
     assert body["voice"]["mode"] == "away"
     assert "Incident pressure is high." in body["voice"]["headline"]
+    assert body["voice"]["notification"]["kind"] == "incident.pressure"
 
 
 def test_hud_actions_endpoint_proxies_lens_actions() -> None:
