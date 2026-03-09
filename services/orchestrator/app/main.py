@@ -27,6 +27,7 @@ def _ensure_package_paths() -> None:
 def _build_app() -> FastAPI:
     _ensure_package_paths()
 
+    from services.orchestrator.app.routes.apprenticeship import router as apprenticeship_router
     from services.orchestrator.app.routes.approvals import router as approvals_router
     from services.orchestrator.app.routes.autonomy import router as autonomy_router
     from services.orchestrator.app.routes.capabilities import router as capabilities_router
@@ -65,6 +66,7 @@ def _build_app() -> FastAPI:
     app.include_router(presence_router)
     app.include_router(runs_router)
     app.include_router(missions_router)
+    app.include_router(apprenticeship_router)
     app.include_router(approvals_router)
     app.include_router(forge_router)
     app.include_router(observer_router)

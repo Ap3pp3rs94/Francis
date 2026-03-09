@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from francis_brain.apprenticeship import summarize_apprenticeship
 from francis_brain.ledger import RunLedger
 from francis_core.clock import utc_now_iso
 from francis_core.config import settings
@@ -74,6 +75,11 @@ from services.orchestrator.app.routes.autonomy import (
     AutonomyReactorTickRequest,
     autonomy_dispatch_events,
     autonomy_reactor_tick,
+)
+from services.orchestrator.app.routes.apprenticeship import (
+    ApprenticeshipSkillizeRequest,
+    apprenticeship_generalize,
+    apprenticeship_skillize,
 )
 from services.orchestrator.app.routes.forge import forge_proposals
 from services.orchestrator.app.routes.missions import execute_mission_tick
@@ -886,6 +892,39 @@ def _execute_lens_action(
         summary = forge_proposals(request)
         return {"status": "ok", "kind": normalized_kind, "summary": summary}
 
+    if normalized_kind == "apprenticeship.generalize":
+        _enforce_rbac(role, "apprenticeship.generalize")
+        _enforce_action_scope(app="apprenticeship", action="apprenticeship.generalize", mutating=True)
+        session_id = str(args.get("session_id", "")).strip()
+        if not session_id:
+            raise HTTPException(status_code=400, detail="session_id is required for apprenticeship.generalize")
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": {"session_id": session_id}}
+        summary = apprenticeship_generalize(request, session_id=session_id)
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "apprenticeship.skillize":
+        _enforce_rbac(role, "apprenticeship.skillize")
+        _enforce_action_scope(app="apprenticeship", action="apprenticeship.skillize", mutating=True)
+        session_id = str(args.get("session_id", "")).strip()
+        if not session_id:
+            raise HTTPException(status_code=400, detail="session_id is required for apprenticeship.skillize")
+        skillize_payload = ApprenticeshipSkillizeRequest(
+            name=str(args.get("name", "")).strip() or None,
+            description=str(args.get("description", "")).strip() or None,
+            rationale=str(args.get("rationale", "")).strip() or None,
+            tags=[str(tag) for tag in args.get("tags", []) if isinstance(tag, str)],
+            risk_tier=str(args.get("risk_tier", "low")).strip().lower() or "low",
+        )
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "execution_args": {"session_id": session_id, **skillize_payload.model_dump()},
+            }
+        summary = apprenticeship_skillize(request, session_id=session_id, payload=skillize_payload)
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
     if normalized_kind == "autonomy.reactor.guardrail.reset":
         _enforce_rbac(role, "autonomy.guardrail.reset")
         _enforce_action_scope(app="autonomy", action="autonomy.guardrail.reset")
@@ -941,6 +980,17 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
     }
     if kind == "mission.tick":
         hinted["execute_via"]["payload"]["args"] = {"mission_id": "<required>"}
+    elif kind == "apprenticeship.generalize":
+        hinted["execute_via"]["payload"]["args"] = {"session_id": "<required>"}
+    elif kind == "apprenticeship.skillize":
+        hinted["execute_via"]["payload"]["args"] = {
+            "session_id": "<required>",
+            "name": "",
+            "description": "",
+            "rationale": "",
+            "tags": [],
+            "risk_tier": "low",
+        }
     elif kind == "control.takeover.request":
         hinted["execute_via"]["payload"]["args"] = {"objective": "<required>", "reason": ""}
     elif kind == "control.takeover.confirm":
@@ -1145,6 +1195,7 @@ def lens_state(request: Request) -> dict:
             "last_event_ts": telemetry.get("last_event_ts"),
         },
         "remote": remote_state,
+        "apprenticeship": summarize_apprenticeship(_fs, limit=5),
         "autonomy_queue": {
             "queued_count": int(autonomy_queue.get("queued_count", 0)),
             "queued_retry_count": autonomy_retry_pressure,
@@ -1365,6 +1416,7 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     remote_read_allowed = can(role, "control.remote.read") and can(role, "approvals.read")
     remote_write_allowed = can(role, "control.remote.write")
     remote_decide_allowed = remote_write_allowed and can(role, "approvals.decide")
+    apprenticeship = summarize_apprenticeship(_fs, limit=3)
     remote_pending_rows: list[dict[str, Any]] = []
     try:
         remote_approvals = control_remote_approvals(request, status="pending", limit=3)
@@ -1484,6 +1536,78 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             )
             reject_chip["execute_via"]["payload"]["args"]["approval_id"] = first_pending_id
             action_chips.append(reject_chip)
+
+    review_ready_sessions = [
+        row for row in apprenticeship.get("review_ready", []) if isinstance(row, dict)
+    ]
+    recording_sessions = [
+        row
+        for row in apprenticeship.get("recent_sessions", [])
+        if isinstance(row, dict)
+        and str(row.get("status", "")).strip().lower() == "recording"
+        and int(row.get("step_count", 0)) > 0
+    ]
+    if recording_sessions:
+        session = recording_sessions[0]
+        allowed_by_scope, scope_reason, _ = check_action_allowed(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            app="apprenticeship",
+            action="apprenticeship.generalize",
+            mutating=True,
+        )
+        allowed_by_rbac = can(role, "apprenticeship.generalize")
+        enabled = allowed_by_scope and allowed_by_rbac
+        policy_reason = ""
+        if not enabled:
+            policy_reason = scope_reason if not allowed_by_scope else f"RBAC denied: role={role}, action=apprenticeship.generalize"
+        chip = _with_execute_hint(
+            {
+                "kind": "apprenticeship.generalize",
+                "label": "Generalize Teaching Session",
+                "enabled": enabled,
+                "reason": (
+                    f"{str(session.get('title', 'Teaching session')).strip()} has "
+                    f"{int(session.get('step_count', 0))} demonstrated step(s) ready for review."
+                ),
+                "policy_reason": policy_reason,
+                "risk_tier": "low",
+                "trust_badge": "Confirmed" if enabled else "Uncertain",
+            }
+        )
+        chip["execute_via"]["payload"]["args"]["session_id"] = str(session.get("id", "")).strip()
+        action_chips.append(chip)
+
+    if review_ready_sessions:
+        session = review_ready_sessions[0]
+        allowed_by_scope, scope_reason, _ = check_action_allowed(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            app="apprenticeship",
+            action="apprenticeship.skillize",
+            mutating=True,
+        )
+        allowed_by_rbac = can(role, "apprenticeship.skillize")
+        enabled = allowed_by_scope and allowed_by_rbac
+        policy_reason = ""
+        if not enabled:
+            policy_reason = scope_reason if not allowed_by_scope else f"RBAC denied: role={role}, action=apprenticeship.skillize"
+        chip = _with_execute_hint(
+            {
+                "kind": "apprenticeship.skillize",
+                "label": "Skillize Teaching Session",
+                "enabled": enabled,
+                "reason": f"{str(session.get('title', 'Teaching session')).strip()} is ready to stage into Forge.",
+                "policy_reason": policy_reason,
+                "risk_tier": "low",
+                "trust_badge": "Likely" if enabled else "Uncertain",
+                "requires_confirmation": True,
+            }
+        )
+        chip["execute_via"]["payload"]["args"]["session_id"] = str(session.get("id", "")).strip()
+        action_chips.append(chip)
     if takeover_status == "active":
         action_chips.append(
             _with_execute_hint(

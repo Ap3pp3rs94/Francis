@@ -26,6 +26,8 @@ _ACTION_ALIASES = {
     "worker.cycle": ("worker", "queue", "process queue", "run queue", "jobs"),
     "mission.tick": ("mission", "advance mission", "next step", "tick mission", "continue mission"),
     "forge.propose": ("forge", "proposal", "generate capability", "proposal pass"),
+    "apprenticeship.generalize": ("teach", "generalize lesson", "review teaching", "distill workflow"),
+    "apprenticeship.skillize": ("skillize", "turn into skill", "stage taught skill", "forge learned skill"),
     "control.panic": ("panic", "panic stop", "stop", "halt", "kill switch", "freeze"),
     "control.resume": ("resume", "unpause", "continue"),
     "control.takeover.request": ("takeover", "pilot", "request takeover", "take control"),

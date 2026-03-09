@@ -10,6 +10,7 @@ def get_dashboard_view() -> dict[str, object]:
     approvals = snapshot["approvals"]
     incidents = snapshot["incidents"]
     runs = snapshot["runs"]
+    apprenticeship = snapshot.get("apprenticeship", {})
     return {
         "status": "ok",
         "surface": "dashboard",
@@ -38,7 +39,8 @@ def get_dashboard_view() -> dict[str, object]:
                 "body": (
                     f"Mode {control['mode']}. "
                     f"Kill switch {'active' if control.get('kill_switch') else 'clear'}. "
-                    f"{approvals['pending_count']} pending approval(s)."
+                    f"{approvals['pending_count']} pending approval(s). "
+                    f"{int(apprenticeship.get('review_count', 0))} teaching session(s) ready for review."
                 ),
             },
             {

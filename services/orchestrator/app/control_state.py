@@ -12,6 +12,7 @@ VALID_MODES = {"observe", "assist", "pilot", "away"}
 DEFAULT_ALLOWED_APPS = [
     "missions",
     "forge",
+    "apprenticeship",
     "observer",
     "autonomy",
     "control",

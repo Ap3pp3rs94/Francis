@@ -31,6 +31,8 @@ class ActionChip(TypedDict, total=False):
 
 REQUIRED_ACTION_FIELDS: dict[str, list[str]] = {
     "mission.tick": ["mission_id"],
+    "apprenticeship.generalize": ["session_id"],
+    "apprenticeship.skillize": ["session_id"],
     "control.takeover.request": ["objective"],
     "control.remote.takeover.request": ["objective"],
     "control.takeover.session": ["session_id"],
@@ -114,6 +116,8 @@ def _required_fallbacks(kind: str, args: dict[str, Any], snapshot: dict[str, Any
     active_missions = missions.get("active", []) if isinstance(missions.get("active"), list) else []
     pending_approvals = approvals.get("pending", []) if isinstance(approvals.get("pending"), list) else []
     objective = snapshot.get("objective", {}) if isinstance(snapshot.get("objective"), dict) else {}
+    apprenticeship = snapshot.get("apprenticeship", {}) if isinstance(snapshot.get("apprenticeship"), dict) else {}
+    recent_sessions = apprenticeship.get("recent_sessions", []) if isinstance(apprenticeship.get("recent_sessions"), list) else []
 
     if normalized.get("mission_id") in {"", "<required>", None} and active_missions:
         mission_id = str(active_missions[0].get("id", "")).strip()
@@ -129,6 +133,10 @@ def _required_fallbacks(kind: str, args: dict[str, Any], snapshot: dict[str, Any
         approval_id = str(pending_approvals[0].get("id", "")).strip()
         if approval_id:
             normalized["approval_id"] = approval_id
+    if normalized.get("session_id") in {"", "<required>", None} and recent_sessions:
+        session_id = str(recent_sessions[0].get("id", "")).strip()
+        if session_id:
+            normalized["session_id"] = session_id
 
     if kind == "control.panic":
         normalized["reason"] = str(normalized.get("reason", "")).strip() or "HUD operator panic"

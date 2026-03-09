@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from francis_brain.apprenticeship import summarize_apprenticeship
 from francis_core.clock import utc_now_iso
 
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
@@ -287,6 +288,16 @@ def _materialize_runs(workspace_root: Path) -> dict[str, Any]:
     }
 
 
+def _materialize_apprenticeship(workspace_root: Path) -> dict[str, Any]:
+    from francis_core.workspace_fs import WorkspaceFS
+
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    return summarize_apprenticeship(fs, limit=5)
+
+
 def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     resolved_workspace = (workspace_root or get_workspace_root()).resolve()
     control = _control_state(resolved_workspace)
@@ -295,6 +306,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     inbox = _materialize_inbox(resolved_workspace)
     incidents = _materialize_incidents(resolved_workspace)
     runs = _materialize_runs(resolved_workspace)
+    apprenticeship = _materialize_apprenticeship(resolved_workspace)
 
     active_mission = missions["active"][0] if missions["active"] else None
     if active_mission is not None:
@@ -311,6 +323,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "inbox": inbox,
         "incidents": incidents,
         "runs": runs,
+        "apprenticeship": apprenticeship,
         "objective": {
             "label": objective_label,
             "definition_of_done": (

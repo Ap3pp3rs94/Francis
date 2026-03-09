@@ -187,6 +187,24 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
             }
         ],
     )
+    _write_json(
+        workspace_root / "apprenticeship" / "sessions.json",
+        {
+            "sessions": [
+                {
+                    "id": "teach-1",
+                    "title": "Repo triage",
+                    "objective": "Teach repo review",
+                    "status": "review",
+                    "step_count": 2,
+                    "tags": ["git"],
+                    "created_at": "2026-03-08T12:05:00+00:00",
+                    "updated_at": "2026-03-08T12:06:00+00:00",
+                    "last_event_at": "2026-03-08T12:06:00+00:00",
+                }
+            ]
+        },
+    )
 
     response = client.get("/api/bootstrap")
 
@@ -200,6 +218,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["incidents"]["open_count"] == 1
     assert body["inbox"]["alert_count"] == 1
     assert body["runs"]["active_run"]["run_id"] == "run-live"
+    assert body["snapshot"]["apprenticeship"]["review_count"] == 1
     assert body["voice"]["mode"] == "away"
     assert "Incident pressure is high." in body["voice"]["headline"]
     assert body["voice"]["notification"]["kind"] == "incident.pressure"
