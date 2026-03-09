@@ -15,6 +15,7 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
 from francis_policy.rbac import can
+from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.observer.app.main import run_cycle as run_observer_cycle
 
 from services.orchestrator.app.approvals_store import pending_count
@@ -1945,6 +1946,32 @@ def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
     kind = str(payload.kind).strip().lower()
     args = payload.args if isinstance(payload.args, dict) else {}
     dry_run = bool(payload.dry_run)
+    assessment = assess_untrusted_input(
+        surface="lens",
+        action=kind or "lens.actions.execute",
+        payload={"kind": kind, "args": args},
+        inspect_paths=True,
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="lens",
+            action=kind or "lens.actions.execute",
+            payload={"kind": kind, "args": args},
+            assessment=assessment,
+        )
+        _record_lens_execution(
+            run_id=run_id,
+            trace_id=trace_id,
+            role=role,
+            action_kind=kind,
+            dry_run=dry_run,
+            ok=False,
+            detail={"status": "quarantined", "quarantine_id": quarantine["id"], "categories": quarantine["categories"]},
+        )
+        raise HTTPException(status_code=409, detail={"message": assessment["message"], "quarantine": quarantine})
 
     try:
         result = _execute_lens_action(

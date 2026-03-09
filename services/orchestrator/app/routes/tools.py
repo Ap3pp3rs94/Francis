@@ -17,6 +17,7 @@ from francis_policy.rbac import can
 from francis_policy.tool_policy import approval_policy_for_tool
 from francis_skills.contracts import SkillCall
 from francis_skills.executor import SkillExecutor
+from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.approvals_store import ensure_action_approved
 from services.orchestrator.app.control_state import check_action_allowed
 
@@ -353,6 +354,23 @@ def run_tool(request: Request, payload: ToolRunRequest) -> dict:
     run_id = str(getattr(request.state, "run_id", uuid4()))
     trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     _enforce_rbac(request, "tools.run")
+    assessment = assess_untrusted_input(
+        surface="tools",
+        action="tools.run",
+        payload={"skill": payload.skill, "args": payload.args},
+        inspect_paths=True,
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="tools",
+            action="tools.run",
+            payload={"skill": payload.skill, "args": payload.args},
+            assessment=assessment,
+        )
+        raise HTTPException(status_code=409, detail={"message": assessment["message"], "quarantine": quarantine})
     spec = _resolve_tool_spec(payload.skill.strip())
     if spec is None:
         raise HTTPException(status_code=404, detail=f"Unknown tool: {payload.skill}")
@@ -377,6 +395,28 @@ def run_tool_chain(request: Request, payload: ToolChainRequest) -> dict:
     _enforce_rbac(request, "tools.run")
     if not payload.steps:
         raise HTTPException(status_code=400, detail="steps cannot be empty")
+    chain_payload = {
+        "mission_id": payload.mission_id,
+        "goal": payload.goal,
+        "steps": [step.model_dump() for step in payload.steps],
+    }
+    assessment = assess_untrusted_input(
+        surface="tools",
+        action="tools.chain",
+        payload=chain_payload,
+        inspect_paths=True,
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="tools",
+            action="tools.chain",
+            payload=chain_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(status_code=409, detail={"message": assessment["message"], "quarantine": quarantine})
 
     mission: dict[str, Any] | None = None
     if payload.mission_id:

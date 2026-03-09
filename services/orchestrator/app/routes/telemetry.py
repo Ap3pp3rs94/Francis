@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
+from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.control_state import check_action_allowed
 from services.orchestrator.app.telemetry_connectors import (
     adapt_dev_server_event,
@@ -215,6 +216,23 @@ def post_telemetry_event(request: Request, payload: TelemetryEventRequest) -> di
     _enforce_rbac(request, "telemetry.write")
     _enforce_control("telemetry.ingest", mutating=False)
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", "")).strip() or run_id
+    assessment = assess_untrusted_input(
+        surface="telemetry",
+        action="telemetry.events",
+        payload=payload.model_dump(),
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="telemetry",
+            action="telemetry.events",
+            payload=payload.model_dump(),
+            assessment=assessment,
+        )
+        return {"run_id": run_id, "trace_id": trace_id, "status": "quarantined", "quarantine": quarantine}
     result = ingest_event(
         _fs,
         run_id=run_id,
@@ -234,6 +252,29 @@ def post_terminal_connector_event(request: Request, payload: TerminalConnectorRe
     _enforce_rbac(request, "telemetry.write")
     _enforce_control("telemetry.ingest", mutating=False)
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", "")).strip() or run_id
+    assessment = assess_untrusted_input(
+        surface="telemetry",
+        action="telemetry.connectors.terminal",
+        payload=payload.model_dump(),
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="telemetry",
+            action="telemetry.connectors.terminal",
+            payload=payload.model_dump(),
+            assessment=assessment,
+        )
+        return {
+            "run_id": run_id,
+            "trace_id": trace_id,
+            "connector": "terminal",
+            "status": "quarantined",
+            "quarantine": quarantine,
+        }
     adapted = adapt_terminal_event(
         source=payload.source,
         command=payload.command,
@@ -263,6 +304,29 @@ def post_git_connector_event(request: Request, payload: GitConnectorRequest) -> 
     _enforce_rbac(request, "telemetry.write")
     _enforce_control("telemetry.ingest", mutating=False)
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", "")).strip() or run_id
+    assessment = assess_untrusted_input(
+        surface="telemetry",
+        action="telemetry.connectors.git",
+        payload=payload.model_dump(),
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="telemetry",
+            action="telemetry.connectors.git",
+            payload=payload.model_dump(),
+            assessment=assessment,
+        )
+        return {
+            "run_id": run_id,
+            "trace_id": trace_id,
+            "connector": "git",
+            "status": "quarantined",
+            "quarantine": quarantine,
+        }
     adapted = adapt_git_event(
         source=payload.source,
         action=payload.action,
@@ -291,6 +355,29 @@ def post_dev_server_connector_event(request: Request, payload: DevServerConnecto
     _enforce_rbac(request, "telemetry.write")
     _enforce_control("telemetry.ingest", mutating=False)
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", "")).strip() or run_id
+    assessment = assess_untrusted_input(
+        surface="telemetry",
+        action="telemetry.connectors.dev_server",
+        payload=payload.model_dump(),
+    )
+    if assessment["quarantined"]:
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="telemetry",
+            action="telemetry.connectors.dev_server",
+            payload=payload.model_dump(),
+            assessment=assessment,
+        )
+        return {
+            "run_id": run_id,
+            "trace_id": trace_id,
+            "connector": "dev_server",
+            "status": "quarantined",
+            "quarantine": quarantine,
+        }
     adapted = adapt_dev_server_event(
         source=payload.source,
         service=payload.service,
