@@ -1,1 +1,592 @@
-<!doctype html><html><body><h1>Francis HUD</h1></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Francis Lens HUD</title>
+    <style>
+      :root {
+        --ink: #17202a;
+        --muted: #51606d;
+        --panel: rgba(255, 255, 255, 0.78);
+        --border: rgba(23, 32, 42, 0.12);
+        --accent: #b4472d;
+        --accent-soft: rgba(180, 71, 45, 0.12);
+        --success: #23684a;
+        --shadow: 0 18px 55px rgba(23, 32, 42, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI Variable", "Aptos", "IBM Plex Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(180, 71, 45, 0.18), transparent 35%),
+          radial-gradient(circle at right, rgba(35, 104, 74, 0.12), transparent 30%),
+          linear-gradient(160deg, #f8f5ee 0%, #ebe7de 100%);
+      }
+
+      .shell {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+        padding: 28px;
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.58));
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .eyebrow,
+      .meta,
+      .list li,
+      .console {
+        font-family: "Consolas", "Cascadia Code", monospace;
+      }
+
+      .eyebrow {
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.4rem, 5vw, 4.8rem);
+        line-height: 0.95;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+
+      .hero-copy,
+      .card p,
+      .panel p,
+      .list {
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .hero-copy {
+        max-width: 760px;
+        font-size: 1.05rem;
+      }
+
+      .mode-row,
+      .grid,
+      .stack,
+      .split,
+      .action-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .mode-row {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .grid {
+        margin-top: 22px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+
+      .stack,
+      .split {
+        margin-top: 22px;
+      }
+
+      .split {
+        grid-template-columns: 1.2fr 0.8fr;
+      }
+
+      .pill,
+      .card,
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .pill,
+      .card,
+      .panel {
+        padding: 18px 22px;
+      }
+
+      .pill strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .pill span {
+        color: var(--muted);
+      }
+
+      .accent {
+        background: linear-gradient(180deg, rgba(180, 71, 45, 0.12), rgba(255, 255, 255, 0.74));
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .status::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+
+      .status.status-warn::before {
+        background: #d58b28;
+      }
+
+      .status.status-off::before {
+        background: var(--accent);
+      }
+
+      .panel-head,
+      .action-top,
+      .badge-row,
+      .action-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .panel-head,
+      .action-top {
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+
+      .list {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .list li + li {
+        margin-top: 10px;
+      }
+
+      .tiny {
+        font-size: 0.78rem;
+      }
+
+      .action-card {
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .action-label {
+        font-weight: 700;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+
+      .risk-low,
+      .risk-medium {
+        background: rgba(35, 104, 74, 0.12);
+        color: var(--success);
+      }
+
+      .risk-high,
+      .risk-critical {
+        background: rgba(180, 71, 45, 0.14);
+        color: var(--accent);
+      }
+
+      .disabled {
+        background: rgba(81, 96, 109, 0.12);
+        color: var(--muted);
+      }
+
+      .action-copy {
+        margin: 8px 0 0;
+      }
+
+      .action-buttons {
+        margin-top: 14px;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+        transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--ink);
+        color: white;
+      }
+
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
+        border-color: var(--border);
+      }
+
+      .btn-danger {
+        background: var(--accent);
+        color: white;
+      }
+
+      .console {
+        margin: 0;
+        padding: 16px;
+        border-radius: 16px;
+        background: #19212a;
+        color: #ebf0f3;
+        overflow: auto;
+        font-size: 0.82rem;
+        line-height: 1.5;
+        min-height: 180px;
+      }
+
+      .muted-empty {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      @media (max-width: 700px) {
+        .shell {
+          padding: 20px 16px 40px;
+        }
+
+        .hero,
+        .card,
+        .panel,
+        .pill {
+          border-radius: 18px;
+        }
+
+        .split {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">Francis Lens</div>
+        <div class="status" id="stream-status">Stream connecting</div>
+        <h1>Operator overlay for live work.</h1>
+        <p class="hero-copy">
+          Francis Lens is the 4th-wall HUD for missions, control mode visibility, incidents, and
+          next actions. This build turns the HUD into a live operator surface with real action
+          chips, previews, and governed execution.
+        </p>
+        <div class="mode-row" id="mode-row"></div>
+      </section>
+
+      <section class="grid" id="cards"></section>
+
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Operator Deck</h2>
+            <span class="meta tiny" id="action-summary">Awaiting live actions</span>
+          </div>
+          <div class="action-grid" id="action-grid"></div>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Execution Feed</h2>
+            <span class="meta tiny" id="execution-meta">No action executed yet</span>
+          </div>
+          <pre class="console" id="execution-output">Awaiting operator input.</pre>
+        </article>
+      </section>
+
+      <section class="stack">
+        <article class="panel">
+          <h2>Mission Stack</h2>
+          <ul class="list" id="missions"></ul>
+        </article>
+        <article class="panel accent">
+          <h2>Incident Posture</h2>
+          <p id="incidents"></p>
+          <p class="meta" id="runs"></p>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Blocked Actions</h2>
+            <span class="meta tiny" id="blocked-summary">No blocked actions surfaced</span>
+          </div>
+          <ul class="list" id="blocked-actions"></ul>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      let currentActions = { action_chips: [], blocked_actions: [] };
+      let streamSource = null;
+      let streamReconnectTimer = null;
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function formatJson(value) {
+        return JSON.stringify(value, null, 2);
+      }
+
+      function setStreamStatus(state, detail) {
+        const node = document.getElementById("stream-status");
+        if (!node) {
+          return;
+        }
+        node.className = "status";
+        if (state === "connecting") {
+          node.classList.add("status-warn");
+        } else if (state === "offline") {
+          node.classList.add("status-off");
+        }
+        node.textContent = detail ? `${state} | ${detail}` : state;
+      }
+
+      function renderBootstrap(payload) {
+        currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
+
+        const mode = payload.dashboard.mode;
+        const modeRow = document.getElementById("mode-row");
+        modeRow.innerHTML = [
+          `<div class="pill"><strong>Mode</strong><span>${escapeHtml(mode.current)}</span></div>`,
+          `<div class="pill"><strong>Kill Switch</strong><span>${mode.kill_switch ? "active" : "clear"}</span></div>`,
+          `<div class="pill"><strong>Objective</strong><span>${escapeHtml(payload.dashboard.objective.label)}</span></div>`,
+          `<div class="pill"><strong>Pending Approvals</strong><span>${payload.snapshot.approvals.pending_count}</span></div>`,
+        ].join("");
+
+        const cards = document.getElementById("cards");
+        cards.innerHTML = payload.dashboard.cards
+          .map(
+            (card) =>
+              `<article class="card ${card.tone === "accent" ? "accent" : ""}"><h2>${escapeHtml(card.title)}</h2><p>${escapeHtml(card.body)}</p></article>`,
+          )
+          .join("");
+
+        const missionRows = payload.missions.active.length ? payload.missions.active : payload.missions.backlog;
+        const missions = document.getElementById("missions");
+        missions.innerHTML = missionRows.length
+          ? missionRows
+              .map(
+                (mission) =>
+                  `<li>${escapeHtml(mission.title)} <span class="meta">${escapeHtml(mission.phase || mission.status || "planned")}</span></li>`,
+              )
+              .join("")
+          : `<li class="muted-empty">No mission records available.</li>`;
+
+        document.getElementById("incidents").textContent = payload.incidents.items[0].summary;
+        document.getElementById("runs").textContent =
+          `Run: ${payload.runs.active_run.run_id} | Phase: ${payload.runs.active_run.phase}`;
+
+        renderActions(currentActions);
+      }
+
+      function renderActions(actions) {
+        const chips = Array.isArray(actions.action_chips) ? actions.action_chips.slice(0, 8) : [];
+        const blocked = Array.isArray(actions.blocked_actions) ? actions.blocked_actions.slice(0, 8) : [];
+        const actionGrid = document.getElementById("action-grid");
+        const blockedList = document.getElementById("blocked-actions");
+        document.getElementById("action-summary").textContent = `${chips.length} live action chip(s)`;
+        document.getElementById("blocked-summary").textContent = blocked.length
+          ? `${blocked.length} currently blocked`
+          : "No blocked actions surfaced";
+
+        actionGrid.innerHTML = chips.length
+          ? chips
+              .map((chip) => {
+                const enabled = Boolean(chip.enabled);
+                const primaryClass = String(chip.kind || "").includes("panic") ? "btn-danger" : "btn-primary";
+                const riskClass = `risk-${escapeHtml(chip.risk_tier || "low")}`;
+                const primaryReason = chip.policy_reason || chip.reason || "No operator note provided.";
+                const guidance = chip.requires_confirmation
+                  ? "This action requires explicit confirmation."
+                  : "This action can execute immediately.";
+                return `
+                  <article class="action-card">
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(chip.label || chip.kind)}</div>
+                      <div class="badge-row">
+                        <span class="badge ${riskClass}">${escapeHtml(chip.risk_tier || "low")}</span>
+                        <span class="badge ${enabled ? riskClass : "disabled"}">${escapeHtml(chip.trust_badge || (enabled ? "Likely" : "Blocked"))}</span>
+                      </div>
+                    </div>
+                    <p class="action-copy">${escapeHtml(primaryReason)}</p>
+                    <p class="action-copy meta">${escapeHtml(guidance)}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', true)">Preview</button>
+                      <button class="${primaryClass}" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', false)">${enabled ? "Execute" : "Blocked"}</button>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `<p class="muted-empty">No live action chips available.</p>`;
+
+        blockedList.innerHTML = blocked.length
+          ? blocked
+              .map(
+                (chip) =>
+                  `<li>${escapeHtml(chip.kind || "unknown")} <span class="meta">${escapeHtml(chip.policy_reason || chip.reason || "blocked")}</span></li>`,
+              )
+              .join("")
+          : `<li class="muted-empty">No blocked actions surfaced by Lens.</li>`;
+      }
+
+      function renderExecution(execution) {
+        if (!execution) {
+          return;
+        }
+        document.getElementById("execution-meta").textContent =
+          `Action ${execution.action.kind} | Run ${execution.run_id}`;
+        document.getElementById("execution-output").textContent = formatJson(execution);
+      }
+
+      async function executeAction(kind, dryRun) {
+        const chip = (currentActions.action_chips || []).find(
+          (item) => String(item.kind || "") === String(kind || ""),
+        );
+        if (!chip) {
+          return;
+        }
+        if (chip.requires_confirmation && !dryRun) {
+          const proceed = window.confirm(`Confirm execution for ${chip.label || chip.kind}?`);
+          if (!proceed) {
+            return;
+          }
+        }
+
+        const response = await fetch("/api/actions/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, dry_run: dryRun }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("execution-meta").textContent = `Action ${kind} failed`;
+          document.getElementById("execution-output").textContent = formatJson(payload);
+          return;
+        }
+
+        renderExecution(payload.execution);
+        await loadSurface();
+      }
+
+      async function loadSurface() {
+        const response = await fetch("/api/bootstrap");
+        const payload = await response.json();
+        renderBootstrap(payload);
+      }
+
+      function scheduleReconnect() {
+        if (streamReconnectTimer !== null) {
+          window.clearTimeout(streamReconnectTimer);
+        }
+        streamReconnectTimer = window.setTimeout(() => {
+          openStream();
+        }, 1500);
+      }
+
+      function openStream() {
+        if (!window.EventSource) {
+          setStreamStatus("offline", "EventSource unavailable");
+          return;
+        }
+        if (streamSource) {
+          streamSource.close();
+        }
+        setStreamStatus("connecting", "subscribing");
+        streamSource = new EventSource("/api/stream?max_actions=8&max_seconds=45&poll_interval_ms=1000");
+
+        streamSource.addEventListener("bootstrap", (event) => {
+          const message = JSON.parse(event.data);
+          renderBootstrap(message.payload);
+          setStreamStatus("live", message.stream_id.slice(0, 8));
+        });
+
+        streamSource.addEventListener("heartbeat", (event) => {
+          const message = JSON.parse(event.data);
+          setStreamStatus("live", `${message.stream_id.slice(0, 8)} | heartbeat`);
+        });
+
+        streamSource.addEventListener("end", (event) => {
+          const message = JSON.parse(event.data);
+          setStreamStatus("connecting", `${message.stream_id.slice(0, 8)} | reconnect`);
+          streamSource.close();
+          scheduleReconnect();
+        });
+
+        streamSource.onerror = () => {
+          setStreamStatus("offline", "reconnecting");
+          if (streamSource) {
+            streamSource.close();
+          }
+          scheduleReconnect();
+        };
+      }
+
+      loadSurface()
+        .then(() => {
+          openStream();
+        })
+        .catch((error) => {
+          document.body.innerHTML =
+            `<main class="shell"><section class="panel"><h2>HUD bootstrap failed</h2><p>${error}</p></section></main>`;
+        });
+    </script>
+  </body>
+</html>
