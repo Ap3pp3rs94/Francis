@@ -92,9 +92,15 @@ def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) 
         summary={
             "mode": briefing["mode"],
             "headline": briefing["headline"],
+            "trust": briefing["grounding"]["trust"],
             "incident_count": briefing["grounding"]["incident_count"],
             "pending_approvals": briefing["grounding"]["pending_approvals"],
             "active_missions": briefing["grounding"]["active_missions"],
+            "fabric_uncertain_count": briefing["grounding"].get("fabric", {}).get("uncertain_count", 0),
+            "fabric_stale_current_state_count": briefing["grounding"].get("fabric", {}).get(
+                "stale_current_state_count",
+                0,
+            ),
             "suggested_action_kind": briefing["actions"][0]["kind"] if briefing["actions"] else "",
         },
     )

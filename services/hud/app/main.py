@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.dashboard import get_dashboard_view
@@ -39,6 +40,17 @@ class HudVoiceCommandPreviewRequest(BaseModel):
     max_actions: int = Field(default=5, ge=1, le=8)
 
 
+class HudFabricQueryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=300)
+    limit: int = Field(default=6, ge=1, le=12)
+    sources: list[str] = Field(default_factory=list)
+    run_id: str | None = None
+    trace_id: str | None = None
+    mission_id: str | None = None
+    include_related: bool = True
+    refresh: bool = False
+
+
 def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
     snapshot = build_lens_snapshot()
     actions = get_lens_actions(max_actions=max_actions)
@@ -59,6 +71,7 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
         "incidents": get_incidents_view(),
         "inbox": get_inbox_view(),
         "runs": get_runs_view(),
+        "fabric": get_fabric_surface(refresh=False),
     }
 
 
@@ -101,6 +114,26 @@ def _build_app() -> FastAPI:
     @app.get("/api/runs")
     def runs() -> dict[str, object]:
         return get_runs_view()
+
+    @app.get("/api/fabric")
+    def fabric(refresh: bool = False) -> dict[str, object]:
+        return get_fabric_surface(refresh=refresh)
+
+    @app.post("/api/fabric/query")
+    def fabric_query(payload: HudFabricQueryRequest) -> dict[str, object]:
+        try:
+            return query_fabric_surface(
+                query=payload.query,
+                limit=payload.limit,
+                sources=payload.sources,
+                run_id=payload.run_id,
+                trace_id=payload.trace_id,
+                mission_id=payload.mission_id,
+                include_related=payload.include_related,
+                refresh=payload.refresh,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/actions")
     def actions(max_actions: int = 8) -> dict[str, object]:

@@ -92,6 +92,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["missions"]["surface"] == "missions"
     assert body["inbox"]["surface"] == "inbox"
     assert body["runs"]["surface"] == "runs"
+    assert body["fabric"]["surface"] == "fabric"
     assert body["voice"]["surface"] == "voice"
 
 
@@ -219,9 +220,72 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["inbox"]["alert_count"] == 1
     assert body["runs"]["active_run"]["run_id"] == "run-live"
     assert body["snapshot"]["apprenticeship"]["review_count"] == 1
+    assert body["fabric"]["summary"]["artifact_count"] >= 1
+    assert body["voice"]["grounding"]["trust"] == "Likely"
     assert body["voice"]["mode"] == "away"
     assert "Incident pressure is high." in body["voice"]["headline"]
     assert body["voice"]["notification"]["kind"] == "incident.pressure"
+
+
+def test_hud_fabric_surface_supports_summary_and_query(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+
+    _write_json(
+        workspace_root / "runs" / "last_run.json",
+        {
+            "run_id": "run-fabric",
+            "phase": "report",
+            "summary": "Fabric HUD query path is live.",
+        },
+    )
+    _write_jsonl(
+        workspace_root / "journals" / "decisions.jsonl",
+        [
+            {
+                "id": "decision-fabric-1",
+                "ts": "2026-03-09T12:00:00+00:00",
+                "kind": "observer.decision",
+                "run_id": "run-fabric",
+                "headline": "Approval waiting for forge promote.",
+                "reason": "Approval waiting",
+            }
+        ],
+    )
+    _write_jsonl(
+        workspace_root / "telemetry" / "events.jsonl",
+        [
+            {
+                "id": "telemetry-fabric-1",
+                "ts": "2026-03-09T12:01:00+00:00",
+                "ingested_at": "2026-03-09T12:01:01+00:00",
+                "run_id": "run-fabric",
+                "kind": "telemetry.event",
+                "stream": "dev_server",
+                "source": "api",
+                "severity": "critical",
+                "text": "service crashed under load",
+                "fields": {"service": "api"},
+            }
+        ],
+    )
+
+    summary = client.get("/api/fabric")
+
+    assert summary.status_code == 200
+    summary_payload = summary.json()
+    assert summary_payload["surface"] == "fabric"
+    assert summary_payload["summary"]["artifact_count"] >= 2
+    assert summary_payload["summary"]["calibration"]["confidence_counts"]["likely"] >= 1
+
+    query = client.post("/api/fabric/query", json={"query": "approval waiting", "limit": 5, "include_related": True})
+
+    assert query.status_code == 200
+    query_payload = query.json()
+    assert query_payload["surface"] == "fabric"
+    assert query_payload["result_count"] >= 1
+    assert query_payload["results"][0]["confidence"] == "likely"
+    assert query_payload["results"][0]["citation"]["rel_path"] == "journals/decisions.jsonl"
 
 
 def test_hud_actions_endpoint_proxies_lens_actions() -> None:

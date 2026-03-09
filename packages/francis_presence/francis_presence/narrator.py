@@ -21,6 +21,42 @@ def _count(snapshot: Mapping[str, Any], section_name: str, field: str) -> int:
         return 0
 
 
+def _fabric_calibration(snapshot: Mapping[str, Any]) -> Mapping[str, Any]:
+    fabric = _section(snapshot, "fabric")
+    calibration = fabric.get("calibration", {})
+    return calibration if isinstance(calibration, Mapping) else {}
+
+
+def _fabric_confidence_counts(snapshot: Mapping[str, Any]) -> Mapping[str, Any]:
+    calibration = _fabric_calibration(snapshot)
+    counts = calibration.get("confidence_counts", {})
+    return counts if isinstance(counts, Mapping) else {}
+
+
+def _fabric_trust(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    fabric = _section(snapshot, "fabric")
+    calibration = _fabric_calibration(snapshot)
+    counts = _fabric_confidence_counts(snapshot)
+    confirmed = int(counts.get("confirmed", 0) or 0)
+    likely = int(counts.get("likely", 0) or 0)
+    uncertain = int(counts.get("uncertain", 0) or 0)
+    citation_ready_count = int(fabric.get("citation_ready_count", 0) or 0)
+    stale_current_state_count = int(calibration.get("stale_current_state_count", 0) or 0)
+    trust = "Uncertain"
+    if citation_ready_count > 0 and confirmed > 0 and uncertain == 0 and stale_current_state_count == 0:
+        trust = "Confirmed"
+    elif citation_ready_count > 0 or confirmed > 0 or likely > 0:
+        trust = "Likely"
+    return {
+        "trust": trust,
+        "citation_ready_count": citation_ready_count,
+        "confirmed_count": confirmed,
+        "likely_count": likely,
+        "uncertain_count": uncertain,
+        "stale_current_state_count": stale_current_state_count,
+    }
+
+
 def build_presence_headline(snapshot: Mapping[str, Any]) -> str:
     control = _section(snapshot, "control")
     incidents = _section(snapshot, "incidents")
@@ -54,6 +90,7 @@ def build_presence_lines(
     incidents = _section(snapshot, "incidents")
     missions = _section(snapshot, "missions")
     runs = _section(snapshot, "runs")
+    fabric_trust = _fabric_trust(snapshot)
 
     active_mission = missions.get("active", [])
     top_mission = active_mission[0] if isinstance(active_mission, list) and active_mission else {}
@@ -76,6 +113,20 @@ def build_presence_lines(
     summary = str(last_run.get("summary", "")).strip()
     if summary:
         lines.append(f"Latest recorded run: {summary}")
+    lines.append(
+        "Fabric trust is "
+        f"{str(fabric_trust['trust']).lower()} with "
+        f"{fabric_trust['confirmed_count']} confirmed, "
+        f"{fabric_trust['likely_count']} likely, and "
+        f"{fabric_trust['uncertain_count']} uncertain artifacts."
+    )
+    if fabric_trust["stale_current_state_count"] > 0:
+        lines.append(
+            f"Refresh {fabric_trust['stale_current_state_count']} stale current-state artifact(s) "
+            "before treating memory as current proof."
+        )
+    elif fabric_trust["citation_ready_count"] == 0:
+        lines.append("Knowledge Fabric has no citation-ready evidence yet; memory claims stay uncertain.")
     action_labels = ", ".join(str(action.get("label", "")).strip() for action in actions[:3] if action.get("label"))
     if action_labels:
         lines.append(f"Recommended next actions: {action_labels}.")
@@ -84,13 +135,15 @@ def build_presence_lines(
 
 
 def build_presence_grounding(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    fabric_trust = _fabric_trust(snapshot)
     return {
-        "trust": "Confirmed",
+        "trust": fabric_trust["trust"],
         "workspace_root": snapshot.get("workspace_root"),
         "objective": dict(_section(snapshot, "objective")),
         "incident_count": _count(snapshot, "incidents", "open_count"),
         "pending_approvals": _count(snapshot, "approvals", "pending_count"),
         "active_missions": _count(snapshot, "missions", "active_count"),
+        "fabric": fabric_trust,
     }
 
 

@@ -90,7 +90,8 @@
       .grid,
       .stack,
       .split,
-      .action-grid {
+      .action-grid,
+      .input-row {
         display: grid;
         gap: 16px;
       }
@@ -243,6 +244,11 @@
         margin-top: 14px;
       }
 
+      .input-row {
+        grid-template-columns: 1fr auto;
+        align-items: center;
+      }
+
       button {
         appearance: none;
         border: 1px solid transparent;
@@ -388,6 +394,41 @@
         </article>
       </section>
 
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Knowledge Fabric</h2>
+            <span class="meta tiny" id="fabric-summary-meta">Waiting for fabric summary</span>
+          </div>
+          <p id="fabric-summary" class="hero-copy">
+            Fabric trust will appear here once the HUD receives the live summary.
+          </p>
+          <div class="input-row">
+            <input
+              id="fabric-query"
+              type="text"
+              maxlength="300"
+              placeholder="Search cited memory: approval waiting, service crashed, repo triage"
+            />
+            <button class="btn-primary" type="button" onclick="runFabricQuery()">Search Fabric</button>
+          </div>
+          <p class="meta tiny" id="fabric-query-meta">No fabric query executed yet.</p>
+          <div class="stack" id="fabric-results">
+            <p class="muted-empty">Run a fabric query to inspect cited memory.</p>
+          </div>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Calibration Detail</h2>
+            <span class="meta tiny" id="fabric-detail-meta">No fabric artifact selected</span>
+          </div>
+          <ul class="list" id="fabric-calibration-list">
+            <li class="muted-empty">Calibration posture will appear here.</li>
+          </ul>
+          <pre class="console" id="fabric-detail">Awaiting a fabric query.</pre>
+        </article>
+      </section>
+
       <section class="stack">
         <article class="panel">
           <h2>Mission Stack</h2>
@@ -411,6 +452,7 @@
     <script>
       let currentActions = { action_chips: [], blocked_actions: [] };
       let currentSnapshot = null;
+      let currentFabricResults = [];
       let streamSource = null;
       let streamReconnectTimer = null;
 
@@ -478,17 +520,104 @@
           `Run: ${payload.runs.active_run.run_id} | Phase: ${payload.runs.active_run.phase}`;
 
         renderActions(currentActions);
+        renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+      }
+
+      function renderFabricSummary(surface) {
+        const summary = surface?.summary || {};
+        const calibration = summary.calibration || {};
+        const counts = calibration.confidence_counts || {};
+        const topSources = Array.isArray(summary.top_sources) ? summary.top_sources : [];
+        const summaryLine =
+          `${summary.citation_ready_count || 0} citation-ready artifacts, ` +
+          `${counts.confirmed || 0} confirmed, ` +
+          `${counts.likely || 0} likely, ` +
+          `${counts.uncertain || 0} uncertain.`;
+        document.getElementById("fabric-summary").textContent = summaryLine;
+        document.getElementById("fabric-summary-meta").textContent =
+          topSources.length
+            ? `Top source ${topSources[0].source} (${topSources[0].count})`
+            : `Artifacts ${summary.artifact_count || 0} | Sources ${summary.source_count || 0}`;
+
+        const calibrationItems = [];
+        calibrationItems.push(
+          `${calibration.done_claim_ready_count || 0} artifact(s) are ready for confirmed done-claims.`,
+        );
+        if ((calibration.stale_current_state_count || 0) > 0) {
+          calibrationItems.push(
+            `${calibration.stale_current_state_count} current-state artifact(s) are stale and need refresh before they count as proof.`,
+          );
+        }
+        calibrationItems.push(
+          `${calibration.local_provenance_count || 0} artifact(s) have local provenance; ${calibration.anchored_provenance_count || 0} are line- or record-anchored.`,
+        );
+        document.getElementById("fabric-calibration-list").innerHTML = calibrationItems
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join("");
+      }
+
+      function inspectFabricResult(index) {
+        const row = currentFabricResults[index];
+        if (!row) {
+          return;
+        }
+        document.getElementById("fabric-detail-meta").textContent =
+          `${row.source || "unknown"} | ${row.trust_badge || row.confidence || "Uncertain"} | ${row.citation?.rel_path || "no citation"}`;
+        document.getElementById("fabric-detail").textContent = formatJson(row);
+      }
+
+      function renderFabricQuery(payload) {
+        currentFabricResults = Array.isArray(payload.results) ? payload.results : [];
+        const counts = payload.calibration?.confidence_counts || {};
+        document.getElementById("fabric-query-meta").textContent =
+          `${payload.result_count || 0} result(s) | ` +
+          `${counts.confirmed || 0} confirmed, ${counts.likely || 0} likely, ${counts.uncertain || 0} uncertain`;
+        const resultsNode = document.getElementById("fabric-results");
+        resultsNode.innerHTML = currentFabricResults.length
+          ? currentFabricResults
+              .map((row, index) => {
+                const caveats = Array.isArray(row.calibration?.caveats) ? row.calibration.caveats : [];
+                const nextChecks = Array.isArray(row.calibration?.next_checks) ? row.calibration.next_checks : [];
+                const relatedCount = Array.isArray(row.related) ? row.related.length : 0;
+                return `
+                  <article class="action-card">
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(row.title || row.artifact_id || "Untitled artifact")}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(row.severity || row.risk_tier || "low")}">${escapeHtml(row.source || "unknown")}</span>
+                        <span class="badge ${String(row.trust_badge || "Uncertain").toLowerCase() === "confirmed" ? "risk-low" : String(row.trust_badge || "Uncertain").toLowerCase() === "likely" ? "risk-medium" : "disabled"}">${escapeHtml(row.trust_badge || "Uncertain")}</span>
+                      </div>
+                    </div>
+                    <p class="action-copy">${escapeHtml(row.summary || "No summary available.")}</p>
+                    <p class="action-copy meta">Citation ${escapeHtml(row.citation?.rel_path || "unknown")} | freshness ${escapeHtml(row.calibration?.freshness || "unknown")} | related ${relatedCount}</p>
+                    ${caveats.length ? `<p class="action-copy meta">Caveats: ${escapeHtml(caveats.join("; "))}</p>` : ""}
+                    ${nextChecks.length ? `<p class="action-copy meta">Next checks: ${escapeHtml(nextChecks.join("; "))}</p>` : ""}
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectFabricResult(${index})">Inspect</button>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `<p class="muted-empty">No cited artifacts matched that query.</p>`;
+        if (currentFabricResults.length) {
+          inspectFabricResult(0);
+        } else {
+          document.getElementById("fabric-detail-meta").textContent = "No fabric artifact selected";
+          document.getElementById("fabric-detail").textContent = formatJson(payload);
+        }
       }
 
       function renderVoiceBriefing(briefing, meta = {}) {
         const lines = Array.isArray(briefing.lines) ? briefing.lines : [];
         const actions = Array.isArray(briefing.actions) ? briefing.actions : [];
+        const fabric = briefing.grounding?.fabric || {};
         document.getElementById("voice-headline").textContent =
           briefing.headline || "No grounded voice briefing is available.";
         const receipt = meta.runId ? `Run ${meta.runId}` : "Live stream";
         document.getElementById("voice-meta").textContent =
-          `Mode ${briefing.mode || "assist"} | ${receipt} | ${actions.length} suggested action(s)`;
+          `Mode ${briefing.mode || "assist"} | ${receipt} | ${briefing.grounding?.trust || "Uncertain"} trust | ${actions.length} suggested action(s) | ${fabric.uncertain_count || 0} uncertain artifact(s)`;
         document.getElementById("voice-lines").innerHTML = lines.length
           ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
           : `<li class="muted-empty">No briefing lines were produced.</li>`;
@@ -637,6 +766,31 @@
         renderVoicePreview(payload);
       }
 
+      async function runFabricQuery() {
+        const input = document.getElementById("fabric-query");
+        const query = String(input?.value || "").trim();
+        if (!query) {
+          document.getElementById("fabric-query-meta").textContent =
+            "Enter a fabric query before searching.";
+          return;
+        }
+        const response = await fetch("/api/fabric/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, limit: 6, include_related: true }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("fabric-query-meta").textContent =
+            `Fabric query failed: ${payload.detail || "unknown error"}`;
+          document.getElementById("fabric-results").innerHTML =
+            `<p class="muted-empty">${escapeHtml(payload.detail || "Unknown fabric query failure.")}</p>`;
+          document.getElementById("fabric-detail").textContent = formatJson(payload);
+          return;
+        }
+        renderFabricQuery(payload);
+      }
+
       async function loadSurface() {
         const response = await fetch("/api/bootstrap");
         const payload = await response.json();
@@ -692,6 +846,14 @@
 
       loadSurface()
         .then(() => {
+          const queryNode = document.getElementById("fabric-query");
+          if (queryNode) {
+            queryNode.addEventListener("keydown", (event) => {
+              if (event.key === "Enter") {
+                runFabricQuery();
+              }
+            });
+          }
           openStream();
         })
         .catch((error) => {

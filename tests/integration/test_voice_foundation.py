@@ -67,6 +67,13 @@ def test_voice_live_briefing_uses_live_lens_state(monkeypatch) -> None:
             },
             "inbox": {"alert_count": 1},
             "runs": {"last_run": {"summary": "Lens state is flowing live."}},
+            "fabric": {
+                "citation_ready_count": 4,
+                "calibration": {
+                    "confidence_counts": {"confirmed": 2, "likely": 3, "uncertain": 1},
+                    "stale_current_state_count": 1,
+                },
+            },
             "objective": {"label": "Live Lens"},
         },
     )
@@ -106,9 +113,12 @@ def test_voice_live_briefing_uses_live_lens_state(monkeypatch) -> None:
     assert "Incident pressure is high." in briefing["headline"]
     assert briefing["notification"]["kind"] == "incident.pressure"
     assert any("Control mode is away" in line for line in briefing["lines"])
+    assert any("Fabric trust is likely" in line for line in briefing["lines"])
+    assert any("Refresh 1 stale current-state artifact" in line for line in briefing["lines"])
     assert any("Recommended next actions: Run Observer Scan" in line for line in briefing["lines"])
     assert any(trigger["kind"] == "incident.pressure.increased" for trigger in briefing["triggers"])
-    assert briefing["grounding"]["trust"] == "Confirmed"
+    assert briefing["grounding"]["trust"] == "Likely"
+    assert briefing["grounding"]["fabric"]["uncertain_count"] == 1
     assert receipts[-1]["kind"] == "voice.live_briefing"
 
 
@@ -147,6 +157,8 @@ def test_voice_operator_presence_is_pure(monkeypatch) -> None:
     assert presence["notification"]["kind"] == "system.stable"
     assert presence["triggers"] == []
     assert presence["receipt_mode"] == "explicit"
+    assert presence["grounding"]["trust"] == "Uncertain"
+    assert any("Knowledge Fabric has no citation-ready evidence yet" in line for line in presence["lines"])
     assert receipts == []
 
 
@@ -221,6 +233,13 @@ def test_voice_command_preview_briefing_request_does_not_emit_live_briefing_rece
             "missions": {"active_count": 1, "active": [{"title": "Live Lens", "status": "active"}]},
             "inbox": {"alert_count": 0},
             "runs": {"last_run": {"summary": "Lens state is flowing live."}},
+            "fabric": {
+                "citation_ready_count": 2,
+                "calibration": {
+                    "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
+                    "stale_current_state_count": 0,
+                },
+            },
             "objective": {"label": "Live Lens"},
         },
     )
