@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from francis_brain.apprenticeship import summarize_apprenticeship
+from francis_brain.recall import summarize_fabric
 from francis_core.clock import utc_now_iso
+from francis_core.workspace_fs import WorkspaceFS
 
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 
@@ -289,13 +291,19 @@ def _materialize_runs(workspace_root: Path) -> dict[str, Any]:
 
 
 def _materialize_apprenticeship(workspace_root: Path) -> dict[str, Any]:
-    from francis_core.workspace_fs import WorkspaceFS
-
     fs = WorkspaceFS(
         roots=[workspace_root],
         journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
     )
     return summarize_apprenticeship(fs, limit=5)
+
+
+def _materialize_fabric(workspace_root: Path) -> dict[str, Any]:
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    return summarize_fabric(fs, refresh=False)
 
 
 def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
@@ -307,6 +315,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     incidents = _materialize_incidents(resolved_workspace)
     runs = _materialize_runs(resolved_workspace)
     apprenticeship = _materialize_apprenticeship(resolved_workspace)
+    fabric = _materialize_fabric(resolved_workspace)
 
     active_mission = missions["active"][0] if missions["active"] else None
     if active_mission is not None:
@@ -324,6 +333,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "incidents": incidents,
         "runs": runs,
         "apprenticeship": apprenticeship,
+        "fabric": fabric,
         "objective": {
             "label": objective_label,
             "definition_of_done": (

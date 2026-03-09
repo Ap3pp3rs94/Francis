@@ -11,6 +11,7 @@ def get_dashboard_view() -> dict[str, object]:
     incidents = snapshot["incidents"]
     runs = snapshot["runs"]
     apprenticeship = snapshot.get("apprenticeship", {})
+    fabric = snapshot.get("fabric", {})
     return {
         "status": "ok",
         "surface": "dashboard",
@@ -50,7 +51,8 @@ def get_dashboard_view() -> dict[str, object]:
                 "body": (
                     f"{runs['ledger_count']} ledger event(s) tracked. "
                     f"{incidents['open_count']} open incident(s). "
-                    f"Highest severity: {incidents['highest_severity']}."
+                    f"Highest severity: {incidents['highest_severity']}. "
+                    f"Fabric citations ready: {int(fabric.get('citation_ready_count', 0))}."
                 ),
             },
         ],

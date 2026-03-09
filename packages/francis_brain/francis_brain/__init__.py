@@ -11,6 +11,7 @@ from .apprenticeship import (
     write_skill_artifact,
 )
 from .ledger import RunLedger
+from .recall import query_fabric, rebuild_fabric, summarize_fabric
 
 __all__ = [
     "RunLedger",
@@ -22,6 +23,9 @@ __all__ = [
     "list_sessions",
     "load_session_steps",
     "mark_session_skillized",
+    "query_fabric",
+    "rebuild_fabric",
     "summarize_apprenticeship",
+    "summarize_fabric",
     "write_skill_artifact",
 ]
