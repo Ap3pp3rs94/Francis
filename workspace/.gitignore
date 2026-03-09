@@ -1,0 +1,5 @@
+# Francis runtime workspace
+# Keep policy/docs in git; keep live state local.
+*
+!.gitignore
+!README.md

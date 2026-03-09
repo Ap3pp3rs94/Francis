@@ -842,6 +842,115 @@ def test_control_remote_feed_rejects_invalid_timestamp_window() -> None:
     assert missing_after_payload.get("after_id_found") is False
     assert int(missing_after_payload.get("count", 0)) == 0
 
+    invalid_highlights_window = c.get(
+        "/control/remote/highlights",
+        params={
+            "since_ts": "2026-01-02T00:00:00+00:00",
+            "until_ts": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    assert invalid_highlights_window.status_code == 400
+    assert "since_ts must be <= until_ts" in str(invalid_highlights_window.json().get("detail", ""))
+
+    invalid_highlights_since = c.get("/control/remote/highlights", params={"since_ts": "bad-ts"})
+    assert invalid_highlights_since.status_code == 400
+    assert "Invalid since_ts" in str(invalid_highlights_since.json().get("detail", ""))
+
+
+def test_control_remote_highlights_provide_trends_and_action_chips() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    trace_id = f"remote-highlights-{uuid4()}"
+    headers = {"x-trace-id": trace_id}
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        req_approve = c.post(
+            "/approvals/request",
+            json={"action": "forge.promote", "reason": "highlight approve", "metadata": {"source": "pytest"}},
+        )
+        assert req_approve.status_code == 200
+        approval_id_one = str(req_approve.json().get("approval", {}).get("id", "")).strip()
+        assert approval_id_one
+
+        req_reject = c.post(
+            "/approvals/request",
+            json={"action": "tools.run", "reason": "highlight reject", "metadata": {"source": "pytest"}},
+        )
+        assert req_reject.status_code == 200
+        approval_id_two = str(req_reject.json().get("approval", {}).get("id", "")).strip()
+        assert approval_id_two
+
+        approve = c.post(
+            f"/control/remote/approvals/{approval_id_one}/approve",
+            headers=headers,
+            json={"note": "highlight approve"},
+        )
+        assert approve.status_code == 200
+        reject = c.post(
+            f"/control/remote/approvals/{approval_id_two}/reject",
+            headers=headers,
+            json={"note": "highlight reject"},
+        )
+        assert reject.status_code == 200
+
+        highlights = c.get(
+            "/control/remote/highlights",
+            headers=headers,
+            params={"window_seconds": 3600, "limit": 400},
+        )
+        assert highlights.status_code == 200
+        payload = highlights.json()
+        assert payload.get("status") == "ok"
+        filters = payload.get("filters", {})
+        assert int(filters.get("window_seconds", 0)) == 3600
+        assert str(filters.get("since_ts", "")).strip()
+        assert str(filters.get("until_ts", "")).strip()
+
+        insights = payload.get("insights", {})
+        assert int(insights.get("total_events", 0)) >= 2
+        by_kind = insights.get("by_kind", {})
+        assert isinstance(by_kind, dict)
+        assert any(
+            key in by_kind for key in ("control.remote.approval.approved", "control.remote.approval.rejected")
+        )
+        timeline = insights.get("timeline", [])
+        assert isinstance(timeline, list)
+        assert timeline
+        assert all("count" in row and "start" in row and "end" in row for row in timeline)
+        sparkline = str(insights.get("sparkline", ""))
+        assert sparkline
+
+        top_signals = insights.get("top_signals", [])
+        assert isinstance(top_signals, list)
+        assert top_signals
+        assert all("kind" in item and "score" in item and "ts" in item for item in top_signals)
+        assert any(str(item.get("kind", "")).startswith("control.") for item in top_signals)
+
+        chips = payload.get("action_chips", [])
+        assert isinstance(chips, list)
+        assert chips
+        assert all("kind" in chip and "label" in chip and "priority" in chip for chip in chips)
+
+        filtered = c.get(
+            "/control/remote/highlights",
+            headers=headers,
+            params={
+                "kind_prefix": "control.remote.approval",
+                "since_ts": str(filters.get("since_ts", "")),
+                "until_ts": str(filters.get("until_ts", "")),
+                "limit": 400,
+            },
+        )
+        assert filtered.status_code == 200
+        filtered_payload = filtered.json()
+        assert filtered_payload.get("filters", {}).get("kind_prefix") == "control.remote.approval"
+        assert int(filtered_payload.get("insights", {}).get("total_events", 0)) >= 2
+        filtered_signals = filtered_payload.get("insights", {}).get("top_signals", [])
+        assert filtered_signals
+        assert all(str(item.get("kind", "")).startswith("control.remote.approval") for item in filtered_signals)
+    finally:
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
 
 def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> None:
     c = TestClient(app)

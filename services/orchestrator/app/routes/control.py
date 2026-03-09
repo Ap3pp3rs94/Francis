@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 import json
 import time
 from pathlib import Path
@@ -41,6 +42,7 @@ _takeover_history_path = "control/takeover_history.jsonl"
 _takeover_activity_path = "control/takeover_activity.jsonl"
 _REMOTE_FEED_RISK_TIERS = {"low", "medium", "high", "critical"}
 _REMOTE_FEED_SOURCES = {"takeover.activity", "journals.decisions"}
+_REMOTE_SPARKLINE_CHARS = " .:-=+*#%@"
 
 
 class ControlModeRequest(BaseModel):
@@ -886,6 +888,167 @@ def _build_remote_feed_rows(
     return feed_rows
 
 
+def _risk_tier_weight(value: str | None) -> int:
+    risk = str(value or "").strip().lower()
+    if risk == "critical":
+        return 4
+    if risk == "high":
+        return 3
+    if risk == "medium":
+        return 2
+    return 1
+
+
+def _build_count_dict(rows: list[dict[str, Any]], field: str, *, top_n: int = 20) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        key = str(row.get(field, "")).strip().lower()
+        if not key:
+            continue
+        counts[key] += 1
+    ordered = counts.most_common(max(1, top_n))
+    return {key: int(value) for key, value in ordered}
+
+
+def _sparkline_from_counts(counts: list[int]) -> str:
+    if not counts:
+        return ""
+    max_count = max(counts)
+    if max_count <= 0:
+        return ""
+    scale = len(_REMOTE_SPARKLINE_CHARS) - 1
+    out: list[str] = []
+    for count in counts:
+        idx = int(round((float(max(0, count)) / float(max_count)) * scale))
+        idx = max(0, min(scale, idx))
+        out.append(_REMOTE_SPARKLINE_CHARS[idx])
+    return "".join(out)
+
+
+def _build_timeline(
+    rows: list[dict[str, Any]],
+    *,
+    since_dt: datetime,
+    until_dt: datetime,
+    bucket_seconds: int,
+    max_buckets: int = 96,
+) -> list[dict[str, Any]]:
+    if bucket_seconds <= 0:
+        return []
+    total_seconds = max(0, int((until_dt - since_dt).total_seconds()))
+    bucket_count = max(1, min(max_buckets, (total_seconds // bucket_seconds) + 1))
+    bucket_map: dict[int, dict[str, Any]] = {}
+
+    for idx in range(bucket_count):
+        start = since_dt + timedelta(seconds=idx * bucket_seconds)
+        bucket_map[idx] = {
+            "start": start.isoformat(),
+            "end": (start + timedelta(seconds=bucket_seconds)).isoformat(),
+            "count": 0,
+            "risk_peak": "low",
+        }
+
+    for row in rows:
+        ts_raw = str(row.get("ts", "")).strip()
+        row_dt = _parse_remote_feed_timestamp(ts_raw)
+        if row_dt is None:
+            continue
+        if row_dt < since_dt or row_dt > until_dt:
+            continue
+        idx = int((row_dt - since_dt).total_seconds() // bucket_seconds)
+        idx = max(0, min(bucket_count - 1, idx))
+        bucket = bucket_map[idx]
+        bucket["count"] = int(bucket.get("count", 0)) + 1
+        current_peak = str(bucket.get("risk_peak", "low")).strip().lower()
+        row_risk = str(row.get("risk_tier", "low")).strip().lower()
+        if _risk_tier_weight(row_risk) > _risk_tier_weight(current_peak):
+            bucket["risk_peak"] = row_risk
+
+    return [bucket_map[idx] for idx in sorted(bucket_map)]
+
+
+def _score_signals(rows: list[dict[str, Any]], *, now_dt: datetime, top_n: int = 8) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    kind_counts = Counter(str(row.get("kind", "")).strip().lower() for row in rows)
+    scored: list[dict[str, Any]] = []
+    for row in rows:
+        kind = str(row.get("kind", "")).strip().lower()
+        if not kind:
+            continue
+        row_ts = _parse_remote_feed_timestamp(str(row.get("ts", "")).strip())
+        if row_ts is None:
+            recency = 0.0
+        else:
+            age_seconds = max(0.0, (now_dt - row_ts).total_seconds())
+            recency = 1.0 / (1.0 + (age_seconds / 60.0))
+        rarity = 1.0 / float(max(1, kind_counts.get(kind, 1)))
+        risk_weight = float(_risk_tier_weight(str(row.get("risk_tier", "low")).strip().lower()))
+        score = (risk_weight * 3.0) + (recency * 2.0) + rarity
+        scored.append(
+            {
+                "id": str(row.get("id", "")).strip(),
+                "kind": kind,
+                "source": str(row.get("source", "")).strip().lower(),
+                "risk_tier": str(row.get("risk_tier", "low")).strip().lower(),
+                "ts": str(row.get("ts", "")).strip(),
+                "score": round(score, 4),
+                "trace_id": str(row.get("trace_id", "")).strip() or None,
+                "run_id": str(row.get("run_id", "")).strip() or None,
+            }
+        )
+    scored.sort(key=lambda item: (float(item.get("score", 0.0)), str(item.get("ts", ""))), reverse=True)
+    return scored[: max(1, top_n)]
+
+
+def _build_highlight_chips(
+    *,
+    rows: list[dict[str, Any]],
+    pending_approvals: int,
+    by_risk: dict[str, int],
+    top_kinds: dict[str, int],
+) -> list[dict[str, Any]]:
+    chips: list[dict[str, Any]] = []
+    if pending_approvals > 0:
+        chips.append(
+            {
+                "kind": "open.approvals",
+                "label": "Review pending approvals",
+                "priority": "high",
+                "reason": f"{pending_approvals} pending approval(s) require a decision.",
+            }
+        )
+    high_count = int(by_risk.get("high", 0)) + int(by_risk.get("critical", 0))
+    if high_count > 0:
+        chips.append(
+            {
+                "kind": "review.high_risk_feed",
+                "label": "Inspect high-risk activity",
+                "priority": "high",
+                "reason": f"{high_count} high/critical event(s) detected in the current feed window.",
+            }
+        )
+    if int(top_kinds.get("control.remote.approval.rejected", 0)) > 0:
+        chips.append(
+            {
+                "kind": "audit.rejections",
+                "label": "Audit rejected actions",
+                "priority": "medium",
+                "reason": "Rejected approvals can signal policy friction or unclear scope.",
+            }
+        )
+    if not rows:
+        chips.append(
+            {
+                "kind": "quiet.window",
+                "label": "Quiet control window",
+                "priority": "low",
+                "reason": "No control feed events detected for the selected window.",
+            }
+        )
+    return chips
+
+
 @router.get("/control/mode")
 def get_control_mode() -> dict:
     state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
@@ -1061,6 +1224,7 @@ def control_remote_state(request: Request, approval_limit: int = 10, session_lim
         "control.remote.state",
         "control.remote.approvals",
         "control.remote.feed",
+        "control.remote.highlights",
     ]
     if remote_write_allowed:
         remote_actions.extend(
@@ -1211,6 +1375,115 @@ def control_remote_feed(
         "total_available": len(rows),
         "count": len(chunk),
         "feed": chunk,
+    }
+
+
+@router.get("/control/remote/highlights")
+def control_remote_highlights(
+    request: Request,
+    limit: int = 300,
+    window_seconds: int = 1800,
+    session_id: str | None = None,
+    kind: str | None = None,
+    kind_prefix: str | None = None,
+    risk_tier: str | None = None,
+    source: str | None = None,
+    since_ts: str | None = None,
+    until_ts: str | None = None,
+) -> dict:
+    _enforce_remote_control("control.remote.read")
+    _enforce_remote_rbac(request, "control.remote.read")
+    _enforce_remote_rbac(request, "approvals.read")
+
+    normalized_session_id = str(session_id or "").strip() or None
+    normalized_kind = str(kind or "").strip() or None
+    normalized_kind_prefix = str(kind_prefix or "").strip() or None
+    normalized_risk_tier = _normalize_remote_feed_risk_tier(risk_tier)
+    normalized_source = _normalize_remote_feed_source(source)
+    requested_since = _normalize_remote_feed_timestamp(since_ts, field_name="since_ts")
+    requested_until = _normalize_remote_feed_timestamp(until_ts, field_name="until_ts")
+    normalized_window = max(0, min(int(window_seconds), 86400))
+    now_dt = datetime.now(timezone.utc)
+    if requested_since or requested_until:
+        resolved_since = requested_since
+        resolved_until = requested_until
+    elif normalized_window > 0:
+        resolved_until = now_dt.isoformat()
+        resolved_since = (now_dt - timedelta(seconds=normalized_window)).isoformat()
+    else:
+        resolved_since = None
+        resolved_until = None
+    if resolved_since and resolved_until and resolved_since > resolved_until:
+        raise HTTPException(status_code=400, detail="since_ts must be <= until_ts")
+
+    rows = _build_remote_feed_rows(
+        session_id=normalized_session_id,
+        kind=normalized_kind,
+        kind_prefix=normalized_kind_prefix,
+        risk_tier=normalized_risk_tier,
+        source=normalized_source,
+        since_ts=resolved_since,
+        until_ts=resolved_until,
+    )
+    normalized_limit = max(1, min(limit, 2000))
+    rows = rows[-normalized_limit:]
+    by_kind = _build_count_dict(rows, "kind", top_n=12)
+    by_risk = _build_count_dict(rows, "risk_tier", top_n=4)
+    by_source = _build_count_dict(rows, "source", top_n=4)
+
+    timeline: list[dict[str, Any]] = []
+    sparkline = ""
+    if resolved_since and resolved_until:
+        since_dt = _parse_remote_feed_timestamp(resolved_since) or now_dt
+        until_dt = _parse_remote_feed_timestamp(resolved_until) or now_dt
+        if until_dt < since_dt:
+            since_dt, until_dt = until_dt, since_dt
+        duration_seconds = max(1, int((until_dt - since_dt).total_seconds()))
+        if duration_seconds <= 900:
+            bucket_seconds = 60
+        elif duration_seconds <= 7200:
+            bucket_seconds = 300
+        else:
+            bucket_seconds = 900
+        timeline = _build_timeline(
+            rows,
+            since_dt=since_dt,
+            until_dt=until_dt,
+            bucket_seconds=bucket_seconds,
+            max_buckets=96,
+        )
+        sparkline = _sparkline_from_counts([int(item.get("count", 0)) for item in timeline])
+
+    top_signals = _score_signals(rows, now_dt=now_dt, top_n=8)
+    chips = _build_highlight_chips(
+        rows=rows,
+        pending_approvals=pending_count(_fs),
+        by_risk=by_risk,
+        top_kinds=by_kind,
+    )
+    return {
+        "status": "ok",
+        "filters": {
+            "session_id": normalized_session_id,
+            "kind": normalized_kind,
+            "kind_prefix": normalized_kind_prefix,
+            "risk_tier": normalized_risk_tier,
+            "source": normalized_source,
+            "since_ts": resolved_since,
+            "until_ts": resolved_until,
+            "window_seconds": normalized_window,
+            "limit": normalized_limit,
+        },
+        "insights": {
+            "total_events": len(rows),
+            "by_kind": by_kind,
+            "by_risk_tier": by_risk,
+            "by_source": by_source,
+            "timeline": timeline,
+            "sparkline": sparkline,
+            "top_signals": top_signals,
+        },
+        "action_chips": chips,
     }
 
 

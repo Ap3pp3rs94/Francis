@@ -226,6 +226,7 @@ Francis is local-first and stateful. Live artifacts land in areas like:
 * `runtime/`
 
 These hold journals, queues, missions, incidents, receipts, telemetry, and other live system artifacts.
+`workspace/` is runtime-managed local state, not a source-controlled artifact surface.
 
 ## Current Architecture Shape
 
@@ -324,6 +325,7 @@ In this repository, the minimum expected routine is:
 * verify that scope, approvals, receipts, and user-visible behavior still hold
 
 `workspace/` and `runtime/` are intentionally excluded from Ruff because they contain live artifacts rather than source code.
+Git should treat `workspace/` the same way: local runtime state stays local unless an artifact is intentionally promoted into a real repo surface.
 
 ## Operating Realism
 
