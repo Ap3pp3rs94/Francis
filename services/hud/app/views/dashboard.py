@@ -12,6 +12,12 @@ def get_dashboard_view() -> dict[str, object]:
     runs = snapshot["runs"]
     apprenticeship = snapshot.get("apprenticeship", {})
     fabric = snapshot.get("fabric", {})
+    fabric_calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
+    fabric_confidence = (
+        fabric_calibration.get("confidence_counts", {})
+        if isinstance(fabric_calibration.get("confidence_counts"), dict)
+        else {}
+    )
     return {
         "status": "ok",
         "surface": "dashboard",
@@ -52,7 +58,10 @@ def get_dashboard_view() -> dict[str, object]:
                     f"{runs['ledger_count']} ledger event(s) tracked. "
                     f"{incidents['open_count']} open incident(s). "
                     f"Highest severity: {incidents['highest_severity']}. "
-                    f"Fabric citations ready: {int(fabric.get('citation_ready_count', 0))}."
+                    f"Fabric citations ready: {int(fabric.get('citation_ready_count', 0))}. "
+                    f"Trust state: {int(fabric_confidence.get('confirmed', 0))} confirmed, "
+                    f"{int(fabric_confidence.get('likely', 0))} likely, "
+                    f"{int(fabric_confidence.get('uncertain', 0))} uncertain."
                 ),
             },
         ],

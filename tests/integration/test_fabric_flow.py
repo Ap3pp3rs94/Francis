@@ -144,6 +144,7 @@ def test_fabric_routes_support_summary_query_and_rebuild(monkeypatch, tmp_path: 
     payload = summary.json()
     assert payload["summary"]["artifact_count"] >= 4
     assert payload["summary"]["source_count"] >= 3
+    assert payload["summary"]["calibration"]["confidence_counts"]["likely"] >= 1
 
     query = client.post(
         "/fabric/query",
@@ -153,6 +154,9 @@ def test_fabric_routes_support_summary_query_and_rebuild(monkeypatch, tmp_path: 
     query_payload = query.json()
     assert query_payload["result_count"] >= 1
     assert query_payload["results"][0]["citation"]["rel_path"] == "journals/decisions.jsonl"
+    assert query_payload["results"][0]["confidence"] == "likely"
+    assert query_payload["results"][0]["trust_badge"] == "Likely"
+    assert query_payload["results"][0]["calibration"]["has_local_provenance"] is True
 
     rebuild = client.post("/fabric/rebuild", json={"reason": "integration rebuild"})
     assert rebuild.status_code == 200
@@ -170,3 +174,4 @@ def test_lens_snapshot_surfaces_fabric_summary(monkeypatch, tmp_path: Path) -> N
 
     assert snapshot["fabric"]["artifact_count"] >= 4
     assert snapshot["fabric"]["citation_ready_count"] >= 1
+    assert snapshot["fabric"]["calibration"]["confidence_counts"]["likely"] >= 1

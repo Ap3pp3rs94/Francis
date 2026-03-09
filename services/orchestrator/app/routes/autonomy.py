@@ -9,6 +9,9 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from francis_brain.calibration import calibrate_fabric_artifact, summarize_calibrated_artifacts
+from francis_brain.recall import VOLATILE_SOURCES
+from francis_brain.snapshots import build_fabric_snapshot
 from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
@@ -145,6 +148,89 @@ def _enforce_control(action: str, *, mutating: bool) -> None:
     )
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
+
+
+def _fabric_citation_for_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
+    provenance = artifact.get("provenance", {}) if isinstance(artifact.get("provenance"), dict) else {}
+    return {
+        "artifact_id": artifact.get("id"),
+        "source": artifact.get("source"),
+        "rel_path": provenance.get("rel_path"),
+        "line": provenance.get("line"),
+        "record_index": provenance.get("record_index"),
+        "ts": artifact.get("ts"),
+    }
+
+
+def _fabric_artifacts_for_trace(*, run_id: str, trace_id: str) -> list[dict[str, Any]]:
+    snapshot = build_fabric_snapshot(_fs)
+    artifacts = snapshot.get("artifacts", []) if isinstance(snapshot.get("artifacts"), list) else []
+    matched: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        relations = artifact.get("relationships", {}) if isinstance(artifact.get("relationships"), dict) else {}
+        artifact_trace_id = str(relations.get("trace_id", "")).strip()
+        artifact_run_id = str(relations.get("run_id", "")).strip()
+        artifact_id = str(artifact.get("id", "")).strip()
+        if trace_id and artifact_trace_id == trace_id:
+            matched.append(artifact)
+            continue
+        if run_id and (artifact_run_id == run_id or artifact_id == run_id):
+            matched.append(artifact)
+    return matched
+
+
+def _apply_fabric_evidence_gate(
+    verification: dict[str, Any],
+    *,
+    run_id: str,
+    trace_id: str,
+    now: str,
+    required: bool,
+) -> dict[str, Any]:
+    row = dict(verification)
+    matching_artifacts = _fabric_artifacts_for_trace(run_id=run_id, trace_id=trace_id)
+    calibration = summarize_calibrated_artifacts(
+        matching_artifacts,
+        volatile_sources=VOLATILE_SOURCES,
+        now=now,
+    )
+    evidence_preview: list[dict[str, Any]] = []
+    for artifact in matching_artifacts[:5]:
+        artifact_calibration = calibrate_fabric_artifact(artifact, volatile_sources=VOLATILE_SOURCES, now=now)
+        evidence_preview.append(
+            {
+                "artifact_id": artifact.get("id"),
+                "source": artifact.get("source"),
+                "title": artifact.get("title"),
+                "citation": _fabric_citation_for_artifact(artifact),
+                "confidence": artifact_calibration.get("confidence"),
+                "trust_badge": artifact_calibration.get("trust_badge"),
+                "freshness": artifact_calibration.get("freshness"),
+            }
+        )
+
+    evidence = row.get("evidence", {}) if isinstance(row.get("evidence"), dict) else {}
+    evidence["fabric"] = {
+        "artifact_count": len(matching_artifacts),
+        **calibration,
+        "supporting_artifacts": evidence_preview,
+    }
+    row["evidence"] = evidence
+
+    should_gate = (
+        required
+        and str(row.get("verification_status", "")).strip().lower() == "verified"
+        and bool(row.get("can_claim_done"))
+    )
+    if should_gate and calibration["fresh_provenance_count"] < 1:
+        row["verification_status"] = "partial"
+        row["confidence"] = "likely"
+        row["can_claim_done"] = False
+        row["claim"] = "awaiting_fabric_confirmation"
+
+    return row
 
 
 def _risk_tier_rank(value: str | None) -> int:
@@ -489,10 +575,14 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
                 reason=halted_reason if halted_reason != "completed" else "dispatch_partial",
             )
 
+    dispatch_ts = utc_now_iso()
     dispatch_summary = {
+        "id": str(uuid4()),
         "status": "ok",
+        "ts": dispatch_ts,
         "run_id": run_id,
         "trace_id": trace_id,
+        "kind": "autonomy.dispatch",
         "leased_count": len(leased),
         "recovered_count": int(recovery.get("recovered_count", 0)),
         "processed_count": len(processed),
@@ -535,6 +625,13 @@ def autonomy_dispatch_events(request: Request, payload: AutonomyDispatchRequest 
         due_preview_count=due_count,
         critical_incident_count=critical_incident_count,
         processed=processed,
+    )
+    dispatch_summary["verification"] = _apply_fabric_evidence_gate(
+        dispatch_summary["verification"],
+        run_id=run_id,
+        trace_id=trace_id,
+        now=dispatch_summary["ts"],
+        required=len(processed) > 0,
     )
     dispatch_summary["completion_state"] = completion_state(dispatch_summary["verification"])
     dispatch_summary["trust_badge"] = trust_badge(
@@ -762,6 +859,13 @@ def autonomy_reactor_tick(request: Request, payload: AutonomyReactorTickRequest 
         collect_result=collect_result if isinstance(collect_result, dict) else {},
         dispatch_result=dispatch_result if isinstance(dispatch_result, dict) else {},
         guardrail_receipt=guardrail_receipt,
+    )
+    tick_summary["verification"] = _apply_fabric_evidence_gate(
+        tick_summary["verification"],
+        run_id=run_id,
+        trace_id=trace_id,
+        now=tick_summary["ts"],
+        required=int(dispatch_result.get("processed_count", 0)) > 0,
     )
     tick_summary["completion_state"] = completion_state(tick_summary["verification"])
     tick_summary["trust_badge"] = trust_badge(

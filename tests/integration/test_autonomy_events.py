@@ -198,6 +198,9 @@ def test_autonomy_event_dispatch_processes_due_event() -> None:
         assert verification.get("verification_status") in {"verified", "partial", "uncertain"}
         assert verification.get("confidence") in {"confirmed", "likely", "uncertain"}
         assert isinstance(verification.get("can_claim_done"), bool)
+        fabric_evidence = verification.get("evidence", {}).get("fabric", {})
+        assert int(fabric_evidence.get("artifact_count", 0)) >= 1
+        assert int(fabric_evidence.get("fresh_provenance_count", 0)) >= 1
         assert payload.get("completion_state") in {"done", "incomplete"}
         assert payload.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
 
@@ -206,6 +209,79 @@ def test_autonomy_event_dispatch_processes_due_event() -> None:
         q = queue.json()["queue"]
         assert q["dispatched_count"] >= 1
         assert queue.json()["last_dispatch"].get("run_id") == payload.get("run_id")
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(_deadletter_file(), deadletter_before)
+        _restore(_last_dispatch_file(), last_dispatch_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_dispatch_downgrades_when_fabric_confirmation_is_missing() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    deadletter_before = _stash(_deadletter_file())
+    last_dispatch_before = _stash(_last_dispatch_file())
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(_deadletter_file(), "")
+        _restore(_last_dispatch_file(), "{}")
+
+        enqueue = c.post(
+            "/autonomy/events",
+            json={
+                "event_type": "manual.fabric_gate_test",
+                "source": "pytest",
+                "priority": "normal",
+                "payload": {"test": True},
+            },
+        )
+        assert enqueue.status_code == 200
+
+        with (
+            patch(
+                "services.orchestrator.app.routes.autonomy.run_cycle",
+                return_value={
+                    "run_id": "dispatch-cycle-1",
+                    "trace_id": "dispatch-trace-1",
+                    "halted_reason": "completed",
+                    "executed_actions": [],
+                    "blocked_actions": [],
+                    "event_state": {"critical_incident_count": 0},
+                },
+            ),
+            patch("services.orchestrator.app.routes.autonomy.build_fabric_snapshot", return_value={"artifacts": []}),
+        ):
+            dispatch = c.post(
+                "/autonomy/events/dispatch",
+                json={
+                    "max_events": 1,
+                    "max_actions": 0,
+                    "max_runtime_seconds": 5,
+                    "allow_medium": False,
+                    "allow_high": False,
+                    "stop_on_critical": False,
+                },
+            )
+
+        assert dispatch.status_code == 200
+        payload = dispatch.json()
+        verification = payload.get("verification", {})
+        assert verification.get("verification_status") == "partial"
+        assert verification.get("confidence") == "likely"
+        assert verification.get("can_claim_done") is False
+        assert verification.get("claim") == "awaiting_fabric_confirmation"
+        fabric_evidence = verification.get("evidence", {}).get("fabric", {})
+        assert fabric_evidence.get("artifact_count") == 0
+        assert fabric_evidence.get("fresh_provenance_count") == 0
+        assert payload.get("completion_state") == "incomplete"
+        assert payload.get("trust_badge") == "Likely"
     finally:
         _restore(_events_file(), events_before)
         _restore(_deadletter_file(), deadletter_before)
@@ -850,6 +926,7 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
     last_dispatch_before = _stash(_last_dispatch_file())
     last_tick_before = _stash(_last_tick_file())
     tick_history_before = _stash(_tick_history_file())
+    guardrail_before = _stash(_guardrail_file())
 
     try:
         _set_scope(c, test_scope)
@@ -859,6 +936,7 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         _restore(_last_dispatch_file(), "{}")
         _restore(_last_tick_file(), "{}")
         _restore(_tick_history_file(), "")
+        _restore(_guardrail_file(), "{}")
         _restore(
             _worker_deadletter_file(),
             (
@@ -893,6 +971,9 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         assert int(dispatch.get("processed_count", 0)) >= 1
         assert verification.get("verification_status") in {"verified", "partial", "uncertain"}
         assert verification.get("confidence") in {"confirmed", "likely", "uncertain"}
+        tick_fabric = verification.get("evidence", {}).get("fabric", {})
+        assert int(tick_fabric.get("artifact_count", 0)) >= 1
+        assert int(tick_fabric.get("fresh_provenance_count", 0)) >= 1
         assert payload.get("completion_state") in {"done", "incomplete"}
         assert payload.get("trust_badge") in {"Confirmed", "Likely", "Uncertain"}
 
@@ -925,6 +1006,7 @@ def test_autonomy_reactor_tick_collects_then_dispatches() -> None:
         _restore(_last_dispatch_file(), last_dispatch_before)
         _restore(_last_tick_file(), last_tick_before)
         _restore(_tick_history_file(), tick_history_before)
+        _restore(_guardrail_file(), guardrail_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 

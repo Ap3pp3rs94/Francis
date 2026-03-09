@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from francis_brain.calibration import calibrate_fabric_artifact
 from francis_brain.memory_store import SNAPSHOT_PATH
 from francis_brain.recall import query_fabric, rebuild_fabric, summarize_fabric
 from francis_brain.snapshots import build_fabric_snapshot
@@ -241,17 +242,35 @@ def test_fabric_query_returns_citations_and_related_artifacts(tmp_path: Path) ->
     fs = _build_fs(tmp_path)
     _seed_workspace(fs)
 
-    response = query_fabric(fs, query="no anomalies detected", limit=5, include_related=True)
+    response = query_fabric(
+        fs,
+        query="no anomalies detected",
+        limit=5,
+        include_related=True,
+        now="2026-03-09T10:30:00+00:00",
+    )
 
     assert response["status"] == "ok"
     assert response["result_count"] >= 1
     top = response["results"][0]
     assert top["citation"]["rel_path"] == "journals/decisions.jsonl"
+    assert top["confidence"] == "likely"
+    assert top["trust_badge"] == "Likely"
+    assert top["calibration"]["has_local_provenance"] is True
     assert any(item["reason"].startswith("shared run_id=") for item in top["related"])
+    assert response["calibration"]["confidence_counts"]["likely"] >= 1
 
-    telemetry = query_fabric(fs, query="service crashed", sources=["telemetry.events"], limit=3)
+    telemetry = query_fabric(
+        fs,
+        query="service crashed",
+        sources=["telemetry.events"],
+        limit=3,
+        now="2026-03-09T10:16:30+00:00",
+    )
     assert telemetry["result_count"] == 1
     assert telemetry["results"][0]["source"] == "telemetry.events"
+    assert telemetry["results"][0]["confidence"] == "likely"
+    assert telemetry["results"][0]["calibration"]["freshness"] in {"live", "fresh"}
 
 
 
@@ -260,8 +279,37 @@ def test_fabric_rebuild_persists_snapshot(tmp_path: Path) -> None:
     _seed_workspace(fs)
 
     rebuild = rebuild_fabric(fs)
-    summary = summarize_fabric(fs)
+    summary = summarize_fabric(fs, now="2026-03-09T10:30:00+00:00")
 
     assert rebuild["summary"]["artifact_count"] == summary["artifact_count"]
+    assert summary["calibration"]["confidence_counts"]["likely"] >= 1
+    assert summary["calibration"]["local_provenance_count"] >= 1
     persisted = Path(fs.roots[0]) / SNAPSHOT_PATH
     assert persisted.exists()
+
+
+
+def test_fabric_calibration_degrades_stale_volatile_evidence() -> None:
+    artifact = {
+        "id": "telemetry.events:1",
+        "source": "telemetry.events",
+        "kind": "telemetry.event",
+        "title": "API crash",
+        "body": "service crashed",
+        "ts": "2026-03-01T10:16:00+00:00",
+        "verification_status": "verified",
+        "provenance": {"rel_path": "telemetry/events.jsonl", "line": 1},
+        "relationships": {"run_id": "run-incident-1", "trace_id": "run-incident-1"},
+    }
+
+    calibration = calibrate_fabric_artifact(
+        artifact,
+        volatile_sources={"telemetry.events"},
+        now="2026-03-09T10:16:30+00:00",
+    )
+
+    assert calibration["confidence"] == "likely"
+    assert calibration["trust_badge"] == "Likely"
+    assert calibration["can_claim_done"] is False
+    assert calibration["freshness"] == "stale"
+    assert any("current-state source is not fresh enough" in item for item in calibration["caveats"])

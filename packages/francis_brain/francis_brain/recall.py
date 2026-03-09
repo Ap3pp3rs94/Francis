@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from francis_brain.calibration import calibrate_fabric_artifact, summarize_calibrated_artifacts
 from francis_brain.memory_store import build_relation_index, load_snapshot, save_snapshot, summarize_snapshot
 from francis_brain.retrieval.chunking import build_artifact_chunks, tokenize
 from francis_brain.retrieval.rerank import rerank_results
@@ -17,6 +18,15 @@ VOLATILE_SOURCES = {
     "autonomy.last_dispatch",
     "autonomy.last_tick",
 }
+
+
+def _summarize_snapshot_with_calibration(snapshot: dict[str, Any], *, now: object | None = None) -> dict[str, Any]:
+    summary = summarize_snapshot(snapshot)
+    artifacts = snapshot.get("artifacts", []) if isinstance(snapshot.get("artifacts"), list) else []
+    calibrated = summarize_calibrated_artifacts(artifacts, volatile_sources=VOLATILE_SOURCES, now=now)
+    summary["volatile_sources"] = sorted(VOLATILE_SOURCES)
+    summary["calibration"] = calibrated
+    return summary
 
 
 def _load_snapshot_for_query(
@@ -41,11 +51,9 @@ def rebuild_fabric(fs: WorkspaceFS) -> dict[str, Any]:
     return snapshot
 
 
-def summarize_fabric(fs: WorkspaceFS, *, refresh: bool = False) -> dict[str, Any]:
+def summarize_fabric(fs: WorkspaceFS, *, refresh: bool = False, now: object | None = None) -> dict[str, Any]:
     snapshot = _load_snapshot_for_query(fs, refresh=refresh, persist=False)
-    summary = summarize_snapshot(snapshot)
-    summary["volatile_sources"] = sorted(VOLATILE_SOURCES)
-    return summary
+    return _summarize_snapshot_with_calibration(snapshot, now=now)
 
 
 def _matches_filters(artifact: dict[str, Any], *, sources: set[str], run_id: str, trace_id: str, mission_id: str) -> bool:
@@ -95,6 +103,7 @@ def query_fabric(
     mission_id: str | None = None,
     include_related: bool = True,
     refresh: bool = False,
+    now: object | None = None,
 ) -> dict[str, Any]:
     normalized_query = " ".join(str(query or "").strip().split())
     if not normalized_query:
@@ -129,8 +138,10 @@ def query_fabric(
 
     results: list[dict[str, Any]] = []
     citations: list[dict[str, Any]] = []
+    result_artifacts: list[dict[str, Any]] = []
     for row in ranked:
         artifact = row["artifact"]
+        result_artifacts.append(artifact)
         citation = _citation_for_artifact(artifact)
         citations.append(citation)
         related: list[dict[str, Any]] = []
@@ -164,6 +175,8 @@ def query_fabric(
         stale = _stale_state_warning(artifact)
         if stale:
             why.append(stale)
+        calibration = calibrate_fabric_artifact(artifact, volatile_sources=VOLATILE_SOURCES, now=now)
+        why.extend(calibration["caveats"])
         results.append(
             {
                 "artifact_id": artifact.get("id"),
@@ -178,8 +191,12 @@ def query_fabric(
                 "status": artifact.get("status"),
                 "severity": artifact.get("severity"),
                 "verification_status": artifact.get("verification_status"),
+                "confidence": calibration["confidence"],
+                "trust_badge": calibration["trust_badge"],
+                "can_claim_done": calibration["can_claim_done"],
                 "citation": citation,
                 "why": why,
+                "calibration": calibration,
                 "excerpts": row.get("excerpts", []),
                 "relationships": artifact.get("relationships", {}),
                 "related": related,
@@ -198,7 +215,12 @@ def query_fabric(
             "refresh": refresh,
             "limit": max(1, min(int(limit), 25)),
         },
-        "snapshot": summarize_snapshot(snapshot),
+        "snapshot": _summarize_snapshot_with_calibration(snapshot, now=now),
+        "calibration": summarize_calibrated_artifacts(
+            result_artifacts,
+            volatile_sources=VOLATILE_SOURCES,
+            now=now,
+        ),
         "result_count": len(results),
         "results": results,
         "citations": citations,
