@@ -419,21 +419,31 @@
         overflow: hidden;
       }
 
-      #orb-canvas {
+      #orb-render-root {
         position: absolute;
         top: 0;
         left: 0;
         width: 160px;
         height: 160px;
-        display: block;
         opacity: 0;
         transform: translate3d(-999px, -999px, 0);
         transition: opacity 180ms ease;
-        filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.28));
         will-change: transform;
+        pointer-events: none;
       }
 
-      body[data-boot="ready"] #orb-canvas {
+      #orb-render-root.orb-interactive {
+        pointer-events: auto;
+      }
+
+      #orb-render-root canvas {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+        filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.28));
+      }
+
+      body[data-boot="ready"] #orb-render-root {
         opacity: 1;
       }
 
@@ -689,9 +699,10 @@
     </main>
 
     <div id="orb-overlay" aria-hidden="true">
-      <canvas id="orb-canvas" width="220" height="220" aria-label="Francis Orb renderer"></canvas>
+      <div id="orb-render-root" aria-label="Francis Orb renderer"></div>
     </div>
 
+    <script src="/static/orb/francis-orb.js"></script>
     <script>
       let currentActions = { action_chips: [], blocked_actions: [] };
       let currentSnapshot = null;
@@ -699,9 +710,13 @@
       let currentOrb = null;
       let streamSource = null;
       let streamReconnectTimer = null;
+      let orbApi = null;
       let orbAnimationFrame = null;
       let orbHoldTimer = null;
       let orbHoldTriggered = false;
+      let orbSpeechBurstUntil = 0;
+      let orbThinkingUntil = 0;
+      let orbListeningActive = false;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -757,6 +772,30 @@
         node.textContent = detail ? `${state} | ${detail}` : state;
       }
 
+            function getOrbBundle() {
+        return window.FrancisOrb && typeof window.FrancisOrb.createFrancisOrb === "function"
+          ? window.FrancisOrb
+          : null;
+      }
+
+      function mountOrbEngine() {
+        if (orbApi) {
+          return orbApi;
+        }
+        const bundle = getOrbBundle();
+        const root = document.getElementById("orb-render-root");
+        if (!bundle || !root) {
+          return null;
+        }
+        orbApi = bundle.createFrancisOrb(root, {
+          transparentBackground: true,
+          background: 0x000000,
+          usePostFX: false,
+          enableBeam: true,
+        });
+        return orbApi;
+      }
+
       function orbControlHint() {
         const panicChip = (currentActions.action_chips || []).find(
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
@@ -764,7 +803,7 @@
         if (!panicChip) {
           return "The Orb is following the cursor. Panic stop becomes live when control exposes it in scope.";
         }
-        return "The Orb is following the cursor. Hold this sovereignty pad to panic stop immediately.";
+        return "The Orb is following the cursor. Hold the Orb itself or the sovereignty pad to panic stop immediately.";
       }
 
       function renderOrb(orb) {
@@ -802,9 +841,11 @@
               `<div class="metric-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`,
           )
           .join("");
-        document.body.classList.toggle("orb-cursor-active", canUseOrbCursor());
+        mountOrbEngine();
+        document.body.classList.toggle("orb-cursor-active", canUseOrbCursor() && Boolean(currentOrb));
+        applyOrbSignals();
         if (orbAnimationFrame === null) {
-          orbAnimationFrame = window.requestAnimationFrame(drawOrbFrame);
+          orbAnimationFrame = window.requestAnimationFrame(animateOrbOverlay);
         }
         initOrbInteractions();
       }
@@ -842,16 +883,103 @@
         orbMotion.lastMoveAt = timestamp;
       }
 
-      function drawOrbFrame(timestamp) {
-        orbAnimationFrame = window.requestAnimationFrame(drawOrbFrame);
-        const canvas = document.getElementById("orb-canvas");
-        if (!canvas) {
+      function resolveOrbStateOverride() {
+        const now = performance.now();
+        if (orbListeningActive) {
+          return "listening";
+        }
+        if (now < orbThinkingUntil) {
+          return "thinking";
+        }
+        if (now < orbSpeechBurstUntil) {
+          return "speaking";
+        }
+        return null;
+      }
+
+      function resolveOrbActionTarget() {
+        if (!currentOrb?.operator_cursor) {
+          return null;
+        }
+        const bundle = getOrbBundle();
+        if (!bundle) {
+          return null;
+        }
+        return (
+          bundle.elementToOrbTarget(document.querySelector("#execution-output")) ||
+          bundle.elementToOrbTarget(document.querySelector(".action-card")) ||
+          bundle.screenPointToOrbTarget(
+            orbMotion.pointerX || window.innerWidth * 0.6,
+            orbMotion.pointerY || window.innerHeight * 0.36,
+            window.innerWidth,
+            window.innerHeight,
+          )
+        );
+      }
+
+      function resolveOrbAttentionTarget(actionTarget) {
+        const bundle = getOrbBundle();
+        if (!bundle) {
+          return actionTarget;
+        }
+        if (document.activeElement && document.activeElement instanceof HTMLElement) {
+          const tag = String(document.activeElement.tagName || "").toLowerCase();
+          if (["input", "button", "textarea"].includes(tag)) {
+            return bundle.elementToOrbTarget(document.activeElement) || actionTarget;
+          }
+        }
+        return (
+          actionTarget ||
+          bundle.screenPointToOrbTarget(
+            orbMotion.pointerX || window.innerWidth * 0.54,
+            orbMotion.pointerY || window.innerHeight * 0.24,
+            window.innerWidth,
+            window.innerHeight,
+          )
+        );
+      }
+
+      function resolveOrbSpeakingAmplitude() {
+        const now = performance.now();
+        if (now < orbSpeechBurstUntil) {
+          return 0.42 + Math.abs(Math.sin(now / 85)) * 0.42;
+        }
+        return Number(currentOrb?.visual?.voice_resonance || 0);
+      }
+
+      function applyOrbSignals() {
+        const bundle = getOrbBundle();
+        const api = mountOrbEngine();
+        const root = document.getElementById("orb-render-root");
+        if (!bundle || !api || !root || !currentOrb) {
           return;
         }
+        const actionTarget = resolveOrbActionTarget();
+        const attentionTarget = resolveOrbAttentionTarget(actionTarget);
+        const stateOverride = resolveOrbStateOverride();
+        api.orb.setSignals(
+          bundle.mapHudOrbPayloadToSignals(currentOrb, {
+            stateOverride,
+            speakingAmplitude: resolveOrbSpeakingAmplitude(),
+            attentionTarget,
+            actionTarget,
+            actionStrength:
+              currentOrb.operator_cursor || stateOverride === "acting"
+                ? Math.max(0.45, Number(currentOrb.visual?.core_brightness || 0.7))
+                : 0,
+          }),
+        );
+        root.classList.toggle("orb-interactive", Boolean(currentOrb.panic_ready));
+      }
+
+      function animateOrbOverlay(timestamp) {
+        orbAnimationFrame = window.requestAnimationFrame(animateOrbOverlay);
+        const root = document.getElementById("orb-render-root");
         const overlay = document.getElementById("orb-overlay");
-        if (!overlay) {
+        if (!root || !overlay || !currentOrb) {
           return;
         }
+
         const level = Number(currentOrb?.interjection_level || 0);
         const size = Math.round(
           Math.max(
@@ -862,52 +990,9 @@
             ),
           ),
         );
-        const width = size;
-        const height = size;
-        const dpr = window.devicePixelRatio || 1;
-        if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
-          canvas.width = Math.round(width * dpr);
-          canvas.height = Math.round(height * dpr);
-        }
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          return;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, width, height);
-        if (!currentOrb) {
-          return;
-        }
+        root.style.width = `${size}px`;
+        root.style.height = `${size}px`;
 
-        const palette = currentOrb.palette || {};
-        const visual = currentOrb.visual || {};
-        const pulseKind = String(visual.pulse_kind || "steady");
-        const pulseAmplitudeByKind = {
-          steady: 0.018,
-          voice_ready: 0.045,
-          interjection: 0.075,
-          execution: 0.09,
-          panic: 0.14,
-        };
-        const pulseFreqByKind = {
-          steady: 0.55,
-          voice_ready: 0.95,
-          interjection: 1.2,
-          execution: 1.45,
-          panic: 2.0,
-        };
-        const brightness = Number(visual.core_brightness || 0.5);
-        const orbitSpeed = Number(visual.orbit_speed || 0.4);
-        const ringTightness = Number(visual.ring_tightness || 0.45);
-        const ringDensity = Math.max(4, Number(visual.ring_density || 7));
-        const resonance = Number(visual.voice_resonance || 0.3);
-        const pulse =
-          1 +
-          Math.sin((timestamp / 1000) * Math.PI * 2 * (pulseFreqByKind[pulseKind] || 0.6)) *
-            (pulseAmplitudeByKind[pulseKind] || 0.03) *
-            (1 + resonance * 0.6);
         const fallback = getOrbFallbackTarget();
         const pointerFresh = orbMotion.lastMoveAt > 0 && timestamp - orbMotion.lastMoveAt < 2400;
         const anchorX = pointerFresh ? orbMotion.pointerX : fallback.x;
@@ -931,99 +1016,11 @@
         orbMotion.vy *= damping;
         orbMotion.x += orbMotion.vx;
         orbMotion.y += orbMotion.vy;
-        const positionX = Math.max(24, Math.min(window.innerWidth - width - 24, orbMotion.x - width / 2));
-        const positionY = Math.max(24, Math.min(window.innerHeight - height - 24, orbMotion.y - height / 2));
-        canvas.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0)`;
+        const positionX = Math.max(24, Math.min(window.innerWidth - size - 24, orbMotion.x - size / 2));
+        const positionY = Math.max(24, Math.min(window.innerHeight - size - 24, orbMotion.y - size / 2));
+        root.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0)`;
         overlay.dataset.posture = String(currentOrb.posture || "resting");
-        const centerX = width / 2;
-        const centerY = height / 2;
-
-        const wash = ctx.createRadialGradient(centerX, centerY, 18, centerX, centerY, width * 0.44);
-        wash.addColorStop(0, palette.halo || "rgba(109, 140, 204, 0.32)");
-        wash.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = wash;
-        ctx.fillRect(0, 0, width, height);
-
-        const travel = Math.min(24, Math.hypot(orbMotion.pointerVx, orbMotion.pointerVy) * 0.18);
-        if (travel > 0.8) {
-          ctx.save();
-          ctx.translate(centerX, centerY);
-          ctx.rotate(Math.atan2(orbMotion.pointerVy || 0.001, orbMotion.pointerVx || 0.001));
-          const trail = ctx.createLinearGradient(-travel * 2.4, 0, 0, 0);
-          trail.addColorStop(0, "rgba(0, 0, 0, 0)");
-          trail.addColorStop(1, palette.halo || "rgba(109, 140, 204, 0.3)");
-          ctx.strokeStyle = trail;
-          ctx.lineWidth = 10 + resonance * 5;
-          ctx.globalAlpha = 0.22;
-          ctx.beginPath();
-          ctx.moveTo(-travel * 2.4, 0);
-          ctx.quadraticCurveTo(-travel * 1.2, -travel * 0.2, -4, 0);
-          ctx.stroke();
-          ctx.restore();
-          ctx.globalAlpha = 1;
-        }
-
-        for (let index = 0; index < ringDensity; index += 1) {
-          const orbitOffset = index * 0.43;
-          const orbitRadius = 48 + index * (11 - ringTightness * 3.6);
-          const axisX = orbitRadius * (1.02 + index * 0.08 + 0.12 * Math.sin(timestamp / 1900 + orbitOffset));
-          const axisY = orbitRadius * (0.36 + ringTightness * 0.42 + 0.08 * Math.cos(timestamp / 1700 + orbitOffset));
-          ctx.save();
-          ctx.translate(centerX, centerY);
-          ctx.rotate((timestamp / 1000) * orbitSpeed * (0.38 + index * 0.055) + orbitOffset);
-          ctx.beginPath();
-          ctx.globalAlpha = Math.max(0.06, 0.34 - index * 0.024 + brightness * 0.18);
-          ctx.strokeStyle = palette.ring || "#a4b9d6";
-          ctx.lineWidth = 1 + (index % 3 === 0 ? 0.75 : 0.2);
-          ctx.ellipse(
-            0,
-            0,
-            axisX * pulse,
-            axisY * (1 + 0.06 * Math.sin(timestamp / 1350 + orbitOffset)),
-            0,
-            0,
-            Math.PI * 2,
-          );
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        const outerGlow = 34 + brightness * 34;
-        const coreGradient = ctx.createRadialGradient(
-          centerX - outerGlow * 0.22,
-          centerY - outerGlow * 0.28,
-          2,
-          centerX,
-          centerY,
-          outerGlow * 1.75,
-        );
-        coreGradient.addColorStop(0, "#ffffff");
-        coreGradient.addColorStop(0.24, palette.core || "#f5f8ff");
-        coreGradient.addColorStop(0.68, palette.halo || "rgba(109, 140, 204, 0.32)");
-        coreGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = coreGradient;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, outerGlow * 1.68 * pulse, 0, Math.PI * 2);
-        ctx.fill();
-
-        const coreRadius = (28 + brightness * 18) * pulse;
-        const innerGradient = ctx.createRadialGradient(
-          centerX - 8,
-          centerY - 10,
-          1,
-          centerX,
-          centerY,
-          coreRadius,
-        );
-        innerGradient.addColorStop(0, "#ffffff");
-        innerGradient.addColorStop(0.5, palette.core || "#f5f8ff");
-        innerGradient.addColorStop(1, palette.ring || "#a4b9d6");
-        ctx.fillStyle = innerGradient;
-        ctx.globalAlpha = 0.98;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
+        applyOrbSignals();
       }
 
       function beginOrbHold(event) {
@@ -1045,7 +1042,7 @@
         orbHoldTriggered = false;
         stage.classList.add("orb-hold");
         document.getElementById("orb-controls").textContent =
-          "Hold steady. Panic stop will trigger if you keep pressure on the sovereignty pad.";
+          "Hold steady. Panic stop will trigger if you keep pressure on the Orb.";
         orbHoldTimer = window.setTimeout(async () => {
           orbHoldTriggered = true;
           document.getElementById("orb-controls").textContent =
@@ -1080,6 +1077,15 @@
         stage.addEventListener("pointerup", endOrbHold);
         stage.addEventListener("pointerleave", endOrbHold);
         stage.addEventListener("pointercancel", endOrbHold);
+
+        const root = document.getElementById("orb-render-root");
+        if (root) {
+          root.addEventListener("pointerdown", beginOrbHold);
+          root.addEventListener("pointerup", endOrbHold);
+          root.addEventListener("pointerleave", endOrbHold);
+          root.addEventListener("pointercancel", endOrbHold);
+        }
+
         window.addEventListener("pointermove", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
         });
@@ -1095,6 +1101,18 @@
             orbMotion.targetY = fallback.y;
           }
         });
+
+        const voiceCommand = document.getElementById("voice-command");
+        if (voiceCommand && voiceCommand instanceof HTMLElement) {
+          voiceCommand.addEventListener("focus", () => {
+            orbListeningActive = true;
+            applyOrbSignals();
+          });
+          voiceCommand.addEventListener("blur", () => {
+            orbListeningActive = false;
+            applyOrbSignals();
+          });
+        }
       }
 
       function renderBootstrap(payload) {
@@ -1248,6 +1266,8 @@
         const lines = Array.isArray(briefing.lines) ? briefing.lines : [];
         const actions = Array.isArray(briefing.actions) ? briefing.actions : [];
         const fabric = briefing.grounding?.fabric || {};
+        orbThinkingUntil = 0;
+        orbSpeechBurstUntil = performance.now() + 1400;
         document.getElementById("voice-headline").textContent =
           briefing.headline || "No grounded voice briefing is available.";
         const receipt = meta.runId ? `Run ${meta.runId}` : "Live stream";
@@ -1256,12 +1276,14 @@
         document.getElementById("voice-lines").innerHTML = lines.length
           ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")
           : `<li class="muted-empty">No briefing lines were produced.</li>`;
+        applyOrbSignals();
       }
 
       function renderVoicePreview(payload) {
         const intent = payload.intent || {};
         const matches = Array.isArray(payload.matches) ? payload.matches : [];
         const governance = payload.governance || {};
+        orbThinkingUntil = 0;
         document.getElementById("voice-intent").textContent =
           `${intent.kind || "unknown"} | ${intent.trust || "Uncertain"} | ${governance.reason || "No governance note."}`;
         document.getElementById("voice-matches").innerHTML = matches.length
@@ -1274,6 +1296,7 @@
               })
               .join("")
           : `<li class="muted-empty">No Lens actions matched that utterance.</li>`;
+        applyOrbSignals();
       }
 
       function renderActions(actions) {
@@ -1326,6 +1349,7 @@
               .join("")
           : `<li class="muted-empty">No blocked actions surfaced by Lens.</li>`;
         document.getElementById("orb-controls").textContent = orbControlHint();
+        applyOrbSignals();
       }
 
       function renderExecution(execution) {
@@ -1369,12 +1393,16 @@
 
       async function loadVoiceBriefing() {
         const mode = currentSnapshot?.control?.mode || "assist";
+        orbThinkingUntil = performance.now() + 1200;
+        applyOrbSignals();
         const response = await fetch(`/api/voice/briefing?mode=${encodeURIComponent(mode)}&max_actions=3`);
         const payload = await response.json();
         if (!response.ok) {
+          orbThinkingUntil = 0;
           document.getElementById("voice-meta").textContent = `Voice briefing failed for ${mode}`;
           document.getElementById("voice-lines").innerHTML =
             `<li class="muted-empty">${escapeHtml(payload.detail || "Unknown voice briefing failure.")}</li>`;
+          applyOrbSignals();
           return;
         }
         renderVoiceBriefing(payload.briefing || {}, { runId: payload.run_id || "" });
@@ -1387,6 +1415,8 @@
           document.getElementById("voice-intent").textContent = "Enter a command to preview against live Lens actions.";
           return;
         }
+        orbThinkingUntil = performance.now() + 1400;
+        applyOrbSignals();
         const response = await fetch("/api/voice/command/preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1394,9 +1424,11 @@
         });
         const payload = await response.json();
         if (!response.ok) {
+          orbThinkingUntil = 0;
           document.getElementById("voice-intent").textContent = `Voice preview failed: ${payload.detail || "unknown error"}`;
           document.getElementById("voice-matches").innerHTML =
             `<li class="muted-empty">${escapeHtml(payload.detail || "Unknown voice preview failure.")}</li>`;
+          applyOrbSignals();
           return;
         }
         renderVoicePreview(payload);
@@ -1410,6 +1442,8 @@
             "Enter a fabric query before searching.";
           return;
         }
+        orbThinkingUntil = performance.now() + 1600;
+        applyOrbSignals();
         const response = await fetch("/api/fabric/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1417,14 +1451,18 @@
         });
         const payload = await response.json();
         if (!response.ok) {
+          orbThinkingUntil = 0;
           document.getElementById("fabric-query-meta").textContent =
             `Fabric query failed: ${payload.detail || "unknown error"}`;
           document.getElementById("fabric-results").innerHTML =
             `<p class="muted-empty">${escapeHtml(payload.detail || "Unknown fabric query failure.")}</p>`;
           document.getElementById("fabric-detail").textContent = formatJson(payload);
+          applyOrbSignals();
           return;
         }
+        orbThinkingUntil = 0;
         renderFabricQuery(payload);
+        applyOrbSignals();
       }
 
       async function loadSurface() {
@@ -1500,5 +1538,6 @@
     </script>
   </body>
 </html>
+
 
 

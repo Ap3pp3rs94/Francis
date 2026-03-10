@@ -70,6 +70,15 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Francis Lens" in response.text
     assert "Operator overlay for live work." in response.text
     assert "The Orb rides directly over the cursor." in response.text
+    assert "/static/orb/francis-orb.js" in response.text
+
+
+def test_hud_serves_orb_bundle() -> None:
+    response = client.get("/static/orb/francis-orb.js")
+
+    assert response.status_code == 200
+    assert "Francis Orb bundle" in response.text
+    assert "createFrancisOrb" in response.text
 
 
 def test_hud_dashboard_exposes_mode_and_cards() -> None:

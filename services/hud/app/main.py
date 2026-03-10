@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from francis_presence.orb import build_orb_state
@@ -25,7 +26,8 @@ from services.hud.app.views.runs import get_runs_view
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
 SERVICE_VERSION = "0.2.0"
-STATIC_INDEX = Path(__file__).resolve().parent / "static" / "index.html"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_INDEX = STATIC_DIR / "index.html"
 
 
 class HudActionExecuteRequest(BaseModel):
@@ -95,6 +97,7 @@ def _sse_event(event: str, data: dict[str, Any]) -> str:
 
 def _build_app() -> FastAPI:
     app = FastAPI(title="Francis HUD", version=SERVICE_VERSION)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")
     def index() -> FileResponse:
