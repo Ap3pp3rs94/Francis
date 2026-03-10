@@ -753,12 +753,18 @@
         active: false,
         startAt: 0,
         durationMs: 0,
+        lingerMs: 0,
+        settleMs: 0,
         fromX: 0,
         fromY: 0,
         toX: 0,
         toY: 0,
-        controlX: 0,
-        controlY: 0,
+        control1X: 0,
+        control1Y: 0,
+        control2X: 0,
+        control2Y: 0,
+        releaseX: 0,
+        releaseY: 0,
       };
 
       function escapeHtml(value) {
@@ -834,6 +840,8 @@
         orbHandback.active = false;
         orbHandback.startAt = 0;
         orbHandback.durationMs = 0;
+        orbHandback.lingerMs = 0;
+        orbHandback.settleMs = 0;
       }
 
       function isOrbHandbackActive() {
@@ -856,16 +864,29 @@
         const toY = fallback.y;
         const deltaX = toX - fromX;
         const deltaY = toY - fromY;
+        const lastVx = Number.isFinite(orbMotion.pointerVx) ? orbMotion.pointerVx : 0;
+        const lastVy = Number.isFinite(orbMotion.pointerVy) ? orbMotion.pointerVy : 0;
+        const velocityCarry = Math.max(0.1, Math.min(0.45, Number(handback.velocity_carry || 0.26)));
+        const releaseBias = Math.max(0.08, Math.min(0.4, Number(handback.release_bias || 0.18)));
+        const arcLift = Math.max(36, Math.min(96, Number(handback.arc_lift_px || 56)));
+        const releaseX = lastVx * velocityCarry * 12;
+        const releaseY = lastVy * velocityCarry * 8;
 
         orbHandback.active = true;
         orbHandback.startAt = performance.now();
         orbHandback.durationMs = Math.max(600, Number(handback.duration_ms || 1100));
+        orbHandback.lingerMs = Math.max(40, Number(handback.linger_ms || 90));
+        orbHandback.settleMs = Math.max(60, Number(handback.settle_ms || 140));
         orbHandback.fromX = fromX;
         orbHandback.fromY = fromY;
         orbHandback.toX = toX;
         orbHandback.toY = toY;
-        orbHandback.controlX = (fromX + toX) / 2 + Math.max(-72, Math.min(72, deltaX * 0.14));
-        orbHandback.controlY = (fromY + toY) / 2 - Math.max(32, Math.min(84, Math.abs(deltaY) * 0.28 + 28));
+        orbHandback.releaseX = releaseX;
+        orbHandback.releaseY = releaseY;
+        orbHandback.control1X = fromX + releaseX + deltaX * releaseBias;
+        orbHandback.control1Y = fromY + releaseY - arcLift * 0.24;
+        orbHandback.control2X = toX - deltaX * 0.18;
+        orbHandback.control2Y = toY - arcLift - Math.abs(deltaY) * 0.08;
 
         orbMotion.vx *= 0.28;
         orbMotion.vy *= 0.28;
@@ -879,26 +900,73 @@
         return 1 - Math.pow(1 - t, 3);
       }
 
+      function easeInOutCubic(value) {
+        const t = Math.max(0, Math.min(1, value));
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+
+      function cubicBezierPoint(t, p0, p1, p2, p3) {
+        const inverse = 1 - t;
+        return (
+          inverse * inverse * inverse * p0 +
+          3 * inverse * inverse * t * p1 +
+          3 * inverse * t * t * p2 +
+          t * t * t * p3
+        );
+      }
+
       function resolveOrbHandbackTarget(timestamp) {
         if (!isOrbHandbackActive()) {
           return null;
         }
         const durationMs = Math.max(600, orbHandback.durationMs || 1100);
-        const progress = Math.max(0, Math.min(1, (timestamp - orbHandback.startAt) / durationMs));
-        const eased = easeOutCubic(progress);
-        const inverse = 1 - eased;
-        const x =
-          inverse * inverse * orbHandback.fromX +
-          2 * inverse * eased * orbHandback.controlX +
-          eased * eased * orbHandback.toX;
-        const y =
-          inverse * inverse * orbHandback.fromY +
-          2 * inverse * eased * orbHandback.controlY +
-          eased * eased * orbHandback.toY;
+        const lingerMs = Math.min(durationMs * 0.35, Math.max(40, orbHandback.lingerMs || 90));
+        const settleMs = Math.min(durationMs * 0.25, Math.max(60, orbHandback.settleMs || 140));
+        const elapsed = Math.max(0, timestamp - orbHandback.startAt);
+        const lingerProgress = lingerMs > 0 ? Math.min(1, elapsed / lingerMs) : 1;
+
+        if (elapsed < lingerMs) {
+          const easedLinger = easeOutCubic(lingerProgress);
+          return {
+            x: orbHandback.fromX + orbHandback.releaseX * 0.24 * easedLinger,
+            y: orbHandback.fromY + orbHandback.releaseY * 0.18 * easedLinger,
+            complete: false,
+          };
+        }
+
+        const travelDuration = Math.max(240, durationMs - lingerMs - settleMs);
+        const travelElapsed = Math.max(0, Math.min(travelDuration, elapsed - lingerMs));
+        const travelProgress = Math.max(0, Math.min(1, travelElapsed / travelDuration));
+        const easedTravel = easeInOutCubic(travelProgress);
+        let x = cubicBezierPoint(
+          easedTravel,
+          orbHandback.fromX + orbHandback.releaseX * 0.24,
+          orbHandback.control1X,
+          orbHandback.control2X,
+          orbHandback.toX,
+        );
+        let y = cubicBezierPoint(
+          easedTravel,
+          orbHandback.fromY + orbHandback.releaseY * 0.18,
+          orbHandback.control1Y,
+          orbHandback.control2Y,
+          orbHandback.toY,
+        );
+
+        if (elapsed > lingerMs + travelDuration) {
+          const settleProgress = Math.max(
+            0,
+            Math.min(1, (elapsed - lingerMs - travelDuration) / Math.max(60, settleMs)),
+          );
+          const easedSettle = easeOutCubic(settleProgress);
+          x += (orbHandback.toX - x) * easedSettle;
+          y += (orbHandback.toY - y) * easedSettle;
+        }
+
         return {
           x,
           y,
-          complete: progress >= 1,
+          complete: elapsed >= durationMs,
         };
       }
 
@@ -922,9 +990,9 @@
           ? "Handback is visible. The Orb is returning to ambient rest and will settle back into normal presence."
           : orbControlHint();
         document.getElementById("orb-stage-copy").textContent = handbackActive
-          ? "Authority has ended cleanly. The Orb is arcing back to its ambient anchor so handback stays spatial, not implied."
+          ? "Authority has ended cleanly. The Orb is carrying the last motion briefly, then settling back to its ambient anchor so handback stays spatial, not implied."
           : currentOrb.operator_cursor
-            ? "The Orb is locked to the pointer path and makes active authority spatially legible. Motion resolves through small human-style correction instead of robotic-perfect tracking."
+            ? "The Orb is riding directly on the pointer path and makes active authority spatially legible. Motion stays tight, with only small human correction instead of robotic-perfect tracking."
             : "The Orb stays attached to the cursor path, but with softer breathing drift until the work genuinely needs attention.";
         document.getElementById("orb-anchor").textContent = handbackActive
           ? "ambient return"
@@ -932,9 +1000,11 @@
             ? "cursor authority"
             : "cursor ambient";
         document.getElementById("orb-motion").textContent = handbackActive
-          ? "graceful arc | handback"
-          : currentOrb.movement?.cursor_lock
-            ? "cursor lock | human correction"
+          ? "release arc | handback"
+          : currentOrb.movement?.profile === "cursor_ride"
+            ? "cursor ride | predictive commit"
+            : currentOrb.movement?.cursor_lock
+              ? "cursor guard | tension hold"
             : "soft drift | breathing";
         const metrics = [
           ["Posture", handbackActive ? "Handback" : titleCase(currentOrb.posture || "resting")],
@@ -984,6 +1054,7 @@
         if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
           return;
         }
+        const motionProfile = getOrbMotionProfile();
         if (orbMotion.lastPointerX !== null && orbMotion.lastPointerY !== null) {
           const dt = Math.max(16, timestamp - orbMotion.lastMoveAt);
           const frameScale = dt / 16.6667;
@@ -1006,10 +1077,14 @@
             Math.abs(rawVy) > 0.9 &&
             Math.abs(previousVy) > 0.35;
           if (flipX) {
-            orbMotion.correctionX = Math.max(-8, Math.min(8, previousVx * 3.4));
+            const correctionCap = Number(motionProfile.correctionCap ?? 8);
+            const correctionStrength = Number(motionProfile.correctionStrength ?? 3.4);
+            orbMotion.correctionX = Math.max(-correctionCap, Math.min(correctionCap, previousVx * correctionStrength));
           }
           if (flipY) {
-            orbMotion.correctionY = Math.max(-8, Math.min(8, previousVy * 3.4));
+            const correctionCap = Number(motionProfile.correctionCap ?? 8);
+            const correctionStrength = Number(motionProfile.correctionStrength ?? 3.4);
+            orbMotion.correctionY = Math.max(-correctionCap, Math.min(correctionCap, previousVy * correctionStrength));
           }
         } else {
           orbMotion.x = nextX;
@@ -1028,6 +1103,7 @@
         const cursorLock = Boolean(movement.cursor_lock);
         return {
           cursorLock,
+          profile: String(movement.profile || (cursorLock ? "cursor_lock" : "cursor_drift")),
           leadStrength: Number(movement.lead_strength ?? (cursorLock ? 0.06 : 0.035)),
           settleStrength: Number(movement.settle_strength ?? (cursorLock ? 0.42 : 0.24)),
           damping: Number(movement.damping ?? (cursorLock ? 0.68 : 0.82)),
@@ -1035,20 +1111,35 @@
           microStrength: Number(movement.micro_strength ?? (cursorLock ? 0.22 : 0.75)),
           verticalBias: Number(movement.vertical_bias ?? (cursorLock ? -0.02 : -0.06)),
           hesitationMs: Number(movement.hesitation_ms ?? (cursorLock ? 180 : 260)),
+          correctionStrength: Number(movement.correction_strength ?? (cursorLock ? 2.8 : 3.4)),
+          correctionCap: Number(movement.correction_cap ?? (cursorLock ? 5 : 8)),
+          leadCap: Number(movement.lead_cap ?? (cursorLock ? 10 : 14)),
+          lockRadius: Number(movement.lock_radius ?? (cursorLock ? 0.8 : 1.4)),
+          orbitBias: Number(movement.orbit_bias ?? 0),
           interjectionBias: Number(movement.interjection_bias ?? 0),
         };
       }
 
       function resolveOrbHumanOffset(timestamp, motionProfile, speedFactor) {
-        const driftStrength = motionProfile.driftStrength * (motionProfile.cursorLock ? 0.55 + speedFactor * 0.35 : 1);
-        const microStrength = motionProfile.microStrength * (0.45 + speedFactor * 0.75);
+        const rideProfile = motionProfile.profile === "cursor_ride";
+        const guardProfile = motionProfile.profile === "cursor_guard";
+        const driftStrength = motionProfile.driftStrength * (motionProfile.cursorLock ? 0.42 + speedFactor * 0.22 : 1);
+        const microStrength = motionProfile.microStrength * (rideProfile ? 0.22 + speedFactor * 0.34 : 0.45 + speedFactor * 0.75);
         const x =
           Math.sin(timestamp / 540 + orbMotion.seedA) * driftStrength +
           Math.sin(timestamp / 128 + orbMotion.seedB) * microStrength;
         const y =
           Math.cos(timestamp / 620 + orbMotion.seedC) * driftStrength +
           Math.sin(timestamp / 164 + orbMotion.seedD) * microStrength;
-        return { x, y };
+        if (!motionProfile.cursorLock) {
+          return { x, y };
+        }
+        const orbitBias = motionProfile.orbitBias * (rideProfile ? 0.55 : guardProfile ? 0.3 : 0.18);
+        const orbitPhase = timestamp / (rideProfile ? 220 : 280) + orbMotion.seedA;
+        return {
+          x: x + Math.sin(orbitPhase) * orbitBias,
+          y: y + Math.cos(orbitPhase) * orbitBias * 0.7,
+        };
       }
 
       function resolveOrbStateOverride() {
@@ -1185,8 +1276,8 @@
           const speedFactor = Math.min(1, orbMotion.speed / 18);
           const humanOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
           const leadStrength = motionProfile.leadStrength * (0.6 + speedFactor * 0.4);
-          const leadX = orbMotion.pointerVx * leadStrength;
-          const leadY = orbMotion.pointerVy * leadStrength;
+          const leadX = Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVx * leadStrength));
+          const leadY = Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVy * leadStrength));
           orbMotion.correctionX *= pointerFresh ? 0.82 : 0.68;
           orbMotion.correctionY *= pointerFresh ? 0.82 : 0.68;
           orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
@@ -1197,12 +1288,23 @@
             humanOffset.y +
             orbMotion.correctionY -
             motionProfile.interjectionBias * size * 0.12;
-          const stiffness = Math.min(0.58, motionProfile.settleStrength + speedFactor * 0.06);
-          const damping = Math.max(0.58, motionProfile.damping - speedFactor * 0.04);
+          const rideProfile = motionProfile.profile === "cursor_ride";
+          const stiffness = Math.min(
+            rideProfile ? 0.72 : 0.58,
+            motionProfile.settleStrength + speedFactor * (rideProfile ? 0.09 : 0.06),
+          );
+          const damping = Math.max(rideProfile ? 0.52 : 0.58, motionProfile.damping - speedFactor * 0.04);
           orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
           orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
           orbMotion.vx *= damping;
           orbMotion.vy *= damping;
+          if (motionProfile.cursorLock) {
+            const lockDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
+            if (lockDistance < size * motionProfile.lockRadius * 0.08) {
+              orbMotion.vx *= 0.86;
+              orbMotion.vy *= 0.86;
+            }
+          }
           orbMotion.x += orbMotion.vx;
           orbMotion.y += orbMotion.vy;
         }

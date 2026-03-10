@@ -133,20 +133,66 @@ def _pulse_kind(*, posture: str, voice_lines: int, interjection_level: int) -> s
 
 
 def _movement_profile(*, active_execution: bool, interjection_level: int, panic_ready: bool) -> dict[str, Any]:
-    cursor_lock = active_execution or panic_ready
+    if active_execution:
+        return {
+            "anchor": "cursor",
+            "profile": "cursor_ride",
+            "cursor_lock": True,
+            "lead_style": "predictive_commit",
+            "randomness": "operator_tremor",
+            "lead_strength": 0.082,
+            "settle_strength": 0.56,
+            "damping": 0.64,
+            "drift_strength": 0.16,
+            "micro_strength": 0.08,
+            "vertical_bias": -0.008,
+            "hesitation_ms": 120,
+            "correction_strength": 2.6,
+            "correction_cap": 4.5,
+            "lead_cap": 10.0,
+            "lock_radius": 0.72,
+            "orbit_bias": 0.06,
+            "interjection_bias": round(0.04 * interjection_level, 3),
+        }
+    if panic_ready:
+        return {
+            "anchor": "cursor",
+            "profile": "cursor_guard",
+            "cursor_lock": True,
+            "lead_style": "authority_guard",
+            "randomness": "tension_hold",
+            "lead_strength": 0.072,
+            "settle_strength": 0.52,
+            "damping": 0.67,
+            "drift_strength": 0.2,
+            "micro_strength": 0.1,
+            "vertical_bias": -0.012,
+            "hesitation_ms": 140,
+            "correction_strength": 2.4,
+            "correction_cap": 4.2,
+            "lead_cap": 9.0,
+            "lock_radius": 0.82,
+            "orbit_bias": 0.04,
+            "interjection_bias": round(0.05 * interjection_level, 3),
+        }
     return {
         "anchor": "cursor",
-        "profile": "cursor_lock" if cursor_lock else "cursor_drift",
-        "cursor_lock": cursor_lock,
+        "profile": "cursor_drift",
+        "cursor_lock": False,
         "lead_style": "human_correction",
-        "randomness": "hand_tremor" if cursor_lock else "breathing_variation",
-        "lead_strength": round(0.06 if cursor_lock else 0.035, 3),
-        "settle_strength": round(0.42 if cursor_lock else 0.24, 3),
-        "damping": round(0.68 if cursor_lock else 0.82, 3),
-        "drift_strength": round(0.45 if cursor_lock else 1.35, 3),
-        "micro_strength": round(0.22 if cursor_lock else 0.75, 3),
-        "vertical_bias": round(-0.02 if cursor_lock else -0.06, 3),
-        "hesitation_ms": 180 if cursor_lock else 260,
+        "randomness": "breathing_variation",
+        "lead_strength": 0.035,
+        "settle_strength": 0.24,
+        "damping": 0.82,
+        "drift_strength": 1.35,
+        "micro_strength": 0.75,
+        "vertical_bias": -0.06,
+        "hesitation_ms": 260,
+        "correction_strength": 3.4,
+        "correction_cap": 8.0,
+        "lead_cap": 14.0,
+        "lock_radius": 1.4,
+        "orbit_bias": 0.0,
         "interjection_bias": round(0.08 * interjection_level, 3),
     }
 
@@ -156,9 +202,14 @@ def _handback_profile(*, mode: str, active_execution: bool) -> dict[str, Any]:
     return {
         "visible": orchestrated_mode or active_execution,
         "ritual": "return_to_ambient",
-        "return_profile": "graceful_arc",
+        "return_profile": "release_arc",
         "anchor": "ambient_rest",
-        "duration_ms": 1400 if orchestrated_mode else 1100,
+        "duration_ms": 1480 if orchestrated_mode else 1180,
+        "linger_ms": 120 if orchestrated_mode else 90,
+        "settle_ms": 180 if orchestrated_mode else 140,
+        "arc_lift_px": 72 if orchestrated_mode else 56,
+        "release_bias": 0.22 if orchestrated_mode else 0.18,
+        "velocity_carry": 0.34 if orchestrated_mode else 0.26,
     }
 
 
@@ -273,7 +324,7 @@ def build_orb_state(
     if posture == "panic":
         summary = "Kill switch is live. The Orb is now the immediate stop surface."
     elif posture == "acting":
-        summary = f"Francis is acting in {normalized_mode} mode. Follow the Orb to see where authority is landing."
+        summary = f"Francis is acting in {normalized_mode} mode. The Orb is riding the cursor so authority stays visible where the work is landing."
     elif interjection_level >= 2:
         summary = "The work needs you now. The Orb is holding focus on a real decision edge."
     elif normalized_mode in {"observe", "assist"}:

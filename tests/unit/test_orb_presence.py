@@ -44,14 +44,16 @@ def test_orb_state_becomes_operator_cursor_during_pilot_execution() -> None:
     assert orb["posture"] == "acting"
     assert orb["operator_cursor"] is True
     assert orb["movement"]["anchor"] == "cursor"
-    assert orb["movement"]["profile"] == "cursor_lock"
+    assert orb["movement"]["profile"] == "cursor_ride"
     assert orb["movement"]["cursor_lock"] is True
-    assert orb["movement"]["lead_style"] == "human_correction"
+    assert orb["movement"]["lead_style"] == "predictive_commit"
+    assert orb["movement"]["lock_radius"] < 1
     assert orb["panic_ready"] is False
     assert orb["visual"]["pulse_kind"] == "execution"
     assert orb["handback_visible"] is True
     assert orb["handback"]["ritual"] == "return_to_ambient"
-    assert orb["handback"]["return_profile"] == "graceful_arc"
+    assert orb["handback"]["return_profile"] == "release_arc"
+    assert orb["handback"]["linger_ms"] >= 100
 
 
 def test_orb_state_enters_panic_when_kill_switch_is_live() -> None:
@@ -91,4 +93,6 @@ def test_orb_state_exposes_handback_profile_for_ambient_modes() -> None:
     assert orb["posture"] == "resting"
     assert orb["handback"]["ritual"] == "return_to_ambient"
     assert orb["handback"]["anchor"] == "ambient_rest"
-    assert orb["handback"]["duration_ms"] == 1100
+    assert orb["handback"]["return_profile"] == "release_arc"
+    assert orb["handback"]["duration_ms"] == 1180
+    assert orb["handback"]["linger_ms"] == 90
