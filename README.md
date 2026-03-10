@@ -59,6 +59,7 @@ At maturity, it is all of the following at once:
 * a Trust-calibrated intelligence
 * a governed execution substrate
 * a Lens surface that lives in place instead of behind a detached chat tab
+* an embodied Orb presence object that makes presence, conversation, execution, and stop paths physically legible
 * a Swarm-capable internal architecture
 * a Federated multi-node architecture
 * a managed-copy business platform
@@ -385,6 +386,8 @@ Replace generic loops with bounded, event-driven autonomy.
 
 Make Francis experientially real in place, with visible mode and authority surfaces.
 
+The long-term Lens embodiment is not just panels and chips. It also includes the Orb: a single presence object that can rest ambiently, unfold into voice and chat in place, become the visible operator cursor during execution, and serve as the immediate kill surface.
+
 ### Stage 7 - Telemetry MVP
 
 Add high-signal, scope-bound visibility into the user's real work context without becoming invasive.
@@ -436,6 +439,8 @@ Create isolated customer-specific copies without surrendering the core or poolin
 ### Stage 19 - Productization
 
 Make Francis a real machine-resident daily-layer product with startup, summon, update, recovery, export/import, and clean install/uninstall behavior.
+
+That is also where the Orb becomes an implemented embodiment layer instead of a doctrine note: a state-driven overlay object whose motion, pulse, handback, and stop behavior map to real operational state.
 
 ## What The User Should Feel
 

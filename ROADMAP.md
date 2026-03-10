@@ -3517,6 +3517,249 @@ The product must never create ambiguity about whether Francis is:
 
 Indicator clarity is part of the law.
 
+### 4.4.11 The Orb
+
+Lens also needs a single embodied interface primitive: the Orb.
+
+The Orb is not a mascot, decorative animation, dashboard widget, floating chat bubble, or cursor skin.
+
+It is the one coherent presence object through which Francis becomes physically legible in the environment.
+
+It is where:
+
+* presence becomes visible
+* voice becomes spatial
+* execution becomes legible
+* handback becomes felt
+* revocation becomes immediate
+* clarification becomes disciplined and in-place
+
+If Lens is the signature product surface, the Orb is the signature presence object inside that surface.
+
+#### 4.4.11.1 Why the Orb exists
+
+The Orb exists because Francis needs a single embodied primitive that unifies:
+
+* ambient presence
+* direct communication
+* disciplined interjection
+* visible execution
+* handback signaling
+* immediate control revocation
+
+Most systems fragment these across tray icons, chat windows, cursors, notification panels, popups, and hidden kill paths.
+
+That fragmentation weakens identity and weakens trust.
+
+The Orb solves that by becoming the one persistent object through which Francis is physically understood.
+
+The user should learn almost instinctively:
+
+* when Francis is present
+* when Francis is listening
+* when Francis is speaking
+* when Francis is asking because the work genuinely needs them
+* when Francis is acting
+* when Francis has handed back control
+* where to go to stop it instantly
+
+#### 4.4.11.2 The Orb at rest must be operational language
+
+In `Observe` and `Assist`, the Orb should feel:
+
+* calm
+* suspended
+* watchful
+* non-intrusive
+* alive without demanding attention
+
+Stillness would make it feel dead.
+Chaos would make it feel theatrical.
+
+The correct feeling is controlled continuity.
+
+Its visual properties should map to real operational meaning, such as:
+
+* core brightness -> incident pressure, urgency, or current attention level
+* motion speed -> activity intensity or autonomy engagement
+* color temperature -> mode or posture
+* ring density or tightness -> focus, readiness, or concentration
+* pulse behavior -> listening, speaking, dormant, or preparing an interjection
+
+The Orb should not merely look interesting.
+It must function as a compact operational language.
+
+#### 4.4.11.3 Voice and chat should emerge from the Orb
+
+The Orb should be the in-place conversation surface.
+
+The user should be able to:
+
+* click it
+* summon it by hotkey
+* address it by voice
+* expand it into interaction mode without leaving the current work surface
+
+Conversation should emerge from the Orb itself rather than launching a detached app whenever possible.
+
+That preserves the 4th-wall rule:
+
+> the user does not leave the work surface to talk to Francis
+
+#### 4.4.11.4 During Pilot or approved Away execution, the Orb becomes the operator cursor
+
+This is the centerpiece of the concept.
+
+When Francis is actively executing, the Orb should stop behaving like an ambient presence object and become the visible operator cursor.
+
+That means it moves to where the work is happening and makes action spatially legible:
+
+* navigating interfaces
+* selecting targets
+* activating controls
+* traversing surfaces
+* touching exactly what Francis is acting on
+
+The user should not need to wonder:
+
+* what Francis is touching
+* where it is moving
+* whether it is acting somewhere hidden
+* whether the cursor is theirs or Francis's
+* whether the work is still active
+
+Where the Orb moves, Francis is acting.
+Where the Orb is not, Francis is not acting there.
+
+#### 4.4.11.5 The Orb should preserve coherence during speech
+
+When Francis speaks, the Orb should pulse with the voice without collapsing into a generic waveform blob.
+
+The core remains the anchor.
+The rings continue orbiting.
+Voice creates rhythmic expansions, contractions, brightness waves, or resonance ripples through stable orbital fields.
+
+The visual language should feel:
+
+* intelligent
+* coherent
+* embodied
+* elegant
+* controlled
+
+not noisy, gadget-like, or theatrically reactive.
+
+#### 4.4.11.6 Interjections must be earned
+
+The Orb is also the physical surface through which Francis interjects.
+
+Those interjections should appear only when the work genuinely needs the user, such as:
+
+* approval is required
+* scope is ambiguous
+* intent is unclear
+* risk materially increased
+* the system is blocked
+* a meaningful contradiction was detected
+* a short answer would prevent wasted work
+* a high-value next step depends on clarification
+* an important anomaly or decision threshold has been crossed
+
+They should not appear for:
+
+* filler conversation
+* personality theater
+* low-value status chatter
+* obvious next steps that do not require the user
+* repeated reassurance
+* generic check-in behavior without operational reason
+
+Francis must earn every interruption.
+
+A good interjection should satisfy at least one of these tests:
+
+* Law test: continuing without asking would violate governance
+* Clarity test: asking now prevents costly misunderstanding
+* Risk test: user awareness is materially necessary
+* Leverage test: a short answer unlocks meaningful progress
+* Trust test: silence would make the system feel hidden or presumptuous
+
+#### 4.4.11.7 Interjection severity needs a ladder
+
+Interjections should follow a disciplined severity model:
+
+* Level 1 - Soft Prompt: low-friction clarification that improves quality without hard interruption
+* Level 2 - Needed Decision: lawful or strategic continuation cannot proceed without user input
+* Level 3 - Immediate Intervention: risk, suspicious input, blocked action, or contradictory evidence requires immediate awareness
+
+The Orb should express those levels through focus, brightness, ring tightness, and prompt strength without becoming noisy.
+
+#### 4.4.11.8 Handback and kill semantics must be spatial
+
+When Francis finishes active execution, the Orb should visibly disengage from the work surface and drift back to its resting position.
+
+That return is the handback.
+
+It makes sovereignty transfer felt rather than merely described.
+
+The Orb should also be the most immediate emergency control surface in the system.
+
+The user should always know:
+
+> that is what I grab to stop it
+
+Panic interactions should feel physically direct, such as:
+
+* clicking and holding the Orb
+* grabbing and dragging it to halt
+* issuing a direct stop voice command to it
+* invoking a hard panic gesture tied to the Orb surface
+
+#### 4.4.11.9 Orb design rules
+
+To avoid gimmick drift, the Orb must obey strict rules:
+
+* every visual property maps to real operational meaning
+* it remains calm rather than noisy
+* it preserves circular continuity even under speech, interjection, or execution
+* it clearly distinguishes rest, listening, speaking, asking, acting, and handback
+* it never hides execution
+* it never interrupts casually
+* it always remains interruptible
+* it feels premium and operator-grade rather than playful
+
+#### 4.4.11.10 Orb failure modes
+
+The implementation should explicitly defend against:
+
+* decorative sci-fi object with weak state meaning
+* noisy floating assistant behavior
+* cursor-replacement gimmickry with no trust value
+* random interjection behavior
+* unclear handback
+* weak kill semantics
+
+Each of those would damage trust, not strengthen it.
+
+#### 4.4.11.11 Orb doctrine statement
+
+> The Orb is Francis's embodied interface object: a continuously living ambient presence whose luminous core and orbiting rings communicate state at rest, unfold into voice and chat in place, surface only earned interjections, become the visible operator cursor during execution, return to rest as handback, and serve as the immediate physical kill surface so presence, communication, clarification, action, and revocation remain one coherent governed object.
+
+#### 4.4.11.12 Orb acceptance criteria
+
+The Orb concept is successful only if all of the following become true:
+
+* it feels like Francis's embodied presence rather than a decorative widget
+* at rest, it communicates operational state through readable visual behavior
+* voice interaction emerges from the Orb rather than dragging the user into a detached app
+* during `Pilot` or active execution, it becomes the visible operator cursor and makes action spatially legible
+* interjections occur only when they are operationally earned
+* interjections feel calm, useful, and bounded
+* handback is clearly signaled by return to ambient rest
+* panic stop and control revocation are immediate through the Orb surface
+* motion remains calm, orbital, and coherent under speech, interjection, and execution
+* the Orb strengthens trust, inspectability, and product identity rather than adding spectacle without governance value
+
 ---
 
 ## 4.5 Lens Must Make Francis Feel In-Place
@@ -22901,6 +23144,7 @@ This stage adds or solidifies:
 * startup/install/update behavior
 * tray icon
 * hotkeys
+* Orb embodiment layer
 * crash recovery
 * export/import
 * machine-resident lifecycle dignity
@@ -22910,14 +23154,47 @@ This stage adds or solidifies:
 * startup/install/update flows
 * tray icon
 * hotkey summon
+* embodied Orb presence object
 * crash recovery
 * export/import
+
+### 25.22.1 Orb embodiment implementation note
+
+When the Orb embodiment layer is implemented, the likely renderer path should target a real-time 3D overlay stack, with `Three.js` as the most likely first rendering surface.
+
+The Orb should be treated as a state-driven render object, not a decorative animation.
+
+Its core, rings, pulse behavior, and movement system should map to explicit operational state, including:
+
+* mode
+* incident pressure
+* activity intensity
+* execution focus
+* voice activity
+* interjection state
+* handback state
+* panic or kill readiness
+
+Orbital ring motion should come from parametric geometry and shader- or uniform-driven modulation rather than canned animation clips.
+
+Voice pulse behavior should be driven by audio analysis feeding render parameters while preserving circular orbital continuity.
+
+The implementation must preserve a strict visual distinction among:
+
+* ambient rest
+* listening
+* speaking
+* interjecting
+* active execution
+* handback
+* panic-stop interaction
 
 ### Done looks like
 
 Stage 19 is done when:
 
 * Francis feels native
+* presence feels machine-resident instead of panel-bound
 * reliability is boring and strong
 * the user can turn it on or off without fear
 * the system no longer feels like a build artifact
