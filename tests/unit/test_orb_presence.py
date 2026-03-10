@@ -50,6 +50,8 @@ def test_orb_state_becomes_operator_cursor_during_pilot_execution() -> None:
     assert orb["panic_ready"] is False
     assert orb["visual"]["pulse_kind"] == "execution"
     assert orb["handback_visible"] is True
+    assert orb["handback"]["ritual"] == "return_to_ambient"
+    assert orb["handback"]["return_profile"] == "graceful_arc"
 
 
 def test_orb_state_enters_panic_when_kill_switch_is_live() -> None:
@@ -70,3 +72,23 @@ def test_orb_state_enters_panic_when_kill_switch_is_live() -> None:
     assert orb["panic_ready"] is True
     assert orb["movement"]["cursor_lock"] is True
     assert orb["visual"]["pulse_kind"] == "panic"
+
+
+def test_orb_state_exposes_handback_profile_for_ambient_modes() -> None:
+    snapshot = {
+        "control": {"mode": "assist", "kill_switch": False},
+        "objective": {"label": "Return"},
+        "approvals": {"pending_count": 0},
+        "missions": {"active_count": 0},
+        "incidents": {"open_count": 0, "highest_severity": "nominal"},
+        "security": {"quarantine_count": 0, "top_categories": {}},
+        "inbox": {"alert_count": 0},
+        "runs": {"last_run": {"phase": "report"}},
+    }
+
+    orb = build_orb_state(mode="assist", snapshot=snapshot, actions_payload={}, voice={})
+
+    assert orb["posture"] == "resting"
+    assert orb["handback"]["ritual"] == "return_to_ambient"
+    assert orb["handback"]["anchor"] == "ambient_rest"
+    assert orb["handback"]["duration_ms"] == 1100

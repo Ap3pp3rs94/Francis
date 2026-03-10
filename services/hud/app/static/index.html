@@ -436,6 +436,13 @@
           brightness(1.08);
       }
 
+      #orb-render-root.orb-handback canvas {
+        filter:
+          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.22))
+          saturate(0.95)
+          brightness(0.98);
+      }
+
       #orb-render-root canvas {
         width: 100% !important;
         height: 100% !important;
@@ -739,6 +746,17 @@
         seedC: Math.random() * Math.PI * 2,
         seedD: Math.random() * Math.PI * 2,
       };
+      let orbHandback = {
+        active: false,
+        startAt: 0,
+        durationMs: 0,
+        fromX: 0,
+        fromY: 0,
+        toX: 0,
+        toY: 0,
+        controlX: 0,
+        controlY: 0,
+      };
 
       function escapeHtml(value) {
         return String(value)
@@ -809,33 +827,116 @@
         return "The Orb is following the cursor. Hold the moving Orb itself to panic stop immediately.";
       }
 
-      function renderOrb(orb) {
-        currentOrb = orb || null;
+      function clearOrbHandback() {
+        orbHandback.active = false;
+        orbHandback.startAt = 0;
+        orbHandback.durationMs = 0;
+      }
+
+      function isOrbHandbackActive() {
+        return Boolean(currentOrb?.handback?.ritual === "return_to_ambient" && orbHandback.active);
+      }
+
+      function maybeStartOrbHandback(previousOrb, nextOrb) {
+        if (!nextOrb || nextOrb.operator_cursor) {
+          clearOrbHandback();
+          return;
+        }
+        const handback = nextOrb.handback || {};
+        if (!previousOrb?.operator_cursor || handback.ritual !== "return_to_ambient") {
+          return;
+        }
+        const fallback = getOrbFallbackTarget();
+        const fromX = Number.isFinite(orbMotion.x) ? orbMotion.x : orbMotion.pointerX || fallback.x;
+        const fromY = Number.isFinite(orbMotion.y) ? orbMotion.y : orbMotion.pointerY || fallback.y;
+        const toX = fallback.x;
+        const toY = fallback.y;
+        const deltaX = toX - fromX;
+        const deltaY = toY - fromY;
+
+        orbHandback.active = true;
+        orbHandback.startAt = performance.now();
+        orbHandback.durationMs = Math.max(600, Number(handback.duration_ms || 1100));
+        orbHandback.fromX = fromX;
+        orbHandback.fromY = fromY;
+        orbHandback.toX = toX;
+        orbHandback.toY = toY;
+        orbHandback.controlX = (fromX + toX) / 2 + Math.max(-72, Math.min(72, deltaX * 0.14));
+        orbHandback.controlY = (fromY + toY) / 2 - Math.max(32, Math.min(84, Math.abs(deltaY) * 0.28 + 28));
+
+        orbMotion.vx *= 0.28;
+        orbMotion.vy *= 0.28;
+        orbMotion.speed *= 0.35;
+        orbMotion.correctionX *= 0.2;
+        orbMotion.correctionY *= 0.2;
+      }
+
+      function easeOutCubic(value) {
+        const t = Math.max(0, Math.min(1, value));
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function resolveOrbHandbackTarget(timestamp) {
+        if (!isOrbHandbackActive()) {
+          return null;
+        }
+        const durationMs = Math.max(600, orbHandback.durationMs || 1100);
+        const progress = Math.max(0, Math.min(1, (timestamp - orbHandback.startAt) / durationMs));
+        const eased = easeOutCubic(progress);
+        const inverse = 1 - eased;
+        const x =
+          inverse * inverse * orbHandback.fromX +
+          2 * inverse * eased * orbHandback.controlX +
+          eased * eased * orbHandback.toX;
+        const y =
+          inverse * inverse * orbHandback.fromY +
+          2 * inverse * eased * orbHandback.controlY +
+          eased * eased * orbHandback.toY;
+        return {
+          x,
+          y,
+          complete: progress >= 1,
+        };
+      }
+
+      function renderOrbPresentation() {
         if (!currentOrb) {
           return;
         }
+        const handbackActive = isOrbHandbackActive();
         document.getElementById("orb-title").textContent =
           `${titleCase(currentOrb.posture || "resting")} | ${titleCase(currentOrb.mode || "assist")}`;
-        document.getElementById("orb-status").textContent =
-          `L${currentOrb.interjection_level || 0} | ${currentOrb.operator_cursor ? "cursor active" : "ambient"}`;
-        document.getElementById("orb-summary").textContent =
-          currentOrb.summary || "Ambient presence is standing by.";
-        document.getElementById("orb-detail").textContent =
-          currentOrb.detail || "Orb detail is not available.";
-        document.getElementById("orb-controls").textContent = orbControlHint();
-        document.getElementById("orb-stage-copy").textContent = currentOrb.operator_cursor
-          ? "The Orb is locked to the pointer path and makes active authority spatially legible. Motion resolves through small human-style correction instead of robotic-perfect tracking."
-          : "The Orb stays attached to the cursor path, but with softer breathing drift until the work genuinely needs attention.";
-        document.getElementById("orb-anchor").textContent = currentOrb.operator_cursor
-          ? "cursor authority"
-          : "cursor ambient";
-        document.getElementById("orb-motion").textContent = currentOrb.movement?.cursor_lock
-          ? "cursor lock | human correction"
-          : "soft drift | breathing";
+        document.getElementById("orb-status").textContent = handbackActive
+          ? `L${currentOrb.interjection_level || 0} | handback`
+          : `L${currentOrb.interjection_level || 0} | ${currentOrb.operator_cursor ? "cursor active" : "ambient"}`;
+        document.getElementById("orb-summary").textContent = handbackActive
+          ? "Authority ended cleanly. The Orb is returning to ambient rest in view."
+          : currentOrb.summary || "Ambient presence is standing by.";
+        document.getElementById("orb-detail").textContent = handbackActive
+          ? "Handback is in progress. The return path remains visible so sovereignty transfer stays explicit."
+          : currentOrb.detail || "Orb detail is not available.";
+        document.getElementById("orb-controls").textContent = handbackActive
+          ? "Handback is visible. The Orb is returning to ambient rest and will settle back into normal presence."
+          : orbControlHint();
+        document.getElementById("orb-stage-copy").textContent = handbackActive
+          ? "Authority has ended cleanly. The Orb is arcing back to its ambient anchor so handback stays spatial, not implied."
+          : currentOrb.operator_cursor
+            ? "The Orb is locked to the pointer path and makes active authority spatially legible. Motion resolves through small human-style correction instead of robotic-perfect tracking."
+            : "The Orb stays attached to the cursor path, but with softer breathing drift until the work genuinely needs attention.";
+        document.getElementById("orb-anchor").textContent = handbackActive
+          ? "ambient return"
+          : currentOrb.operator_cursor
+            ? "cursor authority"
+            : "cursor ambient";
+        document.getElementById("orb-motion").textContent = handbackActive
+          ? "graceful arc | handback"
+          : currentOrb.movement?.cursor_lock
+            ? "cursor lock | human correction"
+            : "soft drift | breathing";
         const metrics = [
-          ["Posture", titleCase(currentOrb.posture || "resting")],
-          ["Pulse", titleCase(currentOrb.visual?.pulse_kind || "steady")],
-          ["Cursor", currentOrb.operator_cursor ? "Visible" : "Idle"],
+          ["Posture", handbackActive ? "Handback" : titleCase(currentOrb.posture || "resting")],
+          ["Pulse", handbackActive ? "Return Arc" : titleCase(currentOrb.visual?.pulse_kind || "steady")],
+          ["Cursor", handbackActive ? "Returning" : currentOrb.operator_cursor ? "Visible" : "Idle"],
           ["Stop Path", currentOrb.panic_ready ? "Immediate" : "Unavailable"],
         ];
         document.getElementById("orb-metrics").innerHTML = metrics
@@ -844,6 +945,16 @@
               `<div class="metric-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`,
           )
           .join("");
+      }
+
+      function renderOrb(orb) {
+        const previousOrb = currentOrb;
+        currentOrb = orb || null;
+        if (!currentOrb) {
+          return;
+        }
+        maybeStartOrbHandback(previousOrb, currentOrb);
+        renderOrbPresentation();
         mountOrbEngine();
         document.body.classList.toggle("orb-cursor-active", canUseOrbCursor() && Boolean(currentOrb));
         applyOrbSignals();
@@ -1047,40 +1158,56 @@
         root.style.width = `${size}px`;
         root.style.height = `${size}px`;
 
-        const motionProfile = getOrbMotionProfile();
-        const fallback = getOrbFallbackTarget();
-        const pointerFresh =
-          orbMotion.lastMoveAt > 0 &&
-          timestamp - orbMotion.lastMoveAt < Math.max(700, motionProfile.hesitationMs * 6);
-        const anchorX = pointerFresh ? orbMotion.pointerX : fallback.x;
-        const anchorY = pointerFresh ? orbMotion.pointerY : fallback.y;
-        const speedFactor = Math.min(1, orbMotion.speed / 18);
-        const humanOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
-        const leadStrength = motionProfile.leadStrength * (0.6 + speedFactor * 0.4);
-        const leadX = orbMotion.pointerVx * leadStrength;
-        const leadY = orbMotion.pointerVy * leadStrength;
-        orbMotion.correctionX *= pointerFresh ? 0.82 : 0.68;
-        orbMotion.correctionY *= pointerFresh ? 0.82 : 0.68;
-        orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
-        orbMotion.targetY =
-          anchorY +
-          size * motionProfile.verticalBias +
-          leadY +
-          humanOffset.y +
-          orbMotion.correctionY -
-          motionProfile.interjectionBias * size * 0.12;
-        const stiffness = Math.min(0.58, motionProfile.settleStrength + speedFactor * 0.06);
-        const damping = Math.max(0.58, motionProfile.damping - speedFactor * 0.04);
-        orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
-        orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
-        orbMotion.vx *= damping;
-        orbMotion.vy *= damping;
-        orbMotion.x += orbMotion.vx;
-        orbMotion.y += orbMotion.vy;
+        const handbackState = resolveOrbHandbackTarget(timestamp);
+        const handbackActive = Boolean(handbackState);
+        if (handbackState) {
+          orbMotion.targetX = handbackState.x;
+          orbMotion.targetY = handbackState.y;
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+          orbMotion.x = handbackState.x;
+          orbMotion.y = handbackState.y;
+          if (handbackState.complete) {
+            clearOrbHandback();
+            renderOrbPresentation();
+          }
+        } else {
+          const motionProfile = getOrbMotionProfile();
+          const fallback = getOrbFallbackTarget();
+          const pointerFresh =
+            orbMotion.lastMoveAt > 0 &&
+            timestamp - orbMotion.lastMoveAt < Math.max(700, motionProfile.hesitationMs * 6);
+          const anchorX = pointerFresh ? orbMotion.pointerX : fallback.x;
+          const anchorY = pointerFresh ? orbMotion.pointerY : fallback.y;
+          const speedFactor = Math.min(1, orbMotion.speed / 18);
+          const humanOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
+          const leadStrength = motionProfile.leadStrength * (0.6 + speedFactor * 0.4);
+          const leadX = orbMotion.pointerVx * leadStrength;
+          const leadY = orbMotion.pointerVy * leadStrength;
+          orbMotion.correctionX *= pointerFresh ? 0.82 : 0.68;
+          orbMotion.correctionY *= pointerFresh ? 0.82 : 0.68;
+          orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
+          orbMotion.targetY =
+            anchorY +
+            size * motionProfile.verticalBias +
+            leadY +
+            humanOffset.y +
+            orbMotion.correctionY -
+            motionProfile.interjectionBias * size * 0.12;
+          const stiffness = Math.min(0.58, motionProfile.settleStrength + speedFactor * 0.06);
+          const damping = Math.max(0.58, motionProfile.damping - speedFactor * 0.04);
+          orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
+          orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
+          orbMotion.vx *= damping;
+          orbMotion.vy *= damping;
+          orbMotion.x += orbMotion.vx;
+          orbMotion.y += orbMotion.vy;
+        }
         const positionX = Math.max(24, Math.min(window.innerWidth - size - 24, orbMotion.x - size / 2));
         const positionY = Math.max(24, Math.min(window.innerHeight - size - 24, orbMotion.y - size / 2));
         root.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0)`;
-        overlay.dataset.posture = String(currentOrb.posture || "resting");
+        root.classList.toggle("orb-handback", handbackActive);
+        overlay.dataset.posture = handbackActive ? "handback" : String(currentOrb.posture || "resting");
         applyOrbSignals();
       }
 

@@ -151,6 +151,17 @@ def _movement_profile(*, active_execution: bool, interjection_level: int, panic_
     }
 
 
+def _handback_profile(*, mode: str, active_execution: bool) -> dict[str, Any]:
+    orchestrated_mode = mode in {"pilot", "away"}
+    return {
+        "visible": orchestrated_mode or active_execution,
+        "ritual": "return_to_ambient",
+        "return_profile": "graceful_arc",
+        "anchor": "ambient_rest",
+        "duration_ms": 1400 if orchestrated_mode else 1100,
+    }
+
+
 def build_orb_state(
     *,
     mode: str,
@@ -294,6 +305,10 @@ def build_orb_state(
         "operator_cursor": active_execution,
         "voice_channel": pulse_kind in {"voice_ready", "interjection", "execution"},
         "handback_visible": normalized_mode in {"pilot", "away"} or active_execution,
+        "handback": _handback_profile(
+            mode=normalized_mode,
+            active_execution=active_execution,
+        ),
         "palette": colorway,
         "movement": _movement_profile(
             active_execution=active_execution,

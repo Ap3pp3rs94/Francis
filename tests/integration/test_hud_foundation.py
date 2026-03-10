@@ -385,6 +385,9 @@ def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> 
     assert body["movement"]["profile"] == "cursor_lock"
     assert body["movement"]["cursor_lock"] is True
     assert body["movement"]["lead_style"] == "human_correction"
+    assert body["handback"]["ritual"] == "return_to_ambient"
+    assert body["handback"]["return_profile"] == "graceful_arc"
+    assert body["handback"]["duration_ms"] == 1400
     assert body["visual"]["pulse_kind"] == "execution"
 
 
