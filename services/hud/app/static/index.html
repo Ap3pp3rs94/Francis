@@ -260,6 +260,44 @@
         margin-top: 14px;
       }
 
+      .desktop-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .desktop-pill {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid var(--border);
+      }
+
+      .desktop-pill strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .desktop-pill span {
+        color: var(--ink);
+      }
+
+      .desktop-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .desktop-actions button {
+        flex: 0 0 auto;
+      }
+
       .orb-chamber {
         position: relative;
         overflow: hidden;
@@ -623,6 +661,28 @@
       <section class="split">
         <article class="panel">
           <div class="panel-head">
+            <h2>Desktop Shell</h2>
+            <span class="meta tiny" id="desktop-status">Browser mode | no bridge</span>
+          </div>
+          <p id="desktop-summary" class="hero-copy">
+            Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.
+          </p>
+          <div class="desktop-grid" id="desktop-grid">
+            <div class="desktop-pill"><strong>Mode</strong><span>browser</span></div>
+            <div class="desktop-pill"><strong>Input</strong><span>interactive</span></div>
+            <div class="desktop-pill"><strong>Topmost</strong><span>n/a</span></div>
+          </div>
+          <div class="desktop-actions" id="desktop-actions">
+            <button class="btn-secondary" type="button" disabled>Interactive</button>
+            <button class="btn-secondary" type="button" disabled>Click-through</button>
+          </div>
+          <p class="meta tiny" id="desktop-meta">
+            Electron-only bridge. In browser mode there is no desktop shell control surface.
+          </p>
+          <pre class="console" id="desktop-display">Awaiting desktop bridge.</pre>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
             <h2>Voice Presence</h2>
             <button class="btn-secondary" type="button" onclick="loadVoiceBriefing()">Refresh Briefing</button>
           </div>
@@ -634,7 +694,10 @@
           </ul>
           <p class="meta tiny" id="voice-meta">No voice receipt loaded yet.</p>
         </article>
-        <article class="panel accent">
+      </section>
+
+      <section class="split">
+        <article class="panel">
           <div class="panel-head">
             <h2>Command Preview</h2>
             <button class="btn-primary" type="button" onclick="previewVoiceCommand()">Preview Command</button>
@@ -727,6 +790,19 @@
       let orbSpeechBurstUntil = 0;
       let orbThinkingUntil = 0;
       let orbListeningActive = false;
+      let desktopState = {
+        available: false,
+        ignoreMouseEvents: false,
+        alwaysOnTop: true,
+        visible: true,
+        hudUrl: "http://127.0.0.1:8767",
+        shortcuts: {
+          toggleOverlay: "Ctrl+Shift+Alt+F",
+          toggleClickThrough: "Ctrl+Shift+Alt+C",
+        },
+        displayInfo: null,
+      };
+      let desktopNotice = "";
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -800,6 +876,220 @@
           node.classList.add("status-off");
         }
         node.textContent = detail ? `${state} | ${detail}` : state;
+      }
+
+      function getDesktopBridge() {
+        const bridge = window.FrancisDesktop;
+        if (!bridge || typeof bridge.getState !== "function" || typeof bridge.getDisplayInfo !== "function") {
+          return null;
+        }
+        return bridge;
+      }
+
+      function normalizeDesktopState(raw, displayInfo = desktopState.displayInfo) {
+        const available = Boolean(getDesktopBridge());
+        const shortcuts = raw?.shortcuts || {};
+        return {
+          available,
+          ignoreMouseEvents: Boolean(raw?.ignoreMouseEvents),
+          alwaysOnTop: raw?.alwaysOnTop !== false,
+          visible: raw?.visible !== false,
+          hudUrl: String(raw?.hudUrl || "http://127.0.0.1:8767"),
+          shortcuts: {
+            toggleOverlay: String(shortcuts.toggleOverlay || "Ctrl+Shift+Alt+F"),
+            toggleClickThrough: String(shortcuts.toggleClickThrough || "Ctrl+Shift+Alt+C"),
+          },
+          displayInfo: displayInfo && typeof displayInfo === "object" ? displayInfo : null,
+        };
+      }
+
+      function renderDesktopShell() {
+        const status = document.getElementById("desktop-status");
+        const summary = document.getElementById("desktop-summary");
+        const grid = document.getElementById("desktop-grid");
+        const actions = document.getElementById("desktop-actions");
+        const meta = document.getElementById("desktop-meta");
+        const display = document.getElementById("desktop-display");
+        if (!status || !summary || !grid || !actions || !meta || !display) {
+          return;
+        }
+
+        const modeLabel = desktopState.available ? "desktop shell live" : "browser mode";
+        const inputLabel = desktopState.ignoreMouseEvents ? "click-through" : "interactive";
+        const topmostLabel = desktopState.available ? (desktopState.alwaysOnTop ? "locked" : "released") : "n/a";
+        const visibilityLabel = desktopState.available ? (desktopState.visible ? "visible" : "hidden") : "tab only";
+
+        status.textContent = desktopState.available
+          ? `${modeLabel} | ${inputLabel}`
+          : "browser mode | no bridge";
+        summary.textContent = desktopState.available
+          ? desktopState.ignoreMouseEvents
+            ? `The overlay is in click-through mode. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control without dropping the overlay.`
+            : "The Electron shell is live. You can switch between interactive and click-through overlay behavior without changing the HUD architecture."
+          : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
+
+        grid.innerHTML = [
+          ["Mode", desktopState.available ? "desktop" : "browser"],
+          ["Input", inputLabel],
+          ["Topmost", topmostLabel],
+          ["Visibility", visibilityLabel],
+          ["Overlay Toggle", desktopState.shortcuts.toggleOverlay],
+          ["Click-through", desktopState.shortcuts.toggleClickThrough],
+        ]
+          .map(
+            ([label, value]) =>
+              `<div class="desktop-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`,
+          )
+          .join("");
+
+        const disabled = desktopState.available ? "" : "disabled";
+        actions.innerHTML = `
+          <button class="${desktopState.ignoreMouseEvents ? "btn-secondary" : "btn-primary"}" type="button" ${disabled} onclick="setDesktopIgnoreMouseEvents(false)">Interactive</button>
+          <button class="${desktopState.ignoreMouseEvents ? "btn-danger" : "btn-secondary"}" type="button" ${disabled} onclick="setDesktopIgnoreMouseEvents(true)">Click-through</button>
+          <button class="${desktopState.alwaysOnTop ? "btn-primary" : "btn-secondary"}" type="button" ${disabled} onclick="toggleDesktopAlwaysOnTop()">${desktopState.alwaysOnTop ? "Release Topmost" : "Pin Topmost"}</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="toggleDesktopDevTools()">DevTools</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="refreshDesktopDisplay()">Refresh Display</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="minimizeDesktopOverlay()">Minimize</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="hideDesktopOverlay()">Hide Overlay</button>
+        `;
+
+        meta.textContent = desktopState.available
+          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough}`
+          : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
+        display.textContent = desktopState.displayInfo
+          ? formatJson(desktopState.displayInfo)
+          : "Awaiting desktop bridge.";
+      }
+
+      async function syncDesktopState() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          desktopState = normalizeDesktopState(null, null);
+          desktopNotice = "";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [state, displayInfo] = await Promise.all([
+            bridge.getState(),
+            bridge.getDisplayInfo().catch(() => null),
+          ]);
+          desktopState = normalizeDesktopState(state, displayInfo);
+          desktopNotice = "Desktop shell bridge connected.";
+        } catch (error) {
+          desktopState = normalizeDesktopState(null, null);
+          desktopNotice = `Desktop bridge sync failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function refreshDesktopDisplay() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          renderDesktopShell();
+          return;
+        }
+        try {
+          desktopState.displayInfo = await bridge.getDisplayInfo();
+          desktopNotice = "Display info refreshed.";
+        } catch (error) {
+          desktopNotice = `Display query failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function setDesktopIgnoreMouseEvents(ignore) {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          return;
+        }
+        try {
+          desktopState.ignoreMouseEvents = Boolean(await bridge.setIgnoreMouseEvents(Boolean(ignore)));
+          desktopNotice = desktopState.ignoreMouseEvents
+            ? `Click-through enabled. Use ${desktopState.shortcuts.toggleClickThrough} if you need to recover direct pointer control.`
+            : "Interactive overlay mode restored.";
+        } catch (error) {
+          desktopNotice = `Click-through update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function toggleDesktopAlwaysOnTop() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          return;
+        }
+        try {
+          desktopState.alwaysOnTop = Boolean(await bridge.setAlwaysOnTop(!desktopState.alwaysOnTop));
+          desktopNotice = desktopState.alwaysOnTop ? "Overlay pinned above work surfaces." : "Always-on-top released.";
+        } catch (error) {
+          desktopNotice = `Always-on-top update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function toggleDesktopDevTools() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          return;
+        }
+        try {
+          const open = await bridge.toggleDevTools();
+          desktopNotice = open ? "DevTools opened in a detached window." : "DevTools closed.";
+        } catch (error) {
+          desktopNotice = `DevTools toggle failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function minimizeDesktopOverlay() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          return;
+        }
+        try {
+          await bridge.minimize();
+          desktopState.visible = false;
+          desktopNotice = `Overlay minimized. Use ${desktopState.shortcuts.toggleOverlay} to restore it quickly.`;
+        } catch (error) {
+          desktopNotice = `Overlay minimize failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function hideDesktopOverlay() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          return;
+        }
+        try {
+          await bridge.hide();
+          desktopState.visible = false;
+          desktopNotice = `Overlay hidden. Use ${desktopState.shortcuts.toggleOverlay} to show it again.`;
+        } catch (error) {
+          desktopNotice = `Overlay hide failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      function initDesktopShell() {
+        const bridge = getDesktopBridge();
+        if (!bridge) {
+          desktopState = normalizeDesktopState(null, null);
+          renderDesktopShell();
+          return;
+        }
+        if (!window.__francisDesktopBridgeBound && typeof bridge.onStateChanged === "function") {
+          bridge.onStateChanged((value) => {
+            desktopState = normalizeDesktopState(value, desktopState.displayInfo);
+            desktopNotice = desktopState.ignoreMouseEvents
+              ? `Click-through live. Use ${desktopState.shortcuts.toggleClickThrough} to return to interactive control.`
+              : "Desktop shell state updated.";
+            renderDesktopShell();
+          });
+          window.__francisDesktopBridgeBound = true;
+        }
+        syncDesktopState();
       }
 
             function getOrbBundle() {
@@ -1805,6 +2095,7 @@
 
       loadSurface()
         .then(() => {
+          initDesktopShell();
           const queryNode = document.getElementById("fabric-query");
           if (queryNode) {
             queryNode.addEventListener("keydown", (event) => {

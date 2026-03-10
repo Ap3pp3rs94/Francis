@@ -3,11 +3,13 @@ const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electro
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
+const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 
 let mainWindow = null;
 let ipcRegistered = false;
 let overlayState = {
   ignoreMouseEvents: false,
+  alwaysOnTop: true,
 };
 
 function log(message, extra) {
@@ -27,6 +29,28 @@ function getDisplayInfo() {
     workArea: display.workArea,
     workAreaSize: display.workAreaSize,
   };
+}
+
+function getOverlayState(win = mainWindow) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  return {
+    ignoreMouseEvents: overlayState.ignoreMouseEvents,
+    alwaysOnTop: safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop,
+    visible: safeWindow ? safeWindow.isVisible() : false,
+    hudUrl: HUD_URL,
+    shortcuts: {
+      toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
+      toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
+    },
+  };
+}
+
+function notifyOverlayState(win = mainWindow) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  if (!safeWindow) {
+    return;
+  }
+  safeWindow.webContents.send("overlay:state-changed", getOverlayState(safeWindow));
 }
 
 function buildFallbackHtml(errorText) {
@@ -106,11 +130,13 @@ function fallbackUrl(errorText) {
 
 function applyAlwaysOnTop(win, enabled) {
   if (!win || win.isDestroyed()) {
-    return false;
+    return overlayState.alwaysOnTop;
   }
   // Use a high always-on-top level so the overlay behaves like an operator layer, not a normal app window.
   win.setAlwaysOnTop(Boolean(enabled), enabled ? "screen-saver" : "normal");
-  return win.isAlwaysOnTop();
+  overlayState.alwaysOnTop = win.isAlwaysOnTop();
+  notifyOverlayState(win);
+  return overlayState.alwaysOnTop;
 }
 
 function applyIgnoreMouseEvents(win, ignore) {
@@ -120,6 +146,7 @@ function applyIgnoreMouseEvents(win, ignore) {
   overlayState.ignoreMouseEvents = Boolean(ignore);
   // Forward mouse-move events while click-through is enabled so the overlay can still react visually.
   win.setIgnoreMouseEvents(overlayState.ignoreMouseEvents, overlayState.ignoreMouseEvents ? { forward: true } : undefined);
+  notifyOverlayState(win);
   return overlayState.ignoreMouseEvents;
 }
 
@@ -154,9 +181,11 @@ async function loadHud(win) {
     const currentUrl = win.webContents.getURL();
     if (currentUrl.startsWith("data:text/html")) {
       log("Overlay loaded fallback content");
+      notifyOverlayState(win);
       return;
     }
     log("Overlay loaded HUD", currentUrl);
+    notifyOverlayState(win);
   });
 
   try {
@@ -217,6 +246,11 @@ function createMainWindow() {
     win.showInactive();
   });
 
+  win.on("show", () => notifyOverlayState(win));
+  win.on("hide", () => notifyOverlayState(win));
+  win.on("minimize", () => notifyOverlayState(win));
+  win.on("restore", () => notifyOverlayState(win));
+
   win.on("closed", () => {
     log("Overlay window closed");
     if (mainWindow === win) {
@@ -258,17 +292,20 @@ function registerIpc() {
     return value;
   });
 
+  ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
   ipcMain.handle("overlay:get-display-info", () => getDisplayInfo());
 
   ipcMain.handle("overlay:minimize", () => {
     const win = requireWindow();
     win.minimize();
+    notifyOverlayState(win);
     return true;
   });
 
   ipcMain.handle("overlay:hide", () => {
     const win = requireWindow();
     win.hide();
+    notifyOverlayState(win);
     return true;
   });
 
@@ -278,6 +315,7 @@ function registerIpc() {
       win.restore();
     }
     win.showInactive();
+    notifyOverlayState(win);
     return true;
   });
 
@@ -299,6 +337,7 @@ function toggleOverlayVisibility() {
   if (mainWindow.isVisible()) {
     log("Hiding overlay via global shortcut");
     mainWindow.hide();
+    notifyOverlayState(mainWindow);
     return;
   }
   log("Showing overlay via global shortcut");
@@ -306,15 +345,32 @@ function toggleOverlayVisibility() {
     mainWindow.restore();
   }
   mainWindow.showInactive();
+  notifyOverlayState(mainWindow);
+}
+
+function toggleClickThrough() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  const nextValue = !overlayState.ignoreMouseEvents;
+  const applied = applyIgnoreMouseEvents(mainWindow, nextValue);
+  log("Toggled click-through via global shortcut", applied);
 }
 
 function registerShortcuts() {
-  const registered = globalShortcut.register(OVERLAY_TOGGLE_SHORTCUT, toggleOverlayVisibility);
-  if (!registered) {
+  const overlayRegistered = globalShortcut.register(OVERLAY_TOGGLE_SHORTCUT, toggleOverlayVisibility);
+  if (!overlayRegistered) {
     log(`Failed to register global shortcut: ${OVERLAY_TOGGLE_SHORTCUT}`);
+  } else {
+    log(`Registered global shortcut: ${OVERLAY_TOGGLE_SHORTCUT}`);
+  }
+
+  const clickThroughRegistered = globalShortcut.register(CLICK_THROUGH_TOGGLE_SHORTCUT, toggleClickThrough);
+  if (!clickThroughRegistered) {
+    log(`Failed to register global shortcut: ${CLICK_THROUGH_TOGGLE_SHORTCUT}`);
     return;
   }
-  log(`Registered global shortcut: ${OVERLAY_TOGGLE_SHORTCUT}`);
+  log(`Registered global shortcut: ${CLICK_THROUGH_TOGGLE_SHORTCUT}`);
 }
 
 if (!app.requestSingleInstanceLock()) {

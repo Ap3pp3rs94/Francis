@@ -7,12 +7,22 @@ function assertBoolean(name, value) {
   return value;
 }
 
+function assertFunction(name, value) {
+  if (typeof value !== "function") {
+    throw new TypeError(`${name} must be a function`);
+  }
+  return value;
+}
+
 contextBridge.exposeInMainWorld("FrancisDesktop", {
   setIgnoreMouseEvents(ignore) {
     return ipcRenderer.invoke("overlay:set-ignore-mouse-events", assertBoolean("ignore", ignore));
   },
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", assertBoolean("value", value));
+  },
+  getState() {
+    return ipcRenderer.invoke("overlay:get-state");
   },
   getDisplayInfo() {
     return ipcRenderer.invoke("overlay:get-display-info");
@@ -28,5 +38,13 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   },
   toggleDevTools() {
     return ipcRenderer.invoke("overlay:toggle-devtools");
+  },
+  onStateChanged(callback) {
+    const safeCallback = assertFunction("callback", callback);
+    ipcRenderer.removeAllListeners("overlay:state-changed");
+    ipcRenderer.on("overlay:state-changed", (_event, value) => {
+      safeCallback(value);
+    });
+    return true;
   },
 });

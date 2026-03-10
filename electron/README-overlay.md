@@ -9,6 +9,8 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - exposes a small preload bridge at `window.FrancisDesktop`
 - supports toggling click-through, always-on-top, devtools, hide/show, and minimize
 - registers `Ctrl+Shift+Alt+F` as a global show/hide shortcut
+- registers `Ctrl+Shift+Alt+C` as a global click-through toggle so pointer control is recoverable
+- lets the live HUD consume those shell controls directly when running inside Electron
 
 ## Run
 
@@ -33,7 +35,7 @@ That PowerShell helper checks the HUD URL first and stops with a clear message i
 ## Current Limitations
 
 - Click-through is a whole-window toggle, not pixel-perfect hit testing.
-- The HUD is not yet wired to call the preload bridge directly, so the bridge is mainly for shell integration and devtools-driven control.
+- Click-through should be treated as an operator mode change: once enabled, use the global shortcut to recover pointer control.
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
 
 ## Next Extensions
