@@ -57,8 +57,8 @@ var FrancisOrb = (() => {
     coreRadius: 0.62,
     shellRadius: 1.22,
     auraRadius: 4.8,
-    filamentCount: 12,
-    filamentSegments: 256,
+    filamentCount: 30,
+    filamentSegments: 640,
     particleCount: 180,
     profileLerp: 0.08,
     attentionLerp: 0.06,
@@ -74,9 +74,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.03,
       shellOpacity: 0.09,
       shellFresnelPower: 2.2,
-      filamentOpacity: 0.42,
-      filamentSpeed: 0.45,
-      filamentTightness: 1,
+      filamentOpacity: 0.5,
+      filamentSpeed: 0.42,
+      filamentTightness: 0.82,
       particleOpacity: 0.24,
       particleSpeed: 0.18,
       auraOpacity: 0.15,
@@ -91,9 +91,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.045,
       shellOpacity: 0.11,
       shellFresnelPower: 2.4,
-      filamentOpacity: 0.52,
-      filamentSpeed: 0.7,
-      filamentTightness: 0.97,
+      filamentOpacity: 0.6,
+      filamentSpeed: 0.68,
+      filamentTightness: 0.84,
       particleOpacity: 0.28,
       particleSpeed: 0.28,
       auraOpacity: 0.18,
@@ -108,9 +108,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.06,
       shellOpacity: 0.14,
       shellFresnelPower: 2.7,
-      filamentOpacity: 0.64,
-      filamentSpeed: 1,
-      filamentTightness: 0.94,
+      filamentOpacity: 0.72,
+      filamentSpeed: 1.02,
+      filamentTightness: 0.86,
       particleOpacity: 0.34,
       particleSpeed: 0.42,
       auraOpacity: 0.22,
@@ -125,9 +125,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.05,
       shellOpacity: 0.15,
       shellFresnelPower: 2.5,
-      filamentOpacity: 0.7,
-      filamentSpeed: 0.9,
-      filamentTightness: 0.96,
+      filamentOpacity: 0.76,
+      filamentSpeed: 0.92,
+      filamentTightness: 0.88,
       particleOpacity: 0.36,
       particleSpeed: 0.46,
       auraOpacity: 0.24,
@@ -142,9 +142,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.05,
       shellOpacity: 0.18,
       shellFresnelPower: 3,
-      filamentOpacity: 0.8,
-      filamentSpeed: 1.2,
-      filamentTightness: 0.92,
+      filamentOpacity: 0.84,
+      filamentSpeed: 1.18,
+      filamentTightness: 0.84,
       particleOpacity: 0.42,
       particleSpeed: 0.58,
       auraOpacity: 0.28,
@@ -159,9 +159,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.07,
       shellOpacity: 0.18,
       shellFresnelPower: 3.1,
-      filamentOpacity: 0.82,
-      filamentSpeed: 0.88,
-      filamentTightness: 0.9,
+      filamentOpacity: 0.88,
+      filamentSpeed: 0.9,
+      filamentTightness: 0.82,
       particleOpacity: 0.38,
       particleSpeed: 0.35,
       auraOpacity: 0.3,
@@ -176,9 +176,9 @@ var FrancisOrb = (() => {
       pulseAmplitude: 0.03,
       shellOpacity: 0.16,
       shellFresnelPower: 2.8,
-      filamentOpacity: 0.5,
+      filamentOpacity: 0.54,
       filamentSpeed: 0.25,
-      filamentTightness: 1.04,
+      filamentTightness: 0.94,
       particleOpacity: 0.18,
       particleSpeed: 0.12,
       auraOpacity: 0.13,
@@ -13613,209 +13613,6 @@ var FrancisOrb = (() => {
      */
     clone() {
       return new this.constructor().copy(this);
-    }
-  };
-  var LineBasicMaterial = class extends Material {
-    /**
-     * Constructs a new line basic material.
-     *
-     * @param {Object} [parameters] - An object with one or more properties
-     * defining the material's appearance. Any property of the material
-     * (including any property from inherited materials) can be passed
-     * in here. Color values can be passed any type of value accepted
-     * by {@link Color#set}.
-     */
-    constructor(parameters) {
-      super();
-      this.isLineBasicMaterial = true;
-      this.type = "LineBasicMaterial";
-      this.color = new Color(16777215);
-      this.map = null;
-      this.linewidth = 1;
-      this.linecap = "round";
-      this.linejoin = "round";
-      this.fog = true;
-      this.setValues(parameters);
-    }
-    copy(source) {
-      super.copy(source);
-      this.color.copy(source.color);
-      this.map = source.map;
-      this.linewidth = source.linewidth;
-      this.linecap = source.linecap;
-      this.linejoin = source.linejoin;
-      this.fog = source.fog;
-      return this;
-    }
-  };
-  var _vStart = /* @__PURE__ */ new Vector3();
-  var _vEnd = /* @__PURE__ */ new Vector3();
-  var _inverseMatrix$1 = /* @__PURE__ */ new Matrix4();
-  var _ray$1 = /* @__PURE__ */ new Ray();
-  var _sphere$1 = /* @__PURE__ */ new Sphere();
-  var _intersectPointOnRay = /* @__PURE__ */ new Vector3();
-  var _intersectPointOnSegment = /* @__PURE__ */ new Vector3();
-  var Line = class extends Object3D {
-    /**
-     * Constructs a new line.
-     *
-     * @param {BufferGeometry} [geometry] - The line geometry.
-     * @param {Material|Array<Material>} [material] - The line material.
-     */
-    constructor(geometry = new BufferGeometry(), material = new LineBasicMaterial()) {
-      super();
-      this.isLine = true;
-      this.type = "Line";
-      this.geometry = geometry;
-      this.material = material;
-      this.morphTargetDictionary = void 0;
-      this.morphTargetInfluences = void 0;
-      this.updateMorphTargets();
-    }
-    copy(source, recursive) {
-      super.copy(source, recursive);
-      this.material = Array.isArray(source.material) ? source.material.slice() : source.material;
-      this.geometry = source.geometry;
-      return this;
-    }
-    /**
-     * Computes an array of distance values which are necessary for rendering dashed lines.
-     * For each vertex in the geometry, the method calculates the cumulative length from the
-     * current point to the very beginning of the line.
-     *
-     * @return {Line} A reference to this line.
-     */
-    computeLineDistances() {
-      const geometry = this.geometry;
-      if (geometry.index === null) {
-        const positionAttribute = geometry.attributes.position;
-        const lineDistances = [0];
-        for (let i = 1, l = positionAttribute.count; i < l; i++) {
-          _vStart.fromBufferAttribute(positionAttribute, i - 1);
-          _vEnd.fromBufferAttribute(positionAttribute, i);
-          lineDistances[i] = lineDistances[i - 1];
-          lineDistances[i] += _vStart.distanceTo(_vEnd);
-        }
-        geometry.setAttribute("lineDistance", new Float32BufferAttribute(lineDistances, 1));
-      } else {
-        console.warn("THREE.Line.computeLineDistances(): Computation only possible with non-indexed BufferGeometry.");
-      }
-      return this;
-    }
-    /**
-     * Computes intersection points between a casted ray and this line.
-     *
-     * @param {Raycaster} raycaster - The raycaster.
-     * @param {Array<Object>} intersects - The target array that holds the intersection points.
-     */
-    raycast(raycaster, intersects) {
-      const geometry = this.geometry;
-      const matrixWorld = this.matrixWorld;
-      const threshold = raycaster.params.Line.threshold;
-      const drawRange = geometry.drawRange;
-      if (geometry.boundingSphere === null) geometry.computeBoundingSphere();
-      _sphere$1.copy(geometry.boundingSphere);
-      _sphere$1.applyMatrix4(matrixWorld);
-      _sphere$1.radius += threshold;
-      if (raycaster.ray.intersectsSphere(_sphere$1) === false) return;
-      _inverseMatrix$1.copy(matrixWorld).invert();
-      _ray$1.copy(raycaster.ray).applyMatrix4(_inverseMatrix$1);
-      const localThreshold = threshold / ((this.scale.x + this.scale.y + this.scale.z) / 3);
-      const localThresholdSq = localThreshold * localThreshold;
-      const step = this.isLineSegments ? 2 : 1;
-      const index = geometry.index;
-      const attributes = geometry.attributes;
-      const positionAttribute = attributes.position;
-      if (index !== null) {
-        const start = Math.max(0, drawRange.start);
-        const end = Math.min(index.count, drawRange.start + drawRange.count);
-        for (let i = start, l = end - 1; i < l; i += step) {
-          const a = index.getX(i);
-          const b = index.getX(i + 1);
-          const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, i);
-          if (intersect) {
-            intersects.push(intersect);
-          }
-        }
-        if (this.isLineLoop) {
-          const a = index.getX(end - 1);
-          const b = index.getX(start);
-          const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, end - 1);
-          if (intersect) {
-            intersects.push(intersect);
-          }
-        }
-      } else {
-        const start = Math.max(0, drawRange.start);
-        const end = Math.min(positionAttribute.count, drawRange.start + drawRange.count);
-        for (let i = start, l = end - 1; i < l; i += step) {
-          const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, i, i + 1, i);
-          if (intersect) {
-            intersects.push(intersect);
-          }
-        }
-        if (this.isLineLoop) {
-          const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, end - 1, start, end - 1);
-          if (intersect) {
-            intersects.push(intersect);
-          }
-        }
-      }
-    }
-    /**
-     * Sets the values of {@link Line#morphTargetDictionary} and {@link Line#morphTargetInfluences}
-     * to make sure existing morph targets can influence this 3D object.
-     */
-    updateMorphTargets() {
-      const geometry = this.geometry;
-      const morphAttributes = geometry.morphAttributes;
-      const keys = Object.keys(morphAttributes);
-      if (keys.length > 0) {
-        const morphAttribute = morphAttributes[keys[0]];
-        if (morphAttribute !== void 0) {
-          this.morphTargetInfluences = [];
-          this.morphTargetDictionary = {};
-          for (let m = 0, ml = morphAttribute.length; m < ml; m++) {
-            const name = morphAttribute[m].name || String(m);
-            this.morphTargetInfluences.push(0);
-            this.morphTargetDictionary[name] = m;
-          }
-        }
-      }
-    }
-  };
-  function checkIntersection(object, raycaster, ray, thresholdSq, a, b, i) {
-    const positionAttribute = object.geometry.attributes.position;
-    _vStart.fromBufferAttribute(positionAttribute, a);
-    _vEnd.fromBufferAttribute(positionAttribute, b);
-    const distSq = ray.distanceSqToSegment(_vStart, _vEnd, _intersectPointOnRay, _intersectPointOnSegment);
-    if (distSq > thresholdSq) return;
-    _intersectPointOnRay.applyMatrix4(object.matrixWorld);
-    const distance = raycaster.ray.origin.distanceTo(_intersectPointOnRay);
-    if (distance < raycaster.near || distance > raycaster.far) return;
-    return {
-      distance,
-      // What do we want? intersection point on the ray or on the segment??
-      // point: raycaster.ray.at( distance ),
-      point: _intersectPointOnSegment.clone().applyMatrix4(object.matrixWorld),
-      index: i,
-      face: null,
-      faceIndex: null,
-      barycoord: null,
-      object
-    };
-  }
-  var LineLoop = class extends Line {
-    /**
-     * Constructs a new line loop.
-     *
-     * @param {BufferGeometry} [geometry] - The line geometry.
-     * @param {Material|Array<Material>} [material] - The line material.
-     */
-    constructor(geometry, material) {
-      super(geometry, material);
-      this.isLineLoop = true;
-      this.type = "LineLoop";
     }
   };
   var PointsMaterial = class extends Material {
@@ -27500,15 +27297,103 @@ void main() {
     }
   };
 
+  // renderer/shaders/filament.fragment.glsl
+  var filament_fragment_default = "uniform float uOpacity;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float edgeFade = 1.0 - smoothstep(0.45, 1.0, vAcross);\n  float tipFade = 0.22 + pow(sin(vAlong * 3.14159265), 0.58) * 0.78;\n  float alpha = uOpacity * edgeFade * tipFade * (0.48 + vEnergy * 0.52);\n\n  vec3 base = vec3(0.58, 0.8, 0.98);\n  vec3 hot = vec3(0.96, 0.99, 1.0);\n  vec3 color = mix(base, hot, vEnergy);\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
+
+  // renderer/shaders/filament.vertex.glsl
+  var filament_vertex_default = "attribute vec3 aSideDir;\nattribute float aSide;\nattribute float aAlong;\nattribute float aSeed;\nattribute float aPhase;\nattribute float aRibbonWidth;\n\nuniform float uTime;\nuniform float uTightness;\nuniform float uSpeed;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float alongPulse = sin(aAlong * 3.14159265);\n  float widthFalloff = 0.28 + pow(alongPulse, 0.72) * 0.72;\n  float wobble = sin(uTime * uSpeed + aPhase + aAlong * 12.0 + aSeed) * 0.045;\n  float ripple = sin(uTime * (uSpeed * 0.72) + aAlong * 24.0 + aSeed) * 0.018;\n\n  vec3 center = position * mix(1.0, uTightness, 0.84);\n  center += normalize(position) * wobble;\n\n  float width = aRibbonWidth * widthFalloff;\n  vec3 transformed = center + aSideDir * (aSide * width + ripple * aSide);\n\n  vEnergy = 0.58 + 0.42 * sin(uTime * uSpeed + aPhase + aSeed + aAlong * 14.0);\n  vAcross = abs(aSide);\n  vAlong = aAlong;\n\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);\n}\n";
+
   // renderer/OrbFilaments.ts
-  function buildLoopPoints(radiusX, radiusY, wobble, segments) {
+  function buildLoopPoints(radiusX, radiusY, wobble, segments, phase, swirl) {
     const points = [];
     for (let i = 0; i <= segments; i += 1) {
       const t = i / segments * Math.PI * 2;
-      const z = Math.sin(t * 2) * wobble;
-      points.push(new Vector3(Math.cos(t) * radiusX, Math.sin(t) * radiusY, z));
+      const radialWave = 1 + Math.sin(t * 3 + phase) * swirl + Math.cos(t * 2 - phase * 0.65) * swirl * 0.45;
+      const x = Math.cos(t) * radiusX * radialWave;
+      const y = Math.sin(t) * radiusY * (1 - swirl * 0.14 * Math.cos(t * 2.5 + phase));
+      const z = Math.sin(t * (2.1 + swirl * 1.4) + phase) * wobble + Math.cos(t * 3.2 - phase * 0.4) * wobble * 0.38;
+      points.push(new Vector3(x, y, z));
     }
     return points;
+  }
+  function buildRibbonGeometry(points, options) {
+    const { width, seed, phase } = options;
+    const count = points.length;
+    const positions = new Float32Array(count * 2 * 3);
+    const sideDirs = new Float32Array(count * 2 * 3);
+    const sides = new Float32Array(count * 2);
+    const along = new Float32Array(count * 2);
+    const seeds = new Float32Array(count * 2);
+    const phases = new Float32Array(count * 2);
+    const indices = [];
+    const up = new Vector3(0, 1, 0);
+    for (let i = 0; i < count; i += 1) {
+      const current = points[i];
+      const prev = points[(i - 1 + count) % count];
+      const next = points[(i + 1) % count];
+      const tangent = next.clone().sub(prev).normalize();
+      const radial = current.clone().normalize();
+      let sideDir = tangent.clone().cross(radial);
+      if (sideDir.lengthSq() < 1e-5) {
+        sideDir = tangent.clone().cross(up);
+      }
+      if (sideDir.lengthSq() < 1e-5) {
+        sideDir = new Vector3(1, 0, 0);
+      }
+      sideDir.normalize();
+      const vertexBase = i * 2;
+      const alongValue = i / Math.max(1, count - 1);
+      for (let sideIndex = 0; sideIndex < 2; sideIndex += 1) {
+        const vertexIndex = vertexBase + sideIndex;
+        const side = sideIndex === 0 ? -1 : 1;
+        const positionOffset = vertexIndex * 3;
+        positions[positionOffset + 0] = current.x;
+        positions[positionOffset + 1] = current.y;
+        positions[positionOffset + 2] = current.z;
+        sideDirs[positionOffset + 0] = sideDir.x;
+        sideDirs[positionOffset + 1] = sideDir.y;
+        sideDirs[positionOffset + 2] = sideDir.z;
+        sides[vertexIndex] = side;
+        along[vertexIndex] = alongValue;
+        seeds[vertexIndex] = seed;
+        phases[vertexIndex] = phase;
+      }
+      if (i < count - 1) {
+        const start = i * 2;
+        indices.push(start, start + 1, start + 2);
+        indices.push(start + 1, start + 3, start + 2);
+      }
+    }
+    const geometry = new BufferGeometry();
+    geometry.setIndex(indices);
+    geometry.setAttribute("position", new BufferAttribute(positions, 3));
+    geometry.setAttribute("aSideDir", new BufferAttribute(sideDirs, 3));
+    geometry.setAttribute("aSide", new BufferAttribute(sides, 1));
+    geometry.setAttribute("aAlong", new BufferAttribute(along, 1));
+    geometry.setAttribute("aSeed", new BufferAttribute(seeds, 1));
+    geometry.setAttribute("aPhase", new BufferAttribute(phases, 1));
+    geometry.computeBoundingSphere();
+    const materialWidth = new Float32Array(count * 2);
+    materialWidth.fill(width);
+    geometry.setAttribute("aRibbonWidth", new BufferAttribute(materialWidth, 1));
+    return geometry;
+  }
+  function createFilamentMaterial(width) {
+    return new ShaderMaterial({
+      vertexShader: filament_vertex_default,
+      fragmentShader: filament_fragment_default,
+      transparent: true,
+      depthWrite: false,
+      side: DoubleSide,
+      blending: AdditiveBlending,
+      uniforms: {
+        uTime: { value: 0 },
+        uOpacity: { value: 0.52 },
+        uSpeed: { value: 0.5 },
+        uTightness: { value: 1 },
+        uRibbonWidth: { value: width }
+      }
+    });
   }
   var OrbFilaments = class {
     group = new Group();
@@ -27516,36 +27401,39 @@ void main() {
     constructor(count, segments, seed) {
       const rng = new DeterministicRng(seed);
       for (let i = 0; i < count; i += 1) {
+        const phase = rng.range(0, Math.PI * 2);
+        const width = rng.range(0.04, 0.085);
         const points = buildLoopPoints(
-          rng.range(1.1, 1.55),
-          rng.range(0.72, 1.25),
-          rng.range(0.03, 0.12),
-          segments
+          rng.range(1.03, 1.42),
+          rng.range(0.66, 1.08),
+          rng.range(0.025, 0.11),
+          segments,
+          phase,
+          rng.range(0.05, 0.22)
         );
-        const geometry = new BufferGeometry().setFromPoints(points);
-        const material = new LineBasicMaterial({
-          color: 14086143,
-          transparent: true,
-          opacity: 0.45,
-          blending: AdditiveBlending,
-          depthWrite: false
+        const geometry = buildRibbonGeometry(points, {
+          width,
+          seed: rng.range(0, Math.PI * 2),
+          phase
         });
-        const line = new LineLoop(geometry, material);
+        const material = createFilamentMaterial(width);
+        const mesh = new Mesh(geometry, material);
         const baseRotation = new Euler(
           rng.range(0, Math.PI),
           rng.range(0, Math.PI),
           rng.range(0, Math.PI)
         );
-        line.rotation.copy(baseRotation);
-        line.scale.setScalar(rng.range(0.94, 1.1));
-        this.group.add(line);
+        mesh.rotation.copy(baseRotation);
+        mesh.scale.setScalar(rng.range(0.88, 1.03));
+        this.group.add(mesh);
         this.filaments.push({
-          line,
+          mesh,
+          material,
           baseRotation,
           speed: new Vector3(
-            rng.range(0.1, 0.4) * rng.sign(),
-            rng.range(0.1, 0.35) * rng.sign(),
-            rng.range(0.08, 0.24) * rng.sign()
+            rng.range(0.08, 0.24) * rng.sign(),
+            rng.range(0.08, 0.22) * rng.sign(),
+            rng.range(0.05, 0.16) * rng.sign()
           )
         });
       }
@@ -27553,20 +27441,22 @@ void main() {
     update(frame, profile) {
       for (const filament of this.filaments) {
         const speed = profile.filamentSpeed;
-        filament.line.rotation.x = filament.baseRotation.x + frame.elapsed * filament.speed.x * speed;
-        filament.line.rotation.y = filament.baseRotation.y + frame.elapsed * filament.speed.y * speed;
-        filament.line.rotation.z = filament.baseRotation.z + frame.elapsed * filament.speed.z * speed;
-        const wobble = 1 + Math.sin(frame.elapsed * 1.4 + filament.speed.x * 10) * 0.02;
+        filament.mesh.rotation.x = filament.baseRotation.x + frame.elapsed * filament.speed.x * speed;
+        filament.mesh.rotation.y = filament.baseRotation.y + frame.elapsed * filament.speed.y * speed;
+        filament.mesh.rotation.z = filament.baseRotation.z + frame.elapsed * filament.speed.z * speed;
+        const wobble = 1 + Math.sin(frame.elapsed * 1.65 + filament.speed.x * 10) * 0.018;
         const tight = profile.filamentTightness * profile.compression;
-        filament.line.scale.setScalar(wobble * tight);
-        const material = filament.line.material;
-        material.opacity = profile.filamentOpacity;
+        filament.mesh.scale.setScalar(wobble * tight);
+        filament.material.uniforms.uTime.value = frame.elapsed;
+        filament.material.uniforms.uOpacity.value = profile.filamentOpacity;
+        filament.material.uniforms.uSpeed.value = speed;
+        filament.material.uniforms.uTightness.value = tight;
       }
     }
     dispose() {
       for (const filament of this.filaments) {
-        filament.line.geometry.dispose();
-        filament.line.material.dispose();
+        filament.mesh.geometry.dispose();
+        filament.material.dispose();
       }
     }
   };
@@ -27626,10 +27516,10 @@ void main() {
   };
 
   // renderer/shaders/shell.vertex.glsl
-  var shell_vertex_default = "varying vec3 vNormal;\nvarying vec3 vViewDir;\n\nvoid main() {\n  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);\n  vNormal = normalize(normalMatrix * normal);\n  vViewDir = normalize(-mvPosition.xyz);\n  gl_Position = projectionMatrix * mvPosition;\n}\r\n";
+  var shell_vertex_default = "varying vec3 vNormal;\nvarying vec3 vViewDir;\nvarying vec3 vWorldPos;\nvarying vec3 vObjectPos;\n\nvoid main() {\n  vec4 worldPos = modelMatrix * vec4(position, 1.0);\n  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);\n  vWorldPos = worldPos.xyz;\n  vObjectPos = position;\n  vNormal = normalize(normalMatrix * normal);\n  vViewDir = normalize(-mvPosition.xyz);\n  gl_Position = projectionMatrix * mvPosition;\n}\n";
 
   // renderer/shaders/shell.fragment.glsl
-  var shell_fragment_default = "uniform float uOpacity;\nuniform float uFresnelPower;\n\nvarying vec3 vNormal;\nvarying vec3 vViewDir;\n\nvoid main() {\n  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), uFresnelPower);\n  vec3 color = vec3(0.78, 0.92, 1.0);\n  gl_FragColor = vec4(color, fresnel * uOpacity);\n}\r\n";
+  var shell_fragment_default = "uniform float uTime;\nuniform float uOpacity;\nuniform float uFresnelPower;\nuniform float uActivity;\nuniform float uPulse;\nuniform float uNoiseDensity;\nuniform float uRefractionStrength;\n\nvarying vec3 vNormal;\nvarying vec3 vViewDir;\nvarying vec3 vWorldPos;\nvarying vec3 vObjectPos;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nfloat fbm(vec3 p) {\n  float value = 0.0;\n  float amplitude = 0.55;\n\n  for (int i = 0; i < 4; i++) {\n    value += noise(p) * amplitude;\n    p = p * 2.03 + vec3(11.7, 5.2, 9.3);\n    amplitude *= 0.5;\n  }\n\n  return value;\n}\n\nvoid main() {\n  vec3 normal = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);\n  vec3 viewDir = normalize(vViewDir);\n  float fresnel = pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), uFresnelPower);\n\n  vec3 basePos = vObjectPos * (2.8 * uNoiseDensity);\n  vec3 slowFlow = vec3(uTime * 0.12, -uTime * 0.08, uTime * 0.18);\n  vec3 fastFlow = vec3(-uTime * 0.21, uTime * 0.15, -uTime * 0.11);\n  vec3 refracted = refract(-viewDir, normal, 1.0 / (1.04 + uRefractionStrength * 0.08));\n\n  vec3 warp = vec3(\n    fbm(basePos + slowFlow),\n    fbm(basePos * 1.7 - fastFlow),\n    fbm(vWorldPos * 1.3 + slowFlow * 0.6)\n  ) - 0.5;\n\n  float coarse = fbm(basePos + slowFlow + refracted * (0.7 + uRefractionStrength * 0.8));\n  float billow = fbm(basePos * 2.05 - fastFlow + warp * 1.8);\n  float grain = fbm(basePos * 3.9 + refracted * 1.35 - slowFlow * 1.4);\n  float filigree = fbm(basePos * 4.6 + warp * 2.4 - fastFlow * 1.6);\n\n  float shellBody = smoothstep(0.26, 0.88, coarse * 0.6 + billow * 0.4);\n  float internalHaze = smoothstep(0.18, 0.92, grain * 0.65 + coarse * 0.35);\n  float fracture = smoothstep(0.5, 0.94, filigree + grain * 0.22);\n  float meshLines = 1.0 - smoothstep(0.08, 0.28, abs(billow - filigree));\n  meshLines *= 0.55 + fracture * 0.45;\n\n  float rim = clamp(fresnel * 1.2 + meshLines * 0.35 + fracture * 0.25, 0.0, 1.0);\n  float shimmer = clamp(0.82 + (uPulse - 1.0) * 2.8, 0.75, 1.1);\n\n  float prismR = fbm(basePos * 2.6 + refracted * 1.4 + vec3(uTime * 0.18, 0.0, 0.0));\n  float prismB = fbm(basePos * 2.6 + refracted * 1.4 - vec3(0.0, uTime * 0.16, 0.0));\n  vec3 prismShift = vec3(prismR - 0.5, internalHaze - 0.5, prismB - 0.5);\n\n  vec3 deepColor = vec3(0.08, 0.19, 0.28);\n  vec3 bodyColor = vec3(0.33, 0.72, 0.94);\n  vec3 rimColor = vec3(0.84, 0.97, 1.0);\n\n  vec3 color = mix(deepColor, bodyColor, shellBody);\n  color = mix(color, rimColor, rim * 0.45 + fracture * 0.2);\n  color += prismShift * (0.09 + uRefractionStrength * 0.06) * (0.35 + rim * 0.65);\n  color += rimColor * meshLines * (0.08 + uActivity * 0.06);\n  color *= (0.62 + internalHaze * 0.25 + rim * 0.45) * shimmer;\n  color = max(color, vec3(0.0));\n\n  float alpha = uOpacity * (0.78 + uActivity * 0.32);\n  alpha *= clamp(fresnel * 1.15 + shellBody * 0.42 + fracture * 0.18, 0.0, 1.1);\n  alpha *= 0.86 + meshLines * 0.22;\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
 
   // renderer/OrbShell.ts
   var OrbShell = class {
@@ -27643,19 +27533,33 @@ void main() {
         transparent: true,
         side: DoubleSide,
         uniforms: {
+          uTime: { value: 0 },
           uOpacity: { value: 0.1 },
-          uFresnelPower: { value: 2.2 }
+          uFresnelPower: { value: 2.2 },
+          uActivity: { value: 0 },
+          uPulse: { value: 1 },
+          uNoiseDensity: { value: 1 },
+          uRefractionStrength: { value: 0.45 }
         },
         blending: AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        toneMapped: false
       });
       this.mesh = new Mesh(geometry, this.material);
     }
     update(frame, profile) {
       const breathe = 1 + Math.sin(frame.elapsed * 0.7) * 6e-3;
+      const stateBoost = frame.state === "interject" ? 0.33 : frame.state === "acting" ? 0.28 : frame.state === "speaking" ? 0.24 : frame.state === "thinking" ? 0.18 : frame.state === "listening" ? 0.12 : frame.state === "error" ? 0.08 : 0;
+      const activity = Math.min(1, stateBoost + frame.speakingAmplitude * 0.9);
+      const shimmer = 1 + Math.sin(frame.elapsed * (profile.pulseSpeed * Math.PI * 1.5 + 0.5)) * (0.03 + profile.pulseAmplitude * 0.6 + activity * 0.03);
       this.mesh.scale.setScalar(breathe * profile.compression);
+      this.material.uniforms.uTime.value = frame.elapsed;
       this.material.uniforms.uOpacity.value = profile.shellOpacity;
       this.material.uniforms.uFresnelPower.value = profile.shellFresnelPower;
+      this.material.uniforms.uActivity.value = activity;
+      this.material.uniforms.uPulse.value = shimmer;
+      this.material.uniforms.uNoiseDensity.value = 1 + profile.coreDistortion * 1.8 + (1 - profile.compression) * 1.2 + stateBoost * 0.25;
+      this.material.uniforms.uRefractionStrength.value = 0.34 + profile.coreDistortion * 1.45 + activity * 0.18;
     }
     dispose() {
       this.mesh.geometry.dispose();

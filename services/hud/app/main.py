@@ -77,12 +77,12 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
             actions_payload=actions,
             voice=voice,
         ),
-        "dashboard": get_dashboard_view(),
-        "missions": get_missions_view(),
-        "incidents": get_incidents_view(),
-        "inbox": get_inbox_view(),
-        "runs": get_runs_view(),
-        "fabric": get_fabric_surface(refresh=False),
+        "dashboard": get_dashboard_view(snapshot=snapshot),
+        "missions": get_missions_view(snapshot=snapshot),
+        "incidents": get_incidents_view(snapshot=snapshot),
+        "inbox": get_inbox_view(snapshot=snapshot),
+        "runs": get_runs_view(snapshot=snapshot),
+        "fabric": get_fabric_surface(refresh=False, defer_if_missing=True),
     }
 
 

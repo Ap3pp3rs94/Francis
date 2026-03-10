@@ -6,6 +6,11 @@ from fastapi.testclient import TestClient
 from apps.api.main import app as orchestrator_app
 import services.hud.app.main as hud_main
 import services.hud.app.state as hud_state
+import services.hud.app.views.dashboard as dashboard_view
+import services.hud.app.views.inbox as inbox_view
+import services.hud.app.views.incidents as incidents_view
+import services.hud.app.views.missions as missions_view
+import services.hud.app.views.runs as runs_view
 from services.hud.app.main import app
 
 
@@ -105,6 +110,74 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["fabric"]["surface"] == "fabric"
     assert body["voice"]["surface"] == "voice"
     assert body["orb"]["surface"] == "orb"
+
+
+def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "assist", "kill_switch": False},
+        "objective": {"label": "Shared snapshot", "definition_of_done": "Reuse lens state once."},
+        "missions": {
+            "active_count": 1,
+            "backlog_count": 0,
+            "completed_count": 0,
+            "active": [{"id": "mission-1", "title": "Shared snapshot", "status": "active"}],
+            "backlog": [],
+            "completed": [],
+        },
+        "approvals": {"pending_count": 0},
+        "incidents": {"open_count": 0, "highest_severity": "nominal", "items": [{"summary": "clear"}]},
+        "security": {"quarantine_count": 0, "top_categories": {}, "highest_severity": "nominal"},
+        "runs": {
+            "ledger_count": 1,
+            "last_run": {"run_id": "run-1", "phase": "verify", "summary": "ok"},
+            "recent": [],
+            "ledger_tail": [],
+        },
+        "apprenticeship": {"review_count": 0},
+        "fabric": {
+            "citation_ready_count": 1,
+            "calibration": {"confidence_counts": {"confirmed": 1, "likely": 0, "uncertain": 0}},
+        },
+        "inbox": {"count": 0, "alert_count": 0, "items": []},
+    }
+
+    def _unexpected_snapshot_build() -> dict[str, object]:
+        raise AssertionError("bootstrap should reuse the shared snapshot")
+
+    monkeypatch.setattr(hud_main, "build_lens_snapshot", lambda: snapshot)
+    monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(inbox_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(runs_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(
+        hud_main,
+        "get_lens_actions",
+        lambda max_actions=8: {"status": "ok", "action_chips": [], "blocked_actions": []},
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "build_operator_presence",
+        lambda **_: {"surface": "voice", "mode": "assist", "headline": "Stable", "lines": [], "actions": []},
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "assist", "posture": "resting", "visual": {"ring_density": 6}},
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "get_fabric_surface",
+        lambda refresh=False, defer_if_missing=False: {"surface": "fabric", "summary": {"artifact_count": 1}},
+    )
+
+    payload = hud_main._build_bootstrap_payload()
+
+    assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
+    assert payload["missions"]["active_count"] == 1
+    assert payload["incidents"]["items"][0]["summary"] == "clear"
+    assert payload["inbox"]["messages"][0]["title"] == "Inbox clear"
+    assert payload["runs"]["active_run"]["run_id"] == "run-1"
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -247,7 +320,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["snapshot"]["apprenticeship"]["review_count"] == 1
     assert body["snapshot"]["security"]["quarantine_count"] == 1
     assert body["snapshot"]["security"]["top_categories"]["policy_bypass"] == 1
-    assert body["fabric"]["summary"]["artifact_count"] >= 1
+    assert body["fabric"]["surface"] == "fabric"
+    assert body["fabric"]["summary"]["pending"] is True
     assert body["voice"]["grounding"]["trust"] == "Likely"
     assert body["voice"]["mode"] == "away"
     assert "Incident pressure is high." in body["voice"]["headline"]
@@ -370,6 +444,19 @@ def test_hud_fabric_surface_supports_summary_and_query(monkeypatch, tmp_path: Pa
     assert query_payload["result_count"] >= 1
     assert query_payload["results"][0]["confidence"] == "likely"
     assert query_payload["results"][0]["citation"]["rel_path"] == "journals/decisions.jsonl"
+
+
+def test_hud_bootstrap_defers_fabric_when_snapshot_is_missing(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+
+    response = client.get("/api/bootstrap")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["fabric"]["surface"] == "fabric"
+    assert payload["fabric"]["summary"]["pending"] is True
+    assert payload["fabric"]["summary"]["artifact_count"] == 0
 
 
 def test_hud_actions_endpoint_proxies_lens_actions() -> None:

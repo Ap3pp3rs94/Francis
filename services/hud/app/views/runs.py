@@ -3,8 +3,9 @@ from __future__ import annotations
 from services.hud.app.state import build_lens_snapshot
 
 
-def get_runs_view() -> dict[str, object]:
-    snapshot = build_lens_snapshot()
+def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
+    if snapshot is None:
+        snapshot = build_lens_snapshot()
     runs = snapshot["runs"]
     last_run = runs["last_run"] if isinstance(runs["last_run"], dict) else {}
     return {
