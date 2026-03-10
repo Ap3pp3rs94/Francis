@@ -21,6 +21,7 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from francis_presence.rituals import build_handback_ritual
+from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.approvals_store import add_decision, get_request, list_requests, pending_count
 
 from services.orchestrator.app.control_state import (
@@ -1979,6 +1980,31 @@ def _control_remote_approval_decision(
     normalized_approval_id = str(approval_id).strip()
     if not normalized_approval_id:
         raise HTTPException(status_code=400, detail="approval_id is required")
+    normalized_note = str(body.note).strip()
+    normalized_payload = {
+        "approval_id": normalized_approval_id,
+        "note": normalized_note,
+        "session_id": str(body.session_id or "").strip() or None,
+    }
+    assessment = assess_untrusted_input(
+        surface="control",
+        action=f"control.remote.approval.{decision}",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="control",
+            action=f"control.remote.approval.{decision}",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
 
     before = get_request(_fs, normalized_approval_id)
     if before is None:
@@ -1991,7 +2017,7 @@ def _control_remote_approval_decision(
             approval_id=normalized_approval_id,
             decision=decision,
             decided_by=role,
-            note=str(body.note).strip(),
+            note=normalized_note,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2031,7 +2057,7 @@ def _control_remote_approval_decision(
             "approval_id": normalized_approval_id,
             "action": after.get("action"),
             "status": after.get("status"),
-            "note": str(body.note).strip(),
+            "note": normalized_note,
         },
         ok=True,
         session_id=normalized_session_id,
@@ -2490,6 +2516,26 @@ def control_takeover_request(request: Request, payload: ControlTakeoverRequest) 
     objective = payload.objective.strip()
     if not objective:
         raise HTTPException(status_code=400, detail="objective is required")
+    normalized_payload = payload.model_dump()
+    assessment = assess_untrusted_input(
+        surface="control",
+        action="control.takeover.request",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="control",
+            action="control.takeover.request",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
     reason = str(payload.reason).strip() or "manual_takeover_request"
     now = utc_now_iso()
     session_id = str(uuid4())
@@ -2579,6 +2625,26 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
     run_id = str(getattr(request.state, "run_id", uuid4()))
     trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     body = payload or ControlTakeoverConfirmRequest()
+    normalized_payload = body.model_dump()
+    assessment = assess_untrusted_input(
+        surface="control",
+        action="control.takeover.confirm",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="control",
+            action="control.takeover.confirm",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
     if not body.confirm:
         raise HTTPException(status_code=400, detail="Takeover confirmation requires confirm=true.")
     mode = str(body.mode).strip().lower()
@@ -2689,6 +2755,26 @@ def control_takeover_handback(request: Request, payload: ControlTakeoverHandback
     run_id = str(getattr(request.state, "run_id", uuid4()))
     trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
     body = payload or ControlTakeoverHandbackRequest()
+    normalized_payload = body.model_dump()
+    assessment = assess_untrusted_input(
+        surface="control",
+        action="control.takeover.handback",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="control",
+            action="control.takeover.handback",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
     takeover_before = _load_or_init_takeover_state()
     if str(takeover_before.get("status", "idle")).strip().lower() != "active":
         raise HTTPException(status_code=409, detail="No active takeover to hand back.")

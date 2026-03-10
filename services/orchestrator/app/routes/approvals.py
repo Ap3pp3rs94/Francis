@@ -11,6 +11,7 @@ from francis_brain.ledger import RunLedger
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
+from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.approvals_store import add_decision, create_request, get_request, list_requests
 from services.orchestrator.app.control_state import check_action_allowed
 
@@ -82,7 +83,28 @@ def approval_request(request: Request, payload: ApprovalRequestPayload) -> dict:
     _enforce_control("approvals.request")
     _enforce_rbac(request, "approvals.request")
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
     role = _role_from_request(request)
+    normalized_payload = payload.model_dump()
+    assessment = assess_untrusted_input(
+        surface="approvals",
+        action="approvals.request",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="approvals",
+            action="approvals.request",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
 
     approval = create_request(
         _fs,
@@ -109,7 +131,31 @@ def approval_decision(approval_id: str, request: Request, payload: ApprovalDecis
     _enforce_control("approvals.decide")
     _enforce_rbac(request, "approvals.decide")
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
     role = _role_from_request(request)
+    normalized_payload = {
+        "approval_id": str(approval_id).strip(),
+        **payload.model_dump(),
+    }
+    assessment = assess_untrusted_input(
+        surface="approvals",
+        action="approvals.decision",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="approvals",
+            action="approvals.decision",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
 
     try:
         decision_event = add_decision(
