@@ -1,0 +1,14 @@
+{
+  "name": "francis-overlay-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop overlay shell for the Francis HUD",
+  "main": "electron/main.js",
+  "scripts": {
+    "overlay:start": "electron .",
+    "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1"
+  },
+  "devDependencies": {
+    "electron": "40.8.0"
+  }
+}
