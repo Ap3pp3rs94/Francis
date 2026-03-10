@@ -1,6 +1,7 @@
 from .briefing import compose_briefing
 from .narrator import build_presence_grounding, build_presence_headline, build_presence_lines, compose_operator_presence
 from .notifications import build_notification_digest
+from .orb import build_orb_state
 from .rituals import build_handback_ritual, build_shift_report
 from .state import PresenceState, compute_state
 from .tone import MODE_OPENERS, compose_mode_briefing, normalize_mode
@@ -11,6 +12,7 @@ __all__ = [
     "PresenceState",
     "build_handback_ritual",
     "build_notification_digest",
+    "build_orb_state",
     "build_presence_grounding",
     "build_presence_headline",
     "build_presence_lines",

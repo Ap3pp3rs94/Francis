@@ -12,7 +12,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from francis_presence.orb import build_orb_state
 from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
+from services.hud.app.orb import get_orb_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.dashboard import get_dashboard_view
@@ -54,17 +56,24 @@ class HudFabricQueryRequest(BaseModel):
 def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
     snapshot = build_lens_snapshot()
     actions = get_lens_actions(max_actions=max_actions)
+    voice = build_operator_presence(
+        mode=str(snapshot.get("control", {}).get("mode", "assist")),
+        max_actions=min(max_actions, 3),
+        snapshot=snapshot,
+        actions_payload=actions,
+    )
     return {
         "status": "ok",
         "service": "hud",
         "version": SERVICE_VERSION,
         "snapshot": snapshot,
         "actions": actions,
-        "voice": build_operator_presence(
+        "voice": voice,
+        "orb": build_orb_state(
             mode=str(snapshot.get("control", {}).get("mode", "assist")),
-            max_actions=min(max_actions, 3),
             snapshot=snapshot,
             actions_payload=actions,
+            voice=voice,
         ),
         "dashboard": get_dashboard_view(),
         "missions": get_missions_view(),
@@ -118,6 +127,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/fabric")
     def fabric(refresh: bool = False) -> dict[str, object]:
         return get_fabric_surface(refresh=refresh)
+
+    @app.get("/api/orb")
+    def orb(max_actions: int = 8) -> dict[str, object]:
+        return get_orb_view(max_actions=max_actions)
 
     @app.post("/api/fabric/query")
     def fabric_query(payload: HudFabricQueryRequest) -> dict[str, object]:

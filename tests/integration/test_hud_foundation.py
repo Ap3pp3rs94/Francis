@@ -69,6 +69,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert response.status_code == 200
     assert "Francis Lens" in response.text
     assert "Operator overlay for live work." in response.text
+    assert "The Orb rides directly over the cursor." in response.text
 
 
 def test_hud_dashboard_exposes_mode_and_cards() -> None:
@@ -94,6 +95,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["runs"]["surface"] == "runs"
     assert body["fabric"]["surface"] == "fabric"
     assert body["voice"]["surface"] == "voice"
+    assert body["orb"]["surface"] == "orb"
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -241,6 +243,63 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["voice"]["mode"] == "away"
     assert "Incident pressure is high." in body["voice"]["headline"]
     assert body["voice"]["notification"]["kind"] == "incident.pressure"
+    assert body["orb"]["mode"] == "away"
+    assert body["orb"]["interjection_level"] == 3
+    assert body["orb"]["state"]["security_quarantines"] == 1
+    assert body["orb"]["visual"]["ring_density"] >= 6
+
+
+def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+
+    _write_json(
+        workspace_root / "control" / "state.json",
+        {
+            "mode": "pilot",
+            "kill_switch": False,
+            "scopes": {
+                "repos": [str(workspace_root.parent)],
+                "workspaces": [str(workspace_root)],
+                "apps": ["control", "approvals", "receipts", "lens", "missions"],
+            },
+        },
+    )
+    _write_json(
+        workspace_root / "runs" / "last_run.json",
+        {
+            "run_id": "run-orb",
+            "phase": "execute",
+            "summary": "Orb should move with the work.",
+        },
+    )
+    _write_json(
+        workspace_root / "missions" / "missions.json",
+        {
+            "missions": [
+                {
+                    "id": "mission-orb",
+                    "title": "Orb cursor",
+                    "objective": "Make the orb visibly active",
+                    "status": "active",
+                    "priority": "high",
+                    "updated_at": "2026-03-09T13:00:00+00:00",
+                }
+            ]
+        },
+    )
+
+    response = client.get("/api/orb")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["surface"] == "orb"
+    assert body["mode"] == "pilot"
+    assert body["posture"] == "acting"
+    assert body["operator_cursor"] is True
+    assert body["movement"]["anchor"] == "cursor"
+    assert body["movement"]["profile"] == "humanized_follow"
+    assert body["visual"]["pulse_kind"] == "execution"
 
 
 def test_hud_fabric_surface_supports_summary_and_query(monkeypatch, tmp_path: Path) -> None:
@@ -380,6 +439,7 @@ def test_hud_root_mentions_voice_presence() -> None:
 
     assert response.status_code == 200
     assert "Voice Presence" in response.text
+    assert "Orb Chamber" in response.text
 
 
 
