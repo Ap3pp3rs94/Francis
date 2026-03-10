@@ -329,13 +329,6 @@
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
       }
 
-      .orb-stage.orb-hold {
-        border-color: rgba(214, 93, 54, 0.58);
-        box-shadow:
-          0 0 0 1px rgba(214, 93, 54, 0.2),
-          inset 0 0 80px rgba(214, 93, 54, 0.08);
-      }
-
       .orb-stage-copy {
         margin: 0;
         max-width: 30rem;
@@ -434,6 +427,13 @@
 
       #orb-render-root.orb-interactive {
         pointer-events: auto;
+      }
+
+      #orb-render-root.orb-hold canvas {
+        filter:
+          drop-shadow(0 0 18px rgba(214, 93, 54, 0.44))
+          drop-shadow(0 24px 38px rgba(0, 0, 0, 0.34))
+          brightness(1.08);
       }
 
       #orb-render-root canvas {
@@ -553,7 +553,7 @@
               </div>
               <span class="orb-status meta tiny" id="orb-status">Awaiting live orb state</span>
             </div>
-            <div class="orb-stage" id="orb-stage" title="Hold to panic stop when available">
+            <div class="orb-stage" id="orb-stage" title="The moving Orb is the panic-stop surface when authority is live.">
               <p class="orb-stage-copy" id="orb-stage-copy">
                 The Orb rides directly over the cursor. Motion stays calm, legible, and slightly irregular so it feels operated rather than robotic.
               </p>
@@ -573,7 +573,7 @@
               <div class="metric-pill"><strong>Pulse</strong><span>steady</span></div>
             </div>
             <p class="meta tiny orb-controls" id="orb-controls">
-              Hold the Orb to panic stop once the live control surface exposes the action.
+              Hold the moving Orb itself to panic stop once the live control surface exposes the action.
             </p>
           </article>
           <div class="hero-copy-block">
@@ -806,7 +806,7 @@
         if (!panicChip) {
           return "The Orb is following the cursor. Panic stop becomes live when control exposes it in scope.";
         }
-        return "The Orb is following the cursor. Hold the Orb itself or the sovereignty pad to panic stop immediately.";
+        return "The Orb is following the cursor. Hold the moving Orb itself to panic stop immediately.";
       }
 
       function renderOrb(orb) {
@@ -1088,8 +1088,8 @@
         if (event) {
           event.preventDefault();
         }
-        const stage = document.getElementById("orb-stage");
-        if (!stage || orbHoldTimer !== null) {
+        const root = document.getElementById("orb-render-root");
+        if (!root || orbHoldTimer !== null) {
           return;
         }
         const panicChip = (currentActions.action_chips || []).find(
@@ -1101,7 +1101,7 @@
           return;
         }
         orbHoldTriggered = false;
-        stage.classList.add("orb-hold");
+        root.classList.add("orb-hold");
         document.getElementById("orb-controls").textContent =
           "Hold steady. Panic stop will trigger if you keep pressure on the Orb.";
         orbHoldTimer = window.setTimeout(async () => {
@@ -1114,13 +1114,13 @@
       }
 
       function endOrbHold() {
-        const stage = document.getElementById("orb-stage");
+        const root = document.getElementById("orb-render-root");
         if (orbHoldTimer !== null) {
           window.clearTimeout(orbHoldTimer);
           orbHoldTimer = null;
         }
-        if (stage) {
-          stage.classList.remove("orb-hold");
+        if (root) {
+          root.classList.remove("orb-hold");
         }
         if (!orbHoldTriggered) {
           document.getElementById("orb-controls").textContent = orbControlHint();
@@ -1129,23 +1129,15 @@
       }
 
       function initOrbInteractions() {
-        const stage = document.getElementById("orb-stage");
-        if (!stage || stage.dataset.bound === "true") {
+        const root = document.getElementById("orb-render-root");
+        if (!root || root.dataset.bound === "true") {
           return;
         }
-        stage.dataset.bound = "true";
-        stage.addEventListener("pointerdown", beginOrbHold);
-        stage.addEventListener("pointerup", endOrbHold);
-        stage.addEventListener("pointerleave", endOrbHold);
-        stage.addEventListener("pointercancel", endOrbHold);
-
-        const root = document.getElementById("orb-render-root");
-        if (root) {
-          root.addEventListener("pointerdown", beginOrbHold);
-          root.addEventListener("pointerup", endOrbHold);
-          root.addEventListener("pointerleave", endOrbHold);
-          root.addEventListener("pointercancel", endOrbHold);
-        }
+        root.dataset.bound = "true";
+        root.addEventListener("pointerdown", beginOrbHold);
+        root.addEventListener("pointerup", endOrbHold);
+        root.addEventListener("pointerleave", endOrbHold);
+        root.addEventListener("pointercancel", endOrbHold);
 
         window.addEventListener("pointermove", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
