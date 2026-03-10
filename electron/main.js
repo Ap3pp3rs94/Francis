@@ -1,5 +1,11 @@
 const path = require("node:path");
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electron");
+const {
+  buildDefaultPreferences,
+  getPreferencesPath,
+  loadPreferences,
+  savePreferences,
+} = require("./preferences");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -7,6 +13,8 @@ const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 
 let mainWindow = null;
 let ipcRegistered = false;
+let overlayPreferences = null;
+let preferenceSaveTimer = null;
 let overlayState = {
   ignoreMouseEvents: false,
   alwaysOnTop: true,
@@ -31,13 +39,23 @@ function getDisplayInfo() {
   };
 }
 
+function getWorkAreaForBounds(bounds) {
+  if (bounds && Number.isFinite(bounds.x) && Number.isFinite(bounds.y)) {
+    return screen.getDisplayMatching(bounds).workArea;
+  }
+  return getDisplayInfo().workArea;
+}
+
 function getOverlayState(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
+  const bounds = safeWindow ? safeWindow.getBounds() : overlayPreferences?.windowBounds || null;
   return {
     ignoreMouseEvents: overlayState.ignoreMouseEvents,
     alwaysOnTop: safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop,
     visible: safeWindow ? safeWindow.isVisible() : false,
     hudUrl: HUD_URL,
+    bounds,
+    preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     shortcuts: {
       toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
       toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
@@ -51,6 +69,61 @@ function notifyOverlayState(win = mainWindow) {
     return;
   }
   safeWindow.webContents.send("overlay:state-changed", getOverlayState(safeWindow));
+}
+
+function schedulePreferenceSave(win = mainWindow, { immediate = false } = {}) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  if (!safeWindow || safeWindow.isMinimized()) {
+    return;
+  }
+
+  const persist = () => {
+    const bounds = safeWindow.getBounds();
+    const workArea = getWorkAreaForBounds(bounds);
+    overlayPreferences = savePreferences(
+      app.getPath("userData"),
+      {
+        ...(overlayPreferences || buildDefaultPreferences(workArea)),
+        alwaysOnTop: safeWindow.isAlwaysOnTop(),
+        ignoreMouseEvents: overlayState.ignoreMouseEvents,
+        windowBounds: bounds,
+      },
+      workArea,
+    );
+    log("Saved overlay preferences", overlayPreferences);
+    notifyOverlayState(safeWindow);
+  };
+
+  if (preferenceSaveTimer) {
+    clearTimeout(preferenceSaveTimer);
+    preferenceSaveTimer = null;
+  }
+
+  if (immediate) {
+    persist();
+    return;
+  }
+
+  preferenceSaveTimer = setTimeout(() => {
+    preferenceSaveTimer = null;
+    persist();
+  }, 180);
+}
+
+function resetOverlayPreferences(win = mainWindow) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  if (!safeWindow) {
+    throw new Error("Overlay window is not available");
+  }
+  const workArea = getDisplayInfo().workArea;
+  overlayPreferences = buildDefaultPreferences(workArea);
+  safeWindow.setBounds(overlayPreferences.windowBounds);
+  applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
+  applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
+  overlayPreferences = savePreferences(app.getPath("userData"), overlayPreferences, workArea);
+  log("Reset overlay preferences", overlayPreferences);
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
 }
 
 function buildFallbackHtml(errorText) {
@@ -135,6 +208,7 @@ function applyAlwaysOnTop(win, enabled) {
   // Use a high always-on-top level so the overlay behaves like an operator layer, not a normal app window.
   win.setAlwaysOnTop(Boolean(enabled), enabled ? "screen-saver" : "normal");
   overlayState.alwaysOnTop = win.isAlwaysOnTop();
+  schedulePreferenceSave(win);
   notifyOverlayState(win);
   return overlayState.alwaysOnTop;
 }
@@ -146,6 +220,7 @@ function applyIgnoreMouseEvents(win, ignore) {
   overlayState.ignoreMouseEvents = Boolean(ignore);
   // Forward mouse-move events while click-through is enabled so the overlay can still react visually.
   win.setIgnoreMouseEvents(overlayState.ignoreMouseEvents, overlayState.ignoreMouseEvents ? { forward: true } : undefined);
+  schedulePreferenceSave(win);
   notifyOverlayState(win);
   return overlayState.ignoreMouseEvents;
 }
@@ -201,15 +276,16 @@ async function loadHud(win) {
 
 function createMainWindow() {
   const { workArea } = getDisplayInfo();
+  overlayPreferences = loadPreferences(app.getPath("userData"), workArea);
   const preloadPath = path.join(__dirname, "preload.js");
 
-  log("Creating overlay window", { hudUrl: HUD_URL, workArea });
+  log("Creating overlay window", { hudUrl: HUD_URL, workArea, preferences: overlayPreferences });
 
   const win = new BrowserWindow({
-    x: workArea.x,
-    y: workArea.y,
-    width: workArea.width,
-    height: workArea.height,
+    x: overlayPreferences.windowBounds.x,
+    y: overlayPreferences.windowBounds.y,
+    width: overlayPreferences.windowBounds.width,
+    height: overlayPreferences.windowBounds.height,
     show: false,
     frame: false, // Remove native chrome so the window reads as an overlay instead of a desktop app.
     transparent: true, // Let the HUD alpha blend with the Windows desktop.
@@ -230,8 +306,8 @@ function createMainWindow() {
   });
 
   win.setMenuBarVisibility(false);
-  applyAlwaysOnTop(win, true);
-  applyIgnoreMouseEvents(win, false);
+  applyAlwaysOnTop(win, overlayPreferences.alwaysOnTop);
+  applyIgnoreMouseEvents(win, overlayPreferences.ignoreMouseEvents);
 
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, targetUrl) => {
@@ -246,12 +322,15 @@ function createMainWindow() {
     win.showInactive();
   });
 
+  win.on("move", () => schedulePreferenceSave(win));
+  win.on("resize", () => schedulePreferenceSave(win));
   win.on("show", () => notifyOverlayState(win));
   win.on("hide", () => notifyOverlayState(win));
   win.on("minimize", () => notifyOverlayState(win));
   win.on("restore", () => notifyOverlayState(win));
 
   win.on("closed", () => {
+    schedulePreferenceSave(win, { immediate: true });
     log("Overlay window closed");
     if (mainWindow === win) {
       mainWindow = null;
@@ -292,6 +371,7 @@ function registerIpc() {
     return value;
   });
 
+  ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
   ipcMain.handle("overlay:get-display-info", () => getDisplayInfo());
 
@@ -408,6 +488,13 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  if (preferenceSaveTimer) {
+    clearTimeout(preferenceSaveTimer);
+    preferenceSaveTimer = null;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    schedulePreferenceSave(mainWindow, { immediate: true });
+  }
   log("Unregistering global shortcuts");
   globalShortcut.unregisterAll();
 });

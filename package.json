@@ -6,7 +6,8 @@
   "main": "electron/main.js",
   "scripts": {
     "overlay:start": "electron .",
-    "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1"
+    "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1",
+    "overlay:test": "node --test electron/preferences.test.cjs"
   },
   "devDependencies": {
     "electron": "40.8.0"

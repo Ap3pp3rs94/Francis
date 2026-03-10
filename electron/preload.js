@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", assertBoolean("value", value));
   },
+  resetLayout() {
+    return ipcRenderer.invoke("overlay:reset-layout");
+  },
   getState() {
     return ipcRenderer.invoke("overlay:get-state");
   },

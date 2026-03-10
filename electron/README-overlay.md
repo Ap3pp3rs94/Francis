@@ -11,6 +11,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - registers `Ctrl+Shift+Alt+F` as a global show/hide shortcut
 - registers `Ctrl+Shift+Alt+C` as a global click-through toggle so pointer control is recoverable
 - lets the live HUD consume those shell controls directly when running inside Electron
+- persists overlay bounds, always-on-top, and click-through state in the Electron user-data directory
 
 ## Run
 
@@ -37,6 +38,7 @@ That PowerShell helper checks the HUD URL first and stops with a clear message i
 - Click-through is a whole-window toggle, not pixel-perfect hit testing.
 - Click-through should be treated as an operator mode change: once enabled, use the global shortcut to recover pointer control.
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
+- The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds or mode become undesirable.
 
 ## Next Extensions
 
