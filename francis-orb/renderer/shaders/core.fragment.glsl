@@ -42,14 +42,14 @@ void main() {
   float n2 = noise(vWorldPos * 6.8 - uTime * 0.9);
   float plasma = mix(n1, n2, 0.5);
 
-  float brightness = 0.54 + plasma * uDistortion + uPulse * 0.18;
+  float brightness = 0.46 + plasma * uDistortion + uPulse * 0.14;
   brightness *= uIntensity;
 
-  vec3 base = vec3(0.88, 0.96, 1.0);
-  vec3 hot = vec3(1.0, 1.0, 1.0);
+  vec3 base = vec3(0.78, 0.89, 0.97);
+  vec3 hot = vec3(0.96, 0.99, 1.0);
 
-  vec3 color = mix(base, hot, clamp(brightness + fresnel * 0.25, 0.0, 1.0));
+  vec3 color = mix(base, hot, clamp(brightness + fresnel * 0.2, 0.0, 1.0));
 
-  float alpha = 0.92;
+  float alpha = 0.78;
   gl_FragColor = vec4(color * brightness, alpha);
 }

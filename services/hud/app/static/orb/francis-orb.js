@@ -54,12 +54,12 @@ var FrancisOrb = (() => {
       far: 100,
       z: 7.2
     },
-    coreRadius: 0.62,
-    shellRadius: 1.22,
+    coreRadius: 0.54,
+    shellRadius: 1.18,
     auraRadius: 4.8,
-    filamentCount: 30,
+    filamentCount: 34,
     filamentSegments: 640,
-    particleCount: 180,
+    particleCount: 210,
     profileLerp: 0.08,
     attentionLerp: 0.06,
     beamLerp: 0.12,
@@ -72,16 +72,16 @@ var FrancisOrb = (() => {
     idle: {
       pulseSpeed: 0.75,
       pulseAmplitude: 0.03,
-      shellOpacity: 0.09,
-      shellFresnelPower: 2.2,
-      filamentOpacity: 0.5,
+      shellOpacity: 0.12,
+      shellFresnelPower: 2.45,
+      filamentOpacity: 0.58,
       filamentSpeed: 0.42,
-      filamentTightness: 0.82,
-      particleOpacity: 0.24,
+      filamentTightness: 0.76,
+      particleOpacity: 0.2,
       particleSpeed: 0.18,
-      auraOpacity: 0.15,
-      auraScale: 0.98,
-      coreIntensity: 0.96,
+      auraOpacity: 0.18,
+      auraScale: 0.96,
+      coreIntensity: 1.02,
       coreDistortion: 0.12,
       compression: 1,
       beamOpacity: 0
@@ -89,16 +89,16 @@ var FrancisOrb = (() => {
     listening: {
       pulseSpeed: 1,
       pulseAmplitude: 0.045,
-      shellOpacity: 0.11,
-      shellFresnelPower: 2.4,
-      filamentOpacity: 0.6,
+      shellOpacity: 0.14,
+      shellFresnelPower: 2.6,
+      filamentOpacity: 0.68,
       filamentSpeed: 0.68,
-      filamentTightness: 0.84,
-      particleOpacity: 0.28,
+      filamentTightness: 0.78,
+      particleOpacity: 0.23,
       particleSpeed: 0.28,
-      auraOpacity: 0.18,
-      auraScale: 1,
-      coreIntensity: 1.06,
+      auraOpacity: 0.21,
+      auraScale: 0.99,
+      coreIntensity: 1.1,
       coreDistortion: 0.15,
       compression: 0.975,
       beamOpacity: 0
@@ -106,16 +106,16 @@ var FrancisOrb = (() => {
     thinking: {
       pulseSpeed: 1.35,
       pulseAmplitude: 0.06,
-      shellOpacity: 0.14,
-      shellFresnelPower: 2.7,
-      filamentOpacity: 0.72,
+      shellOpacity: 0.18,
+      shellFresnelPower: 2.95,
+      filamentOpacity: 0.78,
       filamentSpeed: 1.02,
-      filamentTightness: 0.86,
-      particleOpacity: 0.34,
+      filamentTightness: 0.8,
+      particleOpacity: 0.27,
       particleSpeed: 0.42,
-      auraOpacity: 0.22,
-      auraScale: 1.04,
-      coreIntensity: 1.18,
+      auraOpacity: 0.25,
+      auraScale: 1.02,
+      coreIntensity: 1.22,
       coreDistortion: 0.2,
       compression: 0.955,
       beamOpacity: 0
@@ -123,16 +123,16 @@ var FrancisOrb = (() => {
     speaking: {
       pulseSpeed: 1.6,
       pulseAmplitude: 0.05,
-      shellOpacity: 0.15,
-      shellFresnelPower: 2.5,
-      filamentOpacity: 0.76,
+      shellOpacity: 0.18,
+      shellFresnelPower: 2.8,
+      filamentOpacity: 0.82,
       filamentSpeed: 0.92,
-      filamentTightness: 0.88,
-      particleOpacity: 0.36,
+      filamentTightness: 0.8,
+      particleOpacity: 0.29,
       particleSpeed: 0.46,
-      auraOpacity: 0.24,
-      auraScale: 1.06,
-      coreIntensity: 1.24,
+      auraOpacity: 0.27,
+      auraScale: 1.04,
+      coreIntensity: 1.28,
       coreDistortion: 0.17,
       compression: 0.965,
       beamOpacity: 0
@@ -140,16 +140,16 @@ var FrancisOrb = (() => {
     acting: {
       pulseSpeed: 1.2,
       pulseAmplitude: 0.05,
-      shellOpacity: 0.18,
-      shellFresnelPower: 3,
-      filamentOpacity: 0.84,
+      shellOpacity: 0.22,
+      shellFresnelPower: 3.2,
+      filamentOpacity: 0.88,
       filamentSpeed: 1.18,
-      filamentTightness: 0.84,
-      particleOpacity: 0.42,
+      filamentTightness: 0.78,
+      particleOpacity: 0.34,
       particleSpeed: 0.58,
-      auraOpacity: 0.28,
-      auraScale: 1.08,
-      coreIntensity: 1.34,
+      auraOpacity: 0.3,
+      auraScale: 1.06,
+      coreIntensity: 1.38,
       coreDistortion: 0.14,
       compression: 0.94,
       beamOpacity: 0.62
@@ -157,16 +157,16 @@ var FrancisOrb = (() => {
     interject: {
       pulseSpeed: 1.95,
       pulseAmplitude: 0.07,
-      shellOpacity: 0.18,
-      shellFresnelPower: 3.1,
-      filamentOpacity: 0.88,
+      shellOpacity: 0.24,
+      shellFresnelPower: 3.3,
+      filamentOpacity: 0.94,
       filamentSpeed: 0.9,
-      filamentTightness: 0.82,
-      particleOpacity: 0.38,
+      filamentTightness: 0.76,
+      particleOpacity: 0.3,
       particleSpeed: 0.35,
-      auraOpacity: 0.3,
-      auraScale: 1.1,
-      coreIntensity: 1.42,
+      auraOpacity: 0.32,
+      auraScale: 1.08,
+      coreIntensity: 1.46,
       coreDistortion: 0.18,
       compression: 0.91,
       beamOpacity: 0
@@ -174,16 +174,16 @@ var FrancisOrb = (() => {
     error: {
       pulseSpeed: 0.9,
       pulseAmplitude: 0.03,
-      shellOpacity: 0.16,
+      shellOpacity: 0.19,
       shellFresnelPower: 2.8,
-      filamentOpacity: 0.54,
+      filamentOpacity: 0.62,
       filamentSpeed: 0.25,
-      filamentTightness: 0.94,
-      particleOpacity: 0.18,
+      filamentTightness: 0.86,
+      particleOpacity: 0.14,
       particleSpeed: 0.12,
-      auraOpacity: 0.13,
-      auraScale: 0.98,
-      coreIntensity: 0.88,
+      auraOpacity: 0.12,
+      auraScale: 0.96,
+      coreIntensity: 0.92,
       coreDistortion: 0.08,
       compression: 1.02,
       beamOpacity: 0
@@ -27234,11 +27234,11 @@ void main() {
       this.material = new SpriteMaterial({
         map: createAuraTexture(),
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.16,
         blending: AdditiveBlending,
         depthWrite: false,
         depthTest: false,
-        color: 13101567
+        color: 12114154
       });
       this.sprite = new Sprite(this.material);
       this.sprite.scale.setScalar(this.baseScale);
@@ -27260,7 +27260,7 @@ void main() {
   var core_vertex_default = "varying vec3 vNormal;\nvarying vec3 vWorldPos;\nvarying vec3 vViewDir;\n\nvoid main() {\n  vec4 worldPos = modelMatrix * vec4(position, 1.0);\n  vWorldPos = worldPos.xyz;\n  vNormal = normalize(normalMatrix * normal);\n\n  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);\n  vViewDir = normalize(-mvPosition.xyz);\n\n  gl_Position = projectionMatrix * mvPosition;\n}\r\n";
 
   // renderer/shaders/core.fragment.glsl
-  var core_fragment_default = "uniform float uTime;\nuniform float uIntensity;\nuniform float uPulse;\nuniform float uDistortion;\n\nvarying vec3 vNormal;\nvarying vec3 vWorldPos;\nvarying vec3 vViewDir;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nvoid main() {\n  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 2.0);\n\n  float n1 = noise(vWorldPos * 3.2 + uTime * 0.6);\n  float n2 = noise(vWorldPos * 6.8 - uTime * 0.9);\n  float plasma = mix(n1, n2, 0.5);\n\n  float brightness = 0.54 + plasma * uDistortion + uPulse * 0.18;\n  brightness *= uIntensity;\n\n  vec3 base = vec3(0.88, 0.96, 1.0);\n  vec3 hot = vec3(1.0, 1.0, 1.0);\n\n  vec3 color = mix(base, hot, clamp(brightness + fresnel * 0.25, 0.0, 1.0));\n\n  float alpha = 0.92;\n  gl_FragColor = vec4(color * brightness, alpha);\n}\r\n";
+  var core_fragment_default = "uniform float uTime;\nuniform float uIntensity;\nuniform float uPulse;\nuniform float uDistortion;\n\nvarying vec3 vNormal;\nvarying vec3 vWorldPos;\nvarying vec3 vViewDir;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nvoid main() {\n  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 2.0);\n\n  float n1 = noise(vWorldPos * 3.2 + uTime * 0.6);\n  float n2 = noise(vWorldPos * 6.8 - uTime * 0.9);\n  float plasma = mix(n1, n2, 0.5);\n\n  float brightness = 0.46 + plasma * uDistortion + uPulse * 0.14;\n  brightness *= uIntensity;\n\n  vec3 base = vec3(0.78, 0.89, 0.97);\n  vec3 hot = vec3(0.96, 0.99, 1.0);\n\n  vec3 color = mix(base, hot, clamp(brightness + fresnel * 0.2, 0.0, 1.0));\n\n  float alpha = 0.78;\n  gl_FragColor = vec4(color * brightness, alpha);\n}\n";
 
   // renderer/OrbCore.ts
   var OrbCore = class {
@@ -27279,7 +27279,8 @@ void main() {
           uDistortion: { value: 0.12 }
         },
         blending: AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        toneMapped: false
       });
       this.mesh = new Mesh(geometry, this.material);
     }
@@ -27298,7 +27299,7 @@ void main() {
   };
 
   // renderer/shaders/filament.fragment.glsl
-  var filament_fragment_default = "uniform float uOpacity;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float edgeFade = 1.0 - smoothstep(0.45, 1.0, vAcross);\n  float tipFade = 0.22 + pow(sin(vAlong * 3.14159265), 0.58) * 0.78;\n  float alpha = uOpacity * edgeFade * tipFade * (0.48 + vEnergy * 0.52);\n\n  vec3 base = vec3(0.58, 0.8, 0.98);\n  vec3 hot = vec3(0.96, 0.99, 1.0);\n  vec3 color = mix(base, hot, vEnergy);\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
+  var filament_fragment_default = "uniform float uOpacity;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float edgeFade = 1.0 - smoothstep(0.45, 1.0, vAcross);\n  float tipFade = 0.22 + pow(sin(vAlong * 3.14159265), 0.58) * 0.78;\n  float alpha = uOpacity * edgeFade * tipFade * (0.62 + vEnergy * 0.58);\n\n  vec3 base = vec3(0.42, 0.66, 0.86);\n  vec3 hot = vec3(0.84, 0.94, 0.99);\n  vec3 color = mix(base, hot, vEnergy);\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
 
   // renderer/shaders/filament.vertex.glsl
   var filament_vertex_default = "attribute vec3 aSideDir;\nattribute float aSide;\nattribute float aAlong;\nattribute float aSeed;\nattribute float aPhase;\nattribute float aRibbonWidth;\n\nuniform float uTime;\nuniform float uTightness;\nuniform float uSpeed;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float alongPulse = sin(aAlong * 3.14159265);\n  float widthFalloff = 0.28 + pow(alongPulse, 0.72) * 0.72;\n  float wobble = sin(uTime * uSpeed + aPhase + aAlong * 12.0 + aSeed) * 0.045;\n  float ripple = sin(uTime * (uSpeed * 0.72) + aAlong * 24.0 + aSeed) * 0.018;\n\n  vec3 center = position * mix(1.0, uTightness, 0.84);\n  center += normalize(position) * wobble;\n\n  float width = aRibbonWidth * widthFalloff;\n  vec3 transformed = center + aSideDir * (aSide * width + ripple * aSide);\n\n  vEnergy = 0.58 + 0.42 * sin(uTime * uSpeed + aPhase + aSeed + aAlong * 14.0);\n  vAcross = abs(aSide);\n  vAlong = aAlong;\n\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);\n}\n";
@@ -27386,6 +27387,7 @@ void main() {
       depthWrite: false,
       side: DoubleSide,
       blending: AdditiveBlending,
+      toneMapped: false,
       uniforms: {
         uTime: { value: 0 },
         uOpacity: { value: 0.52 },
@@ -27402,14 +27404,14 @@ void main() {
       const rng = new DeterministicRng(seed);
       for (let i = 0; i < count; i += 1) {
         const phase = rng.range(0, Math.PI * 2);
-        const width = rng.range(0.04, 0.085);
+        const width = rng.range(0.05, 0.1);
         const points = buildLoopPoints(
-          rng.range(1.03, 1.42),
-          rng.range(0.66, 1.08),
-          rng.range(0.025, 0.11),
+          rng.range(0.94, 1.32),
+          rng.range(0.58, 0.98),
+          rng.range(0.02, 0.095),
           segments,
           phase,
-          rng.range(0.05, 0.22)
+          rng.range(0.04, 0.18)
         );
         const geometry = buildRibbonGeometry(points, {
           width,
@@ -27424,7 +27426,7 @@ void main() {
           rng.range(0, Math.PI)
         );
         mesh.rotation.copy(baseRotation);
-        mesh.scale.setScalar(rng.range(0.88, 1.03));
+        mesh.scale.setScalar(rng.range(0.83, 0.98));
         this.group.add(mesh);
         this.filaments.push({
           mesh,

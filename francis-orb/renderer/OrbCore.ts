@@ -22,6 +22,7 @@ export class OrbCore implements OrbRenderable {
       },
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      toneMapped: false,
     });
 
     this.mesh = new THREE.Mesh(geometry, this.material);

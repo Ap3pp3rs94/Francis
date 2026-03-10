@@ -32,11 +32,11 @@ export class OrbAura implements OrbRenderable {
     this.material = new THREE.SpriteMaterial({
       map: createAuraTexture(),
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.16,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       depthTest: false,
-      color: 0xc7e9ff,
+      color: 0xb8d8ea,
     });
 
     this.sprite = new THREE.Sprite(this.material);

@@ -121,6 +121,7 @@ function createFilamentMaterial(width: number): THREE.ShaderMaterial {
     depthWrite: false,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
+    toneMapped: false,
     uniforms: {
       uTime: { value: 0 },
       uOpacity: { value: 0.52 },
@@ -140,14 +141,14 @@ export class OrbFilaments implements OrbRenderable {
 
     for (let i = 0; i < count; i += 1) {
       const phase = rng.range(0, Math.PI * 2);
-      const width = rng.range(0.04, 0.085);
+      const width = rng.range(0.05, 0.1);
       const points = buildLoopPoints(
-        rng.range(1.03, 1.42),
-        rng.range(0.66, 1.08),
-        rng.range(0.025, 0.11),
+        rng.range(0.94, 1.32),
+        rng.range(0.58, 0.98),
+        rng.range(0.02, 0.095),
         segments,
         phase,
-        rng.range(0.05, 0.22),
+        rng.range(0.04, 0.18),
       );
 
       const geometry = buildRibbonGeometry(points, {
@@ -164,7 +165,7 @@ export class OrbFilaments implements OrbRenderable {
       );
 
       mesh.rotation.copy(baseRotation);
-      mesh.scale.setScalar(rng.range(0.88, 1.03));
+      mesh.scale.setScalar(rng.range(0.83, 0.98));
       this.group.add(mesh);
 
       this.filaments.push({
