@@ -159,6 +159,19 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
         ],
     )
     _write_jsonl(
+        workspace_root / "security" / "quarantine.jsonl",
+        [
+            {
+                "id": "quarantine-1",
+                "ts": "2026-03-08T12:02:30+00:00",
+                "severity": "high",
+                "surface": "approvals",
+                "action": "approvals.request",
+                "categories": ["policy_bypass"],
+            }
+        ],
+    )
+    _write_jsonl(
         workspace_root / "inbox" / "messages.jsonl",
         [
             {
@@ -217,9 +230,12 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["missions"]["active_count"] == 1
     assert body["missions"]["backlog_count"] == 1
     assert body["incidents"]["open_count"] == 1
+    assert body["incidents"]["security"]["quarantine_count"] == 1
     assert body["inbox"]["alert_count"] == 1
     assert body["runs"]["active_run"]["run_id"] == "run-live"
     assert body["snapshot"]["apprenticeship"]["review_count"] == 1
+    assert body["snapshot"]["security"]["quarantine_count"] == 1
+    assert body["snapshot"]["security"]["top_categories"]["policy_bypass"] == 1
     assert body["fabric"]["summary"]["artifact_count"] >= 1
     assert body["voice"]["grounding"]["trust"] == "Likely"
     assert body["voice"]["mode"] == "away"

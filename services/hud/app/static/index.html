@@ -437,6 +437,7 @@
         <article class="panel accent">
           <h2>Incident Posture</h2>
           <p id="incidents"></p>
+          <p class="meta" id="security-summary"></p>
           <p class="meta" id="runs"></p>
         </article>
         <article class="panel">
@@ -516,12 +517,30 @@
           : `<li class="muted-empty">No mission records available.</li>`;
 
         document.getElementById("incidents").textContent = payload.incidents.items[0].summary;
+        document.getElementById("security-summary").textContent = summarizeSecurity(
+          payload.incidents.security || payload.snapshot?.security || {},
+        );
         document.getElementById("runs").textContent =
           `Run: ${payload.runs.active_run.run_id} | Phase: ${payload.runs.active_run.phase}`;
 
         renderActions(currentActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+      }
+
+      function summarizeSecurity(security) {
+        const quarantineCount = Number(security?.quarantine_count || 0);
+        if (!quarantineCount) {
+          return "Security quarantine clear.";
+        }
+        const topCategories = security?.top_categories || {};
+        const topEntry = Object.entries(topCategories)[0];
+        const latest = security?.latest || {};
+        const topSummary = topEntry ? `top ${topEntry[0]} (${topEntry[1]})` : "no category detail";
+        const latestSummary = latest.action
+          ? `latest ${latest.action}`
+          : latest.summary || "latest quarantine recorded";
+        return `${quarantineCount} quarantine event(s) | ${topSummary} | ${latestSummary}`;
       }
 
       function renderFabricSummary(surface) {

@@ -9,6 +9,7 @@ def get_dashboard_view() -> dict[str, object]:
     missions = snapshot["missions"]
     approvals = snapshot["approvals"]
     incidents = snapshot["incidents"]
+    security = snapshot.get("security", {})
     runs = snapshot["runs"]
     apprenticeship = snapshot.get("apprenticeship", {})
     fabric = snapshot.get("fabric", {})
@@ -18,6 +19,21 @@ def get_dashboard_view() -> dict[str, object]:
         if isinstance(fabric_calibration.get("confidence_counts"), dict)
         else {}
     )
+    top_security_categories = (
+        security.get("top_categories", {})
+        if isinstance(security.get("top_categories"), dict)
+        else {}
+    )
+    lead_security_category = next(iter(top_security_categories.items()), None)
+    if int(security.get("quarantine_count", 0)) > 0:
+        security_line = (
+            f"Security quarantine: {int(security.get('quarantine_count', 0))} event(s), "
+            f"severity {security.get('highest_severity', 'medium')}."
+        )
+        if lead_security_category is not None:
+            security_line += f" Top category: {lead_security_category[0]} ({int(lead_security_category[1])})."
+    else:
+        security_line = "Security quarantine: none."
     return {
         "status": "ok",
         "surface": "dashboard",
@@ -58,6 +74,7 @@ def get_dashboard_view() -> dict[str, object]:
                     f"{runs['ledger_count']} ledger event(s) tracked. "
                     f"{incidents['open_count']} open incident(s). "
                     f"Highest severity: {incidents['highest_severity']}. "
+                    f"{security_line} "
                     f"Fabric citations ready: {int(fabric.get('citation_ready_count', 0))}. "
                     f"Trust state: {int(fabric_confidence.get('confirmed', 0))} confirmed, "
                     f"{int(fabric_confidence.get('likely', 0))} likely, "

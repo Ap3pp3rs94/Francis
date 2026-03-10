@@ -246,6 +246,65 @@ def _materialize_incidents(workspace_root: Path) -> dict[str, Any]:
     }
 
 
+def _materialize_security(workspace_root: Path) -> dict[str, Any]:
+    rows = _read_jsonl(workspace_root / "security" / "quarantine.jsonl")
+    items: list[dict[str, Any]] = []
+    category_counts: dict[str, int] = {}
+    for row in rows:
+        severity = str(row.get("severity", "medium")).strip().lower() or "medium"
+        categories = [
+            str(item).strip().lower()
+            for item in row.get("categories", [])
+            if isinstance(item, str) and str(item).strip()
+        ]
+        for category in categories:
+            category_counts[category] = int(category_counts.get(category, 0)) + 1
+        action = str(row.get("action", "")).strip()
+        surface = str(row.get("surface", "")).strip()
+        items.append(
+            {
+                "id": str(row.get("id", "")).strip(),
+                "ts": row.get("ts"),
+                "severity": severity,
+                "surface": surface,
+                "action": action,
+                "categories": categories,
+                "summary": (
+                    f"{action or 'unknown action'} quarantined on {surface or 'unknown surface'}"
+                    + (f" ({', '.join(categories)})" if categories else "")
+                ),
+            }
+        )
+    items.sort(
+        key=lambda row: (SEVERITY_ORDER.get(str(row.get("severity", "")), 0), str(row.get("ts", ""))),
+        reverse=True,
+    )
+    highest = items[0]["severity"] if items else "nominal"
+    latest = max(items, key=lambda row: str(row.get("ts", "")), default=None)
+    if not items:
+        items = [
+            {
+                "id": "security-none",
+                "ts": utc_now_iso(),
+                "severity": "nominal",
+                "surface": "lens",
+                "action": "",
+                "categories": [],
+                "summary": "No quarantined ingress detected in the current workspace.",
+            }
+        ]
+    top_categories = dict(
+        sorted(category_counts.items(), key=lambda item: (-int(item[1]), str(item[0])))[:4]
+    )
+    return {
+        "quarantine_count": 0 if items[0]["id"] == "security-none" else len(items),
+        "highest_severity": highest,
+        "top_categories": top_categories,
+        "latest": latest,
+        "items": _tail(items, 5),
+    }
+
+
 def _summarize_runs(events: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for event in events:
@@ -313,6 +372,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     approvals = _materialize_approvals(resolved_workspace)
     inbox = _materialize_inbox(resolved_workspace)
     incidents = _materialize_incidents(resolved_workspace)
+    security = _materialize_security(resolved_workspace)
     runs = _materialize_runs(resolved_workspace)
     apprenticeship = _materialize_apprenticeship(resolved_workspace)
     fabric = _materialize_fabric(resolved_workspace)
@@ -331,6 +391,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "missions": missions,
         "inbox": inbox,
         "incidents": incidents,
+        "security": security,
         "runs": runs,
         "apprenticeship": apprenticeship,
         "fabric": fabric,

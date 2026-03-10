@@ -112,6 +112,19 @@ def _seed_workspace(workspace: Path) -> None:
             }
         ],
     )
+    _write_jsonl(
+        workspace / "security" / "quarantine.jsonl",
+        [
+            {
+                "id": "quarantine-route-1",
+                "ts": "2026-03-09T11:02:30+00:00",
+                "severity": "high",
+                "surface": "telemetry",
+                "action": "telemetry.events",
+                "categories": ["prompt_injection"],
+            }
+        ],
+    )
     _write_json(
         workspace / "forge" / "catalog.json",
         {
@@ -175,3 +188,5 @@ def test_lens_snapshot_surfaces_fabric_summary(monkeypatch, tmp_path: Path) -> N
     assert snapshot["fabric"]["artifact_count"] >= 4
     assert snapshot["fabric"]["citation_ready_count"] >= 1
     assert snapshot["fabric"]["calibration"]["confidence_counts"]["likely"] >= 1
+    assert snapshot["security"]["quarantine_count"] == 1
+    assert snapshot["security"]["top_categories"]["prompt_injection"] == 1
