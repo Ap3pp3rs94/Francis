@@ -132,6 +132,25 @@ def _pulse_kind(*, posture: str, voice_lines: int, interjection_level: int) -> s
     return "steady"
 
 
+def _movement_profile(*, active_execution: bool, interjection_level: int, panic_ready: bool) -> dict[str, Any]:
+    cursor_lock = active_execution or panic_ready
+    return {
+        "anchor": "cursor",
+        "profile": "cursor_lock" if cursor_lock else "cursor_drift",
+        "cursor_lock": cursor_lock,
+        "lead_style": "human_correction",
+        "randomness": "hand_tremor" if cursor_lock else "breathing_variation",
+        "lead_strength": round(0.06 if cursor_lock else 0.035, 3),
+        "settle_strength": round(0.42 if cursor_lock else 0.24, 3),
+        "damping": round(0.68 if cursor_lock else 0.82, 3),
+        "drift_strength": round(0.45 if cursor_lock else 1.35, 3),
+        "micro_strength": round(0.22 if cursor_lock else 0.75, 3),
+        "vertical_bias": round(-0.02 if cursor_lock else -0.06, 3),
+        "hesitation_ms": 180 if cursor_lock else 260,
+        "interjection_bias": round(0.08 * interjection_level, 3),
+    }
+
+
 def build_orb_state(
     *,
     mode: str,
@@ -276,11 +295,11 @@ def build_orb_state(
         "voice_channel": pulse_kind in {"voice_ready", "interjection", "execution"},
         "handback_visible": normalized_mode in {"pilot", "away"} or active_execution,
         "palette": colorway,
-        "movement": {
-            "anchor": "cursor",
-            "profile": "humanized_follow",
-            "randomness": "micro_variation",
-        },
+        "movement": _movement_profile(
+            active_execution=active_execution,
+            interjection_level=interjection_level,
+            panic_ready=panic_ready,
+        ),
         "visual": {
             "core_brightness": round(core_brightness, 3),
             "orbit_speed": round(orbit_speed, 3),

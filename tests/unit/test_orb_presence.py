@@ -44,7 +44,9 @@ def test_orb_state_becomes_operator_cursor_during_pilot_execution() -> None:
     assert orb["posture"] == "acting"
     assert orb["operator_cursor"] is True
     assert orb["movement"]["anchor"] == "cursor"
-    assert orb["movement"]["profile"] == "humanized_follow"
+    assert orb["movement"]["profile"] == "cursor_lock"
+    assert orb["movement"]["cursor_lock"] is True
+    assert orb["movement"]["lead_style"] == "human_correction"
     assert orb["panic_ready"] is False
     assert orb["visual"]["pulse_kind"] == "execution"
     assert orb["handback_visible"] is True
@@ -66,4 +68,5 @@ def test_orb_state_enters_panic_when_kill_switch_is_live() -> None:
 
     assert orb["posture"] == "panic"
     assert orb["panic_ready"] is True
+    assert orb["movement"]["cursor_lock"] is True
     assert orb["visual"]["pulse_kind"] == "panic"

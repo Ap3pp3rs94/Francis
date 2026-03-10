@@ -724,10 +724,13 @@
         targetY: Math.max(96, window.innerHeight * 0.24),
         vx: 0,
         vy: 0,
+        speed: 0,
         pointerX: window.innerWidth * 0.54,
         pointerY: Math.max(96, window.innerHeight * 0.24),
         pointerVx: 0,
         pointerVy: 0,
+        correctionX: 0,
+        correctionY: 0,
         lastPointerX: null,
         lastPointerY: null,
         lastMoveAt: 0,
@@ -821,14 +824,14 @@
           currentOrb.detail || "Orb detail is not available.";
         document.getElementById("orb-controls").textContent = orbControlHint();
         document.getElementById("orb-stage-copy").textContent = currentOrb.operator_cursor
-          ? "The Orb is riding the cursor and making active authority spatially legible. Motion stays slightly irregular to preserve human continuity."
-          : "The Orb remains attached to the cursor path, but calm enough to stay ambient until the work genuinely needs attention.";
+          ? "The Orb is locked to the pointer path and makes active authority spatially legible. Motion resolves through small human-style correction instead of robotic-perfect tracking."
+          : "The Orb stays attached to the cursor path, but with softer breathing drift until the work genuinely needs attention.";
         document.getElementById("orb-anchor").textContent = currentOrb.operator_cursor
           ? "cursor authority"
           : "cursor ambient";
-        document.getElementById("orb-motion").textContent = currentOrb.operator_cursor
-          ? "tight follow"
-          : "soft drift";
+        document.getElementById("orb-motion").textContent = currentOrb.movement?.cursor_lock
+          ? "cursor lock | human correction"
+          : "soft drift | breathing";
         const metrics = [
           ["Posture", titleCase(currentOrb.posture || "resting")],
           ["Pulse", titleCase(currentOrb.visual?.pulse_kind || "steady")],
@@ -870,17 +873,68 @@
         if (orbMotion.lastPointerX !== null && orbMotion.lastPointerY !== null) {
           const dt = Math.max(16, timestamp - orbMotion.lastMoveAt);
           const frameScale = dt / 16.6667;
-          orbMotion.pointerVx = (nextX - orbMotion.lastPointerX) / frameScale;
-          orbMotion.pointerVy = (nextY - orbMotion.lastPointerY) / frameScale;
+          const rawVx = (nextX - orbMotion.lastPointerX) / frameScale;
+          const rawVy = (nextY - orbMotion.lastPointerY) / frameScale;
+          const previousVx = orbMotion.pointerVx;
+          const previousVy = orbMotion.pointerVy;
+          orbMotion.pointerVx = orbMotion.pointerVx * 0.42 + rawVx * 0.58;
+          orbMotion.pointerVy = orbMotion.pointerVy * 0.42 + rawVy * 0.58;
+          orbMotion.speed =
+            orbMotion.speed * 0.68 +
+            Math.hypot(orbMotion.pointerVx, orbMotion.pointerVy) * 0.32;
+
+          const flipX =
+            Math.sign(rawVx) !== Math.sign(previousVx) &&
+            Math.abs(rawVx) > 0.9 &&
+            Math.abs(previousVx) > 0.35;
+          const flipY =
+            Math.sign(rawVy) !== Math.sign(previousVy) &&
+            Math.abs(rawVy) > 0.9 &&
+            Math.abs(previousVy) > 0.35;
+          if (flipX) {
+            orbMotion.correctionX = Math.max(-8, Math.min(8, previousVx * 3.4));
+          }
+          if (flipY) {
+            orbMotion.correctionY = Math.max(-8, Math.min(8, previousVy * 3.4));
+          }
         } else {
           orbMotion.x = nextX;
           orbMotion.y = nextY;
+          orbMotion.speed = 0;
         }
         orbMotion.pointerX = nextX;
         orbMotion.pointerY = nextY;
         orbMotion.lastPointerX = nextX;
         orbMotion.lastPointerY = nextY;
         orbMotion.lastMoveAt = timestamp;
+      }
+
+      function getOrbMotionProfile() {
+        const movement = currentOrb?.movement || {};
+        const cursorLock = Boolean(movement.cursor_lock);
+        return {
+          cursorLock,
+          leadStrength: Number(movement.lead_strength ?? (cursorLock ? 0.06 : 0.035)),
+          settleStrength: Number(movement.settle_strength ?? (cursorLock ? 0.42 : 0.24)),
+          damping: Number(movement.damping ?? (cursorLock ? 0.68 : 0.82)),
+          driftStrength: Number(movement.drift_strength ?? (cursorLock ? 0.45 : 1.35)),
+          microStrength: Number(movement.micro_strength ?? (cursorLock ? 0.22 : 0.75)),
+          verticalBias: Number(movement.vertical_bias ?? (cursorLock ? -0.02 : -0.06)),
+          hesitationMs: Number(movement.hesitation_ms ?? (cursorLock ? 180 : 260)),
+          interjectionBias: Number(movement.interjection_bias ?? 0),
+        };
+      }
+
+      function resolveOrbHumanOffset(timestamp, motionProfile, speedFactor) {
+        const driftStrength = motionProfile.driftStrength * (motionProfile.cursorLock ? 0.55 + speedFactor * 0.35 : 1);
+        const microStrength = motionProfile.microStrength * (0.45 + speedFactor * 0.75);
+        const x =
+          Math.sin(timestamp / 540 + orbMotion.seedA) * driftStrength +
+          Math.sin(timestamp / 128 + orbMotion.seedB) * microStrength;
+        const y =
+          Math.cos(timestamp / 620 + orbMotion.seedC) * driftStrength +
+          Math.sin(timestamp / 164 + orbMotion.seedD) * microStrength;
+        return { x, y };
       }
 
       function resolveOrbStateOverride() {
@@ -993,23 +1047,30 @@
         root.style.width = `${size}px`;
         root.style.height = `${size}px`;
 
+        const motionProfile = getOrbMotionProfile();
         const fallback = getOrbFallbackTarget();
-        const pointerFresh = orbMotion.lastMoveAt > 0 && timestamp - orbMotion.lastMoveAt < 2400;
+        const pointerFresh =
+          orbMotion.lastMoveAt > 0 &&
+          timestamp - orbMotion.lastMoveAt < Math.max(700, motionProfile.hesitationMs * 6);
         const anchorX = pointerFresh ? orbMotion.pointerX : fallback.x;
         const anchorY = pointerFresh ? orbMotion.pointerY : fallback.y;
-        const executionLead = currentOrb.operator_cursor ? 0.18 : 0.05;
-        const driftScale = currentOrb.operator_cursor ? 1.4 : 3.8;
-        const microScale = currentOrb.operator_cursor ? 0.85 : 1.65;
-        const driftX =
-          Math.sin(timestamp / 640 + orbMotion.seedA) * driftScale +
-          Math.sin(timestamp / 170 + orbMotion.seedB) * microScale;
-        const driftY =
-          Math.cos(timestamp / 710 + orbMotion.seedC) * driftScale +
-          Math.sin(timestamp / 210 + orbMotion.seedD) * microScale;
-        orbMotion.targetX = anchorX + orbMotion.pointerVx * executionLead + driftX;
-        orbMotion.targetY = anchorY + orbMotion.pointerVy * executionLead + driftY;
-        const stiffness = currentOrb.operator_cursor ? 0.34 : 0.22;
-        const damping = currentOrb.operator_cursor ? 0.72 : 0.8;
+        const speedFactor = Math.min(1, orbMotion.speed / 18);
+        const humanOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
+        const leadStrength = motionProfile.leadStrength * (0.6 + speedFactor * 0.4);
+        const leadX = orbMotion.pointerVx * leadStrength;
+        const leadY = orbMotion.pointerVy * leadStrength;
+        orbMotion.correctionX *= pointerFresh ? 0.82 : 0.68;
+        orbMotion.correctionY *= pointerFresh ? 0.82 : 0.68;
+        orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
+        orbMotion.targetY =
+          anchorY +
+          size * motionProfile.verticalBias +
+          leadY +
+          humanOffset.y +
+          orbMotion.correctionY -
+          motionProfile.interjectionBias * size * 0.12;
+        const stiffness = Math.min(0.58, motionProfile.settleStrength + speedFactor * 0.06);
+        const damping = Math.max(0.58, motionProfile.damping - speedFactor * 0.04);
         orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
         orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
         orbMotion.vx *= damping;
