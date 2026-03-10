@@ -7,11 +7,11 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - creates a transparent, frameless, always-on-top overlay window
 - loads the existing localhost HUD instead of bundling a second renderer
 - exposes a small preload bridge at `window.FrancisDesktop`
-- supports toggling click-through, always-on-top, devtools, hide/show, and minimize
+- supports toggling click-through, always-on-top, display targeting, devtools, hide/show, and minimize
 - registers `Ctrl+Shift+Alt+F` as a global show/hide shortcut
 - registers `Ctrl+Shift+Alt+C` as a global click-through toggle so pointer control is recoverable
 - lets the live HUD consume those shell controls directly when running inside Electron
-- persists overlay bounds, always-on-top, and click-through state in the Electron user-data directory
+- persists overlay bounds, target display, always-on-top, and click-through state in the Electron user-data directory
 
 ## Run
 
@@ -38,11 +38,16 @@ That PowerShell helper checks the HUD URL first and stops with a clear message i
 - Click-through is a whole-window toggle, not pixel-perfect hit testing.
 - Click-through should be treated as an operator mode change: once enabled, use the global shortcut to recover pointer control.
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
-- The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds or mode become undesirable.
+- The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
+
+## Current Operator Surface
+
+- the HUD can move the overlay to any detected display and the choice persists across launches
+- display topology changes are reconciled by the Electron shell so the overlay falls back cleanly if a monitor disappears
+- the HUD can still refresh raw display topology for inspection when the desktop environment changes
 
 ## Next Extensions
 
-- wire HUD controls to `window.FrancisDesktop`
-- add persisted overlay preferences for click-through and window bounds
-- add multi-display targeting and per-display overlay placement
-- add packaged Windows distribution once the shell behavior settles
+- package the overlay for Windows distribution once shell behavior settles
+- add richer per-display policies if Francis eventually needs different overlay presence on different monitors
+- add selective hit-testing only if the whole-window click-through toggle stops being sufficient

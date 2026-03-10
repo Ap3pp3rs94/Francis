@@ -298,6 +298,15 @@
         flex: 0 0 auto;
       }
 
+      .desktop-targets {
+        margin-top: 16px;
+      }
+
+      .desktop-targets-label {
+        display: block;
+        margin-bottom: 10px;
+      }
+
       .orb-chamber {
         position: relative;
         overflow: hidden;
@@ -676,6 +685,12 @@
             <button class="btn-secondary" type="button" disabled>Interactive</button>
             <button class="btn-secondary" type="button" disabled>Click-through</button>
           </div>
+          <div class="desktop-targets" id="desktop-targets">
+            <span class="meta tiny desktop-targets-label">Display Target</span>
+            <div class="desktop-actions">
+              <button class="btn-secondary" type="button" disabled>Primary Display</button>
+            </div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -797,6 +812,8 @@
         visible: true,
         hudUrl: "http://127.0.0.1:8767",
         bounds: null,
+        targetDisplayId: null,
+        activeDisplayId: null,
         preferencesPath: null,
         shortcuts: {
           toggleOverlay: "Ctrl+Shift+Alt+F",
@@ -898,6 +915,18 @@
           visible: raw?.visible !== false,
           hudUrl: String(raw?.hudUrl || "http://127.0.0.1:8767"),
           bounds: raw?.bounds && typeof raw.bounds === "object" ? raw.bounds : null,
+          targetDisplayId:
+            typeof raw?.targetDisplayId === "number"
+              ? raw.targetDisplayId
+              : typeof displayInfo?.targetDisplayId === "number"
+                ? displayInfo.targetDisplayId
+                : null,
+          activeDisplayId:
+            typeof raw?.activeDisplayId === "number"
+              ? raw.activeDisplayId
+              : typeof displayInfo?.activeDisplayId === "number"
+                ? displayInfo.activeDisplayId
+                : null,
           preferencesPath: raw?.preferencesPath ? String(raw.preferencesPath) : null,
           shortcuts: {
             toggleOverlay: String(shortcuts.toggleOverlay || "Ctrl+Shift+Alt+F"),
@@ -907,14 +936,39 @@
         };
       }
 
+      function getDesktopDisplays() {
+        return Array.isArray(desktopState.displayInfo?.displays) ? desktopState.displayInfo.displays : [];
+      }
+
+      function getDesktopDisplayById(displayId) {
+        return getDesktopDisplays().find((display) => display.id === displayId) || null;
+      }
+
+      function formatDesktopDisplayLabel(display) {
+        if (!display) {
+          return "Unavailable";
+        }
+        const width = Number(display.workArea?.width) || Number(display.bounds?.width) || 0;
+        const height = Number(display.workArea?.height) || Number(display.bounds?.height) || 0;
+        return `${display.label || `Display ${display.ordinal || ""}`}`.trim() + ` | ${width}x${height}`;
+      }
+
+      function formatDesktopDisplayButtonLabel(display) {
+        if (!display) {
+          return "Unknown Display";
+        }
+        return display.primary ? "Primary Display" : display.label || `Display ${display.ordinal || ""}`;
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
         const grid = document.getElementById("desktop-grid");
         const actions = document.getElementById("desktop-actions");
+        const targets = document.getElementById("desktop-targets");
         const meta = document.getElementById("desktop-meta");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !meta || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !meta || !display) {
           return;
         }
 
@@ -922,6 +976,10 @@
         const inputLabel = desktopState.ignoreMouseEvents ? "click-through" : "interactive";
         const topmostLabel = desktopState.available ? (desktopState.alwaysOnTop ? "locked" : "released") : "n/a";
         const visibilityLabel = desktopState.available ? (desktopState.visible ? "visible" : "hidden") : "tab only";
+        const targetDisplay = getDesktopDisplayById(desktopState.targetDisplayId) || desktopState.displayInfo?.targetDisplay || null;
+        const activeDisplay = getDesktopDisplayById(desktopState.activeDisplayId) || desktopState.displayInfo?.activeDisplay || null;
+        const targetDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(targetDisplay) : "n/a";
+        const activeDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(activeDisplay) : "n/a";
         const boundsLabel = desktopState.bounds
           ? `${Math.round(desktopState.bounds.width)}x${Math.round(desktopState.bounds.height)} @ ${Math.round(desktopState.bounds.x)},${Math.round(desktopState.bounds.y)}`
           : "n/a";
@@ -932,7 +990,7 @@
         summary.textContent = desktopState.available
           ? desktopState.ignoreMouseEvents
             ? `The overlay is in click-through mode. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control without dropping the overlay.`
-            : "The Electron shell is live. You can switch between interactive and click-through overlay behavior without changing the HUD architecture."
+            : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
           : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
 
         grid.innerHTML = [
@@ -940,6 +998,8 @@
           ["Input", inputLabel],
           ["Topmost", topmostLabel],
           ["Visibility", visibilityLabel],
+          ["Target Display", targetDisplayLabel],
+          ["Active Display", activeDisplayLabel],
           ["Bounds", boundsLabel],
           ["Overlay Toggle", desktopState.shortcuts.toggleOverlay],
           ["Click-through", desktopState.shortcuts.toggleClickThrough],
@@ -962,11 +1022,32 @@
           <button class="btn-secondary" type="button" ${disabled} onclick="hideDesktopOverlay()">Hide Overlay</button>
         `;
 
+        const displays = getDesktopDisplays();
+        targets.innerHTML = `
+          <span class="meta tiny desktop-targets-label">Display Target</span>
+          <div class="desktop-actions">
+            ${
+              displays.length
+                ? displays
+                    .map(
+                      (entry) =>
+                        `<button class="${desktopState.targetDisplayId === entry.id ? "btn-primary" : "btn-secondary"}" type="button" ${
+                          desktopState.available ? "" : "disabled"
+                        } onclick="setDesktopTargetDisplay(${entry.id})">${escapeHtml(formatDesktopDisplayButtonLabel(entry))}</button>`,
+                    )
+                    .join("")
+                : '<button class="btn-secondary" type="button" disabled>Primary Display</button>'
+            }
+          </div>
+        `;
+
         meta.textContent = desktopState.available
-          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
+          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
+          targetDisplayId: desktopState.targetDisplayId,
+          activeDisplayId: desktopState.activeDisplayId,
           display: desktopState.displayInfo || null,
           preferencesPath: desktopState.preferencesPath || null,
         });
@@ -1001,7 +1082,7 @@
           return;
         }
         try {
-          desktopState.displayInfo = await bridge.getDisplayInfo();
+          desktopState = normalizeDesktopState(desktopState, await bridge.getDisplayInfo());
           desktopNotice = "Display info refreshed.";
         } catch (error) {
           desktopNotice = `Display query failed: ${error?.message || error}`;
@@ -1022,6 +1103,27 @@
           return;
         } catch (error) {
           desktopNotice = `Reset layout failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function setDesktopTargetDisplay(displayId) {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.setTargetDisplay !== "function") {
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.setTargetDisplay(Number(displayId)),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          const targetDisplay = getDesktopDisplayById(desktopState.targetDisplayId) || desktopState.displayInfo?.targetDisplay || null;
+          desktopNotice = targetDisplay
+            ? `Overlay moved to ${formatDesktopDisplayLabel(targetDisplay)}.`
+            : "Overlay target display updated.";
+        } catch (error) {
+          desktopNotice = `Display move failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }
@@ -1114,6 +1216,15 @@
               ? `Click-through live. Use ${desktopState.shortcuts.toggleClickThrough} to return to interactive control.`
               : "Desktop shell state updated.";
             renderDesktopShell();
+            if (typeof bridge.getDisplayInfo === "function") {
+              bridge
+                .getDisplayInfo()
+                .then((displayInfo) => {
+                  desktopState = normalizeDesktopState(desktopState, displayInfo);
+                  renderDesktopShell();
+                })
+                .catch(() => {});
+            }
           });
           window.__francisDesktopBridgeBound = true;
         }

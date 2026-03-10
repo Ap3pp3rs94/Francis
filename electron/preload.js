@@ -14,12 +14,22 @@ function assertFunction(name, value) {
   return value;
 }
 
+function assertFiniteNumber(name, value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(`${name} must be a finite number`);
+  }
+  return value;
+}
+
 contextBridge.exposeInMainWorld("FrancisDesktop", {
   setIgnoreMouseEvents(ignore) {
     return ipcRenderer.invoke("overlay:set-ignore-mouse-events", assertBoolean("ignore", ignore));
   },
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", assertBoolean("value", value));
+  },
+  setTargetDisplay(displayId) {
+    return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
   },
   resetLayout() {
     return ipcRenderer.invoke("overlay:reset-layout");

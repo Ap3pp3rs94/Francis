@@ -4,6 +4,8 @@ const {
   buildDefaultPreferences,
   getPreferencesPath,
   loadPreferences,
+  normalizeBounds,
+  resolveTargetDisplay,
   savePreferences,
 } = require("./preferences");
 
@@ -28,10 +30,24 @@ function log(message, extra) {
   console.log(`[francis-overlay] ${message}`, extra);
 }
 
-function getDisplayInfo() {
-  const display = screen.getPrimaryDisplay();
+function getSortedDisplays() {
+  return [...screen.getAllDisplays()].sort((left, right) => {
+    if (left.bounds.x !== right.bounds.x) {
+      return left.bounds.x - right.bounds.x;
+    }
+    if (left.bounds.y !== right.bounds.y) {
+      return left.bounds.y - right.bounds.y;
+    }
+    return left.id - right.id;
+  });
+}
+
+function serializeDisplay(display, index) {
   return {
     id: display.id,
+    ordinal: index + 1,
+    label: display.primary ? "Primary Display" : `Display ${index + 1}`,
+    primary: Boolean(display.primary),
     scaleFactor: display.scaleFactor,
     bounds: display.bounds,
     workArea: display.workArea,
@@ -39,22 +55,68 @@ function getDisplayInfo() {
   };
 }
 
-function getWorkAreaForBounds(bounds) {
-  if (bounds && Number.isFinite(bounds.x) && Number.isFinite(bounds.y)) {
-    return screen.getDisplayMatching(bounds).workArea;
+function listDisplays() {
+  return getSortedDisplays().map((display, index) => serializeDisplay(display, index));
+}
+
+function getDisplayContext() {
+  const displays = getSortedDisplays();
+  if (!displays.length) {
+    throw new Error("No displays are available for the overlay shell");
   }
-  return getDisplayInfo().workArea;
+  return {
+    displays,
+    primaryDisplayId: screen.getPrimaryDisplay().id,
+  };
+}
+
+function getResolvedTargetDisplay(targetDisplayId = overlayPreferences?.targetDisplayId ?? null) {
+  const { displays, primaryDisplayId } = getDisplayContext();
+  return resolveTargetDisplay(displays, targetDisplayId, primaryDisplayId);
+}
+
+function getWindowOrPreferenceBounds(win = mainWindow) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  return safeWindow ? safeWindow.getBounds() : overlayPreferences?.windowBounds || null;
+}
+
+function getActiveDisplay(win = mainWindow) {
+  const bounds = getWindowOrPreferenceBounds(win);
+  if (bounds && Number.isFinite(bounds.x) && Number.isFinite(bounds.y)) {
+    return screen.getDisplayMatching(bounds);
+  }
+  return getResolvedTargetDisplay();
+}
+
+function getDisplayInfo(win = mainWindow) {
+  const displays = listDisplays();
+  const primaryDisplay = displays.find((display) => display.primary) || displays[0];
+  const targetDisplay = displays.find((display) => display.id === overlayPreferences?.targetDisplayId) || primaryDisplay;
+  const activeDisplay = displays.find((display) => display.id === getActiveDisplay(win).id) || targetDisplay;
+
+  return {
+    primaryDisplayId: primaryDisplay.id,
+    targetDisplayId: targetDisplay.id,
+    activeDisplayId: activeDisplay.id,
+    targetDisplay,
+    activeDisplay,
+    displays,
+  };
 }
 
 function getOverlayState(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
-  const bounds = safeWindow ? safeWindow.getBounds() : overlayPreferences?.windowBounds || null;
+  const bounds = getWindowOrPreferenceBounds(safeWindow);
+  const displayInfo = app.isReady() ? getDisplayInfo(safeWindow) : null;
+
   return {
     ignoreMouseEvents: overlayState.ignoreMouseEvents,
     alwaysOnTop: safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop,
     visible: safeWindow ? safeWindow.isVisible() : false,
     hudUrl: HUD_URL,
     bounds,
+    targetDisplayId: displayInfo?.targetDisplayId ?? overlayPreferences?.targetDisplayId ?? null,
+    activeDisplayId: displayInfo?.activeDisplayId ?? null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     shortcuts: {
       toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
@@ -71,6 +133,44 @@ function notifyOverlayState(win = mainWindow) {
   safeWindow.webContents.send("overlay:state-changed", getOverlayState(safeWindow));
 }
 
+function buildCenteredBoundsForDisplay(bounds, display) {
+  const normalized = normalizeBounds(bounds, display.workArea);
+  return {
+    x: Math.round(display.workArea.x + Math.max(0, display.workArea.width - normalized.width) / 2),
+    y: Math.round(display.workArea.y + Math.max(0, display.workArea.height - normalized.height) / 2),
+    width: normalized.width,
+    height: normalized.height,
+  };
+}
+
+function persistOverlayPreferences(win = mainWindow, overrides = {}) {
+  const { displays, primaryDisplayId } = getDisplayContext();
+  const fallbackDisplay = resolveTargetDisplay(
+    displays,
+    overrides.targetDisplayId ?? overlayPreferences?.targetDisplayId,
+    primaryDisplayId,
+  );
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const bounds = overrides.windowBounds || getWindowOrPreferenceBounds(safeWindow) || buildDefaultPreferences(fallbackDisplay).windowBounds;
+  const activeDisplay = screen.getDisplayMatching(bounds);
+
+  overlayPreferences = savePreferences(
+    app.getPath("userData"),
+    {
+      ...(overlayPreferences || buildDefaultPreferences(fallbackDisplay)),
+      ...overrides,
+      targetDisplayId: overrides.targetDisplayId ?? activeDisplay.id ?? fallbackDisplay.id,
+      alwaysOnTop: overrides.alwaysOnTop ?? (safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop),
+      ignoreMouseEvents: overrides.ignoreMouseEvents ?? overlayState.ignoreMouseEvents,
+      windowBounds: bounds,
+    },
+    displays,
+    primaryDisplayId,
+  );
+
+  return overlayPreferences;
+}
+
 function schedulePreferenceSave(win = mainWindow, { immediate = false } = {}) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
   if (!safeWindow || safeWindow.isMinimized()) {
@@ -78,18 +178,7 @@ function schedulePreferenceSave(win = mainWindow, { immediate = false } = {}) {
   }
 
   const persist = () => {
-    const bounds = safeWindow.getBounds();
-    const workArea = getWorkAreaForBounds(bounds);
-    overlayPreferences = savePreferences(
-      app.getPath("userData"),
-      {
-        ...(overlayPreferences || buildDefaultPreferences(workArea)),
-        alwaysOnTop: safeWindow.isAlwaysOnTop(),
-        ignoreMouseEvents: overlayState.ignoreMouseEvents,
-        windowBounds: bounds,
-      },
-      workArea,
-    );
+    overlayPreferences = persistOverlayPreferences(safeWindow);
     log("Saved overlay preferences", overlayPreferences);
     notifyOverlayState(safeWindow);
   };
@@ -115,15 +204,71 @@ function resetOverlayPreferences(win = mainWindow) {
   if (!safeWindow) {
     throw new Error("Overlay window is not available");
   }
-  const workArea = getDisplayInfo().workArea;
-  overlayPreferences = buildDefaultPreferences(workArea);
+
+  const primaryDisplay = getResolvedTargetDisplay(screen.getPrimaryDisplay().id);
+  overlayPreferences = buildDefaultPreferences(primaryDisplay);
   safeWindow.setBounds(overlayPreferences.windowBounds);
   applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
   applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
-  overlayPreferences = savePreferences(app.getPath("userData"), overlayPreferences, workArea);
+  overlayPreferences = persistOverlayPreferences(safeWindow, overlayPreferences);
   log("Reset overlay preferences", overlayPreferences);
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
+}
+
+function moveOverlayToDisplay(displayId, win = mainWindow) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  if (!safeWindow) {
+    throw new Error("Overlay window is not available");
+  }
+
+  const targetDisplay = getResolvedTargetDisplay(displayId);
+  const nextBounds = buildCenteredBoundsForDisplay(getWindowOrPreferenceBounds(safeWindow), targetDisplay);
+
+  safeWindow.setBounds(nextBounds);
+  overlayPreferences = persistOverlayPreferences(safeWindow, {
+    targetDisplayId: targetDisplay.id,
+    windowBounds: nextBounds,
+  });
+  log("Moved overlay to target display", {
+    targetDisplayId: targetDisplay.id,
+    bounds: nextBounds,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+function sameBounds(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  return left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height;
+}
+
+function reconcileDisplayTopology(reason) {
+  if (!app.isReady()) {
+    return;
+  }
+
+  try {
+    const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      windowBounds: getWindowOrPreferenceBounds(safeWindow),
+    });
+
+    if (safeWindow && !sameBounds(safeWindow.getBounds(), overlayPreferences.windowBounds)) {
+      safeWindow.setBounds(overlayPreferences.windowBounds);
+    }
+
+    log("Reconciled display topology", {
+      reason,
+      targetDisplayId: overlayPreferences.targetDisplayId,
+      bounds: overlayPreferences.windowBounds,
+    });
+    notifyOverlayState(safeWindow);
+  } catch (error) {
+    log("Display topology reconciliation failed", error instanceof Error ? error.message : String(error));
+  }
 }
 
 function buildFallbackHtml(errorText) {
@@ -275,11 +420,17 @@ async function loadHud(win) {
 }
 
 function createMainWindow() {
-  const { workArea } = getDisplayInfo();
-  overlayPreferences = loadPreferences(app.getPath("userData"), workArea);
+  const { displays, primaryDisplayId } = getDisplayContext();
+  overlayPreferences = loadPreferences(app.getPath("userData"), displays, primaryDisplayId);
   const preloadPath = path.join(__dirname, "preload.js");
+  const targetDisplay = resolveTargetDisplay(displays, overlayPreferences.targetDisplayId, primaryDisplayId);
 
-  log("Creating overlay window", { hudUrl: HUD_URL, workArea, preferences: overlayPreferences });
+  log("Creating overlay window", {
+    hudUrl: HUD_URL,
+    targetDisplayId: targetDisplay.id,
+    bounds: overlayPreferences.windowBounds,
+    preferences: overlayPreferences,
+  });
 
   const win = new BrowserWindow({
     x: overlayPreferences.windowBounds.x,
@@ -371,9 +522,10 @@ function registerIpc() {
     return value;
   });
 
+  ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
-  ipcMain.handle("overlay:get-display-info", () => getDisplayInfo());
+  ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(requireWindow()));
 
   ipcMain.handle("overlay:minimize", () => {
     const win = requireWindow();
@@ -453,11 +605,24 @@ function registerShortcuts() {
   log(`Registered global shortcut: ${CLICK_THROUGH_TOGGLE_SHORTCUT}`);
 }
 
+function registerDisplayListeners() {
+  screen.on("display-added", (_event, display) => {
+    reconcileDisplayTopology(`display-added:${display.id}`);
+  });
+  screen.on("display-removed", (_event, display) => {
+    reconcileDisplayTopology(`display-removed:${display.id}`);
+  });
+  screen.on("display-metrics-changed", (_event, display, changedMetrics) => {
+    reconcileDisplayTopology(`display-metrics-changed:${display.id}:${changedMetrics.join(",")}`);
+  });
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.whenReady().then(() => {
     registerIpc();
+    registerDisplayListeners();
     mainWindow = createMainWindow();
     registerShortcuts();
   });

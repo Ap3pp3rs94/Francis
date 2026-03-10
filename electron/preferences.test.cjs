@@ -12,14 +12,25 @@ const {
   savePreferences,
 } = require("./preferences");
 
-const WORK_AREA = { x: 0, y: 0, width: 1536, height: 912 };
+const DISPLAYS = [
+  {
+    id: 101,
+    primary: true,
+    workArea: { x: 0, y: 0, width: 1536, height: 912 },
+  },
+  {
+    id: 202,
+    primary: false,
+    workArea: { x: 1536, y: 0, width: 1280, height: 1024 },
+  },
+];
 
 function tempUserDataPath() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "francis-overlay-"));
 }
 
 test("normalizeBounds clamps invalid geometry into the work area", () => {
-  const bounds = normalizeBounds({ x: -400, y: -200, width: 4000, height: 120 }, WORK_AREA);
+  const bounds = normalizeBounds({ x: -400, y: -200, width: 4000, height: 120 }, DISPLAYS[0].workArea);
 
   assert.equal(bounds.x, 0);
   assert.equal(bounds.y, 0);
@@ -29,37 +40,65 @@ test("normalizeBounds clamps invalid geometry into the work area", () => {
 
 test("loadPreferences falls back cleanly when no file exists", () => {
   const userDataPath = tempUserDataPath();
-  const prefs = loadPreferences(userDataPath, WORK_AREA);
+  const prefs = loadPreferences(userDataPath, DISPLAYS, 101);
 
-  assert.deepEqual(prefs, buildDefaultPreferences(WORK_AREA));
+  assert.deepEqual(prefs, buildDefaultPreferences(DISPLAYS[0]));
 });
 
-test("savePreferences persists normalized bounds and booleans", () => {
+test("savePreferences persists normalized bounds and booleans on the target display", () => {
   const userDataPath = tempUserDataPath();
   const saved = savePreferences(
     userDataPath,
     {
+      targetDisplayId: 202,
       alwaysOnTop: false,
       ignoreMouseEvents: true,
-      windowBounds: { x: 1440, y: 800, width: 900, height: 900 },
+      windowBounds: { x: 1900, y: 800, width: 1400, height: 1100 },
     },
-    WORK_AREA,
+    DISPLAYS,
+    101,
   );
 
-  const loaded = loadPreferences(userDataPath, WORK_AREA);
+  const loaded = loadPreferences(userDataPath, DISPLAYS, 101);
 
+  assert.equal(saved.targetDisplayId, 202);
   assert.equal(saved.alwaysOnTop, false);
   assert.equal(saved.ignoreMouseEvents, true);
   assert.deepEqual(saved, loaded);
-  assert.equal(saved.windowBounds.x, 636);
-  assert.equal(saved.windowBounds.y, 12);
+  assert.equal(saved.windowBounds.x, 1536);
+  assert.equal(saved.windowBounds.y, 0);
+  assert.equal(saved.windowBounds.width, 1280);
+  assert.equal(saved.windowBounds.height, 1024);
+});
+
+test("invalid target display falls back to the primary display", () => {
+  const userDataPath = tempUserDataPath();
+  const saved = savePreferences(
+    userDataPath,
+    {
+      targetDisplayId: 999,
+      alwaysOnTop: true,
+      ignoreMouseEvents: false,
+      windowBounds: { x: 1900, y: 100, width: 900, height: 800 },
+    },
+    DISPLAYS,
+    101,
+  );
+
+  assert.equal(saved.targetDisplayId, 101);
+  assert.deepEqual(saved.windowBounds, {
+    x: 636,
+    y: 100,
+    width: 900,
+    height: 800,
+  });
 });
 
 test("loadPreferences ignores malformed json and returns defaults", () => {
   const userDataPath = tempUserDataPath();
   fs.writeFileSync(getPreferencesPath(userDataPath), "{broken", "utf8");
 
-  const prefs = loadPreferences(userDataPath, WORK_AREA);
+  const prefs = loadPreferences(userDataPath, DISPLAYS, 101);
 
-  assert.deepEqual(prefs, buildDefaultPreferences(WORK_AREA));
+  assert.deepEqual(prefs, buildDefaultPreferences(DISPLAYS[0]));
 });

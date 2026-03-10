@@ -75,6 +75,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Francis Lens" in response.text
     assert "Operator overlay for live work." in response.text
     assert "Desktop Shell" in response.text
+    assert "Display Target" in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "The Orb rides directly over the cursor." in response.text
     assert "Hold the moving Orb itself to panic stop" in response.text

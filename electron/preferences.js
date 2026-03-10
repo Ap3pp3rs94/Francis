@@ -13,6 +13,29 @@ function getPreferencesPath(userDataPath) {
   return path.join(userDataPath, PREFERENCES_FILE);
 }
 
+function resolvePrimaryDisplay(displays, primaryDisplayId = null) {
+  const safeDisplays = Array.isArray(displays) ? displays.filter(Boolean) : [];
+  if (!safeDisplays.length) {
+    throw new Error("At least one display is required");
+  }
+  return (
+    safeDisplays.find((display) => display.id === primaryDisplayId) ||
+    safeDisplays.find((display) => Boolean(display.primary)) ||
+    safeDisplays[0]
+  );
+}
+
+function resolveTargetDisplay(displays, targetDisplayId, primaryDisplayId = null) {
+  const primaryDisplay = resolvePrimaryDisplay(displays, primaryDisplayId);
+  return safeDisplayMatch(displays, targetDisplayId) || primaryDisplay;
+}
+
+function safeDisplayMatch(displays, targetDisplayId) {
+  return (Array.isArray(displays) ? displays : []).find(
+    (display) => display && display.id === targetDisplayId,
+  );
+}
+
 function normalizeBounds(rawBounds, workArea) {
   const fallback = {
     x: workArea.x,
@@ -46,42 +69,45 @@ function normalizeBounds(rawBounds, workArea) {
   };
 }
 
-function buildDefaultPreferences(workArea) {
+function buildDefaultPreferences(display) {
   return {
-    version: 1,
+    version: 2,
+    targetDisplayId: display.id,
     alwaysOnTop: true,
     ignoreMouseEvents: false,
-    windowBounds: normalizeBounds(null, workArea),
+    windowBounds: normalizeBounds(null, display.workArea),
   };
 }
 
-function normalizePreferences(raw, workArea) {
-  const defaults = buildDefaultPreferences(workArea);
+function normalizePreferences(raw, displays, primaryDisplayId = null) {
+  const targetDisplay = resolveTargetDisplay(displays, raw?.targetDisplayId, primaryDisplayId);
+  const defaults = buildDefaultPreferences(targetDisplay);
   if (!raw || typeof raw !== "object") {
     return defaults;
   }
 
   return {
-    version: 1,
+    version: 2,
+    targetDisplayId: targetDisplay.id,
     alwaysOnTop: raw.alwaysOnTop !== false,
     ignoreMouseEvents: Boolean(raw.ignoreMouseEvents),
-    windowBounds: normalizeBounds(raw.windowBounds, workArea),
+    windowBounds: normalizeBounds(raw.windowBounds, targetDisplay.workArea),
   };
 }
 
-function loadPreferences(userDataPath, workArea) {
+function loadPreferences(userDataPath, displays, primaryDisplayId = null) {
   const filePath = getPreferencesPath(userDataPath);
   try {
     const raw = fs.readFileSync(filePath, "utf8");
-    return normalizePreferences(JSON.parse(raw), workArea);
+    return normalizePreferences(JSON.parse(raw), displays, primaryDisplayId);
   } catch {
-    return buildDefaultPreferences(workArea);
+    return buildDefaultPreferences(resolvePrimaryDisplay(displays, primaryDisplayId));
   }
 }
 
-function savePreferences(userDataPath, preferences, workArea) {
+function savePreferences(userDataPath, preferences, displays, primaryDisplayId = null) {
   const filePath = getPreferencesPath(userDataPath);
-  const normalized = normalizePreferences(preferences, workArea);
+  const normalized = normalizePreferences(preferences, displays, primaryDisplayId);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(normalized, null, 2), "utf8");
   return normalized;
@@ -94,5 +120,7 @@ module.exports = {
   loadPreferences,
   normalizeBounds,
   normalizePreferences,
+  resolvePrimaryDisplay,
+  resolveTargetDisplay,
   savePreferences,
 };
