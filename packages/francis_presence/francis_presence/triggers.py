@@ -85,4 +85,20 @@ def detect_presence_triggers(
             }
         )
 
+    previous_takeover = _section(prior, "takeover")
+    current_takeover = _section(current, "takeover")
+    previous_handback = str(previous_takeover.get("handed_back_at", "")).strip()
+    current_handback = str(current_takeover.get("handed_back_at", "")).strip()
+    if current_handback and current_handback != previous_handback:
+        handback = _section(current_takeover, "handback")
+        summary = str(handback.get("summary", "")).strip() or "Authority returned to ambient control."
+        triggers.append(
+            {
+                "kind": "control.takeover.handed_back",
+                "severity": "info",
+                "trust": "Confirmed",
+                "summary": summary,
+            }
+        )
+
     return triggers

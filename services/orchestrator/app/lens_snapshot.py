@@ -11,6 +11,7 @@ from francis_core.clock import utc_now_iso
 from francis_core.workspace_fs import WorkspaceFS
 
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
+from services.orchestrator.app.takeover_snapshot import load_takeover_state
 
 DEFAULT_MODES = {"observe", "assist", "pilot", "away"}
 DEFAULT_WORKSPACE_ROOT = Path(
@@ -368,6 +369,7 @@ def _materialize_fabric(workspace_root: Path) -> dict[str, Any]:
 def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     resolved_workspace = (workspace_root or get_workspace_root()).resolve()
     control = _control_state(resolved_workspace)
+    takeover = load_takeover_state(resolved_workspace)
     missions = _materialize_missions(resolved_workspace)
     approvals = _materialize_approvals(resolved_workspace)
     inbox = _materialize_inbox(resolved_workspace)
@@ -387,6 +389,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "generated_at": utc_now_iso(),
         "workspace_root": str(resolved_workspace),
         "control": control,
+        "takeover": takeover,
         "approvals": approvals,
         "missions": missions,
         "inbox": inbox,

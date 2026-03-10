@@ -55,3 +55,47 @@ def test_operator_presence_reports_stable_state_without_triggers() -> None:
     assert payload["triggers"] == []
     assert payload["grounding"]["trust"] == "Uncertain"
     assert any("Knowledge Fabric has no citation-ready evidence yet" in line for line in payload["lines"])
+
+
+def test_operator_presence_surfaces_handback_language() -> None:
+    payload = compose_operator_presence(
+        mode="assist",
+        snapshot={
+            "workspace_root": "D:/francis/workspace",
+            "control": {"mode": "assist", "kill_switch": False},
+            "takeover": {
+                "status": "idle",
+                "handed_back_at": "2026-03-10T04:10:00+00:00",
+                "handback_available": True,
+                "handback": {
+                    "summary": "Returned authority after verification.",
+                    "pending_approvals": 1,
+                    "run_id": "run-handback",
+                    "trace_id": "trace-handback",
+                    "fabric_posture": {"trust": "Likely"},
+                },
+            },
+            "incidents": {"open_count": 0, "highest_severity": "nominal"},
+            "approvals": {"pending_count": 0},
+            "missions": {"active_count": 0, "active": []},
+            "inbox": {"alert_count": 0},
+            "runs": {"last_run": {"summary": "Pilot work completed."}},
+            "fabric": {
+                "citation_ready_count": 2,
+                "calibration": {
+                    "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
+                    "stale_current_state_count": 0,
+                },
+            },
+            "objective": {"label": "Return control cleanly"},
+        },
+        actions=[],
+    )
+
+    assert "Handback is complete." in payload["headline"]
+    assert payload["notification"]["kind"] == "control.handback"
+    assert any(trigger["kind"] == "control.takeover.handed_back" for trigger in payload["triggers"])
+    assert payload["grounding"]["handback"]["available"] is True
+    assert payload["grounding"]["handback"]["run_id"] == "run-handback"
+    assert any("Handback summary: Returned authority after verification." in line for line in payload["lines"])
+    assert any("Handback trust is likely with 1 pending approval." in line for line in payload["lines"])

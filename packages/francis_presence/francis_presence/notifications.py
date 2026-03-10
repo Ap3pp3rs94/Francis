@@ -21,6 +21,8 @@ def build_notification_digest(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     control = _section(snapshot, "control")
     incidents = _section(snapshot, "incidents")
     objective = _section(snapshot, "objective")
+    takeover = _section(snapshot, "takeover")
+    handback = _section(takeover, "handback")
 
     objective_label = str(objective.get("label", "the current objective")).strip() or "the current objective"
     incident_count = _count(snapshot, "incidents", "open_count")
@@ -51,6 +53,15 @@ def build_notification_digest(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "title": f"{approval_count} approval(s) are waiting",
             "body": f"Governed work on {objective_label} is waiting on explicit approval.",
             "action_hint": "Review pending approvals before opening new work.",
+        }
+    if bool(takeover.get("handback_available")):
+        handback_summary = str(handback.get("summary", "")).strip() or "Authority returned cleanly to ambient control."
+        return {
+            "kind": "control.handback",
+            "severity": "info",
+            "title": "Handback completed",
+            "body": handback_summary,
+            "action_hint": "Review the handback receipts before re-entering Pilot.",
         }
     if mission_count > 0:
         return {

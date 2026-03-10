@@ -11,6 +11,7 @@ from francis_brain.recall import summarize_fabric_scope
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from services.orchestrator.app.control_state import check_action_allowed
+from services.orchestrator.app.takeover_snapshot import load_takeover_state, summarize_takeover_handback
 
 router = APIRouter(tags=["runs"])
 
@@ -180,6 +181,11 @@ def runs_trace(trace_id: str, limit: int = 200) -> dict:
     counts = {name: len(rows) for name, rows in filtered.items()}
     total = sum(counts.values())
     fabric_summary = summarize_fabric_scope(_fs, trace_id=normalized, refresh=False)
+    handback_summary = summarize_takeover_handback(
+        load_takeover_state(_workspace_root),
+        evidence_scope="trace",
+        trace_id=normalized,
+    )
     return {
         "status": "ok",
         "trace_id": normalized,
@@ -194,6 +200,7 @@ def runs_trace(trace_id: str, limit: int = 200) -> dict:
                 "generated_at": fabric_summary.get("generated_at"),
                 "trust": summarize_fabric_posture(fabric_summary),
             },
+            "handback": handback_summary,
         },
         "receipts": {
             name: _tail(rows, limit) for name, rows in filtered.items()

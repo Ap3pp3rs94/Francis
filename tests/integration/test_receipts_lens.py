@@ -106,6 +106,77 @@ def test_receipts_and_run_lookup() -> None:
     assert "trust" in run_summary["fabric"]
 
 
+def test_receipts_and_trace_surfaces_expose_handback_summary() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    try:
+        _ensure_takeover_idle(c)
+        _set_mode(c, "assist", kill_switch=False)
+        _set_scope(c, _enable_apps(original_scope, ["control", "receipts", "missions", "approvals", "forge", "lens"]))
+
+        requested = c.post(
+            "/control/takeover/request",
+            json={"objective": f"Receipt handback {uuid4()}", "reason": "receipt handback test"},
+        )
+        assert requested.status_code == 200
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            json={"confirm": True, "mode": "pilot", "reason": "receipt confirm"},
+        )
+        assert confirmed.status_code == 200
+
+        handed_back = c.post(
+            "/control/takeover/handback",
+            json={
+                "summary": "Returned authority after verification.",
+                "verification": {"pytest": "pass"},
+                "pending_approvals": 1,
+                "mode": "assist",
+            },
+        )
+        assert handed_back.status_code == 200
+        takeover = handed_back.json()["takeover"]
+        handback_run_id = str(takeover.get("handback_run_id", "")).strip()
+        handback_trace_id = str(takeover.get("handback_trace_id", "")).strip()
+        assert handback_run_id
+        assert handback_trace_id
+
+        latest = c.get("/receipts/latest")
+        assert latest.status_code == 200
+        latest_summary = latest.json()["summary"]["handback"]
+        assert latest_summary["available"] is True
+        assert latest_summary["scope_match"] is True
+        assert latest_summary["summary"] == "Returned authority after verification."
+        assert latest_summary["run_id"] == handback_run_id
+        assert latest_summary["pending_approvals"] == 1
+
+        run = c.get(f"/runs/{handback_run_id}")
+        assert run.status_code == 200
+        run_summary = run.json()["summary"]["handback"]
+        assert run_summary["available"] is True
+        assert run_summary["scope_match"] is True
+        assert run_summary["summary"] == "Returned authority after verification."
+        assert run_summary["run_id"] == handback_run_id
+
+        trace = c.get(f"/runs/trace/{handback_trace_id}", params={"limit": 100})
+        assert trace.status_code == 200
+        trace_summary = trace.json()["summary"]["handback"]
+        assert trace_summary["available"] is True
+        assert trace_summary["scope_match"] is True
+        assert trace_summary["trace_id"] == handback_trace_id
+        assert trace_summary["trust"] in {"Confirmed", "Likely", "Uncertain"}
+    finally:
+        _ensure_takeover_idle(c)
+        _set_scope(c, original_scope)
+        _set_mode(
+            c,
+            str(original_mode.get("mode", "pilot")),
+            kill_switch=bool(original_mode.get("kill_switch", False)),
+        )
+
+
 def test_receipts_trust_latest_endpoint_available() -> None:
     c = TestClient(app)
     mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})

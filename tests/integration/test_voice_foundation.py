@@ -259,3 +259,66 @@ def test_voice_command_preview_briefing_request_does_not_emit_live_briefing_rece
     assert payload["intent"]["kind"] == "briefing.request"
     assert payload["briefing"]["surface"] == "voice"
     assert [receipt["kind"] for receipt in receipts] == ["voice.command.preview"]
+
+
+def test_voice_live_briefing_surfaces_handback_grounding(monkeypatch) -> None:
+    receipts: list[dict[str, object]] = []
+
+    class StubLedger:
+        def append(self, *, run_id: str, kind: str, summary: dict[str, object]) -> None:
+            receipts.append({"run_id": run_id, "kind": kind, "summary": summary})
+
+    monkeypatch.setattr(voice_operator, "_ledger", StubLedger())
+    monkeypatch.setattr(
+        voice_operator,
+        "build_lens_snapshot",
+        lambda: {
+            "workspace_root": "D:/francis/workspace",
+            "control": {"mode": "assist", "kill_switch": False},
+            "takeover": {
+                "status": "idle",
+                "handed_back_at": "2026-03-10T04:10:00+00:00",
+                "handback_available": True,
+                "handback": {
+                    "summary": "Returned authority after verification.",
+                    "pending_approvals": 1,
+                    "run_id": "run-handback",
+                    "trace_id": "trace-handback",
+                    "fabric_posture": {"trust": "Likely"},
+                },
+            },
+            "incidents": {"open_count": 0, "highest_severity": "nominal"},
+            "approvals": {"pending_count": 0},
+            "missions": {"active_count": 0, "active": []},
+            "inbox": {"alert_count": 0},
+            "runs": {"last_run": {"summary": "Pilot work completed."}},
+            "fabric": {
+                "citation_ready_count": 2,
+                "calibration": {
+                    "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
+                    "stale_current_state_count": 0,
+                },
+            },
+            "objective": {"label": "Return control cleanly"},
+        },
+    )
+    monkeypatch.setattr(
+        voice_operator,
+        "get_lens_actions",
+        lambda max_actions=3: {"status": "ok", "action_chips": [], "blocked_actions": []},
+    )
+
+    response = client.get("/voice/briefing/live", params={"mode": "assist", "max_actions": 2})
+
+    assert response.status_code == 200
+    payload = response.json()
+    briefing = payload["briefing"]
+    assert "Handback is complete." in briefing["headline"]
+    assert briefing["notification"]["kind"] == "control.handback"
+    assert briefing["grounding"]["handback"]["available"] is True
+    assert briefing["grounding"]["handback"]["run_id"] == "run-handback"
+    assert any("Handback summary: Returned authority after verification." in line for line in briefing["lines"])
+    assert receipts[-1]["kind"] == "voice.live_briefing"
+    assert receipts[-1]["summary"]["handback_available"] is True
+    assert receipts[-1]["summary"]["handback_run_id"] == "run-handback"
+    assert receipts[-1]["summary"]["handback_trust"] == "Likely"

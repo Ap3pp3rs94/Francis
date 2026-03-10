@@ -10,6 +10,7 @@ from francis_brain.calibration import summarize_fabric_posture
 from francis_brain.recall import summarize_fabric, summarize_fabric_scope
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
+from services.orchestrator.app.takeover_snapshot import load_takeover_state, summarize_takeover_handback
 
 router = APIRouter(tags=["receipts"])
 
@@ -62,6 +63,7 @@ def _receipt_bundle_summary(
     deadletter: list[dict[str, Any]],
     fabric_summary: dict[str, Any],
     evidence_scope: str,
+    handback: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "evidence_scope": evidence_scope,
@@ -79,6 +81,7 @@ def _receipt_bundle_summary(
             "generated_at": fabric_summary.get("generated_at"),
             "trust": summarize_fabric_posture(fabric_summary),
         },
+        "handback": handback,
     }
 
 
@@ -181,6 +184,10 @@ def receipts_latest(limit: int = 20) -> dict:
             latest_run_id = str(row["run_id"])
             break
     fabric_summary = summarize_fabric(_fs, refresh=False)
+    handback_summary = summarize_takeover_handback(
+        load_takeover_state(_workspace_root),
+        evidence_scope="workspace",
+    )
 
     return {
         "status": "ok",
@@ -193,6 +200,7 @@ def receipts_latest(limit: int = 20) -> dict:
             deadletter=queue_deadletter,
             fabric_summary=fabric_summary,
             evidence_scope="workspace",
+            handback=handback_summary,
         ),
         "receipts": {
             "ledger": _tail(ledger, limit),
@@ -225,6 +233,11 @@ def run_receipts(run_id: str, limit: int = 100) -> dict:
         + len(deadletter)
     )
     fabric_summary = summarize_fabric_scope(_fs, run_id=run_id, refresh=False)
+    handback_summary = summarize_takeover_handback(
+        load_takeover_state(_workspace_root),
+        evidence_scope="run",
+        run_id=run_id,
+    )
     return {
         "status": "ok",
         "run_id": run_id,
@@ -237,6 +250,7 @@ def run_receipts(run_id: str, limit: int = 100) -> dict:
             deadletter=deadletter,
             fabric_summary=fabric_summary,
             evidence_scope="run",
+            handback=handback_summary,
         ),
         "receipts": {
             "ledger": _tail(ledger, limit),

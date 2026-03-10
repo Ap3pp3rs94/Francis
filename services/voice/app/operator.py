@@ -101,6 +101,9 @@ def build_live_operator_briefing(*, mode: str = "assist", max_actions: int = 3) 
                 "stale_current_state_count",
                 0,
             ),
+            "handback_available": briefing["grounding"].get("handback", {}).get("available", False),
+            "handback_run_id": briefing["grounding"].get("handback", {}).get("run_id"),
+            "handback_trust": briefing["grounding"].get("handback", {}).get("trust"),
             "suggested_action_kind": briefing["actions"][0]["kind"] if briefing["actions"] else "",
         },
     )
