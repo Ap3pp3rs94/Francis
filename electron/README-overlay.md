@@ -27,6 +27,13 @@ For a guard-railed dev launch:
 
 That PowerShell helper checks the HUD URL first and stops with a clear message if the server is down.
 
+## Package
+
+- `npm run overlay:pack` builds an unpacked portable app directory for local verification
+- `npm run overlay:dist` builds the portable Windows executable in `dist/overlay`
+
+The packaged shell still expects the Francis HUD to be running locally at `http://127.0.0.1:8767`.
+
 ## Assumptions
 
 - Windows is the primary target.
@@ -39,15 +46,17 @@ That PowerShell helper checks the HUD URL first and stops with a clear message i
 - Click-through should be treated as an operator mode change: once enabled, use the global shortcut to recover pointer control.
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
 - The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
+- The Windows portable build is unsigned. SmartScreen or local policy may require an explicit trust decision until code signing is added.
 
 ## Current Operator Surface
 
 - the HUD can move the overlay to any detected display and the choice persists across launches
 - display topology changes are reconciled by the Electron shell so the overlay falls back cleanly if a monitor disappears
 - the HUD can still refresh raw display topology for inspection when the desktop environment changes
+- the shell can now be packaged into a portable Windows artifact with the Orb icon and current shell controls intact
 
 ## Next Extensions
 
-- package the overlay for Windows distribution once shell behavior settles
+- add Windows signing once the distribution path stabilizes
 - add richer per-display policies if Francis eventually needs different overlay presence on different monitors
 - add selective hit-testing only if the whole-window click-through toggle stops being sufficient

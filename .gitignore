@@ -5,3 +5,4 @@ runtime/keys/*
 node_modules/
 .playwright-cli/
 output/playwright/
+dist/overlay/

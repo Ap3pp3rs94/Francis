@@ -2,14 +2,43 @@
   "name": "francis-overlay-shell",
   "version": "0.1.0",
   "private": true,
+  "author": "Ap3pp3rs94",
   "description": "Electron desktop overlay shell for the Francis HUD",
   "main": "electron/main.js",
   "scripts": {
     "overlay:start": "electron .",
     "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1",
-    "overlay:test": "node --test electron/preferences.test.cjs"
+    "overlay:test": "node --test electron/preferences.test.cjs",
+    "overlay:pack": "electron-builder --dir --win",
+    "overlay:dist": "electron-builder --win portable"
   },
   "devDependencies": {
-    "electron": "40.8.0"
+    "electron": "40.8.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.francis.overlay",
+    "productName": "Francis Overlay",
+    "asar": true,
+    "directories": {
+      "output": "dist/overlay",
+      "buildResources": "electron/assets"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "electron/assets/francis-overlay.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Francis-Overlay-${version}-${arch}.${ext}"
+    }
   }
 }
