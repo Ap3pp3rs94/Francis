@@ -3348,7 +3348,7 @@
         const completed = Array.isArray(missionsPayload?.completed) ? missionsPayload.completed : [];
         currentMissionRows = active.length ? active : backlog;
         document.getElementById("mission-meta").textContent =
-          `${active.length} active | ${backlog.length} backlog | ${completed.length} completed`;
+          String(missionsPayload?.summary || `${active.length} active | ${backlog.length} backlog | ${completed.length} completed`);
         const missions = document.getElementById("missions");
         missions.innerHTML = currentMissionRows.length
           ? currentMissionRows
@@ -3362,7 +3362,7 @@
                         <span class="badge risk-medium">${escapeHtml(mission.priority || "normal")}</span>
                       </div>
                     </div>
-                    <p class="meta">${escapeHtml(mission.objective || "No mission objective recorded.")}</p>
+                    <p class="meta">${escapeHtml(mission.detail_summary || mission.objective || "No mission objective recorded.")}</p>
                     <div class="action-buttons">
                       <button class="btn-secondary" type="button" onclick="inspectMission(${index})">Inspect</button>
                     </div>
@@ -3374,11 +3374,15 @@
         if (currentMissionRows.length) {
           inspectMission(0);
         } else {
-          document.getElementById("mission-detail").textContent = formatJson({
-            active,
-            backlog,
-            completed,
-          });
+          document.getElementById("mission-detail").textContent = formatJson(
+            missionsPayload?.detail && typeof missionsPayload.detail === "object"
+              ? missionsPayload.detail
+              : {
+                  active,
+                  backlog,
+                  completed,
+                },
+          );
         }
       }
 
@@ -3395,7 +3399,8 @@
         currentIncidentRows = items;
         document.getElementById("incident-meta").textContent =
           `${Number(incidentsPayload?.open_count || 0)} open | ${String(incidentsPayload?.severity || incidentsPayload?.highest_severity || "nominal")}`;
-        document.getElementById("incidents").textContent = items[0]?.summary || "No open incidents in the current workspace.";
+        document.getElementById("incidents").textContent =
+          String(incidentsPayload?.summary || items[0]?.summary || "No open incidents in the current workspace.");
         document.getElementById("incidents-list").innerHTML = items.length
           ? items
               .map(
@@ -3408,7 +3413,7 @@
                         <span class="badge risk-medium">${escapeHtml(incident.state || "open")}</span>
                       </div>
                     </div>
-                    <p class="meta">${escapeHtml(incident.source || "unknown source")} | ${escapeHtml(incident.ts || "unknown time")}</p>
+                    <p class="meta">${escapeHtml(incident.detail_summary || `${incident.source || "unknown source"} | ${incident.ts || "unknown time"}`)}</p>
                     <div class="action-buttons">
                       <button class="btn-secondary" type="button" onclick="inspectIncident(${index})">Inspect</button>
                     </div>
@@ -3417,19 +3422,25 @@
               )
               .join("")
           : `<li class="muted-empty">No incidents surfaced.</li>`;
-        document.getElementById("security-summary").textContent = summarizeSecurity(
-          securityPayload || currentSnapshot?.security || {},
-        );
+        document.getElementById("security-summary").textContent =
+          String(
+            incidentsPayload?.detail?.security_summary ||
+            summarizeSecurity(securityPayload || currentSnapshot?.security || {}),
+          );
         document.getElementById("runs").textContent =
           `Run: ${runsPayload?.active_run?.run_id || "none"} | Phase: ${runsPayload?.active_run?.phase || "unknown"}`;
         if (items.length) {
           inspectIncident(0);
         } else {
-          document.getElementById("incident-detail").textContent = formatJson({
-            incidents: items,
-            security: securityPayload || {},
-            run: runsPayload?.active_run || {},
-          });
+          document.getElementById("incident-detail").textContent = formatJson(
+            incidentsPayload?.detail && typeof incidentsPayload.detail === "object"
+              ? incidentsPayload.detail
+              : {
+                  incidents: items,
+                  security: securityPayload || {},
+                  run: runsPayload?.active_run || {},
+                },
+          );
         }
       }
 

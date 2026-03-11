@@ -436,8 +436,10 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert any(card["id"] == "next-best-action" for card in body["dashboard"]["cards"])
     assert body["missions"]["active_count"] == 1
     assert body["missions"]["backlog_count"] == 1
+    assert body["missions"]["summary"].startswith("Live Lens is in active")
     assert body["incidents"]["open_count"] == 1
     assert body["incidents"]["security"]["quarantine_count"] == 1
+    assert body["incidents"]["summary"].startswith("Observer detected sustained error pressure.")
     assert body["inbox"]["alert_count"] == 1
     assert body["runs"]["active_run"]["run_id"] == "run-live"
     assert body["snapshot"]["apprenticeship"]["review_count"] == 1
@@ -556,6 +558,30 @@ def test_hud_execution_feed_route_returns_structured_surface() -> None:
     assert "summary" in payload
     assert "severity" in payload
     assert "evidence" in payload
+    assert "detail" in payload
+
+
+def test_hud_missions_route_returns_structured_surface() -> None:
+    response = client.get("/api/missions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "missions"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "cards" in payload
+    assert "detail" in payload
+
+
+def test_hud_incidents_route_returns_structured_surface() -> None:
+    response = client.get("/api/incidents")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "incidents"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "cards" in payload
     assert "detail" in payload
 
 
