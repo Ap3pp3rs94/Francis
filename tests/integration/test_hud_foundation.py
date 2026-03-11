@@ -152,6 +152,10 @@ def test_hud_dashboard_exposes_mode_and_cards() -> None:
     card_ids = {card["id"] for card in body["cards"]}
     assert "current-work" in card_ids
     assert "next-best-action" in card_ids
+    assert all("summary" in card for card in body["cards"])
+    assert all("signal" in card for card in body["cards"])
+    assert all("evidence" in card for card in body["cards"])
+    assert all("detail" in card for card in body["cards"])
 
 
 def test_hud_bootstrap_aggregates_core_surfaces() -> None:
