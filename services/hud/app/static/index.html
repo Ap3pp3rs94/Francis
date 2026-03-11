@@ -689,6 +689,14 @@
           <ul class="list" id="work-blockers">
             <li class="muted-empty">No blockers surfaced yet.</li>
           </ul>
+          <h3>Repo Drilldown</h3>
+          <div class="work-action-row" id="repo-drilldown-actions">
+            <button class="btn-secondary" type="button" id="repo-action-status" disabled>Repo Status</button>
+            <button class="btn-secondary" type="button" id="repo-action-diff" disabled>Local Diff</button>
+            <button class="btn-secondary" type="button" id="repo-action-lint" disabled>Ruff Check</button>
+            <button class="btn-primary" type="button" id="repo-action-tests" disabled>Fast Checks</button>
+          </div>
+          <pre class="console" id="work-repo-detail">Awaiting repo drilldown.</pre>
         </article>
         <article class="panel accent">
           <div class="panel-head">
@@ -1990,6 +1998,30 @@
             runFocusAction();
           });
         }
+        const repoStatus = document.getElementById("repo-action-status");
+        if (repoStatus && repoStatus instanceof HTMLElement) {
+          repoStatus.addEventListener("click", () => {
+            runRepoAction("repo.status");
+          });
+        }
+        const repoDiff = document.getElementById("repo-action-diff");
+        if (repoDiff && repoDiff instanceof HTMLElement) {
+          repoDiff.addEventListener("click", () => {
+            runRepoAction("repo.diff");
+          });
+        }
+        const repoLint = document.getElementById("repo-action-lint");
+        if (repoLint && repoLint instanceof HTMLElement) {
+          repoLint.addEventListener("click", () => {
+            runRepoAction("repo.lint");
+          });
+        }
+        const repoTests = document.getElementById("repo-action-tests");
+        if (repoTests && repoTests instanceof HTMLElement) {
+          repoTests.addEventListener("click", () => {
+            runRepoTestsAction();
+          });
+        }
       }
 
       function renderBootstrap(payload) {
@@ -2205,6 +2237,11 @@
         return direct;
       }
 
+      function resolveActionChipByKind(kind, actions) {
+        const chips = Array.isArray(actions?.action_chips) ? actions.action_chips : [];
+        return chips.find((chip) => String(chip.kind || "").trim().toLowerCase() === String(kind || "").trim().toLowerCase()) || null;
+      }
+
       function renderCurrentWork(snapshot, actions) {
         const currentWork = snapshot?.current_work && typeof snapshot.current_work === "object"
           ? snapshot.current_work
@@ -2250,6 +2287,18 @@
         document.getElementById("work-blockers").innerHTML = blockers.length
           ? blockers.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
           : `<li class="muted-empty">No blockers are active.</li>`;
+        document.getElementById("work-repo-detail").textContent = repo.available
+          ? formatJson({
+              branch: repo.branch || "unknown",
+              dirty: Boolean(repo.dirty),
+              changed_count: Number(repo.changed_count || 0),
+              staged_count: Number(repo.staged_count || 0),
+              unstaged_count: Number(repo.unstaged_count || 0),
+              untracked_count: Number(repo.untracked_count || 0),
+              top_paths: topPaths,
+              summary: repo.summary || "",
+            })
+          : "Repository status unavailable.";
 
         const command = String(terminal.command || "").trim();
         const exitCode = terminal.exit_code;
@@ -2291,6 +2340,31 @@
           previewButton.disabled = true;
           executeButton.disabled = true;
           executeButton.textContent = "Execute";
+        }
+
+        const statusChip = resolveActionChipByKind("repo.status", actions);
+        const diffChip = resolveActionChipByKind("repo.diff", actions);
+        const lintChip = resolveActionChipByKind("repo.lint", actions);
+        const testsChip =
+          resolveActionChipByKind("repo.tests", actions) ||
+          resolveActionChipByKind("repo.tests.request_approval", actions);
+        const statusButton = document.getElementById("repo-action-status");
+        const diffButton = document.getElementById("repo-action-diff");
+        const lintButton = document.getElementById("repo-action-lint");
+        const testsButton = document.getElementById("repo-action-tests");
+        if (statusButton) {
+          statusButton.disabled = !Boolean(statusChip?.enabled);
+        }
+        if (diffButton) {
+          diffButton.disabled = !Boolean(diffChip?.enabled);
+        }
+        if (lintButton) {
+          lintButton.disabled = !Boolean(lintChip?.enabled);
+        }
+        if (testsButton) {
+          testsButton.disabled = !Boolean(testsChip?.enabled);
+          testsButton.textContent =
+            String(testsChip?.kind || "").includes("request_approval") ? "Request Fast Checks" : "Fast Checks";
         }
       }
 
@@ -2458,6 +2532,21 @@
         document.getElementById("execution-output").textContent = formatJson(execution);
       }
 
+      function renderRepoDrilldownExecution(kind, payload) {
+        const result = payload?.execution?.result || {};
+        const output = result?.result?.output || {};
+        let detail = result;
+        if (output && typeof output === "object" && Object.keys(output).length) {
+          detail = output;
+        } else if (typeof result?.summary === "string" && result.summary.trim()) {
+          detail = { summary: result.summary };
+        }
+        document.getElementById("work-repo-detail").textContent = formatJson({
+          kind,
+          detail,
+        });
+      }
+
       async function executeActionWithArgs(kind, args, dryRun) {
         const chip = (currentActions.action_chips || []).find(
           (item) => String(item.kind || "") === String(kind || ""),
@@ -2487,11 +2576,18 @@
         if (!response.ok) {
           document.getElementById("execution-meta").textContent = `Action ${kind} failed`;
           document.getElementById("execution-output").textContent = formatJson(payload);
+          if (String(kind || "").startsWith("repo.")) {
+            document.getElementById("work-repo-detail").textContent = formatJson(payload);
+          }
           return;
         }
 
         renderExecution(payload.execution);
+        if (String(kind || "").startsWith("repo.")) {
+          renderRepoDrilldownExecution(kind, payload);
+        }
         await loadSurface();
+        return payload;
       }
 
       async function executeAction(kind, dryRun) {
@@ -2510,6 +2606,25 @@
           return;
         }
         await executeAction(String(currentFocusActionChip.kind || ""), false);
+      }
+
+      async function runRepoAction(kind) {
+        const chip = resolveActionChipByKind(kind, currentActions);
+        if (!chip || !chip.enabled) {
+          return;
+        }
+        const response = await executeActionWithArgs(String(chip.kind || kind), {}, false);
+        return response;
+      }
+
+      async function runRepoTestsAction() {
+        const chip =
+          resolveActionChipByKind("repo.tests", currentActions) ||
+          resolveActionChipByKind("repo.tests.request_approval", currentActions);
+        if (!chip || !chip.enabled) {
+          return;
+        }
+        await executeActionWithArgs(String(chip.kind || "repo.tests"), {}, false);
       }
 
       async function approveQueueItem(approvalId) {
