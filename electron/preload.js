@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   setTargetDisplay(displayId) {
     return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
   },
+  restartHud() {
+    return ipcRenderer.invoke("overlay:restart-hud");
+  },
   resetLayout() {
     return ipcRenderer.invoke("overlay:reset-layout");
   },

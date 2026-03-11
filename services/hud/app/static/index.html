@@ -815,6 +815,7 @@
         targetDisplayId: null,
         activeDisplayId: null,
         preferencesPath: null,
+        hud: null,
         shortcuts: {
           toggleOverlay: "Ctrl+Shift+Alt+F",
           toggleClickThrough: "Ctrl+Shift+Alt+C",
@@ -928,6 +929,7 @@
                 ? displayInfo.activeDisplayId
                 : null,
           preferencesPath: raw?.preferencesPath ? String(raw.preferencesPath) : null,
+          hud: raw?.hud && typeof raw.hud === "object" ? raw.hud : null,
           shortcuts: {
             toggleOverlay: String(shortcuts.toggleOverlay || "Ctrl+Shift+Alt+F"),
             toggleClickThrough: String(shortcuts.toggleClickThrough || "Ctrl+Shift+Alt+C"),
@@ -960,6 +962,19 @@
         return display.primary ? "Primary Display" : display.label || `Display ${display.ordinal || ""}`;
       }
 
+      function formatHudRuntimeMode(hud) {
+        if (!hud || !hud.mode) {
+          return "unavailable";
+        }
+        if (hud.mode === "managed") {
+          return "managed";
+        }
+        if (hud.mode === "external") {
+          return "external";
+        }
+        return titleCase(hud.mode);
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -980,6 +995,8 @@
         const activeDisplay = getDesktopDisplayById(desktopState.activeDisplayId) || desktopState.displayInfo?.activeDisplay || null;
         const targetDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(targetDisplay) : "n/a";
         const activeDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(activeDisplay) : "n/a";
+        const hudRuntime = desktopState.hud;
+        const hudRuntimeMode = desktopState.available ? formatHudRuntimeMode(hudRuntime) : "n/a";
         const boundsLabel = desktopState.bounds
           ? `${Math.round(desktopState.bounds.width)}x${Math.round(desktopState.bounds.height)} @ ${Math.round(desktopState.bounds.x)},${Math.round(desktopState.bounds.y)}`
           : "n/a";
@@ -990,12 +1007,17 @@
         summary.textContent = desktopState.available
           ? desktopState.ignoreMouseEvents
             ? `The overlay is in click-through mode. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control without dropping the overlay.`
-            : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
+            : hudRuntime?.mode === "managed"
+              ? `The Electron shell started the local HUD itself and is currently running on ${targetDisplayLabel}.`
+              : hudRuntime?.mode === "external"
+                ? `The Electron shell is attached to an already-running HUD on ${targetDisplayLabel}.`
+                : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
           : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
 
         grid.innerHTML = [
           ["Mode", desktopState.available ? "desktop" : "browser"],
           ["Input", inputLabel],
+          ["HUD Runtime", hudRuntimeMode],
           ["Topmost", topmostLabel],
           ["Visibility", visibilityLabel],
           ["Target Display", targetDisplayLabel],
@@ -1015,6 +1037,7 @@
           <button class="${desktopState.ignoreMouseEvents ? "btn-secondary" : "btn-primary"}" type="button" ${disabled} onclick="setDesktopIgnoreMouseEvents(false)">Interactive</button>
           <button class="${desktopState.ignoreMouseEvents ? "btn-danger" : "btn-secondary"}" type="button" ${disabled} onclick="setDesktopIgnoreMouseEvents(true)">Click-through</button>
           <button class="${desktopState.alwaysOnTop ? "btn-primary" : "btn-secondary"}" type="button" ${disabled} onclick="toggleDesktopAlwaysOnTop()">${desktopState.alwaysOnTop ? "Release Topmost" : "Pin Topmost"}</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="restartDesktopHud()">Restart HUD</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="resetDesktopLayout()">Reset Layout</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="toggleDesktopDevTools()">DevTools</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="refreshDesktopDisplay()">Refresh Display</button>
@@ -1042,12 +1065,13 @@
         `;
 
         meta.textContent = desktopState.available
-          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
+          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
           activeDisplayId: desktopState.activeDisplayId,
+          hud: desktopState.hud || null,
           display: desktopState.displayInfo || null,
           preferencesPath: desktopState.preferencesPath || null,
         });
@@ -1140,6 +1164,26 @@
             : "Interactive overlay mode restored.";
         } catch (error) {
           desktopNotice = `Click-through update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function restartDesktopHud() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.restartHud !== "function") {
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.restartHud(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = desktopState.hud?.mode === "managed"
+            ? "Managed HUD restarted successfully."
+            : "HUD restart completed.";
+        } catch (error) {
+          desktopNotice = `HUD restart failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }

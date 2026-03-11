@@ -1,5 +1,6 @@
 const path = require("node:path");
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electron");
+const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
   getPreferencesPath,
@@ -17,6 +18,8 @@ let mainWindow = null;
 let ipcRegistered = false;
 let overlayPreferences = null;
 let preferenceSaveTimer = null;
+let hudRuntime = null;
+let quitAfterHudShutdown = false;
 let overlayState = {
   ignoreMouseEvents: false,
   alwaysOnTop: true,
@@ -28,6 +31,10 @@ function log(message, extra) {
     return;
   }
   console.log(`[francis-overlay] ${message}`, extra);
+}
+
+function getHudState() {
+  return hudRuntime ? hudRuntime.getPublicState() : null;
 }
 
 function getSortedDisplays() {
@@ -118,6 +125,7 @@ function getOverlayState(win = mainWindow) {
     targetDisplayId: displayInfo?.targetDisplayId ?? overlayPreferences?.targetDisplayId ?? null,
     activeDisplayId: displayInfo?.activeDisplayId ?? null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
+    hud: getHudState(),
     shortcuts: {
       toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
       toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
@@ -151,7 +159,10 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
     primaryDisplayId,
   );
   const safeWindow = win && !win.isDestroyed() ? win : null;
-  const bounds = overrides.windowBounds || getWindowOrPreferenceBounds(safeWindow) || buildDefaultPreferences(fallbackDisplay).windowBounds;
+  const bounds =
+    overrides.windowBounds ||
+    getWindowOrPreferenceBounds(safeWindow) ||
+    buildDefaultPreferences(fallbackDisplay).windowBounds;
   const activeDisplay = screen.getDisplayMatching(bounds);
 
   overlayPreferences = savePreferences(
@@ -272,11 +283,20 @@ function reconcileDisplayTopology(reason) {
 }
 
 function buildFallbackHtml(errorText) {
+  const hudState = getHudState();
   const escapedMessage = String(errorText || "Unknown load failure")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
   const escapedTarget = HUD_URL.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const escapedHudMode = String(hudState?.mode || "unknown")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  const escapedHudError = String(hudState?.lastError || "No managed HUD error captured.")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -329,15 +349,49 @@ function buildFallbackHtml(errorText) {
         color: #ffd8c2;
         white-space: pre-wrap;
       }
+      button {
+        margin-top: 16px;
+        padding: 10px 14px;
+        border: 0;
+        border-radius: 999px;
+        background: #9ed2ff;
+        color: #06111f;
+        font: inherit;
+        cursor: pointer;
+      }
+      small {
+        display: block;
+        margin-top: 10px;
+        color: rgba(230, 238, 248, 0.7);
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>Francis HUD server is not reachable.</h1>
       <p>The desktop overlay shell started correctly, but the HUD at <code>${escapedTarget}</code> did not respond.</p>
-      <p>Start the HUD server first, then relaunch the overlay.</p>
-      <pre>${escapedMessage}</pre>
+      <p>Managed HUD state: <code>${escapedHudMode}</code></p>
+      <p>If this shell owns the HUD runtime, you can retry startup directly from here.</p>
+      <button type="button" onclick="retryHudStart()">Retry Managed HUD Startup</button>
+      <small id="retry-status">No retry attempted yet.</small>
+      <pre>${escapedMessage}\n\n${escapedHudError}</pre>
     </main>
+    <script>
+      async function retryHudStart() {
+        const status = document.getElementById('retry-status');
+        status.textContent = 'Retrying HUD startup...';
+        try {
+          if (!window.FrancisDesktop || typeof window.FrancisDesktop.restartHud !== 'function') {
+            throw new Error('Desktop bridge is unavailable in this fallback view.');
+          }
+          await window.FrancisDesktop.restartHud();
+          status.textContent = 'Managed HUD restart completed. Reloading overlay...';
+          window.location.reload();
+        } catch (error) {
+          status.textContent = error && error.message ? error.message : String(error);
+        }
+      }
+    </script>
   </body>
 </html>`;
 }
@@ -430,6 +484,7 @@ function createMainWindow() {
     targetDisplayId: targetDisplay.id,
     bounds: overlayPreferences.windowBounds,
     preferences: overlayPreferences,
+    hud: getHudState(),
   });
 
   const win = new BrowserWindow({
@@ -502,6 +557,20 @@ function requireWindow() {
   return mainWindow;
 }
 
+async function restartHudAndRefreshWindow(win = mainWindow) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  if (!hudRuntime) {
+    throw new Error("HUD runtime is not available");
+  }
+
+  await hudRuntime.restart();
+  if (safeWindow) {
+    await loadHud(safeWindow);
+    notifyOverlayState(safeWindow);
+  }
+  return getOverlayState(safeWindow);
+}
+
 function registerIpc() {
   if (ipcRegistered) {
     return;
@@ -526,6 +595,7 @@ function registerIpc() {
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
   ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(requireWindow()));
+  ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
 
   ipcMain.handle("overlay:minimize", () => {
     const win = requireWindow();
@@ -617,12 +687,32 @@ function registerDisplayListeners() {
   });
 }
 
+async function initializeHudRuntime() {
+  hudRuntime = createHudRuntimeManager({
+    appDir: __dirname,
+    resourcesPath: process.resourcesPath,
+    userDataPath: app.getPath("userData"),
+    isPackaged: app.isPackaged,
+    hudUrl: HUD_URL,
+    log,
+    onStateChanged: () => notifyOverlayState(mainWindow),
+  });
+
+  try {
+    const hudState = await hudRuntime.ensureReady();
+    log("HUD runtime ready", hudState);
+  } catch (error) {
+    log("HUD runtime initialization did not produce a ready server", error instanceof Error ? error.message : String(error));
+  }
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     registerIpc();
     registerDisplayListeners();
+    await initializeHudRuntime();
     mainWindow = createMainWindow();
     registerShortcuts();
   });
@@ -644,6 +734,25 @@ app.on("activate", () => {
   if (!mainWindow.isVisible()) {
     mainWindow.showInactive();
   }
+});
+
+app.on("before-quit", (event) => {
+  if (quitAfterHudShutdown) {
+    return;
+  }
+  if (!hudRuntime || !getHudState()?.managed) {
+    return;
+  }
+  event.preventDefault();
+  quitAfterHudShutdown = true;
+  hudRuntime
+    .shutdown({ force: true })
+    .catch((error) => {
+      log("Managed HUD shutdown failed", error instanceof Error ? error.message : String(error));
+    })
+    .finally(() => {
+      app.quit();
+    });
 });
 
 app.on("window-all-closed", () => {

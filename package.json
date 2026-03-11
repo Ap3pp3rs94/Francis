@@ -8,7 +8,7 @@
   "scripts": {
     "overlay:start": "electron .",
     "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1",
-    "overlay:test": "node --test electron/preferences.test.cjs",
+    "overlay:test": "node --test electron/preferences.test.cjs electron/hud-runtime.test.cjs",
     "overlay:pack": "electron-builder --dir --win",
     "overlay:dist": "electron-builder --win portable"
   },
@@ -27,6 +27,112 @@
     "files": [
       "electron/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "apps",
+        "to": "python-src/apps",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "services",
+        "to": "python-src/services",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "packages",
+        "to": "python-src/packages",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis",
+        "to": "python-src/francis",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_brain",
+        "to": "python-src/francis_brain",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_connectors",
+        "to": "python-src/francis_connectors",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_core",
+        "to": "python-src/francis_core",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_forge",
+        "to": "python-src/francis_forge",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_llm",
+        "to": "python-src/francis_llm",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_policy",
+        "to": "python-src/francis_policy",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_presence",
+        "to": "python-src/francis_presence",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "francis_skills",
+        "to": "python-src/francis_skills",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "_francis_package_shim.py",
+        "to": "python-src/_francis_package_shim.py"
+      },
+      {
+        "from": "pyproject.toml",
+        "to": "python-src/pyproject.toml"
+      }
     ],
     "win": {
       "icon": "electron/assets/francis-overlay.ico",
