@@ -235,10 +235,10 @@ The most important HUD/operator surfaces are now shifting from status cards towa
 
 * `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, and the next actionable move
 * `Approval Queue` - pending approvals with in-place approve/reject controls
-* `Execution Journal` - recent receipts and active run state
+* `Execution Journal` - recent receipts and active run state, linked back to the current operator move
 * `Repo Drilldown` - direct `repo.status`, `repo.diff`, `repo.lint`, and fast-check execution from the same Lens surface
 
-That is still not the final Lens, but it is the right direction: Francis should expose what matters now, what is blocked, what it can do next, and what it just did.
+That is still not the final Lens, but it is the right direction: Francis should expose what matters now, what is blocked, what it can do next, and what it just did. The HUD is increasingly being shaped as one operator loop instead of a set of unrelated panels.
 
 ## Current Architecture Shape
 

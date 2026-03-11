@@ -922,6 +922,12 @@
       let currentIncidentRows = [];
       let currentOrb = null;
       let currentFocusActionChip = null;
+      let lastOperatorLink = {
+        actionKind: "",
+        approvalId: "",
+        runId: "",
+        decision: "",
+      };
       let streamSource = null;
       let streamReconnectTimer = null;
       let orbApi = null;
@@ -2265,6 +2271,15 @@
         return chips.find((chip) => String(chip.kind || "").trim().toLowerCase() === String(kind || "").trim().toLowerCase()) || null;
       }
 
+      function setLastOperatorLink(next = {}) {
+        lastOperatorLink = {
+          actionKind: String(next.actionKind || "").trim().toLowerCase(),
+          approvalId: String(next.approvalId || "").trim(),
+          runId: String(next.runId || "").trim(),
+          decision: String(next.decision || "").trim().toLowerCase(),
+        };
+      }
+
       function normalizeUsageActionKind(kind) {
         const raw = String(kind || "").trim().toLowerCase();
         if (!raw) {
@@ -2287,10 +2302,25 @@
         });
       }
 
-      function findRelatedJournalIndex(actionKind, journal = currentExecutionJournal) {
+      function findRelatedJournalIndex(actionKind, journal = currentExecutionJournal, link = lastOperatorLink) {
         const normalized = normalizeUsageActionKind(actionKind);
         const items = Array.isArray(journal?.items) ? journal.items : [];
-        if (!normalized || !items.length) {
+        if (!items.length) {
+          return -1;
+        }
+        if (link?.runId) {
+          const runMatch = items.findIndex((row) => String(row?.run_id || "").trim() === String(link.runId).trim());
+          if (runMatch >= 0) {
+            return runMatch;
+          }
+        }
+        if (link?.approvalId) {
+          const approvalMatch = items.findIndex((row) => String(row?.approval_id || "").trim() === String(link.approvalId).trim());
+          if (approvalMatch >= 0) {
+            return approvalMatch;
+          }
+        }
+        if (!normalized) {
           return -1;
         }
         return items.findIndex((row) => normalizeUsageActionKind(row?.action_kind) === normalized);
@@ -2301,13 +2331,13 @@
           ? snapshot.next_best_action
           : {};
         const focusChip = currentFocusActionChip || resolveFocusActionChip(snapshot, actions);
-        return normalizeUsageActionKind(focusChip?.kind || nextAction.kind || "");
+        return normalizeUsageActionKind(lastOperatorLink.actionKind || focusChip?.kind || nextAction.kind || "");
       }
 
       function syncUsageFocusPanels(snapshot, actions, queue, journal) {
         const focusKind = resolveUsageFocusActionKind(snapshot, actions);
         const approvalIndex = findRelatedApprovalIndex(focusKind, queue);
-        const journalIndex = findRelatedJournalIndex(focusKind, journal);
+        const journalIndex = findRelatedJournalIndex(focusKind, journal, lastOperatorLink);
         if (approvalIndex >= 0) {
           inspectApproval(approvalIndex);
         }
@@ -2770,6 +2800,7 @@
           },
           focus_action_kind: focusKind || "none",
           focus_chip: focusChip || null,
+          operator_link: lastOperatorLink,
           related_approval: relatedApproval,
           latest_related_receipt: relatedReceipt,
           active_run: activeRun,
@@ -2787,6 +2818,7 @@
         }
         document.getElementById("work-repo-detail").textContent = formatJson({
           kind,
+          run_id: payload?.execution?.run_id || "",
           detail,
         });
       }
@@ -2826,6 +2858,21 @@
           return;
         }
 
+        const normalizedKind = normalizeUsageActionKind(kind);
+        const preservedActionKind =
+          kind === "control.remote.approval.approve" || kind === "control.remote.approval.reject"
+            ? normalizeUsageActionKind(lastOperatorLink.actionKind || chipArgs.action_kind || "")
+            : normalizedKind;
+        setLastOperatorLink({
+          actionKind: preservedActionKind || normalizedKind,
+          approvalId: chipArgs.approval_id || "",
+          runId: payload?.execution?.run_id || "",
+          decision: kind === "control.remote.approval.approve"
+            ? "approved"
+            : kind === "control.remote.approval.reject"
+              ? "rejected"
+              : "",
+        });
         renderExecution(payload.execution);
         if (String(kind || "").startsWith("repo.")) {
           renderRepoDrilldownExecution(kind, payload);
@@ -2875,6 +2922,14 @@
         if (!approvalId) {
           return;
         }
+        const row = Array.isArray(currentApprovalQueue?.items)
+          ? currentApprovalQueue.items.find((item) => String(item?.id || "") === String(approvalId))
+          : null;
+        setLastOperatorLink({
+          actionKind: normalizeUsageActionKind(row?.requested_action_kind || row?.skill || row?.action),
+          approvalId,
+          decision: "approved",
+        });
         await executeActionWithArgs(
           "control.remote.approval.approve",
           { approval_id: approvalId, note: "Approved from HUD approval queue." },
@@ -2886,6 +2941,14 @@
         if (!approvalId) {
           return;
         }
+        const row = Array.isArray(currentApprovalQueue?.items)
+          ? currentApprovalQueue.items.find((item) => String(item?.id || "") === String(approvalId))
+          : null;
+        setLastOperatorLink({
+          actionKind: normalizeUsageActionKind(row?.requested_action_kind || row?.skill || row?.action),
+          approvalId,
+          decision: "rejected",
+        });
         await executeActionWithArgs(
           "control.remote.approval.reject",
           { approval_id: approvalId, note: "Rejected from HUD approval queue." },
