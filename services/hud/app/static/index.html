@@ -970,7 +970,6 @@
           <ul class="list" id="incidents-list"></ul>
           <p id="incidents"></p>
           <p class="meta" id="security-summary"></p>
-          <p class="meta" id="runs"></p>
           <pre class="console" id="incident-detail">Incident detail will render from live workspace posture.</pre>
         </article>
         <article class="panel">
@@ -983,6 +982,41 @@
             <div class="desktop-pill"><strong>Blocked</strong><span>Detail cards will render from the backend contract.</span></div>
           </div>
           <pre class="console" id="blocked-detail">Blocked action detail will render from Lens policy state.</pre>
+        </article>
+      </section>
+
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Inbox Surface</h2>
+            <span class="meta tiny" id="inbox-meta">Inbox summary loading from Lens</span>
+          </div>
+          <p id="inbox-summary" class="hero-copy">
+            Inbox summary will render from the backend contract.
+          </p>
+          <ul class="list" id="inbox-list">
+            <li class="muted-empty">No inbox messages surfaced yet.</li>
+          </ul>
+          <div class="desktop-grid" id="inbox-detail-cards">
+            <div class="desktop-pill"><strong>Inbox</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <pre class="console" id="inbox-detail">Inbox detail will render from the current workspace queue.</pre>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Run Surface</h2>
+            <span class="meta tiny" id="runs-meta">Run summary loading from Lens</span>
+          </div>
+          <p id="runs-summary" class="hero-copy">
+            Run summary will render from the backend contract.
+          </p>
+          <ul class="list" id="runs-list">
+            <li class="muted-empty">No run groups surfaced yet.</li>
+          </ul>
+          <div class="desktop-grid" id="runs-detail-cards">
+            <div class="desktop-pill"><strong>Run</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <pre class="console" id="runs-detail">Run detail will render from the current workspace run surface.</pre>
         </article>
       </section>
     </main>
@@ -1002,8 +1036,12 @@
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
       let currentBlockedActions = { items: [] };
+      let currentInboxSurface = { messages: [] };
+      let currentRunsSurface = { run_groups: [] };
       let currentMissionRows = [];
       let currentIncidentRows = [];
+      let currentInboxRows = [];
+      let currentRunRows = [];
       let currentOrb = null;
       let currentFocusActionChip = null;
       let lastOperatorLink = {
@@ -2134,6 +2172,8 @@
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
+        currentInboxSurface = payload.inbox || { messages: [] };
+        currentRunsSurface = payload.runs || { run_groups: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
         currentExecutionFeed = payload.execution_feed || {};
 
@@ -2162,6 +2202,8 @@
         renderExecutionFeedSurface(currentExecutionFeed);
         renderMissionStack(payload.missions || {});
         renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
+        renderInboxSurface(currentInboxSurface);
+        renderRunsSurface(currentRunsSurface);
         renderActions(currentActions, currentBlockedActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
@@ -3463,8 +3505,6 @@
             incidentsPayload?.detail?.security_summary ||
             summarizeSecurity(securityPayload || currentSnapshot?.security || {}),
           );
-        document.getElementById("runs").textContent =
-          String(runsPayload?.summary || `Run: ${runsPayload?.active_run?.run_id || "none"} | Phase: ${runsPayload?.active_run?.phase || "unknown"}`);
         if (items.length) {
           inspectIncident(0);
         } else {
@@ -3476,6 +3516,107 @@
                   security: securityPayload || {},
                   run: runsPayload?.active_run || {},
                 },
+          );
+        }
+      }
+
+      function inspectInboxItem(index) {
+        const row = Array.isArray(currentInboxRows) ? currentInboxRows[index] : null;
+        if (!row) {
+          return;
+        }
+        renderDetailCards("inbox-detail-cards", row.detail_cards, "Inbox");
+        document.getElementById("inbox-detail").textContent = formatJson(row);
+      }
+
+      function renderInboxSurface(inboxPayload) {
+        currentInboxSurface = inboxPayload || { messages: [] };
+        const messages = Array.isArray(currentInboxSurface.messages) ? currentInboxSurface.messages : [];
+        currentInboxRows = messages;
+        document.getElementById("inbox-meta").textContent =
+          `${Number(currentInboxSurface.message_count || messages.length || 0)} message(s) | ${Number(currentInboxSurface.alert_count || 0)} alert(s)`;
+        document.getElementById("inbox-summary").textContent =
+          String(currentInboxSurface.summary || "Inbox summary will render from the backend contract.");
+        applySeverityState(document.getElementById("inbox-summary"), String(currentInboxSurface.severity || "low"));
+        document.getElementById("inbox-list").innerHTML = messages.length
+          ? messages
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(row.title || "Inbox message")}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(row.severity || "low")}">${escapeHtml(row.severity || "low")}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(row.detail_summary || row.summary || "No inbox detail provided.")}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectInboxItem(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">No inbox messages surfaced yet.</li>`;
+        if (messages.length) {
+          inspectInboxItem(0);
+        } else {
+          renderDetailCards("inbox-detail-cards", [], "Inbox");
+          document.getElementById("inbox-detail").textContent = formatJson(
+            currentInboxSurface.detail && typeof currentInboxSurface.detail === "object"
+              ? currentInboxSurface.detail
+              : { messages: [] },
+          );
+        }
+      }
+
+      function inspectRunSurface(index) {
+        const row = Array.isArray(currentRunRows) ? currentRunRows[index] : null;
+        if (!row) {
+          return;
+        }
+        renderDetailCards("runs-detail-cards", row.detail_cards, "Run");
+        document.getElementById("runs-detail").textContent = formatJson(row);
+      }
+
+      function renderRunsSurface(runsPayload) {
+        currentRunsSurface = runsPayload || { run_groups: [] };
+        const groups = Array.isArray(currentRunsSurface.run_groups) ? currentRunsSurface.run_groups : [];
+        currentRunRows = groups.length ? groups : [currentRunsSurface.active_run || {}];
+        document.getElementById("runs-meta").textContent =
+          `${String(currentRunsSurface.active_run?.run_id || "none")} | ${String(currentRunsSurface.active_run?.phase || "unknown")}`;
+        document.getElementById("runs-summary").textContent =
+          String(currentRunsSurface.summary || "Run summary will render from the backend contract.");
+        applySeverityState(document.getElementById("runs-summary"), String(currentRunsSurface.severity || "low"));
+        document.getElementById("runs-list").innerHTML = currentRunRows.length
+          ? currentRunRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(row.run_id || "Run")}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-low">${escapeHtml(row.phase || row.last_kind || "unknown")}</span>
+                        <span class="badge risk-medium">${escapeHtml(String(row.event_count || 0))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(row.detail_summary || row.summary || "No run detail provided.")}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectRunSurface(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">No run groups surfaced yet.</li>`;
+        if (currentRunRows.length && currentRunRows[0] && Object.keys(currentRunRows[0]).length) {
+          inspectRunSurface(0);
+        } else {
+          renderDetailCards("runs-detail-cards", [], "Run");
+          document.getElementById("runs-detail").textContent = formatJson(
+            currentRunsSurface.detail && typeof currentRunsSurface.detail === "object"
+              ? currentRunsSurface.detail
+              : { active_run: currentRunsSurface.active_run || {}, run_groups: [] },
           );
         }
       }

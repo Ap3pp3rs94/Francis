@@ -123,6 +123,12 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Mission detail will render from active or backlog work." in response.text
     assert "Incident detail will render from live workspace posture." in response.text
     assert "Blocked action detail will render from Lens policy state." in response.text
+    assert "Inbox Surface" in response.text
+    assert "Inbox summary will render from the backend contract." in response.text
+    assert "Inbox detail will render from the current workspace queue." in response.text
+    assert "Run Surface" in response.text
+    assert "Run summary will render from the backend contract." in response.text
+    assert "Run detail will render from the current workspace run surface." in response.text
     assert "Detail cards will render from the backend contract." in response.text
     assert "/static/orb/francis-orb.js" in response.text
 
