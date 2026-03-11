@@ -684,6 +684,9 @@
           <p class="meta" id="work-link-meta">
             Operator link will resolve from the current Lens action chain.
           </p>
+          <p class="meta tiny" id="work-link-state">
+            Link state will resolve from live workspace continuity.
+          </p>
           <h3>Changed Paths</h3>
           <ul class="list" id="work-paths">
             <li class="muted-empty">No repo paths surfaced yet.</li>
@@ -700,6 +703,7 @@
             <button class="btn-primary" type="button" id="repo-action-tests" disabled>Fast Checks</button>
           </div>
           <p class="meta" id="work-repo-summary">Repo drilldown summary will render here.</p>
+          <p class="meta tiny" id="work-repo-severity">Repo severity will resolve from drilldown results.</p>
           <pre class="console" id="work-repo-detail">Repo drilldown detail will render from current work.</pre>
         </article>
         <article class="panel accent">
@@ -2381,6 +2385,33 @@
         return "Operator link is idle. Lens is waiting for the next actionable move.";
       }
 
+      function describeOperatorLinkState(snapshot, actions, journal) {
+        const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
+          ? snapshot.next_best_action
+          : {};
+        const nextKind = normalizeUsageActionKind(nextAction.kind || "");
+        const focusKind = resolveUsageFocusActionKind(snapshot, actions);
+        const journalIndex = findRelatedJournalIndex(focusKind, journal, lastOperatorLink);
+        const approvalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
+        const activeRunId = String(snapshot?.current_work?.last_run?.run_id || "").trim();
+        const linkedRunId = String(lastOperatorLink.runId || "").trim();
+        const hasAnchor = approvalIndex >= 0 || journalIndex >= 0;
+        if (!focusKind) {
+          return "Link state: idle";
+        }
+        if (
+          lastOperatorLink.actionKind &&
+          !hasAnchor &&
+          ((nextKind && nextKind !== normalizeUsageActionKind(lastOperatorLink.actionKind)) ||
+            (linkedRunId && activeRunId && linkedRunId !== activeRunId))
+        ) {
+          return "Link state: stale | workspace has moved past the last linked action";
+        }
+        return hasAnchor
+          ? "Link state: active | continuity is grounded by approval or receipt"
+          : "Link state: active | following the current operator move";
+      }
+
       function compactTextSummary(value, maxLength = 220) {
         const text = String(value || "").replace(/\s+/g, " ").trim();
         if (!text) {
@@ -2458,6 +2489,39 @@
         return summary || `${kind} completed.`;
       }
 
+      function classifyRepoDrilldownSeverity(kind, payload) {
+        const execution = payload?.execution || {};
+        const result = execution?.result || {};
+        const summary = String(result?.summary || "").toLowerCase();
+        const detail = JSON.stringify(result?.result?.output || result?.result || "").toLowerCase();
+        const combined = `${summary} ${detail}`;
+        if (kind === "repo.status") {
+          return combined.includes("nothing to commit") || combined.includes("working tree clean")
+            ? "low"
+            : "medium";
+        }
+        if (kind === "repo.diff") {
+          return combined.includes("diff --git") || combined.includes("@@")
+            ? "medium"
+            : "low";
+        }
+        if (kind === "repo.lint") {
+          return combined.includes("all checks passed") || combined.includes("0 errors")
+            ? "low"
+            : combined.includes("error") || combined.includes("failed")
+              ? "high"
+              : "medium";
+        }
+        if (kind === "repo.tests") {
+          return combined.includes("failed") || combined.includes("error")
+            ? "high"
+            : combined.includes("passed")
+              ? "low"
+              : "medium";
+        }
+        return "medium";
+      }
+
       function renderCurrentWork(snapshot, actions) {
         const currentWork = snapshot?.current_work && typeof snapshot.current_work === "object"
           ? snapshot.current_work
@@ -2500,6 +2564,11 @@
           actions,
           currentExecutionJournal,
         );
+        document.getElementById("work-link-state").textContent = describeOperatorLinkState(
+          snapshot,
+          actions,
+          currentExecutionJournal,
+        );
 
         document.getElementById("work-paths").innerHTML = topPaths.length
           ? topPaths.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
@@ -2521,6 +2590,11 @@
         });
         document.getElementById("work-repo-summary").textContent =
           repo.summary || "Use the repo drilldown controls to inspect current repository state.";
+        document.getElementById("work-repo-severity").textContent = repo.available
+          ? repo.dirty
+            ? "Repo severity: medium | local changes are present"
+            : "Repo severity: low | working tree appears stable"
+          : "Repo severity: unknown | repository state is unavailable";
 
         const command = String(terminal.command || "").trim();
         const exitCode = terminal.exit_code;
@@ -2942,6 +3016,8 @@
           detail,
         });
         document.getElementById("work-repo-summary").textContent = summarizeRepoDrilldown(kind, payload);
+        document.getElementById("work-repo-severity").textContent =
+          `Repo severity: ${classifyRepoDrilldownSeverity(kind, payload)} | ${kind}`;
       }
 
       async function executeActionWithArgs(kind, args, dryRun) {
