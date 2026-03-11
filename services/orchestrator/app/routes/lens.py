@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -240,6 +241,188 @@ def _execute_repo_skill(
     if not bool(result.get("ok", False)):
         raise HTTPException(status_code=500, detail=f"{skill_name} failed: {result.get('error', 'unknown error')}")
     return result
+
+
+def _compact_text_summary(value: object, max_length: int = 220) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if not text:
+        return ""
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1]}…"
+
+
+def _first_meaningful_line(*values: object) -> str:
+    for value in values:
+        for raw_line in str(value or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lowered = line.lower()
+            if lowered in {"traceback", "stack trace"}:
+                continue
+            if lowered.startswith("line "):
+                continue
+            if lowered.startswith("collected ") and lowered.endswith(" items"):
+                continue
+            return line
+    return ""
+
+
+def _meaningful_lines(*values: object, max_lines: int = 6) -> list[str]:
+    rows: list[str] = []
+    for value in values:
+        for raw_line in str(value or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            rows.append(line)
+            if len(rows) >= max_lines:
+                return rows
+    return rows
+
+
+def _build_repo_presentation(
+    *,
+    kind: str,
+    execution_args: dict[str, Any],
+    result: dict[str, Any],
+    summary: str,
+) -> dict[str, Any]:
+    output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+    stdout = str(output.get("stdout", "")).strip()
+    stderr = str(output.get("stderr", "")).strip()
+    meaningful = _meaningful_lines(stdout, stderr, max_lines=6)
+    presentation_summary = _compact_text_summary(summary, 260) or f"{kind} completed."
+    severity = "medium"
+    evidence: list[dict[str, str]] = []
+    stats: dict[str, Any] = {}
+
+    if kind == "repo.status":
+        combined = f"{stdout}\n{stderr}".lower()
+        clean = "nothing to commit" in combined or "working tree clean" in combined
+        severity = "low" if clean else "medium"
+        evidence_rows = meaningful or ["Repository status returned no significant lines."]
+        evidence = [
+            {"kind": "status", "severity": severity, "detail": row}
+            for row in evidence_rows[:4]
+        ]
+        stats = {
+            "dirty": not clean,
+            "line_count": len(meaningful),
+        }
+        if not presentation_summary or presentation_summary == "Repository status returned no output.":
+            presentation_summary = evidence_rows[0]
+
+    elif kind == "repo.diff":
+        file_count = len(re.findall(r"^diff --git ", stdout, flags=re.MULTILINE))
+        hunk_count = len(re.findall(r"^@@", stdout, flags=re.MULTILINE))
+        added = len(re.findall(r"^\+(?!\+\+)", stdout, flags=re.MULTILINE))
+        removed = len(re.findall(r"^-(?!--)", stdout, flags=re.MULTILINE))
+        severity = "medium" if any((file_count, hunk_count, added, removed)) else "low"
+        evidence = [
+            {
+                "kind": "diff",
+                "severity": severity,
+                "detail": f"{file_count} file diff(s) surfaced. {hunk_count} hunk(s), {added} addition(s), {removed} removal(s).",
+            }
+        ]
+        evidence.extend(
+            {"kind": "diff", "severity": severity, "detail": row}
+            for row in meaningful[:3]
+        )
+        stats = {
+            "file_count": file_count,
+            "hunk_count": hunk_count,
+            "added": added,
+            "removed": removed,
+        }
+        if not presentation_summary or presentation_summary == "No tracked diff output was returned.":
+            presentation_summary = evidence[0]["detail"]
+
+    elif kind == "repo.lint":
+        issue_count = len(re.findall(r"^[^:\r\n]+:\d+:\d+:", stdout, flags=re.MULTILINE))
+        combined = f"{stdout}\n{stderr}".lower()
+        passed = "all checks passed" in combined or "0 errors" in combined
+        severity = "low" if passed and issue_count == 0 else "high" if issue_count or "failed" in combined or "error" in combined else "medium"
+        if issue_count:
+            evidence.append(
+                {
+                    "kind": "lint",
+                    "severity": severity,
+                    "detail": f"{issue_count} lint issue(s) detected.",
+                }
+            )
+            evidence.extend(
+                {"kind": "lint", "severity": severity, "detail": row}
+                for row in meaningful[:3]
+            )
+        else:
+            pass_line = _first_meaningful_line(stdout, stderr) or "Ruff completed without visible issues."
+            evidence.append({"kind": "lint", "severity": severity, "detail": pass_line})
+        stats = {"issue_count": issue_count}
+        if not presentation_summary or presentation_summary == "Ruff completed without stdout.":
+            presentation_summary = evidence[0]["detail"]
+
+    elif kind == "repo.tests":
+        combined = f"{stdout}\n{stderr}"
+        lane = str(execution_args.get("lane", "fast")).strip().lower() or "fast"
+        passed_match = re.search(r"(\d+)\s+passed", combined, flags=re.IGNORECASE)
+        failed_match = re.search(r"(\d+)\s+failed", combined, flags=re.IGNORECASE)
+        skipped_match = re.search(r"(\d+)\s+(?:skipped|deselected)", combined, flags=re.IGNORECASE)
+        passed = int(passed_match.group(1)) if passed_match else 0
+        failed = int(failed_match.group(1)) if failed_match else 0
+        skipped = int(skipped_match.group(1)) if skipped_match else 0
+        lowered = combined.lower()
+        severity = "high" if failed > 0 or "error" in lowered else "low" if passed > 0 and failed == 0 else "medium"
+        evidence.append(
+            {
+                "kind": "tests",
+                "severity": severity,
+                "detail": f"Lane {lane} executed.",
+            }
+        )
+        if passed or failed or skipped:
+            evidence.append(
+                {
+                    "kind": "tests",
+                    "severity": severity,
+                    "detail": f"{passed} passed | {failed} failed" + (f" | {skipped} skipped/deselected" if skipped else ""),
+                }
+            )
+        evidence.extend(
+            {"kind": "tests", "severity": severity, "detail": row}
+            for row in meaningful[:3]
+        )
+        stats = {
+            "lane": lane,
+            "passed": passed,
+            "failed": failed,
+            "skipped": skipped,
+        }
+        if not presentation_summary or presentation_summary == "repo.tests completed without stdout.":
+            presentation_summary = evidence[1]["detail"] if len(evidence) > 1 else evidence[0]["detail"]
+
+    else:
+        evidence = [
+            {"kind": "context", "severity": severity, "detail": _first_meaningful_line(stdout, stderr, summary) or f"{kind} completed."}
+        ]
+
+    return {
+        "kind": kind,
+        "summary": presentation_summary,
+        "severity": severity,
+        "evidence": evidence[:4],
+        "detail": {
+            "kind": kind,
+            "execution_args": execution_args,
+            "stats": stats,
+            "raw_excerpt": {
+                "stdout": _compact_text_summary(stdout, 1200),
+                "stderr": _compact_text_summary(stderr, 800),
+            },
+        },
+    }
 
 
 def _usage_action_chip(
@@ -953,11 +1136,18 @@ def _execute_lens_action(
     if normalized_kind == "repo.status":
         result = _execute_repo_skill(role=role, skill_name="repo.status", args={})
         output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+        summary = str(output.get("stdout", "")).strip() or "Repository status returned no output."
         return {
             "status": "ok",
             "kind": normalized_kind,
             "tool": {"skill": "repo.status"},
-            "summary": str(output.get("stdout", "")).strip() or "Repository status returned no output.",
+            "summary": summary,
+            "presentation": _build_repo_presentation(
+                kind=normalized_kind,
+                execution_args={},
+                result=result,
+                summary=summary,
+            ),
             "result": result,
         }
 
@@ -980,6 +1170,12 @@ def _execute_lens_action(
             "tool": {"skill": "repo.diff"},
             "execution_args": execution_args,
             "summary": summary,
+            "presentation": _build_repo_presentation(
+                kind=normalized_kind,
+                execution_args=execution_args,
+                result=result,
+                summary=summary,
+            ),
             "result": result,
         }
 
@@ -997,6 +1193,12 @@ def _execute_lens_action(
             "tool": {"skill": "repo.lint"},
             "execution_args": execution_args,
             "summary": summary,
+            "presentation": _build_repo_presentation(
+                kind=normalized_kind,
+                execution_args=execution_args,
+                result=result,
+                summary=summary,
+            ),
             "result": result,
         }
 
@@ -1079,6 +1281,12 @@ def _execute_lens_action(
             "tool": {"skill": "repo.tests", "approval_id": approval_id},
             "execution_args": execution_args,
             "summary": summary,
+            "presentation": _build_repo_presentation(
+                kind=normalized_kind,
+                execution_args=execution_args,
+                result=result,
+                summary=summary,
+            ),
             "result": result,
         }
 

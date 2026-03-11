@@ -404,6 +404,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
     assert body["current_work"]["terminal_summary"].startswith("Terminal failure anchor:")
     assert body["current_work"]["next_action"]["kind"] == "repo.tests"
+    assert body["current_work"]["repo"]["severity"] in {"medium", "high"}
+    assert body["current_work"]["next_action_signal"]["severity"] == "high"
     assert any(item["kind"] == "terminal" for item in body["current_work"]["next_action_evidence"])
     assert any(item["kind"] in {"blocker", "approval"} for item in body["current_work"]["next_action_evidence"])
     assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
@@ -445,10 +447,12 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert payload["surface"] == "current_work"
     assert "summary" in payload
     assert "repo" in payload
+    assert payload["repo"]["severity"] in {"low", "medium", "high", "unknown"}
     assert "attention" in payload
     assert "terminal" in payload
     assert "terminal_summary" in payload
     assert "next_action" in payload
+    assert "next_action_signal" in payload
     assert "next_action_evidence" in payload
 
 

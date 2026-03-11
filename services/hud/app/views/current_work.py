@@ -49,6 +49,37 @@ def _evidence_row(*, kind: str, severity: str, detail: str) -> dict[str, str]:
     }
 
 
+def _severity_rank(severity: str) -> int:
+    normalized = str(severity or "").strip().lower()
+    if normalized == "high":
+        return 3
+    if normalized == "medium":
+        return 2
+    if normalized == "low":
+        return 1
+    return 0
+
+
+def _max_evidence_severity(evidence: list[dict[str, str]]) -> str:
+    highest = "low"
+    for row in evidence:
+        severity = str(row.get("severity", "low")).strip().lower() or "low"
+        if _severity_rank(severity) > _severity_rank(highest):
+            highest = severity
+    return highest if evidence else "low"
+
+
+def _repo_severity(repo: dict[str, Any]) -> str:
+    if not bool(repo.get("available", False)):
+        return "unknown"
+    changed_count = int(repo.get("changed_count", 0))
+    if not bool(repo.get("dirty", False)) and changed_count <= 0:
+        return "low"
+    if changed_count >= 8 or int(repo.get("unstaged_count", 0)) >= 5:
+        return "high"
+    return "medium"
+
+
 def _build_next_action_evidence(
     *,
     snapshot: dict[str, object],
@@ -123,6 +154,12 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
     blockers = current_work.get("blockers", []) if isinstance(current_work.get("blockers"), list) else []
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
     last_run = current_work.get("last_run", {}) if isinstance(current_work.get("last_run"), dict) else {}
+    next_action_evidence = _build_next_action_evidence(
+        snapshot=snapshot,
+        blockers=[str(item).strip() for item in blockers if str(item).strip()],
+        terminal=terminal,
+    )
+    next_action_severity = _max_evidence_severity(next_action_evidence)
 
     return {
         "status": "ok",
@@ -145,6 +182,7 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
             "top_paths": [str(item).strip() for item in repo.get("top_paths", []) if str(item).strip()],
             "summary": str(repo.get("summary", "Repository status unavailable.")).strip()
             or "Repository status unavailable.",
+            "severity": _repo_severity(repo),
         },
         "terminal": {
             "command": str(terminal.get("command", "")).strip(),
@@ -160,9 +198,15 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
         "last_run": last_run,
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],
         "next_action": next_best_action,
-        "next_action_evidence": _build_next_action_evidence(
-            snapshot=snapshot,
-            blockers=[str(item).strip() for item in blockers if str(item).strip()],
-            terminal=terminal,
-        ),
+        "next_action_signal": {
+            "severity": next_action_severity,
+            "summary": (
+                "High-pressure evidence is driving the next operator move."
+                if next_action_severity == "high"
+                else "Medium-pressure evidence is shaping the next operator move."
+                if next_action_severity == "medium"
+                else "Low-pressure evidence is shaping the next operator move."
+            ),
+        },
+        "next_action_evidence": next_action_evidence,
     }
