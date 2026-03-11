@@ -2077,6 +2077,11 @@
                 const guidance = chip.requires_confirmation
                   ? "This action requires explicit confirmation."
                   : "This action can execute immediately.";
+                const primaryLabel = String(chip.kind || "").includes("request_approval")
+                  ? "Request"
+                  : enabled
+                    ? "Execute"
+                    : "Blocked";
                 return `
                   <article class="action-card">
                     <div class="action-top">
@@ -2090,7 +2095,7 @@
                     <p class="action-copy meta">${escapeHtml(guidance)}</p>
                     <div class="action-buttons">
                       <button class="btn-secondary" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', true)">Preview</button>
-                      <button class="${primaryClass}" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', false)">${enabled ? "Execute" : "Blocked"}</button>
+                      <button class="${primaryClass}" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', false)">${escapeHtml(primaryLabel)}</button>
                     </div>
                   </article>
                 `;
@@ -2126,6 +2131,11 @@
         if (!chip) {
           return;
         }
+        const chipArgs = chip.execute_via?.payload?.args && typeof chip.execute_via.payload.args === "object"
+          ? chip.execute_via.payload.args
+          : chip.args && typeof chip.args === "object"
+            ? chip.args
+            : {};
         if (chip.requires_confirmation && !dryRun) {
           const proceed = window.confirm(`Confirm execution for ${chip.label || chip.kind}?`);
           if (!proceed) {
@@ -2136,7 +2146,7 @@
         const response = await fetch("/api/actions/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kind, dry_run: dryRun }),
+          body: JSON.stringify({ kind, args: chipArgs, dry_run: dryRun }),
         });
         const payload = await response.json();
         if (!response.ok) {

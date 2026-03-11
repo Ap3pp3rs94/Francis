@@ -175,6 +175,20 @@ def _validate_required_args(kind: str, args: dict[str, Any]) -> None:
             raise HTTPException(status_code=400, detail=f"{field} is required for {kind}")
 
 
+def _merge_execution_snapshot(execution: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
+    result = execution.get("result", {}) if isinstance(execution.get("result"), dict) else {}
+    after = result.get("after", {}) if isinstance(result.get("after"), dict) else {}
+    control = snapshot.get("control", {}) if isinstance(snapshot.get("control"), dict) else {}
+    if not after or not control:
+        return snapshot
+
+    merged_control = dict(control)
+    for key in ("mode", "kill_switch", "scopes", "updated_at"):
+        if key in after:
+            merged_control[key] = after[key]
+    return {**snapshot, "control": merged_control}
+
+
 def execute_lens_action(
     *,
     kind: str,
@@ -208,8 +222,9 @@ def execute_lens_action(
         user=user,
         trace_id=trace_id,
     )
+    snapshot = _merge_execution_snapshot(execution, build_lens_snapshot())
     return {
         "execution": execution,
         "actions": get_lens_actions(role=role, user=user),
-        "snapshot": build_lens_snapshot(),
+        "snapshot": snapshot,
     }

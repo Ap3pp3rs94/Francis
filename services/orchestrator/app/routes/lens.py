@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -14,13 +15,14 @@ from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
+from francis_policy.tool_policy import approval_policy_for_tool
 from francis_policy.rbac import can
 from francis_skills.contracts import SkillCall
 from francis_skills.executor import SkillExecutor
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.observer.app.main import run_cycle as run_observer_cycle
 
-from services.orchestrator.app.approvals_store import pending_count
+from services.orchestrator.app.approvals_store import ensure_action_approved, list_requests, pending_count
 from services.orchestrator.app.autonomy.action_budget import check_action_budget, load_state as load_budget_state
 from services.orchestrator.app.autonomy.decision_engine import build_plan
 from services.orchestrator.app.autonomy.event_queue import (
@@ -85,6 +87,7 @@ from services.orchestrator.app.routes.apprenticeship import (
     apprenticeship_generalize,
     apprenticeship_skillize,
 )
+from services.orchestrator.app.routes.approvals import ApprovalRequestPayload, approval_request
 from services.orchestrator.app.routes.forge import forge_proposals
 from services.orchestrator.app.routes.missions import execute_mission_tick
 from services.orchestrator.app.telemetry_store import status as telemetry_status
@@ -277,6 +280,50 @@ def _check_usage_scope(app: str, action: str, *, mutating: bool = False) -> tupl
         mutating=mutating,
     )
     return (allowed, reason)
+
+
+def _usage_tool_approval_signature(*, skill_name: str, args: dict[str, Any]) -> str:
+    normalized = json.dumps(
+        {"skill": str(skill_name).strip().lower(), "args": args},
+        ensure_ascii=False,
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest()
+
+
+def _usage_tool_approval_metadata(*, skill_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "surface": "lens.usage",
+        "skill": str(skill_name).strip().lower(),
+        "args": args,
+        "signature": _usage_tool_approval_signature(skill_name=skill_name, args=args),
+    }
+
+
+def _find_usage_tool_approval(*, skill_name: str, args: dict[str, Any]) -> dict[str, Any] | None:
+    signature = _usage_tool_approval_signature(skill_name=skill_name, args=args)
+    requests = list_requests(_fs, action=f"tools.{skill_name}", limit=50)
+    for row in reversed(requests):
+        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+        if str(metadata.get("signature", "")).strip() != signature:
+            continue
+        return row
+    return None
+
+
+def _request_usage_tool_approval(
+    *,
+    request: Request,
+    skill_name: str,
+    args: dict[str, Any],
+    reason: str,
+) -> dict[str, Any]:
+    payload = ApprovalRequestPayload(
+        action=f"tools.{skill_name}",
+        reason=reason,
+        metadata=_usage_tool_approval_metadata(skill_name=skill_name, args=args),
+    )
+    return approval_request(request, payload)
 
 
 def _execute_lens_action(
@@ -953,15 +1000,87 @@ def _execute_lens_action(
             "result": result,
         }
 
-    if normalized_kind == "repo.tests":
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "message": "repo.tests requires approval through the tools surface.",
-                "policy_reason": "Repository test execution consumes significant compute/time and requires approval.",
-                "skill": "repo.tests",
-            },
+    if normalized_kind == "repo.tests.request_approval":
+        lane = str(args.get("lane", "fast")).strip().lower() or "fast"
+        target = str(args.get("target", "")).strip()
+        tool_args = {"lane": lane}
+        if target:
+            tool_args["target"] = target
+        execution_args = dict(tool_args)
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        _enforce_rbac(role, "approvals.request")
+        _enforce_action_scope(app="approvals", action="approvals.request", mutating=False)
+        approval_response = _request_usage_tool_approval(
+            request=request,
+            skill_name="repo.tests",
+            args=tool_args,
+            reason="Lens requested approval for repo.tests from the usage loop.",
         )
+        approval = approval_response.get("approval", {}) if isinstance(approval_response.get("approval"), dict) else {}
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "execution_args": execution_args,
+            "approval": approval,
+            "summary": (
+                f"Approval {str(approval.get('id', '')).strip() or 'pending'} requested for repo.tests."
+            ),
+        }
+
+    if normalized_kind == "repo.tests":
+        lane = str(args.get("lane", "fast")).strip().lower() or "fast"
+        target = str(args.get("target", "")).strip()
+        approval_id = str(args.get("approval_id", "")).strip() or None
+        execution_args = {"lane": lane, "approval_id": approval_id or ""}
+        if target:
+            execution_args["target"] = target
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        _enforce_rbac(role, "tools.run")
+        _enforce_action_scope(app="tools", action="tools.run.repo.tests", mutating=False)
+        policy = approval_policy_for_tool(
+            skill_name="repo.tests",
+            risk_tier="low",
+            mutating=False,
+            source="builtin",
+            declared_requires_approval=True,
+        )
+        tool_args = {"lane": lane}
+        if target:
+            tool_args["target"] = target
+        approved, approval_detail = ensure_action_approved(
+            _fs,
+            run_id=run_id,
+            action="tools.repo.tests",
+            requested_by=role,
+            reason="Lens requested repo.tests execution from the usage loop.",
+            approval_required=True,
+            approval_id=approval_id,
+            metadata=_usage_tool_approval_metadata(skill_name="repo.tests", args=tool_args),
+        )
+        if not approved:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Action requires approval: tools.repo.tests",
+                    "policy_reason": policy.reason,
+                    **approval_detail,
+                },
+            )
+        result = _skill_executor.execute(SkillCall(name="repo.tests", args=tool_args)).to_dict()
+        if not bool(result.get("ok", False)):
+            raise HTTPException(status_code=500, detail=f"repo.tests failed: {result.get('error', 'unknown error')}")
+        output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+        summary = str(output.get("stdout", "")).strip() or "repo.tests completed without stdout."
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "repo.tests", "approval_id": approval_id},
+            "execution_args": execution_args,
+            "summary": summary,
+            "result": result,
+        }
 
     if normalized_kind == "observer.scan":
         _enforce_action_scope(app="observer", action="observer.scan")
@@ -1101,6 +1220,10 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
     }
     if kind == "mission.tick":
         hinted["execute_via"]["payload"]["args"] = {"mission_id": "<required>"}
+    elif kind == "repo.tests":
+        hinted["execute_via"]["payload"]["args"] = {"lane": "fast", "approval_id": ""}
+    elif kind == "repo.tests.request_approval":
+        hinted["execute_via"]["payload"]["args"] = {"lane": "fast"}
     elif kind == "apprenticeship.generalize":
         hinted["execute_via"]["payload"]["args"] = {"session_id": "<required>"}
     elif kind == "apprenticeship.skillize":
@@ -1438,6 +1561,7 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
 
+    role = _role_from_request(request)
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
     lens_snapshot = build_lens_snapshot(_workspace_root)
@@ -1546,6 +1670,19 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     repo_diff_allowed, repo_diff_scope_reason = _check_usage_scope("tools", "tools.run.repo.diff")
     repo_lint_allowed, repo_lint_scope_reason = _check_usage_scope("tools", "tools.run.repo.lint")
     repo_tests_allowed, repo_tests_scope_reason = _check_usage_scope("tools", "tools.run.repo.tests")
+    repo_tests_request_allowed, repo_tests_request_scope_reason = _check_usage_scope(
+        "approvals",
+        "approvals.request",
+        mutating=False,
+    )
+    repo_tests_args = {"lane": "fast"}
+    repo_tests_approval = _find_usage_tool_approval(skill_name="repo.tests", args=repo_tests_args)
+    repo_tests_approval_status = (
+        str(repo_tests_approval.get("status", "")).strip().lower() if isinstance(repo_tests_approval, dict) else ""
+    )
+    repo_tests_approval_id = (
+        str(repo_tests_approval.get("id", "")).strip() if isinstance(repo_tests_approval, dict) else ""
+    )
     usage_chip_defs = [
         {
             "kind": "repo.status",
@@ -1586,22 +1723,67 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
             "policy_reason": "" if repo_lint_allowed else repo_lint_scope_reason,
         }
     )
-    usage_chip_defs.append(
-        {
-            "kind": "repo.tests",
-            "label": "Run Fast Checks",
-            "enabled": False,
-            "reason": "Run the fast pytest lane against the current repo state.",
-            "risk_tier": "low",
-            "trust_badge": "Likely",
-            "args": {"lane": "fast"},
-            "policy_reason": (
-                "Repository test execution requires approval through the tools surface."
+    if repo_tests_approval_status == "approved" and repo_tests_approval_id:
+        usage_chip_defs.append(
+            {
+                "kind": "repo.tests",
+                "label": "Run Fast Checks",
+                "enabled": repo_tests_allowed,
+                "reason": (
+                    f"Approval {repo_tests_approval_id[:8]} is approved. "
+                    "Run the fast pytest lane against the current repo state."
+                ),
+                "risk_tier": "low",
+                "trust_badge": "Confirmed",
+                "args": {"lane": "fast", "approval_id": repo_tests_approval_id},
+                "policy_reason": "" if repo_tests_allowed else repo_tests_scope_reason,
+            }
+        )
+    else:
+        pending_policy_reason = (
+            f"Approval {repo_tests_approval_id[:8]} is pending."
+            if repo_tests_approval_status == "pending" and repo_tests_approval_id
+            else (
+                "Repository test execution requires approval."
                 if repo_tests_allowed
                 else repo_tests_scope_reason
-            ),
-        }
-    )
+            )
+        )
+        usage_chip_defs.append(
+            {
+                "kind": "repo.tests",
+                "label": "Run Fast Checks",
+                "enabled": False,
+                "reason": "Run the fast pytest lane against the current repo state.",
+                "risk_tier": "low",
+                "trust_badge": "Likely",
+                "args": {"lane": "fast"},
+                "policy_reason": pending_policy_reason,
+            }
+        )
+        if repo_tests_approval_status != "pending":
+            request_enabled = repo_tests_request_allowed and can(role, "approvals.request")
+            request_policy_reason = (
+                ""
+                if request_enabled
+                else repo_tests_request_scope_reason
+                if not repo_tests_request_allowed
+                else f"RBAC denied: role={role}, action=approvals.request"
+            )
+            usage_chip_defs.append(
+                {
+                    "kind": "repo.tests.request_approval",
+                    "label": "Request Fast Checks Approval",
+                    "enabled": request_enabled,
+                    "reason": (
+                        "Queue approval for repo.tests so Francis can run the fast lane from the same operator deck."
+                    ),
+                    "risk_tier": "low",
+                    "trust_badge": "Likely",
+                    "args": {"lane": "fast"},
+                    "policy_reason": request_policy_reason,
+                }
+            )
     if next_best_action:
         next_kind = str(next_best_action.get("kind", "")).strip().lower()
         if next_kind and not any(str(item.get("kind", "")).strip().lower() == next_kind for item in usage_chip_defs):
@@ -1654,7 +1836,6 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         {},
     )
     handback_trust_badge = str(latest_handback_posture.get("trust", "Likely")).strip() or "Likely"
-    role = _role_from_request(request)
     remote_read_allowed = can(role, "control.remote.read") and can(role, "approvals.read")
     remote_write_allowed = can(role, "control.remote.write")
     remote_decide_allowed = remote_write_allowed and can(role, "approvals.decide")
