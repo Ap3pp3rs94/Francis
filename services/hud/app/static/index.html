@@ -3272,6 +3272,12 @@
         applySeverityState(document.getElementById("work-next-action-meta"), nextSeverity);
         applySeverityState(document.getElementById("work-terminal-summary"), nextSeverity);
         applyPanelSignal("next-move-panel", nextSeverity);
+        const focusKind = resolveUsageFocusActionKind(snapshot, actions);
+        const relatedApprovalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
+        const relatedApproval =
+          relatedApprovalIndex >= 0 && Array.isArray(currentApprovalQueue?.items)
+            ? currentApprovalQueue.items[relatedApprovalIndex]
+            : null;
         document.getElementById("work-next-evidence").innerHTML = nextEvidence.length
           ? nextEvidence
               .map(
@@ -3293,7 +3299,11 @@
           const requestFlow = String(currentFocusActionChip.kind || "").includes("request_approval");
           previewButton.disabled = !Boolean(currentFocusActionChip.enabled);
           executeButton.disabled = !Boolean(currentFocusActionChip.enabled);
-          executeButton.textContent = requestFlow ? "Request" : "Execute";
+          executeButton.textContent = relatedApproval?.can_execute_after_approval
+            ? "Approve + Run"
+            : requestFlow
+              ? "Request"
+              : "Execute";
         } else {
           previewButton.disabled = true;
           executeButton.disabled = true;
@@ -3984,6 +3994,16 @@
 
       async function runFocusAction() {
         if (!currentFocusActionChip) {
+          return;
+        }
+        const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
+        const relatedApprovalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
+        const relatedApproval =
+          relatedApprovalIndex >= 0 && Array.isArray(currentApprovalQueue?.items)
+            ? currentApprovalQueue.items[relatedApprovalIndex]
+            : null;
+        if (relatedApproval?.can_execute_after_approval && relatedApproval?.id) {
+          await approveAndRunQueueItem(String(relatedApproval.id));
           return;
         }
         await executeAction(String(currentFocusActionChip.kind || ""), false);

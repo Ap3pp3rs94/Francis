@@ -234,7 +234,7 @@ These hold journals, queues, missions, incidents, receipts, telemetry, and other
 The most important HUD/operator surfaces are now shifting from status cards toward real usage flow:
 
 * `Dashboard Cards` - server-shaped landing cards with signal, summary, evidence, and detail so the first HUD surface stops flattening operator state into generic text
-* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, a structured terminal breakdown, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, and explicit evidence for why Lens picked the current move
+* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, a structured terminal breakdown, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, explicit evidence for why Lens picked the current move, and direct `Approve + Run` continuation when the queue can resume the blocked action cleanly
 * `Approval Queue` - pending approvals with in-place approve/reject controls, resumable `Approve + Run` handling for supported usage actions, server-shaped approval detail cards, and explicit current-vs-historical state
 * `Blocked Actions` - policy-denied or approval-gated actions with backend detail summaries and detail cards instead of a raw blocked list
 * `Execution Journal` - recent receipts and active run state, linked back to the current operator move with server-shaped receipt summaries, detail cards, and explicit current-vs-historical state
