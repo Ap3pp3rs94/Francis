@@ -514,6 +514,7 @@ def test_hud_approval_queue_route_returns_pending_requests() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "approval_queue"
+    assert "focus_approval_id" in payload
     assert "pending_count" in payload
     assert "items" in payload
 
@@ -566,6 +567,7 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
 
     payload = approval_queue_view.get_approval_queue_view()
 
+    assert payload["focus_approval_id"] == "approval-tests"
     assert payload["items"][0]["requested_action_kind"] == "repo.tests"
     assert payload["items"][0]["detail_summary"].startswith("repo.tests is waiting on an operator decision.")
     assert payload["items"][0]["detail_cards"]
@@ -679,6 +681,8 @@ def test_hud_execution_journal_route_returns_receipts() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "execution_journal"
+    assert "focus_run_id" in payload
+    assert "focus_action_kind" in payload
     assert "active_run" in payload
     assert "items" in payload
 
@@ -785,6 +789,8 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
 
     payload = execution_journal_view.get_execution_journal_view()
 
+    assert payload["focus_run_id"] == "run-tests"
+    assert payload["focus_action_kind"] == "repo.tests"
     lens_row = next(item for item in payload["items"] if item["kind"] == "lens.action.execute")
     approval_row = next(item for item in payload["items"] if item["kind"] == "approval.decided")
     assert lens_row["action_kind"] == "repo.tests"

@@ -235,9 +235,28 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
             }
         )
 
+    focus_item = next((row for row in items if str(row.get("detail_state", "")).strip() == "current"), None)
+    if focus_item is None and items:
+        active_run_id = str(last_run.get("run_id", "")).strip()
+        if active_run_id:
+            focus_item = next(
+                (
+                    row
+                    for row in items
+                    if str(row.get("run_id", "")).strip() == active_run_id and str(row.get("action_kind", "")).strip()
+                ),
+                None,
+            )
+            if focus_item is None:
+                focus_item = next((row for row in items if str(row.get("run_id", "")).strip() == active_run_id), None)
+    if focus_item is None and items:
+        focus_item = items[0]
+
     return {
         "status": "ok",
         "surface": "execution_journal",
+        "focus_run_id": str(focus_item.get("run_id", "")).strip() if isinstance(focus_item, dict) else "",
+        "focus_action_kind": str(focus_item.get("action_kind", "")).strip() if isinstance(focus_item, dict) else "",
         "active_run": {
             "run_id": str(last_run.get("run_id", "")).strip() or "none",
             "phase": str(last_run.get("phase", "unknown")).strip() or "unknown",

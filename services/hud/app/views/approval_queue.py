@@ -160,10 +160,15 @@ def get_approval_queue_view(
             }
         )
 
+    focus_item = next((row for row in items if str(row.get("detail_state", "")).strip() == "current"), None)
+    if focus_item is None and items:
+        focus_item = items[0]
+
     return {
         "status": "ok",
         "surface": "approval_queue",
         "pending_count": int(approvals.get("pending_count", 0)),
+        "focus_approval_id": str(focus_item.get("id", "")).strip() if isinstance(focus_item, dict) else "",
         "can_read": can_read,
         "can_approve": can_approve,
         "can_reject": can_reject,

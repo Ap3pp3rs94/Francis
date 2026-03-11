@@ -3426,10 +3426,13 @@
           : `<li class="muted-empty">No pending approvals surfaced yet.</li>`;
 
         if (items.length) {
-          const linkedIndex = findRelatedApprovalIndex(
-            resolveUsageFocusActionKind(currentSnapshot, currentActions),
-            currentApprovalQueue,
-          );
+          const focusApprovalId = String(currentApprovalQueue.focus_approval_id || "").trim();
+          const linkedIndex = focusApprovalId
+            ? items.findIndex((row) => String(row.id || "").trim() === focusApprovalId)
+            : findRelatedApprovalIndex(
+                resolveUsageFocusActionKind(currentSnapshot, currentActions),
+                currentApprovalQueue,
+              );
           inspectApproval(linkedIndex >= 0 ? linkedIndex : 0);
         } else {
           document.getElementById("approval-detail-meta").textContent = "Queue idle";
@@ -3487,10 +3490,22 @@
           : `<li class="muted-empty">No recent receipts surfaced yet.</li>`;
 
         if (items.length) {
-          const linkedIndex = findRelatedJournalIndex(
-            resolveUsageFocusActionKind(currentSnapshot, currentActions),
-            currentExecutionJournal,
-          );
+          const focusRunId = String(currentExecutionJournal.focus_run_id || "").trim();
+          const focusActionKind = String(currentExecutionJournal.focus_action_kind || "").trim().toLowerCase();
+          let linkedIndex = -1;
+          if (focusRunId || focusActionKind) {
+            linkedIndex = items.findIndex((row) => {
+              const runMatch = !focusRunId || String(row.run_id || "").trim() === focusRunId;
+              const actionMatch = !focusActionKind || String(row.action_kind || "").trim().toLowerCase() === focusActionKind;
+              return runMatch && actionMatch;
+            });
+          }
+          if (linkedIndex < 0) {
+            linkedIndex = findRelatedJournalIndex(
+              resolveUsageFocusActionKind(currentSnapshot, currentActions),
+              currentExecutionJournal,
+            );
+          }
           inspectJournalItem(linkedIndex >= 0 ? linkedIndex : 0);
         } else {
           document.getElementById("journal-detail-meta").textContent = "Ledger idle";
