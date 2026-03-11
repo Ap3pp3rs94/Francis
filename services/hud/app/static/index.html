@@ -3639,6 +3639,7 @@
         currentInboxSurface = inboxPayload || { messages: [] };
         const messages = Array.isArray(currentInboxSurface.messages) ? currentInboxSurface.messages : [];
         currentInboxRows = messages;
+        const focusMessageId = String(currentInboxSurface.focus_message_id || "").trim();
         document.getElementById("inbox-meta").textContent =
           `${Number(currentInboxSurface.message_count || messages.length || 0)} message(s) | ${Number(currentInboxSurface.alert_count || 0)} alert(s)`;
         document.getElementById("inbox-summary").textContent =
@@ -3665,7 +3666,10 @@
               .join("")
           : `<li class="muted-empty">No inbox messages surfaced yet.</li>`;
         if (messages.length) {
-          inspectInboxItem(0);
+          const focusIndex = focusMessageId
+            ? messages.findIndex((row) => String(row.id || "").trim() === focusMessageId)
+            : -1;
+          inspectInboxItem(focusIndex >= 0 ? focusIndex : 0);
         } else {
           document.getElementById("inbox-detail-summary").textContent =
             "Inbox detail will render from the current backend surface.";
@@ -3700,6 +3704,7 @@
         currentRunsSurface = runsPayload || { run_groups: [] };
         const groups = Array.isArray(currentRunsSurface.run_groups) ? currentRunsSurface.run_groups : [];
         currentRunRows = groups.length ? groups : [currentRunsSurface.active_run || {}];
+        const focusRunId = String(currentRunsSurface.focus_run_id || "").trim();
         document.getElementById("runs-meta").textContent =
           `${String(currentRunsSurface.active_run?.run_id || "none")} | ${String(currentRunsSurface.active_run?.phase || "unknown")}`;
         document.getElementById("runs-summary").textContent =
@@ -3727,7 +3732,10 @@
               .join("")
           : `<li class="muted-empty">No run groups surfaced yet.</li>`;
         if (currentRunRows.length && currentRunRows[0] && Object.keys(currentRunRows[0]).length) {
-          inspectRunSurface(0);
+          const focusIndex = focusRunId
+            ? currentRunRows.findIndex((row) => String(row.run_id || "").trim() === focusRunId)
+            : -1;
+          inspectRunSurface(focusIndex >= 0 ? focusIndex : 0);
         } else {
           document.getElementById("runs-detail-summary").textContent =
             "Run detail will render from the current backend surface.";

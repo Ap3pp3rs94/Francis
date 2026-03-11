@@ -725,6 +725,7 @@ def test_hud_inbox_route_returns_structured_surface() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "inbox"
+    assert "focus_message_id" in payload
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload
@@ -737,6 +738,7 @@ def test_hud_runs_route_returns_structured_surface() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "runs"
+    assert "focus_run_id" in payload
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload
@@ -828,6 +830,7 @@ def test_hud_inbox_view_marks_current_and_historical_messages(monkeypatch) -> No
     payload = inbox_view.get_inbox_view()
 
     assert payload["summary"].startswith("Approval waiting | alert | repo.tests needs a decision")
+    assert payload["focus_message_id"] == "msg-1"
     assert payload["messages"][0]["detail_state"] == "current"
     assert payload["messages"][0]["detail_cards"][0]["label"] == "Message"
     assert payload["messages"][1]["detail_state"] == "historical"
@@ -881,6 +884,7 @@ def test_hud_runs_view_carries_latest_receipt_summary(monkeypatch) -> None:
     payload = runs_view.get_runs_view()
 
     assert "Lane fast executed. 12 passed | 0 failed" in payload["summary"]
+    assert payload["focus_run_id"] == "run-tests"
     assert payload["active_run"]["detail_state"] == "current"
     assert any(card["label"] == "Latest Receipt" for card in payload["cards"])
     assert payload["run_groups"][0]["detail_state"] == "current"

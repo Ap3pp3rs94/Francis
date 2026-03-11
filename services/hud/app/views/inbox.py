@@ -88,6 +88,7 @@ def get_inbox_view(*, snapshot: dict[str, object] | None = None) -> dict[str, ob
         "surface": "inbox",
         "message_count": inbox["count"],
         "alert_count": inbox["alert_count"],
+        "focus_message_id": str(top.get("id", "")).strip() if top else "",
         "summary": str(top.get("detail_summary", "")).strip() if top else "Inbox is clear.",
         "severity": _max_severity(normalized) if normalized else "low",
         "cards": [

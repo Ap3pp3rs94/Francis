@@ -134,6 +134,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
     return {
         "status": "ok",
         "surface": "runs",
+        "focus_run_id": active_run["run_id"] if active_run["run_id"] != "none" else (run_groups[0]["run_id"] if run_groups else "none"),
         "summary": active_run["detail_summary"],
         "severity": "medium" if active_run["run_id"] != "none" else "low",
         "cards": [
