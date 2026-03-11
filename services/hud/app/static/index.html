@@ -717,6 +717,9 @@
           <p class="meta" id="work-next-action-meta">
             Waiting for the first action resolution.
           </p>
+          <ul class="list" id="work-next-evidence">
+            <li class="muted-empty">Evidence for the next move will render here.</li>
+          </ul>
           <p class="meta" id="work-terminal-summary">
             Terminal summary will explain the first failure or clean completion.
           </p>
@@ -944,6 +947,7 @@
       let currentFabricResults = [];
       let currentApprovalQueue = { items: [] };
       let currentExecutionJournal = { items: [] };
+      let currentCurrentWork = {};
       let currentMissionRows = [];
       let currentIncidentRows = [];
       let currentOrb = null;
@@ -2072,6 +2076,7 @@
         document.body.dataset.boot = "hydrating";
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
         currentSnapshot = payload.snapshot || null;
+        currentCurrentWork = payload.current_work || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
 
@@ -2093,7 +2098,7 @@
           .join("");
 
         renderOrb(payload.orb || {});
-        renderCurrentWork(payload.snapshot || {}, currentActions);
+        renderCurrentWork(currentCurrentWork, payload.snapshot || {}, currentActions);
         renderApprovalQueue(currentApprovalQueue);
         renderExecutionJournal(currentExecutionJournal);
         renderMissionStack(payload.missions || {});
@@ -2663,12 +2668,13 @@
         return "medium";
       }
 
-      function renderCurrentWork(snapshot, actions) {
-        const currentWork = snapshot?.current_work && typeof snapshot.current_work === "object"
+      function renderCurrentWork(surface, snapshot, actions) {
+        const currentWork = surface && typeof surface === "object" ? surface : {};
+        const snapshotWork = snapshot?.current_work && typeof snapshot.current_work === "object"
           ? snapshot.current_work
           : {};
         const repo = currentWork.repo && typeof currentWork.repo === "object" ? currentWork.repo : {};
-        const telemetry = currentWork.telemetry && typeof currentWork.telemetry === "object" ? currentWork.telemetry : {};
+        const telemetry = snapshotWork.telemetry && typeof snapshotWork.telemetry === "object" ? snapshotWork.telemetry : {};
         const terminal = telemetry.last_terminal && typeof telemetry.last_terminal === "object"
           ? telemetry.last_terminal
           : {};
@@ -2679,9 +2685,10 @@
         const lastRun = currentWork.last_run && typeof currentWork.last_run === "object" ? currentWork.last_run : {};
         const blockers = Array.isArray(currentWork.blockers) ? currentWork.blockers : [];
         const topPaths = Array.isArray(repo.top_paths) ? repo.top_paths : [];
-        const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
-          ? snapshot.next_best_action
+        const nextAction = currentWork.next_action && typeof currentWork.next_action === "object"
+          ? currentWork.next_action
           : {};
+        const nextEvidence = Array.isArray(currentWork.next_action_evidence) ? currentWork.next_action_evidence : [];
         currentFocusActionChip = resolveFocusActionChip(snapshot, actions);
 
         document.getElementById("work-focus-meta").textContent =
@@ -2744,7 +2751,8 @@
           : "No terminal command captured.";
         document.getElementById("work-terminal-meta").textContent =
           `${String(terminal.severity || "info")} | ${terminalSummary}`;
-        document.getElementById("work-terminal-summary").textContent = summarizeTerminalContext(terminal);
+        document.getElementById("work-terminal-summary").textContent =
+          String(currentWork.terminal_summary || summarizeTerminalContext(terminal));
         document.getElementById("work-terminal").textContent = formatJson({
           command: command || "No terminal command captured.",
           exit_code: exitCode,
@@ -2765,6 +2773,19 @@
         document.getElementById("work-next-action-meta").textContent = currentFocusActionChip
           ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${currentFocusActionChip.enabled ? "ready" : "blocked"}`
           : `${String(nextAction.kind || "unknown")} | no matching action chip`;
+        document.getElementById("work-next-evidence").innerHTML = nextEvidence.length
+          ? nextEvidence
+              .map(
+                (item) => `
+                  <li>
+                    <strong>${escapeHtml(titleCase(String(item.kind || "signal")))}</strong>
+                    <span class="meta"> | ${escapeHtml(String(item.severity || "low"))}</span>
+                    ${escapeHtml(String(item.detail || "No evidence detail provided."))}
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">No explicit evidence has been surfaced for the next move yet.</li>`;
 
         const previewButton = document.getElementById("work-action-preview");
         const executeButton = document.getElementById("work-action-execute");
@@ -3095,7 +3116,7 @@
           });
         }
         if (currentSnapshot) {
-          renderCurrentWork(currentSnapshot, currentActions);
+          renderCurrentWork(currentCurrentWork, currentSnapshot, currentActions);
         }
         document.getElementById("orb-controls").textContent = orbControlHint();
         applyOrbSignals();

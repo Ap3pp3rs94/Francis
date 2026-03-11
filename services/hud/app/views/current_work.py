@@ -1,6 +1,111 @@
 from __future__ import annotations
 
+from typing import Any
+
 from services.hud.app.state import build_lens_snapshot
+
+
+def _first_meaningful_line(*values: object) -> str:
+    for value in values:
+        text = str(value or "")
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            lowered = line.lower()
+            if lowered in {"traceback", "stack trace"}:
+                continue
+            if lowered.startswith("line "):
+                continue
+            if lowered.startswith("collected ") and lowered.endswith(" items"):
+                continue
+            return line
+    return ""
+
+
+def _terminal_summary(terminal: dict[str, Any]) -> str:
+    command = str(terminal.get("command", "")).strip()
+    severity = str(terminal.get("severity", "info")).strip().lower() or "info"
+    exit_code = terminal.get("exit_code")
+    if not command:
+        return "Terminal anchor: no recent command."
+    if severity == "error" or (isinstance(exit_code, int) and exit_code != 0):
+        first_failure = _first_meaningful_line(
+            terminal.get("stderr", ""),
+            terminal.get("stdout", ""),
+            terminal.get("text", ""),
+        )
+        if first_failure:
+            return f'Terminal failure anchor: {command} failed first on "{first_failure}".'
+        return f"Terminal failure anchor: {command} exited {exit_code}."
+    return f"Terminal anchor: {command} completed without a visible failure edge."
+
+
+def _evidence_row(*, kind: str, severity: str, detail: str) -> dict[str, str]:
+    return {
+        "kind": kind,
+        "severity": severity,
+        "detail": detail.strip(),
+    }
+
+
+def _build_next_action_evidence(
+    *,
+    snapshot: dict[str, object],
+    blockers: list[str],
+    terminal: dict[str, Any],
+) -> list[dict[str, str]]:
+    evidence: list[dict[str, str]] = []
+    terminal_summary = _terminal_summary(terminal)
+    if terminal_summary.startswith("Terminal failure anchor:"):
+        evidence.append(_evidence_row(kind="terminal", severity="high", detail=terminal_summary))
+
+    lowered_blockers = [item.lower() for item in blockers]
+    for blocker in blockers[:2]:
+        severity = "high" if "approval" in blocker.lower() or "blocked" in blocker.lower() else "medium"
+        evidence.append(_evidence_row(kind="blocker", severity=severity, detail=blocker))
+
+    approvals = snapshot.get("approvals", {}) if isinstance(snapshot.get("approvals"), dict) else {}
+    pending_count = int(approvals.get("pending_count", 0))
+    if pending_count and not any("approval" in item for item in lowered_blockers):
+        evidence.append(
+            _evidence_row(
+                kind="approval",
+                severity="high" if pending_count > 0 else "medium",
+                detail=f"{pending_count} approval(s) are pending in the current workspace.",
+            )
+        )
+
+    fabric = snapshot.get("fabric", {}) if isinstance(snapshot.get("fabric"), dict) else {}
+    calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
+    confidence_counts = (
+        calibration.get("confidence_counts", {}) if isinstance(calibration.get("confidence_counts"), dict) else {}
+    )
+    stale_count = int(calibration.get("stale_current_state_count", 0))
+    uncertain_count = int(confidence_counts.get("uncertain", 0))
+    if stale_count > 0:
+        evidence.append(
+            _evidence_row(
+                kind="fabric",
+                severity="medium",
+                detail=f"{stale_count} current-state artifact(s) are stale and need refresh before they count as proof.",
+            )
+        )
+    elif uncertain_count > 0:
+        evidence.append(
+            _evidence_row(
+                kind="fabric",
+                severity="medium",
+                detail=f"{uncertain_count} fabric artifact(s) remain uncertain.",
+            )
+        )
+
+    if not evidence:
+        summary = str(snapshot.get("next_best_action", {}).get("reason", "")).strip()
+        if summary:
+            evidence.append(_evidence_row(kind="context", severity="low", detail=summary))
+
+    return evidence[:4]
 
 
 def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
@@ -50,8 +155,14 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
             "text": str(terminal.get("text", "")).strip(),
             "ts": terminal.get("ts"),
         },
+        "terminal_summary": _terminal_summary(terminal),
         "mission": mission,
         "last_run": last_run,
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],
         "next_action": next_best_action,
+        "next_action_evidence": _build_next_action_evidence(
+            snapshot=snapshot,
+            blockers=[str(item).strip() for item in blockers if str(item).strip()],
+            terminal=terminal,
+        ),
     }

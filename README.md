@@ -233,12 +233,12 @@ These hold journals, queues, missions, incidents, receipts, telemetry, and other
 
 The most important HUD/operator surfaces are now shifting from status cards toward real usage flow:
 
-* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, the next actionable move, whether the current operator link is still active or stale, and what the first terminal failure edge actually was
+* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, and explicit evidence for why Lens picked the current move
 * `Approval Queue` - pending approvals with in-place approve/reject controls, readable approval detail, and explicit current-vs-historical state
 * `Execution Journal` - recent receipts and active run state, linked back to the current operator move with readable receipt summaries and explicit current-vs-historical state
 * `Repo Drilldown` - direct `repo.status`, `repo.diff`, `repo.lint`, and fast-check execution from the same Lens surface, with readable operator summaries and explicit severity instead of raw receipt-only dumps
 
-That is still not the final Lens, but it is the right direction: Francis should expose what matters now, what is blocked, what it can do next, and what it just did. The HUD is increasingly being shaped as one operator loop instead of a set of unrelated panels, with current-work linkage carrying through approvals, execution, receipts, stale/active continuity cues, and terminal-failure anchors. The detail panes should read as operator guidance first and raw proof second.
+That is still not the final Lens, but it is the right direction: Francis should expose what matters now, what is blocked, what it can do next, and what it just did. The HUD is increasingly being shaped as one operator loop instead of a set of unrelated panels, with current-work linkage carrying through approvals, execution, receipts, stale/active continuity cues, terminal-failure anchors, and explicit next-move evidence. The detail panes should read as operator guidance first and raw proof second.
 
 ## Current Architecture Shape
 

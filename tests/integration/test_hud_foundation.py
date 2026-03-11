@@ -106,6 +106,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Link state will resolve from live workspace continuity." in response.text
     assert "Repo drilldown summary will render here." in response.text
     assert "Repo severity will resolve from drilldown results." in response.text
+    assert "Evidence for the next move will render here." in response.text
     assert "Terminal summary will explain the first failure or clean completion." in response.text
     assert "Execution feed will explain the current operator chain." in response.text
     assert "Mission Stack" in response.text
@@ -399,7 +400,10 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
+    assert body["current_work"]["terminal_summary"].startswith("Terminal failure anchor:")
     assert body["current_work"]["next_action"]["kind"] == "repo.tests"
+    assert any(item["kind"] == "terminal" for item in body["current_work"]["next_action_evidence"])
+    assert any(item["kind"] in {"blocker", "approval"} for item in body["current_work"]["next_action_evidence"])
     assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["approval_queue"]["pending_count"] == 1
@@ -441,7 +445,9 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "repo" in payload
     assert "attention" in payload
     assert "terminal" in payload
+    assert "terminal_summary" in payload
     assert "next_action" in payload
+    assert "next_action_evidence" in payload
 
 
 def test_hud_approval_queue_route_returns_pending_requests() -> None:
