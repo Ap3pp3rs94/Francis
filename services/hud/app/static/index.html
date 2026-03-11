@@ -621,7 +621,7 @@
                 <div class="eyebrow orb-eyebrow">Orb Chamber</div>
                 <h2 id="orb-title">Cursor-riding operator surface</h2>
               </div>
-              <span class="orb-status meta tiny" id="orb-status">Awaiting live orb state</span>
+              <span class="orb-status meta tiny" id="orb-status">L0 | ambient</span>
             </div>
             <div class="orb-stage" id="orb-stage" title="The moving Orb is the panic-stop surface when authority is live.">
               <p class="orb-stage-copy" id="orb-stage-copy">
@@ -696,7 +696,7 @@
             <button class="btn-secondary" type="button" id="repo-action-lint" disabled>Ruff Check</button>
             <button class="btn-primary" type="button" id="repo-action-tests" disabled>Fast Checks</button>
           </div>
-          <pre class="console" id="work-repo-detail">Awaiting repo drilldown.</pre>
+          <pre class="console" id="work-repo-detail">Repo drilldown detail will render from current work.</pre>
         </article>
         <article class="panel accent">
           <div class="panel-head">
@@ -713,7 +713,7 @@
             <button class="btn-secondary" type="button" id="work-action-preview" disabled>Preview</button>
             <button class="btn-primary" type="button" id="work-action-execute" disabled>Execute</button>
           </div>
-          <pre class="console" id="work-terminal">Awaiting live terminal context.</pre>
+          <pre class="console" id="work-terminal">Terminal detail will render from live telemetry.</pre>
         </article>
       </section>
 
@@ -733,9 +733,9 @@
         <article class="panel accent">
           <div class="panel-head">
             <h2>Approval Detail</h2>
-            <span class="meta tiny" id="approval-detail-meta">No approval selected</span>
+            <span class="meta tiny" id="approval-detail-meta">Queue idle</span>
           </div>
-          <pre class="console" id="approval-detail">Awaiting approval queue data.</pre>
+          <pre class="console" id="approval-detail">Approval detail will render from the current workspace queue.</pre>
         </article>
       </section>
 
@@ -755,9 +755,9 @@
         <article class="panel accent">
           <div class="panel-head">
             <h2>Receipt Detail</h2>
-            <span class="meta tiny" id="journal-detail-meta">No receipt selected</span>
+            <span class="meta tiny" id="journal-detail-meta">Ledger idle</span>
           </div>
-          <pre class="console" id="journal-detail">Awaiting receipt history.</pre>
+          <pre class="console" id="journal-detail">Receipt detail will render from the run ledger.</pre>
         </article>
       </section>
 
@@ -765,7 +765,7 @@
         <article class="panel">
           <div class="panel-head">
             <h2>Operator Deck</h2>
-            <span class="meta tiny" id="action-summary">Awaiting live actions</span>
+            <span class="meta tiny" id="action-summary">Lens action state loading</span>
           </div>
           <div class="action-grid" id="action-grid"></div>
         </article>
@@ -774,7 +774,7 @@
             <h2>Execution Feed</h2>
             <span class="meta tiny" id="execution-meta">No action executed yet</span>
           </div>
-          <pre class="console" id="execution-output">Awaiting operator input.</pre>
+          <pre class="console" id="execution-output">Execution preview and receipt detail will appear here.</pre>
         </article>
       </section>
 
@@ -805,7 +805,7 @@
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
-          <pre class="console" id="desktop-display">Awaiting desktop bridge.</pre>
+          <pre class="console" id="desktop-display">Desktop shell detail will render here. Browser mode until Electron is attached.</pre>
         </article>
         <article class="panel accent">
           <div class="panel-head">
@@ -867,25 +867,34 @@
         <article class="panel accent">
           <div class="panel-head">
             <h2>Calibration Detail</h2>
-            <span class="meta tiny" id="fabric-detail-meta">No fabric artifact selected</span>
+            <span class="meta tiny" id="fabric-detail-meta">Fabric summary</span>
           </div>
           <ul class="list" id="fabric-calibration-list">
             <li class="muted-empty">Calibration posture will appear here.</li>
           </ul>
-          <pre class="console" id="fabric-detail">Awaiting a fabric query.</pre>
+          <pre class="console" id="fabric-detail">Fabric detail will render from summary or query results.</pre>
         </article>
       </section>
 
       <section class="stack">
         <article class="panel">
-          <h2>Mission Stack</h2>
+          <div class="panel-head">
+            <h2>Mission Stack</h2>
+            <span class="meta tiny" id="mission-meta">Mission detail loading from Lens</span>
+          </div>
           <ul class="list" id="missions"></ul>
+          <pre class="console" id="mission-detail">Mission detail will render from active or backlog work.</pre>
         </article>
         <article class="panel accent">
-          <h2>Incident Posture</h2>
+          <div class="panel-head">
+            <h2>Incident Posture</h2>
+            <span class="meta tiny" id="incident-meta">Incident posture loading from Lens</span>
+          </div>
+          <ul class="list" id="incidents-list"></ul>
           <p id="incidents"></p>
           <p class="meta" id="security-summary"></p>
           <p class="meta" id="runs"></p>
+          <pre class="console" id="incident-detail">Incident detail will render from live workspace posture.</pre>
         </article>
         <article class="panel">
           <div class="panel-head">
@@ -893,6 +902,7 @@
             <span class="meta tiny" id="blocked-summary">No blocked actions surfaced</span>
           </div>
           <ul class="list" id="blocked-actions"></ul>
+          <pre class="console" id="blocked-detail">Blocked action detail will render from Lens policy state.</pre>
         </article>
       </section>
     </main>
@@ -908,6 +918,8 @@
       let currentFabricResults = [];
       let currentApprovalQueue = { items: [] };
       let currentExecutionJournal = { items: [] };
+      let currentMissionRows = [];
+      let currentIncidentRows = [];
       let currentOrb = null;
       let currentFocusActionChip = null;
       let streamSource = null;
@@ -2048,31 +2060,17 @@
           )
           .join("");
 
-        const missionRows = payload.missions.active.length ? payload.missions.active : payload.missions.backlog;
-        const missions = document.getElementById("missions");
-        missions.innerHTML = missionRows.length
-          ? missionRows
-              .map(
-                (mission) =>
-                  `<li>${escapeHtml(mission.title)} <span class="meta">${escapeHtml(mission.phase || mission.status || "planned")}</span></li>`,
-              )
-              .join("")
-          : `<li class="muted-empty">No mission records available.</li>`;
-
-        document.getElementById("incidents").textContent = payload.incidents.items[0].summary;
-        document.getElementById("security-summary").textContent = summarizeSecurity(
-          payload.incidents.security || payload.snapshot?.security || {},
-        );
-        document.getElementById("runs").textContent =
-          `Run: ${payload.runs.active_run.run_id} | Phase: ${payload.runs.active_run.phase}`;
-
         renderOrb(payload.orb || {});
         renderCurrentWork(payload.snapshot || {}, currentActions);
         renderApprovalQueue(currentApprovalQueue);
         renderExecutionJournal(currentExecutionJournal);
+        renderMissionStack(payload.missions || {});
+        renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
         renderActions(currentActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
+        renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+        renderExecutionBootstrapState(payload.snapshot || {}, currentActions, currentExecutionJournal);
         document.body.dataset.boot = "ready";
       }
 
@@ -2122,6 +2120,31 @@
         document.getElementById("fabric-calibration-list").innerHTML = calibrationItems
           .map((item) => `<li>${escapeHtml(item)}</li>`)
           .join("");
+      }
+
+      function renderFabricBootstrapDetail(surface) {
+        if (currentFabricResults.length) {
+          return;
+        }
+        const summary = surface?.summary || {};
+        const calibration = summary.calibration || {};
+        document.getElementById("fabric-detail-meta").textContent =
+          `${summary.artifact_count || 0} artifact(s) | ${summary.citation_ready_count || 0} citation-ready`;
+        document.getElementById("fabric-detail").textContent = formatJson({
+          summary: {
+            artifact_count: summary.artifact_count || 0,
+            source_count: summary.source_count || 0,
+            citation_ready_count: summary.citation_ready_count || 0,
+            top_sources: Array.isArray(summary.top_sources) ? summary.top_sources : [],
+          },
+          calibration: {
+            confidence_counts: calibration.confidence_counts || {},
+            done_claim_ready_count: calibration.done_claim_ready_count || 0,
+            stale_current_state_count: calibration.stale_current_state_count || 0,
+            local_provenance_count: calibration.local_provenance_count || 0,
+            anchored_provenance_count: calibration.anchored_provenance_count || 0,
+          },
+        });
       }
 
       function inspectFabricResult(index) {
@@ -2287,18 +2310,17 @@
         document.getElementById("work-blockers").innerHTML = blockers.length
           ? blockers.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
           : `<li class="muted-empty">No blockers are active.</li>`;
-        document.getElementById("work-repo-detail").textContent = repo.available
-          ? formatJson({
-              branch: repo.branch || "unknown",
-              dirty: Boolean(repo.dirty),
-              changed_count: Number(repo.changed_count || 0),
-              staged_count: Number(repo.staged_count || 0),
-              unstaged_count: Number(repo.unstaged_count || 0),
-              untracked_count: Number(repo.untracked_count || 0),
-              top_paths: topPaths,
-              summary: repo.summary || "",
-            })
-          : "Repository status unavailable.";
+        document.getElementById("work-repo-detail").textContent = formatJson({
+          available: Boolean(repo.available),
+          branch: repo.branch || "unknown",
+          dirty: Boolean(repo.dirty),
+          changed_count: Number(repo.changed_count || 0),
+          staged_count: Number(repo.staged_count || 0),
+          unstaged_count: Number(repo.unstaged_count || 0),
+          untracked_count: Number(repo.untracked_count || 0),
+          top_paths: topPaths,
+          summary: repo.summary || "Repository status unavailable.",
+        });
 
         const command = String(terminal.command || "").trim();
         const exitCode = terminal.exit_code;
@@ -2307,18 +2329,17 @@
           : "No terminal command captured.";
         document.getElementById("work-terminal-meta").textContent =
           `${String(terminal.severity || "info")} | ${terminalSummary}`;
-        document.getElementById("work-terminal").textContent = command
-          ? formatJson({
-              command,
-              exit_code: exitCode,
-              cwd: terminal.cwd || "",
-              stderr: terminal.stderr || "",
-              stdout: terminal.stdout || "",
-              text: terminal.text || "",
-              ts: terminal.ts || "",
-              active_streams: Array.isArray(telemetry.active_streams) ? telemetry.active_streams : [],
-            })
-          : "Awaiting live terminal context.";
+        document.getElementById("work-terminal").textContent = formatJson({
+          command: command || "No terminal command captured.",
+          exit_code: exitCode,
+          cwd: terminal.cwd || "",
+          stderr: terminal.stderr || "",
+          stdout: terminal.stdout || "",
+          text: terminal.text || "",
+          ts: terminal.ts || "",
+          severity: terminal.severity || "info",
+          active_streams: Array.isArray(telemetry.active_streams) ? telemetry.active_streams : [],
+        });
 
         const focusLabel = String(currentFocusActionChip?.label || nextAction.label || "No next action selected.");
         const focusReason = String(
@@ -2462,6 +2483,113 @@
         }
       }
 
+      function inspectMission(index) {
+        const row = Array.isArray(currentMissionRows) ? currentMissionRows[index] : null;
+        if (!row) {
+          return;
+        }
+        document.getElementById("mission-detail").textContent = formatJson(row);
+      }
+
+      function renderMissionStack(missionsPayload) {
+        const active = Array.isArray(missionsPayload?.active) ? missionsPayload.active : [];
+        const backlog = Array.isArray(missionsPayload?.backlog) ? missionsPayload.backlog : [];
+        const completed = Array.isArray(missionsPayload?.completed) ? missionsPayload.completed : [];
+        currentMissionRows = active.length ? active : backlog;
+        document.getElementById("mission-meta").textContent =
+          `${active.length} active | ${backlog.length} backlog | ${completed.length} completed`;
+        const missions = document.getElementById("missions");
+        missions.innerHTML = currentMissionRows.length
+          ? currentMissionRows
+              .map(
+                (mission, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(mission.title || "Untitled mission")}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-low">${escapeHtml(mission.phase || mission.status || "planned")}</span>
+                        <span class="badge risk-medium">${escapeHtml(mission.priority || "normal")}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(mission.objective || "No mission objective recorded.")}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectMission(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">No mission records available.</li>`;
+        if (currentMissionRows.length) {
+          inspectMission(0);
+        } else {
+          document.getElementById("mission-detail").textContent = formatJson({
+            active,
+            backlog,
+            completed,
+          });
+        }
+      }
+
+      function inspectIncident(index) {
+        const row = Array.isArray(currentIncidentRows) ? currentIncidentRows[index] : null;
+        if (!row) {
+          return;
+        }
+        document.getElementById("incident-detail").textContent = formatJson(row);
+      }
+
+      function renderIncidents(incidentsPayload, securityPayload, runsPayload) {
+        const items = Array.isArray(incidentsPayload?.items) ? incidentsPayload.items : [];
+        currentIncidentRows = items;
+        document.getElementById("incident-meta").textContent =
+          `${Number(incidentsPayload?.open_count || 0)} open | ${String(incidentsPayload?.severity || incidentsPayload?.highest_severity || "nominal")}`;
+        document.getElementById("incidents").textContent = items[0]?.summary || "No open incidents in the current workspace.";
+        document.getElementById("incidents-list").innerHTML = items.length
+          ? items
+              .map(
+                (incident, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(incident.summary || "Incident")}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(incident.severity || "low")}">${escapeHtml(incident.severity || "low")}</span>
+                        <span class="badge risk-medium">${escapeHtml(incident.state || "open")}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(incident.source || "unknown source")} | ${escapeHtml(incident.ts || "unknown time")}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectIncident(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">No incidents surfaced.</li>`;
+        document.getElementById("security-summary").textContent = summarizeSecurity(
+          securityPayload || currentSnapshot?.security || {},
+        );
+        document.getElementById("runs").textContent =
+          `Run: ${runsPayload?.active_run?.run_id || "none"} | Phase: ${runsPayload?.active_run?.phase || "unknown"}`;
+        if (items.length) {
+          inspectIncident(0);
+        } else {
+          document.getElementById("incident-detail").textContent = formatJson({
+            incidents: items,
+            security: securityPayload || {},
+            run: runsPayload?.active_run || {},
+          });
+        }
+      }
+
+      function inspectBlockedAction(index) {
+        const row = Array.isArray(currentActions?.blocked_actions) ? currentActions.blocked_actions[index] : null;
+        if (!row) {
+          return;
+        }
+        document.getElementById("blocked-detail").textContent = formatJson(row);
+      }
+
       function renderActions(actions) {
         const chips = Array.isArray(actions.action_chips) ? actions.action_chips.slice(0, 8) : [];
         const blocked = Array.isArray(actions.blocked_actions) ? actions.blocked_actions.slice(0, 8) : [];
@@ -2511,11 +2639,19 @@
         blockedList.innerHTML = blocked.length
           ? blocked
               .map(
-                (chip) =>
-                  `<li>${escapeHtml(chip.kind || "unknown")} <span class="meta">${escapeHtml(chip.policy_reason || chip.reason || "blocked")}</span></li>`,
+                (chip, index) =>
+                  `<li>${escapeHtml(chip.kind || "unknown")} <span class="meta">${escapeHtml(chip.policy_reason || chip.reason || "blocked")}</span> <button class="btn-secondary" type="button" onclick="inspectBlockedAction(${index})">Inspect</button></li>`,
               )
               .join("")
           : `<li class="muted-empty">No blocked actions surfaced by Lens.</li>`;
+        if (blocked.length) {
+          inspectBlockedAction(0);
+        } else {
+          document.getElementById("blocked-detail").textContent = formatJson({
+            blocked_actions: [],
+            next_best_action: currentSnapshot?.next_best_action || {},
+          });
+        }
         if (currentSnapshot) {
           renderCurrentWork(currentSnapshot, currentActions);
         }
@@ -2530,6 +2666,28 @@
         document.getElementById("execution-meta").textContent =
           `Action ${execution.action.kind} | Run ${execution.run_id}`;
         document.getElementById("execution-output").textContent = formatJson(execution);
+      }
+
+      function renderExecutionBootstrapState(snapshot, actions, journal) {
+        const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
+          ? snapshot.next_best_action
+          : {};
+        const activeRun = journal?.active_run && typeof journal.active_run === "object"
+          ? journal.active_run
+          : {};
+        const focusChip = currentFocusActionChip || resolveFocusActionChip(snapshot, actions);
+        document.getElementById("execution-meta").textContent = focusChip
+          ? `Ready ${String(focusChip.kind || "unknown")} | ${focusChip.enabled ? "preview or execute" : "blocked"}`
+          : `Run ${String(activeRun.run_id || "none")} | awaiting action`;
+        document.getElementById("execution-output").textContent = formatJson({
+          next_action: {
+            kind: nextAction.kind || focusChip?.kind || "none",
+            label: nextAction.label || focusChip?.label || "No next action selected.",
+            reason: nextAction.reason || focusChip?.policy_reason || focusChip?.reason || "No next action guidance is available.",
+          },
+          focus_chip: focusChip || null,
+          active_run: activeRun,
+        });
       }
 
       function renderRepoDrilldownExecution(kind, payload) {

@@ -98,6 +98,12 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Repo Status" in response.text
     assert "Local Diff" in response.text
     assert "Ruff Check" in response.text
+    assert "Mission Stack" in response.text
+    assert "Incident Posture" in response.text
+    assert "Blocked Actions" in response.text
+    assert "Mission detail will render from active or backlog work." in response.text
+    assert "Incident detail will render from live workspace posture." in response.text
+    assert "Blocked action detail will render from Lens policy state." in response.text
     assert "/static/orb/francis-orb.js" in response.text
 
 
