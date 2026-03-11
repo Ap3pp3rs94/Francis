@@ -3527,7 +3527,7 @@
           return;
         }
         renderDetailCards("mission-detail-cards", row.detail_cards, "Mission");
-        document.getElementById("mission-detail").textContent = formatJson(row);
+        document.getElementById("mission-detail").textContent = formatJson(row.audit || row);
       }
 
       function renderMissionStack(missionsPayload) {
@@ -3535,6 +3535,7 @@
         const backlog = Array.isArray(missionsPayload?.backlog) ? missionsPayload.backlog : [];
         const completed = Array.isArray(missionsPayload?.completed) ? missionsPayload.completed : [];
         currentMissionRows = active.length ? active : backlog;
+        const focusMissionId = String(missionsPayload?.focus_mission_id || "").trim();
         document.getElementById("mission-meta").textContent =
           String(missionsPayload?.summary || `${active.length} active | ${backlog.length} backlog | ${completed.length} completed`);
         const missions = document.getElementById("missions");
@@ -3560,7 +3561,10 @@
               .join("")
           : `<li class="muted-empty">No mission records available.</li>`;
         if (currentMissionRows.length) {
-          inspectMission(0);
+          const focusIndex = focusMissionId
+            ? currentMissionRows.findIndex((row) => String(row.id || "").trim() === focusMissionId)
+            : -1;
+          inspectMission(focusIndex >= 0 ? focusIndex : 0);
         } else {
           renderDetailCards("mission-detail-cards", [], "Mission");
           document.getElementById("mission-detail").textContent = formatJson(
@@ -3581,12 +3585,13 @@
           return;
         }
         renderDetailCards("incident-detail-cards", row.detail_cards, "Incident");
-        document.getElementById("incident-detail").textContent = formatJson(row);
+        document.getElementById("incident-detail").textContent = formatJson(row.audit || row);
       }
 
       function renderIncidents(incidentsPayload, securityPayload, runsPayload) {
         const items = Array.isArray(incidentsPayload?.items) ? incidentsPayload.items : [];
         currentIncidentRows = items;
+        const focusIncidentId = String(incidentsPayload?.focus_incident_id || "").trim();
         document.getElementById("incident-meta").textContent =
           `${Number(incidentsPayload?.open_count || 0)} open | ${String(incidentsPayload?.severity || incidentsPayload?.highest_severity || "nominal")}`;
         document.getElementById("incidents").textContent =
@@ -3618,7 +3623,10 @@
             summarizeSecurity(securityPayload || currentSnapshot?.security || {}),
           );
         if (items.length) {
-          inspectIncident(0);
+          const focusIndex = focusIncidentId
+            ? items.findIndex((row) => String(row.id || "").trim() === focusIncidentId)
+            : -1;
+          inspectIncident(focusIndex >= 0 ? focusIndex : 0);
         } else {
           renderDetailCards("incident-detail-cards", [], "Incident");
           document.getElementById("incident-detail").textContent = formatJson(
@@ -3775,7 +3783,7 @@
           return;
         }
         renderDetailCards("blocked-detail-cards", row.detail_cards, "Blocked");
-        document.getElementById("blocked-detail").textContent = formatJson(row);
+        document.getElementById("blocked-detail").textContent = formatJson(row.audit || row);
       }
 
       function renderActions(actions, blockedSurface = null) {

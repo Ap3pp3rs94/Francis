@@ -22,6 +22,16 @@ def _detail_cards(row: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+def _audit(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": str(row.get("kind", "unknown")).strip() or "unknown",
+        "policy_reason": str(row.get("policy_reason") or row.get("reason") or "").strip(),
+        "risk_tier": str(row.get("risk_tier", "low")).strip().lower() or "low",
+        "trust_badge": str(row.get("trust_badge", "Blocked")).strip() or "Blocked",
+        "detail_state": str(row.get("detail_state", "historical")).strip(),
+    }
+
+
 def get_blocked_actions_view(
     *,
     snapshot: dict[str, object] | None = None,
@@ -44,6 +54,7 @@ def get_blocked_actions_view(
         item["detail_summary"] = _detail_summary(item)
         item["detail_cards"] = _detail_cards(item)
         item["detail_state"] = "current" if str(item.get("kind", "")).strip().lower() == focus_kind else "historical"
+        item["audit"] = _audit(item)
         items.append(item)
 
     focus_item = next((row for row in items if str(row.get("detail_state", "")).strip() == "current"), None)

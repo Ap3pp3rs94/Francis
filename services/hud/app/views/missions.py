@@ -49,7 +49,19 @@ def _detail_cards(row: dict[str, Any], *, lane: str) -> list[dict[str, str]]:
     ]
 
 
-def _decorate(rows: list[dict[str, Any]], *, lane: str) -> list[dict[str, Any]]:
+def _audit(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row.get("id", "")).strip(),
+        "title": str(row.get("title", "Untitled mission")).strip() or "Untitled mission",
+        "lane": str(row.get("lane", "")).strip(),
+        "phase": str(row.get("phase") or row.get("status") or "planned").strip() or "planned",
+        "priority": str(row.get("priority", "normal")).strip() or "normal",
+        "summary": str(row.get("detail_summary", "")).strip(),
+        "detail_state": str(row.get("detail_state", "historical")).strip(),
+    }
+
+
+def _decorate(rows: list[dict[str, Any]], *, lane: str, primary_id: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -58,6 +70,8 @@ def _decorate(rows: list[dict[str, Any]], *, lane: str) -> list[dict[str, Any]]:
         item["lane"] = lane
         item["detail_summary"] = _detail_summary(item)
         item["detail_cards"] = _detail_cards(item, lane=lane)
+        item["detail_state"] = "current" if primary_id and str(item.get("id", "")).strip() == primary_id else "historical"
+        item["audit"] = _audit(item)
         items.append(item)
     return items
 
@@ -66,17 +80,25 @@ def get_missions_view(*, snapshot: dict[str, object] | None = None) -> dict[str,
     if snapshot is None:
         snapshot = build_lens_snapshot()
     missions = snapshot["missions"]
+    active_rows = missions["active"] if isinstance(missions.get("active"), list) else []
+    backlog_rows = missions["backlog"] if isinstance(missions.get("backlog"), list) else []
+    completed_rows = missions["completed"] if isinstance(missions.get("completed"), list) else []
+    primary_source = active_rows[0] if active_rows else (backlog_rows[0] if backlog_rows else None)
+    primary_id = str(primary_source.get("id", "")).strip() if isinstance(primary_source, dict) else ""
     active = _decorate(
-        missions["active"] if isinstance(missions.get("active"), list) else [],
+        active_rows,
         lane="active",
+        primary_id=primary_id,
     )
     backlog = _decorate(
-        missions["backlog"] if isinstance(missions.get("backlog"), list) else [],
+        backlog_rows,
         lane="backlog",
+        primary_id=primary_id,
     )
     completed = _decorate(
-        missions["completed"] if isinstance(missions.get("completed"), list) else [],
+        completed_rows,
         lane="completed",
+        primary_id=primary_id,
     )
     primary = active[0] if active else (backlog[0] if backlog else None)
     severity = _severity_for_missions(active, backlog)
@@ -87,6 +109,7 @@ def get_missions_view(*, snapshot: dict[str, object] | None = None) -> dict[str,
     return {
         "status": "ok",
         "surface": "missions",
+        "focus_mission_id": str(primary.get("id", "")).strip() if primary else "",
         "summary": summary,
         "severity": severity,
         "cards": [
@@ -107,6 +130,7 @@ def get_missions_view(*, snapshot: dict[str, object] | None = None) -> dict[str,
         "completed": completed,
         "detail": {
             "focus_state": "active" if active else "backlog" if backlog else "idle",
+            "focus_mission_id": str(primary.get("id", "")).strip() if primary else "",
             "primary": primary,
             "active": active,
             "backlog": backlog,

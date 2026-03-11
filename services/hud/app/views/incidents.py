@@ -45,18 +45,37 @@ def _detail_cards(row: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+def _audit(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row.get("id", "")).strip(),
+        "summary": str(row.get("summary", "Incident")).strip() or "Incident",
+        "severity": str(row.get("severity", "low")).strip().lower() or "low",
+        "state": str(row.get("state", "open")).strip().lower() or "open",
+        "source": str(row.get("source", "unknown")).strip() or "unknown",
+        "detail_state": str(row.get("detail_state", "historical")).strip(),
+    }
+
+
 def get_incidents_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
     incidents = snapshot["incidents"]
     security = snapshot.get("security", {}) if isinstance(snapshot.get("security"), dict) else {}
     items: list[dict[str, Any]] = []
-    for row in incidents["items"] if isinstance(incidents.get("items"), list) else []:
+    source_rows = incidents["items"] if isinstance(incidents.get("items"), list) else []
+    focus_incident_id = ""
+    if source_rows and isinstance(source_rows[0], dict):
+        focus_incident_id = str(source_rows[0].get("id", "")).strip()
+    for row in source_rows:
         if not isinstance(row, dict):
             continue
         item = dict(row)
         item["detail_summary"] = _detail_summary(item)
         item["detail_cards"] = _detail_cards(item)
+        item["detail_state"] = (
+            "current" if focus_incident_id and str(item.get("id", "")).strip() == focus_incident_id else "historical"
+        )
+        item["audit"] = _audit(item)
         items.append(item)
     top_incident = items[0] if items else None
     summary = (
@@ -69,6 +88,7 @@ def get_incidents_view(*, snapshot: dict[str, object] | None = None) -> dict[str
     return {
         "status": "ok",
         "surface": "incidents",
+        "focus_incident_id": focus_incident_id,
         "summary": summary,
         "severity": severity,
         "cards": [
@@ -90,6 +110,7 @@ def get_incidents_view(*, snapshot: dict[str, object] | None = None) -> dict[str
         "security": security,
         "detail": {
             "top_incident": top_incident,
+            "focus_incident_id": focus_incident_id,
             "security_summary": security_text,
             "items": items,
             "security": security,

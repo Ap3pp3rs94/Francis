@@ -679,6 +679,8 @@ def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:
     assert payload["items"][0]["detail_summary"].startswith("repo.tests is blocked.")
     assert payload["items"][0]["detail_cards"]
     assert payload["items"][0]["detail_state"] == "current"
+    assert payload["items"][0]["audit"]["kind"] == "repo.tests"
+    assert payload["items"][0]["audit"]["detail_state"] == "current"
 
 
 def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Path) -> None:
@@ -726,6 +728,86 @@ def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Pa
     assert payload["audit"]["evidence_count"] == 1
 
 
+def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "missions": {
+                "active_count": 1,
+                "backlog_count": 1,
+                "completed_count": 0,
+                "active": [
+                    {
+                        "id": "mission-active",
+                        "title": "Fix HUD contract",
+                        "objective": "Replace raw detail dumps",
+                        "status": "active",
+                        "priority": "high",
+                    }
+                ],
+                "backlog": [
+                    {
+                        "id": "mission-backlog",
+                        "title": "Follow-up cleanup",
+                        "objective": "Tighten remaining panes",
+                        "status": "planned",
+                        "priority": "medium",
+                    }
+                ],
+                "completed": [],
+            }
+        }
+
+    monkeypatch.setattr(missions_view, "build_lens_snapshot", _snapshot)
+
+    payload = missions_view.get_missions_view()
+
+    assert payload["focus_mission_id"] == "mission-active"
+    assert payload["active"][0]["detail_state"] == "current"
+    assert payload["active"][0]["audit"]["id"] == "mission-active"
+    assert payload["active"][0]["audit"]["detail_state"] == "current"
+    assert payload["backlog"][0]["detail_state"] == "historical"
+
+
+def test_hud_incidents_view_exposes_focus_and_audit(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "incidents": {
+                "open_count": 2,
+                "highest_severity": "high",
+                "items": [
+                    {
+                        "id": "incident-top",
+                        "summary": "Approval queue is blocked",
+                        "severity": "high",
+                        "state": "open",
+                        "source": "approval-queue",
+                    },
+                    {
+                        "id": "incident-old",
+                        "summary": "Repo drift detected",
+                        "severity": "medium",
+                        "state": "open",
+                        "source": "repo",
+                    },
+                ],
+            },
+            "security": {
+                "quarantine_count": 0,
+                "highest_severity": "nominal",
+            },
+        }
+
+    monkeypatch.setattr(incidents_view, "build_lens_snapshot", _snapshot)
+
+    payload = incidents_view.get_incidents_view()
+
+    assert payload["focus_incident_id"] == "incident-top"
+    assert payload["items"][0]["detail_state"] == "current"
+    assert payload["items"][0]["audit"]["id"] == "incident-top"
+    assert payload["items"][0]["audit"]["detail_state"] == "current"
+    assert payload["items"][1]["detail_state"] == "historical"
+
+
 def test_hud_execution_journal_route_returns_receipts() -> None:
     response = client.get("/api/execution-journal")
 
@@ -756,6 +838,7 @@ def test_hud_missions_route_returns_structured_surface() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "missions"
+    assert "focus_mission_id" in payload
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload
@@ -768,6 +851,7 @@ def test_hud_incidents_route_returns_structured_surface() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "incidents"
+    assert "focus_incident_id" in payload
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload
