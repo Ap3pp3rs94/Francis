@@ -1211,8 +1211,21 @@ def test_hud_action_execute_can_mutate_and_refresh_snapshot() -> None:
         assert payload["execution"]["result"]["after"]["kill_switch"] is True
         assert payload["snapshot"]["control"]["kill_switch"] is True
         assert payload["actions"]["status"] == "ok"
+        assert payload["voice"]["surface"] == "voice"
+        assert payload["orb"]["surface"] == "orb"
+        assert payload["current_work"]["surface"] == "current_work"
+        assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
+        assert payload["approval_queue"]["surface"] == "approval_queue"
+        assert payload["blocked_actions"]["surface"] == "blocked_actions"
+        assert payload["execution_journal"]["surface"] == "execution_journal"
         assert payload["execution_feed"]["surface"] == "execution_feed"
         assert payload["execution_feed"]["detail"]["execution"]["result"]["after"]["kill_switch"] is True
+        assert payload["dashboard"]["surface"] == "dashboard"
+        assert payload["missions"]["surface"] == "missions"
+        assert payload["incidents"]["surface"] == "incidents"
+        assert payload["inbox"]["surface"] == "inbox"
+        assert payload["runs"]["surface"] == "runs"
+        assert payload["fabric"]["surface"] == "fabric"
     finally:
         _set_scope(original_scope)
         _set_mode(str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

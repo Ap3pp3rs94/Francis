@@ -61,51 +61,62 @@ class HudFabricQueryRequest(BaseModel):
     refresh: bool = False
 
 
-def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
-    snapshot = build_lens_snapshot()
-    actions = get_lens_actions(max_actions=max_actions)
-    current_work = get_current_work_view(snapshot=snapshot)
-    approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
-    blocked_actions = get_blocked_actions_view(snapshot=snapshot, actions=actions)
-    execution_journal = get_execution_journal_view(snapshot=snapshot)
+def _build_hud_payload(
+    *,
+    snapshot: dict[str, object] | None = None,
+    actions: dict[str, object] | None = None,
+    max_actions: int = 8,
+    execution: dict[str, object] | None = None,
+) -> dict[str, object]:
+    snapshot_payload = snapshot if snapshot else build_lens_snapshot()
+    actions_payload = actions if actions else get_lens_actions(max_actions=max_actions)
+    current_work = get_current_work_view(snapshot=snapshot_payload)
+    approval_queue = get_approval_queue_view(snapshot=snapshot_payload, actions=actions_payload)
+    blocked_actions = get_blocked_actions_view(snapshot=snapshot_payload, actions=actions_payload)
+    execution_journal = get_execution_journal_view(snapshot=snapshot_payload)
     voice = build_operator_presence(
-        mode=str(snapshot.get("control", {}).get("mode", "assist")),
+        mode=str(snapshot_payload.get("control", {}).get("mode", "assist")),
         max_actions=min(max_actions, 3),
-        snapshot=snapshot,
-        actions_payload=actions,
+        snapshot=snapshot_payload,
+        actions_payload=actions_payload,
     )
     return {
         "status": "ok",
         "service": "hud",
         "version": SERVICE_VERSION,
-        "snapshot": snapshot,
-        "actions": actions,
+        "snapshot": snapshot_payload,
+        "actions": actions_payload,
         "voice": voice,
         "orb": build_orb_state(
-            mode=str(snapshot.get("control", {}).get("mode", "assist")),
-            snapshot=snapshot,
-            actions_payload=actions,
+            mode=str(snapshot_payload.get("control", {}).get("mode", "assist")),
+            snapshot=snapshot_payload,
+            actions_payload=actions_payload,
             voice=voice,
         ),
         "current_work": current_work,
-        "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot),
+        "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "execution_journal": execution_journal,
         "execution_feed": get_execution_feed_view(
-            snapshot=snapshot,
-            actions=actions,
+            snapshot=snapshot_payload,
+            actions=actions_payload,
             current_work=current_work,
             approval_queue=approval_queue,
             execution_journal=execution_journal,
+            execution=execution,
         ),
-        "dashboard": get_dashboard_view(snapshot=snapshot),
-        "missions": get_missions_view(snapshot=snapshot),
-        "incidents": get_incidents_view(snapshot=snapshot),
-        "inbox": get_inbox_view(snapshot=snapshot),
-        "runs": get_runs_view(snapshot=snapshot),
+        "dashboard": get_dashboard_view(snapshot=snapshot_payload),
+        "missions": get_missions_view(snapshot=snapshot_payload),
+        "incidents": get_incidents_view(snapshot=snapshot_payload),
+        "inbox": get_inbox_view(snapshot=snapshot_payload),
+        "runs": get_runs_view(snapshot=snapshot_payload),
         "fabric": get_fabric_surface(refresh=False, defer_if_missing=True),
     }
+
+
+def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
+    return _build_hud_payload(max_actions=max_actions)
 
 
 def _payload_digest(payload: dict[str, Any]) -> str:
@@ -212,21 +223,32 @@ def _build_app() -> FastAPI:
         )
         snapshot = response.get("snapshot", {}) if isinstance(response.get("snapshot"), dict) else {}
         actions = response.get("actions", {}) if isinstance(response.get("actions"), dict) else {}
-        current_work = get_current_work_view(snapshot=snapshot)
-        approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
-        blocked_actions = get_blocked_actions_view(snapshot=snapshot, actions=actions)
-        execution_journal = get_execution_journal_view(snapshot=snapshot)
-        response["execution_feed"] = get_execution_feed_view(
+        execution = response.get("execution", {}) if isinstance(response.get("execution"), dict) else None
+        refresh_payload = _build_hud_payload(
             snapshot=snapshot,
             actions=actions,
-            current_work=current_work,
-            approval_queue=approval_queue,
-            execution_journal=execution_journal,
-            execution=response.get("execution", {}) if isinstance(response.get("execution"), dict) else None,
+            execution=execution,
         )
-        response["blocked_actions"] = blocked_actions
-        response["repo_drilldown"] = get_repo_drilldown_view(snapshot=snapshot)
-        return response
+        return {
+            **refresh_payload,
+            **response,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
 
     @app.get("/api/voice/briefing")
     def voice_briefing(
