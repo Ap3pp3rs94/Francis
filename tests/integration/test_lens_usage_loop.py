@@ -56,6 +56,19 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 
 
+def _read_jsonl(path: Path) -> list[dict[str, object]]:
+    raw = _read_text(path)
+    rows: list[dict[str, object]] = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parsed = json.loads(stripped)
+        if isinstance(parsed, dict):
+            rows.append(parsed)
+    return rows
+
+
 def _restore_text(path: Path, content: str, existed: bool) -> None:
     if existed:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -303,10 +316,13 @@ def test_lens_execute_repo_tests_with_approved_request() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     approvals_path = workspace / "approvals" / "requests.jsonl"
     decisions_path = workspace / "journals" / "decisions.jsonl"
+    run_ledger_path = workspace / "runs" / "run_ledger.jsonl"
     approvals_before_exists = approvals_path.exists()
     approvals_before = _read_text(approvals_path)
     decisions_before_exists = decisions_path.exists()
     decisions_before = _read_text(decisions_path)
+    run_ledger_before_exists = run_ledger_path.exists()
+    run_ledger_before = _read_text(run_ledger_path)
 
     try:
         approvals_path.parent.mkdir(parents=True, exist_ok=True)
@@ -365,6 +381,18 @@ def test_lens_execute_repo_tests_with_approved_request() -> None:
         assert result_payload["result"]["presentation"]["severity"] in {"low", "medium", "high"}
         assert result_payload["result"]["presentation"]["cards"]
         assert result_payload["result"]["presentation"]["detail"]["stats"]["lane"] == "fast"
+        ledger_rows = _read_jsonl(run_ledger_path)
+        lens_receipt = next(
+            row for row in reversed(ledger_rows) if str(row.get("kind", "")).strip() == "lens.action.execute"
+        )
+        summary = lens_receipt.get("summary", {}) if isinstance(lens_receipt.get("summary"), dict) else {}
+        assert summary["action_kind"] == "repo.tests"
+        assert summary["summary_text"]
+        assert summary["signal"] in {"low", "medium", "high"}
+        assert summary["skill"] == "repo.tests"
+        assert summary["approval_id"] == approval_id
+        assert summary["presentation_cards"]
     finally:
         _restore_text(approvals_path, approvals_before, approvals_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)
+        _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)

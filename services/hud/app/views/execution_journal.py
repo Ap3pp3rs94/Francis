@@ -17,6 +17,9 @@ def _summary_text(summary: Any) -> str:
     if isinstance(summary, str):
         return summary.strip()
     if isinstance(summary, dict):
+        explicit = str(summary.get("summary_text", "")).strip()
+        if explicit:
+            return explicit
         if str(summary.get("skill", "")).strip():
             skill = str(summary.get("skill", "")).strip()
             ok = summary.get("ok")
@@ -126,15 +129,28 @@ def _detail_cards(
     *,
     kind: str,
     title: str,
+    summary: Any,
     action_kind: str,
     approval_id: str,
     decision: str,
     run_id: str,
 ) -> list[dict[str, str]]:
-    cards = [
+    cards: list[dict[str, str]] = []
+    summary_cards = summary.get("presentation_cards", []) if isinstance(summary, dict) else []
+    for row in summary_cards[:4]:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label", "")).strip()
+        value = str(row.get("value", "")).strip()
+        tone = str(row.get("tone", "low")).strip().lower() or "low"
+        if label and value:
+            cards.append({"label": label, "value": value, "tone": tone})
+    cards.extend(
+        [
         {"label": "Kind", "value": kind, "tone": "low"},
         {"label": "Run", "value": run_id or "none", "tone": "medium" if run_id else "low"},
-    ]
+        ]
+    )
     if action_kind:
         cards.append({"label": "Action", "value": action_kind, "tone": "medium"})
     else:
@@ -167,6 +183,11 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
         approval_id = _approval_id(summary, row)
         decision = _decision(summary, row)
         title = _title_for_kind(kind)
+        operator_summary = summary_text or "Receipt captured with no compact summary."
+        normalized_action = _normalize_usage_action_kind(action_kind)
+        lowered_summary = operator_summary.lower()
+        if normalized_action and normalized_action not in lowered_summary:
+            operator_summary = f"{normalized_action} | {operator_summary}".strip()
         items.append(
             {
                 "run_id": str(row.get("run_id", "")).strip(),
@@ -176,17 +197,18 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
                 "approval_id": approval_id,
                 "decision": decision,
                 "title": title,
-                "summary": summary_text or "Receipt captured with no compact summary.",
+                "summary": operator_summary,
                 "detail_summary": _detail_summary(
                     title=title,
                     action_kind=action_kind,
                     approval_id=approval_id,
                     decision=decision,
-                    summary_text=summary_text or "Receipt recorded.",
+                    summary_text=operator_summary or "Receipt recorded.",
                 ),
                 "detail_cards": _detail_cards(
                     kind=kind,
                     title=title,
+                    summary=summary,
                     action_kind=action_kind,
                     approval_id=approval_id,
                     decision=decision,

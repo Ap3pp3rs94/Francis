@@ -188,6 +188,55 @@ def _record_lens_execution(
     ok: bool,
     detail: dict[str, Any],
 ) -> None:
+    presentation = detail.get("presentation", {}) if isinstance(detail.get("presentation"), dict) else {}
+    tool = detail.get("tool", {}) if isinstance(detail.get("tool"), dict) else {}
+    execution_args = detail.get("execution_args", {}) if isinstance(detail.get("execution_args"), dict) else {}
+    summary_text = str(presentation.get("summary", "")).strip() or str(detail.get("summary", "")).strip()
+    if not summary_text:
+        error = detail.get("error")
+        if isinstance(error, dict):
+            summary_text = str(error.get("message", "")).strip() or str(error.get("policy_reason", "")).strip()
+        elif error is not None:
+            summary_text = str(error).strip()
+    if not summary_text and str(detail.get("status", "")).strip().lower() == "quarantined":
+        summary_text = "Suspicious input was quarantined before Lens execution."
+    if not summary_text:
+        summary_text = f"{action_kind} {'completed' if ok else 'failed'}."
+
+    presentation_cards: list[dict[str, str]] = []
+    for row in presentation.get("cards", []) if isinstance(presentation.get("cards"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label", "")).strip()
+        value = str(row.get("value", "")).strip()
+        tone = str(row.get("tone", "low")).strip().lower() or "low"
+        if label and value:
+            presentation_cards.append({"label": label, "value": value, "tone": tone})
+
+    ledger_summary = {
+        "trace_id": trace_id,
+        "action_kind": action_kind,
+        "dry_run": dry_run,
+        "ok": ok,
+        "result_status": detail.get("status"),
+        "summary_text": summary_text,
+    }
+    if str(presentation.get("severity", "")).strip():
+        ledger_summary["signal"] = str(presentation.get("severity", "")).strip().lower()
+    if presentation_cards:
+        ledger_summary["presentation_cards"] = presentation_cards[:4]
+    if str(tool.get("skill", "")).strip():
+        ledger_summary["skill"] = str(tool.get("skill", "")).strip()
+    approval_id = (
+        str(tool.get("approval_id", "")).strip()
+        or str(execution_args.get("approval_id", "")).strip()
+        or str(detail.get("approval_id", "")).strip()
+    )
+    if approval_id:
+        ledger_summary["approval_id"] = approval_id
+    if execution_args:
+        ledger_summary["execution_args"] = execution_args
+
     takeover_activity = append_takeover_activity(
         run_id=run_id,
         trace_id=trace_id,
@@ -218,13 +267,7 @@ def _record_lens_execution(
     _ledger.append(
         run_id=run_id,
         kind="lens.action.execute",
-        summary={
-            "trace_id": trace_id,
-            "action_kind": action_kind,
-            "dry_run": dry_run,
-            "ok": ok,
-            "result_status": detail.get("status"),
-        },
+        summary=ledger_summary,
     )
 
 
@@ -2728,7 +2771,14 @@ def lens_execute_action(request: Request, payload: LensExecuteRequest) -> dict:
         action_kind=kind,
         dry_run=dry_run,
         ok=True,
-        detail={"status": str(result.get("status", "ok")), "kind": kind},
+        detail={
+            "status": str(result.get("status", "ok")),
+            "kind": kind,
+            "summary": str(result.get("summary", "")).strip(),
+            "presentation": result.get("presentation", {}) if isinstance(result.get("presentation"), dict) else {},
+            "tool": result.get("tool", {}) if isinstance(result.get("tool"), dict) else {},
+            "execution_args": result.get("execution_args", {}) if isinstance(result.get("execution_args"), dict) else {},
+        },
     )
     return {
         "status": "ok" if not dry_run else "dry_run",

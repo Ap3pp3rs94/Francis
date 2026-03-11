@@ -5,6 +5,14 @@ from typing import Any
 from services.hud.app.state import build_lens_snapshot
 
 
+def _normalize_usage_action_kind(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    suffix = ".request_approval"
+    return raw[: -len(suffix)] if raw.endswith(suffix) else raw
+
+
 def _first_meaningful_line(*values: object) -> str:
     for value in values:
         text = str(value or "")
@@ -116,11 +124,74 @@ def _repo_severity(repo: dict[str, Any]) -> str:
     return "medium"
 
 
+def _requested_action_kind(row: dict[str, Any]) -> str:
+    metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+    explicit = str(metadata.get("action_kind", "")).strip().lower()
+    if explicit:
+        return explicit
+    skill = str(metadata.get("skill", "")).strip().lower()
+    if skill:
+        return skill
+    return str(row.get("action", "")).strip().lower()
+
+
+def _build_next_action_resume(
+    *,
+    snapshot: dict[str, object],
+    next_action: dict[str, Any],
+) -> dict[str, object]:
+    focus_kind = _normalize_usage_action_kind(next_action.get("kind"))
+    approvals = snapshot.get("approvals", {}) if isinstance(snapshot.get("approvals"), dict) else {}
+    pending = approvals.get("pending", []) if isinstance(approvals.get("pending"), list) else []
+
+    for row in pending:
+        if not isinstance(row, dict):
+            continue
+        requested_action_kind = _requested_action_kind(row)
+        if not requested_action_kind or requested_action_kind != focus_kind:
+            continue
+        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+        args = metadata.get("args", {}) if isinstance(metadata.get("args"), dict) else {}
+        approval_id = str(row.get("id", "")).strip()
+        lane = str(args.get("lane", "")).strip().lower()
+        target = str(args.get("target", "")).strip()
+        reason = str(row.get("reason", "")).strip()
+        summary = (
+            f"Approval {approval_id or 'pending'} is queued for {requested_action_kind}. "
+            "The next move can resume immediately after the operator approves it."
+        ).strip()
+        detail_parts: list[str] = []
+        if lane:
+            detail_parts.append(f"lane {lane}")
+        if target:
+            detail_parts.append(target)
+        if reason:
+            detail_parts.append(reason)
+        return {
+            "state": "approval_ready",
+            "approval_id": approval_id,
+            "action_kind": requested_action_kind,
+            "summary": summary,
+            "detail": " | ".join(detail_parts).strip(),
+            "can_resume": True,
+        }
+
+    return {
+        "state": "idle",
+        "approval_id": "",
+        "action_kind": focus_kind,
+        "summary": "No approval-backed continuation is currently queued for the next move.",
+        "detail": "",
+        "can_resume": False,
+    }
+
+
 def _build_next_action_evidence(
     *,
     snapshot: dict[str, object],
     blockers: list[str],
     terminal: dict[str, Any],
+    next_action_resume: dict[str, object],
 ) -> list[dict[str, str]]:
     evidence: list[dict[str, str]] = []
     terminal_summary = _terminal_summary(terminal)
@@ -142,6 +213,13 @@ def _build_next_action_evidence(
                 detail=f"{pending_count} approval(s) are pending in the current workspace.",
             )
         )
+    if str(next_action_resume.get("state", "")).strip().lower() == "approval_ready":
+        detail = str(next_action_resume.get("summary", "")).strip()
+        if detail:
+            evidence.append(_evidence_row(kind="resume", severity="medium", detail=detail))
+        extra = str(next_action_resume.get("detail", "")).strip()
+        if extra:
+            evidence.append(_evidence_row(kind="resume", severity="medium", detail=extra))
 
     fabric = snapshot.get("fabric", {}) if isinstance(snapshot.get("fabric"), dict) else {}
     calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
@@ -190,10 +268,12 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
     blockers = current_work.get("blockers", []) if isinstance(current_work.get("blockers"), list) else []
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
     last_run = current_work.get("last_run", {}) if isinstance(current_work.get("last_run"), dict) else {}
+    next_action_resume = _build_next_action_resume(snapshot=snapshot, next_action=next_best_action)
     next_action_evidence = _build_next_action_evidence(
         snapshot=snapshot,
         blockers=[str(item).strip() for item in blockers if str(item).strip()],
         terminal=terminal,
+        next_action_resume=next_action_resume,
     )
     next_action_severity = _max_evidence_severity(next_action_evidence)
 
@@ -238,6 +318,9 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
         "next_action_signal": {
             "severity": next_action_severity,
             "summary": (
+                "Approval-backed continuation is ready to resume from the queue."
+                if str(next_action_resume.get("state", "")).strip().lower() == "approval_ready"
+                else
                 "High-pressure evidence is driving the next operator move."
                 if next_action_severity == "high"
                 else "Medium-pressure evidence is shaping the next operator move."
@@ -245,5 +328,6 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
                 else "Low-pressure evidence is shaping the next operator move."
             ),
         },
+        "next_action_resume": next_action_resume,
         "next_action_evidence": next_action_evidence,
     }

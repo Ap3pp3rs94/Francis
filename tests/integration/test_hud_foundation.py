@@ -491,6 +491,7 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "terminal_breakdown" in payload
     assert "next_action" in payload
     assert "next_action_signal" in payload
+    assert "next_action_resume" in payload
     assert "next_action_evidence" in payload
 
 
@@ -571,6 +572,78 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
     assert payload["items"][0]["can_execute_after_approval"] is True
     assert payload["items"][0]["execute_after_approval_kind"] == "repo.tests"
     assert payload["items"][0]["detail_state"] == "historical"
+
+
+def test_hud_current_work_view_surfaces_approval_ready_resume(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "approvals": {
+                "pending_count": 1,
+                "pending": [
+                    {
+                        "id": "approval-tests",
+                        "action": "tool.run",
+                        "reason": "Fast checks need approval",
+                        "requested_by": "francis",
+                        "metadata": {
+                            "skill": "repo.tests",
+                            "args": {"lane": "fast", "target": "tests/integration/test_hud_foundation.py"},
+                        },
+                    }
+                ],
+            },
+            "current_work": {
+                "summary": "Mode assist. Repository pressure is visible.",
+                "repo": {
+                    "available": True,
+                    "branch": "main",
+                    "dirty": True,
+                    "changed_count": 2,
+                    "staged_count": 0,
+                    "unstaged_count": 2,
+                    "untracked_count": 0,
+                    "top_paths": ["services/hud/app/static/index.html"],
+                    "summary": "Branch main | 2 change(s): 0 staged, 2 unstaged, 0 untracked",
+                },
+                "telemetry": {
+                    "last_terminal": {
+                        "command": "pytest -q tests/integration/test_hud_foundation.py",
+                        "exit_code": 1,
+                        "stderr": "1 failed",
+                        "stdout": "",
+                        "severity": "error",
+                        "text": "terminal failure",
+                    }
+                },
+                "attention": {
+                    "kind": "terminal_failure",
+                    "label": "Terminal Failure",
+                    "reason": "The latest terminal command failed.",
+                },
+                "blockers": ["1 approval(s) are pending."],
+                "mission": None,
+                "last_run": {},
+            },
+            "fabric": {"calibration": {"confidence_counts": {}, "stale_current_state_count": 0}},
+            "next_best_action": {
+                "kind": "repo.tests",
+                "label": "Run Fast Checks",
+                "reason": "The latest test command failed.",
+            },
+        }
+
+    monkeypatch.setattr(current_work_view, "build_lens_snapshot", _snapshot)
+
+    payload = current_work_view.get_current_work_view()
+
+    assert payload["next_action_resume"]["state"] == "approval_ready"
+    assert payload["next_action_resume"]["approval_id"] == "approval-tests"
+    assert payload["next_action_resume"]["action_kind"] == "repo.tests"
+    assert payload["next_action_signal"]["summary"] == "Approval-backed continuation is ready to resume from the queue."
+    assert any(
+        str(row.get("kind", "")) == "resume" and "approval-tests" in str(row.get("detail", ""))
+        for row in payload["next_action_evidence"]
+    )
 
 
 def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:
@@ -684,7 +757,15 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
                         "run_id": "run-tests",
                         "ts": "2026-03-11T10:02:00+00:00",
                         "kind": "lens.action.execute",
-                        "summary": {"action_kind": "repo.tests", "ok": True},
+                        "summary": {
+                            "action_kind": "repo.tests",
+                            "ok": True,
+                            "summary_text": "Lane fast executed. 12 passed | 0 failed | 4 skipped/deselected",
+                            "presentation_cards": [
+                                {"label": "Lane", "value": "fast", "tone": "low"},
+                                {"label": "Passed", "value": "12", "tone": "low"},
+                            ],
+                        },
                         "detail": {"action_kind": "repo.tests", "approval_id": "approval-tests"},
                     },
                     {
@@ -706,8 +787,9 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
     approval_row = next(item for item in payload["items"] if item["kind"] == "approval.decided")
     assert lens_row["action_kind"] == "repo.tests"
     assert lens_row["approval_id"] == "approval-tests"
+    assert lens_row["summary"].startswith("repo.tests | Lane fast executed.")
     assert lens_row["detail_summary"].startswith("Lens Action for repo.tests.")
-    assert lens_row["detail_cards"]
+    assert lens_row["detail_cards"][0]["label"] == "Lane"
     assert lens_row["detail_state"] == "historical"
     assert approval_row["approval_id"] == "approval-tests"
     assert approval_row["decision"] == "approved"

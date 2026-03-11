@@ -788,6 +788,9 @@
           <p class="meta" id="work-next-action-meta">
             Waiting for the first action resolution.
           </p>
+          <p class="meta tiny" id="work-resume-state">
+            Approval-backed continuation state will render here.
+          </p>
           <ul class="list" id="work-next-evidence">
             <li class="muted-empty">Evidence for the next move will render here.</li>
           </ul>
@@ -3163,6 +3166,9 @@
         const nextSignal = currentWork.next_action_signal && typeof currentWork.next_action_signal === "object"
           ? currentWork.next_action_signal
           : {};
+        const nextResume = currentWork.next_action_resume && typeof currentWork.next_action_resume === "object"
+          ? currentWork.next_action_resume
+          : {};
         const nextEvidence = Array.isArray(currentWork.next_action_evidence) ? currentWork.next_action_evidence : [];
         const terminalBreakdown = Array.isArray(currentWork.terminal_breakdown) ? currentWork.terminal_breakdown : [];
         currentFocusActionChip = resolveFocusActionChip(snapshot, actions);
@@ -3268,9 +3274,15 @@
         document.getElementById("work-next-action-meta").textContent = currentFocusActionChip
           ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${currentFocusActionChip.enabled ? "ready" : "blocked"}`
           : `${String(nextAction.kind || "unknown")} | no matching action chip`;
+        document.getElementById("work-resume-state").textContent =
+          String(nextResume.summary || "No approval-backed continuation is currently queued for the next move.");
         const nextSeverity = String(nextSignal.severity || highestSeverity(nextEvidence, "low")).trim().toLowerCase() || "low";
         applySeverityState(document.getElementById("work-next-action-meta"), nextSeverity);
         applySeverityState(document.getElementById("work-terminal-summary"), nextSeverity);
+        applySeverityState(
+          document.getElementById("work-resume-state"),
+          String(nextResume.state || "").trim().toLowerCase() === "approval_ready" ? "medium" : "low",
+        );
         applyPanelSignal("next-move-panel", nextSeverity);
         const focusKind = resolveUsageFocusActionKind(snapshot, actions);
         const relatedApprovalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
@@ -3299,7 +3311,7 @@
           const requestFlow = String(currentFocusActionChip.kind || "").includes("request_approval");
           previewButton.disabled = !Boolean(currentFocusActionChip.enabled);
           executeButton.disabled = !Boolean(currentFocusActionChip.enabled);
-          executeButton.textContent = relatedApproval?.can_execute_after_approval
+          executeButton.textContent = nextResume.can_resume || relatedApproval?.can_execute_after_approval
             ? "Approve + Run"
             : requestFlow
               ? "Request"
