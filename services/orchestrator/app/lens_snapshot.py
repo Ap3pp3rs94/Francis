@@ -12,6 +12,7 @@ from francis_core.workspace_fs import WorkspaceFS
 
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from services.orchestrator.app.takeover_snapshot import load_takeover_state
+from services.orchestrator.app.usage_loop import build_current_work, build_next_best_action
 
 DEFAULT_MODES = {"observe", "assist", "pilot", "away"}
 DEFAULT_WORKSPACE_ROOT = Path(
@@ -378,6 +379,17 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     runs = _materialize_runs(resolved_workspace)
     apprenticeship = _materialize_apprenticeship(resolved_workspace)
     fabric = _materialize_fabric(resolved_workspace)
+    current_work = build_current_work(
+        repo_root=resolved_workspace.parent.resolve(),
+        workspace_root=resolved_workspace,
+        control=control,
+        missions=missions,
+        approvals=approvals,
+        incidents=incidents,
+        inbox=inbox,
+        runs=runs,
+    )
+    next_best_action = build_next_best_action(current_work=current_work, control=control)
 
     active_mission = missions["active"][0] if missions["active"] else None
     if active_mission is not None:
@@ -398,6 +410,8 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "runs": runs,
         "apprenticeship": apprenticeship,
         "fabric": fabric,
+        "current_work": current_work,
+        "next_best_action": next_best_action,
         "objective": {
             "label": objective_label,
             "definition_of_done": (

@@ -15,6 +15,8 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
 from francis_policy.rbac import can
+from francis_skills.contracts import SkillCall
+from francis_skills.executor import SkillExecutor
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.observer.app.main import run_cycle as run_observer_cycle
 
@@ -39,6 +41,7 @@ from services.orchestrator.app.control_state import (
     load_or_init_control_state,
     set_mode,
 )
+from services.orchestrator.app.lens_snapshot import build_lens_snapshot
 from services.orchestrator.app.routes.control import (
     ControlRemoteApprovalDecisionRequest,
     ControlRemotePanicRequest,
@@ -96,6 +99,7 @@ _fs = WorkspaceFS(
     journal_path=(_workspace_root / "journals" / "fs.jsonl").resolve(),
 )
 _ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
+_skill_executor = SkillExecutor.with_defaults(fs=_fs, repo_root=_repo_root)
 
 
 class LensExecuteRequest(BaseModel):
@@ -217,6 +221,62 @@ def _record_lens_execution(
             "result_status": detail.get("status"),
         },
     )
+
+
+def _execute_repo_skill(
+    *,
+    role: str,
+    skill_name: str,
+    args: dict[str, Any],
+    allow_approval_required: bool = False,
+) -> dict[str, Any]:
+    _enforce_rbac(role, "tools.run")
+    _enforce_action_scope(app="tools", action=f"tools.run.{skill_name}", mutating=False)
+    call = SkillCall(name=skill_name, args=args)
+    result = _skill_executor.execute(call).to_dict()
+    if not bool(result.get("ok", False)):
+        raise HTTPException(status_code=500, detail=f"{skill_name} failed: {result.get('error', 'unknown error')}")
+    return result
+
+
+def _usage_action_chip(
+    *,
+    kind: str,
+    label: str,
+    enabled: bool,
+    reason: str,
+    risk_tier: str = "low",
+    trust_badge: str = "Likely",
+    args: dict[str, Any] | None = None,
+    policy_reason: str = "",
+    requires_confirmation: bool = False,
+) -> dict[str, Any]:
+    chip = {
+        "kind": kind,
+        "label": label,
+        "enabled": bool(enabled),
+        "reason": reason,
+        "policy_reason": policy_reason,
+        "risk_tier": risk_tier,
+        "trust_badge": trust_badge,
+        "requires_confirmation": requires_confirmation,
+    }
+    hinted = _with_execute_hint(chip)
+    if args:
+        hinted.setdefault("execute_via", {}).setdefault("payload", {}).setdefault("args", {}).update(args)
+    return hinted
+
+
+def _check_usage_scope(app: str, action: str, *, mutating: bool = False) -> tuple[bool, str]:
+    allowed, reason, _state = check_action_allowed(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        app=app,
+        action=action,
+        mutating=mutating,
+    )
+    return (allowed, reason)
 
 
 def _execute_lens_action(
@@ -843,6 +903,66 @@ def _execute_lens_action(
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
 
+    if normalized_kind == "repo.status":
+        result = _execute_repo_skill(role=role, skill_name="repo.status", args={})
+        output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "repo.status"},
+            "summary": str(output.get("stdout", "")).strip() or "Repository status returned no output.",
+            "result": result,
+        }
+
+    if normalized_kind == "repo.diff":
+        path_arg = str(args.get("path", "")).strip()
+        max_chars = max(200, min(40000, int(args.get("max_chars", 12000))))
+        execution_args = {"path": path_arg, "max_chars": max_chars}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        result = _execute_repo_skill(
+            role=role,
+            skill_name="repo.diff",
+            args={"path": path_arg, "max_chars": max_chars},
+        )
+        output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+        summary = str(output.get("stdout", "")).strip() or "No tracked diff output was returned."
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "repo.diff"},
+            "execution_args": execution_args,
+            "summary": summary,
+            "result": result,
+        }
+
+    if normalized_kind == "repo.lint":
+        target = str(args.get("target", ".")).strip() or "."
+        execution_args = {"target": target}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        result = _execute_repo_skill(role=role, skill_name="repo.lint", args={"target": target})
+        output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+        summary = str(output.get("stdout", "")).strip() or "Ruff completed without stdout."
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "repo.lint"},
+            "execution_args": execution_args,
+            "summary": summary,
+            "result": result,
+        }
+
+    if normalized_kind == "repo.tests":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "repo.tests requires approval through the tools surface.",
+                "policy_reason": "Repository test execution consumes significant compute/time and requires approval.",
+                "skill": "repo.tests",
+            },
+        )
+
     if normalized_kind == "observer.scan":
         _enforce_action_scope(app="observer", action="observer.scan")
         if dry_run:
@@ -1068,6 +1188,13 @@ def lens_state(request: Request) -> dict:
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
     telemetry = telemetry_status(_fs)
+    lens_snapshot = build_lens_snapshot(_workspace_root)
+    current_work = lens_snapshot.get("current_work", {}) if isinstance(lens_snapshot.get("current_work"), dict) else {}
+    next_best_action = (
+        lens_snapshot.get("next_best_action", {})
+        if isinstance(lens_snapshot.get("next_best_action"), dict)
+        else {}
+    )
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
     autonomy_last_tick = read_autonomy_last_tick(_fs)
@@ -1195,6 +1322,8 @@ def lens_state(request: Request) -> dict:
             "active_streams_horizon": list(telemetry.get("active_streams_horizon", [])),
             "last_event_ts": telemetry.get("last_event_ts"),
         },
+        "current_work": current_work,
+        "next_best_action": next_best_action,
         "remote": remote_state,
         "apprenticeship": summarize_apprenticeship(_fs, limit=5),
         "autonomy_queue": {
@@ -1311,6 +1440,13 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
 
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
+    lens_snapshot = build_lens_snapshot(_workspace_root)
+    current_work = lens_snapshot.get("current_work", {}) if isinstance(lens_snapshot.get("current_work"), dict) else {}
+    next_best_action = (
+        lens_snapshot.get("next_best_action", {})
+        if isinstance(lens_snapshot.get("next_best_action"), dict)
+        else {}
+    )
     autonomy_queue = autonomy_queue_status(_fs, limit=200)
     autonomy_last_dispatch = read_autonomy_last_dispatch(_fs)
     autonomy_last_tick = read_autonomy_last_tick(_fs)
@@ -1404,6 +1540,101 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         if kind == "worker.recover_leases":
             chip["recovery_scope"] = action.get("action_classes", [])
         action_chips.append(_with_execute_hint(chip))
+
+    usage_repo = current_work.get("repo", {}) if isinstance(current_work.get("repo"), dict) else {}
+    repo_status_allowed, repo_status_scope_reason = _check_usage_scope("tools", "tools.run.repo.status")
+    repo_diff_allowed, repo_diff_scope_reason = _check_usage_scope("tools", "tools.run.repo.diff")
+    repo_lint_allowed, repo_lint_scope_reason = _check_usage_scope("tools", "tools.run.repo.lint")
+    repo_tests_allowed, repo_tests_scope_reason = _check_usage_scope("tools", "tools.run.repo.tests")
+    usage_chip_defs = [
+        {
+            "kind": "repo.status",
+            "label": "Inspect Repo Status",
+            "enabled": repo_status_allowed,
+            "reason": str(usage_repo.get("summary", "Read the current git working tree state.")),
+            "risk_tier": "low",
+            "trust_badge": "Confirmed",
+            "args": {},
+            "policy_reason": "" if repo_status_allowed else repo_status_scope_reason,
+        }
+    ]
+    if bool(usage_repo.get("dirty", False)):
+        usage_chip_defs.append(
+            {
+                "kind": "repo.diff",
+                "label": "Summarize Local Diff",
+                "enabled": repo_diff_allowed,
+                "reason": (
+                    f"{int(usage_repo.get('changed_count', 0))} repo change(s) are present. "
+                    "Inspect tracked diffs before the next mutating pass."
+                ),
+                "risk_tier": "low",
+                "trust_badge": "Confirmed",
+                "args": {},
+                "policy_reason": "" if repo_diff_allowed else repo_diff_scope_reason,
+            }
+        )
+    usage_chip_defs.append(
+        {
+            "kind": "repo.lint",
+            "label": "Run Ruff Check",
+            "enabled": repo_lint_allowed,
+            "reason": "Run the repo lint gate against the current working tree.",
+            "risk_tier": "low",
+            "trust_badge": "Likely",
+            "args": {"target": "."},
+            "policy_reason": "" if repo_lint_allowed else repo_lint_scope_reason,
+        }
+    )
+    usage_chip_defs.append(
+        {
+            "kind": "repo.tests",
+            "label": "Run Fast Checks",
+            "enabled": False,
+            "reason": "Run the fast pytest lane against the current repo state.",
+            "risk_tier": "low",
+            "trust_badge": "Likely",
+            "args": {"lane": "fast"},
+            "policy_reason": (
+                "Repository test execution requires approval through the tools surface."
+                if repo_tests_allowed
+                else repo_tests_scope_reason
+            ),
+        }
+    )
+    if next_best_action:
+        next_kind = str(next_best_action.get("kind", "")).strip().lower()
+        if next_kind and not any(str(item.get("kind", "")).strip().lower() == next_kind for item in usage_chip_defs):
+            usage_chip_defs.insert(
+                0,
+                {
+                    "kind": next_kind,
+                    "label": str(next_best_action.get("label", next_kind)).strip() or next_kind,
+                    "enabled": bool(next_best_action.get("enabled", True)),
+                    "reason": str(next_best_action.get("reason", "")).strip(),
+                    "risk_tier": str(next_best_action.get("risk_tier", "low")).strip().lower() or "low",
+                    "trust_badge": str(next_best_action.get("trust_badge", "Likely")).strip() or "Likely",
+                    "args": next_best_action.get("args", {}) if isinstance(next_best_action.get("args"), dict) else {},
+                    "policy_reason": str(next_best_action.get("policy_reason", "")).strip(),
+                },
+            )
+    existing_usage_kinds = {str(chip.get("kind", "")).strip().lower() for chip in action_chips}
+    usage_chips = [
+        _usage_action_chip(
+            kind=str(item.get("kind", "")).strip().lower(),
+            label=str(item.get("label", "")).strip() or str(item.get("kind", "")).strip(),
+            enabled=bool(item.get("enabled", False)),
+            reason=str(item.get("reason", "")).strip(),
+            risk_tier=str(item.get("risk_tier", "low")).strip().lower() or "low",
+            trust_badge=str(item.get("trust_badge", "Likely")).strip() or "Likely",
+            args=item.get("args", {}) if isinstance(item.get("args"), dict) else {},
+            policy_reason=str(item.get("policy_reason", "")).strip(),
+            requires_confirmation=bool(item.get("requires_confirmation", False)),
+        )
+        for item in usage_chip_defs
+        if str(item.get("kind", "")).strip().lower() not in existing_usage_kinds
+    ]
+    action_chips = usage_chips + action_chips
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
@@ -1932,6 +2163,8 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     return {
         "status": "ok",
         "mode": control.get("mode"),
+        "current_work": current_work,
+        "next_best_action": next_best_action,
         "action_chips": action_chips,
         "selected_actions": selected_actions,
         "blocked_actions": blocked_actions,

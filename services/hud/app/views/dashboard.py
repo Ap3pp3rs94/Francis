@@ -14,6 +14,10 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
     runs = snapshot["runs"]
     apprenticeship = snapshot.get("apprenticeship", {})
     fabric = snapshot.get("fabric", {})
+    current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
+    next_best_action = (
+        snapshot.get("next_best_action", {}) if isinstance(snapshot.get("next_best_action"), dict) else {}
+    )
     fabric_calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
     fabric_confidence = (
         fabric_calibration.get("confidence_counts", {})
@@ -80,6 +84,21 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
                     f"Trust state: {int(fabric_confidence.get('confirmed', 0))} confirmed, "
                     f"{int(fabric_confidence.get('likely', 0))} likely, "
                     f"{int(fabric_confidence.get('uncertain', 0))} uncertain."
+                ),
+            },
+            {
+                "id": "current-work",
+                "title": "Current Work",
+                "tone": "primary",
+                "body": str(current_work.get("summary", "Current work context is not available.")),
+            },
+            {
+                "id": "next-best-action",
+                "title": "Next Best Action",
+                "tone": "neutral",
+                "body": (
+                    f"{str(next_best_action.get('label', 'No next action selected.')).strip()} | "
+                    f"{str(next_best_action.get('reason', 'No usage guidance is available.')).strip()}"
                 ),
             },
         ],

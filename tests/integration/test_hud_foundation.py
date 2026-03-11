@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 
 from fastapi.testclient import TestClient
 
@@ -27,6 +28,10 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
     path.write_text(payload, encoding="utf-8")
+
+
+def _git(repo_root: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo_root), *args], check=True, capture_output=True, text=True)
 
 
 def _get_mode() -> dict:
@@ -98,7 +103,10 @@ def test_hud_dashboard_exposes_mode_and_cards() -> None:
     body = response.json()
     assert body["mode"]["current"] in {"observe", "assist", "pilot", "away"}
     assert "pilot" in body["mode"]["available"]
-    assert len(body["cards"]) == 3
+    assert len(body["cards"]) == 5
+    card_ids = {card["id"] for card in body["cards"]}
+    assert "current-work" in card_ids
+    assert "next-best-action" in card_ids
 
 
 def test_hud_bootstrap_aggregates_core_surfaces() -> None:
@@ -188,6 +196,9 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
     workspace_root = (tmp_path / "workspace").resolve()
     monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+    repo_root = workspace_root.parent
+    _git(repo_root, "init")
+    (repo_root / "usage-signal.txt").write_text("draft\n", encoding="utf-8")
 
     _write_json(
         workspace_root / "control" / "state.json",
@@ -272,6 +283,29 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
             }
         ],
     )
+    _write_jsonl(
+        workspace_root / "telemetry" / "events.jsonl",
+        [
+            {
+                "id": "telemetry-live-1",
+                "ts": "2026-03-08T12:03:30+00:00",
+                "ingested_at": "2026-03-08T12:03:31+00:00",
+                "run_id": "run-live",
+                "kind": "telemetry.event",
+                "stream": "terminal",
+                "source": "terminal",
+                "severity": "error",
+                "text": "terminal: pytest -q tests/integration/test_hud_foundation.py (exit=1)",
+                "fields": {
+                    "command": "pytest -q tests/integration/test_hud_foundation.py",
+                    "cwd": str(repo_root),
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "1 failed",
+                },
+            }
+        ],
+    )
     _write_json(
         workspace_root / "runs" / "last_run.json",
         {
@@ -315,7 +349,13 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     body = response.json()
     assert body["snapshot"]["control"]["mode"] == "away"
     assert body["snapshot"]["objective"]["label"] == "Live Lens"
+    assert body["snapshot"]["current_work"]["repo"]["available"] is True
+    assert body["snapshot"]["current_work"]["repo"]["dirty"] is True
+    assert body["snapshot"]["current_work"]["attention"]["kind"] == "terminal_failure"
+    assert body["snapshot"]["next_best_action"]["kind"] == "repo.tests"
     assert body["dashboard"]["mode"]["current"] == "away"
+    assert any(card["id"] == "current-work" for card in body["dashboard"]["cards"])
+    assert any(card["id"] == "next-best-action" for card in body["dashboard"]["cards"])
     assert body["missions"]["active_count"] == 1
     assert body["missions"]["backlog_count"] == 1
     assert body["incidents"]["open_count"] == 1
