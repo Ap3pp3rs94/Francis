@@ -1,5 +1,11 @@
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const {
+  buildBundledRuntimeEnv,
+  getBundledPythonExecutable,
+  pathExists,
+  resolveBundledRuntimeRoot,
+} = require("./python-runtime");
 
 const DEFAULT_HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const DEFAULT_BOOT_TIMEOUT_MS = 25000;
@@ -25,11 +31,38 @@ function resolveHudSourceRoot({ appDir, resourcesPath, isPackaged }) {
   return isPackaged ? path.join(resourcesPath, "python-src") : path.resolve(appDir, "..");
 }
 
-function buildHudLaunchCandidates({ sourceRoot, hudUrl, env, userDataPath, isPackaged = false }) {
+function buildHudLaunchCandidates({
+  sourceRoot,
+  resourcesPath,
+  hudUrl,
+  env,
+  userDataPath,
+  isPackaged = false,
+}) {
   const normalizedUrl = new URL(`${normalizeHudUrl(hudUrl)}/`);
   const host = normalizedUrl.hostname;
   const port = Number(normalizedUrl.port || (normalizedUrl.protocol === "https:" ? "443" : "80"));
+  const bundledRuntimeRoot = resolveBundledRuntimeRoot({
+    sourceRoot,
+    resourcesPath,
+    isPackaged,
+  });
+  const bundledPython = getBundledPythonExecutable(bundledRuntimeRoot);
   const pythonCandidates = [
+    ...(isPackaged && pathExists(bundledPython)
+      ? [
+          {
+            command: bundledPython,
+            runtimeKind: "bundled",
+            runtimePath: bundledPython,
+            env: buildBundledRuntimeEnv({
+              runtimeRoot: bundledRuntimeRoot,
+              sourceRoot,
+              env,
+            }),
+          },
+        ]
+      : []),
     ...(env.FRANCIS_HUD_PYTHONS || "")
       .split(path.delimiter)
       .map((value) => value.trim())
@@ -39,11 +72,21 @@ function buildHudLaunchCandidates({ sourceRoot, hudUrl, env, userDataPath, isPac
     path.join(sourceRoot, ".venv", "bin", "python"),
     "python",
     "py",
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((candidate) =>
+      typeof candidate === "string"
+        ? {
+            command: candidate,
+            runtimeKind: "external",
+            runtimePath: candidate,
+          }
+        : candidate,
+    );
 
   const seen = new Set();
   const deduped = pythonCandidates.filter((candidate) => {
-    const key = String(candidate).toLowerCase();
+    const key = String(candidate.command || "").toLowerCase();
     if (seen.has(key)) {
       return false;
     }
@@ -60,11 +103,12 @@ function buildHudLaunchCandidates({ sourceRoot, hudUrl, env, userDataPath, isPac
     ...env,
     FRANCIS_HUD_URL: normalizeHudUrl(hudUrl),
     FRANCIS_WORKSPACE_ROOT: workspaceRoot,
+    PYTHONNOUSERSITE: "1",
     PYTHONUNBUFFERED: "1",
   };
 
-  return deduped.map((command) => ({
-    command,
+  return deduped.map((candidate) => ({
+    command: candidate.command,
     args: [
       "-m",
       "uvicorn",
@@ -75,10 +119,12 @@ function buildHudLaunchCandidates({ sourceRoot, hudUrl, env, userDataPath, isPac
       String(port),
     ],
     cwd: sourceRoot,
-    env: {
+    env: candidate.env || {
       ...sharedEnv,
       PYTHONPATH: appendEnvPath(env.PYTHONPATH, sourceRoot),
     },
+    runtimeKind: candidate.runtimeKind || "external",
+    runtimePath: candidate.runtimePath || candidate.command,
   }));
 }
 
@@ -176,6 +222,13 @@ function createHudRuntimeManager({
 } = {}) {
   const normalizedHudUrl = normalizeHudUrl(hudUrl);
   const sourceRoot = resolveHudSourceRoot({ appDir, resourcesPath, isPackaged });
+  const bundledRuntimeRoot = resolveBundledRuntimeRoot({
+    sourceRoot,
+    resourcesPath,
+    isPackaged,
+  });
+  const bundledRuntimePath = getBundledPythonExecutable(bundledRuntimeRoot);
+  const bundledRuntimeAvailable = isPackaged && pathExists(bundledRuntimePath);
   const allowManagedStart = !["0", "false", "no"].includes(String(env.FRANCIS_OVERLAY_MANAGE_HUD || "1").toLowerCase());
   const state = {
     ready: false,
@@ -186,7 +239,11 @@ function createHudRuntimeManager({
     hudUrl: normalizedHudUrl,
     sourceRoot,
     workspaceRoot: buildHudWorkspaceRoot({ sourceRoot, userDataPath, isPackaged }),
+    bundledRuntimeAvailable,
+    bundledRuntimePath: bundledRuntimeAvailable ? bundledRuntimePath : null,
     launcher: null,
+    runtimeKind: null,
+    runtimePath: null,
     pid: null,
     lastError: null,
   };
@@ -218,6 +275,8 @@ function createHudRuntimeManager({
         ready: false,
         mode: state.mode === "managed" ? "stopped" : state.mode,
         managed: false,
+        runtimeKind: null,
+        runtimePath: null,
         pid: null,
         lastError: code === 0 ? state.lastError : `Managed HUD exited with code ${code}${signal ? ` signal ${signal}` : ""}`,
       });
@@ -232,6 +291,8 @@ function createHudRuntimeManager({
         managed: false,
         attemptedAutoStart: false,
         launcher: null,
+        runtimeKind: null,
+        runtimePath: null,
         pid: null,
         lastError: null,
       });
@@ -245,6 +306,8 @@ function createHudRuntimeManager({
         mode: "disabled",
         managed: false,
         attemptedAutoStart: false,
+        runtimeKind: null,
+        runtimePath: null,
         lastError: message,
       });
       throw new Error(message);
@@ -252,6 +315,7 @@ function createHudRuntimeManager({
 
     const candidates = buildHudLaunchCandidates({
       sourceRoot,
+      resourcesPath,
       hudUrl: normalizedHudUrl,
       env,
       userDataPath,
@@ -267,6 +331,8 @@ function createHudRuntimeManager({
         managed: false,
         attemptedAutoStart: true,
         launcher: describeLaunchCandidate(candidate),
+        runtimeKind: candidate.runtimeKind || null,
+        runtimePath: candidate.runtimePath || null,
         pid: null,
         lastError: null,
       });
@@ -294,6 +360,8 @@ function createHudRuntimeManager({
           ready: true,
           mode: "managed",
           managed: true,
+          runtimeKind: candidate.runtimeKind || null,
+          runtimePath: candidate.runtimePath || null,
           pid: child.pid,
           lastError: null,
         });
@@ -311,6 +379,8 @@ function createHudRuntimeManager({
       ready: false,
       mode: "error",
       managed: false,
+      runtimeKind: null,
+      runtimePath: null,
       pid: null,
       lastError: message,
     });
@@ -333,6 +403,8 @@ function createHudRuntimeManager({
       ready: false,
       mode: "stopped",
       managed: false,
+      runtimeKind: null,
+      runtimePath: null,
       pid: null,
     });
     return getPublicState();

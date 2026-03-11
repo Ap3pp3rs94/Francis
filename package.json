@@ -8,9 +8,10 @@
   "scripts": {
     "overlay:start": "electron .",
     "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1",
-    "overlay:test": "node --test electron/preferences.test.cjs electron/hud-runtime.test.cjs",
-    "overlay:pack": "electron-builder --dir --win",
-    "overlay:dist": "electron-builder --win portable"
+    "overlay:test": "node --test electron/preferences.test.cjs electron/python-runtime.test.cjs electron/hud-runtime.test.cjs",
+    "overlay:prepare-runtime": "node electron/prepare-python-runtime.cjs",
+    "overlay:pack": "npm run overlay:prepare-runtime && electron-builder --dir --win",
+    "overlay:dist": "npm run overlay:prepare-runtime && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "40.8.0",
@@ -29,6 +30,10 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "dist/python-runtime-staging",
+        "to": "python-runtime"
+      },
       {
         "from": "apps",
         "to": "python-src/apps",

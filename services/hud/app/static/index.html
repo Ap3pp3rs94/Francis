@@ -967,7 +967,7 @@
           return "unavailable";
         }
         if (hud.mode === "managed") {
-          return "managed";
+          return hud.runtimeKind ? `managed | ${hud.runtimeKind}` : "managed";
         }
         if (hud.mode === "external") {
           return "external";

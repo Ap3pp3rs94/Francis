@@ -6,3 +6,4 @@ node_modules/
 .playwright-cli/
 output/playwright/
 dist/overlay/
+dist/python-runtime-staging/

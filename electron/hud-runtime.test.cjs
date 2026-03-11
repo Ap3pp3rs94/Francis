@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
@@ -48,6 +49,7 @@ test("buildHudLaunchCandidates wires host, port, source root, and workspace root
   const userDataPath = path.join(makeTempRoot(), "userdata");
   const candidates = buildHudLaunchCandidates({
     sourceRoot,
+    resourcesPath: "C:/ignored",
     hudUrl: "http://127.0.0.1:9009",
     env: { PATH: "X", PYTHONPATH: "Y", FRANCIS_HUD_PYTHONS: "python" },
     userDataPath,
@@ -56,6 +58,7 @@ test("buildHudLaunchCandidates wires host, port, source root, and workspace root
 
   assert.ok(candidates.length >= 1);
   assert.equal(candidates[0].command, "python");
+  assert.equal(candidates[0].runtimeKind, "external");
   assert.deepEqual(candidates[0].args, [
     "-m",
     "uvicorn",
@@ -71,6 +74,30 @@ test("buildHudLaunchCandidates wires host, port, source root, and workspace root
     buildHudWorkspaceRoot({ sourceRoot, userDataPath, isPackaged: false }),
   );
   assert.ok(candidates[0].env.PYTHONPATH.startsWith(sourceRoot));
+});
+
+test("buildHudLaunchCandidates prefers a bundled packaged runtime when available", () => {
+  const sourceRoot = path.resolve("D:/francis");
+  const userDataPath = path.join(makeTempRoot(), "userdata");
+  const resourcesPath = path.join(makeTempRoot(), "resources");
+  const bundledRuntime = path.join(resourcesPath, "python-runtime");
+  fs.mkdirSync(bundledRuntime, { recursive: true });
+  fs.writeFileSync(path.join(bundledRuntime, "python.exe"), "", "utf8");
+
+  const candidates = buildHudLaunchCandidates({
+    sourceRoot,
+    resourcesPath,
+    hudUrl: "http://127.0.0.1:9010",
+    env: { PATH: "X", PYTHONPATH: "Y", FRANCIS_HUD_PYTHONS: "python" },
+    userDataPath,
+    isPackaged: true,
+  });
+
+  assert.ok(candidates.length >= 2);
+  assert.equal(candidates[0].command, path.join(bundledRuntime, "python.exe"));
+  assert.equal(candidates[0].runtimeKind, "bundled");
+  assert.equal(candidates[0].env.PYTHONHOME, bundledRuntime);
+  assert.ok(candidates[0].env.PATH.startsWith(bundledRuntime));
 });
 
 test("buildHudWorkspaceRoot switches to user data in packaged mode", () => {
