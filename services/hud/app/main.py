@@ -26,6 +26,7 @@ from services.hud.app.views.execution_journal import get_execution_journal_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
 from services.hud.app.views.missions import get_missions_view
+from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
@@ -85,6 +86,7 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
             voice=voice,
         ),
         "current_work": current_work,
+        "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot),
         "approval_queue": approval_queue,
         "execution_journal": execution_journal,
         "execution_feed": get_execution_feed_view(
@@ -135,6 +137,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/approval-queue")
     def approval_queue() -> dict[str, object]:
         return get_approval_queue_view()
+
+    @app.get("/api/repo-drilldown")
+    def repo_drilldown() -> dict[str, object]:
+        return get_repo_drilldown_view()
 
     @app.get("/api/execution-journal")
     def execution_journal() -> dict[str, object]:
@@ -210,6 +216,7 @@ def _build_app() -> FastAPI:
             execution_journal=execution_journal,
             execution=response.get("execution", {}) if isinstance(response.get("execution"), dict) else None,
         )
+        response["repo_drilldown"] = get_repo_drilldown_view(snapshot=snapshot)
         return response
 
     @app.get("/api/voice/briefing")

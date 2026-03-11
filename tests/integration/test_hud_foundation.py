@@ -15,6 +15,7 @@ import services.hud.app.views.execution_journal as execution_journal_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.missions as missions_view
+import services.hud.app.views.repo_drilldown as repo_drilldown_view
 import services.hud.app.views.runs as runs_view
 from services.hud.app.main import app
 
@@ -153,6 +154,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["dashboard"]["surface"] == "dashboard"
     assert body["actions"]["status"] == "ok"
     assert body["current_work"]["surface"] == "current_work"
+    assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["execution_journal"]["surface"] == "execution_journal"
     assert body["execution_feed"]["surface"] == "execution_feed"
@@ -205,6 +207,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(inbox_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(repo_drilldown_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(runs_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(
         hud_main,
@@ -234,6 +237,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     payload = hud_main._build_bootstrap_payload()
 
     assert payload["current_work"]["surface"] == "current_work"
+    assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["execution_journal"]["surface"] == "execution_journal"
     assert payload["execution_feed"]["surface"] == "execution_feed"
@@ -416,6 +420,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert any(item["kind"] == "terminal" for item in body["current_work"]["next_action_evidence"])
     assert any(item["kind"] in {"blocker", "approval"} for item in body["current_work"]["next_action_evidence"])
     assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
+    assert body["repo_drilldown"]["surface"] == "repo_drilldown"
+    assert body["repo_drilldown"]["state"] in {"idle", "ready"}
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["approval_queue"]["pending_count"] == 1
     assert body["approval_queue"]["items"][0]["id"] == "approval-1"
@@ -465,6 +471,19 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "next_action" in payload
     assert "next_action_signal" in payload
     assert "next_action_evidence" in payload
+
+
+def test_hud_repo_drilldown_route_returns_structured_surface() -> None:
+    response = client.get("/api/repo-drilldown")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "repo_drilldown"
+    assert payload["state"] in {"idle", "ready"}
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "cards" in payload
+    assert "detail" in payload
 
 
 def test_hud_approval_queue_route_returns_pending_requests() -> None:

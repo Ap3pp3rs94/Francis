@@ -2121,6 +2121,7 @@
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
         currentSnapshot = payload.snapshot || null;
         currentCurrentWork = payload.current_work || {};
+        currentRepoDrilldown = payload.repo_drilldown || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
         currentExecutionFeed = payload.execution_feed || {};
@@ -2144,6 +2145,7 @@
 
         renderOrb(payload.orb || {});
         renderCurrentWork(currentCurrentWork, payload.snapshot || {}, currentActions);
+        renderRepoDrilldownSurface(currentRepoDrilldown);
         renderApprovalQueue(currentApprovalQueue);
         renderExecutionJournal(currentExecutionJournal);
         renderExecutionFeedSurface(currentExecutionFeed);
@@ -2154,7 +2156,6 @@
         renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
         syncUsageFocusPanels(payload.snapshot || {}, currentActions, currentApprovalQueue, currentExecutionJournal);
-        renderPersistedRepoDrilldown(resolveUsageFocusActionKind(payload.snapshot || {}, currentActions));
         document.body.dataset.boot = "ready";
       }
 
@@ -2731,6 +2732,19 @@
       }
 
       function repoPresentationFromPayload(kind, payload) {
+        if (payload?.surface === "repo_drilldown") {
+          const detailPresentation = payload?.detail?.presentation;
+          if (detailPresentation && typeof detailPresentation === "object") {
+            return detailPresentation;
+          }
+          return {
+            summary: payload?.summary,
+            severity: payload?.severity,
+            cards: payload?.cards,
+            evidence: payload?.evidence,
+            detail: payload?.detail,
+          };
+        }
         const result = payload?.execution?.result && typeof payload.execution.result === "object"
           ? payload.execution.result
           : {};
@@ -2921,27 +2935,26 @@
         if (!currentRepoDrilldown || typeof currentRepoDrilldown !== "object") {
           return null;
         }
+        if (String(currentRepoDrilldown.surface || "").trim() === "repo_drilldown") {
+          return currentRepoDrilldown;
+        }
         const drilldownKind = normalizeUsageActionKind(currentRepoDrilldown.kind || "");
         const linkedKind = normalizeUsageActionKind(lastOperatorLink.actionKind || "");
         const requestedKind = normalizeUsageActionKind(focusKind || "");
-        if (requestedKind && drilldownKind === requestedKind) {
-          return currentRepoDrilldown;
-        }
-        if (linkedKind && drilldownKind === linkedKind) {
-          return currentRepoDrilldown;
-        }
-        if (!requestedKind && !linkedKind) {
-          return currentRepoDrilldown;
-        }
-        return null;
+        return (requestedKind && drilldownKind === requestedKind) ||
+          (linkedKind && drilldownKind === linkedKind) ||
+          (!requestedKind && !linkedKind)
+          ? currentRepoDrilldown
+          : null;
       }
 
       function renderPersistedRepoDrilldown(focusKind = "") {
         const drilldown = getActiveRepoDrilldown(focusKind);
         if (!drilldown) {
-          if (currentRepoDrilldown && normalizeUsageActionKind(lastOperatorLink.actionKind || "")) {
-            currentRepoDrilldown = null;
-          }
+          return;
+        }
+        if (String(drilldown.surface || "").trim() === "repo_drilldown") {
+          renderRepoDrilldownSurface(drilldown);
           return;
         }
         renderRepoDrilldownExecution(drilldown.kind, drilldown.payload);
@@ -2958,7 +2971,9 @@
         const relatedReceipt =
           typeof links.journalIndex === "number" && links.journalIndex >= 0 ? receipts[links.journalIndex] : null;
         const repoDrilldown = getActiveRepoDrilldown(links.focusKind || "");
-        const repoPresentation = repoDrilldown ? repoPresentationFromPayload(repoDrilldown.kind, repoDrilldown.payload) : null;
+        const repoPresentation = repoDrilldown
+          ? repoPresentationFromPayload(repoDrilldown.kind, repoDrilldown)
+          : null;
         const rows = nextEvidence
           .map((item) => `${titleCase(String(item.kind || "signal"))} | ${String(item.severity || "low")} | ${String(item.detail || "").trim()}`)
           .filter(Boolean);
@@ -3547,7 +3562,9 @@
         const relatedReceipt =
           typeof links.journalIndex === "number" && links.journalIndex >= 0 ? receipts[links.journalIndex] : null;
         const repoDrilldown = getActiveRepoDrilldown(focusKind);
-        const repoPresentation = repoDrilldown ? repoPresentationFromPayload(repoDrilldown.kind, repoDrilldown.payload) : null;
+        const repoPresentation = repoDrilldown
+          ? repoPresentationFromPayload(repoDrilldown.kind, repoDrilldown)
+          : null;
         document.getElementById("execution-meta").textContent = relatedApproval
           ? `Approval pending ${String(relatedApproval.id || "unknown")} | ${focusKind || "unknown"}`
           : relatedReceipt
@@ -3592,6 +3609,32 @@
           `Repo severity: ${severity} | ${kind}`;
         applySeverityState(document.getElementById("work-repo-severity"), severity);
         applyPanelSignal("current-work-panel", severity);
+      }
+
+      function renderRepoDrilldownSurface(surface) {
+        const state = surface && typeof surface === "object" ? surface : {};
+        const kind = String(state.kind || "").trim() || "repo";
+        renderRepoDrilldownCards(kind, state);
+        const evidence = Array.isArray(state.evidence) ? state.evidence : [];
+        document.getElementById("work-repo-summary").textContent =
+          String(state.summary || "Use the repo drilldown controls to inspect current repository state.");
+        document.getElementById("work-repo-severity").textContent =
+          `Repo severity: ${String(state.severity || "low")} | ${kind}`;
+        applySeverityState(document.getElementById("work-repo-severity"), String(state.severity || "low"));
+        applyPanelSignal("current-work-panel", String(state.severity || "low"));
+        document.getElementById("work-repo-breakdown").innerHTML = evidence.length
+          ? evidence
+              .map((item) => {
+                const label = titleCase(String(item.kind || "signal"));
+                const severity = String(item.severity || "low");
+                const detail = String(item.detail || "No structured drilldown evidence was available.").trim();
+                return `<li>${escapeHtml(`${label} | ${severity} | ${detail}`)}</li>`;
+              })
+              .join("")
+          : `<li class="muted-empty">Structured drilldown evidence will render here.</li>`;
+        document.getElementById("work-repo-detail").textContent = formatJson(
+          state.detail && typeof state.detail === "object" ? state.detail : state,
+        );
       }
 
       async function executeActionWithArgs(kind, args, dryRun) {
@@ -3644,15 +3687,11 @@
             ? "rejected"
               : "",
         });
-        if (String(kind || "").startsWith("repo.")) {
-          currentRepoDrilldown = {
-            kind,
-            payload,
-            runId: String(payload?.execution?.run_id || "").trim(),
-          };
-        }
         renderExecution(payload.execution);
-        if (String(kind || "").startsWith("repo.")) {
+        if (payload.repo_drilldown && typeof payload.repo_drilldown === "object") {
+          currentRepoDrilldown = payload.repo_drilldown;
+          renderRepoDrilldownSurface(currentRepoDrilldown);
+        } else if (String(kind || "").startsWith("repo.")) {
           renderRepoDrilldownExecution(kind, payload);
         }
         if (payload.execution_feed && typeof payload.execution_feed === "object") {

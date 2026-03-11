@@ -121,8 +121,11 @@ def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> Non
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     repo_root = workspace.parent
     telemetry_path = workspace / "telemetry" / "events.jsonl"
+    repo_drilldown_path = workspace / "lens" / "repo_drilldown.json"
     signal_path = repo_root / "usage-loop-signal.txt"
     telemetry_before = _read_text(telemetry_path)
+    repo_drilldown_before_exists = repo_drilldown_path.exists()
+    repo_drilldown_before = _read_text(repo_drilldown_path)
     signal_before_exists = signal_path.exists()
     signal_before = _read_text(signal_path)
 
@@ -186,8 +189,14 @@ def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> Non
         assert result_payload["result"]["presentation"]["severity"] in {"low", "medium"}
         assert result_payload["result"]["presentation"]["cards"]
         assert result_payload["result"]["presentation"]["evidence"]
+        persisted = json.loads(_read_text(repo_drilldown_path))
+        assert persisted["surface"] == "repo_drilldown"
+        assert persisted["kind"] == "repo.status"
+        assert persisted["presentation"]["kind"] == "repo.status"
+        assert persisted["presentation"]["cards"]
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(repo_drilldown_path, repo_drilldown_before, repo_drilldown_before_exists)
         _restore_text(signal_path, signal_before, signal_before_exists)
 
 

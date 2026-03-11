@@ -104,6 +104,7 @@ _fs = WorkspaceFS(
 )
 _ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
 _skill_executor = SkillExecutor.with_defaults(fs=_fs, repo_root=_repo_root)
+_repo_drilldown_state_path = "lens/repo_drilldown.json"
 
 
 class LensExecuteRequest(BaseModel):
@@ -241,6 +242,32 @@ def _execute_repo_skill(
     if not bool(result.get("ok", False)):
         raise HTTPException(status_code=500, detail=f"{skill_name} failed: {result.get('error', 'unknown error')}")
     return result
+
+
+def _write_repo_drilldown_state(
+    *,
+    run_id: str,
+    trace_id: str,
+    kind: str,
+    tool: dict[str, Any],
+    execution_args: dict[str, Any],
+    summary: str,
+    presentation: dict[str, Any],
+) -> None:
+    payload = {
+        "status": "ok",
+        "surface": "repo_drilldown",
+        "state": "ready",
+        "ts": utc_now_iso(),
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "kind": kind,
+        "tool": tool,
+        "execution_args": execution_args,
+        "summary": summary,
+        "presentation": presentation,
+    }
+    _fs.write_text(_repo_drilldown_state_path, json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def _compact_text_summary(value: object, max_length: int = 220) -> str:
@@ -1159,17 +1186,28 @@ def _execute_lens_action(
         result = _execute_repo_skill(role=role, skill_name="repo.status", args={})
         output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
         summary = str(output.get("stdout", "")).strip() or "Repository status returned no output."
+        tool = {"skill": "repo.status"}
+        presentation = _build_repo_presentation(
+            kind=normalized_kind,
+            execution_args={},
+            result=result,
+            summary=summary,
+        )
+        _write_repo_drilldown_state(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind=normalized_kind,
+            tool=tool,
+            execution_args={},
+            summary=summary,
+            presentation=presentation,
+        )
         return {
             "status": "ok",
             "kind": normalized_kind,
-            "tool": {"skill": "repo.status"},
+            "tool": tool,
             "summary": summary,
-            "presentation": _build_repo_presentation(
-                kind=normalized_kind,
-                execution_args={},
-                result=result,
-                summary=summary,
-            ),
+            "presentation": presentation,
             "result": result,
         }
 
@@ -1186,18 +1224,29 @@ def _execute_lens_action(
         )
         output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
         summary = str(output.get("stdout", "")).strip() or "No tracked diff output was returned."
+        tool = {"skill": "repo.diff"}
+        presentation = _build_repo_presentation(
+            kind=normalized_kind,
+            execution_args=execution_args,
+            result=result,
+            summary=summary,
+        )
+        _write_repo_drilldown_state(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind=normalized_kind,
+            tool=tool,
+            execution_args=execution_args,
+            summary=summary,
+            presentation=presentation,
+        )
         return {
             "status": "ok",
             "kind": normalized_kind,
-            "tool": {"skill": "repo.diff"},
+            "tool": tool,
             "execution_args": execution_args,
             "summary": summary,
-            "presentation": _build_repo_presentation(
-                kind=normalized_kind,
-                execution_args=execution_args,
-                result=result,
-                summary=summary,
-            ),
+            "presentation": presentation,
             "result": result,
         }
 
@@ -1209,18 +1258,29 @@ def _execute_lens_action(
         result = _execute_repo_skill(role=role, skill_name="repo.lint", args={"target": target})
         output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
         summary = str(output.get("stdout", "")).strip() or "Ruff completed without stdout."
+        tool = {"skill": "repo.lint"}
+        presentation = _build_repo_presentation(
+            kind=normalized_kind,
+            execution_args=execution_args,
+            result=result,
+            summary=summary,
+        )
+        _write_repo_drilldown_state(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind=normalized_kind,
+            tool=tool,
+            execution_args=execution_args,
+            summary=summary,
+            presentation=presentation,
+        )
         return {
             "status": "ok",
             "kind": normalized_kind,
-            "tool": {"skill": "repo.lint"},
+            "tool": tool,
             "execution_args": execution_args,
             "summary": summary,
-            "presentation": _build_repo_presentation(
-                kind=normalized_kind,
-                execution_args=execution_args,
-                result=result,
-                summary=summary,
-            ),
+            "presentation": presentation,
             "result": result,
         }
 
@@ -1297,18 +1357,29 @@ def _execute_lens_action(
             raise HTTPException(status_code=500, detail=f"repo.tests failed: {result.get('error', 'unknown error')}")
         output = result.get("output", {}) if isinstance(result.get("output"), dict) else {}
         summary = str(output.get("stdout", "")).strip() or "repo.tests completed without stdout."
+        tool = {"skill": "repo.tests", "approval_id": approval_id}
+        presentation = _build_repo_presentation(
+            kind=normalized_kind,
+            execution_args=execution_args,
+            result=result,
+            summary=summary,
+        )
+        _write_repo_drilldown_state(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind=normalized_kind,
+            tool=tool,
+            execution_args=execution_args,
+            summary=summary,
+            presentation=presentation,
+        )
         return {
             "status": "ok",
             "kind": normalized_kind,
-            "tool": {"skill": "repo.tests", "approval_id": approval_id},
+            "tool": tool,
             "execution_args": execution_args,
             "summary": summary,
-            "presentation": _build_repo_presentation(
-                kind=normalized_kind,
-                execution_args=execution_args,
-                result=result,
-                summary=summary,
-            ),
+            "presentation": presentation,
             "result": result,
         }
 
