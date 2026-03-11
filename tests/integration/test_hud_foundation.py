@@ -503,6 +503,8 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
     payload = approval_queue_view.get_approval_queue_view()
 
     assert payload["items"][0]["requested_action_kind"] == "repo.tests"
+    assert payload["items"][0]["detail_summary"].startswith("repo.tests is waiting on an operator decision.")
+    assert payload["items"][0]["detail_state"] == "historical"
 
 
 def test_hud_execution_journal_route_returns_receipts() -> None:
@@ -551,8 +553,12 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
     approval_row = next(item for item in payload["items"] if item["kind"] == "approval.decided")
     assert lens_row["action_kind"] == "repo.tests"
     assert lens_row["approval_id"] == "approval-tests"
+    assert lens_row["detail_summary"].startswith("Lens Action for repo.tests.")
+    assert lens_row["detail_state"] == "historical"
     assert approval_row["approval_id"] == "approval-tests"
     assert approval_row["decision"] == "approved"
+    assert approval_row["detail_summary"].startswith("Approval approved for approval-tests.")
+    assert approval_row["detail_state"] == "historical"
 
 
 def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:

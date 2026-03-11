@@ -5,6 +5,14 @@ from typing import Any
 from services.hud.app.state import build_lens_snapshot
 
 
+def _normalize_usage_action_kind(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    suffix = ".request_approval"
+    return raw[: -len(suffix)] if raw.endswith(suffix) else raw
+
+
 def _summary_text(summary: Any) -> str:
     if isinstance(summary, str):
         return summary.strip()
@@ -85,6 +93,35 @@ def _title_for_kind(kind: str) -> str:
     }.get(kind, kind.replace(".", " ").title())
 
 
+def _focus_action_kind(snapshot: dict[str, object]) -> str:
+    next_action = snapshot.get("next_best_action", {}) if isinstance(snapshot.get("next_best_action"), dict) else {}
+    return _normalize_usage_action_kind(next_action.get("kind"))
+
+
+def _detail_summary(
+    *,
+    title: str,
+    action_kind: str,
+    approval_id: str,
+    decision: str,
+    summary_text: str,
+) -> str:
+    compact = summary_text.strip() or "Receipt recorded."
+    if decision and approval_id:
+        return f"Approval {decision} for {approval_id}. {compact}".strip()
+    if action_kind:
+        return f"{title} for {action_kind}. {compact}".strip()
+    return f"{title}. {compact}".strip()
+
+
+def _detail_state_hint(*, action_kind: str, focus_action_kind: str) -> str:
+    normalized_action = _normalize_usage_action_kind(action_kind)
+    normalized_focus = _normalize_usage_action_kind(focus_action_kind)
+    if normalized_action and normalized_focus and normalized_action == normalized_focus:
+        return "current"
+    return "historical"
+
+
 def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -93,6 +130,7 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
     ledger_tail = runs.get("ledger_tail", []) if isinstance(runs.get("ledger_tail"), list) else []
     recent_runs = runs.get("recent", []) if isinstance(runs.get("recent"), list) else []
     last_run = runs.get("last_run", {}) if isinstance(runs.get("last_run"), dict) else {}
+    focus_action_kind = _focus_action_kind(snapshot)
 
     items: list[dict[str, Any]] = []
     for row in reversed(ledger_tail):
@@ -101,16 +139,31 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
         kind = str(row.get("kind", "")).strip() or "unknown"
         summary = row.get("summary")
         summary_text = _summary_text(summary)
+        action_kind = _action_kind(summary, row)
+        approval_id = _approval_id(summary, row)
+        decision = _decision(summary, row)
+        title = _title_for_kind(kind)
         items.append(
             {
                 "run_id": str(row.get("run_id", "")).strip(),
                 "ts": row.get("ts"),
                 "kind": kind,
-                "action_kind": _action_kind(summary, row),
-                "approval_id": _approval_id(summary, row),
-                "decision": _decision(summary, row),
-                "title": _title_for_kind(kind),
+                "action_kind": action_kind,
+                "approval_id": approval_id,
+                "decision": decision,
+                "title": title,
                 "summary": summary_text or "Receipt captured with no compact summary.",
+                "detail_summary": _detail_summary(
+                    title=title,
+                    action_kind=action_kind,
+                    approval_id=approval_id,
+                    decision=decision,
+                    summary_text=summary_text or "Receipt recorded.",
+                ),
+                "detail_state": _detail_state_hint(
+                    action_kind=action_kind,
+                    focus_action_kind=focus_action_kind,
+                ),
                 "detail": row,
             }
         )

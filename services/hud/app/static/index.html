@@ -2610,6 +2610,9 @@
         if (!row || typeof row !== "object") {
           return "No approval is selected.";
         }
+        if (String(row.detail_summary || "").trim()) {
+          return String(row.detail_summary).trim();
+        }
         const requested = normalizeUsageActionKind(row.requested_action_kind || row.skill || row.action);
         const args = row.args && typeof row.args === "object" ? row.args : {};
         const lane = String(args.lane || "").trim().toLowerCase();
@@ -2636,6 +2639,9 @@
         if (!row || typeof row !== "object") {
           return "Approval state: idle";
         }
+        if (String(row.detail_state || "").trim() === "current") {
+          return "Approval state: current | matches the current operator move";
+        }
         const requested = normalizeUsageActionKind(row.requested_action_kind || row.skill || row.action);
         const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
         if (String(row.id || "").trim() && String(row.id || "").trim() === String(lastOperatorLink.approvalId || "").trim()) {
@@ -2650,6 +2656,9 @@
       function summarizeReceiptDetail(row) {
         if (!row || typeof row !== "object") {
           return "No receipt is selected.";
+        }
+        if (String(row.detail_summary || "").trim()) {
+          return String(row.detail_summary).trim();
         }
         const kind = String(row.title || row.kind || "Receipt");
         const actionKind = normalizeUsageActionKind(row.action_kind || "");
@@ -2667,6 +2676,9 @@
       function describeReceiptDetailState(row) {
         if (!row || typeof row !== "object") {
           return "Receipt state: idle";
+        }
+        if (String(row.detail_state || "").trim() === "current") {
+          return "Receipt state: current | matches the current operator move";
         }
         const actionKind = normalizeUsageActionKind(row.action_kind || "");
         const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
