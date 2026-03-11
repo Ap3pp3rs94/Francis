@@ -717,6 +717,9 @@
           <p class="meta" id="work-next-action-meta">
             Waiting for the first action resolution.
           </p>
+          <p class="meta" id="work-terminal-summary">
+            Terminal summary will explain the first failure or clean completion.
+          </p>
           <div class="work-action-row" id="work-action-row">
             <button class="btn-secondary" type="button" id="work-action-preview" disabled>Preview</button>
             <button class="btn-primary" type="button" id="work-action-execute" disabled>Execute</button>
@@ -2340,15 +2343,53 @@
         return items.findIndex((row) => normalizeUsageActionKind(row?.action_kind) === normalized);
       }
 
-      function resolveUsageFocusActionKind(snapshot, actions) {
+      function resolveLiveFocusActionKind(snapshot, actions) {
         const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
           ? snapshot.next_best_action
           : {};
         const focusChip = currentFocusActionChip || resolveFocusActionChip(snapshot, actions);
-        return normalizeUsageActionKind(lastOperatorLink.actionKind || focusChip?.kind || nextAction.kind || "");
+        return normalizeUsageActionKind(focusChip?.kind || nextAction.kind || "");
+      }
+
+      function resolveUsageFocusActionKind(snapshot, actions) {
+        return normalizeUsageActionKind(lastOperatorLink.actionKind || resolveLiveFocusActionKind(snapshot, actions));
+      }
+
+      function hasUsageAnchor(actionKind, queue, journal) {
+        const normalized = normalizeUsageActionKind(actionKind);
+        if (!normalized) {
+          return false;
+        }
+        return (
+          findRelatedApprovalIndex(normalized, queue) >= 0 ||
+          Array.isArray(journal?.items) &&
+            journal.items.some((row) => normalizeUsageActionKind(row?.action_kind) === normalized)
+        );
+      }
+
+      function reconcileOperatorLink(snapshot, actions, queue, journal) {
+        const linkedKind = normalizeUsageActionKind(lastOperatorLink.actionKind || "");
+        if (!linkedKind) {
+          return;
+        }
+        const liveKind = resolveLiveFocusActionKind(snapshot, actions);
+        if (!liveKind || liveKind === linkedKind) {
+          return;
+        }
+        const linkedHasAnchor =
+          hasUsageAnchor(linkedKind, queue, journal) ||
+          findRelatedJournalIndex(linkedKind, journal, lastOperatorLink) >= 0;
+        const liveHasAnchor = hasUsageAnchor(liveKind, queue, journal);
+        const activeRunId = String(snapshot?.current_work?.last_run?.run_id || "").trim();
+        const linkedRunId = String(lastOperatorLink.runId || "").trim();
+        const runShifted = Boolean(linkedRunId && activeRunId && linkedRunId !== activeRunId);
+        if (!linkedHasAnchor && (liveHasAnchor || runShifted)) {
+          setLastOperatorLink({});
+        }
       }
 
       function syncUsageFocusPanels(snapshot, actions, queue, journal) {
+        reconcileOperatorLink(snapshot, actions, queue, journal);
         const focusKind = resolveUsageFocusActionKind(snapshot, actions);
         const approvalIndex = findRelatedApprovalIndex(focusKind, queue);
         const journalIndex = findRelatedJournalIndex(focusKind, journal, lastOperatorLink);
@@ -2421,6 +2462,41 @@
           return text;
         }
         return `${text.slice(0, maxLength - 1)}…`;
+      }
+
+      function firstMeaningfulLine(...values) {
+        for (const value of values) {
+          const lines = String(value || "")
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+          for (const line of lines) {
+            if (/^(traceback|stack trace|line \d+|collected \d+ items?)$/i.test(line)) {
+              continue;
+            }
+            return line;
+          }
+        }
+        return "";
+      }
+
+      function summarizeTerminalContext(terminal) {
+        if (!terminal || typeof terminal !== "object") {
+          return "Terminal anchor: no recent command.";
+        }
+        const command = String(terminal.command || "").trim();
+        const severity = String(terminal.severity || "info").trim().toLowerCase();
+        const exitCode = terminal.exit_code;
+        const firstFailure = firstMeaningfulLine(terminal.stderr, terminal.stdout, terminal.text);
+        if (!command) {
+          return "Terminal anchor: no recent command.";
+        }
+        if (severity === "error" || (typeof exitCode === "number" && exitCode !== 0)) {
+          return firstFailure
+            ? `Terminal failure anchor: ${command} failed first on "${compactTextSummary(firstFailure, 140)}".`
+            : `Terminal failure anchor: ${command} exited ${exitCode}.`;
+        }
+        return `Terminal anchor: ${command} completed without a visible failure edge.`;
       }
 
       function summarizeApprovalDetail(row) {
@@ -2603,6 +2679,7 @@
           : "No terminal command captured.";
         document.getElementById("work-terminal-meta").textContent =
           `${String(terminal.severity || "info")} | ${terminalSummary}`;
+        document.getElementById("work-terminal-summary").textContent = summarizeTerminalContext(terminal);
         document.getElementById("work-terminal").textContent = formatJson({
           command: command || "No terminal command captured.",
           exit_code: exitCode,
