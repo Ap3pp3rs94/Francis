@@ -107,6 +107,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Link state will resolve from live workspace continuity." in response.text
     assert "Repo drilldown summary will render here." in response.text
     assert "Repo severity will resolve from drilldown results." in response.text
+    assert "Drilldown cards will render from the backend contract." in response.text
     assert "Structured drilldown evidence will render here." in response.text
     assert "Evidence for the next move will render here." in response.text
     assert "Terminal summary will explain the first failure or clean completion." in response.text

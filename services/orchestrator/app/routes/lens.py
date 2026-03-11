@@ -297,6 +297,7 @@ def _build_repo_presentation(
     severity = "medium"
     evidence: list[dict[str, str]] = []
     stats: dict[str, Any] = {}
+    cards: list[dict[str, str]] = []
 
     if kind == "repo.status":
         combined = f"{stdout}\n{stderr}".lower()
@@ -311,6 +312,10 @@ def _build_repo_presentation(
             "dirty": not clean,
             "line_count": len(meaningful),
         }
+        cards = [
+            {"label": "State", "value": "dirty" if not clean else "clean", "tone": severity},
+            {"label": "Visible Lines", "value": str(len(meaningful)), "tone": "low"},
+        ]
         if not presentation_summary or presentation_summary == "Repository status returned no output.":
             presentation_summary = evidence_rows[0]
 
@@ -337,6 +342,12 @@ def _build_repo_presentation(
             "added": added,
             "removed": removed,
         }
+        cards = [
+            {"label": "Files", "value": str(file_count), "tone": severity},
+            {"label": "Hunks", "value": str(hunk_count), "tone": "medium"},
+            {"label": "Additions", "value": str(added), "tone": "low"},
+            {"label": "Removals", "value": str(removed), "tone": "medium"},
+        ]
         if not presentation_summary or presentation_summary == "No tracked diff output was returned.":
             presentation_summary = evidence[0]["detail"]
 
@@ -361,6 +372,10 @@ def _build_repo_presentation(
             pass_line = _first_meaningful_line(stdout, stderr) or "Ruff completed without visible issues."
             evidence.append({"kind": "lint", "severity": severity, "detail": pass_line})
         stats = {"issue_count": issue_count}
+        cards = [
+            {"label": "Issues", "value": str(issue_count), "tone": severity},
+            {"label": "Target", "value": str(execution_args.get("target", ".")).strip() or ".", "tone": "low"},
+        ]
         if not presentation_summary or presentation_summary == "Ruff completed without stdout.":
             presentation_summary = evidence[0]["detail"]
 
@@ -400,6 +415,12 @@ def _build_repo_presentation(
             "failed": failed,
             "skipped": skipped,
         }
+        cards = [
+            {"label": "Lane", "value": lane, "tone": "low"},
+            {"label": "Passed", "value": str(passed), "tone": "low"},
+            {"label": "Failed", "value": str(failed), "tone": "high" if failed else "low"},
+            {"label": "Skipped", "value": str(skipped), "tone": "medium" if skipped else "low"},
+        ]
         if not presentation_summary or presentation_summary == "repo.tests completed without stdout.":
             presentation_summary = evidence[1]["detail"] if len(evidence) > 1 else evidence[0]["detail"]
 
@@ -412,6 +433,7 @@ def _build_repo_presentation(
         "kind": kind,
         "summary": presentation_summary,
         "severity": severity,
+        "cards": cards,
         "evidence": evidence[:4],
         "detail": {
             "kind": kind,

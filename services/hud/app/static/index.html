@@ -734,6 +734,9 @@
           </div>
           <p class="meta" id="work-repo-summary">Repo drilldown summary will render here.</p>
           <p class="meta tiny" id="work-repo-severity">Repo severity will resolve from drilldown results.</p>
+          <div class="desktop-grid" id="work-repo-cards">
+            <div class="desktop-pill"><strong>Repo</strong><span>Drilldown cards will render from the backend contract.</span></div>
+          </div>
           <ul class="list" id="work-repo-breakdown">
             <li class="muted-empty">Structured drilldown evidence will render here.</li>
           </ul>
@@ -2740,6 +2743,28 @@
         return null;
       }
 
+      function renderRepoDrilldownCards(kind, payload) {
+        const presentation = repoPresentationFromPayload(kind, payload);
+        const cards = Array.isArray(presentation?.cards) ? presentation.cards : [];
+        const node = document.getElementById("work-repo-cards");
+        if (!node) {
+          return;
+        }
+        node.innerHTML = cards.length
+          ? cards
+              .map((card) => {
+                const tone = String(card.tone || "low").trim().toLowerCase() || "low";
+                return `
+                  <div class="desktop-pill">
+                    <strong class="severity-${escapeHtml(tone)}">${escapeHtml(String(card.label || "Metric"))}</strong>
+                    <span>${escapeHtml(String(card.value || "n/a"))}</span>
+                  </div>
+                `;
+              })
+              .join("")
+          : `<div class="desktop-pill"><strong>Repo</strong><span>Drilldown cards will render from the backend contract.</span></div>`;
+      }
+
       function summarizeRepoDrilldown(kind, payload) {
         const presentation = repoPresentationFromPayload(kind, payload);
         if (presentation?.summary) {
@@ -3067,6 +3092,8 @@
           ? `Repo severity: ${repoSeverity} | ${repo.dirty ? "local changes are present" : "working tree appears stable"}`
           : "Repo severity: unknown | repository state is unavailable";
         applySeverityState(document.getElementById("work-repo-severity"), repoSeverity);
+        document.getElementById("work-repo-cards").innerHTML =
+          `<div class="desktop-pill"><strong>Repo</strong><span>Drilldown cards will render from the backend contract.</span></div>`;
         document.getElementById("work-repo-breakdown").innerHTML = topPaths.length
           ? topPaths.slice(0, 4).map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
           : `<li class="muted-empty">No structured drilldown evidence is available yet.</li>`;
@@ -3552,6 +3579,7 @@
       }
 
       function renderRepoDrilldownExecution(kind, payload) {
+        renderRepoDrilldownCards(kind, payload);
         document.getElementById("work-repo-breakdown").innerHTML = buildRepoDrilldownBreakdown(kind, payload)
           .map((item) => `<li>${escapeHtml(item)}</li>`)
           .join("");

@@ -184,6 +184,7 @@ def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> Non
         assert "usage-loop-signal.txt" in result_payload["result"]["summary"]
         assert result_payload["result"]["presentation"]["kind"] == "repo.status"
         assert result_payload["result"]["presentation"]["severity"] in {"low", "medium"}
+        assert result_payload["result"]["presentation"]["cards"]
         assert result_payload["result"]["presentation"]["evidence"]
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
@@ -353,6 +354,7 @@ def test_lens_execute_repo_tests_with_approved_request() -> None:
         assert result_payload["result"]["tool"]["approval_id"] == approval_id
         assert result_payload["result"]["presentation"]["kind"] == "repo.tests"
         assert result_payload["result"]["presentation"]["severity"] in {"low", "medium", "high"}
+        assert result_payload["result"]["presentation"]["cards"]
         assert result_payload["result"]["presentation"]["detail"]["stats"]["lane"] == "fast"
     finally:
         _restore_text(approvals_path, approvals_before, approvals_before_exists)
