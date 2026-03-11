@@ -162,6 +162,27 @@ def _detail_cards(
     return cards
 
 
+def _audit(
+    *,
+    kind: str,
+    action_kind: str,
+    approval_id: str,
+    decision: str,
+    run_id: str,
+    summary_text: str,
+    detail_state: str,
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "action_kind": action_kind,
+        "approval_id": approval_id,
+        "decision": decision,
+        "run_id": run_id,
+        "summary": summary_text,
+        "detail_state": detail_state,
+    }
+
+
 def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -188,6 +209,10 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
         lowered_summary = operator_summary.lower()
         if normalized_action and normalized_action not in lowered_summary:
             operator_summary = f"{normalized_action} | {operator_summary}".strip()
+        detail_state = _detail_state_hint(
+            action_kind=action_kind,
+            focus_action_kind=focus_action_kind,
+        )
         items.append(
             {
                 "run_id": str(row.get("run_id", "")).strip(),
@@ -214,9 +239,15 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
                     decision=decision,
                     run_id=str(row.get("run_id", "")).strip(),
                 ),
-                "detail_state": _detail_state_hint(
+                "detail_state": detail_state,
+                "audit": _audit(
+                    kind=kind,
                     action_kind=action_kind,
-                    focus_action_kind=focus_action_kind,
+                    approval_id=approval_id,
+                    decision=decision,
+                    run_id=str(row.get("run_id", "")).strip(),
+                    summary_text=operator_summary,
+                    detail_state=detail_state,
                 ),
                 "detail": row,
             }

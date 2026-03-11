@@ -3391,7 +3391,7 @@
         document.getElementById("approval-detail-summary").textContent = summarizeApprovalDetail(row);
         document.getElementById("approval-detail-state").textContent = describeApprovalDetailState(row);
         renderDetailCards("approval-detail-cards", row.detail_cards, "Approval");
-        document.getElementById("approval-detail").textContent = formatJson(row);
+        document.getElementById("approval-detail").textContent = formatJson(row.audit || row);
       }
 
       function renderApprovalQueue(queue) {
@@ -3458,7 +3458,7 @@
         document.getElementById("journal-detail-summary").textContent = summarizeReceiptDetail(row);
         document.getElementById("journal-detail-state").textContent = describeReceiptDetailState(row);
         renderDetailCards("journal-detail-cards", row.detail_cards, "Receipt");
-        document.getElementById("journal-detail").textContent = formatJson(row.detail || row);
+        document.getElementById("journal-detail").textContent = formatJson(row.audit || row.detail || row);
       }
 
       function renderExecutionJournal(journal) {
@@ -3647,7 +3647,7 @@
               ? "Inbox detail state: idle"
               : "Inbox detail state: historical";
         renderDetailCards("inbox-detail-cards", row.detail_cards, "Inbox");
-        document.getElementById("inbox-detail").textContent = formatJson(row);
+        document.getElementById("inbox-detail").textContent = formatJson(row.audit || row);
       }
 
       function renderInboxSurface(inboxPayload) {
@@ -3712,7 +3712,7 @@
               ? "Run detail state: idle"
               : "Run detail state: historical";
         renderDetailCards("runs-detail-cards", row.detail_cards, "Run");
-        document.getElementById("runs-detail").textContent = formatJson(row);
+        document.getElementById("runs-detail").textContent = formatJson(row.audit || row);
       }
 
       function renderRunsSurface(runsPayload) {

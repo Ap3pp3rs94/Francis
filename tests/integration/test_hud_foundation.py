@@ -574,6 +574,8 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
     assert payload["items"][0]["requested_action_kind"] == "repo.tests"
     assert payload["items"][0]["detail_summary"].startswith("repo.tests is waiting on an operator decision.")
     assert payload["items"][0]["detail_cards"]
+    assert payload["items"][0]["audit"]["approval_id"] == "approval-tests"
+    assert payload["items"][0]["audit"]["requested_action_kind"] == "repo.tests"
     assert payload["items"][0]["can_execute_after_approval"] is True
     assert payload["items"][0]["execute_after_approval_kind"] == "repo.tests"
     assert payload["items"][0]["detail_state"] == "historical"
@@ -848,11 +850,15 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
     assert lens_row["detail_summary"].startswith("Lens Action for repo.tests.")
     assert lens_row["detail_cards"][0]["label"] == "Lane"
     assert lens_row["detail_state"] == "historical"
+    assert lens_row["audit"]["action_kind"] == "repo.tests"
+    assert lens_row["audit"]["run_id"] == "run-tests"
     assert approval_row["approval_id"] == "approval-tests"
     assert approval_row["decision"] == "approved"
     assert approval_row["detail_summary"].startswith("Approval approved for approval-tests.")
     assert approval_row["detail_cards"]
     assert approval_row["detail_state"] == "historical"
+    assert approval_row["audit"]["approval_id"] == "approval-tests"
+    assert approval_row["audit"]["decision"] == "approved"
 
 
 def test_hud_inbox_view_marks_current_and_historical_messages(monkeypatch) -> None:
@@ -888,6 +894,8 @@ def test_hud_inbox_view_marks_current_and_historical_messages(monkeypatch) -> No
     assert payload["focus_message_id"] == "msg-1"
     assert payload["messages"][0]["detail_state"] == "current"
     assert payload["messages"][0]["detail_cards"][0]["label"] == "Message"
+    assert payload["messages"][0]["audit"]["id"] == "msg-1"
+    assert payload["messages"][0]["audit"]["detail_state"] == "current"
     assert payload["messages"][1]["detail_state"] == "historical"
 
 
@@ -941,9 +949,11 @@ def test_hud_runs_view_carries_latest_receipt_summary(monkeypatch) -> None:
     assert "Lane fast executed. 12 passed | 0 failed" in payload["summary"]
     assert payload["focus_run_id"] == "run-tests"
     assert payload["active_run"]["detail_state"] == "current"
+    assert payload["active_run"]["audit"]["run_id"] == "run-tests"
     assert any(card["label"] == "Latest Receipt" for card in payload["cards"])
     assert payload["run_groups"][0]["detail_state"] == "current"
     assert payload["run_groups"][0]["detail_cards"][-1]["value"] == "Lane fast executed. 12 passed | 0 failed"
+    assert payload["run_groups"][0]["audit"]["latest_receipt"] == "Lane fast executed. 12 passed | 0 failed"
     assert payload["run_groups"][1]["detail_state"] == "historical"
 
 

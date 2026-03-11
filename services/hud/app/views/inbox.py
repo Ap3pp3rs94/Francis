@@ -53,6 +53,18 @@ def _detail_cards(row: dict[str, Any]) -> list[dict[str, str]]:
     return cards
 
 
+def _audit(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row.get("id", "")).strip(),
+        "title": str(row.get("title", "Inbox message")).strip() or "Inbox message",
+        "summary": str(row.get("summary", "")).strip(),
+        "severity": str(row.get("severity", "nominal")).strip().lower() or "nominal",
+        "source": str(row.get("source", "workspace")).strip() or "workspace",
+        "ts": str(row.get("ts", "")).strip(),
+        "detail_state": str(row.get("detail_state", "historical")).strip(),
+    }
+
+
 def get_inbox_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -81,6 +93,7 @@ def get_inbox_view(*, snapshot: dict[str, object] | None = None) -> dict[str, ob
             top_id=top_id,
             empty=str(item.get("id", "")).strip() == "msg-inbox-empty",
         )
+        item["audit"] = _audit(item)
         normalized.append(item)
     top = normalized[0] if normalized else None
     return {

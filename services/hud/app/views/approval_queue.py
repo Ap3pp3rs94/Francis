@@ -88,6 +88,27 @@ def _detail_cards(*, row: dict[str, Any], requested_action_kind: str, args: dict
     return cards
 
 
+def _audit(
+    *,
+    row: dict[str, Any],
+    requested_action_kind: str,
+    args: dict[str, Any],
+    detail_state: str,
+    can_execute_after_approval: bool,
+) -> dict[str, Any]:
+    return {
+        "approval_id": str(row.get("id", "")).strip(),
+        "action": str(row.get("action", "")).strip(),
+        "requested_action_kind": requested_action_kind,
+        "requested_by": str(row.get("requested_by", "")).strip(),
+        "reason": str(row.get("reason", "")).strip(),
+        "lane": str(args.get("lane", "")).strip().lower(),
+        "target": str(args.get("target", "")).strip(),
+        "detail_state": detail_state,
+        "can_execute_after_approval": can_execute_after_approval,
+    }
+
+
 def get_approval_queue_view(
     *,
     snapshot: dict[str, object] | None = None,
@@ -124,6 +145,13 @@ def get_approval_queue_view(
             summary = f"repo.tests approval queued for lane {lane}"
             if target:
                 summary += f" on {target}"
+        detail_state = _detail_state_hint(
+            requested_action_kind=requested_action_kind,
+            focus_action_kind=focus_action_kind,
+        )
+        can_execute_after_approval = bool(
+            can_approve and approval_id and requested_action_kind and _has_action(actions, requested_action_kind)
+        )
 
         items.append(
             {
@@ -144,15 +172,17 @@ def get_approval_queue_view(
                     requested_action_kind=requested_action_kind,
                     args=args,
                 ),
-                "detail_state": _detail_state_hint(
-                    requested_action_kind=requested_action_kind,
-                    focus_action_kind=focus_action_kind,
-                ),
+                "detail_state": detail_state,
                 "skill": tool_skill,
                 "args": args,
-                "can_execute_after_approval": bool(
-                    can_approve and approval_id and requested_action_kind and _has_action(actions, requested_action_kind)
+                "audit": _audit(
+                    row=row,
+                    requested_action_kind=requested_action_kind,
+                    args=args,
+                    detail_state=detail_state,
+                    can_execute_after_approval=can_execute_after_approval,
                 ),
+                "can_execute_after_approval": can_execute_after_approval,
                 "execute_after_approval_kind": requested_action_kind,
                 "execute_after_approval_args": args,
                 "can_approve": bool(can_approve and approval_id),

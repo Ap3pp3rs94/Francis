@@ -72,6 +72,27 @@ def _detail_cards(
     return cards
 
 
+def _audit(
+    *,
+    run_id: str,
+    phase: str,
+    detail_summary: str,
+    detail_state: str,
+    event_count: int = 0,
+    receipt_summary: str = "",
+    receipt_kind: str = "",
+) -> dict[str, Any]:
+    return {
+        "run_id": run_id,
+        "phase": phase,
+        "summary": detail_summary,
+        "detail_state": detail_state,
+        "event_count": event_count,
+        "latest_receipt": receipt_summary,
+        "latest_receipt_kind": receipt_kind,
+    }
+
+
 def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -98,6 +119,14 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
         receipt_kind=active_receipt_kind,
     )
     active_run["detail_state"] = "current" if active_run["run_id"] != "none" else "idle"
+    active_run["audit"] = _audit(
+        run_id=active_run["run_id"],
+        phase=active_run["phase"],
+        detail_summary=active_run["detail_summary"],
+        detail_state=active_run["detail_state"],
+        receipt_summary=active_receipt_summary,
+        receipt_kind=active_receipt_kind,
+    )
     run_groups: list[dict[str, Any]] = []
     for row in recent:
         if not isinstance(row, dict):
@@ -130,6 +159,15 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
             receipt_kind=receipt_kind,
         )
         item["detail_state"] = _detail_state(run_id=run_id, active_run_id=active_run["run_id"])
+        item["audit"] = _audit(
+            run_id=run_id,
+            phase=phase,
+            detail_summary=item["detail_summary"],
+            detail_state=item["detail_state"],
+            event_count=event_count,
+            receipt_summary=receipt_summary,
+            receipt_kind=receipt_kind,
+        )
         run_groups.append(item)
     return {
         "status": "ok",
