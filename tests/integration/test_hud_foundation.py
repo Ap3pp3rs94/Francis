@@ -10,6 +10,7 @@ import services.hud.app.views.approval_queue as approval_queue_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
+import services.hud.app.views.execution_feed as execution_feed_view
 import services.hud.app.views.execution_journal as execution_journal_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
@@ -153,6 +154,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["current_work"]["surface"] == "current_work"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["execution_journal"]["surface"] == "execution_journal"
+    assert body["execution_feed"]["surface"] == "execution_feed"
     assert body["missions"]["surface"] == "missions"
     assert body["inbox"]["surface"] == "inbox"
     assert body["runs"]["surface"] == "runs"
@@ -197,6 +199,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(execution_feed_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -232,6 +235,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["current_work"]["surface"] == "current_work"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["execution_journal"]["surface"] == "execution_journal"
+    assert payload["execution_feed"]["surface"] == "execution_feed"
     assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
     assert payload["missions"]["active_count"] == 1
     assert payload["incidents"]["items"][0]["summary"] == "clear"
@@ -417,6 +421,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["execution_journal"]["surface"] == "execution_journal"
     assert body["execution_journal"]["active_run"]["run_id"] == "run-live"
     assert body["execution_journal"]["items"][0]["kind"] == "hud.bootstrap"
+    assert body["execution_feed"]["surface"] == "execution_feed"
+    assert body["execution_feed"]["focus_action_kind"] == "repo.tests"
+    assert body["execution_feed"]["severity"] == "high"
     assert body["dashboard"]["mode"]["current"] == "away"
     assert any(card["id"] == "current-work" for card in body["dashboard"]["cards"])
     assert any(card["id"] == "next-best-action" for card in body["dashboard"]["cards"])
@@ -518,6 +525,18 @@ def test_hud_execution_journal_route_returns_receipts() -> None:
     assert payload["surface"] == "execution_journal"
     assert "active_run" in payload
     assert "items" in payload
+
+
+def test_hud_execution_feed_route_returns_structured_surface() -> None:
+    response = client.get("/api/execution-feed")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "execution_feed"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "evidence" in payload
+    assert "detail" in payload
 
 
 def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypatch) -> None:
@@ -734,6 +753,8 @@ def test_hud_action_execute_can_mutate_and_refresh_snapshot() -> None:
         assert payload["execution"]["result"]["after"]["kill_switch"] is True
         assert payload["snapshot"]["control"]["kill_switch"] is True
         assert payload["actions"]["status"] == "ok"
+        assert payload["execution_feed"]["surface"] == "execution_feed"
+        assert payload["execution_feed"]["detail"]["execution"]["result"]["after"]["kill_switch"] is True
     finally:
         _set_scope(original_scope)
         _set_mode(str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

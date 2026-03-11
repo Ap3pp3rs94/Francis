@@ -986,6 +986,7 @@
       let currentFabricResults = [];
       let currentApprovalQueue = { items: [] };
       let currentExecutionJournal = { items: [] };
+      let currentExecutionFeed = {};
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
       let currentMissionRows = [];
@@ -2119,6 +2120,7 @@
         currentCurrentWork = payload.current_work || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
+        currentExecutionFeed = payload.execution_feed || {};
 
         const mode = payload.dashboard.mode;
         const modeRow = document.getElementById("mode-row");
@@ -2141,6 +2143,7 @@
         renderCurrentWork(currentCurrentWork, payload.snapshot || {}, currentActions);
         renderApprovalQueue(currentApprovalQueue);
         renderExecutionJournal(currentExecutionJournal);
+        renderExecutionFeedSurface(currentExecutionFeed);
         renderMissionStack(payload.missions || {});
         renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
         renderActions(currentActions);
@@ -2453,6 +2456,10 @@
         }
         if (journalIndex >= 0) {
           inspectJournalItem(journalIndex);
+        }
+        if (currentExecutionFeed && currentExecutionFeed.surface === "execution_feed") {
+          renderExecutionFeedSurface(currentExecutionFeed);
+          return;
         }
         renderExecutionBootstrapState(snapshot, actions, journal, {
           focusKind,
@@ -2952,6 +2959,35 @@
           : `<li class="muted-empty">No execution evidence is available yet.</li>`;
       }
 
+      function renderExecutionFeedSurface(surface) {
+        const feed = surface && typeof surface === "object" ? surface : {};
+        const detail = feed.detail && typeof feed.detail === "object" ? feed.detail : {};
+        const activeRun = detail.active_run && typeof detail.active_run === "object" ? detail.active_run : {};
+        const focusKind = String(feed.focus_action_kind || detail.next_action?.kind || "none").trim() || "none";
+        const state = String(feed.state || "idle").trim() || "idle";
+        const evidence = Array.isArray(feed.evidence) ? feed.evidence : [];
+        document.getElementById("execution-meta").textContent =
+          `${state} | ${focusKind} | ${String(activeRun.run_id || "none")}`;
+        document.getElementById("execution-summary").textContent =
+          String(feed.summary || "Execution feed will explain the current operator chain.");
+        applySeverityState(document.getElementById("execution-summary"), String(feed.severity || "low"));
+        applyPanelSignal("execution-panel", String(feed.severity || "low"));
+        document.getElementById("execution-evidence").innerHTML = evidence.length
+          ? evidence
+              .map(
+                (item) => `
+                  <li>
+                    <strong>${escapeHtml(titleCase(String(item.kind || "signal")))}</strong>
+                    <span class="meta"> | ${escapeHtml(String(item.severity || "low"))}</span>
+                    ${escapeHtml(String(item.detail || "No execution detail provided."))}
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">No execution evidence is available yet.</li>`;
+        document.getElementById("execution-output").textContent = formatJson(detail);
+      }
+
       function renderCurrentWork(surface, snapshot, actions) {
         const currentWork = surface && typeof surface === "object" ? surface : {};
         const snapshotWork = snapshot?.current_work && typeof snapshot.current_work === "object"
@@ -3432,8 +3468,13 @@
         applyOrbSignals();
       }
 
-      function renderExecution(execution) {
+      function renderExecution(execution, feed = null) {
         if (!execution) {
+          return;
+        }
+        if (feed && typeof feed === "object" && String(feed.surface || "").trim() === "execution_feed") {
+          currentExecutionFeed = feed;
+          renderExecutionFeedSurface(feed);
           return;
         }
         const executionKind = normalizeUsageActionKind(execution?.action?.kind || "");
@@ -3460,6 +3501,10 @@
       }
 
       function renderExecutionBootstrapState(snapshot, actions, journal, links = {}) {
+        if (currentExecutionFeed && currentExecutionFeed.surface === "execution_feed") {
+          renderExecutionFeedSurface(currentExecutionFeed);
+          return;
+        }
         const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
           ? snapshot.next_best_action
           : {};
@@ -3581,6 +3626,10 @@
         renderExecution(payload.execution);
         if (String(kind || "").startsWith("repo.")) {
           renderRepoDrilldownExecution(kind, payload);
+        }
+        if (payload.execution_feed && typeof payload.execution_feed === "object") {
+          currentExecutionFeed = payload.execution_feed;
+          renderExecution(payload.execution, payload.execution_feed);
         }
         await loadSurface();
         return payload;

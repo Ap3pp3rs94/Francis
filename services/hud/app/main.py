@@ -21,6 +21,7 @@ from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
+from services.hud.app.views.execution_feed import get_execution_feed_view
 from services.hud.app.views.execution_journal import get_execution_journal_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
@@ -61,6 +62,9 @@ class HudFabricQueryRequest(BaseModel):
 def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
     snapshot = build_lens_snapshot()
     actions = get_lens_actions(max_actions=max_actions)
+    current_work = get_current_work_view(snapshot=snapshot)
+    approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
+    execution_journal = get_execution_journal_view(snapshot=snapshot)
     voice = build_operator_presence(
         mode=str(snapshot.get("control", {}).get("mode", "assist")),
         max_actions=min(max_actions, 3),
@@ -80,9 +84,16 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
             actions_payload=actions,
             voice=voice,
         ),
-        "current_work": get_current_work_view(snapshot=snapshot),
-        "approval_queue": get_approval_queue_view(snapshot=snapshot, actions=actions),
-        "execution_journal": get_execution_journal_view(snapshot=snapshot),
+        "current_work": current_work,
+        "approval_queue": approval_queue,
+        "execution_journal": execution_journal,
+        "execution_feed": get_execution_feed_view(
+            snapshot=snapshot,
+            actions=actions,
+            current_work=current_work,
+            approval_queue=approval_queue,
+            execution_journal=execution_journal,
+        ),
         "dashboard": get_dashboard_view(snapshot=snapshot),
         "missions": get_missions_view(snapshot=snapshot),
         "incidents": get_incidents_view(snapshot=snapshot),
@@ -128,6 +139,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/execution-journal")
     def execution_journal() -> dict[str, object]:
         return get_execution_journal_view()
+
+    @app.get("/api/execution-feed")
+    def execution_feed() -> dict[str, object]:
+        return get_execution_feed_view()
 
     @app.get("/api/inbox")
     def inbox() -> dict[str, object]:
@@ -175,13 +190,27 @@ def _build_app() -> FastAPI:
 
     @app.post("/api/actions/execute")
     def action_execute(payload: HudActionExecuteRequest) -> dict[str, object]:
-        return execute_lens_action(
+        response = execute_lens_action(
             kind=payload.kind,
             args=payload.args,
             dry_run=payload.dry_run,
             role=payload.role,
             user=payload.user,
         )
+        snapshot = response.get("snapshot", {}) if isinstance(response.get("snapshot"), dict) else {}
+        actions = response.get("actions", {}) if isinstance(response.get("actions"), dict) else {}
+        current_work = get_current_work_view(snapshot=snapshot)
+        approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
+        execution_journal = get_execution_journal_view(snapshot=snapshot)
+        response["execution_feed"] = get_execution_feed_view(
+            snapshot=snapshot,
+            actions=actions,
+            current_work=current_work,
+            approval_queue=approval_queue,
+            execution_journal=execution_journal,
+            execution=response.get("execution", {}) if isinstance(response.get("execution"), dict) else None,
+        )
+        return response
 
     @app.get("/api/voice/briefing")
     def voice_briefing(
