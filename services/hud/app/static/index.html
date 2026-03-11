@@ -712,6 +712,28 @@
       <section class="split">
         <article class="panel">
           <div class="panel-head">
+            <h2>Approval Queue</h2>
+            <span class="meta tiny" id="approval-queue-meta">Waiting for pending approvals</span>
+          </div>
+          <p id="approval-queue-summary" class="hero-copy">
+            Pending approvals will appear here once Lens sees decision pressure in the workspace.
+          </p>
+          <ul class="list" id="approval-queue-list">
+            <li class="muted-empty">No pending approvals surfaced yet.</li>
+          </ul>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Approval Detail</h2>
+            <span class="meta tiny" id="approval-detail-meta">No approval selected</span>
+          </div>
+          <pre class="console" id="approval-detail">Awaiting approval queue data.</pre>
+        </article>
+      </section>
+
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
             <h2>Operator Deck</h2>
             <span class="meta tiny" id="action-summary">Awaiting live actions</span>
           </div>
@@ -854,6 +876,7 @@
       let currentActions = { action_chips: [], blocked_actions: [] };
       let currentSnapshot = null;
       let currentFabricResults = [];
+      let currentApprovalQueue = { items: [] };
       let currentOrb = null;
       let currentFocusActionChip = null;
       let streamSource = null;
@@ -1950,6 +1973,7 @@
         document.body.dataset.boot = "hydrating";
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
         currentSnapshot = payload.snapshot || null;
+        currentApprovalQueue = payload.approval_queue || { items: [] };
 
         const mode = payload.dashboard.mode;
         const modeRow = document.getElementById("mode-row");
@@ -1988,6 +2012,7 @@
 
         renderOrb(payload.orb || {});
         renderCurrentWork(payload.snapshot || {}, currentActions);
+        renderApprovalQueue(currentApprovalQueue);
         renderActions(currentActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
@@ -2244,6 +2269,54 @@
         }
       }
 
+      function inspectApproval(index) {
+        const row = Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items[index] : null;
+        if (!row) {
+          return;
+        }
+        document.getElementById("approval-detail-meta").textContent =
+          `${row.action || "approval"} | ${row.requested_by || "unknown"} | ${row.id || "unknown"}`;
+        document.getElementById("approval-detail").textContent = formatJson(row);
+      }
+
+      function renderApprovalQueue(queue) {
+        currentApprovalQueue = queue || { items: [] };
+        const items = Array.isArray(currentApprovalQueue.items) ? currentApprovalQueue.items : [];
+        document.getElementById("approval-queue-meta").textContent =
+          `${Number(currentApprovalQueue.pending_count || items.length || 0)} pending | ${currentApprovalQueue.can_approve ? "decision ready" : "read only"}`;
+        document.getElementById("approval-queue-summary").textContent = items.length
+          ? "Pending approvals are live. Approve or reject from the same Lens surface."
+          : "No pending approvals are visible in the current workspace.";
+        document.getElementById("approval-queue-list").innerHTML = items.length
+          ? items
+              .map((row, index) => `
+                <li>
+                  <div class="action-top">
+                    <div class="action-label">${escapeHtml(row.summary || row.action || "approval")}</div>
+                    <div class="badge-row">
+                      <span class="badge risk-low">${escapeHtml(row.skill || "approval")}</span>
+                      <span class="badge ${row.can_approve || row.can_reject ? "risk-medium" : "disabled"}">${row.can_approve || row.can_reject ? "decide" : "view"}</span>
+                    </div>
+                  </div>
+                  <p class="meta">${escapeHtml(row.reason || "No approval reason provided.")}</p>
+                  <div class="action-buttons">
+                    <button class="btn-secondary" type="button" onclick="inspectApproval(${index})">Inspect</button>
+                    <button class="btn-primary" type="button" ${row.can_approve ? "" : "disabled"} onclick="approveQueueItem('${escapeHtml(row.id || "")}')">Approve</button>
+                    <button class="btn-danger" type="button" ${row.can_reject ? "" : "disabled"} onclick="rejectQueueItem('${escapeHtml(row.id || "")}')">Reject</button>
+                  </div>
+                </li>
+              `)
+              .join("")
+          : `<li class="muted-empty">No pending approvals surfaced yet.</li>`;
+
+        if (items.length) {
+          inspectApproval(0);
+        } else {
+          document.getElementById("approval-detail-meta").textContent = "No approval selected";
+          document.getElementById("approval-detail").textContent = "Awaiting approval queue data.";
+        }
+      }
+
       function renderActions(actions) {
         const chips = Array.isArray(actions.action_chips) ? actions.action_chips.slice(0, 8) : [];
         const blocked = Array.isArray(actions.blocked_actions) ? actions.blocked_actions.slice(0, 8) : [];
@@ -2314,19 +2387,20 @@
         document.getElementById("execution-output").textContent = formatJson(execution);
       }
 
-      async function executeAction(kind, dryRun) {
+      async function executeActionWithArgs(kind, args, dryRun) {
         const chip = (currentActions.action_chips || []).find(
           (item) => String(item.kind || "") === String(kind || ""),
         );
-        if (!chip) {
+        if (!chip && (!args || typeof args !== "object")) {
           return;
         }
-        const chipArgs = chip.execute_via?.payload?.args && typeof chip.execute_via.payload.args === "object"
+        const chipArgsBase = chip?.execute_via?.payload?.args && typeof chip.execute_via.payload.args === "object"
           ? chip.execute_via.payload.args
-          : chip.args && typeof chip.args === "object"
+          : chip?.args && typeof chip.args === "object"
             ? chip.args
             : {};
-        if (chip.requires_confirmation && !dryRun) {
+        const chipArgs = { ...chipArgsBase, ...(args && typeof args === "object" ? args : {}) };
+        if (chip?.requires_confirmation && !dryRun) {
           const proceed = window.confirm(`Confirm execution for ${chip.label || chip.kind}?`);
           if (!proceed) {
             return;
@@ -2349,6 +2423,10 @@
         await loadSurface();
       }
 
+      async function executeAction(kind, dryRun) {
+        await executeActionWithArgs(kind, {}, dryRun);
+      }
+
       async function previewFocusAction() {
         if (!currentFocusActionChip) {
           return;
@@ -2361,6 +2439,28 @@
           return;
         }
         await executeAction(String(currentFocusActionChip.kind || ""), false);
+      }
+
+      async function approveQueueItem(approvalId) {
+        if (!approvalId) {
+          return;
+        }
+        await executeActionWithArgs(
+          "control.remote.approval.approve",
+          { approval_id: approvalId, note: "Approved from HUD approval queue." },
+          false,
+        );
+      }
+
+      async function rejectQueueItem(approvalId) {
+        if (!approvalId) {
+          return;
+        }
+        await executeActionWithArgs(
+          "control.remote.approval.reject",
+          { approval_id: approvalId, note: "Rejected from HUD approval queue." },
+          false,
+        );
       }
 
       async function loadVoiceBriefing() {

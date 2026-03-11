@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from apps.api.main import app as orchestrator_app
 import services.hud.app.main as hud_main
+import services.hud.app.views.approval_queue as approval_queue_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
@@ -88,6 +89,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Hold the moving Orb itself to panic stop" in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
+    assert "Approval Queue" in response.text
+    assert "Approval Detail" in response.text
     assert "/static/orb/francis-orb.js" in response.text
 
 
@@ -121,6 +124,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["dashboard"]["surface"] == "dashboard"
     assert body["actions"]["status"] == "ok"
     assert body["current_work"]["surface"] == "current_work"
+    assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["missions"]["surface"] == "missions"
     assert body["inbox"]["surface"] == "inbox"
     assert body["runs"]["surface"] == "runs"
@@ -163,6 +167,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
 
     monkeypatch.setattr(hud_main, "build_lens_snapshot", lambda: snapshot)
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -171,7 +176,11 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(
         hud_main,
         "get_lens_actions",
-        lambda max_actions=8: {"status": "ok", "action_chips": [], "blocked_actions": []},
+        lambda max_actions=8: {
+            "status": "ok",
+            "action_chips": [{"kind": "control.remote.approvals"}, {"kind": "control.remote.approval.approve"}],
+            "blocked_actions": [],
+        },
     )
     monkeypatch.setattr(
         hud_main,
@@ -192,6 +201,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     payload = hud_main._build_bootstrap_payload()
 
     assert payload["current_work"]["surface"] == "current_work"
+    assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
     assert payload["missions"]["active_count"] == 1
     assert payload["incidents"]["items"][0]["summary"] == "clear"
@@ -365,6 +375,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
     assert body["current_work"]["next_action"]["kind"] == "repo.tests"
     assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
+    assert body["approval_queue"]["surface"] == "approval_queue"
+    assert body["approval_queue"]["pending_count"] == 1
+    assert body["approval_queue"]["items"][0]["id"] == "approval-1"
     assert body["dashboard"]["mode"]["current"] == "away"
     assert any(card["id"] == "current-work" for card in body["dashboard"]["cards"])
     assert any(card["id"] == "next-best-action" for card in body["dashboard"]["cards"])
@@ -400,6 +413,16 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "attention" in payload
     assert "terminal" in payload
     assert "next_action" in payload
+
+
+def test_hud_approval_queue_route_returns_pending_requests() -> None:
+    response = client.get("/api/approval-queue")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "approval_queue"
+    assert "pending_count" in payload
+    assert "items" in payload
 
 
 def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:
