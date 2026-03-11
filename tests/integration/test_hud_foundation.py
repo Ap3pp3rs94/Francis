@@ -98,6 +98,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Repo Status" in response.text
     assert "Local Diff" in response.text
     assert "Ruff Check" in response.text
+    assert "Operator link will resolve from the current Lens action chain." in response.text
+    assert "Repo drilldown summary will render here." in response.text
     assert "Mission Stack" in response.text
     assert "Incident Posture" in response.text
     assert "Blocked Actions" in response.text

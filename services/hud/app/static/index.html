@@ -681,6 +681,9 @@
           <p class="meta" id="work-attention-detail">
             No immediate work pressure is visible.
           </p>
+          <p class="meta" id="work-link-meta">
+            Operator link will resolve from the current Lens action chain.
+          </p>
           <h3>Changed Paths</h3>
           <ul class="list" id="work-paths">
             <li class="muted-empty">No repo paths surfaced yet.</li>
@@ -696,6 +699,7 @@
             <button class="btn-secondary" type="button" id="repo-action-lint" disabled>Ruff Check</button>
             <button class="btn-primary" type="button" id="repo-action-tests" disabled>Fast Checks</button>
           </div>
+          <p class="meta" id="work-repo-summary">Repo drilldown summary will render here.</p>
           <pre class="console" id="work-repo-detail">Repo drilldown detail will render from current work.</pre>
         </article>
         <article class="panel accent">
@@ -2351,6 +2355,60 @@
         });
       }
 
+      function describeOperatorLink(snapshot, actions, journal) {
+        const focusKind = resolveUsageFocusActionKind(snapshot, actions);
+        const approvals = Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items : [];
+        const receipts = Array.isArray(journal?.items) ? journal.items : [];
+        const approvalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
+        const journalIndex = findRelatedJournalIndex(focusKind, journal, lastOperatorLink);
+        const relatedApproval = approvalIndex >= 0 ? approvals[approvalIndex] : null;
+        const relatedReceipt = journalIndex >= 0 ? receipts[journalIndex] : null;
+        if (relatedApproval) {
+          return `Operator link: ${focusKind || "unknown"} is waiting on approval ${relatedApproval.id || "unknown"}.`;
+        }
+        if (relatedReceipt) {
+          return `Operator link: ${focusKind || "unknown"} is grounded by receipt ${relatedReceipt.run_id || "unknown"}.`;
+        }
+        if (focusKind) {
+          return `Operator link: following ${focusKind} as the current move.`;
+        }
+        return "Operator link is idle. Lens is waiting for the next actionable move.";
+      }
+
+      function compactTextSummary(value, maxLength = 220) {
+        const text = String(value || "").replace(/\s+/g, " ").trim();
+        if (!text) {
+          return "";
+        }
+        if (text.length <= maxLength) {
+          return text;
+        }
+        return `${text.slice(0, maxLength - 1)}…`;
+      }
+
+      function summarizeRepoDrilldown(kind, payload) {
+        const execution = payload?.execution || {};
+        const result = execution?.result || {};
+        const output = result?.result?.output && typeof result.result.output === "object"
+          ? result.result.output
+          : {};
+        const summary = compactTextSummary(result?.summary || output?.stdout || output?.stderr || "");
+        if (kind === "repo.status") {
+          return summary || "Repo status completed.";
+        }
+        if (kind === "repo.diff") {
+          return summary || "Repo diff completed.";
+        }
+        if (kind === "repo.lint") {
+          return summary || "Ruff check completed.";
+        }
+        if (kind === "repo.tests") {
+          const lane = result?.execution_args?.lane || execution?.action?.args?.lane || "fast";
+          return summary || `Repo tests completed on lane ${lane}.`;
+        }
+        return summary || `${kind} completed.`;
+      }
+
       function renderCurrentWork(snapshot, actions) {
         const currentWork = snapshot?.current_work && typeof snapshot.current_work === "object"
           ? snapshot.current_work
@@ -2388,6 +2446,11 @@
           : "no recent run";
         document.getElementById("work-attention-detail").textContent =
           attention.reason || "No immediate work pressure is visible.";
+        document.getElementById("work-link-meta").textContent = describeOperatorLink(
+          snapshot,
+          actions,
+          currentExecutionJournal,
+        );
 
         document.getElementById("work-paths").innerHTML = topPaths.length
           ? topPaths.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
@@ -2407,6 +2470,8 @@
           top_paths: topPaths,
           summary: repo.summary || "Repository status unavailable.",
         });
+        document.getElementById("work-repo-summary").textContent =
+          repo.summary || "Use the repo drilldown controls to inspect current repository state.";
 
         const command = String(terminal.command || "").trim();
         const exitCode = terminal.exit_code;
@@ -2821,6 +2886,7 @@
           run_id: payload?.execution?.run_id || "",
           detail,
         });
+        document.getElementById("work-repo-summary").textContent = summarizeRepoDrilldown(kind, payload);
       }
 
       async function executeActionWithArgs(kind, args, dryRun) {
