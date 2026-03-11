@@ -794,6 +794,9 @@
           <p class="meta tiny" id="approval-detail-state">
             Approval state will reflect whether this detail is current or historical.
           </p>
+          <div class="desktop-grid" id="approval-detail-cards">
+            <div class="desktop-pill"><strong>Approval</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
           <pre class="console" id="approval-detail">Approval detail will render from the current workspace queue.</pre>
         </article>
       </section>
@@ -822,6 +825,9 @@
           <p class="meta tiny" id="journal-detail-state">
             Receipt state will reflect whether this detail is current or historical.
           </p>
+          <div class="desktop-grid" id="journal-detail-cards">
+            <div class="desktop-pill"><strong>Receipt</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
           <pre class="console" id="journal-detail">Receipt detail will render from the run ledger.</pre>
         </article>
       </section>
@@ -3214,6 +3220,27 @@
         }
       }
 
+      function renderDetailCards(nodeId, cards, emptyLabel) {
+        const node = document.getElementById(nodeId);
+        if (!node) {
+          return;
+        }
+        const rows = Array.isArray(cards) ? cards : [];
+        node.innerHTML = rows.length
+          ? rows
+              .map((card) => {
+                const tone = String(card.tone || "low").trim().toLowerCase() || "low";
+                return `
+                  <div class="desktop-pill">
+                    <strong class="severity-${escapeHtml(tone)}">${escapeHtml(String(card.label || "Detail"))}</strong>
+                    <span>${escapeHtml(String(card.value || "n/a"))}</span>
+                  </div>
+                `;
+              })
+              .join("")
+          : `<div class="desktop-pill"><strong>${escapeHtml(emptyLabel)}</strong><span>Detail cards will render from the backend contract.</span></div>`;
+      }
+
       function inspectApproval(index) {
         const row = Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items[index] : null;
         if (!row) {
@@ -3223,6 +3250,7 @@
           `${row.action || "approval"} | ${row.requested_by || "unknown"} | ${row.id || "unknown"}`;
         document.getElementById("approval-detail-summary").textContent = summarizeApprovalDetail(row);
         document.getElementById("approval-detail-state").textContent = describeApprovalDetailState(row);
+        renderDetailCards("approval-detail-cards", row.detail_cards, "Approval");
         document.getElementById("approval-detail").textContent = formatJson(row);
       }
 
@@ -3267,6 +3295,7 @@
           document.getElementById("approval-detail-summary").textContent =
             "No approval is holding the current operator loop.";
           document.getElementById("approval-detail-state").textContent = "Approval state: idle";
+          renderDetailCards("approval-detail-cards", [], "Approval");
           document.getElementById("approval-detail").textContent = formatJson({
             pending_count: 0,
             focus_action_kind: resolveUsageFocusActionKind(currentSnapshot, currentActions),
@@ -3284,6 +3313,7 @@
           `${row.title || "Receipt"} | ${row.run_id || "unknown"} | ${row.kind || "unknown"}`;
         document.getElementById("journal-detail-summary").textContent = summarizeReceiptDetail(row);
         document.getElementById("journal-detail-state").textContent = describeReceiptDetailState(row);
+        renderDetailCards("journal-detail-cards", row.detail_cards, "Receipt");
         document.getElementById("journal-detail").textContent = formatJson(row.detail || row);
       }
 
@@ -3326,6 +3356,7 @@
           document.getElementById("journal-detail-summary").textContent =
             "No receipt is currently anchoring the active operator loop.";
           document.getElementById("journal-detail-state").textContent = "Receipt state: idle";
+          renderDetailCards("journal-detail-cards", [], "Receipt");
           document.getElementById("journal-detail").textContent = formatJson({
             active_run: activeRun,
             focus_action_kind: resolveUsageFocusActionKind(currentSnapshot, currentActions),

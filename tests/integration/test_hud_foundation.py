@@ -96,6 +96,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Approval Detail" in response.text
     assert "Approval summary will render from the current workspace queue." in response.text
     assert "Approval state will reflect whether this detail is current or historical." in response.text
+    assert "Detail cards will render from the backend contract." in response.text
     assert "Execution Journal" in response.text
     assert "Receipt Detail" in response.text
     assert "Receipt summary will render from the run ledger." in response.text
@@ -536,6 +537,7 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
 
     assert payload["items"][0]["requested_action_kind"] == "repo.tests"
     assert payload["items"][0]["detail_summary"].startswith("repo.tests is waiting on an operator decision.")
+    assert payload["items"][0]["detail_cards"]
     assert payload["items"][0]["detail_state"] == "historical"
 
 
@@ -622,10 +624,12 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
     assert lens_row["action_kind"] == "repo.tests"
     assert lens_row["approval_id"] == "approval-tests"
     assert lens_row["detail_summary"].startswith("Lens Action for repo.tests.")
+    assert lens_row["detail_cards"]
     assert lens_row["detail_state"] == "historical"
     assert approval_row["approval_id"] == "approval-tests"
     assert approval_row["decision"] == "approved"
     assert approval_row["detail_summary"].startswith("Approval approved for approval-tests.")
+    assert approval_row["detail_cards"]
     assert approval_row["detail_state"] == "historical"
 
 

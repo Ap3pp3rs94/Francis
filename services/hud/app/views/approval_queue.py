@@ -61,6 +61,33 @@ def _detail_state_hint(*, requested_action_kind: str, focus_action_kind: str) ->
     return "historical"
 
 
+def _detail_cards(*, row: dict[str, Any], requested_action_kind: str, args: dict[str, Any]) -> list[dict[str, str]]:
+    lane = str(args.get("lane", "")).strip().lower()
+    target = str(args.get("target", "")).strip()
+    cards = [
+        {
+            "label": "Action",
+            "value": requested_action_kind or str(row.get("action", "approval")).strip() or "approval",
+            "tone": "high",
+        },
+        {
+            "label": "Requested By",
+            "value": str(row.get("requested_by", "unknown")).strip() or "unknown",
+            "tone": "low",
+        },
+        {
+            "label": "Decision",
+            "value": "awaiting operator",
+            "tone": "medium",
+        },
+    ]
+    if lane:
+        cards.append({"label": "Lane", "value": lane, "tone": "medium"})
+    if target:
+        cards.append({"label": "Target", "value": target, "tone": "low"})
+    return cards
+
+
 def get_approval_queue_view(
     *,
     snapshot: dict[str, object] | None = None,
@@ -108,6 +135,11 @@ def get_approval_queue_view(
                 "requested_by": str(row.get("requested_by", "")).strip(),
                 "summary": summary,
                 "detail_summary": _detail_summary(
+                    row=row,
+                    requested_action_kind=requested_action_kind,
+                    args=args,
+                ),
+                "detail_cards": _detail_cards(
                     row=row,
                     requested_action_kind=requested_action_kind,
                     args=args,

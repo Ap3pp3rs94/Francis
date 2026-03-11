@@ -122,6 +122,30 @@ def _detail_state_hint(*, action_kind: str, focus_action_kind: str) -> str:
     return "historical"
 
 
+def _detail_cards(
+    *,
+    kind: str,
+    title: str,
+    action_kind: str,
+    approval_id: str,
+    decision: str,
+    run_id: str,
+) -> list[dict[str, str]]:
+    cards = [
+        {"label": "Kind", "value": kind, "tone": "low"},
+        {"label": "Run", "value": run_id or "none", "tone": "medium" if run_id else "low"},
+    ]
+    if action_kind:
+        cards.append({"label": "Action", "value": action_kind, "tone": "medium"})
+    else:
+        cards.append({"label": "Title", "value": title, "tone": "low"})
+    if approval_id:
+        cards.append({"label": "Approval", "value": approval_id, "tone": "medium"})
+    if decision:
+        cards.append({"label": "Decision", "value": decision, "tone": "high" if decision == "rejected" else "low"})
+    return cards
+
+
 def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -159,6 +183,14 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
                     approval_id=approval_id,
                     decision=decision,
                     summary_text=summary_text or "Receipt recorded.",
+                ),
+                "detail_cards": _detail_cards(
+                    kind=kind,
+                    title=title,
+                    action_kind=action_kind,
+                    approval_id=approval_id,
+                    decision=decision,
+                    run_id=str(row.get("run_id", "")).strip(),
                 ),
                 "detail_state": _detail_state_hint(
                     action_kind=action_kind,
