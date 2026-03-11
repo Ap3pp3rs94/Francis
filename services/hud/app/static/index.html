@@ -307,6 +307,18 @@
         margin-bottom: 10px;
       }
 
+      .work-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .work-action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
       .orb-chamber {
         position: relative;
         overflow: hidden;
@@ -588,7 +600,8 @@
         }
 
         .hero-grid,
-        .orb-metrics {
+        .orb-metrics,
+        .work-meta-grid {
           grid-template-columns: 1fr;
         }
 
@@ -649,6 +662,52 @@
       </section>
 
       <section class="grid" id="cards"></section>
+
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Current Work Focus</h2>
+            <span class="meta tiny" id="work-focus-meta">Waiting for live work context</span>
+          </div>
+          <p id="work-summary" class="hero-copy">
+            Francis will surface repo, mission, and runtime focus here once the live snapshot arrives.
+          </p>
+          <div class="work-meta-grid" id="work-meta-grid">
+            <div class="desktop-pill"><strong>Attention</strong><span id="work-attention-pill">steady state</span></div>
+            <div class="desktop-pill"><strong>Repo</strong><span id="work-repo-pill">status unavailable</span></div>
+            <div class="desktop-pill"><strong>Mission</strong><span id="work-mission-pill">no active mission</span></div>
+            <div class="desktop-pill"><strong>Last Run</strong><span id="work-run-pill">no recent run</span></div>
+          </div>
+          <p class="meta" id="work-attention-detail">
+            No immediate work pressure is visible.
+          </p>
+          <h3>Changed Paths</h3>
+          <ul class="list" id="work-paths">
+            <li class="muted-empty">No repo paths surfaced yet.</li>
+          </ul>
+          <h3>Blockers</h3>
+          <ul class="list" id="work-blockers">
+            <li class="muted-empty">No blockers surfaced yet.</li>
+          </ul>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Terminal and Next Move</h2>
+            <span class="meta tiny" id="work-terminal-meta">No terminal detail loaded</span>
+          </div>
+          <p id="work-next-action" class="hero-copy">
+            Francis will resolve the next operator move once the current work snapshot is available.
+          </p>
+          <p class="meta" id="work-next-action-meta">
+            Waiting for the first action resolution.
+          </p>
+          <div class="work-action-row" id="work-action-row">
+            <button class="btn-secondary" type="button" id="work-action-preview" disabled>Preview</button>
+            <button class="btn-primary" type="button" id="work-action-execute" disabled>Execute</button>
+          </div>
+          <pre class="console" id="work-terminal">Awaiting live terminal context.</pre>
+        </article>
+      </section>
 
       <section class="split">
         <article class="panel">
@@ -796,6 +855,7 @@
       let currentSnapshot = null;
       let currentFabricResults = [];
       let currentOrb = null;
+      let currentFocusActionChip = null;
       let streamSource = null;
       let streamReconnectTimer = null;
       let orbApi = null;
@@ -1871,6 +1931,19 @@
             applyOrbSignals();
           });
         }
+
+        const focusPreview = document.getElementById("work-action-preview");
+        if (focusPreview && focusPreview instanceof HTMLElement) {
+          focusPreview.addEventListener("click", () => {
+            previewFocusAction();
+          });
+        }
+        const focusExecute = document.getElementById("work-action-execute");
+        if (focusExecute && focusExecute instanceof HTMLElement) {
+          focusExecute.addEventListener("click", () => {
+            runFocusAction();
+          });
+        }
       }
 
       function renderBootstrap(payload) {
@@ -1914,6 +1987,7 @@
           `Run: ${payload.runs.active_run.run_id} | Phase: ${payload.runs.active_run.phase}`;
 
         renderOrb(payload.orb || {});
+        renderCurrentWork(payload.snapshot || {}, currentActions);
         renderActions(currentActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
@@ -2057,6 +2131,119 @@
         applyOrbSignals();
       }
 
+      function resolveFocusActionChip(snapshot, actions) {
+        const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
+          ? snapshot.next_best_action
+          : {};
+        const nextKind = String(nextAction.kind || "").trim().toLowerCase();
+        const chips = Array.isArray(actions?.action_chips) ? actions.action_chips : [];
+        if (!nextKind) {
+          return null;
+        }
+        const direct = chips.find((chip) => String(chip.kind || "").trim().toLowerCase() === nextKind) || null;
+        if (direct && Boolean(direct.enabled)) {
+          return direct;
+        }
+        if (nextKind === "repo.tests") {
+          const approvalChip = chips.find(
+            (chip) => String(chip.kind || "").trim().toLowerCase() === "repo.tests.request_approval",
+          );
+          if (approvalChip) {
+            return approvalChip;
+          }
+        }
+        return direct;
+      }
+
+      function renderCurrentWork(snapshot, actions) {
+        const currentWork = snapshot?.current_work && typeof snapshot.current_work === "object"
+          ? snapshot.current_work
+          : {};
+        const repo = currentWork.repo && typeof currentWork.repo === "object" ? currentWork.repo : {};
+        const telemetry = currentWork.telemetry && typeof currentWork.telemetry === "object" ? currentWork.telemetry : {};
+        const terminal = telemetry.last_terminal && typeof telemetry.last_terminal === "object"
+          ? telemetry.last_terminal
+          : {};
+        const attention = currentWork.attention && typeof currentWork.attention === "object"
+          ? currentWork.attention
+          : {};
+        const mission = currentWork.mission && typeof currentWork.mission === "object" ? currentWork.mission : null;
+        const lastRun = currentWork.last_run && typeof currentWork.last_run === "object" ? currentWork.last_run : {};
+        const blockers = Array.isArray(currentWork.blockers) ? currentWork.blockers : [];
+        const topPaths = Array.isArray(repo.top_paths) ? repo.top_paths : [];
+        const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
+          ? snapshot.next_best_action
+          : {};
+        currentFocusActionChip = resolveFocusActionChip(snapshot, actions);
+
+        document.getElementById("work-focus-meta").textContent =
+          `${attention.label || "Stable"} | ${repo.branch || "unknown"} | ${Number(repo.changed_count || 0)} repo change(s)`;
+        document.getElementById("work-summary").textContent =
+          currentWork.summary || "Current work context is not available.";
+        document.getElementById("work-attention-pill").textContent = attention.label || "Stable";
+        document.getElementById("work-repo-pill").textContent = repo.available
+          ? `${repo.branch || "unknown"} | ${repo.dirty ? "dirty" : "clean"}`
+          : "status unavailable";
+        document.getElementById("work-mission-pill").textContent = mission?.title
+          ? String(mission.title)
+          : "no active mission";
+        document.getElementById("work-run-pill").textContent = lastRun?.run_id
+          ? `${lastRun.run_id} | ${lastRun.phase || "unknown"}`
+          : "no recent run";
+        document.getElementById("work-attention-detail").textContent =
+          attention.reason || "No immediate work pressure is visible.";
+
+        document.getElementById("work-paths").innerHTML = topPaths.length
+          ? topPaths.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
+          : `<li class="muted-empty">No repo paths surfaced yet.</li>`;
+
+        document.getElementById("work-blockers").innerHTML = blockers.length
+          ? blockers.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
+          : `<li class="muted-empty">No blockers are active.</li>`;
+
+        const command = String(terminal.command || "").trim();
+        const exitCode = terminal.exit_code;
+        const terminalSummary = command
+          ? `${command}${exitCode === undefined || exitCode === null ? "" : ` (exit ${exitCode})`}`
+          : "No terminal command captured.";
+        document.getElementById("work-terminal-meta").textContent =
+          `${String(terminal.severity || "info")} | ${terminalSummary}`;
+        document.getElementById("work-terminal").textContent = command
+          ? formatJson({
+              command,
+              exit_code: exitCode,
+              cwd: terminal.cwd || "",
+              stderr: terminal.stderr || "",
+              stdout: terminal.stdout || "",
+              text: terminal.text || "",
+              ts: terminal.ts || "",
+              active_streams: Array.isArray(telemetry.active_streams) ? telemetry.active_streams : [],
+            })
+          : "Awaiting live terminal context.";
+
+        const focusLabel = String(currentFocusActionChip?.label || nextAction.label || "No next action selected.");
+        const focusReason = String(
+          currentFocusActionChip?.policy_reason || currentFocusActionChip?.reason || nextAction.reason || "No next action guidance is available.",
+        );
+        document.getElementById("work-next-action").textContent = `${focusLabel} | ${focusReason}`;
+        document.getElementById("work-next-action-meta").textContent = currentFocusActionChip
+          ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${currentFocusActionChip.enabled ? "ready" : "blocked"}`
+          : `${String(nextAction.kind || "unknown")} | no matching action chip`;
+
+        const previewButton = document.getElementById("work-action-preview");
+        const executeButton = document.getElementById("work-action-execute");
+        if (currentFocusActionChip) {
+          const requestFlow = String(currentFocusActionChip.kind || "").includes("request_approval");
+          previewButton.disabled = !Boolean(currentFocusActionChip.enabled);
+          executeButton.disabled = !Boolean(currentFocusActionChip.enabled);
+          executeButton.textContent = requestFlow ? "Request" : "Execute";
+        } else {
+          previewButton.disabled = true;
+          executeButton.disabled = true;
+          executeButton.textContent = "Execute";
+        }
+      }
+
       function renderActions(actions) {
         const chips = Array.isArray(actions.action_chips) ? actions.action_chips.slice(0, 8) : [];
         const blocked = Array.isArray(actions.blocked_actions) ? actions.blocked_actions.slice(0, 8) : [];
@@ -2111,6 +2298,9 @@
               )
               .join("")
           : `<li class="muted-empty">No blocked actions surfaced by Lens.</li>`;
+        if (currentSnapshot) {
+          renderCurrentWork(currentSnapshot, currentActions);
+        }
         document.getElementById("orb-controls").textContent = orbControlHint();
         applyOrbSignals();
       }
@@ -2157,6 +2347,20 @@
 
         renderExecution(payload.execution);
         await loadSurface();
+      }
+
+      async function previewFocusAction() {
+        if (!currentFocusActionChip) {
+          return;
+        }
+        await executeAction(String(currentFocusActionChip.kind || ""), true);
+      }
+
+      async function runFocusAction() {
+        if (!currentFocusActionChip) {
+          return;
+        }
+        await executeAction(String(currentFocusActionChip.kind || ""), false);
       }
 
       async function loadVoiceBriefing() {

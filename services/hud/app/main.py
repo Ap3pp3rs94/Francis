@@ -18,6 +18,7 @@ from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
 from services.hud.app.orb import get_orb_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
+from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
@@ -77,6 +78,7 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
             actions_payload=actions,
             voice=voice,
         ),
+        "current_work": get_current_work_view(snapshot=snapshot),
         "dashboard": get_dashboard_view(snapshot=snapshot),
         "missions": get_missions_view(snapshot=snapshot),
         "incidents": get_incidents_view(snapshot=snapshot),
@@ -110,6 +112,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/dashboard")
     def dashboard() -> dict[str, object]:
         return get_dashboard_view()
+
+    @app.get("/api/current-work")
+    def current_work() -> dict[str, object]:
+        return get_current_work_view()
 
     @app.get("/api/inbox")
     def inbox() -> dict[str, object]:

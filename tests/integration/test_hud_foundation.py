@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import app as orchestrator_app
 import services.hud.app.main as hud_main
 import services.hud.app.state as hud_state
+import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
@@ -85,6 +86,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "The Orb rides directly over the cursor." in response.text
     assert "Hold the moving Orb itself to panic stop" in response.text
+    assert "Current Work Focus" in response.text
+    assert "Terminal and Next Move" in response.text
     assert "/static/orb/francis-orb.js" in response.text
 
 
@@ -117,6 +120,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["service"] == "hud"
     assert body["dashboard"]["surface"] == "dashboard"
     assert body["actions"]["status"] == "ok"
+    assert body["current_work"]["surface"] == "current_work"
     assert body["missions"]["surface"] == "missions"
     assert body["inbox"]["surface"] == "inbox"
     assert body["runs"]["surface"] == "runs"
@@ -159,6 +163,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
 
     monkeypatch.setattr(hud_main, "build_lens_snapshot", lambda: snapshot)
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(inbox_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -186,6 +191,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
 
     payload = hud_main._build_bootstrap_payload()
 
+    assert payload["current_work"]["surface"] == "current_work"
     assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
     assert payload["missions"]["active_count"] == 1
     assert payload["incidents"]["items"][0]["summary"] == "clear"
@@ -353,6 +359,12 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["snapshot"]["current_work"]["repo"]["dirty"] is True
     assert body["snapshot"]["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["snapshot"]["next_best_action"]["kind"] == "repo.tests"
+    assert body["current_work"]["surface"] == "current_work"
+    assert body["current_work"]["attention"]["kind"] == "terminal_failure"
+    assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
+    assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
+    assert body["current_work"]["next_action"]["kind"] == "repo.tests"
+    assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
     assert body["dashboard"]["mode"]["current"] == "away"
     assert any(card["id"] == "current-work" for card in body["dashboard"]["cards"])
     assert any(card["id"] == "next-best-action" for card in body["dashboard"]["cards"])
@@ -375,6 +387,19 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["orb"]["interjection_level"] == 3
     assert body["orb"]["state"]["security_quarantines"] == 1
     assert body["orb"]["visual"]["ring_density"] >= 6
+
+
+def test_hud_current_work_route_returns_structured_focus() -> None:
+    response = client.get("/api/current-work")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "current_work"
+    assert "summary" in payload
+    assert "repo" in payload
+    assert "attention" in payload
+    assert "terminal" in payload
+    assert "next_action" in payload
 
 
 def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:
