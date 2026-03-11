@@ -995,6 +995,9 @@
             <span class="meta tiny" id="mission-meta">Mission detail loading from Lens</span>
           </div>
           <ul class="list" id="missions"></ul>
+          <div class="desktop-grid" id="mission-detail-cards">
+            <div class="desktop-pill"><strong>Mission</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
           <pre class="console" id="mission-detail">Mission detail will render from active or backlog work.</pre>
         </article>
         <article class="panel accent">
@@ -1005,6 +1008,9 @@
           <ul class="list" id="incidents-list"></ul>
           <p id="incidents"></p>
           <p class="meta" id="security-summary"></p>
+          <div class="desktop-grid" id="incident-detail-cards">
+            <div class="desktop-pill"><strong>Incident</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
           <pre class="console" id="incident-detail">Incident detail will render from live workspace posture.</pre>
         </article>
         <article class="panel">
@@ -3470,6 +3476,7 @@
         if (!row) {
           return;
         }
+        renderDetailCards("mission-detail-cards", row.detail_cards, "Mission");
         document.getElementById("mission-detail").textContent = formatJson(row);
       }
 
@@ -3505,6 +3512,7 @@
         if (currentMissionRows.length) {
           inspectMission(0);
         } else {
+          renderDetailCards("mission-detail-cards", [], "Mission");
           document.getElementById("mission-detail").textContent = formatJson(
             missionsPayload?.detail && typeof missionsPayload.detail === "object"
               ? missionsPayload.detail
@@ -3522,6 +3530,7 @@
         if (!row) {
           return;
         }
+        renderDetailCards("incident-detail-cards", row.detail_cards, "Incident");
         document.getElementById("incident-detail").textContent = formatJson(row);
       }
 
@@ -3561,6 +3570,7 @@
         if (items.length) {
           inspectIncident(0);
         } else {
+          renderDetailCards("incident-detail-cards", [], "Incident");
           document.getElementById("incident-detail").textContent = formatJson(
             incidentsPayload?.detail && typeof incidentsPayload.detail === "object"
               ? incidentsPayload.detail

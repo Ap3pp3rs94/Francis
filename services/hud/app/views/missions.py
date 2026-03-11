@@ -38,6 +38,17 @@ def _detail_summary(row: dict[str, Any]) -> str:
     return f"{title} is in {phase} with {priority} priority.".strip()
 
 
+def _detail_cards(row: dict[str, Any], *, lane: str) -> list[dict[str, str]]:
+    phase = str(row.get("phase") or row.get("status") or "planned").strip() or "planned"
+    priority = str(row.get("priority", "normal")).strip() or "normal"
+    return [
+        {"label": "Mission", "value": str(row.get("title", "Untitled mission")).strip() or "Untitled mission", "tone": "high" if lane == "active" else "low"},
+        {"label": "Lane", "value": lane, "tone": "medium" if lane == "active" else "low"},
+        {"label": "Phase", "value": phase, "tone": "medium"},
+        {"label": "Priority", "value": priority, "tone": "high" if priority.lower() in {"critical", "urgent", "high"} else "low"},
+    ]
+
+
 def _decorate(rows: list[dict[str, Any]], *, lane: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for row in rows:
@@ -46,6 +57,7 @@ def _decorate(rows: list[dict[str, Any]], *, lane: str) -> list[dict[str, Any]]:
         item = dict(row)
         item["lane"] = lane
         item["detail_summary"] = _detail_summary(item)
+        item["detail_cards"] = _detail_cards(item, lane=lane)
         items.append(item)
     return items
 

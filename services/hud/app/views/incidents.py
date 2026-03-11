@@ -34,6 +34,17 @@ def _detail_summary(row: dict[str, Any]) -> str:
     return f"{summary} | {severity} severity | {state} | {source}"
 
 
+def _detail_cards(row: dict[str, Any]) -> list[dict[str, str]]:
+    severity = str(row.get("severity", "low")).strip().lower() or "low"
+    state = str(row.get("state", "open")).strip().lower() or "open"
+    return [
+        {"label": "Incident", "value": str(row.get("summary", "Incident")).strip() or "Incident", "tone": severity},
+        {"label": "Severity", "value": severity, "tone": severity},
+        {"label": "State", "value": state, "tone": "medium"},
+        {"label": "Source", "value": str(row.get("source", "unknown")).strip() or "unknown", "tone": "low"},
+    ]
+
+
 def get_incidents_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -45,6 +56,7 @@ def get_incidents_view(*, snapshot: dict[str, object] | None = None) -> dict[str
             continue
         item = dict(row)
         item["detail_summary"] = _detail_summary(item)
+        item["detail_cards"] = _detail_cards(item)
         items.append(item)
     top_incident = items[0] if items else None
     summary = (

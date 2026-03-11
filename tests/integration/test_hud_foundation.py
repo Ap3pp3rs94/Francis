@@ -454,9 +454,11 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["missions"]["active_count"] == 1
     assert body["missions"]["backlog_count"] == 1
     assert body["missions"]["summary"].startswith("Live Lens is in active")
+    assert body["missions"]["active"][0]["detail_cards"]
     assert body["incidents"]["open_count"] == 1
     assert body["incidents"]["security"]["quarantine_count"] == 1
     assert body["incidents"]["summary"].startswith("Observer detected sustained error pressure.")
+    assert body["incidents"]["items"][0]["detail_cards"]
     assert body["inbox"]["alert_count"] == 1
     assert body["runs"]["active_run"]["run_id"] == "run-live"
     assert body["snapshot"]["apprenticeship"]["review_count"] == 1
