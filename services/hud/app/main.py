@@ -70,7 +70,7 @@ def _build_hud_payload(
 ) -> dict[str, object]:
     snapshot_payload = snapshot if snapshot else build_lens_snapshot()
     actions_payload = actions if actions else get_lens_actions(max_actions=max_actions)
-    current_work = get_current_work_view(snapshot=snapshot_payload)
+    current_work = get_current_work_view(snapshot=snapshot_payload, actions=actions_payload)
     approval_queue = get_approval_queue_view(snapshot=snapshot_payload, actions=actions_payload)
     blocked_actions = get_blocked_actions_view(snapshot=snapshot_payload, actions=actions_payload)
     execution_journal = get_execution_journal_view(snapshot=snapshot_payload)

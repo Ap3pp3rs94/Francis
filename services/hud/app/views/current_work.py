@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 
 
@@ -174,6 +175,7 @@ def _build_next_action_resume(
             "summary": summary,
             "detail": " | ".join(detail_parts).strip(),
             "can_resume": True,
+            "args": {**args, "approval_id": approval_id},
         }
 
     return {
@@ -183,6 +185,7 @@ def _build_next_action_resume(
         "summary": "No approval-backed continuation is currently queued for the next move.",
         "detail": "",
         "can_resume": False,
+        "args": {},
     }
 
 
@@ -237,6 +240,114 @@ def _build_operator_link(
         "run_id": "",
         "summary": f"Operator link: following {action_kind} as the current move.",
         "detail": reason or "The operator loop is tracking the current next-best action.",
+    }
+
+
+def _chip_args(chip: dict[str, Any]) -> dict[str, object]:
+    execute_via = chip.get("execute_via", {}) if isinstance(chip.get("execute_via"), dict) else {}
+    payload = execute_via.get("payload", {}) if isinstance(execute_via.get("payload"), dict) else {}
+    if isinstance(payload.get("args"), dict):
+        return dict(payload.get("args", {}))
+    if isinstance(chip.get("args"), dict):
+        return dict(chip.get("args", {}))
+    return {}
+
+
+def _find_action_chip(actions: dict[str, object], kind: str) -> dict[str, Any] | None:
+    chips = actions.get("action_chips", []) if isinstance(actions.get("action_chips"), list) else []
+    lowered = str(kind or "").strip().lower()
+    for chip in chips:
+        if str(chip.get("kind", "")).strip().lower() == lowered:
+            return chip
+    return None
+
+
+def _build_focus_action(
+    *,
+    actions: dict[str, object],
+    next_action: dict[str, Any],
+    next_action_resume: dict[str, object],
+) -> dict[str, object]:
+    focus_kind = _normalize_usage_action_kind(next_action.get("kind"))
+    label = str(next_action.get("label", "")).strip() or "No next action selected."
+    reason = str(next_action.get("reason", "")).strip() or "No next action guidance is available."
+    if not focus_kind:
+        return {
+            "state": "idle",
+            "kind": "",
+            "execute_kind": "",
+            "label": "No next action selected.",
+            "reason": reason,
+            "enabled": False,
+            "risk_tier": "low",
+            "args": {},
+        }
+
+    if str(next_action_resume.get("state", "")).strip().lower() == "approval_ready":
+        return {
+            "state": "approval_ready",
+            "kind": focus_kind,
+            "execute_kind": focus_kind,
+            "label": label,
+            "reason": str(next_action_resume.get("summary", "")).strip() or reason,
+            "enabled": True,
+            "risk_tier": "medium",
+            "args": next_action_resume.get("args", {}) if isinstance(next_action_resume.get("args"), dict) else {},
+        }
+
+    direct_chip = _find_action_chip(actions, focus_kind)
+    if direct_chip and bool(direct_chip.get("enabled", False)):
+        return {
+            "state": "ready",
+            "kind": str(direct_chip.get("kind", "")).strip() or focus_kind,
+            "execute_kind": str(direct_chip.get("kind", "")).strip() or focus_kind,
+            "label": str(direct_chip.get("label", "")).strip() or label,
+            "reason": str(direct_chip.get("policy_reason", "")).strip()
+            or str(direct_chip.get("reason", "")).strip()
+            or reason,
+            "enabled": True,
+            "risk_tier": str(direct_chip.get("risk_tier", "low")).strip().lower() or "low",
+            "args": _chip_args(direct_chip),
+        }
+
+    approval_chip = _find_action_chip(actions, f"{focus_kind}.request_approval")
+    if approval_chip:
+        return {
+            "state": "approval_request" if bool(approval_chip.get("enabled", False)) else "blocked",
+            "kind": str(approval_chip.get("kind", "")).strip() or f"{focus_kind}.request_approval",
+            "execute_kind": str(approval_chip.get("kind", "")).strip() or f"{focus_kind}.request_approval",
+            "label": str(approval_chip.get("label", "")).strip() or label,
+            "reason": str(approval_chip.get("policy_reason", "")).strip()
+            or str(approval_chip.get("reason", "")).strip()
+            or reason,
+            "enabled": bool(approval_chip.get("enabled", False)),
+            "risk_tier": str(approval_chip.get("risk_tier", "medium")).strip().lower() or "medium",
+            "args": _chip_args(approval_chip),
+        }
+
+    if direct_chip:
+        return {
+            "state": "blocked",
+            "kind": str(direct_chip.get("kind", "")).strip() or focus_kind,
+            "execute_kind": str(direct_chip.get("kind", "")).strip() or focus_kind,
+            "label": str(direct_chip.get("label", "")).strip() or label,
+            "reason": str(direct_chip.get("policy_reason", "")).strip()
+            or str(direct_chip.get("reason", "")).strip()
+            or reason,
+            "enabled": False,
+            "risk_tier": str(direct_chip.get("risk_tier", "medium")).strip().lower() or "medium",
+            "args": _chip_args(direct_chip),
+        }
+
+    return {
+        "state": "blocked",
+        "kind": focus_kind,
+        "execute_kind": focus_kind,
+        "label": label,
+        "reason": reason,
+        "enabled": False,
+        "risk_tier": "medium",
+        "args": {},
     }
 
 
@@ -307,9 +418,15 @@ def _build_next_action_evidence(
     return evidence[:4]
 
 
-def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
+def get_current_work_view(
+    *,
+    snapshot: dict[str, object] | None = None,
+    actions: dict[str, object] | None = None,
+) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
+    if actions is None:
+        actions = get_lens_actions(max_actions=8)
 
     current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
     next_best_action = (
@@ -327,6 +444,11 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
         next_action=next_best_action,
         next_action_resume=next_action_resume,
         last_run=last_run,
+    )
+    focus_action = _build_focus_action(
+        actions=actions,
+        next_action=next_best_action,
+        next_action_resume=next_action_resume,
     )
     next_action_evidence = _build_next_action_evidence(
         snapshot=snapshot,
@@ -375,6 +497,7 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],
         "next_action": next_best_action,
         "operator_link": operator_link,
+        "focus_action": focus_action,
         "next_action_signal": {
             "severity": next_action_severity,
             "summary": (

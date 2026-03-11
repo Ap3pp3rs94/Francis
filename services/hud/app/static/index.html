@@ -3209,6 +3209,9 @@
         const nextAction = currentWork.next_action && typeof currentWork.next_action === "object"
           ? currentWork.next_action
           : {};
+        const focusAction = currentWork.focus_action && typeof currentWork.focus_action === "object"
+          ? currentWork.focus_action
+          : {};
         const nextSignal = currentWork.next_action_signal && typeof currentWork.next_action_signal === "object"
           ? currentWork.next_action_signal
           : {};
@@ -3220,7 +3223,19 @@
           : {};
         const nextEvidence = Array.isArray(currentWork.next_action_evidence) ? currentWork.next_action_evidence : [];
         const terminalBreakdown = Array.isArray(currentWork.terminal_breakdown) ? currentWork.terminal_breakdown : [];
-        currentFocusActionChip = resolveFocusActionChip(snapshot, actions);
+        currentFocusActionChip =
+          focusAction && String(focusAction.execute_kind || focusAction.kind || "").trim()
+            ? {
+                kind: String(focusAction.execute_kind || focusAction.kind || "").trim(),
+                label: String(focusAction.label || nextAction.label || "").trim(),
+                enabled: Boolean(focusAction.enabled),
+                risk_tier: String(focusAction.risk_tier || "low").trim().toLowerCase() || "low",
+                reason: String(focusAction.reason || nextAction.reason || "").trim(),
+                policy_reason: String(focusAction.reason || nextAction.reason || "").trim(),
+                args: focusAction.args && typeof focusAction.args === "object" ? focusAction.args : {},
+                state: String(focusAction.state || "").trim(),
+              }
+            : resolveFocusActionChip(snapshot, actions);
 
         document.getElementById("work-focus-meta").textContent =
           `${attention.label || "Stable"} | ${repo.branch || "unknown"} | ${Number(repo.changed_count || 0)} repo change(s)`;
@@ -3315,13 +3330,17 @@
           active_streams: Array.isArray(telemetry.active_streams) ? telemetry.active_streams : [],
         });
 
-        const focusLabel = String(currentFocusActionChip?.label || nextAction.label || "No next action selected.");
+        const focusLabel = String(currentFocusActionChip?.label || focusAction.label || nextAction.label || "No next action selected.");
         const focusReason = String(
-          currentFocusActionChip?.policy_reason || currentFocusActionChip?.reason || nextAction.reason || "No next action guidance is available.",
+          currentFocusActionChip?.policy_reason ||
+            currentFocusActionChip?.reason ||
+            focusAction.reason ||
+            nextAction.reason ||
+            "No next action guidance is available.",
         );
         document.getElementById("work-next-action").textContent = `${focusLabel} | ${focusReason}`;
         document.getElementById("work-next-action-meta").textContent = currentFocusActionChip
-          ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${currentFocusActionChip.enabled ? "ready" : "blocked"}`
+          ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${String(focusAction.state || "").trim() || (currentFocusActionChip.enabled ? "ready" : "blocked")}`
           : `${String(nextAction.kind || "unknown")} | no matching action chip`;
         document.getElementById("work-resume-state").textContent =
           String(nextResume.summary || "No approval-backed continuation is currently queued for the next move.");
@@ -3360,7 +3379,7 @@
           const requestFlow = String(currentFocusActionChip.kind || "").includes("request_approval");
           previewButton.disabled = !Boolean(currentFocusActionChip.enabled);
           executeButton.disabled = !Boolean(currentFocusActionChip.enabled);
-          executeButton.textContent = nextResume.can_resume || relatedApproval?.can_execute_after_approval
+          executeButton.textContent = String(focusAction.state || "").trim() === "approval_ready" || nextResume.can_resume || relatedApproval?.can_execute_after_approval
             ? "Approve + Run"
             : requestFlow
               ? "Request"
@@ -4121,7 +4140,11 @@
         if (!currentFocusActionChip) {
           return;
         }
-        await executeAction(String(currentFocusActionChip.kind || ""), true);
+        await executeActionWithArgs(
+          String(currentFocusActionChip.kind || ""),
+          currentFocusActionChip.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
+          true,
+        );
       }
 
       async function runFocusAction() {
@@ -4138,7 +4161,11 @@
           await approveAndRunQueueItem(String(relatedApproval.id));
           return;
         }
-        await executeAction(String(currentFocusActionChip.kind || ""), false);
+        await executeActionWithArgs(
+          String(currentFocusActionChip.kind || ""),
+          currentFocusActionChip.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
+          false,
+        );
       }
 
       async function runRepoAction(kind) {
