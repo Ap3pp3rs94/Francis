@@ -32,13 +32,25 @@ def _detail_summary(row: dict[str, Any]) -> str:
     return f"{title} | {severity} | {summary}".strip(" |")
 
 
+def _detail_state(*, row_id: str, top_id: str, empty: bool = False) -> str:
+    if empty:
+        return "idle"
+    if row_id and top_id and row_id == top_id:
+        return "current"
+    return "historical"
+
+
 def _detail_cards(row: dict[str, Any]) -> list[dict[str, str]]:
     severity = str(row.get("severity", "nominal")).strip().lower() or "nominal"
-    return [
+    cards = [
         {"label": "Message", "value": str(row.get("title", "Inbox message")).strip() or "Inbox message", "tone": severity},
         {"label": "Severity", "value": severity, "tone": severity},
         {"label": "Source", "value": str(row.get("source", "workspace")).strip() or "workspace", "tone": "low"},
     ]
+    ts = str(row.get("ts", "")).strip()
+    if ts:
+        cards.append({"label": "Seen", "value": ts, "tone": "low"})
+    return cards
 
 
 def get_inbox_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
@@ -57,12 +69,18 @@ def get_inbox_view(*, snapshot: dict[str, object] | None = None) -> dict[str, ob
             }
         ]
     normalized: list[dict[str, Any]] = []
+    top_id = str(messages[0].get("id", "")).strip() if messages else ""
     for row in messages:
         if not isinstance(row, dict):
             continue
         item = dict(row)
         item["detail_summary"] = _detail_summary(item)
         item["detail_cards"] = _detail_cards(item)
+        item["detail_state"] = _detail_state(
+            row_id=str(item.get("id", "")).strip(),
+            top_id=top_id,
+            empty=str(item.get("id", "")).strip() == "msg-inbox-empty",
+        )
         normalized.append(item)
     top = normalized[0] if normalized else None
     return {

@@ -798,6 +798,96 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
     assert approval_row["detail_state"] == "historical"
 
 
+def test_hud_inbox_view_marks_current_and_historical_messages(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "inbox": {
+                "count": 2,
+                "alert_count": 1,
+                "items": [
+                    {
+                        "id": "msg-1",
+                        "ts": "2026-03-11T10:05:00+00:00",
+                        "title": "Approval waiting",
+                        "summary": "repo.tests needs a decision",
+                        "severity": "alert",
+                    },
+                    {
+                        "id": "msg-2",
+                        "ts": "2026-03-11T10:01:00+00:00",
+                        "title": "Observer note",
+                        "summary": "observer scan completed",
+                        "severity": "low",
+                    },
+                ],
+            }
+        }
+
+    monkeypatch.setattr(inbox_view, "build_lens_snapshot", _snapshot)
+
+    payload = inbox_view.get_inbox_view()
+
+    assert payload["summary"].startswith("Approval waiting | alert | repo.tests needs a decision")
+    assert payload["messages"][0]["detail_state"] == "current"
+    assert payload["messages"][0]["detail_cards"][0]["label"] == "Message"
+    assert payload["messages"][1]["detail_state"] == "historical"
+
+
+def test_hud_runs_view_carries_latest_receipt_summary(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "runs": {
+                "last_run": {
+                    "run_id": "run-tests",
+                    "phase": "verify",
+                    "summary": "Fast checks ran through Lens.",
+                },
+                "recent": [
+                    {
+                        "run_id": "run-tests",
+                        "event_count": 3,
+                        "last_kind": "lens.action.execute",
+                        "last_ts": "2026-03-11T10:02:00+00:00",
+                    },
+                    {
+                        "run_id": "run-older",
+                        "event_count": 1,
+                        "last_kind": "approval.decided",
+                        "last_ts": "2026-03-11T09:58:00+00:00",
+                    },
+                ],
+                "ledger_tail": [
+                    {
+                        "run_id": "run-tests",
+                        "ts": "2026-03-11T10:02:00+00:00",
+                        "kind": "lens.action.execute",
+                        "summary": {
+                            "action_kind": "repo.tests",
+                            "summary_text": "Lane fast executed. 12 passed | 0 failed",
+                        },
+                    },
+                    {
+                        "run_id": "run-older",
+                        "ts": "2026-03-11T09:58:00+00:00",
+                        "kind": "approval.decided",
+                        "summary": {"decision": "approved", "approval_id": "approval-old"},
+                    },
+                ],
+            }
+        }
+
+    monkeypatch.setattr(runs_view, "build_lens_snapshot", _snapshot)
+
+    payload = runs_view.get_runs_view()
+
+    assert "Lane fast executed. 12 passed | 0 failed" in payload["summary"]
+    assert payload["active_run"]["detail_state"] == "current"
+    assert any(card["label"] == "Latest Receipt" for card in payload["cards"])
+    assert payload["run_groups"][0]["detail_state"] == "current"
+    assert payload["run_groups"][0]["detail_cards"][-1]["value"] == "Lane fast executed. 12 passed | 0 failed"
+    assert payload["run_groups"][1]["detail_state"] == "historical"
+
+
 def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:
     workspace_root = (tmp_path / "workspace").resolve()
     monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)

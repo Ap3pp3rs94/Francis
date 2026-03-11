@@ -1041,6 +1041,12 @@
           <ul class="list" id="inbox-list">
             <li class="muted-empty">No inbox messages surfaced yet.</li>
           </ul>
+          <p class="meta" id="inbox-detail-summary">
+            Inbox detail summary will render from the current backend surface.
+          </p>
+          <p class="meta tiny" id="inbox-detail-state">
+            Inbox detail state will resolve from current message pressure.
+          </p>
           <div class="desktop-grid" id="inbox-detail-cards">
             <div class="desktop-pill"><strong>Inbox</strong><span>Detail cards will render from the backend contract.</span></div>
           </div>
@@ -1057,6 +1063,12 @@
           <ul class="list" id="runs-list">
             <li class="muted-empty">No run groups surfaced yet.</li>
           </ul>
+          <p class="meta" id="runs-detail-summary">
+            Run detail summary will render from the current backend surface.
+          </p>
+          <p class="meta tiny" id="runs-detail-state">
+            Run detail state will resolve from active run continuity.
+          </p>
           <div class="desktop-grid" id="runs-detail-cards">
             <div class="desktop-pill"><strong>Run</strong><span>Detail cards will render from the backend contract.</span></div>
           </div>
@@ -3611,6 +3623,14 @@
         if (!row) {
           return;
         }
+        document.getElementById("inbox-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No inbox detail provided.");
+        document.getElementById("inbox-detail-state").textContent =
+          String(row.detail_state || "historical") === "current"
+            ? "Inbox detail state: current"
+            : String(row.detail_state || "") === "idle"
+              ? "Inbox detail state: idle"
+              : "Inbox detail state: historical";
         renderDetailCards("inbox-detail-cards", row.detail_cards, "Inbox");
         document.getElementById("inbox-detail").textContent = formatJson(row);
       }
@@ -3647,6 +3667,9 @@
         if (messages.length) {
           inspectInboxItem(0);
         } else {
+          document.getElementById("inbox-detail-summary").textContent =
+            "Inbox detail will render from the current backend surface.";
+          document.getElementById("inbox-detail-state").textContent = "Inbox detail state: idle";
           renderDetailCards("inbox-detail-cards", [], "Inbox");
           document.getElementById("inbox-detail").textContent = formatJson(
             currentInboxSurface.detail && typeof currentInboxSurface.detail === "object"
@@ -3661,6 +3684,14 @@
         if (!row) {
           return;
         }
+        document.getElementById("runs-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No run detail provided.");
+        document.getElementById("runs-detail-state").textContent =
+          String(row.detail_state || "historical") === "current"
+            ? "Run detail state: current"
+            : String(row.detail_state || "") === "idle"
+              ? "Run detail state: idle"
+              : "Run detail state: historical";
         renderDetailCards("runs-detail-cards", row.detail_cards, "Run");
         document.getElementById("runs-detail").textContent = formatJson(row);
       }
@@ -3698,6 +3729,9 @@
         if (currentRunRows.length && currentRunRows[0] && Object.keys(currentRunRows[0]).length) {
           inspectRunSurface(0);
         } else {
+          document.getElementById("runs-detail-summary").textContent =
+            "Run detail will render from the current backend surface.";
+          document.getElementById("runs-detail-state").textContent = "Run detail state: idle";
           renderDetailCards("runs-detail-cards", [], "Run");
           document.getElementById("runs-detail").textContent = formatJson(
             currentRunsSurface.detail && typeof currentRunsSurface.detail === "object"
