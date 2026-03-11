@@ -734,6 +734,28 @@
       <section class="split">
         <article class="panel">
           <div class="panel-head">
+            <h2>Execution Journal</h2>
+            <span class="meta tiny" id="journal-meta">Waiting for receipt history</span>
+          </div>
+          <p id="journal-summary" class="hero-copy">
+            Recent run receipts will appear here once Francis executes work in the current workspace.
+          </p>
+          <ul class="list" id="journal-list">
+            <li class="muted-empty">No recent receipts surfaced yet.</li>
+          </ul>
+        </article>
+        <article class="panel accent">
+          <div class="panel-head">
+            <h2>Receipt Detail</h2>
+            <span class="meta tiny" id="journal-detail-meta">No receipt selected</span>
+          </div>
+          <pre class="console" id="journal-detail">Awaiting receipt history.</pre>
+        </article>
+      </section>
+
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
             <h2>Operator Deck</h2>
             <span class="meta tiny" id="action-summary">Awaiting live actions</span>
           </div>
@@ -877,6 +899,7 @@
       let currentSnapshot = null;
       let currentFabricResults = [];
       let currentApprovalQueue = { items: [] };
+      let currentExecutionJournal = { items: [] };
       let currentOrb = null;
       let currentFocusActionChip = null;
       let streamSource = null;
@@ -1974,6 +1997,7 @@
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
         currentSnapshot = payload.snapshot || null;
         currentApprovalQueue = payload.approval_queue || { items: [] };
+        currentExecutionJournal = payload.execution_journal || { items: [] };
 
         const mode = payload.dashboard.mode;
         const modeRow = document.getElementById("mode-row");
@@ -2013,6 +2037,7 @@
         renderOrb(payload.orb || {});
         renderCurrentWork(payload.snapshot || {}, currentActions);
         renderApprovalQueue(currentApprovalQueue);
+        renderExecutionJournal(currentExecutionJournal);
         renderActions(currentActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
@@ -2314,6 +2339,52 @@
         } else {
           document.getElementById("approval-detail-meta").textContent = "No approval selected";
           document.getElementById("approval-detail").textContent = "Awaiting approval queue data.";
+        }
+      }
+
+      function inspectJournalItem(index) {
+        const row = Array.isArray(currentExecutionJournal?.items) ? currentExecutionJournal.items[index] : null;
+        if (!row) {
+          return;
+        }
+        document.getElementById("journal-detail-meta").textContent =
+          `${row.title || "Receipt"} | ${row.run_id || "unknown"} | ${row.kind || "unknown"}`;
+        document.getElementById("journal-detail").textContent = formatJson(row.detail || row);
+      }
+
+      function renderExecutionJournal(journal) {
+        currentExecutionJournal = journal || { items: [] };
+        const items = Array.isArray(currentExecutionJournal.items) ? currentExecutionJournal.items : [];
+        const activeRun = currentExecutionJournal.active_run || {};
+        document.getElementById("journal-meta").textContent =
+          `${activeRun.run_id || "none"} | ${activeRun.phase || "unknown"} | ${items.length} receipt(s)`;
+        document.getElementById("journal-summary").textContent =
+          activeRun.summary || "No active run recorded.";
+        document.getElementById("journal-list").innerHTML = items.length
+          ? items
+              .map((row, index) => `
+                <li>
+                  <div class="action-top">
+                    <div class="action-label">${escapeHtml(row.title || row.kind || "Receipt")}</div>
+                    <div class="badge-row">
+                      <span class="badge risk-low">${escapeHtml(row.kind || "receipt")}</span>
+                      <span class="badge risk-medium">${escapeHtml(row.run_id || "none")}</span>
+                    </div>
+                  </div>
+                  <p class="meta">${escapeHtml(row.summary || "No compact summary available.")}</p>
+                  <div class="action-buttons">
+                    <button class="btn-secondary" type="button" onclick="inspectJournalItem(${index})">Inspect</button>
+                  </div>
+                </li>
+              `)
+              .join("")
+          : `<li class="muted-empty">No recent receipts surfaced yet.</li>`;
+
+        if (items.length) {
+          inspectJournalItem(0);
+        } else {
+          document.getElementById("journal-detail-meta").textContent = "No receipt selected";
+          document.getElementById("journal-detail").textContent = "Awaiting receipt history.";
         }
       }
 

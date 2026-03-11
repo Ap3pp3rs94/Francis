@@ -21,6 +21,7 @@ from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
+from services.hud.app.views.execution_journal import get_execution_journal_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
 from services.hud.app.views.missions import get_missions_view
@@ -81,6 +82,7 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
         ),
         "current_work": get_current_work_view(snapshot=snapshot),
         "approval_queue": get_approval_queue_view(snapshot=snapshot, actions=actions),
+        "execution_journal": get_execution_journal_view(snapshot=snapshot),
         "dashboard": get_dashboard_view(snapshot=snapshot),
         "missions": get_missions_view(snapshot=snapshot),
         "incidents": get_incidents_view(snapshot=snapshot),
@@ -122,6 +124,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/approval-queue")
     def approval_queue() -> dict[str, object]:
         return get_approval_queue_view()
+
+    @app.get("/api/execution-journal")
+    def execution_journal() -> dict[str, object]:
+        return get_execution_journal_view()
 
     @app.get("/api/inbox")
     def inbox() -> dict[str, object]:

@@ -10,6 +10,7 @@ import services.hud.app.views.approval_queue as approval_queue_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
+import services.hud.app.views.execution_journal as execution_journal_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.missions as missions_view
@@ -91,6 +92,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Terminal and Next Move" in response.text
     assert "Approval Queue" in response.text
     assert "Approval Detail" in response.text
+    assert "Execution Journal" in response.text
+    assert "Receipt Detail" in response.text
     assert "/static/orb/francis-orb.js" in response.text
 
 
@@ -125,6 +128,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["actions"]["status"] == "ok"
     assert body["current_work"]["surface"] == "current_work"
     assert body["approval_queue"]["surface"] == "approval_queue"
+    assert body["execution_journal"]["surface"] == "execution_journal"
     assert body["missions"]["surface"] == "missions"
     assert body["inbox"]["surface"] == "inbox"
     assert body["runs"]["surface"] == "runs"
@@ -169,6 +173,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(inbox_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -202,6 +207,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
 
     assert payload["current_work"]["surface"] == "current_work"
     assert payload["approval_queue"]["surface"] == "approval_queue"
+    assert payload["execution_journal"]["surface"] == "execution_journal"
     assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
     assert payload["missions"]["active_count"] == 1
     assert payload["incidents"]["items"][0]["summary"] == "clear"
@@ -378,6 +384,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["approval_queue"]["pending_count"] == 1
     assert body["approval_queue"]["items"][0]["id"] == "approval-1"
+    assert body["execution_journal"]["surface"] == "execution_journal"
+    assert body["execution_journal"]["active_run"]["run_id"] == "run-live"
+    assert body["execution_journal"]["items"][0]["kind"] == "hud.bootstrap"
     assert body["dashboard"]["mode"]["current"] == "away"
     assert any(card["id"] == "current-work" for card in body["dashboard"]["cards"])
     assert any(card["id"] == "next-best-action" for card in body["dashboard"]["cards"])
@@ -422,6 +431,16 @@ def test_hud_approval_queue_route_returns_pending_requests() -> None:
     payload = response.json()
     assert payload["surface"] == "approval_queue"
     assert "pending_count" in payload
+    assert "items" in payload
+
+
+def test_hud_execution_journal_route_returns_receipts() -> None:
+    response = client.get("/api/execution-journal")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "execution_journal"
+    assert "active_run" in payload
     assert "items" in payload
 
 
