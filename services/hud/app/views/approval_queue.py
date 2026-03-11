@@ -13,6 +13,16 @@ def _has_action(actions: dict[str, Any], kind: str) -> bool:
     return False
 
 
+def _requested_action_kind(row: dict[str, Any], metadata: dict[str, Any]) -> str:
+    explicit = str(metadata.get("action_kind", "")).strip().lower()
+    if explicit:
+        return explicit
+    skill = str(metadata.get("skill", "")).strip().lower()
+    if skill:
+        return skill
+    return str(row.get("action", "")).strip().lower()
+
+
 def get_approval_queue_view(
     *,
     snapshot: dict[str, object] | None = None,
@@ -53,6 +63,7 @@ def get_approval_queue_view(
                 "id": approval_id,
                 "ts": row.get("ts"),
                 "action": str(row.get("action", "")).strip(),
+                "requested_action_kind": _requested_action_kind(row, metadata),
                 "reason": str(row.get("reason", "")).strip(),
                 "requested_by": str(row.get("requested_by", "")).strip(),
                 "summary": summary,

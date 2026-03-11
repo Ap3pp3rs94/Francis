@@ -194,7 +194,7 @@ This repository is not just a vision dump. It already contains meaningful system
 * `services/observer/` - probes, baselines, anomaly detection, scoring, and event emission
 * `services/worker/` - queued execution with leases, backoff, deadletter, and safety controls
 * `services/gateway/` - gateway and middleware for auth, RBAC, panic mode, request IDs, rate limiting, and proxy flows
-* `services/hud/` - UI scaffolding for dashboard, inbox, incidents, missions, and runs
+* `services/hud/` - Lens/HUD operator surfaces for current work focus, approval queue, execution journal, repo drilldown, incidents, missions, and runs
 * `services/voice/` - voice scaffolding
 
 ### Shared package layers
@@ -228,6 +228,17 @@ Francis is local-first and stateful. Live artifacts land in areas like:
 
 These hold journals, queues, missions, incidents, receipts, telemetry, and other live system artifacts.
 `workspace/` is runtime-managed local state, not a source-controlled artifact surface.
+
+### Current Lens usage loop
+
+The most important HUD/operator surfaces are now shifting from status cards toward real usage flow:
+
+* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, and the next actionable move
+* `Approval Queue` - pending approvals with in-place approve/reject controls
+* `Execution Journal` - recent receipts and active run state
+* `Repo Drilldown` - direct `repo.status`, `repo.diff`, `repo.lint`, and fast-check execution from the same Lens surface
+
+That is still not the final Lens, but it is the right direction: Francis should expose what matters now, what is blocked, what it can do next, and what it just did.
 
 ## Current Architecture Shape
 

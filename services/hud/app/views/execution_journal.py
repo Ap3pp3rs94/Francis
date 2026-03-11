@@ -31,6 +31,50 @@ def _summary_text(summary: Any) -> str:
     return ""
 
 
+def _action_kind(summary: Any, row: dict[str, Any]) -> str:
+    detail = row.get("detail", {}) if isinstance(row.get("detail"), dict) else {}
+    candidates = [
+        row.get("action_kind"),
+        detail.get("action_kind"),
+        summary.get("action_kind") if isinstance(summary, dict) else None,
+        detail.get("skill"),
+        summary.get("skill") if isinstance(summary, dict) else None,
+    ]
+    for value in candidates:
+        text = str(value or "").strip().lower()
+        if text:
+            return text
+    return ""
+
+
+def _approval_id(summary: Any, row: dict[str, Any]) -> str:
+    detail = row.get("detail", {}) if isinstance(row.get("detail"), dict) else {}
+    candidates = [
+        row.get("approval_id"),
+        detail.get("approval_id"),
+        summary.get("approval_id") if isinstance(summary, dict) else None,
+    ]
+    for value in candidates:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _decision(summary: Any, row: dict[str, Any]) -> str:
+    detail = row.get("detail", {}) if isinstance(row.get("detail"), dict) else {}
+    candidates = [
+        row.get("decision"),
+        detail.get("decision"),
+        summary.get("decision") if isinstance(summary, dict) else None,
+    ]
+    for value in candidates:
+        text = str(value or "").strip().lower()
+        if text:
+            return text
+    return ""
+
+
 def _title_for_kind(kind: str) -> str:
     return {
         "tool.run": "Tool Run",
@@ -55,12 +99,16 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
         if not isinstance(row, dict):
             continue
         kind = str(row.get("kind", "")).strip() or "unknown"
-        summary_text = _summary_text(row.get("summary"))
+        summary = row.get("summary")
+        summary_text = _summary_text(summary)
         items.append(
             {
                 "run_id": str(row.get("run_id", "")).strip(),
                 "ts": row.get("ts"),
                 "kind": kind,
+                "action_kind": _action_kind(summary, row),
+                "approval_id": _approval_id(summary, row),
+                "decision": _decision(summary, row),
                 "title": _title_for_kind(kind),
                 "summary": summary_text or "Receipt captured with no compact summary.",
                 "detail": row,

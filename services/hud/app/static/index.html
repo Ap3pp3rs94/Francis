@@ -2070,7 +2070,7 @@
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
-        renderExecutionBootstrapState(payload.snapshot || {}, currentActions, currentExecutionJournal);
+        syncUsageFocusPanels(payload.snapshot || {}, currentActions, currentApprovalQueue, currentExecutionJournal);
         document.body.dataset.boot = "ready";
       }
 
@@ -2265,6 +2265,62 @@
         return chips.find((chip) => String(chip.kind || "").trim().toLowerCase() === String(kind || "").trim().toLowerCase()) || null;
       }
 
+      function normalizeUsageActionKind(kind) {
+        const raw = String(kind || "").trim().toLowerCase();
+        if (!raw) {
+          return "";
+        }
+        return raw.endsWith(".request_approval")
+          ? raw.slice(0, -".request_approval".length)
+          : raw;
+      }
+
+      function findRelatedApprovalIndex(actionKind, queue = currentApprovalQueue) {
+        const normalized = normalizeUsageActionKind(actionKind);
+        const items = Array.isArray(queue?.items) ? queue.items : [];
+        if (!normalized || !items.length) {
+          return -1;
+        }
+        return items.findIndex((row) => {
+          const requested = normalizeUsageActionKind(row?.requested_action_kind || row?.skill || row?.action);
+          return requested === normalized;
+        });
+      }
+
+      function findRelatedJournalIndex(actionKind, journal = currentExecutionJournal) {
+        const normalized = normalizeUsageActionKind(actionKind);
+        const items = Array.isArray(journal?.items) ? journal.items : [];
+        if (!normalized || !items.length) {
+          return -1;
+        }
+        return items.findIndex((row) => normalizeUsageActionKind(row?.action_kind) === normalized);
+      }
+
+      function resolveUsageFocusActionKind(snapshot, actions) {
+        const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
+          ? snapshot.next_best_action
+          : {};
+        const focusChip = currentFocusActionChip || resolveFocusActionChip(snapshot, actions);
+        return normalizeUsageActionKind(focusChip?.kind || nextAction.kind || "");
+      }
+
+      function syncUsageFocusPanels(snapshot, actions, queue, journal) {
+        const focusKind = resolveUsageFocusActionKind(snapshot, actions);
+        const approvalIndex = findRelatedApprovalIndex(focusKind, queue);
+        const journalIndex = findRelatedJournalIndex(focusKind, journal);
+        if (approvalIndex >= 0) {
+          inspectApproval(approvalIndex);
+        }
+        if (journalIndex >= 0) {
+          inspectJournalItem(journalIndex);
+        }
+        renderExecutionBootstrapState(snapshot, actions, journal, {
+          focusKind,
+          approvalIndex,
+          journalIndex,
+        });
+      }
+
       function renderCurrentWork(snapshot, actions) {
         const currentWork = snapshot?.current_work && typeof snapshot.current_work === "object"
           ? snapshot.current_work
@@ -2430,10 +2486,18 @@
           : `<li class="muted-empty">No pending approvals surfaced yet.</li>`;
 
         if (items.length) {
-          inspectApproval(0);
+          const linkedIndex = findRelatedApprovalIndex(
+            resolveUsageFocusActionKind(currentSnapshot, currentActions),
+            currentApprovalQueue,
+          );
+          inspectApproval(linkedIndex >= 0 ? linkedIndex : 0);
         } else {
-          document.getElementById("approval-detail-meta").textContent = "No approval selected";
-          document.getElementById("approval-detail").textContent = "Awaiting approval queue data.";
+          document.getElementById("approval-detail-meta").textContent = "Queue idle";
+          document.getElementById("approval-detail").textContent = formatJson({
+            pending_count: 0,
+            focus_action_kind: resolveUsageFocusActionKind(currentSnapshot, currentActions),
+            items: [],
+          });
         }
       }
 
@@ -2476,10 +2540,18 @@
           : `<li class="muted-empty">No recent receipts surfaced yet.</li>`;
 
         if (items.length) {
-          inspectJournalItem(0);
+          const linkedIndex = findRelatedJournalIndex(
+            resolveUsageFocusActionKind(currentSnapshot, currentActions),
+            currentExecutionJournal,
+          );
+          inspectJournalItem(linkedIndex >= 0 ? linkedIndex : 0);
         } else {
-          document.getElementById("journal-detail-meta").textContent = "No receipt selected";
-          document.getElementById("journal-detail").textContent = "Awaiting receipt history.";
+          document.getElementById("journal-detail-meta").textContent = "Ledger idle";
+          document.getElementById("journal-detail").textContent = formatJson({
+            active_run: activeRun,
+            focus_action_kind: resolveUsageFocusActionKind(currentSnapshot, currentActions),
+            items: [],
+          });
         }
       }
 
@@ -2668,7 +2740,7 @@
         document.getElementById("execution-output").textContent = formatJson(execution);
       }
 
-      function renderExecutionBootstrapState(snapshot, actions, journal) {
+      function renderExecutionBootstrapState(snapshot, actions, journal, links = {}) {
         const nextAction = snapshot?.next_best_action && typeof snapshot.next_best_action === "object"
           ? snapshot.next_best_action
           : {};
@@ -2676,16 +2748,30 @@
           ? journal.active_run
           : {};
         const focusChip = currentFocusActionChip || resolveFocusActionChip(snapshot, actions);
-        document.getElementById("execution-meta").textContent = focusChip
-          ? `Ready ${String(focusChip.kind || "unknown")} | ${focusChip.enabled ? "preview or execute" : "blocked"}`
-          : `Run ${String(activeRun.run_id || "none")} | awaiting action`;
+        const focusKind = normalizeUsageActionKind(links.focusKind || focusChip?.kind || nextAction.kind || "");
+        const approvals = Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items : [];
+        const receipts = Array.isArray(journal?.items) ? journal.items : [];
+        const relatedApproval =
+          typeof links.approvalIndex === "number" && links.approvalIndex >= 0 ? approvals[links.approvalIndex] : null;
+        const relatedReceipt =
+          typeof links.journalIndex === "number" && links.journalIndex >= 0 ? receipts[links.journalIndex] : null;
+        document.getElementById("execution-meta").textContent = relatedApproval
+          ? `Approval pending ${String(relatedApproval.id || "unknown")} | ${focusKind || "unknown"}`
+          : relatedReceipt
+            ? `Last receipt ${String(relatedReceipt.run_id || "unknown")} | ${relatedReceipt.title || relatedReceipt.kind || "receipt"}`
+            : focusChip
+              ? `Ready ${String(focusChip.kind || "unknown")} | ${focusChip.enabled ? "preview or execute" : "blocked"}`
+              : `Run ${String(activeRun.run_id || "none")} | awaiting action`;
         document.getElementById("execution-output").textContent = formatJson({
           next_action: {
             kind: nextAction.kind || focusChip?.kind || "none",
             label: nextAction.label || focusChip?.label || "No next action selected.",
             reason: nextAction.reason || focusChip?.policy_reason || focusChip?.reason || "No next action guidance is available.",
           },
+          focus_action_kind: focusKind || "none",
           focus_chip: focusChip || null,
+          related_approval: relatedApproval,
+          latest_related_receipt: relatedReceipt,
           active_run: activeRun,
         });
       }

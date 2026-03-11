@@ -444,6 +444,45 @@ def test_hud_approval_queue_route_returns_pending_requests() -> None:
     assert "items" in payload
 
 
+def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "approvals": {
+                "pending_count": 1,
+                "pending": [
+                    {
+                        "id": "approval-tests",
+                        "ts": "2026-03-11T10:00:00+00:00",
+                        "action": "tool.run",
+                        "reason": "Fast checks need approval",
+                        "requested_by": "francis",
+                        "metadata": {
+                            "skill": "repo.tests",
+                            "args": {"lane": "fast", "target": "tests/integration/test_hud_foundation.py"},
+                        },
+                    }
+                ],
+            }
+        }
+
+    def _actions(max_actions: int = 8) -> dict[str, object]:
+        assert max_actions == 8
+        return {
+            "action_chips": [
+                {"kind": "control.remote.approvals"},
+                {"kind": "control.remote.approval.approve"},
+                {"kind": "control.remote.approval.reject"},
+            ]
+        }
+
+    monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(approval_queue_view, "get_lens_actions", _actions)
+
+    payload = approval_queue_view.get_approval_queue_view()
+
+    assert payload["items"][0]["requested_action_kind"] == "repo.tests"
+
+
 def test_hud_execution_journal_route_returns_receipts() -> None:
     response = client.get("/api/execution-journal")
 
@@ -452,6 +491,46 @@ def test_hud_execution_journal_route_returns_receipts() -> None:
     assert payload["surface"] == "execution_journal"
     assert "active_run" in payload
     assert "items" in payload
+
+
+def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "runs": {
+                "last_run": {
+                    "run_id": "run-tests",
+                    "phase": "verify",
+                    "summary": "Fast checks ran through Lens.",
+                },
+                "ledger_tail": [
+                    {
+                        "run_id": "run-tests",
+                        "ts": "2026-03-11T10:02:00+00:00",
+                        "kind": "lens.action.execute",
+                        "summary": {"action_kind": "repo.tests", "ok": True},
+                        "detail": {"action_kind": "repo.tests", "approval_id": "approval-tests"},
+                    },
+                    {
+                        "run_id": "run-tests",
+                        "ts": "2026-03-11T10:01:00+00:00",
+                        "kind": "approval.decided",
+                        "summary": {"decision": "approved", "approval_id": "approval-tests"},
+                    },
+                ],
+                "recent": [],
+            }
+        }
+
+    monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _snapshot)
+
+    payload = execution_journal_view.get_execution_journal_view()
+
+    lens_row = next(item for item in payload["items"] if item["kind"] == "lens.action.execute")
+    approval_row = next(item for item in payload["items"] if item["kind"] == "approval.decided")
+    assert lens_row["action_kind"] == "repo.tests"
+    assert lens_row["approval_id"] == "approval-tests"
+    assert approval_row["approval_id"] == "approval-tests"
+    assert approval_row["decision"] == "approved"
 
 
 def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:
