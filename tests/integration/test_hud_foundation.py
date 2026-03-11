@@ -109,6 +109,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Structured drilldown evidence will render here." in response.text
     assert "Evidence for the next move will render here." in response.text
     assert "Terminal summary will explain the first failure or clean completion." in response.text
+    assert "Terminal breakdown will render from the backend contract." in response.text
     assert "Execution feed will explain the current operator chain." in response.text
     assert "Execution evidence will render here." in response.text
     assert "Mission Stack" in response.text
@@ -403,6 +404,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
     assert body["current_work"]["terminal_summary"].startswith("Terminal failure anchor:")
+    assert any(item["kind"] == "failure" for item in body["current_work"]["terminal_breakdown"])
     assert body["current_work"]["next_action"]["kind"] == "repo.tests"
     assert body["current_work"]["repo"]["severity"] in {"medium", "high"}
     assert body["current_work"]["next_action_signal"]["severity"] == "high"
@@ -451,6 +453,7 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "attention" in payload
     assert "terminal" in payload
     assert "terminal_summary" in payload
+    assert "terminal_breakdown" in payload
     assert "next_action" in payload
     assert "next_action_signal" in payload
     assert "next_action_evidence" in payload

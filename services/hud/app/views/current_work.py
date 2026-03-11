@@ -41,6 +41,42 @@ def _terminal_summary(terminal: dict[str, Any]) -> str:
     return f"Terminal anchor: {command} completed without a visible failure edge."
 
 
+def _terminal_breakdown(terminal: dict[str, Any]) -> list[dict[str, str]]:
+    command = str(terminal.get("command", "")).strip()
+    severity = str(terminal.get("severity", "info")).strip().lower() or "info"
+    exit_code = terminal.get("exit_code")
+    rows: list[dict[str, str]] = []
+    if not command:
+        return [_evidence_row(kind="terminal", severity="low", detail="No recent terminal command was captured.")]
+
+    rows.append(
+        _evidence_row(
+            kind="command",
+            severity="high" if severity == "error" or (isinstance(exit_code, int) and exit_code != 0) else "low",
+            detail=f"{command}{'' if exit_code is None else f' exited {exit_code}'}",
+        )
+    )
+    cwd = str(terminal.get("cwd", "")).strip()
+    if cwd:
+        rows.append(_evidence_row(kind="cwd", severity="low", detail=f"Working directory {cwd}"))
+    first_failure = _first_meaningful_line(
+        terminal.get("stderr", ""),
+        terminal.get("stdout", ""),
+        terminal.get("text", ""),
+    )
+    if first_failure:
+        rows.append(
+            _evidence_row(
+                kind="failure",
+                severity="high" if severity == "error" or (isinstance(exit_code, int) and exit_code != 0) else "medium",
+                detail=first_failure,
+            )
+        )
+    elif severity != "error":
+        rows.append(_evidence_row(kind="result", severity="low", detail="No visible failure edge was detected."))
+    return rows[:4]
+
+
 def _evidence_row(*, kind: str, severity: str, detail: str) -> dict[str, str]:
     return {
         "kind": kind,
@@ -194,6 +230,7 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
             "ts": terminal.get("ts"),
         },
         "terminal_summary": _terminal_summary(terminal),
+        "terminal_breakdown": _terminal_breakdown(terminal),
         "mission": mission,
         "last_run": last_run,
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],

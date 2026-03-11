@@ -233,7 +233,7 @@ These hold journals, queues, missions, incidents, receipts, telemetry, and other
 
 The most important HUD/operator surfaces are now shifting from status cards toward real usage flow:
 
-* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, and explicit evidence for why Lens picked the current move
+* `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, a structured terminal breakdown, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, and explicit evidence for why Lens picked the current move
 * `Approval Queue` - pending approvals with in-place approve/reject controls, server-shaped approval detail, and explicit current-vs-historical state
 * `Execution Journal` - recent receipts and active run state, linked back to the current operator move with server-shaped receipt summaries and explicit current-vs-historical state
 * `Repo Drilldown` - direct `repo.status`, `repo.diff`, `repo.lint`, and fast-check execution from the same Lens surface, with server-shaped execution summaries, structured drilldown evidence, explicit severity, and persisted repo context across Lens refresh
