@@ -92,8 +92,10 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Terminal and Next Move" in response.text
     assert "Approval Queue" in response.text
     assert "Approval Detail" in response.text
+    assert "Approval summary will render from the current workspace queue." in response.text
     assert "Execution Journal" in response.text
     assert "Receipt Detail" in response.text
+    assert "Receipt summary will render from the run ledger." in response.text
     assert "Repo Drilldown" in response.text
     assert "Repo Status" in response.text
     assert "Local Diff" in response.text
