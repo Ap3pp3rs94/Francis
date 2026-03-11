@@ -502,9 +502,11 @@ def test_hud_repo_drilldown_route_returns_structured_surface() -> None:
     payload = response.json()
     assert payload["surface"] == "repo_drilldown"
     assert payload["state"] in {"idle", "ready"}
+    assert "focus_kind" in payload
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload
+    assert "audit" in payload
     assert "detail" in payload
 
 
@@ -525,6 +527,7 @@ def test_hud_blocked_actions_route_returns_structured_surface() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "blocked_actions"
+    assert "focus_blocked_kind" in payload
     assert "summary" in payload
     assert "items" in payload
     assert "detail" in payload
@@ -670,9 +673,55 @@ def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:
 
     payload = blocked_actions_view.get_blocked_actions_view()
 
+    assert payload["focus_blocked_kind"] == "repo.tests"
     assert payload["items"][0]["detail_summary"].startswith("repo.tests is blocked.")
     assert payload["items"][0]["detail_cards"]
     assert payload["items"][0]["detail_state"] == "current"
+
+
+def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(repo_drilldown_view, "get_workspace_root", lambda: workspace_root)
+
+    def _snapshot() -> dict[str, object]:
+        return {
+            "current_work": {
+                "repo": {
+                    "branch": "main",
+                    "dirty": True,
+                    "changed_count": 3,
+                    "top_paths": ["services/hud/app/static/index.html"],
+                    "summary": "Branch main | 3 change(s) present",
+                    "severity": "medium",
+                }
+            }
+        }
+
+    monkeypatch.setattr(repo_drilldown_view, "build_lens_snapshot", _snapshot)
+    _write_json(
+        workspace_root / "lens" / "repo_drilldown.json",
+        {
+            "kind": "repo.tests",
+            "run_id": "run-tests",
+            "trace_id": "trace-tests",
+            "tool": {"skill": "repo.tests", "approval_id": "approval-tests"},
+            "execution_args": {"lane": "fast", "approval_id": "approval-tests"},
+            "presentation": {
+                "summary": "Lane fast executed. 12 passed | 0 failed",
+                "severity": "low",
+                "cards": [{"label": "Lane", "value": "fast", "tone": "low"}],
+                "evidence": [{"kind": "tests", "severity": "low", "detail": "12 passed | 0 failed"}],
+            },
+        },
+    )
+
+    payload = repo_drilldown_view.get_repo_drilldown_view()
+
+    assert payload["focus_kind"] == "repo.tests"
+    assert payload["audit"]["kind"] == "repo.tests"
+    assert payload["audit"]["run_id"] == "run-tests"
+    assert payload["audit"]["card_count"] == 1
+    assert payload["audit"]["evidence_count"] == 1
 
 
 def test_hud_execution_journal_route_returns_receipts() -> None:

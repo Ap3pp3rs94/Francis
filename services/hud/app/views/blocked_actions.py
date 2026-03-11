@@ -46,6 +46,10 @@ def get_blocked_actions_view(
         item["detail_state"] = "current" if str(item.get("kind", "")).strip().lower() == focus_kind else "historical"
         items.append(item)
 
+    focus_item = next((row for row in items if str(row.get("detail_state", "")).strip() == "current"), None)
+    if focus_item is None and items:
+        focus_item = items[0]
+
     summary = (
         f"{len(items)} blocked action(s) are active."
         if items
@@ -56,10 +60,12 @@ def get_blocked_actions_view(
         "status": "ok",
         "surface": "blocked_actions",
         "count": len(items),
+        "focus_blocked_kind": str(focus_item.get("kind", "")).strip() if isinstance(focus_item, dict) else "",
         "summary": summary,
         "items": items,
         "detail": {
             "focus_action_kind": focus_kind,
+            "focus_blocked_kind": str(focus_item.get("kind", "")).strip() if isinstance(focus_item, dict) else "",
             "items": items,
         },
     }

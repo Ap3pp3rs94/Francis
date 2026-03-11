@@ -44,6 +44,32 @@ def _idle_cards(repo: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+def _ready_audit(*, state: dict[str, Any], presentation: dict[str, Any]) -> dict[str, Any]:
+    cards = presentation.get("cards", []) if isinstance(presentation.get("cards"), list) else []
+    evidence = presentation.get("evidence", []) if isinstance(presentation.get("evidence"), list) else []
+    return {
+        "kind": str(state.get("kind", "")).strip() or "repo",
+        "summary": str(presentation.get("summary") or state.get("summary") or "Repo drilldown is available.").strip(),
+        "severity": str(presentation.get("severity", "low")).strip().lower() or "low",
+        "run_id": str(state.get("run_id", "")).strip(),
+        "trace_id": str(state.get("trace_id", "")).strip(),
+        "tool": state.get("tool", {}) if isinstance(state.get("tool"), dict) else {},
+        "execution_args": state.get("execution_args", {}) if isinstance(state.get("execution_args"), dict) else {},
+        "card_count": len(cards),
+        "evidence_count": len(evidence),
+    }
+
+
+def _idle_audit(repo: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "repo",
+        "branch": str(repo.get("branch", "unknown")).strip() or "unknown",
+        "dirty": bool(repo.get("dirty", False)),
+        "changed_count": int(repo.get("changed_count", 0)),
+        "top_paths": [str(item).strip() for item in repo.get("top_paths", []) if str(item).strip()],
+    }
+
+
 def get_repo_drilldown_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
@@ -58,11 +84,13 @@ def get_repo_drilldown_view(*, snapshot: dict[str, object] | None = None) -> dic
             "status": "ok",
             "surface": "repo_drilldown",
             "state": "ready",
+            "focus_kind": str(state.get("kind", "")).strip(),
             "kind": str(state.get("kind", "")).strip(),
             "summary": str(presentation.get("summary") or state.get("summary") or "Repo drilldown is available.").strip(),
             "severity": str(presentation.get("severity", "low")).strip().lower() or "low",
             "cards": presentation.get("cards", []) if isinstance(presentation.get("cards"), list) else [],
             "evidence": presentation.get("evidence", []) if isinstance(presentation.get("evidence"), list) else [],
+            "audit": _ready_audit(state=state, presentation=presentation),
             "detail": {
                 "run_id": str(state.get("run_id", "")).strip(),
                 "trace_id": str(state.get("trace_id", "")).strip(),
@@ -77,12 +105,14 @@ def get_repo_drilldown_view(*, snapshot: dict[str, object] | None = None) -> dic
         "status": "ok",
         "surface": "repo_drilldown",
         "state": "idle",
+        "focus_kind": "",
         "kind": "",
         "summary": str(repo.get("summary", "Use the repo drilldown controls to inspect current repository state.")).strip()
         or "Use the repo drilldown controls to inspect current repository state.",
         "severity": str(repo.get("severity", "low")).strip().lower() or "low",
         "cards": _idle_cards(repo),
         "evidence": [],
+        "audit": _idle_audit(repo),
         "detail": {
             "branch": str(repo.get("branch", "unknown")).strip() or "unknown",
             "dirty": bool(repo.get("dirty", False)),

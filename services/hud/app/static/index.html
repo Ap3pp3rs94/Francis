@@ -3840,7 +3840,11 @@
               .join("")
           : `<li class="muted-empty">No blocked actions surfaced by Lens.</li>`;
         if (blocked.length) {
-          inspectBlockedAction(0);
+          const focusBlockedKind = String(blockedSurface?.focus_blocked_kind || "").trim().toLowerCase();
+          const focusIndex = focusBlockedKind
+            ? blocked.findIndex((row) => String(row.kind || "").trim().toLowerCase() === focusBlockedKind)
+            : -1;
+          inspectBlockedAction(focusIndex >= 0 ? focusIndex : 0);
         } else {
           renderDetailCards("blocked-detail-cards", [], "Blocked");
           document.getElementById("blocked-detail").textContent = formatJson({
@@ -3978,7 +3982,11 @@
               .join("")
           : `<li class="muted-empty">Structured drilldown evidence will render here.</li>`;
         document.getElementById("work-repo-detail").textContent = formatJson(
-          state.detail && typeof state.detail === "object" ? state.detail : state,
+          state.audit && typeof state.audit === "object"
+            ? state.audit
+            : state.detail && typeof state.detail === "object"
+              ? state.detail
+              : state,
         );
       }
 
