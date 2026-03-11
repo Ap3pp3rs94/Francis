@@ -186,6 +186,60 @@ def _build_next_action_resume(
     }
 
 
+def _build_operator_link(
+    *,
+    next_action: dict[str, Any],
+    next_action_resume: dict[str, object],
+    last_run: dict[str, Any],
+) -> dict[str, str]:
+    action_kind = _normalize_usage_action_kind(next_action.get("kind"))
+    approval_id = str(next_action_resume.get("approval_id", "")).strip()
+    run_id = str(last_run.get("run_id", "")).strip()
+    if not action_kind:
+        return {
+            "state": "idle",
+            "action_kind": "",
+            "approval_id": "",
+            "run_id": "",
+            "summary": "Operator link is idle. Lens is waiting for the next actionable move.",
+            "detail": "No current operator move is active.",
+        }
+
+    if str(next_action_resume.get("state", "")).strip().lower() == "approval_ready" and approval_id:
+        detail = str(next_action_resume.get("detail", "")).strip()
+        return {
+            "state": "approval_pending",
+            "action_kind": action_kind,
+            "approval_id": approval_id,
+            "run_id": "",
+            "summary": f"Operator link: {action_kind} is waiting on approval {approval_id}.",
+            "detail": detail or "Approve the queued continuation to resume the current move.",
+        }
+
+    if run_id:
+        run_phase = str(last_run.get("phase", "")).strip()
+        run_summary = str(last_run.get("summary", "")).strip()
+        detail_parts = [part for part in [run_phase, run_summary] if part]
+        return {
+            "state": "receipt_grounded",
+            "action_kind": action_kind,
+            "approval_id": "",
+            "run_id": run_id,
+            "summary": f"Operator link: {action_kind} is grounded by run {run_id}.",
+            "detail": " | ".join(detail_parts).strip() or "A recent receipt is grounding the current move.",
+        }
+
+    reason = str(next_action.get("reason", "")).strip()
+    return {
+        "state": "following",
+        "action_kind": action_kind,
+        "approval_id": "",
+        "run_id": "",
+        "summary": f"Operator link: following {action_kind} as the current move.",
+        "detail": reason or "The operator loop is tracking the current next-best action.",
+    }
+
+
 def _build_next_action_evidence(
     *,
     snapshot: dict[str, object],
@@ -269,6 +323,11 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
     last_run = current_work.get("last_run", {}) if isinstance(current_work.get("last_run"), dict) else {}
     next_action_resume = _build_next_action_resume(snapshot=snapshot, next_action=next_best_action)
+    operator_link = _build_operator_link(
+        next_action=next_best_action,
+        next_action_resume=next_action_resume,
+        last_run=last_run,
+    )
     next_action_evidence = _build_next_action_evidence(
         snapshot=snapshot,
         blockers=[str(item).strip() for item in blockers if str(item).strip()],
@@ -315,6 +374,7 @@ def get_current_work_view(*, snapshot: dict[str, object] | None = None) -> dict[
         "last_run": last_run,
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],
         "next_action": next_best_action,
+        "operator_link": operator_link,
         "next_action_signal": {
             "severity": next_action_severity,
             "summary": (

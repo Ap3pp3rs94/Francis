@@ -107,6 +107,7 @@ def get_execution_feed_view(
         execution_journal = get_execution_journal_view(snapshot=snapshot)
 
     next_action = current_work.get("next_action", {}) if isinstance(current_work.get("next_action"), dict) else {}
+    operator_link = current_work.get("operator_link", {}) if isinstance(current_work.get("operator_link"), dict) else {}
     execution_action = execution.get("action", {}) if isinstance(execution, dict) and isinstance(execution.get("action"), dict) else {}
     focus_kind = _normalize_usage_action_kind(execution_action.get("kind") or next_action.get("kind"))
     focus_chip = _resolve_focus_chip(actions, focus_kind)
@@ -177,10 +178,15 @@ def get_execution_feed_view(
         summary = str(related_receipt.get("detail_summary") or related_receipt.get("summary") or "Receipt is grounding the current move.").strip()
     elif focus_chip:
         state = "ready"
-        summary = f"{current_work.get('terminal_summary', 'Terminal anchor unavailable.')} Execution feed is tracking {focus_kind or 'the current move'}."
+        summary = str(operator_link.get("summary", "")).strip() or (
+            f"{current_work.get('terminal_summary', 'Terminal anchor unavailable.')} "
+            f"Execution feed is tracking {focus_kind or 'the current move'}."
+        )
     else:
-        state = "idle"
-        summary = str(current_work.get("terminal_summary", "Terminal anchor unavailable.")).strip()
+        state = str(operator_link.get("state", "")).strip() or "idle"
+        summary = str(operator_link.get("summary", "")).strip() or str(
+            current_work.get("terminal_summary", "Terminal anchor unavailable.")
+        ).strip()
 
     severity = _max_severity(evidence, fallback=str(current_work.get("next_action_signal", {}).get("severity", "low")))
     active_run = execution_journal.get("active_run", {}) if isinstance(execution_journal.get("active_run"), dict) else {}
@@ -199,6 +205,7 @@ def get_execution_feed_view(
             "related_approval": related_approval,
             "related_receipt": related_receipt,
             "active_run": active_run,
+            "operator_link": operator_link,
             "execution": execution if isinstance(execution, dict) else None,
         },
     }

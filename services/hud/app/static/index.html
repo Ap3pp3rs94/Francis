@@ -2486,6 +2486,40 @@
         };
       }
 
+      function summarizeOperatorLinkContract(link) {
+        if (!link || typeof link !== "object") {
+          return "";
+        }
+        return String(link.summary || "").trim();
+      }
+
+      function describeOperatorLinkContractState(link) {
+        if (!link || typeof link !== "object") {
+          return "";
+        }
+        const state = String(link.state || "").trim().toLowerCase();
+        const detail = String(link.detail || "").trim();
+        if (state === "approval_pending") {
+          return detail
+            ? `Link state: approval pending | ${detail}`
+            : "Link state: approval pending | waiting for operator approval";
+        }
+        if (state === "receipt_grounded") {
+          return detail
+            ? `Link state: receipt grounded | ${detail}`
+            : "Link state: receipt grounded | a recent run is anchoring the current move";
+        }
+        if (state === "following") {
+          return detail
+            ? `Link state: active | ${detail}`
+            : "Link state: active | following the current operator move";
+        }
+        if (state === "idle") {
+          return detail ? `Link state: idle | ${detail}` : "Link state: idle";
+        }
+        return detail ? `Link state: ${state || "idle"} | ${detail}` : "";
+      }
+
       function normalizeUsageActionKind(kind) {
         const raw = String(kind || "").trim().toLowerCase();
         if (!raw) {
@@ -3181,6 +3215,9 @@
         const nextResume = currentWork.next_action_resume && typeof currentWork.next_action_resume === "object"
           ? currentWork.next_action_resume
           : {};
+        const operatorLink = currentWork.operator_link && typeof currentWork.operator_link === "object"
+          ? currentWork.operator_link
+          : {};
         const nextEvidence = Array.isArray(currentWork.next_action_evidence) ? currentWork.next_action_evidence : [];
         const terminalBreakdown = Array.isArray(currentWork.terminal_breakdown) ? currentWork.terminal_breakdown : [];
         currentFocusActionChip = resolveFocusActionChip(snapshot, actions);
@@ -3201,12 +3238,12 @@
           : "no recent run";
         document.getElementById("work-attention-detail").textContent =
           attention.reason || "No immediate work pressure is visible.";
-        document.getElementById("work-link-meta").textContent = describeOperatorLink(
+        document.getElementById("work-link-meta").textContent = summarizeOperatorLinkContract(operatorLink) || describeOperatorLink(
           snapshot,
           actions,
           currentExecutionJournal,
         );
-        document.getElementById("work-link-state").textContent = describeOperatorLinkState(
+        document.getElementById("work-link-state").textContent = describeOperatorLinkContractState(operatorLink) || describeOperatorLinkState(
           snapshot,
           actions,
           currentExecutionJournal,
@@ -3945,7 +3982,10 @@
           },
           focus_action_kind: focusKind || "none",
           focus_chip: focusChip || null,
-          operator_link: lastOperatorLink,
+          operator_link:
+            currentCurrentWork?.operator_link && typeof currentCurrentWork.operator_link === "object"
+              ? currentCurrentWork.operator_link
+              : lastOperatorLink,
           related_approval: relatedApproval,
           latest_related_receipt: relatedReceipt,
           active_run: activeRun,

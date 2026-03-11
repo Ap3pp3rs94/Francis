@@ -431,6 +431,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["current_work"]["terminal_summary"].startswith("Terminal failure anchor:")
     assert any(item["kind"] == "failure" for item in body["current_work"]["terminal_breakdown"])
     assert body["current_work"]["next_action"]["kind"] == "repo.tests"
+    assert body["current_work"]["operator_link"]["action_kind"] == "repo.tests"
+    assert body["current_work"]["operator_link"]["state"] in {"approval_pending", "receipt_grounded", "following"}
     assert body["current_work"]["repo"]["severity"] in {"medium", "high"}
     assert body["current_work"]["next_action_signal"]["severity"] == "high"
     assert any(item["kind"] == "terminal" for item in body["current_work"]["next_action_evidence"])
@@ -490,6 +492,7 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "terminal_summary" in payload
     assert "terminal_breakdown" in payload
     assert "next_action" in payload
+    assert "operator_link" in payload
     assert "next_action_signal" in payload
     assert "next_action_resume" in payload
     assert "next_action_evidence" in payload
@@ -646,6 +649,9 @@ def test_hud_current_work_view_surfaces_approval_ready_resume(monkeypatch) -> No
     assert payload["next_action_resume"]["state"] == "approval_ready"
     assert payload["next_action_resume"]["approval_id"] == "approval-tests"
     assert payload["next_action_resume"]["action_kind"] == "repo.tests"
+    assert payload["operator_link"]["state"] == "approval_pending"
+    assert payload["operator_link"]["approval_id"] == "approval-tests"
+    assert payload["operator_link"]["action_kind"] == "repo.tests"
     assert payload["next_action_signal"]["summary"] == "Approval-backed continuation is ready to resume from the queue."
     assert any(
         str(row.get("kind", "")) == "resume" and "approval-tests" in str(row.get("detail", ""))
@@ -830,6 +836,7 @@ def test_hud_execution_feed_route_returns_structured_surface() -> None:
     assert "severity" in payload
     assert "evidence" in payload
     assert "detail" in payload
+    assert "operator_link" in payload["detail"]
 
 
 def test_hud_missions_route_returns_structured_surface() -> None:
