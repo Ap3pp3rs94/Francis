@@ -93,9 +93,11 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Approval Queue" in response.text
     assert "Approval Detail" in response.text
     assert "Approval summary will render from the current workspace queue." in response.text
+    assert "Approval state will reflect whether this detail is current or historical." in response.text
     assert "Execution Journal" in response.text
     assert "Receipt Detail" in response.text
     assert "Receipt summary will render from the run ledger." in response.text
+    assert "Receipt state will reflect whether this detail is current or historical." in response.text
     assert "Repo Drilldown" in response.text
     assert "Repo Status" in response.text
     assert "Local Diff" in response.text
@@ -105,6 +107,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Repo drilldown summary will render here." in response.text
     assert "Repo severity will resolve from drilldown results." in response.text
     assert "Terminal summary will explain the first failure or clean completion." in response.text
+    assert "Execution feed will explain the current operator chain." in response.text
     assert "Mission Stack" in response.text
     assert "Incident Posture" in response.text
     assert "Blocked Actions" in response.text

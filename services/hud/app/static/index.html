@@ -749,6 +749,9 @@
           <p id="approval-detail-summary" class="hero-copy">
             Approval summary will render from the current workspace queue.
           </p>
+          <p class="meta tiny" id="approval-detail-state">
+            Approval state will reflect whether this detail is current or historical.
+          </p>
           <pre class="console" id="approval-detail">Approval detail will render from the current workspace queue.</pre>
         </article>
       </section>
@@ -774,6 +777,9 @@
           <p id="journal-detail-summary" class="hero-copy">
             Receipt summary will render from the run ledger.
           </p>
+          <p class="meta tiny" id="journal-detail-state">
+            Receipt state will reflect whether this detail is current or historical.
+          </p>
           <pre class="console" id="journal-detail">Receipt detail will render from the run ledger.</pre>
         </article>
       </section>
@@ -791,6 +797,9 @@
             <h2>Execution Feed</h2>
             <span class="meta tiny" id="execution-meta">No action executed yet</span>
           </div>
+          <p id="execution-summary" class="hero-copy">
+            Execution feed will explain the current operator chain.
+          </p>
           <pre class="console" id="execution-output">Execution preview and receipt detail will appear here.</pre>
         </article>
       </section>
@@ -2525,6 +2534,21 @@
           : base;
       }
 
+      function describeApprovalDetailState(row) {
+        if (!row || typeof row !== "object") {
+          return "Approval state: idle";
+        }
+        const requested = normalizeUsageActionKind(row.requested_action_kind || row.skill || row.action);
+        const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
+        if (String(row.id || "").trim() && String(row.id || "").trim() === String(lastOperatorLink.approvalId || "").trim()) {
+          return "Approval state: current | linked to the active operator move";
+        }
+        if (requested && focusKind && requested === focusKind) {
+          return "Approval state: current | matches the current operator move";
+        }
+        return "Approval state: historical | not the active operator link";
+      }
+
       function summarizeReceiptDetail(row) {
         if (!row || typeof row !== "object") {
           return "No receipt is selected.";
@@ -2540,6 +2564,47 @@
           return `${kind} for ${actionKind}. ${summary || "Receipt recorded."}`.trim();
         }
         return `${kind}. ${summary || "Receipt recorded."}`.trim();
+      }
+
+      function describeReceiptDetailState(row) {
+        if (!row || typeof row !== "object") {
+          return "Receipt state: idle";
+        }
+        const actionKind = normalizeUsageActionKind(row.action_kind || "");
+        const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
+        const rowRunId = String(row.run_id || "").trim();
+        const linkedRunId = String(lastOperatorLink.runId || "").trim();
+        const rowApprovalId = String(row.approval_id || "").trim();
+        const linkedApprovalId = String(lastOperatorLink.approvalId || "").trim();
+        if ((linkedRunId && rowRunId === linkedRunId) || (linkedApprovalId && rowApprovalId === linkedApprovalId)) {
+          return "Receipt state: current | linked to the active operator move";
+        }
+        if (actionKind && focusKind && actionKind === focusKind) {
+          return "Receipt state: current | matches the current operator move";
+        }
+        return "Receipt state: historical | not the active operator link";
+      }
+
+      function summarizeExecutionFeed(snapshot, actions, journal, links = {}) {
+        const terminal = snapshot?.current_work?.telemetry?.last_terminal || {};
+        const terminalSummary = summarizeTerminalContext(terminal);
+        const focusKind = normalizeUsageActionKind(links.focusKind || resolveUsageFocusActionKind(snapshot, actions));
+        const approvals = Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items : [];
+        const receipts = Array.isArray(journal?.items) ? journal.items : [];
+        const relatedApproval =
+          typeof links.approvalIndex === "number" && links.approvalIndex >= 0 ? approvals[links.approvalIndex] : null;
+        const relatedReceipt =
+          typeof links.journalIndex === "number" && links.journalIndex >= 0 ? receipts[links.journalIndex] : null;
+        if (relatedApproval) {
+          return `${terminalSummary} Approval ${relatedApproval.id || "unknown"} is the current gate for ${focusKind || "this move"}.`;
+        }
+        if (relatedReceipt) {
+          return `${terminalSummary} ${summarizeReceiptDetail(relatedReceipt)}`;
+        }
+        if (focusKind) {
+          return `${terminalSummary} Execution feed is tracking ${focusKind}.`;
+        }
+        return terminalSummary;
       }
 
       function summarizeRepoDrilldown(kind, payload) {
@@ -2748,6 +2813,7 @@
         document.getElementById("approval-detail-meta").textContent =
           `${row.action || "approval"} | ${row.requested_by || "unknown"} | ${row.id || "unknown"}`;
         document.getElementById("approval-detail-summary").textContent = summarizeApprovalDetail(row);
+        document.getElementById("approval-detail-state").textContent = describeApprovalDetailState(row);
         document.getElementById("approval-detail").textContent = formatJson(row);
       }
 
@@ -2791,6 +2857,7 @@
           document.getElementById("approval-detail-meta").textContent = "Queue idle";
           document.getElementById("approval-detail-summary").textContent =
             "No approval is holding the current operator loop.";
+          document.getElementById("approval-detail-state").textContent = "Approval state: idle";
           document.getElementById("approval-detail").textContent = formatJson({
             pending_count: 0,
             focus_action_kind: resolveUsageFocusActionKind(currentSnapshot, currentActions),
@@ -2807,6 +2874,7 @@
         document.getElementById("journal-detail-meta").textContent =
           `${row.title || "Receipt"} | ${row.run_id || "unknown"} | ${row.kind || "unknown"}`;
         document.getElementById("journal-detail-summary").textContent = summarizeReceiptDetail(row);
+        document.getElementById("journal-detail-state").textContent = describeReceiptDetailState(row);
         document.getElementById("journal-detail").textContent = formatJson(row.detail || row);
       }
 
@@ -2848,6 +2916,7 @@
           document.getElementById("journal-detail-meta").textContent = "Ledger idle";
           document.getElementById("journal-detail-summary").textContent =
             "No receipt is currently anchoring the active operator loop.";
+          document.getElementById("journal-detail-state").textContent = "Receipt state: idle";
           document.getElementById("journal-detail").textContent = formatJson({
             active_run: activeRun,
             focus_action_kind: resolveUsageFocusActionKind(currentSnapshot, currentActions),
@@ -3038,6 +3107,11 @@
         }
         document.getElementById("execution-meta").textContent =
           `Action ${execution.action.kind} | Run ${execution.run_id}`;
+        document.getElementById("execution-summary").textContent = currentSnapshot
+          ? summarizeExecutionFeed(currentSnapshot, currentActions, currentExecutionJournal, {
+              focusKind: normalizeUsageActionKind(execution?.action?.kind || ""),
+            })
+          : `Execution feed is tracking ${String(execution?.action?.kind || "the current action")}.`;
         document.getElementById("execution-output").textContent = formatJson(execution);
       }
 
@@ -3063,6 +3137,7 @@
             : focusChip
               ? `Ready ${String(focusChip.kind || "unknown")} | ${focusChip.enabled ? "preview or execute" : "blocked"}`
               : `Run ${String(activeRun.run_id || "none")} | awaiting action`;
+        document.getElementById("execution-summary").textContent = summarizeExecutionFeed(snapshot, actions, journal, links);
         document.getElementById("execution-output").textContent = formatJson({
           next_action: {
             kind: nextAction.kind || focusChip?.kind || "none",
