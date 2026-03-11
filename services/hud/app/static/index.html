@@ -3383,6 +3383,7 @@
                   <div class="action-buttons">
                     <button class="btn-secondary" type="button" onclick="inspectApproval(${index})">Inspect</button>
                     <button class="btn-primary" type="button" ${row.can_approve ? "" : "disabled"} onclick="approveQueueItem('${escapeHtml(row.id || "")}')">Approve</button>
+                    <button class="btn-secondary" type="button" ${row.can_execute_after_approval ? "" : "disabled"} onclick="approveAndRunQueueItem('${escapeHtml(row.id || "")}')">Approve + Run</button>
                     <button class="btn-danger" type="button" ${row.can_reject ? "" : "disabled"} onclick="rejectQueueItem('${escapeHtml(row.id || "")}')">Reject</button>
                   </div>
                 </li>
@@ -4022,6 +4023,33 @@
         await executeActionWithArgs(
           "control.remote.approval.approve",
           { approval_id: approvalId, note: "Approved from HUD approval queue." },
+          false,
+        );
+      }
+
+      async function approveAndRunQueueItem(approvalId) {
+        if (!approvalId) {
+          return;
+        }
+        const row = Array.isArray(currentApprovalQueue?.items)
+          ? currentApprovalQueue.items.find((item) => String(item?.id || "") === String(approvalId))
+          : null;
+        if (!row || !row.can_execute_after_approval || !row.execute_after_approval_kind) {
+          return;
+        }
+        setLastOperatorLink({
+          actionKind: normalizeUsageActionKind(row.requested_action_kind || row.execute_after_approval_kind),
+          approvalId,
+          decision: "approved",
+        });
+        await executeActionWithArgs(
+          "control.remote.approval.approve",
+          { approval_id: approvalId, note: "Approved from HUD approval queue." },
+          false,
+        );
+        await executeActionWithArgs(
+          String(row.execute_after_approval_kind || ""),
+          { ...(row.execute_after_approval_args || {}), approval_id: approvalId },
           false,
         );
       }

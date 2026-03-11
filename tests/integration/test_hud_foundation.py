@@ -556,6 +556,7 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
                 {"kind": "control.remote.approvals"},
                 {"kind": "control.remote.approval.approve"},
                 {"kind": "control.remote.approval.reject"},
+                {"kind": "repo.tests"},
             ]
         }
 
@@ -567,6 +568,8 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
     assert payload["items"][0]["requested_action_kind"] == "repo.tests"
     assert payload["items"][0]["detail_summary"].startswith("repo.tests is waiting on an operator decision.")
     assert payload["items"][0]["detail_cards"]
+    assert payload["items"][0]["can_execute_after_approval"] is True
+    assert payload["items"][0]["execute_after_approval_kind"] == "repo.tests"
     assert payload["items"][0]["detail_state"] == "historical"
 
 

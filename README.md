@@ -235,7 +235,7 @@ The most important HUD/operator surfaces are now shifting from status cards towa
 
 * `Dashboard Cards` - server-shaped landing cards with signal, summary, evidence, and detail so the first HUD surface stops flattening operator state into generic text
 * `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, a structured terminal breakdown, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, and explicit evidence for why Lens picked the current move
-* `Approval Queue` - pending approvals with in-place approve/reject controls, server-shaped approval detail cards, and explicit current-vs-historical state
+* `Approval Queue` - pending approvals with in-place approve/reject controls, resumable `Approve + Run` handling for supported usage actions, server-shaped approval detail cards, and explicit current-vs-historical state
 * `Blocked Actions` - policy-denied or approval-gated actions with backend detail summaries and detail cards instead of a raw blocked list
 * `Execution Journal` - recent receipts and active run state, linked back to the current operator move with server-shaped receipt summaries, detail cards, and explicit current-vs-historical state
 * `Execution Feed` - server-shaped execution guidance, severity, and evidence so the active operator chain is described by a stable contract instead of browser-only composition

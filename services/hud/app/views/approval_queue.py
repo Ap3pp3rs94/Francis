@@ -150,6 +150,11 @@ def get_approval_queue_view(
                 ),
                 "skill": tool_skill,
                 "args": args,
+                "can_execute_after_approval": bool(
+                    can_approve and approval_id and requested_action_kind and _has_action(actions, requested_action_kind)
+                ),
+                "execute_after_approval_kind": requested_action_kind,
+                "execute_after_approval_args": args,
                 "can_approve": bool(can_approve and approval_id),
                 "can_reject": bool(can_reject and approval_id),
             }
