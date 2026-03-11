@@ -979,6 +979,9 @@
             <span class="meta tiny" id="blocked-summary">No blocked actions surfaced</span>
           </div>
           <ul class="list" id="blocked-actions"></ul>
+          <div class="desktop-grid" id="blocked-detail-cards">
+            <div class="desktop-pill"><strong>Blocked</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
           <pre class="console" id="blocked-detail">Blocked action detail will render from Lens policy state.</pre>
         </article>
       </section>
@@ -998,6 +1001,7 @@
       let currentExecutionFeed = {};
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
+      let currentBlockedActions = { items: [] };
       let currentMissionRows = [];
       let currentIncidentRows = [];
       let currentOrb = null;
@@ -2129,6 +2133,7 @@
         currentCurrentWork = payload.current_work || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
+        currentBlockedActions = payload.blocked_actions || { items: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
         currentExecutionFeed = payload.execution_feed || {};
 
@@ -2157,7 +2162,7 @@
         renderExecutionFeedSurface(currentExecutionFeed);
         renderMissionStack(payload.missions || {});
         renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
-        renderActions(currentActions);
+        renderActions(currentActions, currentBlockedActions);
         renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
         renderVoiceBriefing(payload.voice || {}, { source: "stream" });
@@ -3459,7 +3464,7 @@
             summarizeSecurity(securityPayload || currentSnapshot?.security || {}),
           );
         document.getElementById("runs").textContent =
-          `Run: ${runsPayload?.active_run?.run_id || "none"} | Phase: ${runsPayload?.active_run?.phase || "unknown"}`;
+          String(runsPayload?.summary || `Run: ${runsPayload?.active_run?.run_id || "none"} | Phase: ${runsPayload?.active_run?.phase || "unknown"}`);
         if (items.length) {
           inspectIncident(0);
         } else {
@@ -3476,22 +3481,35 @@
       }
 
       function inspectBlockedAction(index) {
-        const row = Array.isArray(currentActions?.blocked_actions) ? currentActions.blocked_actions[index] : null;
+        const rows = Array.isArray(currentBlockedActions?.items)
+          ? currentBlockedActions.items
+          : Array.isArray(currentActions?.blocked_actions)
+            ? currentActions.blocked_actions
+            : [];
+        const row = rows[index] || null;
         if (!row) {
           return;
         }
+        renderDetailCards("blocked-detail-cards", row.detail_cards, "Blocked");
         document.getElementById("blocked-detail").textContent = formatJson(row);
       }
 
-      function renderActions(actions) {
+      function renderActions(actions, blockedSurface = null) {
         const chips = Array.isArray(actions.action_chips) ? actions.action_chips.slice(0, 8) : [];
-        const blocked = Array.isArray(actions.blocked_actions) ? actions.blocked_actions.slice(0, 8) : [];
+        const blockedRows = blockedSurface && Array.isArray(blockedSurface.items)
+          ? blockedSurface.items
+          : Array.isArray(actions.blocked_actions)
+            ? actions.blocked_actions
+            : [];
+        const blocked = blockedRows.slice(0, 8);
         const actionGrid = document.getElementById("action-grid");
         const blockedList = document.getElementById("blocked-actions");
         document.getElementById("action-summary").textContent = `${chips.length} live action chip(s)`;
-        document.getElementById("blocked-summary").textContent = blocked.length
-          ? `${blocked.length} currently blocked`
-          : "No blocked actions surfaced";
+        document.getElementById("blocked-summary").textContent = blockedSurface?.summary
+          ? String(blockedSurface.summary)
+          : blocked.length
+            ? `${blocked.length} currently blocked`
+            : "No blocked actions surfaced";
 
         actionGrid.innerHTML = chips.length
           ? chips
@@ -3533,13 +3551,14 @@
           ? blocked
               .map(
                 (chip, index) =>
-                  `<li>${escapeHtml(chip.kind || "unknown")} <span class="meta">${escapeHtml(chip.policy_reason || chip.reason || "blocked")}</span> <button class="btn-secondary" type="button" onclick="inspectBlockedAction(${index})">Inspect</button></li>`,
+                  `<li>${escapeHtml(chip.kind || "unknown")} <span class="meta">${escapeHtml(chip.detail_summary || chip.policy_reason || chip.reason || "blocked")}</span> <button class="btn-secondary" type="button" onclick="inspectBlockedAction(${index})">Inspect</button></li>`,
               )
               .join("")
           : `<li class="muted-empty">No blocked actions surfaced by Lens.</li>`;
         if (blocked.length) {
           inspectBlockedAction(0);
         } else {
+          renderDetailCards("blocked-detail-cards", [], "Blocked");
           document.getElementById("blocked-detail").textContent = formatJson({
             blocked_actions: [],
             next_best_action: currentSnapshot?.next_best_action || {},
@@ -3739,6 +3758,9 @@
         if (payload.execution_feed && typeof payload.execution_feed === "object") {
           currentExecutionFeed = payload.execution_feed;
           renderExecution(payload.execution, payload.execution_feed);
+        }
+        if (payload.blocked_actions && typeof payload.blocked_actions === "object") {
+          currentBlockedActions = payload.blocked_actions;
         }
         await loadSurface();
         return payload;

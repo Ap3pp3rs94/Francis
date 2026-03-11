@@ -235,10 +235,12 @@ The most important HUD/operator surfaces are now shifting from status cards towa
 
 * `Current Work Focus` - repo state, changed paths, blockers, latest terminal pressure, a structured terminal breakdown, the next actionable move, whether the current operator link is still active or stale, what the first terminal failure edge actually was, and explicit evidence for why Lens picked the current move
 * `Approval Queue` - pending approvals with in-place approve/reject controls, server-shaped approval detail cards, and explicit current-vs-historical state
+* `Blocked Actions` - policy-denied or approval-gated actions with backend detail summaries and detail cards instead of a raw blocked list
 * `Execution Journal` - recent receipts and active run state, linked back to the current operator move with server-shaped receipt summaries, detail cards, and explicit current-vs-historical state
 * `Execution Feed` - server-shaped execution guidance, severity, and evidence so the active operator chain is described by a stable contract instead of browser-only composition
 * `Repo Drilldown` - direct `repo.status`, `repo.diff`, `repo.lint`, and fast-check execution from the same Lens surface, with server-shaped execution summaries, compact result cards, structured drilldown evidence, explicit severity, and persisted repo context across Lens refresh
 * `Mission Stack` and `Incident Posture` - server-shaped mission and incident summaries so active work pressure, security pressure, and current operational focus stop reading like raw snapshot dumps
+* `Inbox` and `Runs` - backend-shaped message and run surfaces so those routes are ready for richer Lens exposure instead of staying as raw snapshot wrappers
 
 That is still not the final Lens, but it is the right direction: Francis should expose what matters now, what is blocked, what it can do next, and what it just did. The HUD is increasingly being shaped as one operator loop instead of a set of unrelated panels, with current-work linkage carrying through approvals, execution, receipts, stale/active continuity cues, terminal-failure anchors, server-shaped repo execution summaries, explicit mission and incident summaries, and explicit next-move evidence with visible signal emphasis. The detail panes should read as operator guidance first and raw proof second, with structured evidence where possible instead of nested raw payloads.
 

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import app as orchestrator_app
 import services.hud.app.main as hud_main
 import services.hud.app.views.approval_queue as approval_queue_view
+import services.hud.app.views.blocked_actions as blocked_actions_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
@@ -122,6 +123,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Mission detail will render from active or backlog work." in response.text
     assert "Incident detail will render from live workspace posture." in response.text
     assert "Blocked action detail will render from Lens policy state." in response.text
+    assert "Detail cards will render from the backend contract." in response.text
     assert "/static/orb/francis-orb.js" in response.text
 
 
@@ -157,6 +159,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["current_work"]["surface"] == "current_work"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["approval_queue"]["surface"] == "approval_queue"
+    assert body["blocked_actions"]["surface"] == "blocked_actions"
     assert body["execution_journal"]["surface"] == "execution_journal"
     assert body["execution_feed"]["surface"] == "execution_feed"
     assert body["missions"]["surface"] == "missions"
@@ -202,6 +205,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(hud_main, "build_lens_snapshot", lambda: snapshot)
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_feed_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -240,6 +244,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["current_work"]["surface"] == "current_work"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["approval_queue"]["surface"] == "approval_queue"
+    assert payload["blocked_actions"]["surface"] == "blocked_actions"
     assert payload["execution_journal"]["surface"] == "execution_journal"
     assert payload["execution_feed"]["surface"] == "execution_feed"
     assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
@@ -426,6 +431,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["approval_queue"]["pending_count"] == 1
     assert body["approval_queue"]["items"][0]["id"] == "approval-1"
+    assert body["blocked_actions"]["surface"] == "blocked_actions"
     assert body["execution_journal"]["surface"] == "execution_journal"
     assert body["execution_journal"]["active_run"]["run_id"] == "run-live"
     assert body["execution_journal"]["items"][0]["kind"] == "hud.bootstrap"
@@ -499,6 +505,17 @@ def test_hud_approval_queue_route_returns_pending_requests() -> None:
     assert "items" in payload
 
 
+def test_hud_blocked_actions_route_returns_structured_surface() -> None:
+    response = client.get("/api/blocked-actions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "blocked_actions"
+    assert "summary" in payload
+    assert "items" in payload
+    assert "detail" in payload
+
+
 def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -> None:
     def _snapshot() -> dict[str, object]:
         return {
@@ -541,6 +558,33 @@ def test_hud_approval_queue_view_normalizes_requested_action_kind(monkeypatch) -
     assert payload["items"][0]["detail_state"] == "historical"
 
 
+def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {"next_best_action": {"kind": "repo.tests"}}
+
+    def _actions(max_actions: int = 8) -> dict[str, object]:
+        assert max_actions == 8
+        return {
+            "blocked_actions": [
+                {
+                    "kind": "repo.tests",
+                    "policy_reason": "Fast checks are waiting on approval.",
+                    "risk_tier": "high",
+                    "trust_badge": "Blocked",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(blocked_actions_view, "get_lens_actions", _actions)
+
+    payload = blocked_actions_view.get_blocked_actions_view()
+
+    assert payload["items"][0]["detail_summary"].startswith("repo.tests is blocked.")
+    assert payload["items"][0]["detail_cards"]
+    assert payload["items"][0]["detail_state"] == "current"
+
+
 def test_hud_execution_journal_route_returns_receipts() -> None:
     response = client.get("/api/execution-journal")
 
@@ -581,6 +625,30 @@ def test_hud_incidents_route_returns_structured_surface() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["surface"] == "incidents"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "cards" in payload
+    assert "detail" in payload
+
+
+def test_hud_inbox_route_returns_structured_surface() -> None:
+    response = client.get("/api/inbox")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "inbox"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "cards" in payload
+    assert "detail" in payload
+
+
+def test_hud_runs_route_returns_structured_surface() -> None:
+    response = client.get("/api/runs")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "runs"
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload

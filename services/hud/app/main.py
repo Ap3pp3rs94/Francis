@@ -19,6 +19,7 @@ from services.hud.app.orb import get_orb_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
+from services.hud.app.views.blocked_actions import get_blocked_actions_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
 from services.hud.app.views.execution_feed import get_execution_feed_view
@@ -65,6 +66,7 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
     actions = get_lens_actions(max_actions=max_actions)
     current_work = get_current_work_view(snapshot=snapshot)
     approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
+    blocked_actions = get_blocked_actions_view(snapshot=snapshot, actions=actions)
     execution_journal = get_execution_journal_view(snapshot=snapshot)
     voice = build_operator_presence(
         mode=str(snapshot.get("control", {}).get("mode", "assist")),
@@ -88,6 +90,7 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
         "current_work": current_work,
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot),
         "approval_queue": approval_queue,
+        "blocked_actions": blocked_actions,
         "execution_journal": execution_journal,
         "execution_feed": get_execution_feed_view(
             snapshot=snapshot,
@@ -137,6 +140,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/approval-queue")
     def approval_queue() -> dict[str, object]:
         return get_approval_queue_view()
+
+    @app.get("/api/blocked-actions")
+    def blocked_actions() -> dict[str, object]:
+        return get_blocked_actions_view()
 
     @app.get("/api/repo-drilldown")
     def repo_drilldown() -> dict[str, object]:
@@ -207,6 +214,7 @@ def _build_app() -> FastAPI:
         actions = response.get("actions", {}) if isinstance(response.get("actions"), dict) else {}
         current_work = get_current_work_view(snapshot=snapshot)
         approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
+        blocked_actions = get_blocked_actions_view(snapshot=snapshot, actions=actions)
         execution_journal = get_execution_journal_view(snapshot=snapshot)
         response["execution_feed"] = get_execution_feed_view(
             snapshot=snapshot,
@@ -216,6 +224,7 @@ def _build_app() -> FastAPI:
             execution_journal=execution_journal,
             execution=response.get("execution", {}) if isinstance(response.get("execution"), dict) else None,
         )
+        response["blocked_actions"] = blocked_actions
         response["repo_drilldown"] = get_repo_drilldown_view(snapshot=snapshot)
         return response
 
