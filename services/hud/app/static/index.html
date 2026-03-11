@@ -704,6 +704,9 @@
           </div>
           <p class="meta" id="work-repo-summary">Repo drilldown summary will render here.</p>
           <p class="meta tiny" id="work-repo-severity">Repo severity will resolve from drilldown results.</p>
+          <ul class="list" id="work-repo-breakdown">
+            <li class="muted-empty">Structured drilldown evidence will render here.</li>
+          </ul>
           <pre class="console" id="work-repo-detail">Repo drilldown detail will render from current work.</pre>
         </article>
         <article class="panel accent">
@@ -803,6 +806,9 @@
           <p id="execution-summary" class="hero-copy">
             Execution feed will explain the current operator chain.
           </p>
+          <ul class="list" id="execution-evidence">
+            <li class="muted-empty">Execution evidence will render here.</li>
+          </ul>
           <pre class="console" id="execution-output">Execution preview and receipt detail will appear here.</pre>
         </article>
       </section>
@@ -2494,6 +2500,14 @@
         return "";
       }
 
+      function meaningfulLines(value, maxLines = 4) {
+        const lines = String(value || "")
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        return lines.slice(0, maxLines);
+      }
+
       function summarizeTerminalContext(terminal) {
         if (!terminal || typeof terminal !== "object") {
           return "Terminal anchor: no recent command.";
@@ -2668,6 +2682,105 @@
         return "medium";
       }
 
+      function buildRepoDrilldownBreakdown(kind, payload) {
+        const execution = payload?.execution || {};
+        const result = execution?.result || {};
+        const executionArgs = result?.execution_args && typeof result.execution_args === "object"
+          ? result.execution_args
+          : {};
+        const output = result?.result?.output && typeof result.result.output === "object"
+          ? result.result.output
+          : {};
+        const stdout = String(output?.stdout || result?.summary || "").trim();
+        const stderr = String(output?.stderr || "").trim();
+        const lines = meaningfulLines(stdout || stderr, 6);
+        if (kind === "repo.status") {
+          return lines.length
+            ? lines
+            : ["Repository status returned no significant lines."];
+        }
+        if (kind === "repo.diff") {
+          const fileCount = (stdout.match(/^diff --git /gm) || []).length;
+          const hunkCount = (stdout.match(/^@@/gm) || []).length;
+          const added = (stdout.match(/^\+(?!\+\+)/gm) || []).length;
+          const removed = (stdout.match(/^-(?!--)/gm) || []).length;
+          const summary = [];
+          summary.push(`${fileCount || 0} file diff(s) surfaced.`);
+          summary.push(`${hunkCount || 0} hunk(s), ${added || 0} addition(s), ${removed || 0} removal(s).`);
+          return summary.concat(lines.slice(0, 3));
+        }
+        if (kind === "repo.lint") {
+          const issueCount = (stdout.match(/^[^:\r\n]+:\d+:\d+:/gm) || []).length;
+          if (issueCount) {
+            return [`${issueCount} lint issue(s) detected.`].concat(lines.slice(0, 3));
+          }
+          return lines.length
+            ? lines
+            : ["Ruff completed without visible issues."];
+        }
+        if (kind === "repo.tests") {
+          const combined = `${stdout}\n${stderr}`;
+          const passed = combined.match(/(\d+)\s+passed/i);
+          const failed = combined.match(/(\d+)\s+failed/i);
+          const skipped = combined.match(/(\d+)\s+(?:skipped|deselected)/i);
+          const summary = [];
+          summary.push(`Lane ${String(executionArgs?.lane || execution?.action?.args?.lane || "fast")} executed.`);
+          if (passed || failed || skipped) {
+            summary.push(
+              `${passed ? `${passed[1]} passed` : "0 passed"} | ${failed ? `${failed[1]} failed` : "0 failed"}${skipped ? ` | ${skipped[1]} skipped/deselected` : ""}`,
+            );
+          }
+          return summary.concat(lines.slice(0, 3));
+        }
+        return lines.length
+          ? lines
+          : ["No structured drilldown evidence was available."];
+      }
+
+      function buildRepoDrilldownDetail(kind, payload) {
+        const execution = payload?.execution || {};
+        const result = execution?.result || {};
+        const output = result?.result?.output && typeof result.result.output === "object"
+          ? result.result.output
+          : {};
+        const stdout = String(output?.stdout || "").trim();
+        const stderr = String(output?.stderr || "").trim();
+        return {
+          kind,
+          run_id: execution?.run_id || "",
+          summary: result?.summary || "",
+          execution_args: result?.execution_args || {},
+          raw_excerpt: {
+            stdout: compactTextSummary(stdout, 1200),
+            stderr: compactTextSummary(stderr, 800),
+          },
+        };
+      }
+
+      function renderExecutionEvidence(snapshot, journal, links = {}) {
+        const nextEvidence = Array.isArray(currentCurrentWork?.next_action_evidence)
+          ? currentCurrentWork.next_action_evidence
+          : [];
+        const approvals = Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items : [];
+        const receipts = Array.isArray(journal?.items) ? journal.items : [];
+        const relatedApproval =
+          typeof links.approvalIndex === "number" && links.approvalIndex >= 0 ? approvals[links.approvalIndex] : null;
+        const relatedReceipt =
+          typeof links.journalIndex === "number" && links.journalIndex >= 0 ? receipts[links.journalIndex] : null;
+        const rows = nextEvidence
+          .map((item) => `${titleCase(String(item.kind || "signal"))} | ${String(item.severity || "low")} | ${String(item.detail || "").trim()}`)
+          .filter(Boolean);
+        if (relatedApproval) {
+          rows.unshift(`Approval | current | ${relatedApproval.id || "unknown"} gates ${resolveUsageFocusActionKind(snapshot, currentActions) || "the current move"}.`);
+        }
+        if (relatedReceipt) {
+          rows.unshift(`Receipt | current | ${summarizeReceiptDetail(relatedReceipt)}`);
+        }
+        document.getElementById("execution-evidence").innerHTML = rows.length
+          ? rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")
+          : `<li class="muted-empty">No execution evidence is available yet.</li>`;
+      }
+
       function renderCurrentWork(surface, snapshot, actions) {
         const currentWork = surface && typeof surface === "object" ? surface : {};
         const snapshotWork = snapshot?.current_work && typeof snapshot.current_work === "object"
@@ -2743,6 +2856,9 @@
             ? "Repo severity: medium | local changes are present"
             : "Repo severity: low | working tree appears stable"
           : "Repo severity: unknown | repository state is unavailable";
+        document.getElementById("work-repo-breakdown").innerHTML = topPaths.length
+          ? topPaths.slice(0, 4).map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
+          : `<li class="muted-empty">No structured drilldown evidence is available yet.</li>`;
 
         const command = String(terminal.command || "").trim();
         const exitCode = terminal.exit_code;
@@ -3133,6 +3249,9 @@
               focusKind: normalizeUsageActionKind(execution?.action?.kind || ""),
             })
           : `Execution feed is tracking ${String(execution?.action?.kind || "the current action")}.`;
+        renderExecutionEvidence(currentSnapshot || {}, currentExecutionJournal, {
+          focusKind: normalizeUsageActionKind(execution?.action?.kind || ""),
+        });
         document.getElementById("execution-output").textContent = formatJson(execution);
       }
 
@@ -3159,6 +3278,7 @@
               ? `Ready ${String(focusChip.kind || "unknown")} | ${focusChip.enabled ? "preview or execute" : "blocked"}`
               : `Run ${String(activeRun.run_id || "none")} | awaiting action`;
         document.getElementById("execution-summary").textContent = summarizeExecutionFeed(snapshot, actions, journal, links);
+        renderExecutionEvidence(snapshot, journal, links);
         document.getElementById("execution-output").textContent = formatJson({
           next_action: {
             kind: nextAction.kind || focusChip?.kind || "none",
@@ -3175,19 +3295,12 @@
       }
 
       function renderRepoDrilldownExecution(kind, payload) {
-        const result = payload?.execution?.result || {};
-        const output = result?.result?.output || {};
-        let detail = result;
-        if (output && typeof output === "object" && Object.keys(output).length) {
-          detail = output;
-        } else if (typeof result?.summary === "string" && result.summary.trim()) {
-          detail = { summary: result.summary };
-        }
-        document.getElementById("work-repo-detail").textContent = formatJson({
-          kind,
-          run_id: payload?.execution?.run_id || "",
-          detail,
-        });
+        document.getElementById("work-repo-breakdown").innerHTML = buildRepoDrilldownBreakdown(kind, payload)
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join("");
+        document.getElementById("work-repo-detail").textContent = formatJson(
+          buildRepoDrilldownDetail(kind, payload),
+        );
         document.getElementById("work-repo-summary").textContent = summarizeRepoDrilldown(kind, payload);
         document.getElementById("work-repo-severity").textContent =
           `Repo severity: ${classifyRepoDrilldownSeverity(kind, payload)} | ${kind}`;
