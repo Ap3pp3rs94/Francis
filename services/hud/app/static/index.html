@@ -1051,7 +1051,9 @@
             </select>
             <input class="chamber-input" type="text" id="swarm-action-kind" placeholder="Action kind" />
             <input class="chamber-input" type="text" id="swarm-summary-input" placeholder="Delegation summary" />
+            <input class="chamber-input" type="text" id="swarm-action-args" placeholder='Action args JSON (optional)' />
             <button class="btn-primary" type="button" onclick="delegateSwarmWork()">Delegate Work</button>
+            <button class="btn-secondary" type="button" onclick="runSwarmCycle()">Run Swarm Cycle</button>
           </div>
           <p class="meta tiny" id="swarm-create-meta">
             Delegation defaults will come from the backend swarm contract.
@@ -1076,6 +1078,7 @@
           </div>
           <div class="work-action-row" id="swarm-detail-controls">
             <input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" />
+            <button class="btn-secondary" type="button" disabled>Execute Delegation</button>
             <button class="btn-secondary" type="button" disabled>Lease Delegation</button>
             <button class="btn-secondary" type="button" disabled>Complete Delegation</button>
             <button class="btn-secondary" type="button" disabled>Fail Delegation</button>
@@ -4765,11 +4768,13 @@
           String(row.detail_summary || row.summary || "No swarm detail is available.");
         renderDetailCards("swarm-detail-cards", row.detail_cards, "Delegation");
         const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const execute = controls.execute && typeof controls.execute === "object" ? controls.execute : {};
         const lease = controls.lease && typeof controls.lease === "object" ? controls.lease : {};
         const complete = controls.complete && typeof controls.complete === "object" ? controls.complete : {};
         const fail = controls.fail && typeof controls.fail === "object" ? controls.fail : {};
         document.getElementById("swarm-detail-controls").innerHTML = `
           <input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" value="${escapeHtml(String(row.status || "").trim().toLowerCase() === "completed" ? String(row.audit?.result_summary || "") : String(row.audit?.last_error || ""))}" />
+          <button class="btn-secondary" type="button" ${execute.enabled ? "" : "disabled"} onclick="executeSwarmDelegation()">${escapeHtml(String(execute.label || "Execute Delegation"))}</button>
           <button class="btn-secondary" type="button" ${lease.enabled ? "" : "disabled"} onclick="leaseSwarmDelegation()">${escapeHtml(String(lease.label || "Lease Delegation"))}</button>
           <button class="btn-secondary" type="button" ${complete.enabled ? "" : "disabled"} onclick="completeSwarmDelegation()">${escapeHtml(String(complete.label || "Complete Delegation"))}</button>
           <button class="btn-secondary" type="button" ${fail.enabled ? "" : "disabled"} onclick="failSwarmDelegation()">${escapeHtml(String(fail.label || "Fail Delegation"))}</button>
@@ -4811,8 +4816,10 @@
           String(document.getElementById("swarm-action-kind")?.value || defaults.action_kinds?.[0] || "").trim();
         document.getElementById("swarm-summary-input").value =
           String(document.getElementById("swarm-summary-input")?.value || "").trim();
+        document.getElementById("swarm-action-args").value =
+          String(document.getElementById("swarm-action-args")?.value || "").trim();
         document.getElementById("swarm-create-meta").textContent =
-          `Suggested actions: ${Array.isArray(defaults.action_kinds) && defaults.action_kinds.length ? defaults.action_kinds.slice(0, 4).join(", ") : "mission.plan, repo.tests, verify.receipts"}`;
+          `Suggested actions: ${Array.isArray(defaults.action_kinds) && defaults.action_kinds.length ? defaults.action_kinds.slice(0, 4).join(", ") : "mission.tick, repo.tests, verify.receipts"}`;
         document.getElementById("swarm-unit-cards").innerHTML = units.length
           ? units
               .map(
@@ -4859,7 +4866,7 @@
           document.getElementById("swarm-detail-summary").textContent =
             "Delegation detail will render from the backend swarm contract.";
           document.getElementById("swarm-detail-controls").innerHTML =
-            `<input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" /><button class="btn-secondary" type="button" disabled>Lease Delegation</button><button class="btn-secondary" type="button" disabled>Complete Delegation</button><button class="btn-secondary" type="button" disabled>Fail Delegation</button>`;
+            `<input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" /><button class="btn-secondary" type="button" disabled>Execute Delegation</button><button class="btn-secondary" type="button" disabled>Lease Delegation</button><button class="btn-secondary" type="button" disabled>Complete Delegation</button><button class="btn-secondary" type="button" disabled>Fail Delegation</button>`;
           document.getElementById("swarm-detail").textContent = formatJson(
             currentSwarmSurface.detail && typeof currentSwarmSurface.detail === "object"
               ? currentSwarmSurface.detail
@@ -4873,8 +4880,21 @@
         const targetUnitId = String(document.getElementById("swarm-target-unit")?.value || "planner").trim();
         const actionKind = String(document.getElementById("swarm-action-kind")?.value || "").trim();
         const summary = String(document.getElementById("swarm-summary-input")?.value || "").trim();
+        const actionArgsRaw = String(document.getElementById("swarm-action-args")?.value || "").trim();
         if (!targetUnitId || !actionKind || !summary) {
           return;
+        }
+        let actionArgs = {};
+        if (actionArgsRaw) {
+          try {
+            const parsed = JSON.parse(actionArgsRaw);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              throw new Error("Action args must be a JSON object.");
+            }
+            actionArgs = parsed;
+          } catch (error) {
+            throw new Error(error instanceof Error ? error.message : "Action args must be valid JSON.");
+          }
         }
         const response = await fetch("/api/swarm/delegate", {
           method: "POST",
@@ -4883,6 +4903,7 @@
             target_unit_id: targetUnitId,
             action_kind: actionKind,
             summary,
+            action_args: actionArgs,
           }),
         });
         const payload = await response.json();
@@ -4890,6 +4911,7 @@
           throw new Error(String(payload.detail || payload.message || "Failed to delegate swarm work."));
         }
         document.getElementById("swarm-summary-input").value = "";
+        document.getElementById("swarm-action-args").value = "";
         renderBootstrap(payload);
       }
 
@@ -4910,6 +4932,24 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to lease delegation."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function executeSwarmDelegation() {
+        const focused = Array.isArray(currentSwarmRows)
+          ? currentSwarmRows.find((row) => String(row?.delegation_id || "").trim() === String(currentSwarmFocusId || "").trim())
+          : null;
+        const delegationId = String(focused?.delegation_id || "").trim();
+        if (!delegationId) {
+          return;
+        }
+        const response = await fetch(`/api/swarm/delegations/${encodeURIComponent(delegationId)}/execute`, {
+          method: "POST",
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to execute delegation."));
         }
         renderBootstrap(payload);
       }
@@ -4960,6 +5000,26 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to fail delegation."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function runSwarmCycle() {
+        const controls = currentSwarmSurface && typeof currentSwarmSurface.controls === "object"
+          ? currentSwarmSurface.controls
+          : {};
+        const cycle = controls.run_cycle && typeof controls.run_cycle === "object" ? controls.run_cycle : {};
+        if (cycle.enabled === false) {
+          return;
+        }
+        const response = await fetch("/api/swarm/cycle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: Number(cycle.limit || 3) || 3 }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to run the Swarm cycle."));
         }
         renderBootstrap(payload);
       }

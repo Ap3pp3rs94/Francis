@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.hud.app.state import build_lens_snapshot
+from services.orchestrator.app.swarm_runtime import supports_swarm_execution
 
 
 def _detail_state(delegation_id: str, focus_delegation_id: str) -> str:
@@ -59,6 +60,7 @@ def _audit(row: dict[str, Any], detail_state: str) -> dict[str, Any]:
         "mission_id": str(row.get("mission_id", "")).strip(),
         "approval_id": str(row.get("approval_id", "")).strip(),
         "scope_apps": row.get("scope_apps", []) if isinstance(row.get("scope_apps"), list) else [],
+        "action_args": row.get("action_args", {}) if isinstance(row.get("action_args"), dict) else {},
         "attempts": int(row.get("attempts", 0) or 0),
         "max_attempts": int(row.get("max_attempts", 0) or 0),
         "detail_state": detail_state,
@@ -77,8 +79,15 @@ def _audit(row: dict[str, Any], detail_state: str) -> dict[str, Any]:
 def _controls(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     delegation_id = str(row.get("id", "")).strip()
     unit_id = str(row.get("target_unit_id", "")).strip()
+    action_kind = str(row.get("action_kind", "")).strip()
     status = str(row.get("status", "")).strip().lower()
+    execution_supported = supports_swarm_execution(unit_id, action_kind)
     return {
+        "execute": {
+            "label": "Execute Delegation" if execution_supported else "Execution Unsupported",
+            "enabled": bool(delegation_id and unit_id and execution_supported) and status in {"queued", "leased"},
+            "unit_id": unit_id,
+        },
         "lease": {
             "label": "Lease Delegation",
             "enabled": bool(delegation_id and unit_id) and status == "queued",
@@ -185,14 +194,12 @@ def get_swarm_view(*, snapshot: dict[str, object] | None = None) -> dict[str, An
         "defaults": {
             "default_target_unit_id": "planner",
             "action_kinds": [
-                "mission.plan",
+                "mission.tick",
                 "repo.status",
                 "repo.diff",
                 "repo.lint",
                 "repo.tests",
                 "verify.receipts",
-                "fabric.recall",
-                "incident.review",
             ],
         },
         "cards": [
@@ -201,6 +208,13 @@ def get_swarm_view(*, snapshot: dict[str, object] | None = None) -> dict[str, An
             {"label": "Active", "value": str(leased_count), "tone": "medium" if leased_count else "low"},
             {"label": "Deadletter", "value": str(deadletter_count), "tone": "high" if deadletter_count else "low"},
         ],
+        "controls": {
+            "run_cycle": {
+                "label": "Run Swarm Cycle",
+                "enabled": queued_count > 0,
+                "limit": 3,
+            }
+        },
         "units": unit_rows,
         "delegations": delegation_rows,
         "deadletter": deadletter[:5],

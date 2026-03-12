@@ -86,6 +86,34 @@ def _normalize_list(values: list[str] | None, *, max_items: int = 12) -> list[st
     return items
 
 
+def _normalize_action_args(value: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, item in value.items():
+        normalized_key = _normalize_text(str(key), max_length=80)
+        if not normalized_key:
+            continue
+        if isinstance(item, (str, int, float, bool)) or item is None:
+            normalized[normalized_key] = item
+        elif isinstance(item, list):
+            safe_items: list[Any] = []
+            for entry in item[:16]:
+                if isinstance(entry, (str, int, float, bool)) or entry is None:
+                    safe_items.append(entry)
+            normalized[normalized_key] = safe_items
+        elif isinstance(item, dict):
+            child: dict[str, Any] = {}
+            for child_key, child_value in item.items():
+                normalized_child_key = _normalize_text(str(child_key), max_length=80)
+                if not normalized_child_key:
+                    continue
+                if isinstance(child_value, (str, int, float, bool)) or child_value is None:
+                    child[normalized_child_key] = child_value
+            normalized[normalized_key] = child
+    return normalized
+
+
 def _parse_ts(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -146,6 +174,7 @@ def _normalize_unit_registry(
             "summary": "Breaks missions and repo pressure into bounded next moves.",
             "capabilities": [
                 "mission.plan",
+                "mission.tick",
                 "repo.breakdown",
                 "approval.route",
                 "next_move.selection",
@@ -264,6 +293,7 @@ def delegate_work(
     summary: str,
     handoff_note: str = "",
     scope_apps: list[str] | None = None,
+    action_args: dict[str, Any] | None = None,
     mission_id: str | None = None,
     approval_id: str | None = None,
     max_attempts: int = 2,
@@ -294,6 +324,7 @@ def delegate_work(
         "summary": _normalize_text(summary, max_length=240),
         "handoff_note": _normalize_text(handoff_note, max_length=240),
         "scope_apps": normalized_scope_apps,
+        "action_args": _normalize_action_args(action_args),
         "mission_id": _normalize_text(mission_id, max_length=80) or None,
         "approval_id": _normalize_text(approval_id, max_length=80) or None,
         "authority_basis": _normalize_text(authority_basis, max_length=240),
@@ -315,6 +346,52 @@ def delegate_work(
     rows.append(row)
     _write_jsonl(fs, SWARM_DELEGATIONS_PATH, rows)
     return row
+
+
+def get_delegation(fs: WorkspaceFS, delegation_id: str) -> dict[str, Any] | None:
+    normalized_id = _normalize_text(delegation_id, max_length=80)
+    if not normalized_id:
+        return None
+    for row in _read_jsonl(fs, SWARM_DELEGATIONS_PATH):
+        if _normalize_text(str(row.get("id", "")), max_length=80) == normalized_id:
+            return row
+    return None
+
+
+def list_delegations(
+    fs: WorkspaceFS,
+    *,
+    statuses: set[str] | None = None,
+    due_only: bool = False,
+    target_unit_id: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    normalized_statuses = {str(item).strip().lower() for item in statuses or set() if str(item).strip()}
+    normalized_target = _normalize_text(target_unit_id, max_length=80).lower() if target_unit_id else ""
+    rows = _read_jsonl(fs, SWARM_DELEGATIONS_PATH)
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        status = _normalize_text(str(row.get("status", "")), max_length=40).lower()
+        if normalized_statuses and status not in normalized_statuses:
+            continue
+        if due_only and not _is_due(row):
+            continue
+        if normalized_target and _normalize_text(str(row.get("target_unit_id", "")), max_length=80).lower() != normalized_target:
+            continue
+        filtered.append(row)
+    filtered.sort(
+        key=lambda row: (
+            _status_rank(str(row.get("status", ""))),
+            str(row.get("next_run_after", row.get("ts", ""))),
+            str(row.get("ts", "")),
+        )
+    )
+    if limit is not None:
+        capped = max(0, min(int(limit), 50))
+        return filtered[:capped]
+    return filtered
 
 
 def lease_delegation(

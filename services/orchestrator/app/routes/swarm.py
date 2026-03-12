@@ -23,6 +23,7 @@ from services.orchestrator.app.swarm_store import (
     fail_delegation,
     lease_delegation,
 )
+from services.orchestrator.app.swarm_runtime import execute_swarm_delegation, run_swarm_cycle
 
 router = APIRouter(tags=["swarm"])
 
@@ -42,6 +43,7 @@ class SwarmDelegateRequest(BaseModel):
     handoff_note: str = ""
     source_unit_id: str = Field(default="coordinator", min_length=1, max_length=80)
     scope_apps: list[str] = Field(default_factory=list)
+    action_args: dict[str, Any] = Field(default_factory=dict)
     mission_id: str | None = None
     approval_id: str | None = None
     max_attempts: int = Field(default=2, ge=1, le=5)
@@ -65,6 +67,11 @@ class SwarmFailRequest(BaseModel):
     retry_backoff_seconds: int = Field(default=DEFAULT_RETRY_BACKOFF_SECONDS, ge=0, le=3600)
 
 
+class SwarmCycleRequest(BaseModel):
+    limit: int = Field(default=3, ge=1, le=10)
+    target_unit_id: str | None = Field(default=None, max_length=80)
+
+
 def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
     try:
         raw = _fs.read_text(rel_path)
@@ -77,6 +84,10 @@ def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
 
 def _role_from_request(request: Request) -> str:
     return request.headers.get("x-francis-role", "architect").strip().lower()
+
+
+def _user_from_request(request: Request) -> str:
+    return request.headers.get("x-francis-user", "hud.operator").strip() or "hud.operator"
 
 
 def _enforce_rbac(request: Request, action: str) -> str:
@@ -186,6 +197,7 @@ def swarm_delegate(request: Request, payload: SwarmDelegateRequest) -> dict[str,
         summary=payload.summary,
         handoff_note=payload.handoff_note,
         scope_apps=scope_apps if isinstance(scope_apps, list) else [],
+        action_args=payload.action_args,
         mission_id=payload.mission_id,
         approval_id=payload.approval_id,
         max_attempts=payload.max_attempts,
@@ -205,6 +217,27 @@ def swarm_delegate(request: Request, payload: SwarmDelegateRequest) -> dict[str,
         },
     )
     return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "delegation": delegation, "swarm": state}
+
+
+def _record_cycle_summary(
+    *,
+    run_id: str,
+    trace_id: str,
+    role: str,
+    summary: dict[str, Any],
+) -> None:
+    record = {
+        "id": str(uuid4()),
+        "ts": utc_now_iso(),
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "kind": "swarm.cycle",
+        "actor": role,
+        "summary": summary,
+    }
+    _append_jsonl("logs/francis.log.jsonl", record)
+    _append_jsonl("journals/decisions.jsonl", record)
+    _ledger.append(run_id=run_id, kind="swarm.cycle", summary={**summary, "trace_id": trace_id, "actor": role})
 
 
 @router.post("/swarm/delegations/{delegation_id}/lease")
@@ -317,3 +350,152 @@ def swarm_fail(delegation_id: str, request: Request, payload: SwarmFailRequest) 
         },
     )
     return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "delegation": delegation, "swarm": state}
+
+
+@router.post("/swarm/delegations/{delegation_id}/execute")
+def swarm_execute(delegation_id: str, request: Request) -> dict[str, Any]:
+    _enforce_control("swarm.write", mutating=True)
+    role = _enforce_rbac(request, "swarm.write")
+    user = _user_from_request(request)
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
+    try:
+        execution = execute_swarm_delegation(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            delegation_id=delegation_id,
+            role=role,
+            user=user,
+            trace_id=trace_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    delegation = execution.get("delegation", {}) if isinstance(execution.get("delegation"), dict) else {}
+    leased_row = execution.get("leased_delegation", {}) if isinstance(execution.get("leased_delegation"), dict) else {}
+    if bool(execution.get("leased")) and leased_row:
+        _record_swarm_receipt(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind="swarm.delegation.leased",
+            actor=role,
+            delegation=leased_row,
+            summary={
+                "status": str(leased_row.get("status", "")).strip(),
+                "lease_owner": str(leased_row.get("lease_owner", "")).strip(),
+                "lease_mode": "auto",
+            },
+        )
+
+    if str(execution.get("status", "")).strip().lower() == "ok":
+        nested = execution.get("execution", {}) if isinstance(execution.get("execution"), dict) else {}
+        _record_swarm_receipt(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind="swarm.delegation.executed",
+            actor=role,
+            delegation=delegation,
+            summary={
+                "status": "ok",
+                "executor": str(nested.get("executor", "")).strip(),
+                "execution_run_id": nested.get("execution_run_id"),
+                "execution_trace_id": nested.get("execution_trace_id"),
+                "result_summary": str(nested.get("result_summary", "")).strip(),
+            },
+        )
+        _record_swarm_receipt(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind="swarm.delegation.completed",
+            actor=role,
+            delegation=delegation,
+            summary={
+                "status": str(delegation.get("status", "")).strip(),
+                "result_summary": str(delegation.get("result_summary", "")).strip(),
+            },
+        )
+    else:
+        nested = execution.get("execution", {}) if isinstance(execution.get("execution"), dict) else {}
+        _record_swarm_receipt(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind="swarm.delegation.execution_failed",
+            actor=role,
+            delegation=delegation or leased_row,
+            summary={
+                "status": str((delegation or leased_row).get("status", "")).strip(),
+                "error": str(execution.get("error", "")).strip(),
+                "retryable": bool(execution.get("retryable", False)),
+                "nested_detail": nested,
+            },
+        )
+        receipt_kind = (
+            "swarm.delegation.deadlettered"
+            if str(delegation.get("status", "")).strip().lower() == "deadlettered"
+            else "swarm.delegation.retried"
+        )
+        _record_swarm_receipt(
+            run_id=run_id,
+            trace_id=trace_id,
+            kind=receipt_kind,
+            actor=role,
+            delegation=delegation,
+            summary={
+                "status": str(delegation.get("status", "")).strip(),
+                "attempts": int(delegation.get("attempts", 0) or 0),
+                "last_error": str(delegation.get("last_error", "")).strip(),
+                "next_run_after": delegation.get("next_run_after"),
+            },
+        )
+
+    state = _build_state_payload()
+    return {
+        "status": "ok" if str(execution.get("status", "")).strip().lower() == "ok" else "error",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "delegation": delegation,
+        "swarm": state,
+        "execution": execution.get("execution", {}),
+        "error": execution.get("error"),
+    }
+
+
+@router.post("/swarm/cycle")
+def swarm_cycle(request: Request, payload: SwarmCycleRequest) -> dict[str, Any]:
+    _enforce_control("swarm.write", mutating=True)
+    role = _enforce_rbac(request, "swarm.write")
+    user = _user_from_request(request)
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
+    cycle = run_swarm_cycle(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        role=role,
+        user=user,
+        trace_id=trace_id,
+        limit=payload.limit,
+        target_unit_id=payload.target_unit_id,
+    )
+    _record_cycle_summary(
+        run_id=run_id,
+        trace_id=trace_id,
+        role=role,
+        summary={
+            "processed_count": int(cycle.get("processed_count", 0) or 0),
+            "completed_count": int(cycle.get("completed_count", 0) or 0),
+            "error_count": int(cycle.get("error_count", 0) or 0),
+            "target_unit_id": payload.target_unit_id,
+        },
+    )
+    state = _build_state_payload()
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "cycle": cycle,
+        "swarm": state,
+    }

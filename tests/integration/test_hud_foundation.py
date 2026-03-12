@@ -836,6 +836,7 @@ def test_hud_swarm_route_returns_structured_surface() -> None:
     assert "severity" in payload
     assert "focus_delegation_id" in payload
     assert "cards" in payload
+    assert "controls" in payload
     assert "units" in payload
     assert "delegations" in payload
     assert "detail" in payload
@@ -1721,8 +1722,11 @@ def test_hud_swarm_view_exposes_focus_and_audit(monkeypatch) -> None:
     assert focused["detail_state"] == "current"
     assert focused["audit"]["status"] == "deadlettered"
     assert focused["audit"]["action_kind"] == "repo.tests"
+    assert "action_args" in focused["audit"]
+    assert focused["controls"]["execute"]["enabled"] is False
     assert focused["controls"]["lease"]["enabled"] is False
     assert focused["controls"]["fail"]["enabled"] is False
+    assert payload["controls"]["run_cycle"]["enabled"] is True
 
 
 def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
