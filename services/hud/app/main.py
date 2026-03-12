@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -31,12 +31,19 @@ from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
 from services.hud.app.views.execution_feed import get_execution_feed_view
 from services.hud.app.views.execution_journal import get_execution_journal_view
+from services.hud.app.views.federation import get_federation_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
 from services.hud.app.views.missions import get_missions_view
 from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
 from services.hud.app.views.shift_report import get_shift_report_view
+from services.orchestrator.app.routes.federation import (
+    FederationPairRequest,
+    FederationRevokeRequest,
+    federation_pair,
+    federation_revoke,
+)
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
 SERVICE_VERSION = "0.2.0"
@@ -132,6 +139,7 @@ def _build_hud_payload(
         ),
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "capability_library": get_capability_library_view(snapshot=snapshot_payload),
+        "federation": get_federation_view(snapshot=snapshot_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "action_deck": action_deck,
@@ -175,6 +183,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "federation",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -206,6 +215,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "federation",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -281,6 +291,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/capability-library")
     def capability_library() -> dict[str, object]:
         return get_capability_library_view()
+
+    @app.get("/api/federation")
+    def federation_surface() -> dict[str, object]:
+        return get_federation_view()
 
     @app.get("/api/apprenticeship")
     def apprenticeship_surface() -> dict[str, object]:
@@ -366,6 +380,7 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
             "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
@@ -400,6 +415,7 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
             "action_deck": refresh_payload["action_deck"],
@@ -441,6 +457,71 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/federation/pair")
+    def hud_federation_pair(request: Request, payload: FederationPairRequest) -> dict[str, object]:
+        result = federation_pair(request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/federation/nodes/{node_id}/revoke")
+    def hud_federation_revoke(
+        node_id: str,
+        request: Request,
+        payload: FederationRevokeRequest,
+    ) -> dict[str, object]:
+        result = federation_revoke(node_id, request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
             "action_deck": refresh_payload["action_deck"],

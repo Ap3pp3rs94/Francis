@@ -16,6 +16,7 @@ import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
 import services.hud.app.views.execution_feed as execution_feed_view
 import services.hud.app.views.execution_journal as execution_journal_view
+import services.hud.app.views.federation as federation_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.missions as missions_view
@@ -116,6 +117,12 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Capability detail will render from staged and active library state." in response.text
     assert "Request Promotion Approval" in response.text
     assert "Promote Capability" in response.text
+    assert "Federation Topology" in response.text
+    assert "Federation topology will render from the governed node registry." in response.text
+    assert "Node Detail" in response.text
+    assert "Node detail will render from the backend federation contract." in response.text
+    assert "Pair Node" in response.text
+    assert "Revoke Node" in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
     assert "Capability pressure will render from the internal library contract." in response.text
@@ -196,6 +203,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["shift_report"]["surface"] == "shift_report"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["capability_library"]["surface"] == "capability_library"
+    assert body["federation"]["surface"] == "federation"
     assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
@@ -215,6 +223,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "federation",
         "apprenticeship_surface",
         "approval_queue",
         "execution_journal",
@@ -269,6 +278,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(federation_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -310,6 +320,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["shift_report"]["surface"] == "shift_report"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["capability_library"]["surface"] == "capability_library"
+    assert payload["federation"]["surface"] == "federation"
     assert payload["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["blocked_actions"]["surface"] == "blocked_actions"
@@ -325,6 +336,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["surface_digests"]["current_work"]
     assert payload["surface_digests"]["shift_report"]
     assert payload["surface_digests"]["capability_library"]
+    assert payload["surface_digests"]["federation"]
     assert payload["surface_digests"]["apprenticeship_surface"]
 
 
@@ -398,6 +410,63 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
                     "tool_pack": {"skill_name": "forge.pack.live-capability"},
                 }
             ]
+        },
+    )
+    _write_json(
+        workspace_root / "federation" / "topology.json",
+        {
+            "version": 1,
+            "updated_at": "2026-03-11T12:05:00+00:00",
+            "local_node": {
+                "node_id": "node-local",
+                "label": "Primary Node",
+                "role": "primary",
+                "trust_level": "high",
+                "status": "active",
+                "local": True,
+                "paired_by": "system",
+                "paired_at": "2026-03-11T12:00:00+00:00",
+                "last_seen_at": "2026-03-11T12:05:00+00:00",
+                "last_sync_at": "2026-03-11T12:05:00+00:00",
+                "last_sync_summary": "Primary workspace initialized.",
+                "scopes": {
+                    "repos": [str(workspace_root.parent.resolve())],
+                    "workspaces": [str(workspace_root.resolve())],
+                    "apps": ["control", "approvals", "lens"],
+                },
+                "capabilities": {
+                    "remote_approvals": True,
+                    "away_continuity": True,
+                    "receipt_summary": True,
+                },
+                "notes": "Primary workspace node.",
+            },
+            "paired_nodes": [
+                {
+                    "node_id": "node-home",
+                    "label": "Home Node",
+                    "role": "always_on",
+                    "trust_level": "scoped",
+                    "status": "stale",
+                    "local": False,
+                    "paired_by": "architect",
+                    "paired_at": "2026-03-11T12:01:00+00:00",
+                    "last_seen_at": "2026-03-11T12:02:00+00:00",
+                    "last_sync_at": "2026-03-11T12:02:00+00:00",
+                    "last_sync_summary": "Home node missed its last sync window.",
+                    "scopes": {
+                        "repos": [str(workspace_root.parent.resolve())],
+                        "workspaces": [str(workspace_root.resolve())],
+                        "apps": ["control", "approvals", "lens"],
+                    },
+                    "capabilities": {
+                        "remote_approvals": True,
+                        "away_continuity": True,
+                        "receipt_summary": True,
+                    },
+                    "notes": "Always-on home node.",
+                }
+            ],
         },
     )
     _write_jsonl(
@@ -543,6 +612,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["capability_library"]["surface"] == "capability_library"
     assert body["capability_library"]["focus_entry_id"] == "cap-live-1"
     assert body["capability_library"]["entries"][0]["id"] == "cap-live-1"
+    assert body["federation"]["surface"] == "federation"
+    assert body["federation"]["focus_node_id"] == "node-home"
+    assert body["federation"]["nodes"][1]["node_id"] == "node-home"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["approval_queue"]["pending_count"] == 1
     assert body["approval_queue"]["items"][0]["id"] == "approval-1"
@@ -649,6 +721,20 @@ def test_hud_capability_library_route_returns_structured_surface() -> None:
     assert "focus_entry_id" in payload
     assert "cards" in payload
     assert "entries" in payload
+    assert "detail" in payload
+
+
+def test_hud_federation_route_returns_structured_surface() -> None:
+    response = client.get("/api/federation")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "federation"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_node_id" in payload
+    assert "cards" in payload
+    assert "nodes" in payload
     assert "detail" in payload
 
 
@@ -1238,6 +1324,77 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
     assert focused["controls"]["promote"]["enabled"] is True
     assert focused["controls"]["promote"]["args"]["approval_id"] == "approval-promote"
     assert focused["detail_cards"]
+
+
+def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "federation": {
+                "summary": "Local node Primary Node with 2 paired node(s), 1 stale, 0 revoked.",
+                "paired_count": 2,
+                "stale_count": 1,
+                "revoked_count": 0,
+                "local_node": {
+                    "node_id": "node-local",
+                    "label": "Primary Node",
+                    "role": "primary",
+                    "trust_level": "high",
+                    "status": "active",
+                    "local": True,
+                    "paired_at": "2026-03-11T12:00:00+00:00",
+                    "last_seen_at": "2026-03-11T12:05:00+00:00",
+                    "last_sync_at": "2026-03-11T12:05:00+00:00",
+                    "last_sync_summary": "Primary workspace initialized.",
+                    "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
+                    "capabilities": {"remote_approvals": True, "away_continuity": True, "receipt_summary": True},
+                },
+                "paired_nodes": [
+                    {
+                        "node_id": "node-home",
+                        "label": "Home Node",
+                        "role": "always_on",
+                        "trust_level": "scoped",
+                        "status": "stale",
+                        "local": False,
+                        "paired_at": "2026-03-11T12:01:00+00:00",
+                        "last_seen_at": "2026-03-11T12:02:00+00:00",
+                        "last_sync_at": "2026-03-11T12:02:00+00:00",
+                        "last_sync_summary": "Home node missed its last sync window.",
+                        "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
+                        "capabilities": {"remote_approvals": True, "away_continuity": True, "receipt_summary": True},
+                    },
+                    {
+                        "node_id": "node-phone",
+                        "label": "Phone Node",
+                        "role": "phone",
+                        "trust_level": "low",
+                        "status": "active",
+                        "local": False,
+                        "paired_at": "2026-03-11T12:03:00+00:00",
+                        "last_seen_at": "2026-03-11T12:04:00+00:00",
+                        "last_sync_at": "2026-03-11T12:04:00+00:00",
+                        "last_sync_summary": "Phone node is available for remote approvals.",
+                        "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
+                        "capabilities": {"remote_approvals": True, "away_continuity": False, "receipt_summary": True},
+                    },
+                ],
+            }
+        }
+
+    monkeypatch.setattr(federation_view, "build_lens_snapshot", _snapshot)
+
+    payload = federation_view.get_federation_view()
+
+    assert payload["surface"] == "federation"
+    assert payload["focus_node_id"] == "node-home"
+    assert payload["severity"] == "high"
+    focused = next(row for row in payload["nodes"] if row["node_id"] == "node-home")
+    assert focused["detail_state"] == "current"
+    assert focused["audit"]["status"] == "stale"
+    assert focused["audit"]["capabilities"]["remote_approvals"] is True
+    assert focused["controls"]["revoke"]["enabled"] is True
+    local = next(row for row in payload["nodes"] if row["node_id"] == "node-local")
+    assert local["controls"]["revoke"]["enabled"] is False
 
 
 def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:

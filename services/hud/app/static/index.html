@@ -866,6 +866,60 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="federation-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Federation Topology</h2>
+            <span class="meta tiny" id="federation-meta">Node topology loading from Lens</span>
+          </div>
+          <p id="federation-summary" class="hero-copy">
+            Federation topology will render from the governed node registry.
+          </p>
+          <div class="desktop-grid" id="federation-cards">
+            <div class="desktop-pill"><strong>Federation</strong><span>Node topology cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="federation-pairing-row">
+            <input class="chamber-input" type="text" id="federation-pair-label" placeholder="Pair label" />
+            <select class="chamber-input" id="federation-pair-role">
+              <option value="always_on">always_on</option>
+              <option value="remote_executor">remote_executor</option>
+              <option value="phone">phone</option>
+              <option value="support">support</option>
+              <option value="customer">customer</option>
+            </select>
+            <select class="chamber-input" id="federation-pair-trust">
+              <option value="scoped">scoped</option>
+              <option value="low">low</option>
+              <option value="high">high</option>
+            </select>
+            <button class="btn-primary" type="button" onclick="pairFederationNode()">Pair Node</button>
+          </div>
+          <p class="meta tiny" id="federation-pairing-meta">
+            Pairing defaults will come from the backend contract.
+          </p>
+          <ul class="list" id="federation-list">
+            <li class="muted-empty">Federated nodes will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="federation-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Node Detail</h2>
+            <span class="meta tiny" id="federation-detail-meta">No node selected</span>
+          </div>
+          <p id="federation-detail-summary" class="hero-copy">
+            Node detail will render from the backend federation contract.
+          </p>
+          <div class="desktop-grid" id="federation-detail-cards">
+            <div class="desktop-pill"><strong>Node</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="federation-detail-controls">
+            <input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" />
+            <button class="btn-secondary" type="button" disabled>Revoke Node</button>
+          </div>
+          <pre class="console" id="federation-detail">Federation audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="current-work-panel" data-signal="low">
           <div class="panel-head">
             <h2>Current Work Focus</h2>
@@ -1237,6 +1291,7 @@
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
       let currentCapabilityLibrary = { entries: [] };
+      let currentFederationSurface = { nodes: [] };
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
@@ -1252,6 +1307,8 @@
       let currentRunsSurface = { run_groups: [] };
       let currentCapabilityFocusId = "";
       let currentCapabilityRows = [];
+      let currentFederationFocusId = "";
+      let currentFederationRows = [];
       let currentMissionRows = [];
       let currentIncidentRows = [];
       let currentInboxRows = [];
@@ -2405,6 +2462,7 @@
         currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentCapabilityLibrary = payload.capability_library || { entries: [] };
+        currentFederationSurface = payload.federation || { nodes: [] };
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
         currentActionDeck = payload.action_deck || { items: [] };
@@ -2465,6 +2523,9 @@
         }
         if (shouldRender("capability_library")) {
           renderCapabilityLibrary(currentCapabilityLibrary);
+        }
+        if (shouldRender("federation")) {
+          renderFederationSurface(currentFederationSurface);
         }
         if (
           shouldRender("current_work") ||
@@ -2533,6 +2594,7 @@
           shift_report: currentShiftReport || {},
           repo_drilldown: currentRepoDrilldown || {},
           capability_library: currentCapabilityLibrary || { entries: [] },
+          federation: currentFederationSurface || { nodes: [] },
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
           action_deck: currentActionDeck || { items: [] },
@@ -3907,6 +3969,151 @@
           );
           applyPanelSignal("capability-detail-panel", "low");
         }
+      }
+
+      function inspectFederationNode(index) {
+        const row = Array.isArray(currentFederationRows) ? currentFederationRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentFederationFocusId = String(row.node_id || "").trim();
+        document.getElementById("federation-detail-meta").textContent =
+          `${String(row.role || "paired")} | ${String(row.trust_level || "scoped")} | ${String(row.node_id || "unknown")}`;
+        document.getElementById("federation-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No federation detail is available.");
+        renderDetailCards("federation-detail-cards", row.detail_cards, "Node");
+        const revoke = row.controls && row.controls.revoke && typeof row.controls.revoke === "object"
+          ? row.controls.revoke
+          : {};
+        document.getElementById("federation-detail-controls").innerHTML = `
+          <input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" value="${escapeHtml(String(revoke.enabled ? "Operator revoked node trust." : ""))}" />
+          <button class="btn-secondary" type="button" ${revoke.enabled ? "" : "disabled"} onclick="revokeFederationNode()">${escapeHtml(String(revoke.label || "Revoke Node"))}</button>
+        `;
+        document.getElementById("federation-detail").textContent = formatJson(row.audit || row);
+        applyPanelSignal(
+          "federation-detail-panel",
+          String(row.status || "low").trim().toLowerCase() === "stale" ? "high" : String(row.status || "").trim().toLowerCase() === "revoked" ? "medium" : "low",
+        );
+      }
+
+      function renderFederationSurface(surface) {
+        currentFederationSurface = surface || { nodes: [] };
+        currentFederationRows = Array.isArray(currentFederationSurface.nodes) ? currentFederationSurface.nodes : [];
+        document.getElementById("federation-meta").textContent =
+          `${currentFederationRows.length} node(s) | ${String(currentFederationSurface.severity || "low")}`;
+        document.getElementById("federation-summary").textContent =
+          String(currentFederationSurface.summary || "Federation topology will render from the governed node registry.");
+        applySeverityState(
+          document.getElementById("federation-summary"),
+          String(currentFederationSurface.severity || "low"),
+        );
+        applyPanelSignal("federation-panel", String(currentFederationSurface.severity || "low"));
+        renderDetailCards(
+          "federation-cards",
+          Array.isArray(currentFederationSurface.cards) ? currentFederationSurface.cards : [],
+          "Federation",
+        );
+        const pairing = currentFederationSurface.pairing && typeof currentFederationSurface.pairing === "object"
+          ? currentFederationSurface.pairing
+          : {};
+        document.getElementById("federation-pair-label").value =
+          String(document.getElementById("federation-pair-label")?.value || "").trim();
+        document.getElementById("federation-pair-role").value = String(pairing.default_role || "always_on");
+        document.getElementById("federation-pair-trust").value = String(pairing.default_trust_level || "scoped");
+        document.getElementById("federation-pairing-meta").textContent =
+          `Default apps: ${Array.isArray(pairing.default_apps) && pairing.default_apps.length ? pairing.default_apps.join(", ") : "control, approvals, lens"}`;
+        document.getElementById("federation-list").innerHTML = currentFederationRows.length
+          ? currentFederationRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(String(row.label || "Node"))}</div>
+                      <div class="badge-row">
+                        <span class="badge ${row.local ? "risk-low" : "risk-medium"}">${row.local ? "local" : "paired"}</span>
+                        <span class="badge ${String(row.status || "").trim().toLowerCase() === "stale" ? "risk-high" : String(row.status || "").trim().toLowerCase() === "revoked" ? "risk-medium" : "risk-low"}">${escapeHtml(String(row.status || "active"))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(String(row.summary || "No node summary is available."))}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectFederationNode(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Federated nodes will render from the backend contract.</li>`;
+        if (currentFederationRows.length) {
+          const focusNodeId = String(currentFederationSurface.focus_node_id || currentFederationFocusId || "").trim();
+          const focusIndex = focusNodeId
+            ? currentFederationRows.findIndex((row) => String(row.node_id || "").trim() === focusNodeId)
+            : -1;
+          inspectFederationNode(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          currentFederationFocusId = "";
+          renderDetailCards("federation-detail-cards", [], "Node");
+          document.getElementById("federation-detail-meta").textContent = "No node selected";
+          document.getElementById("federation-detail-summary").textContent =
+            "Node detail will render from the backend federation contract.";
+          document.getElementById("federation-detail-controls").innerHTML =
+            `<input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" /><button class="btn-secondary" type="button" disabled>Revoke Node</button>`;
+          document.getElementById("federation-detail").textContent = formatJson(
+            currentFederationSurface.detail && typeof currentFederationSurface.detail === "object"
+              ? currentFederationSurface.detail
+              : { nodes: [] },
+          );
+          applyPanelSignal("federation-detail-panel", "low");
+        }
+      }
+
+      async function pairFederationNode() {
+        const label = String(document.getElementById("federation-pair-label")?.value || "").trim();
+        if (!label) {
+          return;
+        }
+        const role = String(document.getElementById("federation-pair-role")?.value || "always_on").trim();
+        const trustLevel = String(document.getElementById("federation-pair-trust")?.value || "scoped").trim();
+        const response = await fetch("/api/federation/pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label,
+            role,
+            trust_level: trustLevel,
+            apps: (
+              currentFederationSurface?.pairing && Array.isArray(currentFederationSurface.pairing.default_apps)
+                ? currentFederationSurface.pairing.default_apps
+                : ["control", "approvals", "lens"]
+            ),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to pair federation node."));
+        }
+        document.getElementById("federation-pair-label").value = "";
+        renderBootstrap(payload);
+      }
+
+      async function revokeFederationNode() {
+        const focused = Array.isArray(currentFederationRows)
+          ? currentFederationRows.find((row) => String(row?.node_id || "").trim() === String(currentFederationFocusId || "").trim())
+          : null;
+        const nodeId = String(focused?.node_id || "").trim();
+        if (!nodeId) {
+          return;
+        }
+        const reason = String(document.getElementById("federation-revoke-reason")?.value || "").trim();
+        const response = await fetch(`/api/federation/nodes/${encodeURIComponent(nodeId)}/revoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to revoke federation node."));
+        }
+        renderBootstrap(payload);
       }
 
       async function createTeachingSession() {

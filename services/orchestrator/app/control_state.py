@@ -17,6 +17,7 @@ DEFAULT_ALLOWED_APPS = [
     "observer",
     "autonomy",
     "control",
+    "federation",
     "approvals",
     "receipts",
     "lens",

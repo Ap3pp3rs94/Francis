@@ -35,6 +35,8 @@ ROLE_RULES: dict[str, set[str]] = {
         "worker.cycle",
         "control.remote.read",
         "control.remote.write",
+        "federation.read",
+        "federation.write",
     },
     "operator": {
         "missions.read",
@@ -65,6 +67,8 @@ ROLE_RULES: dict[str, set[str]] = {
         "worker.cycle",
         "control.remote.read",
         "control.remote.write",
+        "federation.read",
+        "federation.write",
     },
     "worker": {
         "missions.read",
@@ -92,6 +96,7 @@ ROLE_RULES: dict[str, set[str]] = {
         "autonomy.read",
         "worker.read",
         "control.remote.read",
+        "federation.read",
     },
 }
 
