@@ -98,6 +98,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Update Discipline" in response.text
     assert "Shell Portability" in response.text
     assert "Retained State" in response.text
+    assert "Preflight" in response.text
     assert "Display Target" in response.text
     assert "Startup Profile" in response.text
     assert "Start At Login" in response.text

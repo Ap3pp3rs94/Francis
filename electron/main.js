@@ -35,6 +35,7 @@ const {
   savePortabilityState,
 } = require("./overlay-portability");
 const { describeRetainedState } = require("./retained-state");
+const { buildPreflightState } = require("./preflight");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -220,6 +221,29 @@ function getLifecycleState() {
           userDataPath: ".",
           workspaceRoot: null,
           launchAtLogin: login,
+        }),
+    preflight: app.isReady()
+      ? buildPreflightState({
+          userDataPath: app.getPath("userData"),
+          workspaceRoot,
+          preferencesPath: getPreferencesPath(app.getPath("userData")),
+          sessionStatePath: getSessionStatePath(app.getPath("userData")),
+          updateStatePath: getUpdateStatePath(app.getPath("userData")),
+          hudState,
+          launchAtLogin: login,
+          buildIdentity: currentBuild.identity,
+          distribution: currentBuild.distribution,
+        })
+      : buildPreflightState({
+          userDataPath: null,
+          workspaceRoot: null,
+          preferencesPath: null,
+          sessionStatePath: null,
+          updateStatePath: null,
+          hudState,
+          launchAtLogin: login,
+          buildIdentity: currentBuild.identity,
+          distribution: currentBuild.distribution,
         }),
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,

@@ -1302,6 +1302,10 @@
           <div class="desktop-grid" id="desktop-retained-state-cards">
             <div class="desktop-pill"><strong>Retained</strong><span>Retained local state will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Preflight</h3>
+          <div class="desktop-grid" id="desktop-preflight-cards">
+            <div class="desktop-pill"><strong>Preflight</strong><span>Startup diagnostics will render here once the shell bridge is attached.</span></div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -1955,6 +1959,42 @@
         ];
       }
 
+      function buildDesktopPreflightCards() {
+        const preflight = desktopState.lifecycle?.preflight && typeof desktopState.lifecycle.preflight === "object"
+          ? desktopState.lifecycle.preflight
+          : null;
+
+        if (!preflight) {
+          return [
+            { label: "Preflight", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Shell diagnostics will appear once the desktop bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return [
+          {
+            label: "Summary",
+            value: String(preflight.summary || "Preflight summary unavailable"),
+            tone: preflight.blocked > 0 ? "high" : preflight.attention > 0 ? "medium" : "low",
+          },
+          {
+            label: "Blocked",
+            value: String(preflight.blocked || 0),
+            tone: preflight.blocked > 0 ? "high" : "low",
+          },
+          {
+            label: "Attention",
+            value: String(preflight.attention || 0),
+            tone: preflight.attention > 0 ? "medium" : "low",
+          },
+          ...(Array.isArray(preflight.checks) ? preflight.checks.slice(0, 4).map((check) => ({
+            label: String(check.label || check.id || "Check"),
+            value: `${String(check.status || "unknown")} | ${String(check.detail || "n/a")}`,
+            tone: check.status === "blocked" ? "high" : check.status === "attention" ? "medium" : "low",
+          })) : []),
+        ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -1964,11 +2004,12 @@
         const startupProfiles = document.getElementById("desktop-startup-profiles");
         const portabilityCards = document.getElementById("desktop-portability-cards");
         const retainedStateCards = document.getElementById("desktop-retained-state-cards");
+        const preflightCards = document.getElementById("desktop-preflight-cards");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !meta || !recoveryCards || !updateCards || !display) {
           return;
         }
 
@@ -2111,6 +2152,7 @@
         renderDetailCards("desktop-update-cards", buildDesktopUpdateCards(), "Update");
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");
         renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
+        renderDetailCards("desktop-preflight-cards", buildDesktopPreflightCards(), "Preflight");
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
