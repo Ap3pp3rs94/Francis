@@ -1573,6 +1573,7 @@
                 ? displayInfo.activeDisplayId
                 : null,
           preferencesPath: raw?.preferencesPath ? String(raw.preferencesPath) : null,
+          recovery: raw?.recovery && typeof raw.recovery === "object" ? raw.recovery : null,
           hud: raw?.hud && typeof raw.hud === "object" ? raw.hud : null,
           shortcuts: {
             toggleOverlay: String(shortcuts.toggleOverlay || "Ctrl+Shift+Alt+F"),
@@ -1640,6 +1641,7 @@
         const targetDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(targetDisplay) : "n/a";
         const activeDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(activeDisplay) : "n/a";
         const hudRuntime = desktopState.hud;
+        const recovery = desktopState.recovery;
         const hudRuntimeMode = desktopState.available ? formatHudRuntimeMode(hudRuntime) : "n/a";
         const boundsLabel = desktopState.bounds
           ? `${Math.round(desktopState.bounds.width)}x${Math.round(desktopState.bounds.height)} @ ${Math.round(desktopState.bounds.x)},${Math.round(desktopState.bounds.y)}`
@@ -1655,6 +1657,8 @@
               ? `The Electron shell started the local HUD itself and is currently running on ${targetDisplayLabel}.`
               : hudRuntime?.mode === "external"
                 ? `The Electron shell is attached to an already-running HUD on ${targetDisplayLabel}.`
+                : recovery?.needed
+                  ? `The Electron shell is recovering from ${String(recovery.status || "an unclean exit")}. ${String(recovery.message || "").trim()}`
                 : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
           : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
 
@@ -1666,6 +1670,7 @@
           ["Visibility", visibilityLabel],
           ["Target Display", targetDisplayLabel],
           ["Active Display", activeDisplayLabel],
+          ["Recovery", recovery?.needed ? String(recovery.status || "attention") : "nominal"],
           ["Bounds", boundsLabel],
           ["Overlay Toggle", desktopState.shortcuts.toggleOverlay],
           ["Click-through", desktopState.shortcuts.toggleClickThrough],
@@ -1715,6 +1720,7 @@
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
           activeDisplayId: desktopState.activeDisplayId,
+          recovery: desktopState.recovery || null,
           hud: desktopState.hud || null,
           display: desktopState.displayInfo || null,
           preferencesPath: desktopState.preferencesPath || null,

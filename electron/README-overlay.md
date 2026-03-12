@@ -11,7 +11,9 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - registers `Ctrl+Shift+Alt+F` as a global show/hide shortcut
 - registers `Ctrl+Shift+Alt+C` as a global click-through toggle so pointer control is recoverable
 - lets the live HUD consume those shell controls directly when running inside Electron
+- creates a tray control surface for show/hide, click-through, topmost, HUD restart, and quit
 - persists overlay bounds, target display, always-on-top, and click-through state in the Electron user-data directory
+- persists session continuity so unclean exits and managed HUD crashes surface as recovery state on the next launch
 - reuses an already-running HUD if one exists, otherwise attempts to start the local HUD server automatically
 
 ## Run
@@ -51,6 +53,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - Click-through should be treated as an operator mode change: once enabled, use the global shortcut to recover pointer control.
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
 - The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
+- The shell also stores a small `overlay-session.json` continuity record so crash recovery can be surfaced on the next launch.
 - The Windows portable build is unsigned. SmartScreen or local policy may require an explicit trust decision until code signing is added.
 - Packaging assumes the build machine can supply a valid base Python home. If that is not discoverable from `.venv/pyvenv.cfg`, set `FRANCIS_OVERLAY_PYTHON_HOME` before running the package scripts.
 
@@ -60,6 +63,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - display topology changes are reconciled by the Electron shell so the overlay falls back cleanly if a monitor disappears
 - the HUD can still refresh raw display topology for inspection when the desktop environment changes
 - the shell exposes HUD runtime state and can restart the managed HUD from the desktop control surface
+- the tray mirrors those same shell controls so recovery does not depend on the HUD remaining interactive
 - the shell can now be packaged into a portable Windows artifact with the Orb icon and current shell controls intact
 
 ## Next Extensions

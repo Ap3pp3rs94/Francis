@@ -184,6 +184,32 @@ function onceProcessExit(child) {
   });
 }
 
+function intOrZero(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+}
+
+function buildManagedExitUpdate({ previousState, code, signal, shutdownRequested }) {
+  const safeState = previousState && typeof previousState === "object" ? previousState : {};
+  const unexpected = !shutdownRequested && safeState.mode === "managed";
+  return {
+    ready: false,
+    mode: unexpected ? "crashed" : safeState.mode === "managed" ? "stopped" : safeState.mode,
+    managed: false,
+    runtimeKind: null,
+    runtimePath: null,
+    pid: null,
+    lastError:
+      code === 0 && !unexpected
+        ? safeState.lastError
+        : `Managed HUD exited with code ${code}${signal ? ` signal ${signal}` : ""}`,
+    lastExitCode: code,
+    lastExitSignal: signal,
+    crashCount: unexpected ? intOrZero(safeState.crashCount) + 1 : intOrZero(safeState.crashCount),
+    restartSuggested: unexpected,
+  };
+}
+
 async function terminateProcessTree(child, { force = false } = {}) {
   if (!child || child.exitCode !== null) {
     return { code: child?.exitCode ?? null, signal: null };
@@ -246,9 +272,14 @@ function createHudRuntimeManager({
     runtimePath: null,
     pid: null,
     lastError: null,
+    lastExitCode: null,
+    lastExitSignal: null,
+    crashCount: 0,
+    restartSuggested: false,
   };
 
   let child = null;
+  let shutdownRequested = false;
 
   function setState(next) {
     Object.assign(state, next);
@@ -271,15 +302,15 @@ function createHudRuntimeManager({
         return;
       }
       child = null;
-      setState({
-        ready: false,
-        mode: state.mode === "managed" ? "stopped" : state.mode,
-        managed: false,
-        runtimeKind: null,
-        runtimePath: null,
-        pid: null,
-        lastError: code === 0 ? state.lastError : `Managed HUD exited with code ${code}${signal ? ` signal ${signal}` : ""}`,
-      });
+      setState(
+        buildManagedExitUpdate({
+          previousState: state,
+          code,
+          signal,
+          shutdownRequested,
+        }),
+      );
+      shutdownRequested = false;
     });
   }
 
@@ -295,6 +326,9 @@ function createHudRuntimeManager({
         runtimePath: null,
         pid: null,
         lastError: null,
+        lastExitCode: null,
+        lastExitSignal: null,
+        restartSuggested: false,
       });
       return getPublicState();
     }
@@ -309,6 +343,7 @@ function createHudRuntimeManager({
         runtimeKind: null,
         runtimePath: null,
         lastError: message,
+        restartSuggested: false,
       });
       throw new Error(message);
     }
@@ -335,10 +370,14 @@ function createHudRuntimeManager({
         runtimePath: candidate.runtimePath || null,
         pid: null,
         lastError: null,
+        lastExitCode: null,
+        lastExitSignal: null,
+        restartSuggested: false,
       });
       log(`Starting managed HUD: ${describeLaunchCandidate(candidate)}`);
 
       try {
+        shutdownRequested = false;
         child = spawn(candidate.command, candidate.args, {
           cwd: candidate.cwd,
           env: candidate.env,
@@ -364,6 +403,9 @@ function createHudRuntimeManager({
           runtimePath: candidate.runtimePath || null,
           pid: child.pid,
           lastError: null,
+          lastExitCode: null,
+          lastExitSignal: null,
+          restartSuggested: false,
         });
         return getPublicState();
       } catch (error) {
@@ -383,6 +425,7 @@ function createHudRuntimeManager({
       runtimePath: null,
       pid: null,
       lastError: message,
+      restartSuggested: false,
     });
     throw new Error(message);
   }
@@ -397,6 +440,7 @@ function createHudRuntimeManager({
       return getPublicState();
     }
 
+    shutdownRequested = true;
     await terminateProcessTree(child, { force });
     child = null;
     setState({
@@ -406,6 +450,7 @@ function createHudRuntimeManager({
       runtimeKind: null,
       runtimePath: null,
       pid: null,
+      restartSuggested: false,
     });
     return getPublicState();
   }
@@ -430,6 +475,7 @@ module.exports = {
   DEFAULT_HUD_URL,
   DEFAULT_POLL_MS,
   appendEnvPath,
+  buildManagedExitUpdate,
   buildHudHealthUrl,
   buildHudLaunchCandidates,
   buildHudWorkspaceRoot,

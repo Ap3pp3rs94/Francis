@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, screen } = require("electron");
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
@@ -9,20 +9,35 @@ const {
   resolveTargetDisplay,
   savePreferences,
 } = require("./preferences");
+const {
+  buildDefaultSessionState,
+  loadSessionState,
+  saveSessionState,
+} = require("./session-state");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 
 let mainWindow = null;
+let tray = null;
 let ipcRegistered = false;
 let overlayPreferences = null;
+let sessionState = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
+let hudRecoveryTimer = null;
+let hudRecoveryAttempts = 0;
 let quitAfterHudShutdown = false;
 let overlayState = {
   ignoreMouseEvents: false,
   alwaysOnTop: true,
+};
+let overlayRecovery = {
+  needed: false,
+  status: "nominal",
+  message: "",
+  lastExitReason: "",
 };
 
 function log(message, extra) {
@@ -31,6 +46,38 @@ function log(message, extra) {
     return;
   }
   console.log(`[francis-overlay] ${message}`, extra);
+}
+
+function setOverlayRecovery(next = {}) {
+  overlayRecovery = {
+    needed: Boolean(next.needed),
+    status: String(next.status || (next.needed ? "attention" : "nominal")),
+    message: String(next.message || ""),
+    lastExitReason: String(next.lastExitReason || ""),
+  };
+}
+
+function markSessionLaunch() {
+  sessionState = saveSessionState(app.getPath("userData"), {
+    ...(sessionState || buildDefaultSessionState()),
+    lastLaunchAt: new Date().toISOString(),
+    lastExitClean: false,
+    lastExitReason: "running",
+  });
+}
+
+function markSessionExit(reason, { clean = true } = {}) {
+  if (!app.isReady()) {
+    return;
+  }
+  sessionState = saveSessionState(app.getPath("userData"), {
+    ...(sessionState || buildDefaultSessionState()),
+    lastExitAt: new Date().toISOString(),
+    lastExitClean: clean,
+    lastExitReason: String(reason || (clean ? "clean-exit" : "unclean-exit")),
+    hudCrashCount: hudRuntime ? Number(hudRuntime.getPublicState().crashCount || 0) : Number(sessionState?.hudCrashCount || 0),
+    hudLastError: hudRuntime ? hudRuntime.getPublicState().lastError || null : sessionState?.hudLastError || null,
+  });
 }
 
 function getHudState() {
@@ -125,6 +172,7 @@ function getOverlayState(win = mainWindow) {
     targetDisplayId: displayInfo?.targetDisplayId ?? overlayPreferences?.targetDisplayId ?? null,
     activeDisplayId: displayInfo?.activeDisplayId ?? null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
+    recovery: overlayRecovery,
     hud: getHudState(),
     shortcuts: {
       toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
@@ -135,10 +183,79 @@ function getOverlayState(win = mainWindow) {
 
 function notifyOverlayState(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
-  if (!safeWindow) {
+  if (safeWindow) {
+    safeWindow.webContents.send("overlay:state-changed", getOverlayState(safeWindow));
+  }
+  updateTray();
+}
+
+function buildTrayIcon() {
+  const iconPath = path.join(__dirname, "assets", "francis-overlay.png");
+  return nativeImage.createFromPath(iconPath);
+}
+
+function trayLabelForState() {
+  const inputMode = overlayState.ignoreMouseEvents ? "click-through" : "interactive";
+  const hudMode = getHudState()?.mode || "offline";
+  return `Francis Overlay | ${inputMode} | HUD ${hudMode}`;
+}
+
+function updateTray() {
+  if (!tray) {
     return;
   }
-  safeWindow.webContents.send("overlay:state-changed", getOverlayState(safeWindow));
+  const visible = mainWindow && !mainWindow.isDestroyed() ? mainWindow.isVisible() : false;
+  const overlaySnapshot = getOverlayState(mainWindow);
+  tray.setToolTip(trayLabelForState());
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: visible ? "Hide Overlay" : "Show Overlay",
+        click: () => toggleOverlayVisibility(),
+      },
+      {
+        label: overlayState.ignoreMouseEvents ? "Switch To Interactive" : "Enable Click-through",
+        click: () => toggleClickThrough(),
+      },
+      {
+        label: overlayState.alwaysOnTop ? "Release Topmost" : "Pin Topmost",
+        click: () => applyAlwaysOnTop(requireWindow(), !overlayState.alwaysOnTop),
+      },
+      { type: "separator" },
+      {
+        label: "Restart HUD",
+        click: () => {
+          restartHudAndRefreshWindow(requireWindow()).catch((error) => {
+            log("Tray HUD restart failed", error instanceof Error ? error.message : String(error));
+          });
+        },
+      },
+      { type: "separator" },
+      {
+        label: overlaySnapshot.recovery?.needed ? `Recovery: ${overlaySnapshot.recovery.status}` : "Recovery Nominal",
+        enabled: false,
+      },
+      {
+        label: `HUD: ${overlaySnapshot.hud?.mode || "offline"}`,
+        enabled: false,
+      },
+      { type: "separator" },
+      {
+        label: "Quit Francis Overlay",
+        click: () => app.quit(),
+      },
+    ]),
+  );
+}
+
+function createTray() {
+  if (tray) {
+    return tray;
+  }
+  tray = new Tray(buildTrayIcon());
+  tray.on("double-click", () => toggleOverlayVisibility());
+  updateTray();
+  return tray;
 }
 
 function buildCenteredBoundsForDisplay(bounds, display) {
@@ -432,6 +549,48 @@ async function showFallbackPage(win, errorText) {
   await win.loadURL(fallbackUrl(errorText));
 }
 
+function clearHudRecovery() {
+  if (hudRecoveryTimer) {
+    clearTimeout(hudRecoveryTimer);
+    hudRecoveryTimer = null;
+  }
+  hudRecoveryAttempts = 0;
+  setOverlayRecovery({ needed: false, status: "nominal", message: "", lastExitReason: "" });
+}
+
+function scheduleHudRecovery(reason) {
+  if (!hudRuntime || quitAfterHudShutdown) {
+    return;
+  }
+  if (hudRecoveryTimer || hudRecoveryAttempts >= 1) {
+    return;
+  }
+  hudRecoveryAttempts += 1;
+  setOverlayRecovery({
+    needed: true,
+    status: "recovering",
+    message: "Managed HUD exited unexpectedly. Restarting the local runtime.",
+    lastExitReason: reason,
+  });
+  notifyOverlayState(mainWindow);
+  hudRecoveryTimer = setTimeout(async () => {
+    hudRecoveryTimer = null;
+    try {
+      await restartHudAndRefreshWindow(mainWindow);
+      clearHudRecovery();
+      notifyOverlayState(mainWindow);
+    } catch (error) {
+      setOverlayRecovery({
+        needed: true,
+        status: "failed",
+        message: error instanceof Error ? error.message : String(error),
+        lastExitReason: reason,
+      });
+      notifyOverlayState(mainWindow);
+    }
+  }, 1500);
+}
+
 async function loadHud(win) {
   if (!win || win.isDestroyed()) {
     return;
@@ -458,6 +617,7 @@ async function loadHud(win) {
       notifyOverlayState(win);
       return;
     }
+    clearHudRecovery();
     log("Overlay loaded HUD", currentUrl);
     notifyOverlayState(win);
   });
@@ -521,6 +681,30 @@ function createMainWindow() {
       log("Blocked navigation away from HUD origin", targetUrl);
       event.preventDefault();
     }
+  });
+  win.webContents.on("render-process-gone", (_event, details) => {
+    const reason = `renderer-${details.reason || "gone"}`;
+    log("Overlay renderer process exited", details);
+    setOverlayRecovery({
+      needed: true,
+      status: "renderer_crash",
+      message: `Overlay renderer exited: ${details.reason || "unknown"}. Reloading the HUD shell.`,
+      lastExitReason: reason,
+    });
+    markSessionExit(reason, { clean: false });
+    loadHud(win).catch((error) => {
+      log("Renderer recovery load failed", error instanceof Error ? error.message : String(error));
+    });
+    notifyOverlayState(win);
+  });
+  win.on("unresponsive", () => {
+    setOverlayRecovery({
+      needed: true,
+      status: "unresponsive",
+      message: "Overlay renderer became unresponsive. Reload the HUD if this persists.",
+      lastExitReason: "renderer-unresponsive",
+    });
+    notifyOverlayState(win);
   });
 
   win.once("ready-to-show", () => {
@@ -695,7 +879,14 @@ async function initializeHudRuntime() {
     isPackaged: app.isPackaged,
     hudUrl: HUD_URL,
     log,
-    onStateChanged: () => notifyOverlayState(mainWindow),
+    onStateChanged: (publicState) => {
+      if (publicState?.restartSuggested) {
+        scheduleHudRecovery(`hud-${publicState.mode || "crashed"}`);
+      } else if (publicState?.ready) {
+        clearHudRecovery();
+      }
+      notifyOverlayState(mainWindow);
+    },
   });
 
   try {
@@ -710,10 +901,21 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.whenReady().then(async () => {
+    sessionState = loadSessionState(app.getPath("userData"));
+    if (sessionState.lastExitClean === false) {
+      setOverlayRecovery({
+        needed: true,
+        status: "unclean_exit",
+        message: "The previous overlay session did not exit cleanly. Francis restored the shell state and is reloading continuity.",
+        lastExitReason: sessionState.lastExitReason || "unclean-exit",
+      });
+    }
+    markSessionLaunch();
     registerIpc();
     registerDisplayListeners();
     await initializeHudRuntime();
     mainWindow = createMainWindow();
+    createTray();
     registerShortcuts();
   });
 
@@ -740,6 +942,7 @@ app.on("before-quit", (event) => {
   if (quitAfterHudShutdown) {
     return;
   }
+  markSessionExit("clean-exit", { clean: true });
   if (!hudRuntime || !getHudState()?.managed) {
     return;
   }
@@ -766,8 +969,16 @@ app.on("will-quit", () => {
     clearTimeout(preferenceSaveTimer);
     preferenceSaveTimer = null;
   }
+  if (hudRecoveryTimer) {
+    clearTimeout(hudRecoveryTimer);
+    hudRecoveryTimer = null;
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
     schedulePreferenceSave(mainWindow, { immediate: true });
+  }
+  if (tray) {
+    tray.destroy();
+    tray = null;
   }
   log("Unregistering global shortcuts");
   globalShortcut.unregisterAll();

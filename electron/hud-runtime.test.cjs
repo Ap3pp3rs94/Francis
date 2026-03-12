@@ -7,6 +7,7 @@ const path = require("node:path");
 
 const {
   appendEnvPath,
+  buildManagedExitUpdate,
   buildHudHealthUrl,
   buildHudLaunchCandidates,
   buildHudWorkspaceRoot,
@@ -133,4 +134,31 @@ test("isHudReachable and waitForHudReady observe a live local health endpoint", 
   await waitForHudReady(hudUrl, { exitCode: null }, { timeoutMs: 1500, pollMs: 100 });
 
   await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+});
+
+test("buildManagedExitUpdate marks unexpected managed exits as recoverable crashes", () => {
+  const update = buildManagedExitUpdate({
+    previousState: { mode: "managed", crashCount: 1, lastError: null },
+    code: 1,
+    signal: null,
+    shutdownRequested: false,
+  });
+
+  assert.equal(update.mode, "crashed");
+  assert.equal(update.restartSuggested, true);
+  assert.equal(update.crashCount, 2);
+  assert.match(update.lastError, /Managed HUD exited with code 1/);
+});
+
+test("buildManagedExitUpdate leaves intentional shutdowns in stopped mode", () => {
+  const update = buildManagedExitUpdate({
+    previousState: { mode: "managed", crashCount: 2, lastError: null },
+    code: 0,
+    signal: null,
+    shutdownRequested: true,
+  });
+
+  assert.equal(update.mode, "stopped");
+  assert.equal(update.restartSuggested, false);
+  assert.equal(update.crashCount, 2);
 });
