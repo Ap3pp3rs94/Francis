@@ -1278,6 +1278,7 @@
             <div class="desktop-pill"><strong>Topmost</strong><span>n/a</span></div>
           </div>
           <div class="desktop-actions" id="desktop-actions">
+            <button class="btn-secondary" type="button" disabled>Start At Login</button>
             <button class="btn-secondary" type="button" disabled>Interactive</button>
             <button class="btn-secondary" type="button" disabled>Click-through</button>
           </div>
@@ -1618,10 +1619,15 @@
       function normalizeDesktopState(raw, displayInfo = desktopState.displayInfo) {
         const available = Boolean(getDesktopBridge());
         const shortcuts = raw?.shortcuts || {};
+        const lifecycle = raw?.lifecycle && typeof raw.lifecycle === "object" ? raw.lifecycle : null;
+        const launchAtLogin = lifecycle?.launchAtLogin && typeof lifecycle.launchAtLogin === "object"
+          ? lifecycle.launchAtLogin
+          : null;
         return {
           available,
           ignoreMouseEvents: Boolean(raw?.ignoreMouseEvents),
           alwaysOnTop: raw?.alwaysOnTop !== false,
+          launchOnStartup: Boolean(raw?.launchOnStartup || launchAtLogin?.enabled),
           visible: raw?.visible !== false,
           hudUrl: String(raw?.hudUrl || "http://127.0.0.1:8767"),
           bounds: raw?.bounds && typeof raw.bounds === "object" ? raw.bounds : null,
@@ -1640,6 +1646,7 @@
           preferencesPath: raw?.preferencesPath ? String(raw.preferencesPath) : null,
           recovery: raw?.recovery && typeof raw.recovery === "object" ? raw.recovery : null,
           hud: raw?.hud && typeof raw.hud === "object" ? raw.hud : null,
+          lifecycle,
           shortcuts: {
             toggleOverlay: String(shortcuts.toggleOverlay || "Ctrl+Shift+Alt+F"),
             toggleClickThrough: String(shortcuts.toggleClickThrough || "Ctrl+Shift+Alt+C"),
@@ -1707,7 +1714,19 @@
         const activeDisplayLabel = desktopState.available ? formatDesktopDisplayLabel(activeDisplay) : "n/a";
         const hudRuntime = desktopState.hud;
         const recovery = desktopState.recovery;
+        const lifecycle = desktopState.lifecycle;
+        const loginState = lifecycle?.launchAtLogin || null;
+        const session = lifecycle?.session || null;
         const hudRuntimeMode = desktopState.available ? formatHudRuntimeMode(hudRuntime) : "n/a";
+        const buildLabel = desktopState.available
+          ? `${String(lifecycle?.distribution || "source")} | v${String(lifecycle?.version || "unknown")}`
+          : "n/a";
+        const launchAtLoginLabel = loginState?.available ? (loginState.enabled ? "enabled" : "disabled") : "unavailable";
+        const lastLaunchLabel = session?.lastLaunchAt ? String(session.lastLaunchAt) : "n/a";
+        const lastExitLabel = session
+          ? `${session.lastExitClean === false ? "unclean" : "clean"} | ${String(session.lastExitReason || "fresh")}`
+          : "n/a";
+        const hudCrashLabel = session ? String(Number(session.hudCrashCount || 0)) : "0";
         const boundsLabel = desktopState.bounds
           ? `${Math.round(desktopState.bounds.width)}x${Math.round(desktopState.bounds.height)} @ ${Math.round(desktopState.bounds.x)},${Math.round(desktopState.bounds.y)}`
           : "n/a";
@@ -1724,15 +1743,22 @@
                 ? `The Electron shell is attached to an already-running HUD on ${targetDisplayLabel}.`
                 : recovery?.needed
                   ? `The Electron shell is recovering from ${String(recovery.status || "an unclean exit")}. ${String(recovery.message || "").trim()}`
-                : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
+                  : loginState?.enabled
+                    ? `The Electron shell is live on ${targetDisplayLabel} and is configured to start at Windows sign-in.`
+                    : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
           : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
 
         grid.innerHTML = [
           ["Mode", desktopState.available ? "desktop" : "browser"],
+          ["Build", buildLabel],
           ["Input", inputLabel],
           ["HUD Runtime", hudRuntimeMode],
           ["Topmost", topmostLabel],
           ["Visibility", visibilityLabel],
+          ["Start At Login", launchAtLoginLabel],
+          ["Last Launch", lastLaunchLabel],
+          ["Last Exit", lastExitLabel],
+          ["HUD Crashes", hudCrashLabel],
           ["Target Display", targetDisplayLabel],
           ["Active Display", activeDisplayLabel],
           ["Recovery", recovery?.needed ? String(recovery.status || "attention") : "nominal"],
@@ -1747,7 +1773,9 @@
           .join("");
 
         const disabled = desktopState.available ? "" : "disabled";
+        const launchAtLoginDisabled = desktopState.available && loginState?.available ? "" : "disabled";
         actions.innerHTML = `
+          <button class="${loginState?.enabled ? "btn-primary" : "btn-secondary"}" type="button" ${launchAtLoginDisabled} onclick="setDesktopLaunchOnStartup(!desktopState.launchOnStartup)">${loginState?.enabled ? "Disable Start At Login" : "Enable Start At Login"}</button>
           <button class="${desktopState.ignoreMouseEvents ? "btn-secondary" : "btn-primary"}" type="button" ${disabled} onclick="setDesktopIgnoreMouseEvents(false)">Interactive</button>
           <button class="${desktopState.ignoreMouseEvents ? "btn-danger" : "btn-secondary"}" type="button" ${disabled} onclick="setDesktopIgnoreMouseEvents(true)">Click-through</button>
           <button class="${desktopState.alwaysOnTop ? "btn-primary" : "btn-secondary"}" type="button" ${disabled} onclick="toggleDesktopAlwaysOnTop()">${desktopState.alwaysOnTop ? "Release Topmost" : "Pin Topmost"}</button>
@@ -1779,13 +1807,14 @@
         `;
 
         meta.textContent = desktopState.available
-          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
+          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
           activeDisplayId: desktopState.activeDisplayId,
           recovery: desktopState.recovery || null,
+          lifecycle: desktopState.lifecycle || null,
           hud: desktopState.hud || null,
           display: desktopState.displayInfo || null,
           preferencesPath: desktopState.preferencesPath || null,
@@ -1863,6 +1892,32 @@
             : "Overlay target display updated.";
         } catch (error) {
           desktopNotice = `Display move failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function setDesktopLaunchOnStartup(enabled) {
+        const bridge = getDesktopBridge();
+        const setter = bridge && typeof bridge.setLaunchAtLogin === "function"
+          ? bridge.setLaunchAtLogin.bind(bridge)
+          : bridge && typeof bridge.setLaunchOnStartup === "function"
+            ? bridge.setLaunchOnStartup.bind(bridge)
+            : null;
+        if (!setter) {
+          return;
+        }
+        try {
+          await setter(Boolean(enabled));
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.getState(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = desktopState.launchOnStartup
+            ? "Francis will launch at login."
+            : "Francis will stay manual-launch only.";
+        } catch (error) {
+          desktopNotice = `Startup update failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }
@@ -6529,6 +6584,4 @@
     </script>
   </body>
 </html>
-
-
 

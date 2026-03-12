@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", assertBoolean("value", value));
   },
+  setLaunchAtLogin(value) {
+    return ipcRenderer.invoke("overlay:set-launch-at-login", assertBoolean("value", value));
+  },
+  setLaunchOnStartup(value) {
+    return ipcRenderer.invoke("overlay:set-launch-on-startup", assertBoolean("value", value));
+  },
   setTargetDisplay(displayId) {
     return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
   },

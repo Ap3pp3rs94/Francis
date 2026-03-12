@@ -11,9 +11,11 @@ const {
 } = require("./preferences");
 const {
   buildDefaultSessionState,
+  getSessionStatePath,
   loadSessionState,
   saveSessionState,
 } = require("./session-state");
+const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -158,10 +160,31 @@ function getDisplayInfo(win = mainWindow) {
   };
 }
 
+function getLifecycleState() {
+  const login = getLaunchAtLoginState(app);
+  const hudState = getHudState();
+  const session = {
+    ...(sessionState || buildDefaultSessionState()),
+    hudCrashCount: hudState ? Number(hudState.crashCount || 0) : Number(sessionState?.hudCrashCount || 0),
+    hudLastError: hudState?.lastError || sessionState?.hudLastError || null,
+  };
+  return {
+    packaged: Boolean(app.isPackaged),
+    distribution: app.isPackaged ? "portable" : "source",
+    version: typeof app.getVersion === "function" ? app.getVersion() : "unknown",
+    launchAtLogin: login,
+    userDataPath: app.isReady() ? app.getPath("userData") : null,
+    preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
+    sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
+    session,
+  };
+}
+
 function getOverlayState(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
   const bounds = getWindowOrPreferenceBounds(safeWindow);
   const displayInfo = app.isReady() ? getDisplayInfo(safeWindow) : null;
+  const lifecycle = getLifecycleState();
 
   return {
     ignoreMouseEvents: overlayState.ignoreMouseEvents,
@@ -171,14 +194,29 @@ function getOverlayState(win = mainWindow) {
     bounds,
     targetDisplayId: displayInfo?.targetDisplayId ?? overlayPreferences?.targetDisplayId ?? null,
     activeDisplayId: displayInfo?.activeDisplayId ?? null,
-    preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
+    preferencesPath: lifecycle.preferencesPath,
+    launchOnStartup: lifecycle.launchAtLogin.enabled,
     recovery: overlayRecovery,
     hud: getHudState(),
+    lifecycle,
     shortcuts: {
       toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
       toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
     },
   };
+}
+
+function setLaunchAtLoginEnabled(enabled) {
+  const nextState = setLaunchAtLogin(app, enabled);
+  const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (app.isReady()) {
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      launchOnStartup: nextState.enabled,
+    });
+  }
+  log("Updated launch-at-login state", nextState);
+  notifyOverlayState(safeWindow);
+  return nextState;
 }
 
 function notifyOverlayState(win = mainWindow) {
@@ -206,6 +244,7 @@ function updateTray() {
   }
   const visible = mainWindow && !mainWindow.isDestroyed() ? mainWindow.isVisible() : false;
   const overlaySnapshot = getOverlayState(mainWindow);
+  const loginState = overlaySnapshot.lifecycle?.launchAtLogin || getLaunchAtLoginState(app);
   tray.setToolTip(trayLabelForState());
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -220,6 +259,17 @@ function updateTray() {
       {
         label: overlayState.alwaysOnTop ? "Release Topmost" : "Pin Topmost",
         click: () => applyAlwaysOnTop(requireWindow(), !overlayState.alwaysOnTop),
+      },
+      {
+        label: loginState?.enabled ? "Disable Start At Login" : "Enable Start At Login",
+        enabled: Boolean(loginState?.available),
+        click: () => {
+          try {
+            setLaunchAtLoginEnabled(!Boolean(loginState?.enabled));
+          } catch (error) {
+            log("Tray launch-at-login update failed", error instanceof Error ? error.message : String(error));
+          }
+        },
       },
       { type: "separator" },
       {
@@ -275,6 +325,7 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
     overrides.targetDisplayId ?? overlayPreferences?.targetDisplayId,
     primaryDisplayId,
   );
+  const launchAtLogin = getLaunchAtLoginState(app);
   const safeWindow = win && !win.isDestroyed() ? win : null;
   const bounds =
     overrides.windowBounds ||
@@ -290,6 +341,7 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
       targetDisplayId: overrides.targetDisplayId ?? activeDisplay.id ?? fallbackDisplay.id,
       alwaysOnTop: overrides.alwaysOnTop ?? (safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop),
       ignoreMouseEvents: overrides.ignoreMouseEvents ?? overlayState.ignoreMouseEvents,
+      launchOnStartup: overrides.launchOnStartup ?? launchAtLogin.enabled,
       windowBounds: bounds,
     },
     displays,
@@ -775,6 +827,8 @@ function registerIpc() {
     return value;
   });
 
+  ipcMain.handle("overlay:set-launch-at-login", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
+  ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));

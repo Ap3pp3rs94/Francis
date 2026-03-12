@@ -95,6 +95,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Operator overlay for live work." in response.text
     assert "Desktop Shell" in response.text
     assert "Display Target" in response.text
+    assert "Start At Login" in response.text
     assert "Restart HUD" in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "The Orb rides directly over the cursor." in response.text
