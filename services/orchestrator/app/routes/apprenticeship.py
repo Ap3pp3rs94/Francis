@@ -22,6 +22,7 @@ from francis_brain.ledger import RunLedger
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
+from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.control_state import check_action_allowed
 from services.orchestrator.app.routes.forge import ForgeStageRequest, forge_stage
 
@@ -123,6 +124,27 @@ def apprenticeship_create_session(request: Request, payload: ApprenticeshipSessi
     _enforce_control("apprenticeship.write", mutating=True)
     _enforce_rbac(request, "apprenticeship.write")
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
+    normalized_payload = payload.model_dump()
+    assessment = assess_untrusted_input(
+        surface="apprenticeship",
+        action="apprenticeship.session.create",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="apprenticeship",
+            action="apprenticeship.session.create",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
     session = create_session(
         _fs,
         title=payload.title,
@@ -148,6 +170,30 @@ def apprenticeship_add_step(
     _enforce_control("apprenticeship.write", mutating=True)
     _enforce_rbac(request, "apprenticeship.write")
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
+    normalized_payload = {
+        "session_id": str(session_id).strip(),
+        **payload.model_dump(),
+    }
+    assessment = assess_untrusted_input(
+        surface="apprenticeship",
+        action="apprenticeship.step.record",
+        payload=normalized_payload,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="apprenticeship",
+            action="apprenticeship.step.record",
+            payload=normalized_payload,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
     try:
         session, step = add_session_step(
             _fs,
