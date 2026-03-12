@@ -19,6 +19,7 @@ import services.hud.app.views.execution_journal as execution_journal_view
 import services.hud.app.views.federation as federation_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
+import services.hud.app.views.managed_copies as managed_copies_view
 import services.hud.app.views.missions as missions_view
 import services.hud.app.views.repo_drilldown as repo_drilldown_view
 import services.hud.app.views.runs as runs_view
@@ -124,6 +125,14 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Node detail will render from the backend federation contract." in response.text
     assert "Pair Node" in response.text
     assert "Revoke Node" in response.text
+    assert "Managed Copies" in response.text
+    assert "Managed copies will render from the governed copy registry." in response.text
+    assert "Managed Copy Detail" in response.text
+    assert "Managed copy detail will render from the backend contract." in response.text
+    assert "Create Managed Copy" in response.text
+    assert "Record Safe Delta" in response.text
+    assert "Quarantine Copy" in response.text
+    assert "Replace From Clean Baseline" in response.text
     assert "Swarm Units" in response.text
     assert "Swarm units will render from the governed delegation registry." in response.text
     assert "Delegation Detail" in response.text
@@ -214,6 +223,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["capability_library"]["surface"] == "capability_library"
     assert body["swarm"]["surface"] == "swarm"
     assert body["federation"]["surface"] == "federation"
+    assert body["managed_copies"]["surface"] == "managed_copies"
     assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
@@ -235,6 +245,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "capability_library",
         "swarm",
         "federation",
+        "managed_copies",
         "apprenticeship_surface",
         "approval_queue",
         "execution_journal",
@@ -334,6 +345,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["capability_library"]["surface"] == "capability_library"
     assert payload["swarm"]["surface"] == "swarm"
     assert payload["federation"]["surface"] == "federation"
+    assert payload["managed_copies"]["surface"] == "managed_copies"
     assert payload["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["blocked_actions"]["surface"] == "blocked_actions"
@@ -351,6 +363,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["surface_digests"]["capability_library"]
     assert payload["surface_digests"]["swarm"]
     assert payload["surface_digests"]["federation"]
+    assert payload["surface_digests"]["managed_copies"]
     assert payload["surface_digests"]["apprenticeship_surface"]
 
 
@@ -833,6 +846,20 @@ def test_hud_federation_route_returns_structured_surface() -> None:
     if payload["nodes"]:
         assert "audit" in payload["nodes"][0]
         assert "controls" in payload["nodes"][0]
+
+
+def test_hud_managed_copies_route_returns_structured_surface() -> None:
+    response = client.get("/api/managed-copies")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "managed_copies"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_copy_id" in payload
+    assert "cards" in payload
+    assert "copies" in payload
+    assert "detail" in payload
 
 
 def test_hud_apprenticeship_route_returns_structured_surface() -> None:
@@ -1508,6 +1535,81 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
     assert phone["audit"]["remote_approval"]["pending_count"] == 2
     assert phone["controls"]["approve_top"]["enabled"] is True
     assert phone["controls"]["approve_top"]["approval_id"] == "approval-remote-1"
+
+
+def test_hud_managed_copies_view_exposes_focus_and_audit(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "managed_copies": {
+                "summary": "2 managed copy(ies), 1 active, 1 quarantined, 0 replaced, 2 safe delta(s).",
+                "copy_count": 2,
+                "active_count": 1,
+                "quarantined_count": 1,
+                "replaced_count": 0,
+                "delta_count": 2,
+                "copies": [
+                    {
+                        "copy_id": "copy-active",
+                        "customer_label": "Acme Copy",
+                        "status": "active",
+                        "baseline_version": "francis-core",
+                        "sla_tier": "premium",
+                        "workspace_namespace": "managed_copies/copy-active",
+                        "capability_packs": ["pack.alpha"],
+                        "created_by": "architect",
+                        "created_at": "2026-03-11T12:00:00+00:00",
+                        "last_delta_at": "2026-03-11T12:10:00+00:00",
+                        "last_delta_summary": "Promote lint-safe review flow.",
+                        "delta_count": 2,
+                        "quarantined_at": None,
+                        "quarantine_reason": "",
+                        "replaced_at": None,
+                        "replacement_reason": "",
+                        "replacement_copy_id": None,
+                        "replaces_copy_id": None,
+                        "notes": "Premium managed copy.",
+                        "isolation": {"customer_isolated": True, "data_pooling": False, "delta_model": "safe_signals_only"},
+                    },
+                    {
+                        "copy_id": "copy-quarantine",
+                        "customer_label": "Northwind Copy",
+                        "status": "quarantined",
+                        "baseline_version": "francis-core",
+                        "sla_tier": "critical",
+                        "workspace_namespace": "managed_copies/copy-quarantine",
+                        "capability_packs": ["pack.beta"],
+                        "created_by": "architect",
+                        "created_at": "2026-03-11T12:01:00+00:00",
+                        "last_delta_at": "2026-03-11T12:11:00+00:00",
+                        "last_delta_summary": "Customer-specific delta quarantined for review.",
+                        "delta_count": 1,
+                        "quarantined_at": "2026-03-11T12:12:00+00:00",
+                        "quarantine_reason": "Rogue signal detected.",
+                        "replaced_at": None,
+                        "replacement_reason": "",
+                        "replacement_copy_id": None,
+                        "replaces_copy_id": None,
+                        "notes": "Critical managed copy.",
+                        "isolation": {"customer_isolated": True, "data_pooling": False, "delta_model": "safe_signals_only"},
+                    },
+                ],
+                "deltas": [],
+            }
+        }
+
+    monkeypatch.setattr(managed_copies_view, "build_lens_snapshot", _snapshot)
+
+    payload = managed_copies_view.get_managed_copies_view()
+
+    assert payload["surface"] == "managed_copies"
+    assert payload["focus_copy_id"] == "copy-quarantine"
+    assert payload["severity"] == "high"
+    focused = next(row for row in payload["copies"] if row["copy_id"] == "copy-quarantine")
+    assert focused["detail_state"] == "current"
+    assert focused["audit"]["quarantine_reason"] == "Rogue signal detected."
+    assert focused["controls"]["replace"]["enabled"] is True
+    active = next(row for row in payload["copies"] if row["copy_id"] == "copy-active")
+    assert active["controls"]["record_delta"]["enabled"] is True
 
 
 def test_hud_swarm_view_exposes_focus_and_audit(monkeypatch) -> None:

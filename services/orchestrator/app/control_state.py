@@ -19,6 +19,7 @@ DEFAULT_ALLOWED_APPS = [
     "autonomy",
     "control",
     "federation",
+    "managed_copies",
     "approvals",
     "receipts",
     "lens",

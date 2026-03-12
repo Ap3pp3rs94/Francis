@@ -923,6 +923,57 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="managed-copies-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Managed Copies</h2>
+            <span class="meta tiny" id="managed-copies-meta">Managed copy registry loading from Lens</span>
+          </div>
+          <p id="managed-copies-summary" class="hero-copy">
+            Managed copies will render from the governed copy registry.
+          </p>
+          <div class="desktop-grid" id="managed-copies-cards">
+            <div class="desktop-pill"><strong>Copies</strong><span>Managed-copy cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="managed-copies-create-row">
+            <input class="chamber-input" type="text" id="managed-copies-customer-label" placeholder="Customer label" />
+            <select class="chamber-input" id="managed-copies-sla-tier">
+              <option value="standard">standard</option>
+              <option value="premium">premium</option>
+              <option value="critical">critical</option>
+            </select>
+            <input class="chamber-input" type="text" id="managed-copies-baseline" placeholder="Baseline version" />
+            <button class="btn-primary" type="button" onclick="createManagedCopy()">Create Managed Copy</button>
+          </div>
+          <p class="meta tiny" id="managed-copies-create-meta">
+            Managed-copy creation defaults will come from the backend contract.
+          </p>
+          <ul class="list" id="managed-copies-list">
+            <li class="muted-empty">Managed copy rows will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="managed-copies-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Managed Copy Detail</h2>
+            <span class="meta tiny" id="managed-copies-detail-meta">No managed copy selected</span>
+          </div>
+          <p id="managed-copies-detail-summary" class="hero-copy">
+            Managed copy detail will render from the backend contract.
+          </p>
+          <div class="desktop-grid" id="managed-copies-detail-cards">
+            <div class="desktop-pill"><strong>Copy</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="managed-copies-detail-controls">
+            <input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" />
+            <input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" />
+            <button class="btn-secondary" type="button" disabled>Record Safe Delta</button>
+            <button class="btn-secondary" type="button" disabled>Quarantine Copy</button>
+            <button class="btn-secondary" type="button" disabled>Replace From Clean Baseline</button>
+          </div>
+          <pre class="console" id="managed-copies-detail">Managed-copy audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="swarm-panel" data-signal="low">
           <div class="panel-head">
             <h2>Swarm Units</h2>
@@ -1351,6 +1402,7 @@
       let currentCapabilityLibrary = { entries: [] };
       let currentSwarmSurface = { units: [], delegations: [] };
       let currentFederationSurface = { nodes: [] };
+      let currentManagedCopiesSurface = { copies: [] };
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
@@ -1370,6 +1422,8 @@
       let currentSwarmRows = [];
       let currentFederationFocusId = "";
       let currentFederationRows = [];
+      let currentManagedCopyFocusId = "";
+      let currentManagedCopyRows = [];
       let currentMissionRows = [];
       let currentIncidentRows = [];
       let currentInboxRows = [];
@@ -2525,6 +2579,7 @@
         currentCapabilityLibrary = payload.capability_library || { entries: [] };
         currentSwarmSurface = payload.swarm || { units: [], delegations: [] };
         currentFederationSurface = payload.federation || { nodes: [] };
+        currentManagedCopiesSurface = payload.managed_copies || { copies: [] };
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
         currentActionDeck = payload.action_deck || { items: [] };
@@ -2591,6 +2646,9 @@
         }
         if (shouldRender("federation")) {
           renderFederationSurface(currentFederationSurface);
+        }
+        if (shouldRender("managed_copies")) {
+          renderManagedCopiesSurface(currentManagedCopiesSurface);
         }
         if (
           shouldRender("current_work") ||
@@ -2661,6 +2719,7 @@
           capability_library: currentCapabilityLibrary || { entries: [] },
           swarm: currentSwarmSurface || { units: [], delegations: [] },
           federation: currentFederationSurface || { nodes: [] },
+          managed_copies: currentManagedCopiesSurface || { copies: [] },
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
           action_deck: currentActionDeck || { items: [] },
@@ -4231,6 +4290,203 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to reject remote request."));
+        }
+        renderBootstrap(payload);
+      }
+
+      function inspectManagedCopy(index) {
+        const row = Array.isArray(currentManagedCopyRows) ? currentManagedCopyRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentManagedCopyFocusId = String(row.copy_id || "").trim();
+        document.getElementById("managed-copies-detail-meta").textContent =
+          `${String(row.status || "active")} | ${String(row.copy_id || "unknown")}`;
+        document.getElementById("managed-copies-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No managed-copy detail is available.");
+        renderDetailCards("managed-copies-detail-cards", row.detail_cards, "Managed copy");
+        const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const recordDelta = controls.record_delta && typeof controls.record_delta === "object" ? controls.record_delta : {};
+        const quarantine = controls.quarantine && typeof controls.quarantine === "object" ? controls.quarantine : {};
+        const replace = controls.replace && typeof controls.replace === "object" ? controls.replace : {};
+        document.getElementById("managed-copies-detail-controls").innerHTML = `
+          <input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" value="${escapeHtml(String(row.audit?.last_delta_summary || ""))}" />
+          <input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" value="${escapeHtml(String(row.status || "").trim().toLowerCase() === "quarantined" ? String(row.audit?.quarantine_reason || "") : "")}" />
+          <button class="btn-secondary" type="button" ${recordDelta.enabled ? "" : "disabled"} onclick="recordManagedCopyDelta()">${escapeHtml(String(recordDelta.label || "Record Safe Delta"))}</button>
+          <button class="btn-secondary" type="button" ${quarantine.enabled ? "" : "disabled"} onclick="quarantineManagedCopy()">${escapeHtml(String(quarantine.label || "Quarantine Copy"))}</button>
+          <button class="btn-secondary" type="button" ${replace.enabled ? "" : "disabled"} onclick="replaceManagedCopy()">${escapeHtml(String(replace.label || "Replace From Clean Baseline"))}</button>
+        `;
+        document.getElementById("managed-copies-detail").textContent = formatJson(row.audit || row);
+        applyPanelSignal(
+          "managed-copies-detail-panel",
+          String(row.status || "").trim().toLowerCase() === "quarantined"
+            ? "high"
+            : String(row.status || "").trim().toLowerCase() === "replaced"
+              ? "medium"
+              : "low",
+        );
+      }
+
+      function renderManagedCopiesSurface(surface) {
+        currentManagedCopiesSurface = surface || { copies: [] };
+        currentManagedCopyRows = Array.isArray(currentManagedCopiesSurface.copies) ? currentManagedCopiesSurface.copies : [];
+        document.getElementById("managed-copies-meta").textContent =
+          `${currentManagedCopyRows.length} copy(ies) | ${String(currentManagedCopiesSurface.severity || "low")}`;
+        document.getElementById("managed-copies-summary").textContent =
+          String(currentManagedCopiesSurface.summary || "Managed copies will render from the governed copy registry.");
+        applySeverityState(
+          document.getElementById("managed-copies-summary"),
+          String(currentManagedCopiesSurface.severity || "low"),
+        );
+        applyPanelSignal("managed-copies-panel", String(currentManagedCopiesSurface.severity || "low"));
+        renderDetailCards(
+          "managed-copies-cards",
+          Array.isArray(currentManagedCopiesSurface.cards) ? currentManagedCopiesSurface.cards : [],
+          "Managed copy",
+        );
+        const creation = currentManagedCopiesSurface.creation && typeof currentManagedCopiesSurface.creation === "object"
+          ? currentManagedCopiesSurface.creation
+          : {};
+        document.getElementById("managed-copies-sla-tier").value = String(creation.default_sla_tier || "standard");
+        document.getElementById("managed-copies-baseline").value =
+          String(document.getElementById("managed-copies-baseline")?.value || creation.default_baseline_version || "francis-core").trim();
+        document.getElementById("managed-copies-create-meta").textContent =
+          `Baseline ${String(creation.default_baseline_version || "francis-core")} | SLA tiers: ${Array.isArray(creation.sla_tiers) ? creation.sla_tiers.join(", ") : "standard, premium, critical"}`;
+        document.getElementById("managed-copies-list").innerHTML = currentManagedCopyRows.length
+          ? currentManagedCopyRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(String(row.customer_label || "Managed Copy"))}</div>
+                      <div class="badge-row">
+                        <span class="badge ${String(row.status || "").trim().toLowerCase() === "quarantined" ? "risk-high" : String(row.status || "").trim().toLowerCase() === "replaced" ? "risk-medium" : "risk-low"}">${escapeHtml(String(row.status || "active"))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(String(row.summary || "No managed-copy summary is available."))}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectManagedCopy(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Managed copy rows will render from the backend contract.</li>`;
+        if (currentManagedCopyRows.length) {
+          const focusCopyId = String(currentManagedCopiesSurface.focus_copy_id || currentManagedCopyFocusId || "").trim();
+          const focusIndex = focusCopyId
+            ? currentManagedCopyRows.findIndex((row) => String(row.copy_id || "").trim() === focusCopyId)
+            : -1;
+          inspectManagedCopy(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          currentManagedCopyFocusId = "";
+          renderDetailCards("managed-copies-detail-cards", [], "Managed copy");
+          document.getElementById("managed-copies-detail-meta").textContent = "No managed copy selected";
+          document.getElementById("managed-copies-detail-summary").textContent =
+            "Managed copy detail will render from the backend contract.";
+          document.getElementById("managed-copies-detail-controls").innerHTML =
+            `<input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" /><input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" /><button class="btn-secondary" type="button" disabled>Record Safe Delta</button><button class="btn-secondary" type="button" disabled>Quarantine Copy</button><button class="btn-secondary" type="button" disabled>Replace From Clean Baseline</button>`;
+          document.getElementById("managed-copies-detail").textContent = formatJson(
+            currentManagedCopiesSurface.detail && typeof currentManagedCopiesSurface.detail === "object"
+              ? currentManagedCopiesSurface.detail
+              : { copies: [] },
+          );
+          applyPanelSignal("managed-copies-detail-panel", "low");
+        }
+      }
+
+      async function createManagedCopy() {
+        const customerLabel = String(document.getElementById("managed-copies-customer-label")?.value || "").trim();
+        if (!customerLabel) {
+          return;
+        }
+        const slaTier = String(document.getElementById("managed-copies-sla-tier")?.value || "standard").trim();
+        const baselineVersion = String(document.getElementById("managed-copies-baseline")?.value || "francis-core").trim() || "francis-core";
+        const response = await fetch("/api/managed-copies/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customer_label: customerLabel,
+            sla_tier: slaTier,
+            baseline_version: baselineVersion,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to create managed copy."));
+        }
+        document.getElementById("managed-copies-customer-label").value = "";
+        renderBootstrap(payload);
+      }
+
+      async function recordManagedCopyDelta() {
+        const focused = Array.isArray(currentManagedCopyRows)
+          ? currentManagedCopyRows.find((row) => String(row?.copy_id || "").trim() === String(currentManagedCopyFocusId || "").trim())
+          : null;
+        const copyId = String(focused?.copy_id || "").trim();
+        if (!copyId) {
+          return;
+        }
+        const summary = String(document.getElementById("managed-copies-delta-summary")?.value || "").trim();
+        if (!summary) {
+          return;
+        }
+        const response = await fetch(`/api/managed-copies/copies/${encodeURIComponent(copyId)}/delta`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signal_kind: "capability_signal", summary }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to record safe delta."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function quarantineManagedCopy() {
+        const focused = Array.isArray(currentManagedCopyRows)
+          ? currentManagedCopyRows.find((row) => String(row?.copy_id || "").trim() === String(currentManagedCopyFocusId || "").trim())
+          : null;
+        const copyId = String(focused?.copy_id || "").trim();
+        if (!copyId) {
+          return;
+        }
+        const reason = String(document.getElementById("managed-copies-reason")?.value || "").trim();
+        if (!reason) {
+          return;
+        }
+        const response = await fetch(`/api/managed-copies/copies/${encodeURIComponent(copyId)}/quarantine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to quarantine managed copy."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function replaceManagedCopy() {
+        const focused = Array.isArray(currentManagedCopyRows)
+          ? currentManagedCopyRows.find((row) => String(row?.copy_id || "").trim() === String(currentManagedCopyFocusId || "").trim())
+          : null;
+        const copyId = String(focused?.copy_id || "").trim();
+        if (!copyId) {
+          return;
+        }
+        const reason = String(document.getElementById("managed-copies-reason")?.value || "").trim();
+        if (!reason) {
+          return;
+        }
+        const response = await fetch(`/api/managed-copies/copies/${encodeURIComponent(copyId)}/replace`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to replace managed copy."));
         }
         renderBootstrap(payload);
       }

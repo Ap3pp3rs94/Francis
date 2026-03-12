@@ -34,6 +34,7 @@ from services.hud.app.views.execution_journal import get_execution_journal_view
 from services.hud.app.views.federation import get_federation_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
+from services.hud.app.views.managed_copies import get_managed_copies_view
 from services.hud.app.views.missions import get_missions_view
 from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
@@ -59,6 +60,16 @@ from services.orchestrator.app.routes.federation import (
     federation_revoke,
 )
 from services.orchestrator.app.routes.control import ControlRemoteApprovalDecisionRequest
+from services.orchestrator.app.routes.managed_copies import (
+    ManagedCopyCreateRequest,
+    ManagedCopyDeltaRequest,
+    ManagedCopyQuarantineRequest,
+    ManagedCopyReplaceRequest,
+    managed_copy_create,
+    managed_copy_delta,
+    managed_copy_quarantine,
+    managed_copy_replace,
+)
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
 SERVICE_VERSION = "0.2.0"
@@ -156,6 +167,7 @@ def _build_hud_payload(
         "capability_library": get_capability_library_view(snapshot=snapshot_payload),
         "swarm": get_swarm_view(snapshot=snapshot_payload),
         "federation": get_federation_view(snapshot=snapshot_payload),
+        "managed_copies": get_managed_copies_view(snapshot=snapshot_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "action_deck": action_deck,
@@ -201,6 +213,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "capability_library",
         "swarm",
         "federation",
+        "managed_copies",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -234,6 +247,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "capability_library",
         "swarm",
         "federation",
+        "managed_copies",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -317,6 +331,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/federation")
     def federation_surface() -> dict[str, object]:
         return get_federation_view()
+
+    @app.get("/api/managed-copies")
+    def managed_copies_surface() -> dict[str, object]:
+        return get_managed_copies_view()
 
     @app.get("/api/apprenticeship")
     def apprenticeship_surface() -> dict[str, object]:
@@ -679,6 +697,54 @@ def _build_app() -> FastAPI:
             "inbox": refresh_payload["inbox"],
             "runs": refresh_payload["runs"],
             "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/managed-copies/create")
+    def hud_managed_copy_create(request: Request, payload: ManagedCopyCreateRequest) -> dict[str, object]:
+        result = managed_copy_create(request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+        }
+
+    @app.post("/api/managed-copies/copies/{copy_id}/delta")
+    def hud_managed_copy_delta(
+        copy_id: str,
+        request: Request,
+        payload: ManagedCopyDeltaRequest,
+    ) -> dict[str, object]:
+        result = managed_copy_delta(copy_id=copy_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+        }
+
+    @app.post("/api/managed-copies/copies/{copy_id}/quarantine")
+    def hud_managed_copy_quarantine(
+        copy_id: str,
+        request: Request,
+        payload: ManagedCopyQuarantineRequest,
+    ) -> dict[str, object]:
+        result = managed_copy_quarantine(copy_id=copy_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+        }
+
+    @app.post("/api/managed-copies/copies/{copy_id}/replace")
+    def hud_managed_copy_replace(
+        copy_id: str,
+        request: Request,
+        payload: ManagedCopyReplaceRequest,
+    ) -> dict[str, object]:
+        result = managed_copy_replace(copy_id=copy_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
         }
 
     @app.post("/api/swarm/delegate")

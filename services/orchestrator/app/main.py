@@ -38,6 +38,7 @@ def _build_app() -> FastAPI:
     from services.orchestrator.app.routes.health import router as health_router
     from services.orchestrator.app.routes.inbox import router as inbox_router
     from services.orchestrator.app.routes.lens import router as lens_router
+    from services.orchestrator.app.routes.managed_copies import router as managed_copies_router
     from services.orchestrator.app.routes.missions import router as missions_router
     from services.orchestrator.app.routes.observer import router as observer_router
     from services.orchestrator.app.routes.presence import router as presence_router
@@ -63,6 +64,7 @@ def _build_app() -> FastAPI:
     app.include_router(fabric_router)
     app.include_router(swarm_router)
     app.include_router(federation_router)
+    app.include_router(managed_copies_router)
     app.include_router(telemetry_router)
     app.include_router(receipts_router)
     app.include_router(lens_router)
