@@ -747,6 +747,10 @@
           <ul class="list" id="shift-report-recommendations">
             <li class="muted-empty">Recommended next steps will render here.</li>
           </ul>
+          <h3>Away-safe Tasks</h3>
+          <ul class="list" id="shift-report-away-tasks">
+            <li class="muted-empty">Away-safe task posture will render from the backend contract.</li>
+          </ul>
           <div class="work-action-row" id="shift-report-actions">
             <button class="btn-secondary" type="button" disabled>Shift report actions will render from the backend contract.</button>
           </div>
@@ -3328,6 +3332,11 @@
         const evidence = Array.isArray(report.evidence) ? report.evidence : [];
         const recommendations = Array.isArray(report.recommendations) ? report.recommendations : [];
         const controls = report.controls && typeof report.controls === "object" ? report.controls : {};
+        const awaySafeTasks = report.away_safe_tasks && typeof report.away_safe_tasks === "object"
+          ? report.away_safe_tasks
+          : {};
+        const awayAllowed = Array.isArray(awaySafeTasks.allowed) ? awaySafeTasks.allowed : [];
+        const awayGated = Array.isArray(awaySafeTasks.gated) ? awaySafeTasks.gated : [];
         const state = String(report.state || detail.state || "idle").trim() || "idle";
         const mode = String(detail.mode || "assist").trim() || "assist";
         const runId = String(latestRun.run_id || "none").trim() || "none";
@@ -3368,6 +3377,19 @@
         document.getElementById("shift-report-recommendations").innerHTML = recommendations.length
           ? recommendations.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
           : `<li class="muted-empty">Recommended next steps will render here.</li>`;
+        document.getElementById("shift-report-away-tasks").innerHTML = [...awayAllowed, ...awayGated].length
+          ? [...awayAllowed, ...awayGated]
+              .map(
+                (item) => `
+                  <li>
+                    <strong>${escapeHtml(String(item.label || item.kind || "Away task"))}</strong>
+                    <span class="meta"> | ${escapeHtml(String(item.enabled ? "ready" : "gated"))} | ${escapeHtml(String(item.risk_tier || "low"))}</span>
+                    ${escapeHtml(String(item.summary || "No away-task note is available."))}
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Away-safe task posture will render from the backend contract.</li>`;
 
         const controlEntries = Object.entries(controls);
         document.getElementById("shift-report-actions").innerHTML = controlEntries.length

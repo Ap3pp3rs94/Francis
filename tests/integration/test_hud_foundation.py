@@ -97,6 +97,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Shift report will render from away continuity, handback, and mission state." in response.text
     assert "Return briefing cards will render from the backend contract." in response.text
     assert "Mission-centered return evidence will render here." in response.text
+    assert "Away-safe task posture will render from the backend contract." in response.text
     assert "Shift report actions will render from the backend contract." in response.text
     assert "Shift report detail will render from away continuity and handback state." in response.text
     assert "Current Work Focus" in response.text
@@ -467,6 +468,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert any(item["kind"] == "mission" for item in body["shift_report"]["evidence"])
     assert body["shift_report"]["recommendations"]
     assert body["shift_report"]["controls"]["current_work"]["target_surface"] == "current_work"
+    assert "away_safe_tasks" in body["shift_report"]
     assert body["snapshot"]["autonomy"]["guardrail"]["cooldown_active"] is False
     assert body["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
@@ -556,6 +558,7 @@ def test_hud_shift_report_route_returns_structured_surface() -> None:
     assert "evidence" in payload
     assert "recommendations" in payload
     assert "controls" in payload
+    assert "away_safe_tasks" in payload
     assert "detail" in payload
 
 
@@ -994,6 +997,20 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
                     "execute_via": {"payload": {"args": {"lane": "fast", "approval_id": "approval-tests"}}},
                 },
                 {
+                    "kind": "observer.scan",
+                    "label": "Run Observer Scan",
+                    "enabled": True,
+                    "risk_tier": "low",
+                    "reason": "Observer scan is due.",
+                },
+                {
+                    "kind": "worker.cycle",
+                    "label": "Process Worker Queue",
+                    "enabled": False,
+                    "risk_tier": "medium",
+                    "policy_reason": "daily cap reached for worker.cycle",
+                },
+                {
                     "kind": "autonomy.reactor.guardrail.reset",
                     "label": "Reset Guardrail",
                     "enabled": True,
@@ -1022,6 +1039,9 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
     assert payload["controls"]["incidents"]["target_surface"] == "incidents"
     assert payload["controls"]["guardrail_reset"]["enabled"] is True
     assert payload["controls"]["guardrail_reset"]["execute_kind"] == "autonomy.reactor.guardrail.reset"
+    assert payload["away_safe_tasks"]["summary"] == "1 away-safe task(s) ready, 1 gated."
+    assert payload["away_safe_tasks"]["allowed"][0]["kind"] == "observer.scan"
+    assert payload["away_safe_tasks"]["gated"][0]["kind"] == "worker.cycle"
 
 
 def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:

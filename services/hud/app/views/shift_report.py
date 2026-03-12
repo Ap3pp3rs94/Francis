@@ -6,6 +6,15 @@ from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.current_work import get_current_work_view
 
+AWAY_SAFE_ACTION_KINDS = [
+    "observer.scan",
+    "worker.cycle",
+    "worker.recover_leases",
+    "mission.tick",
+    "forge.propose",
+    "autonomy.reactor.tick",
+]
+
 
 def _int(value: object) -> int:
     try:
@@ -390,6 +399,42 @@ def _build_controls(
     }
 
 
+def _build_away_safe_tasks(actions: dict[str, object]) -> dict[str, object]:
+    action_chips = actions.get("action_chips", []) if isinstance(actions.get("action_chips"), list) else []
+    rows: list[dict[str, str | bool]] = []
+    for kind in AWAY_SAFE_ACTION_KINDS:
+        chip = next(
+            (
+                item
+                for item in action_chips
+                if isinstance(item, dict) and str(item.get("kind", "")).strip() == kind
+            ),
+            None,
+        )
+        if chip is None:
+            continue
+        enabled = bool(chip.get("enabled"))
+        rows.append(
+            {
+                "kind": kind,
+                "label": str(chip.get("label", "")).strip() or kind,
+                "enabled": enabled,
+                "risk_tier": str(chip.get("risk_tier", "low")).strip().lower() or "low",
+                "summary": str(chip.get("reason", "")).strip()
+                or str(chip.get("policy_reason", "")).strip()
+                or "No away-task note is available.",
+            }
+        )
+
+    allowed = [row for row in rows if bool(row.get("enabled"))]
+    gated = [row for row in rows if not bool(row.get("enabled"))]
+    return {
+        "summary": f"{len(allowed)} away-safe task(s) ready, {len(gated)} gated.",
+        "allowed": allowed,
+        "gated": gated,
+    }
+
+
 def get_shift_report_view(
     *,
     snapshot: dict[str, object] | None = None,
@@ -476,6 +521,7 @@ def get_shift_report_view(
         autonomy=autonomy,
         actions=actions,
     )
+    away_safe_tasks = _build_away_safe_tasks(actions)
 
     return {
         "status": "ok",
@@ -503,6 +549,7 @@ def get_shift_report_view(
         "evidence": evidence,
         "recommendations": recommendations,
         "controls": controls,
+        "away_safe_tasks": away_safe_tasks,
         "detail": {
             "state": state,
             "mode": mode,
@@ -541,5 +588,6 @@ def get_shift_report_view(
             },
             "next_action": next_action,
             "recommendations": recommendations,
+            "away_safe_tasks": away_safe_tasks,
         },
     }
