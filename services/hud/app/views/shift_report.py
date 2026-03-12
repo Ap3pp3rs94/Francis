@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
+from services.hud.app.views.current_work import get_current_work_view
 
 
 def _int(value: object) -> int:
@@ -30,13 +32,6 @@ def _max_severity(*values: object, fallback: str = "low") -> str:
         if _severity_rank(severity) > _severity_rank(highest):
             highest = severity
     return highest
-
-
-def _tone_for_value(value: object, *, positive: bool = False) -> str:
-    count = _int(value)
-    if count <= 0:
-        return "low" if positive else "low"
-    return "high" if count > 0 else "low"
 
 
 def _mission_focus(snapshot: dict[str, object]) -> dict[str, Any] | None:
@@ -264,9 +259,80 @@ def _recommendations(
     return rows[:4]
 
 
-def get_shift_report_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
+def _build_controls(
+    *,
+    current_work: dict[str, Any],
+    approvals_pending: int,
+    incidents_open: int,
+) -> dict[str, dict[str, Any]]:
+    focus_action = current_work.get("focus_action", {}) if isinstance(current_work.get("focus_action"), dict) else {}
+    focus_state = str(focus_action.get("state", "")).strip().lower()
+    execute_kind = str(focus_action.get("execute_kind", "")).strip() or str(focus_action.get("kind", "")).strip()
+    if focus_state == "approval_ready":
+        resume_label = "Approve + Run"
+    elif focus_state == "approval_request":
+        resume_label = "Request Approval"
+    elif focus_state == "ready":
+        resume_label = "Execute Next Move"
+    else:
+        resume_label = str(focus_action.get("label", "")).strip() or "Resume Next Move"
+
+    resume_summary = str(focus_action.get("reason", "")).strip() or "No resumable next move is available."
+    return {
+        "resume": {
+            "kind": "shift.resume",
+            "label": resume_label,
+            "summary": resume_summary,
+            "control_type": "execute",
+            "enabled": bool(focus_action.get("enabled")) and bool(execute_kind),
+            "execute_kind": execute_kind,
+            "args": focus_action.get("args", {}) if isinstance(focus_action.get("args"), dict) else {},
+        },
+        "approvals": {
+            "kind": "shift.approvals",
+            "label": "Review Approvals",
+            "summary": (
+                f"{approvals_pending} approval(s) are waiting in the current workspace."
+                if approvals_pending > 0
+                else "No pending approvals are waiting."
+            ),
+            "control_type": "surface",
+            "enabled": approvals_pending > 0,
+            "target_surface": "approval_queue",
+        },
+        "incidents": {
+            "kind": "shift.incidents",
+            "label": "Inspect Incidents",
+            "summary": (
+                f"{incidents_open} incident(s) still require review."
+                if incidents_open > 0
+                else "No incident follow-up is currently required."
+            ),
+            "control_type": "surface",
+            "enabled": incidents_open > 0,
+            "target_surface": "incidents",
+        },
+        "current_work": {
+            "kind": "shift.current_work",
+            "label": "Open Current Work",
+            "summary": "Jump back to the current work surface and its next move.",
+            "control_type": "surface",
+            "enabled": True,
+            "target_surface": "current_work",
+        },
+    }
+
+
+def get_shift_report_view(
+    *,
+    snapshot: dict[str, object] | None = None,
+    actions: dict[str, object] | None = None,
+    current_work: dict[str, object] | None = None,
+) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
+    if actions is None:
+        actions = get_lens_actions(max_actions=8)
 
     control = snapshot.get("control", {}) if isinstance(snapshot.get("control"), dict) else {}
     approvals = snapshot.get("approvals", {}) if isinstance(snapshot.get("approvals"), dict) else {}
@@ -285,6 +351,8 @@ def get_shift_report_view(*, snapshot: dict[str, object] | None = None) -> dict[
     handback_available = bool(takeover.get("handback_available"))
     handback = takeover.get("handback", {}) if isinstance(takeover.get("handback"), dict) else {}
     trust = _trust_posture(snapshot, handback)
+    if current_work is None:
+        current_work = get_current_work_view(snapshot=snapshot, actions=actions)
     state = _shift_state(
         mode=mode,
         approvals_pending=approvals_pending,
@@ -325,6 +393,11 @@ def get_shift_report_view(*, snapshot: dict[str, object] | None = None) -> dict[
         next_action=next_action,
         handback=handback,
     )
+    controls = _build_controls(
+        current_work=current_work,
+        approvals_pending=approvals_pending,
+        incidents_open=incidents_open,
+    )
 
     return {
         "status": "ok",
@@ -343,10 +416,19 @@ def get_shift_report_view(*, snapshot: dict[str, object] | None = None) -> dict[
         ),
         "evidence": evidence,
         "recommendations": recommendations,
+        "controls": controls,
         "detail": {
             "state": state,
             "mode": mode,
             "mission": mission,
+            "current_work": {
+                "focus_action": current_work.get("focus_action", {})
+                if isinstance(current_work.get("focus_action"), dict)
+                else {},
+                "operator_link": current_work.get("operator_link", {})
+                if isinstance(current_work.get("operator_link"), dict)
+                else {},
+            },
             "latest_run": last_run,
             "approvals": {
                 "pending_count": approvals_pending,

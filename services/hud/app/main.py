@@ -101,7 +101,11 @@ def _build_hud_payload(
             voice=voice,
         ),
         "current_work": current_work,
-        "shift_report": get_shift_report_view(snapshot=snapshot_payload),
+        "shift_report": get_shift_report_view(
+            snapshot=snapshot_payload,
+            actions=actions_payload,
+            current_work=current_work,
+        ),
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,

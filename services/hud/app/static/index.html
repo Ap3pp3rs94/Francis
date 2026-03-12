@@ -747,6 +747,9 @@
           <ul class="list" id="shift-report-recommendations">
             <li class="muted-empty">Recommended next steps will render here.</li>
           </ul>
+          <div class="work-action-row" id="shift-report-actions">
+            <button class="btn-secondary" type="button" disabled>Shift report actions will render from the backend contract.</button>
+          </div>
           <pre class="console" id="shift-report-detail">Shift report detail will render from away continuity and handback state.</pre>
         </article>
       </section>
@@ -832,7 +835,7 @@
       </section>
 
       <section class="split">
-        <article class="panel">
+        <article class="panel" id="approval-queue-panel">
           <div class="panel-head">
             <h2>Approval Queue</h2>
             <span class="meta tiny" id="approval-queue-meta">Waiting for pending approvals</span>
@@ -844,7 +847,7 @@
             <li class="muted-empty">No pending approvals surfaced yet.</li>
           </ul>
         </article>
-        <article class="panel accent">
+        <article class="panel accent" id="incidents-panel">
           <div class="panel-head">
             <h2>Approval Detail</h2>
             <span class="meta tiny" id="approval-detail-meta">Queue idle</span>
@@ -3324,6 +3327,7 @@
         const cards = Array.isArray(report.cards) ? report.cards : [];
         const evidence = Array.isArray(report.evidence) ? report.evidence : [];
         const recommendations = Array.isArray(report.recommendations) ? report.recommendations : [];
+        const controls = report.controls && typeof report.controls === "object" ? report.controls : {};
         const state = String(report.state || detail.state || "idle").trim() || "idle";
         const mode = String(detail.mode || "assist").trim() || "assist";
         const runId = String(latestRun.run_id || "none").trim() || "none";
@@ -3365,7 +3369,71 @@
           ? recommendations.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
           : `<li class="muted-empty">Recommended next steps will render here.</li>`;
 
+        const controlEntries = Object.entries(controls);
+        document.getElementById("shift-report-actions").innerHTML = controlEntries.length
+          ? controlEntries
+              .map(([key, control]) => {
+                const enabled = Boolean(control?.enabled);
+                const controlType = String(control?.control_type || "surface").trim();
+                const isPrimary = key === "resume" && controlType === "execute";
+                const buttonClass = enabled
+                  ? isPrimary
+                    ? "btn-primary"
+                    : "btn-secondary"
+                  : "btn-secondary";
+                return `
+                  <button
+                    class="${buttonClass}"
+                    type="button"
+                    ${enabled ? "" : "disabled"}
+                    title="${escapeHtml(String(control?.summary || ""))}"
+                    onclick="runShiftReportControl('${escapeHtml(String(key))}')"
+                  >${escapeHtml(String(control?.label || key))}</button>
+                `;
+              })
+              .join("")
+          : `<button class="btn-secondary" type="button" disabled>Shift report actions will render from the backend contract.</button>`;
+
         document.getElementById("shift-report-detail").textContent = formatJson(detail);
+      }
+
+      function focusHudSurface(targetSurface) {
+        const mapping = {
+          current_work: "current-work-panel",
+          approval_queue: "approval-queue-panel",
+          incidents: "incidents-panel",
+          shift_report: "shift-report-panel",
+        };
+        const targetId = mapping[String(targetSurface || "").trim()] || "";
+        if (!targetId) {
+          return;
+        }
+        const node = document.getElementById(targetId);
+        if (!node) {
+          return;
+        }
+        node.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      async function runShiftReportControl(controlKey) {
+        const controls = currentShiftReport && typeof currentShiftReport === "object" && currentShiftReport.controls && typeof currentShiftReport.controls === "object"
+          ? currentShiftReport.controls
+          : {};
+        const control = controls[controlKey];
+        if (!control || !control.enabled) {
+          return;
+        }
+        const controlType = String(control.control_type || "surface").trim();
+        if (controlType === "execute") {
+          const executeKind = String(control.execute_kind || "").trim();
+          if (!executeKind) {
+            return;
+          }
+          const args = control.args && typeof control.args === "object" ? control.args : {};
+          await executeActionWithArgs(executeKind, args, false);
+          return;
+        }
+        focusHudSurface(String(control.target_surface || ""));
       }
 
       function renderCurrentWork(surface, snapshot, actions) {

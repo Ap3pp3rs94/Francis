@@ -97,6 +97,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Shift report will render from away continuity, handback, and mission state." in response.text
     assert "Return briefing cards will render from the backend contract." in response.text
     assert "Mission-centered return evidence will render here." in response.text
+    assert "Shift report actions will render from the backend contract." in response.text
     assert "Shift report detail will render from away continuity and handback state." in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
@@ -465,6 +466,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["shift_report"]["summary"].startswith("Away Mode is active on Live Lens.")
     assert any(item["kind"] == "mission" for item in body["shift_report"]["evidence"])
     assert body["shift_report"]["recommendations"]
+    assert body["shift_report"]["controls"]["current_work"]["target_surface"] == "current_work"
     assert body["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
@@ -552,6 +554,7 @@ def test_hud_shift_report_route_returns_structured_surface() -> None:
     assert "cards" in payload
     assert "evidence" in payload
     assert "recommendations" in payload
+    assert "controls" in payload
     assert "detail" in payload
 
 
@@ -916,6 +919,36 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
                 "label": "Run Fast Checks",
                 "reason": "The validation lane is ready for review.",
             },
+            "current_work": {
+                "summary": "Validation lane is ready to resume.",
+                "repo": {
+                    "available": True,
+                    "branch": "main",
+                    "dirty": True,
+                    "changed_count": 2,
+                    "staged_count": 0,
+                    "unstaged_count": 2,
+                    "untracked_count": 0,
+                    "top_paths": ["tests/integration/test_hud_foundation.py"],
+                    "summary": "Branch main | 2 change(s): 0 staged, 2 unstaged, 0 untracked",
+                },
+                "telemetry": {"last_terminal": {}},
+                "attention": {
+                    "kind": "approval_waiting",
+                    "label": "Approval Waiting",
+                    "reason": "The next move is waiting on operator approval.",
+                },
+                "blockers": ["1 approval(s) are pending."],
+                "mission": {
+                    "id": "mission-night-shift",
+                    "title": "Night Shift Build",
+                },
+                "last_run": {
+                    "run_id": "run-night-1",
+                    "phase": "verify",
+                    "summary": "Away validation completed.",
+                },
+            },
             "fabric": {
                 "calibration": {
                     "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
@@ -925,6 +958,23 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(
+        shift_report_view,
+        "get_lens_actions",
+        lambda max_actions=8: {
+            "status": "ok",
+            "action_chips": [
+                {
+                    "kind": "repo.tests",
+                    "label": "Run Fast Checks",
+                    "enabled": True,
+                    "risk_tier": "medium",
+                    "execute_via": {"payload": {"args": {"lane": "fast", "approval_id": "approval-tests"}}},
+                }
+            ],
+            "blocked_actions": [],
+        },
+    )
 
     payload = shift_report_view.get_shift_report_view()
 
@@ -936,6 +986,10 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
     assert payload["detail"]["handback"]["summary"] == "Validation completed and one approval was left queued."
     assert payload["detail"]["handback"]["trust"] == "Likely"
     assert payload["recommendations"][0] == "Review the pending approvals before resuming execution."
+    assert payload["controls"]["resume"]["label"] == "Execute Next Move"
+    assert payload["controls"]["resume"]["execute_kind"] == "repo.tests"
+    assert payload["controls"]["approvals"]["target_surface"] == "approval_queue"
+    assert payload["controls"]["incidents"]["target_surface"] == "incidents"
 
 
 def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:
