@@ -16,6 +16,7 @@ const {
   saveSessionState,
 } = require("./session-state");
 const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
+const { normalizeStartupProfile, resolveStartupProfile } = require("./startup-profile");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -163,6 +164,7 @@ function getDisplayInfo(win = mainWindow) {
 function getLifecycleState() {
   const login = getLaunchAtLoginState(app);
   const hudState = getHudState();
+  const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
   const session = {
     ...(sessionState || buildDefaultSessionState()),
     hudCrashCount: hudState ? Number(hudState.crashCount || 0) : Number(sessionState?.hudCrashCount || 0),
@@ -173,6 +175,7 @@ function getLifecycleState() {
     distribution: app.isPackaged ? "portable" : "source",
     version: typeof app.getVersion === "function" ? app.getVersion() : "unknown",
     launchAtLogin: login,
+    startupProfile,
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
@@ -217,6 +220,22 @@ function setLaunchAtLoginEnabled(enabled) {
   log("Updated launch-at-login state", nextState);
   notifyOverlayState(safeWindow);
   return nextState;
+}
+
+function setStartupProfile(profileId) {
+  const normalized = normalizeStartupProfile(profileId);
+  const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (app.isReady()) {
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      startupProfile: normalized,
+    });
+  }
+  log("Updated startup profile", {
+    requested: profileId,
+    startupProfile: normalized,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
 }
 
 function notifyOverlayState(win = mainWindow) {
@@ -270,6 +289,21 @@ function updateTray() {
             log("Tray launch-at-login update failed", error instanceof Error ? error.message : String(error));
           }
         },
+      },
+      {
+        label: "Startup Profile",
+        submenu: getOverlayState(mainWindow).lifecycle.startupProfile.options.map((profile) => ({
+          label: profile.label,
+          type: "radio",
+          checked: overlayPreferences?.startupProfile === profile.id,
+          click: () => {
+            try {
+              setStartupProfile(profile.id);
+            } catch (error) {
+              log("Tray startup profile update failed", error instanceof Error ? error.message : String(error));
+            }
+          },
+        })),
       },
       { type: "separator" },
       {
@@ -342,6 +376,7 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
       alwaysOnTop: overrides.alwaysOnTop ?? (safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop),
       ignoreMouseEvents: overrides.ignoreMouseEvents ?? overlayState.ignoreMouseEvents,
       launchOnStartup: overrides.launchOnStartup ?? launchAtLogin.enabled,
+      startupProfile: overrides.startupProfile ?? overlayPreferences?.startupProfile,
       windowBounds: bounds,
     },
     displays,
@@ -690,12 +725,14 @@ function createMainWindow() {
   overlayPreferences = loadPreferences(app.getPath("userData"), displays, primaryDisplayId);
   const preloadPath = path.join(__dirname, "preload.js");
   const targetDisplay = resolveTargetDisplay(displays, overlayPreferences.targetDisplayId, primaryDisplayId);
+  const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
 
   log("Creating overlay window", {
     hudUrl: HUD_URL,
     targetDisplayId: targetDisplay.id,
     bounds: overlayPreferences.windowBounds,
     preferences: overlayPreferences,
+    startupProfile,
     hud: getHudState(),
   });
 
@@ -725,7 +762,7 @@ function createMainWindow() {
 
   win.setMenuBarVisibility(false);
   applyAlwaysOnTop(win, overlayPreferences.alwaysOnTop);
-  applyIgnoreMouseEvents(win, overlayPreferences.ignoreMouseEvents);
+  applyIgnoreMouseEvents(win, startupProfile.ignoreMouseEvents);
 
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, targetUrl) => {
@@ -760,8 +797,17 @@ function createMainWindow() {
   });
 
   win.once("ready-to-show", () => {
-    log("Overlay ready; showing window");
-    win.showInactive();
+    if (startupProfile.visible) {
+      log("Overlay ready; showing window", {
+        startupProfile: startupProfile.effective,
+      });
+      win.showInactive();
+      return;
+    }
+    log("Overlay ready; startup profile keeps the window hidden until summoned", {
+      startupProfile: startupProfile.effective,
+    });
+    notifyOverlayState(win);
   });
 
   win.on("move", () => schedulePreferenceSave(win));
@@ -829,6 +875,7 @@ function registerIpc() {
 
   ipcMain.handle("overlay:set-launch-at-login", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
+  ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));

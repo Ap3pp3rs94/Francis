@@ -2,8 +2,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const PREFERENCES_FILE = "overlay-preferences.json";
+const PREFERENCES_VERSION = 3;
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 360;
+const { DEFAULT_STARTUP_PROFILE, normalizeStartupProfile } = require("./startup-profile");
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -71,10 +73,11 @@ function normalizeBounds(rawBounds, workArea) {
 
 function buildDefaultPreferences(display) {
   return {
-    version: 2,
+    version: PREFERENCES_VERSION,
     targetDisplayId: display.id,
     alwaysOnTop: true,
     ignoreMouseEvents: false,
+    startupProfile: DEFAULT_STARTUP_PROFILE,
     windowBounds: normalizeBounds(null, display.workArea),
   };
 }
@@ -87,10 +90,11 @@ function normalizePreferences(raw, displays, primaryDisplayId = null) {
   }
 
   return {
-    version: 2,
+    version: PREFERENCES_VERSION,
     targetDisplayId: targetDisplay.id,
     alwaysOnTop: raw.alwaysOnTop !== false,
     ignoreMouseEvents: Boolean(raw.ignoreMouseEvents),
+    startupProfile: normalizeStartupProfile(raw.startupProfile),
     windowBounds: normalizeBounds(raw.windowBounds, targetDisplay.workArea),
   };
 }
@@ -115,6 +119,7 @@ function savePreferences(userDataPath, preferences, displays, primaryDisplayId =
 
 module.exports = {
   PREFERENCES_FILE,
+  PREFERENCES_VERSION,
   buildDefaultPreferences,
   getPreferencesPath,
   loadPreferences,

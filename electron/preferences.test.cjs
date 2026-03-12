@@ -53,6 +53,7 @@ test("savePreferences persists normalized bounds and booleans on the target disp
       targetDisplayId: 202,
       alwaysOnTop: false,
       ignoreMouseEvents: true,
+      startupProfile: "quiet",
       windowBounds: { x: 1900, y: 800, width: 1400, height: 1100 },
     },
     DISPLAYS,
@@ -64,6 +65,7 @@ test("savePreferences persists normalized bounds and booleans on the target disp
   assert.equal(saved.targetDisplayId, 202);
   assert.equal(saved.alwaysOnTop, false);
   assert.equal(saved.ignoreMouseEvents, true);
+  assert.equal(saved.startupProfile, "quiet");
   assert.deepEqual(saved, loaded);
   assert.equal(saved.windowBounds.x, 1536);
   assert.equal(saved.windowBounds.y, 0);
@@ -92,6 +94,22 @@ test("invalid target display falls back to the primary display", () => {
     width: 900,
     height: 800,
   });
+});
+
+test("preferences normalize unknown startup profiles back to operator", () => {
+  const userDataPath = tempUserDataPath();
+  const saved = savePreferences(
+    userDataPath,
+    {
+      targetDisplayId: 101,
+      startupProfile: "bad-profile",
+      windowBounds: { x: 32, y: 48, width: 900, height: 720 },
+    },
+    DISPLAYS,
+    101,
+  );
+
+  assert.equal(saved.startupProfile, "operator");
 });
 
 test("loadPreferences ignores malformed json and returns defaults", () => {

@@ -1288,6 +1288,12 @@
               <button class="btn-secondary" type="button" disabled>Primary Display</button>
             </div>
           </div>
+          <div class="desktop-targets" id="desktop-startup-profiles">
+            <span class="meta tiny desktop-targets-label">Startup Profile</span>
+            <div class="desktop-actions">
+              <button class="btn-secondary" type="button" disabled>Operator Overlay</button>
+            </div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -1798,10 +1804,11 @@
         const grid = document.getElementById("desktop-grid");
         const actions = document.getElementById("desktop-actions");
         const targets = document.getElementById("desktop-targets");
+        const startupProfiles = document.getElementById("desktop-startup-profiles");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !meta || !recoveryCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !meta || !recoveryCards || !display) {
           return;
         }
 
@@ -1817,6 +1824,7 @@
         const recovery = desktopState.recovery;
         const lifecycle = desktopState.lifecycle;
         const loginState = lifecycle?.launchAtLogin || null;
+        const startupProfile = lifecycle?.startupProfile || null;
         const session = lifecycle?.session || null;
         const hudRuntimeMode = desktopState.available ? formatHudRuntimeMode(hudRuntime) : "n/a";
         const buildLabel = desktopState.available
@@ -1845,8 +1853,8 @@
                 : recovery?.needed
                   ? `The Electron shell is recovering from ${String(recovery.status || "an unclean exit")}. ${String(recovery.message || "").trim()}`
                   : loginState?.enabled
-                    ? `The Electron shell is live on ${targetDisplayLabel} and is configured to start at Windows sign-in.`
-                    : `The Electron shell is live on ${targetDisplayLabel}. You can switch input posture or move the overlay to another display without changing the HUD architecture.`
+                    ? `The Electron shell is live on ${targetDisplayLabel}, is configured to start at Windows sign-in, and will boot as ${String(startupProfile?.label || "Operator Overlay")}.`
+                    : `The Electron shell is live on ${targetDisplayLabel}. Startup profile ${String(startupProfile?.label || "Operator Overlay")} keeps boot behavior explicit without changing the HUD architecture.`
           : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
 
         grid.innerHTML = [
@@ -1863,6 +1871,7 @@
           ["Target Display", targetDisplayLabel],
           ["Active Display", activeDisplayLabel],
           ["Recovery", recovery?.needed ? String(recovery.status || "attention") : "nominal"],
+          ["Startup Profile", String(startupProfile?.label || "Operator Overlay")],
           ["Bounds", boundsLabel],
           ["Overlay Toggle", desktopState.shortcuts.toggleOverlay],
           ["Click-through", desktopState.shortcuts.toggleClickThrough],
@@ -1907,8 +1916,27 @@
           </div>
         `;
 
+        startupProfiles.innerHTML = `
+          <span class="meta tiny desktop-targets-label">Startup Profile</span>
+          <div class="desktop-actions">
+            ${
+              Array.isArray(startupProfile?.options) && startupProfile.options.length
+                ? startupProfile.options
+                    .map(
+                      (profile) =>
+                        `<button class="${startupProfile.requested === profile.id ? "btn-primary" : "btn-secondary"}" type="button" ${
+                          desktopState.available ? "" : "disabled"
+                        } onclick="setDesktopStartupProfile('${escapeHtml(profile.id)}')">${escapeHtml(profile.label)}</button>`,
+                    )
+                    .join("")
+                : '<button class="btn-secondary" type="button" disabled>Operator Overlay</button>'
+            }
+          </div>
+          <p class="meta tiny">${escapeHtml(String(startupProfile?.description || "Startup profile controls how the overlay boots on the next launch."))}</p>
+        `;
+
         meta.textContent = desktopState.available
-          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
+          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | startup ${String(startupProfile?.requested || "operator")} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
         display.textContent = formatJson({
@@ -2020,6 +2048,26 @@
             : "Francis will stay manual-launch only.";
         } catch (error) {
           desktopNotice = `Startup update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function setDesktopStartupProfile(profileId) {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.setStartupProfile !== "function") {
+          desktopNotice = "Startup-profile control is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.setStartupProfile(String(profileId || "operator")),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = `Startup profile saved: ${String(desktopState.lifecycle?.startupProfile?.label || profileId || "Operator Overlay")}.`;
+        } catch (error) {
+          desktopNotice = `Startup-profile update failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }

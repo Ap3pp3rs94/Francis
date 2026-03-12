@@ -21,6 +21,13 @@ function assertFiniteNumber(name, value) {
   return value;
 }
 
+function assertString(name, value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new TypeError(`${name} must be a non-empty string`);
+  }
+  return value;
+}
+
 contextBridge.exposeInMainWorld("FrancisDesktop", {
   setIgnoreMouseEvents(ignore) {
     return ipcRenderer.invoke("overlay:set-ignore-mouse-events", assertBoolean("ignore", ignore));
@@ -33,6 +40,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   },
   setLaunchOnStartup(value) {
     return ipcRenderer.invoke("overlay:set-launch-on-startup", assertBoolean("value", value));
+  },
+  setStartupProfile(profileId) {
+    return ipcRenderer.invoke("overlay:set-startup-profile", assertString("profileId", profileId));
   },
   setTargetDisplay(displayId) {
     return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
