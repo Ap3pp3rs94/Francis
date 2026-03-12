@@ -126,6 +126,7 @@ def _detail_cards(
     approvals_pending: int,
     incidents_open: int,
     trust: str,
+    autonomy_label: str,
 ) -> list[dict[str, str]]:
     return [
         {"label": "State", "value": state.replace("_", " "), "tone": "medium" if state != "idle" else "low"},
@@ -133,6 +134,7 @@ def _detail_cards(
         {"label": "Mission", "value": mission_title, "tone": "high" if mission_title != "No active mission" else "low"},
         {"label": "Latest Run", "value": last_run_id or "none", "tone": "medium" if last_run_id else "low"},
         {"label": "Approvals", "value": str(approvals_pending), "tone": "high" if approvals_pending else "low"},
+        {"label": "Autonomy", "value": autonomy_label, "tone": "high" if "cooldown" in autonomy_label.lower() or "halt" in autonomy_label.lower() else "low"},
         {"label": "Trust", "value": trust, "tone": "high" if trust == "Uncertain" else "medium" if trust == "Likely" else "low"},
     ]
 
@@ -154,6 +156,7 @@ def _build_evidence(
     handback: dict[str, Any],
     next_action: dict[str, Any],
     trust: str,
+    autonomy: dict[str, Any],
 ) -> list[dict[str, str]]:
     evidence: list[dict[str, str]] = []
     if mission_title != "No active mission":
@@ -209,6 +212,39 @@ def _build_evidence(
             )
         )
 
+    guardrail = autonomy.get("guardrail", {}) if isinstance(autonomy.get("guardrail"), dict) else {}
+    reactor = autonomy.get("reactor", {}) if isinstance(autonomy.get("reactor"), dict) else {}
+    budget = autonomy.get("budget", {}) if isinstance(autonomy.get("budget"), dict) else {}
+    if bool(guardrail.get("cooldown_active")):
+        evidence.append(
+            _evidence_row(
+                kind="guardrail",
+                severity="high",
+                detail=(
+                    f"Autonomy guardrail cooldown is active for "
+                    f"{_int(guardrail.get('cooldown_remaining_ticks'))} tick(s)."
+                ),
+            )
+        )
+    halted_reason = str(reactor.get("halted_reason", "")).strip()
+    if halted_reason:
+        evidence.append(
+            _evidence_row(
+                kind="reactor",
+                severity="high" if "budget" in halted_reason else "medium",
+                detail=f"Latest autonomy tick halted on {halted_reason}.",
+            )
+        )
+    total_executions = _int(budget.get("total_executions"))
+    top_action = budget.get("top_action", {}) if isinstance(budget.get("top_action"), dict) else {}
+    if total_executions > 0:
+        top_label = str(top_action.get("kind", "")).strip()
+        top_count = _int(top_action.get("count"))
+        detail = f"Away-safe budget usage recorded {total_executions} action(s) today."
+        if top_label:
+            detail += f" Top action: {top_label} ({top_count})."
+        evidence.append(_evidence_row(kind="budget", severity="low", detail=detail))
+
     next_label = str(next_action.get("label", "")).strip()
     next_reason = str(next_action.get("reason", "")).strip()
     if next_label:
@@ -239,6 +275,7 @@ def _recommendations(
     trust: str,
     next_action: dict[str, Any],
     handback: dict[str, Any],
+    autonomy: dict[str, Any],
 ) -> list[str]:
     rows: list[str] = []
     if approvals_pending > 0:
@@ -247,6 +284,10 @@ def _recommendations(
         rows.append("Inspect the incident posture before advancing the mission further.")
     if str(handback.get("summary", "")).strip():
         rows.append("Read the latest handback summary before treating the shift as complete.")
+    guardrail = autonomy.get("guardrail", {}) if isinstance(autonomy.get("guardrail"), dict) else {}
+    reactor = autonomy.get("reactor", {}) if isinstance(autonomy.get("reactor"), dict) else {}
+    if bool(guardrail.get("cooldown_active")) or str(reactor.get("halted_reason", "")).strip():
+        rows.append("Inspect the autonomy budget and guardrail posture before resuming Away work.")
     next_label = str(next_action.get("label", "")).strip()
     if next_label:
         rows.append(f"Resume with {next_label}.")
@@ -264,6 +305,8 @@ def _build_controls(
     current_work: dict[str, Any],
     approvals_pending: int,
     incidents_open: int,
+    autonomy: dict[str, Any],
+    actions: dict[str, object],
 ) -> dict[str, dict[str, Any]]:
     focus_action = current_work.get("focus_action", {}) if isinstance(current_work.get("focus_action"), dict) else {}
     focus_state = str(focus_action.get("state", "")).strip().lower()
@@ -278,6 +321,19 @@ def _build_controls(
         resume_label = str(focus_action.get("label", "")).strip() or "Resume Next Move"
 
     resume_summary = str(focus_action.get("reason", "")).strip() or "No resumable next move is available."
+    action_chips = actions.get("action_chips", []) if isinstance(actions.get("action_chips"), list) else []
+    reset_chip = next(
+        (
+            chip
+            for chip in action_chips
+            if isinstance(chip, dict) and str(chip.get("kind", "")).strip() == "autonomy.reactor.guardrail.reset"
+        ),
+        None,
+    )
+    reset_execute_via = reset_chip.get("execute_via", {}) if isinstance(reset_chip, dict) and isinstance(reset_chip.get("execute_via"), dict) else {}
+    reset_payload = reset_execute_via.get("payload", {}) if isinstance(reset_execute_via.get("payload"), dict) else {}
+    reset_args = reset_payload.get("args", {}) if isinstance(reset_payload.get("args"), dict) else {}
+    guardrail = autonomy.get("guardrail", {}) if isinstance(autonomy.get("guardrail"), dict) else {}
     return {
         "resume": {
             "kind": "shift.resume",
@@ -320,6 +376,17 @@ def _build_controls(
             "enabled": True,
             "target_surface": "current_work",
         },
+        "guardrail_reset": {
+            "kind": "shift.guardrail_reset",
+            "label": str((reset_chip or {}).get("label", "")).strip() or "Reset Guardrail",
+            "summary": str((reset_chip or {}).get("policy_reason", "")).strip()
+            or str((reset_chip or {}).get("reason", "")).strip()
+            or "Reset the autonomy guardrail when cooldown recovery is explicitly allowed.",
+            "control_type": "execute",
+            "enabled": bool((reset_chip or {}).get("enabled")) and bool(guardrail.get("cooldown_active")),
+            "execute_kind": str((reset_chip or {}).get("kind", "")).strip(),
+            "args": reset_args,
+        },
     }
 
 
@@ -350,6 +417,7 @@ def get_shift_report_view(
     last_run_id = str(last_run.get("run_id", "")).strip()
     handback_available = bool(takeover.get("handback_available"))
     handback = takeover.get("handback", {}) if isinstance(takeover.get("handback"), dict) else {}
+    autonomy = snapshot.get("autonomy", {}) if isinstance(snapshot.get("autonomy"), dict) else {}
     trust = _trust_posture(snapshot, handback)
     if current_work is None:
         current_work = get_current_work_view(snapshot=snapshot, actions=actions)
@@ -364,6 +432,12 @@ def get_shift_report_view(
         "medium" if mode == "away" else "low",
         "high" if approvals_pending > 0 else "low",
         str(incidents.get("highest_severity", "low")),
+        "high"
+        if isinstance(autonomy.get("guardrail"), dict) and bool(autonomy.get("guardrail", {}).get("cooldown_active"))
+        else "low",
+        "high"
+        if isinstance(autonomy.get("reactor"), dict) and str(autonomy.get("reactor", {}).get("halted_reason", "")).strip()
+        else "low",
         "high" if trust == "Uncertain" else "medium" if trust == "Likely" else "low",
         fallback="low",
     )
@@ -384,6 +458,7 @@ def get_shift_report_view(
         handback=handback,
         next_action=next_action,
         trust=trust,
+        autonomy=autonomy,
     )
     recommendations = _recommendations(
         state=state,
@@ -392,11 +467,14 @@ def get_shift_report_view(
         trust=trust,
         next_action=next_action,
         handback=handback,
+        autonomy=autonomy,
     )
     controls = _build_controls(
         current_work=current_work,
         approvals_pending=approvals_pending,
         incidents_open=incidents_open,
+        autonomy=autonomy,
+        actions=actions,
     )
 
     return {
@@ -413,6 +491,14 @@ def get_shift_report_view(
             approvals_pending=approvals_pending,
             incidents_open=incidents_open,
             trust=trust,
+            autonomy_label=(
+                f"cooldown {_int(autonomy.get('guardrail', {}).get('cooldown_remaining_ticks'))} tick(s)"
+                if isinstance(autonomy.get("guardrail"), dict) and bool(autonomy.get("guardrail", {}).get("cooldown_active"))
+                else f"halted {str(autonomy.get('reactor', {}).get('halted_reason', '')).strip()}"
+                if isinstance(autonomy.get("reactor"), dict)
+                and str(autonomy.get("reactor", {}).get("halted_reason", "")).strip()
+                else "budget clear"
+            ),
         ),
         "evidence": evidence,
         "recommendations": recommendations,
@@ -430,6 +516,7 @@ def get_shift_report_view(
                 else {},
             },
             "latest_run": last_run,
+            "autonomy": autonomy,
             "approvals": {
                 "pending_count": approvals_pending,
                 "pending": approvals.get("pending", []) if isinstance(approvals.get("pending"), list) else [],

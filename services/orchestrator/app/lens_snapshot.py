@@ -367,6 +367,69 @@ def _materialize_fabric(workspace_root: Path) -> dict[str, Any]:
     return summarize_fabric(fs, refresh=False)
 
 
+def _materialize_autonomy(workspace_root: Path) -> dict[str, Any]:
+    budget_raw = _read_json(workspace_root / "autonomy" / "action_budget_state.json", {})
+    if not isinstance(budget_raw, dict):
+        budget_raw = {}
+    budget_counts_raw = budget_raw.get("counts", {}) if isinstance(budget_raw.get("counts"), dict) else {}
+    budget_counts: dict[str, int] = {}
+    for key, value in budget_counts_raw.items():
+        normalized_key = str(key).strip().lower()
+        if not normalized_key:
+            continue
+        try:
+            budget_counts[normalized_key] = max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    top_action = max(
+        budget_counts.items(),
+        key=lambda item: (int(item[1]), str(item[0])),
+        default=None,
+    )
+
+    last_tick = _read_json(workspace_root / "autonomy" / "last_tick.json", {})
+    if not isinstance(last_tick, dict):
+        last_tick = {}
+    collect = last_tick.get("collect", {}) if isinstance(last_tick.get("collect"), dict) else {}
+    dispatch = last_tick.get("dispatch", {}) if isinstance(last_tick.get("dispatch"), dict) else {}
+    halted_reason = str(dispatch.get("halted_reason", "")).strip()
+
+    guardrail_raw = _read_json(workspace_root / "autonomy" / "reactor_guardrail_state.json", {})
+    if not isinstance(guardrail_raw, dict):
+        guardrail_raw = {}
+    cooldown_remaining = int(guardrail_raw.get("cooldown_remaining_ticks", 0) or 0)
+
+    return {
+        "budget": {
+            "date": str(budget_raw.get("date", "")).strip(),
+            "counts": budget_counts,
+            "updated_at": budget_raw.get("updated_at"),
+            "total_executions": sum(int(value) for value in budget_counts.values()),
+            "top_action": (
+                {"kind": str(top_action[0]), "count": int(top_action[1])} if top_action is not None else None
+            ),
+        },
+        "reactor": {
+            "last_tick_ts": last_tick.get("ts"),
+            "run_id": str(last_tick.get("run_id", "")).strip(),
+            "halted_reason": halted_reason,
+            "budget_halted": halted_reason in {"dispatch_action_budget_exceeded", "dispatch_runtime_budget_exceeded"},
+            "collect_queued_count": int(collect.get("queued_count", 0) or 0),
+            "collect_seen_count": int(collect.get("seen_count", 0) or 0),
+            "dispatch_failed_count": int(dispatch.get("failed_count", 0) or 0),
+            "dispatch_retried_count": int(dispatch.get("retried_count", 0) or 0),
+            "dispatch_released_count": int(dispatch.get("released_count", 0) or 0),
+        },
+        "guardrail": {
+            "cooldown_active": cooldown_remaining > 0,
+            "cooldown_remaining_ticks": cooldown_remaining,
+            "escalations_count": int(guardrail_raw.get("escalations_count", 0) or 0),
+            "last_reason": str(guardrail_raw.get("last_reason", "")).strip(),
+            "updated_at": guardrail_raw.get("updated_at"),
+        },
+    }
+
+
 def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     resolved_workspace = (workspace_root or get_workspace_root()).resolve()
     control = _control_state(resolved_workspace)
@@ -377,6 +440,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     incidents = _materialize_incidents(resolved_workspace)
     security = _materialize_security(resolved_workspace)
     runs = _materialize_runs(resolved_workspace)
+    autonomy = _materialize_autonomy(resolved_workspace)
     apprenticeship = _materialize_apprenticeship(resolved_workspace)
     fabric = _materialize_fabric(resolved_workspace)
     current_work = build_current_work(
@@ -408,6 +472,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "incidents": incidents,
         "security": security,
         "runs": runs,
+        "autonomy": autonomy,
         "apprenticeship": apprenticeship,
         "fabric": fabric,
         "current_work": current_work,

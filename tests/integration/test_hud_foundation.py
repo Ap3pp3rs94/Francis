@@ -467,6 +467,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert any(item["kind"] == "mission" for item in body["shift_report"]["evidence"])
     assert body["shift_report"]["recommendations"]
     assert body["shift_report"]["controls"]["current_work"]["target_surface"] == "current_work"
+    assert body["snapshot"]["autonomy"]["guardrail"]["cooldown_active"] is False
     assert body["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
@@ -949,6 +950,27 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
                     "summary": "Away validation completed.",
                 },
             },
+            "autonomy": {
+                "budget": {
+                    "date": "2026-03-11",
+                    "counts": {"worker.cycle": 4},
+                    "updated_at": "2026-03-11T09:00:00+00:00",
+                    "total_executions": 4,
+                    "top_action": {"kind": "worker.cycle", "count": 4},
+                },
+                "reactor": {
+                    "halted_reason": "dispatch_runtime_budget_exceeded",
+                    "budget_halted": True,
+                    "collect_queued_count": 2,
+                    "dispatch_retried_count": 1,
+                },
+                "guardrail": {
+                    "cooldown_active": True,
+                    "cooldown_remaining_ticks": 2,
+                    "escalations_count": 3,
+                    "last_reason": "retry_pressure_cooldown",
+                },
+            },
             "fabric": {
                 "calibration": {
                     "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
@@ -970,6 +992,12 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
                     "enabled": True,
                     "risk_tier": "medium",
                     "execute_via": {"payload": {"args": {"lane": "fast", "approval_id": "approval-tests"}}},
+                },
+                {
+                    "kind": "autonomy.reactor.guardrail.reset",
+                    "label": "Reset Guardrail",
+                    "enabled": True,
+                    "risk_tier": "high",
                 }
             ],
             "blocked_actions": [],
@@ -986,10 +1014,14 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
     assert payload["detail"]["handback"]["summary"] == "Validation completed and one approval was left queued."
     assert payload["detail"]["handback"]["trust"] == "Likely"
     assert payload["recommendations"][0] == "Review the pending approvals before resuming execution."
+    assert any(str(item.get("kind", "")) == "guardrail" for item in payload["evidence"])
+    assert payload["detail"]["autonomy"]["guardrail"]["cooldown_active"] is True
     assert payload["controls"]["resume"]["label"] == "Execute Next Move"
     assert payload["controls"]["resume"]["execute_kind"] == "repo.tests"
     assert payload["controls"]["approvals"]["target_surface"] == "approval_queue"
     assert payload["controls"]["incidents"]["target_surface"] == "incidents"
+    assert payload["controls"]["guardrail_reset"]["enabled"] is True
+    assert payload["controls"]["guardrail_reset"]["execute_kind"] == "autonomy.reactor.guardrail.reset"
 
 
 def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:
