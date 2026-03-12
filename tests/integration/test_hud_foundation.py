@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import app as orchestrator_app
 import services.hud.app.main as hud_main
 import services.hud.app.views.approval_queue as approval_queue_view
+import services.hud.app.views.action_deck as action_deck_view
 import services.hud.app.views.blocked_actions as blocked_actions_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
@@ -170,6 +171,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
+    assert body["action_deck"]["surface"] == "action_deck"
     assert body["execution_journal"]["surface"] == "execution_journal"
     assert body["execution_feed"]["surface"] == "execution_feed"
     assert body["missions"]["surface"] == "missions"
@@ -186,6 +188,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "approval_queue",
         "execution_journal",
         "execution_feed",
+        "action_deck",
         "dashboard",
         "missions",
         "incidents",
@@ -232,6 +235,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(hud_main, "build_lens_snapshot", lambda: snapshot)
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_feed_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -272,6 +276,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["blocked_actions"]["surface"] == "blocked_actions"
+    assert payload["action_deck"]["surface"] == "action_deck"
     assert payload["execution_journal"]["surface"] == "execution_journal"
     assert payload["execution_feed"]["surface"] == "execution_feed"
     assert payload["dashboard"]["objective"]["label"] == "Shared snapshot"
@@ -547,6 +552,18 @@ def test_hud_approval_queue_route_returns_pending_requests() -> None:
     assert "items" in payload
 
 
+def test_hud_action_deck_route_returns_structured_surface() -> None:
+    response = client.get("/api/action-deck")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "action_deck"
+    assert "summary" in payload
+    assert "blocked_summary" in payload
+    assert "focus_action_kind" in payload
+    assert "items" in payload
+
+
 def test_hud_blocked_actions_route_returns_structured_surface() -> None:
     response = client.get("/api/blocked-actions")
 
@@ -714,6 +731,47 @@ def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:
     assert payload["items"][0]["detail_state"] == "current"
     assert payload["items"][0]["audit"]["kind"] == "repo.tests"
     assert payload["items"][0]["audit"]["detail_state"] == "current"
+
+
+def test_hud_action_deck_view_exposes_backend_controls(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "next_best_action": {"kind": "repo.tests"},
+            "current_work": {
+                "focus_action": {
+                    "kind": "repo.tests",
+                    "execute_kind": "repo.tests.request_approval",
+                }
+            },
+        }
+
+    def _actions(max_actions: int = 8) -> dict[str, object]:
+        assert max_actions == 8
+        return {
+            "action_chips": [
+                {"kind": "repo.status", "label": "Repo Status", "enabled": True, "risk_tier": "low"},
+                {
+                    "kind": "repo.tests.request_approval",
+                    "label": "Request Fast Checks Approval",
+                    "enabled": True,
+                    "risk_tier": "medium",
+                    "execute_via": {"payload": {"args": {"lane": "fast"}}},
+                },
+            ]
+        }
+
+    monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(action_deck_view, "get_lens_actions", _actions)
+
+    payload = action_deck_view.get_action_deck_view(
+        blocked_actions={"count": 0, "summary": "No blocked actions surfaced"},
+    )
+
+    assert payload["focus_action_kind"] == "repo.tests"
+    assert payload["items"][1]["kind"] == "repo.tests"
+    assert payload["items"][1]["execute_kind"] == "repo.tests.request_approval"
+    assert payload["items"][1]["state"] == "current"
+    assert payload["items"][1]["args"]["lane"] == "fast"
 
 
 def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Path) -> None:

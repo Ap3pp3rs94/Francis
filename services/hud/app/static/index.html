@@ -1092,6 +1092,7 @@
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
       let currentSurfaceDigests = {};
+      let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
       let currentInboxSurface = { messages: [] };
       let currentRunsSurface = { run_groups: [] };
@@ -2241,6 +2242,7 @@
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
+        currentActionDeck = payload.action_deck || { items: [] };
         currentInboxSurface = payload.inbox || { messages: [] };
         currentRunsSurface = payload.runs || { run_groups: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
@@ -2320,8 +2322,8 @@
         if (shouldRender("runs")) {
           renderRunsSurface(currentRunsSurface);
         }
-        if (shouldRender("actions") || shouldRender("blocked_actions")) {
-          renderActions(currentActions, currentBlockedActions);
+        if (shouldRender("action_deck") || shouldRender("blocked_actions") || shouldRender("actions")) {
+          renderActions(currentActionDeck, currentBlockedActions);
         }
         if (shouldRender("fabric") || shouldRender("snapshot")) {
           renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
@@ -2330,7 +2332,11 @@
         if (shouldRender("voice")) {
           renderVoiceBriefing(payload.voice || {}, { source: "stream" });
         }
-        syncUsageFocusPanels(payload.snapshot || {}, currentActions, currentApprovalQueue, currentExecutionJournal);
+        const focusSyncKeys = ["snapshot", "current_work", "actions", "approval_queue", "execution_journal", "execution_feed"];
+        const focusSyncChanged = focusSyncKeys.some((key) => shouldRender(key));
+        if (focusSyncChanged) {
+          syncUsageFocusPanels(payload.snapshot || {}, currentActions, currentApprovalQueue, currentExecutionJournal);
+        }
         currentSurfaceDigests = nextSurfaceDigests;
         document.body.dataset.boot = "ready";
       }
@@ -3898,52 +3904,46 @@
         document.getElementById("blocked-detail").textContent = formatJson(row.audit || row);
       }
 
-      function renderActions(actions, blockedSurface = null) {
-        const chips = Array.isArray(actions.action_chips) ? actions.action_chips.slice(0, 8) : [];
+      function renderActions(actionDeck, blockedSurface = null) {
+        const items = Array.isArray(actionDeck?.items) ? actionDeck.items.slice(0, 8) : [];
         const blockedRows = blockedSurface && Array.isArray(blockedSurface.items)
           ? blockedSurface.items
-          : Array.isArray(actions.blocked_actions)
-            ? actions.blocked_actions
-            : [];
+          : [];
         const blocked = blockedRows.slice(0, 8);
         const actionGrid = document.getElementById("action-grid");
         const blockedList = document.getElementById("blocked-actions");
-        document.getElementById("action-summary").textContent = `${chips.length} live action chip(s)`;
-        document.getElementById("blocked-summary").textContent = blockedSurface?.summary
-          ? String(blockedSurface.summary)
-          : blocked.length
-            ? `${blocked.length} currently blocked`
-            : "No blocked actions surfaced";
+        document.getElementById("action-summary").textContent = String(actionDeck?.summary || `${items.length} live action chip(s)`);
+        document.getElementById("blocked-summary").textContent = String(
+          actionDeck?.blocked_summary ||
+            blockedSurface?.summary ||
+            (blocked.length ? `${blocked.length} currently blocked` : "No blocked actions surfaced"),
+        );
 
-        actionGrid.innerHTML = chips.length
-          ? chips
-              .map((chip) => {
-                const enabled = Boolean(chip.enabled);
-                const primaryClass = String(chip.kind || "").includes("panic") ? "btn-danger" : "btn-primary";
-                const riskClass = `risk-${escapeHtml(chip.risk_tier || "low")}`;
-                const primaryReason = chip.policy_reason || chip.reason || "No operator note provided.";
-                const guidance = chip.requires_confirmation
-                  ? "This action requires explicit confirmation."
-                  : "This action can execute immediately.";
-                const primaryLabel = String(chip.kind || "").includes("request_approval")
-                  ? "Request"
-                  : enabled
-                    ? "Execute"
-                    : "Blocked";
+        actionGrid.innerHTML = items.length
+          ? items
+              .map((item) => {
+                const enabled = Boolean(item.enabled);
+                const executeKind = String(item.execute_kind || item.kind || "").trim();
+                const primaryClass = executeKind.includes("panic") ? "btn-danger" : "btn-primary";
+                const riskClass = `risk-${escapeHtml(item.risk_tier || "low")}`;
+                const primaryReason = item.detail_summary || "No operator note provided.";
+                const guidance = item.guidance || "No execution guidance is available.";
+                const primaryLabel = item.primary_label || (enabled ? "Execute" : "Blocked");
+                const encodedArgs = encodeURIComponent(JSON.stringify(item.args || {}));
                 return `
-                  <article class="action-card">
+                  <article class="action-card" data-state="${escapeHtml(item.state || "ready")}">
                     <div class="action-top">
-                      <div class="action-label">${escapeHtml(chip.label || chip.kind)}</div>
+                      <div class="action-label">${escapeHtml(item.label || item.kind)}</div>
                       <div class="badge-row">
-                        <span class="badge ${riskClass}">${escapeHtml(chip.risk_tier || "low")}</span>
-                        <span class="badge ${enabled ? riskClass : "disabled"}">${escapeHtml(chip.trust_badge || (enabled ? "Likely" : "Blocked"))}</span>
+                        <span class="badge ${riskClass}">${escapeHtml(item.risk_tier || "low")}</span>
+                        <span class="badge ${enabled ? riskClass : "disabled"}">${escapeHtml(item.trust_badge || (enabled ? "Likely" : "Blocked"))}</span>
                       </div>
                     </div>
                     <p class="action-copy">${escapeHtml(primaryReason)}</p>
                     <p class="action-copy meta">${escapeHtml(guidance)}</p>
                     <div class="action-buttons">
-                      <button class="btn-secondary" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', true)">Preview</button>
-                      <button class="${primaryClass}" ${enabled ? "" : "disabled"} onclick="executeAction('${escapeHtml(chip.kind)}', false)">${escapeHtml(primaryLabel)}</button>
+                      <button class="btn-secondary" ${enabled ? "" : "disabled"} onclick="triggerDeckAction('${escapeHtml(executeKind)}', '${escapeHtml(encodedArgs)}', true)">Preview</button>
+                      <button class="${primaryClass}" ${enabled ? "" : "disabled"} onclick="triggerDeckAction('${escapeHtml(executeKind)}', '${escapeHtml(encodedArgs)}', false)">${escapeHtml(primaryLabel)}</button>
                     </div>
                   </article>
                 `;
@@ -4190,6 +4190,18 @@
 
       async function executeAction(kind, dryRun) {
         await executeActionWithArgs(kind, {}, dryRun);
+      }
+
+      async function triggerDeckAction(kind, encodedArgs, dryRun) {
+        let parsedArgs = {};
+        if (encodedArgs) {
+          try {
+            parsedArgs = JSON.parse(decodeURIComponent(String(encodedArgs)));
+          } catch (_error) {
+            parsedArgs = {};
+          }
+        }
+        await executeActionWithArgs(kind, parsedArgs, dryRun);
       }
 
       async function previewFocusAction() {

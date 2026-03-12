@@ -19,6 +19,7 @@ from services.hud.app.orb import get_orb_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
+from services.hud.app.views.action_deck import get_action_deck_view
 from services.hud.app.views.blocked_actions import get_blocked_actions_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
@@ -73,6 +74,11 @@ def _build_hud_payload(
     current_work = get_current_work_view(snapshot=snapshot_payload, actions=actions_payload)
     approval_queue = get_approval_queue_view(snapshot=snapshot_payload, actions=actions_payload)
     blocked_actions = get_blocked_actions_view(snapshot=snapshot_payload, actions=actions_payload)
+    action_deck = get_action_deck_view(
+        snapshot=snapshot_payload,
+        actions=actions_payload,
+        blocked_actions=blocked_actions,
+    )
     execution_journal = get_execution_journal_view(snapshot=snapshot_payload)
     voice = build_operator_presence(
         mode=str(snapshot_payload.get("control", {}).get("mode", "assist")),
@@ -97,6 +103,7 @@ def _build_hud_payload(
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
+        "action_deck": action_deck,
         "execution_journal": execution_journal,
         "execution_feed": get_execution_feed_view(
             snapshot=snapshot_payload,
@@ -136,6 +143,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "repo_drilldown",
         "approval_queue",
         "blocked_actions",
+        "action_deck",
         "execution_journal",
         "execution_feed",
         "dashboard",
@@ -184,6 +192,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/blocked-actions")
     def blocked_actions() -> dict[str, object]:
         return get_blocked_actions_view()
+
+    @app.get("/api/action-deck")
+    def action_deck() -> dict[str, object]:
+        return get_action_deck_view()
 
     @app.get("/api/repo-drilldown")
     def repo_drilldown() -> dict[str, object]:
