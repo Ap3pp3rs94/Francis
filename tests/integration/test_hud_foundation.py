@@ -1512,8 +1512,20 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
                     "last_seen_at": "2026-03-11T12:05:00+00:00",
                     "last_sync_at": "2026-03-11T12:05:00+00:00",
                     "last_sync_summary": "Primary workspace initialized.",
+                    "status_reason": "local_authority",
+                    "heartbeat_age_seconds": 0,
                     "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
                     "capabilities": {"remote_approvals": True, "away_continuity": True, "receipt_summary": True},
+                    "continuity": {
+                        "summary": "Primary continuity is current.",
+                        "pending_approvals": 0,
+                        "active_missions": 1,
+                        "latest_run_id": "run-local",
+                        "latest_run_summary": "Primary summary.",
+                        "handback_summary": "",
+                        "fabric_trust": "Confirmed",
+                        "updated_at": "2026-03-11T12:05:00+00:00",
+                    },
                 },
                 "paired_nodes": [
                     {
@@ -1527,8 +1539,20 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
                         "last_seen_at": "2026-03-11T12:02:00+00:00",
                         "last_sync_at": "2026-03-11T12:02:00+00:00",
                         "last_sync_summary": "Home node missed its last sync window.",
+                        "status_reason": "heartbeat_expired",
+                        "heartbeat_age_seconds": 1800,
                         "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
                         "capabilities": {"remote_approvals": True, "away_continuity": True, "receipt_summary": True},
+                        "continuity": {
+                            "summary": "One approval is waiting remotely.",
+                            "pending_approvals": 1,
+                            "active_missions": 0,
+                            "latest_run_id": "run-home",
+                            "latest_run_summary": "Remote checks stalled.",
+                            "handback_summary": "",
+                            "fabric_trust": "Likely",
+                            "updated_at": "2026-03-11T12:02:00+00:00",
+                        },
                     },
                     {
                         "node_id": "node-phone",
@@ -1541,8 +1565,20 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
                         "last_seen_at": "2026-03-11T12:04:00+00:00",
                         "last_sync_at": "2026-03-11T12:04:00+00:00",
                         "last_sync_summary": "Phone node is available for remote approvals.",
+                        "status_reason": "heartbeat_current",
+                        "heartbeat_age_seconds": 60,
                         "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
                         "capabilities": {"remote_approvals": True, "away_continuity": False, "receipt_summary": True},
+                        "continuity": {
+                            "summary": "Phone node is carrying the latest run summary.",
+                            "pending_approvals": 2,
+                            "active_missions": 1,
+                            "latest_run_id": "run-phone",
+                            "latest_run_summary": "Remote approval-ready.",
+                            "handback_summary": "One approval remains queued.",
+                            "fabric_trust": "Confirmed",
+                            "updated_at": "2026-03-11T12:04:00+00:00",
+                        },
                     },
                 ],
             }
@@ -1558,13 +1594,17 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
     focused = next(row for row in payload["nodes"] if row["node_id"] == "node-home")
     assert focused["detail_state"] == "current"
     assert focused["audit"]["status"] == "stale"
+    assert focused["audit"]["status_reason"] == "heartbeat_expired"
+    assert focused["audit"]["continuity"]["pending_approvals"] == 1
     assert focused["audit"]["capabilities"]["remote_approvals"] is True
+    assert focused["controls"]["sync"]["enabled"] is True
     assert focused["controls"]["revoke"]["enabled"] is True
     assert focused["audit"]["remote_approval"]["availability"] == "blocked"
     local = next(row for row in payload["nodes"] if row["node_id"] == "node-local")
     assert local["controls"]["revoke"]["enabled"] is False
     phone = next(row for row in payload["nodes"] if row["node_id"] == "node-phone")
     assert phone["audit"]["remote_approval"]["pending_count"] == 2
+    assert phone["audit"]["continuity"]["latest_run_id"] == "run-phone"
     assert phone["controls"]["approve_top"]["enabled"] is True
     assert phone["controls"]["approve_top"]["approval_id"] == "approval-remote-1"
 

@@ -70,12 +70,15 @@ def _row_summary(node: dict[str, Any], remote_approval: dict[str, Any]) -> str:
         else f"{label} is a {role} node with {trust} trust and {status} federation status."
     )
     remote_summary = str(remote_approval.get("summary", "")).strip()
-    return f"{base} {remote_summary}".strip()
+    continuity = node.get("continuity", {}) if isinstance(node.get("continuity"), dict) else {}
+    continuity_summary = str(continuity.get("summary", "")).strip()
+    return f"{base} {remote_summary} {continuity_summary}".strip()
 
 
 def _detail_cards(node: dict[str, Any], remote_approval: dict[str, Any]) -> list[dict[str, str]]:
     scopes = node.get("scopes", {}) if isinstance(node.get("scopes"), dict) else {}
     capabilities = node.get("capabilities", {}) if isinstance(node.get("capabilities"), dict) else {}
+    continuity = node.get("continuity", {}) if isinstance(node.get("continuity"), dict) else {}
     status = str(node.get("status", "active")).strip().lower() or "active"
     pending_count = int(remote_approval.get("pending_count", 0) or 0)
     return [
@@ -97,6 +100,15 @@ def _detail_cards(node: dict[str, Any], remote_approval: dict[str, Any]) -> list
         },
         {"label": "Seen", "value": str(node.get("last_seen_at", "")).strip() or "never", "tone": "low"},
         {
+            "label": "Heartbeat Age",
+            "value": (
+                f"{int(node.get('heartbeat_age_seconds', 0) or 0)}s"
+                if node.get("heartbeat_age_seconds") is not None
+                else "unknown"
+            ),
+            "tone": "high" if status == "stale" else "low",
+        },
+        {
             "label": "Remote Approvals",
             "value": str(remote_approval.get("availability", "blocked")).strip() or "blocked",
             "tone": (
@@ -109,6 +121,16 @@ def _detail_cards(node: dict[str, Any], remote_approval: dict[str, Any]) -> list
             "label": "Pending",
             "value": str(pending_count),
             "tone": "high" if pending_count else "low",
+        },
+        {
+            "label": "Continuity",
+            "value": str(continuity.get("latest_run_id", "")).strip() or "unreported",
+            "tone": "medium" if str(continuity.get("latest_run_id", "")).strip() else "low",
+        },
+        {
+            "label": "Missions",
+            "value": str(int(continuity.get("active_missions", 0) or 0)),
+            "tone": "medium" if int(continuity.get("active_missions", 0) or 0) else "low",
         },
         {
             "label": "Scope",
@@ -127,10 +149,12 @@ def _audit(node: dict[str, Any], detail_state: str, remote_approval: dict[str, A
         "role": str(node.get("role", "")).strip(),
         "trust_level": str(node.get("trust_level", "")).strip(),
         "status": str(node.get("status", "")).strip(),
+        "status_reason": str(node.get("status_reason", "")).strip(),
         "detail_state": detail_state,
         "local": bool(node.get("local", False)),
         "paired_at": str(node.get("paired_at", "")).strip(),
         "last_seen_at": str(node.get("last_seen_at", "")).strip(),
+        "heartbeat_age_seconds": node.get("heartbeat_age_seconds"),
         "last_sync_at": str(node.get("last_sync_at", "")).strip(),
         "last_sync_summary": str(node.get("last_sync_summary", "")).strip(),
         "scopes": {
@@ -143,6 +167,7 @@ def _audit(node: dict[str, Any], detail_state: str, remote_approval: dict[str, A
             "away_continuity": bool(capabilities.get("away_continuity", False)),
             "receipt_summary": bool(capabilities.get("receipt_summary", False)),
         },
+        "continuity": node.get("continuity", {}) if isinstance(node.get("continuity"), dict) else {},
         "remote_approval": remote_approval,
         "revoked_at": node.get("revoked_at"),
         "revocation_reason": str(node.get("revocation_reason", "")).strip(),
@@ -162,6 +187,17 @@ def _controls(node: dict[str, Any], remote_approval: dict[str, Any]) -> dict[str
         and bool(top_pending_id)
     )
     return {
+        "sync": {
+            "label": "Sync Continuity",
+            "enabled": bool(node_id) and not local and status != "revoked",
+            "kind": "federation.sync",
+            "summary": (
+                "Record a fresh continuity envelope for this paired node."
+                if bool(node_id) and not local and status != "revoked"
+                else "Local or revoked nodes do not accept paired sync updates."
+            ),
+            "node_id": node_id,
+        },
         "revoke": {
             "label": "Revoke Node",
             "enabled": bool(node_id) and not local and status != "revoked",

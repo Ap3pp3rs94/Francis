@@ -64,6 +64,11 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return rows
 
 
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _restore_text(path: Path, content: str, existed: bool) -> None:
     if existed:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,6 +102,82 @@ def test_federation_state_initializes_local_node() -> None:
         assert payload["local_node"]["node_id"]
         assert payload["local_node"]["local"] is True
         assert "Local node" in payload["summary"]
+    finally:
+        _restore_text(topology_path, topology_before, topology_before_exists)
+
+
+def test_federation_state_reconciles_stale_nodes_from_heartbeat_age() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    topology_path = workspace / "federation" / "topology.json"
+    topology_before_exists = topology_path.exists()
+    topology_before = _read_text(topology_path)
+
+    try:
+        _write_json(
+            topology_path,
+            {
+                "version": 1,
+                "updated_at": "2026-03-12T00:00:00+00:00",
+                "local_node": {
+                    "node_id": "node-local",
+                    "label": "Primary Node",
+                    "role": "primary",
+                    "trust_level": "high",
+                    "status": "active",
+                    "local": True,
+                    "paired_by": "system",
+                    "paired_at": "2026-03-12T00:00:00+00:00",
+                    "last_seen_at": "2026-03-12T00:00:00+00:00",
+                    "last_sync_at": "2026-03-12T00:00:00+00:00",
+                    "last_sync_summary": "Primary workspace initialized.",
+                    "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
+                    "capabilities": {"remote_approvals": True, "away_continuity": True, "receipt_summary": True},
+                },
+                "paired_nodes": [
+                    {
+                        "node_id": "node-home",
+                        "label": "Home Node",
+                        "role": "always_on",
+                        "trust_level": "scoped",
+                        "status": "active",
+                        "local": False,
+                        "paired_by": "architect",
+                        "paired_at": "2026-03-10T00:00:00+00:00",
+                        "last_seen_at": "2026-03-10T00:00:00+00:00",
+                        "last_sync_at": "2026-03-10T00:00:00+00:00",
+                        "last_sync_summary": "Home node has not checked in recently.",
+                        "scopes": {"repos": ["repo"], "workspaces": ["workspace"], "apps": ["control", "approvals", "lens"]},
+                        "capabilities": {"remote_approvals": True, "away_continuity": True, "receipt_summary": True},
+                        "continuity": {
+                            "summary": "No recent continuity update.",
+                            "pending_approvals": 1,
+                            "active_missions": 0,
+                            "latest_run_id": "run-old",
+                            "latest_run_summary": "Previous sync.",
+                            "handback_summary": "",
+                            "fabric_trust": "Likely",
+                            "updated_at": "2026-03-10T00:00:00+00:00",
+                        },
+                    }
+                ],
+            },
+        )
+
+        with TestClient(app) as client:
+            original_scope = _get_scope(client)
+            try:
+                _set_scope(client, _enable_apps(original_scope, ["federation"]))
+                response = client.get("/federation/state")
+            finally:
+                _set_scope(client, original_scope)
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["counts"]["stale"] == 1
+        paired = next(row for row in payload["paired_nodes"] if str(row.get("node_id", "")).strip() == "node-home")
+        assert paired["status"] == "stale"
+        assert paired["status_reason"] == "heartbeat_expired"
+        assert int(paired["heartbeat_age_seconds"]) > 900
     finally:
         _restore_text(topology_path, topology_before, topology_before_exists)
 
@@ -198,6 +279,94 @@ def test_federation_pair_heartbeat_and_revoke_flow() -> None:
         paired_node = next(row for row in topology["paired_nodes"] if row["node_id"] == node_id)
         assert paired_node["status"] == "revoked"
         assert paired_node["revocation_reason"] == "Trust narrowed after stale continuity."
+    finally:
+        _restore_text(topology_path, topology_before, topology_before_exists)
+        _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)
+        _restore_text(log_path, log_before, log_before_exists)
+        _restore_text(decisions_path, decisions_before, decisions_before_exists)
+
+
+def test_federation_sync_records_continuity_envelope() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    topology_path = workspace / "federation" / "topology.json"
+    run_ledger_path = workspace / "runs" / "run_ledger.jsonl"
+    log_path = workspace / "logs" / "francis.log.jsonl"
+    decisions_path = workspace / "journals" / "decisions.jsonl"
+    topology_before_exists = topology_path.exists()
+    topology_before = _read_text(topology_path)
+    run_ledger_before_exists = run_ledger_path.exists()
+    run_ledger_before = _read_text(run_ledger_path)
+    log_before_exists = log_path.exists()
+    log_before = _read_text(log_path)
+    decisions_before_exists = decisions_path.exists()
+    decisions_before = _read_text(decisions_path)
+
+    try:
+        with TestClient(app) as client:
+            original_mode = _get_mode(client)
+            original_scope = _get_scope(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                _set_scope(client, _enable_apps(original_scope, ["federation", "control", "approvals", "receipts", "lens"]))
+
+                pair = client.post(
+                    "/federation/pair",
+                    json={
+                        "label": "Home Node",
+                        "role": "always_on",
+                        "trust_level": "scoped",
+                        "apps": ["control", "approvals", "lens"],
+                        "remote_approvals": True,
+                        "away_continuity": True,
+                        "receipt_summary": True,
+                        "notes": "Always-on home node for away continuity.",
+                    },
+                )
+                assert pair.status_code == 200
+                node_id = str(pair.json()["node"]["node_id"]).strip()
+                assert node_id
+
+                sync = client.post(
+                    f"/federation/nodes/{node_id}/sync",
+                    json={
+                        "sync_summary": "Home node is carrying one approval and one active mission.",
+                        "pending_approvals": 1,
+                        "active_missions": 1,
+                        "latest_run_id": "run-home-1",
+                        "latest_run_summary": "Night validation completed.",
+                        "handback_summary": "One approval remains queued for operator review.",
+                        "fabric_trust": "Confirmed",
+                    },
+                )
+                assert sync.status_code == 200
+                sync_payload = sync.json()
+                assert sync_payload["node"]["status"] == "active"
+                continuity = sync_payload["node"]["continuity"]
+                assert continuity["pending_approvals"] == 1
+                assert continuity["active_missions"] == 1
+                assert continuity["latest_run_id"] == "run-home-1"
+                assert "one approval" in continuity["summary"].lower()
+            finally:
+                _set_scope(client, original_scope)
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
+
+        ledger_rows = _read_jsonl(run_ledger_path)
+        synced_receipt = next(
+            row for row in reversed(ledger_rows) if str(row.get("kind", "")).strip() == "federation.node.synced"
+        )
+        summary = synced_receipt.get("summary", {}) if isinstance(synced_receipt.get("summary"), dict) else {}
+        assert summary["pending_approvals"] == 1
+        assert summary["active_missions"] == 1
+        assert summary["latest_run_id"] == "run-home-1"
+
+        topology = json.loads(_read_text(topology_path))
+        paired_node = next(row for row in topology["paired_nodes"] if row["node_id"] == str(summary["target_node_id"]))
+        assert paired_node["continuity"]["latest_run_id"] == "run-home-1"
+        assert paired_node["continuity"]["active_missions"] == 1
     finally:
         _restore_text(topology_path, topology_before, topology_before_exists)
         _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)

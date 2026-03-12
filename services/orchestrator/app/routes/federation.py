@@ -21,10 +21,11 @@ from services.orchestrator.app.routes.control import (
     control_remote_approvals,
 )
 from services.orchestrator.app.federation_store import (
-    load_or_init_topology,
     heartbeat_node,
+    load_or_init_topology,
     pair_node,
     revoke_node,
+    sync_node,
 )
 
 router = APIRouter(tags=["federation"])
@@ -59,6 +60,19 @@ class FederationHeartbeatRequest(BaseModel):
 
 class FederationRevokeRequest(BaseModel):
     reason: str = ""
+
+
+class FederationSyncRequest(BaseModel):
+    sync_summary: str = ""
+    pending_approvals: int = Field(default=0, ge=0, le=1000)
+    active_missions: int = Field(default=0, ge=0, le=1000)
+    latest_run_id: str = ""
+    latest_run_summary: str = ""
+    handback_summary: str = ""
+    fabric_trust: str = ""
+    remote_approvals: bool | None = None
+    away_continuity: bool | None = None
+    receipt_summary: bool | None = None
 
 
 def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
@@ -312,6 +326,63 @@ def federation_revoke(node_id: str, request: Request, payload: FederationRevokeR
             "label": str(node.get("label", "")).strip(),
             "status": str(node.get("status", "")).strip(),
             "trust_level": str(node.get("trust_level", "")).strip(),
+        },
+    )
+    return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "node": node, "topology": topology}
+
+
+@router.post("/federation/nodes/{node_id}/sync")
+def federation_sync(node_id: str, request: Request, payload: FederationSyncRequest) -> dict[str, Any]:
+    _enforce_control("federation.write")
+    role = _enforce_rbac(request, "federation.write")
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
+    capability_patch = {
+        key: value
+        for key, value in {
+            "remote_approvals": payload.remote_approvals,
+            "away_continuity": payload.away_continuity,
+            "receipt_summary": payload.receipt_summary,
+        }.items()
+        if value is not None
+    }
+    try:
+        node = sync_node(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            node_id=str(node_id).strip(),
+            sync_summary=payload.sync_summary.strip(),
+            continuity={
+                "pending_approvals": payload.pending_approvals,
+                "active_missions": payload.active_missions,
+                "latest_run_id": payload.latest_run_id.strip(),
+                "latest_run_summary": payload.latest_run_summary.strip(),
+                "handback_summary": payload.handback_summary.strip(),
+                "fabric_trust": payload.fabric_trust.strip(),
+            },
+            capabilities=capability_patch or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
+    topology = _build_state_payload()
+    continuity = node.get("continuity", {}) if isinstance(node.get("continuity"), dict) else {}
+    _record_federation_receipt(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="federation.node.synced",
+        actor=role,
+        local_node_id=str(topology.get("local_node", {}).get("node_id", "")).strip(),
+        target_node_id=str(node.get("node_id", "")).strip(),
+        reason=str(continuity.get("summary", "")).strip() or "federation continuity sync",
+        summary={
+            "label": str(node.get("label", "")).strip(),
+            "status": str(node.get("status", "")).strip(),
+            "pending_approvals": int(continuity.get("pending_approvals", 0) or 0),
+            "active_missions": int(continuity.get("active_missions", 0) or 0),
+            "latest_run_id": str(continuity.get("latest_run_id", "")).strip(),
         },
     )
     return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "node": node, "topology": topology}

@@ -913,7 +913,9 @@
           </div>
           <div class="work-action-row" id="federation-detail-controls">
             <input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" />
+            <input class="chamber-input" type="text" id="federation-sync-summary" placeholder="Continuity sync summary" />
             <input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" />
+            <button class="btn-secondary" type="button" disabled>Sync Continuity</button>
             <button class="btn-secondary" type="button" disabled>Approve Top Remote Request</button>
             <button class="btn-secondary" type="button" disabled>Reject Top Remote Request</button>
             <button class="btn-secondary" type="button" disabled>Revoke Node</button>
@@ -4180,6 +4182,9 @@
         document.getElementById("federation-detail-summary").textContent =
           String(row.detail_summary || row.summary || "No federation detail is available.");
         renderDetailCards("federation-detail-cards", row.detail_cards, "Node");
+        const sync = row.controls && row.controls.sync && typeof row.controls.sync === "object"
+          ? row.controls.sync
+          : {};
         const revoke = row.controls && row.controls.revoke && typeof row.controls.revoke === "object"
           ? row.controls.revoke
           : {};
@@ -4191,7 +4196,9 @@
           : {};
         document.getElementById("federation-detail-controls").innerHTML = `
           <input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" value="${escapeHtml(String(revoke.enabled ? "Operator revoked node trust." : ""))}" />
+          <input class="chamber-input" type="text" id="federation-sync-summary" placeholder="Continuity sync summary" value="${escapeHtml(String(row.audit?.continuity?.summary || row.audit?.last_sync_summary || ""))}" />
           <input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" value="${escapeHtml(String(approveTop.enabled || rejectTop.enabled ? "Paired node decision from Lens." : ""))}" />
+          <button class="btn-secondary" type="button" ${sync.enabled ? "" : "disabled"} onclick="syncFederationNode()">${escapeHtml(String(sync.label || "Sync Continuity"))}</button>
           <button class="btn-secondary" type="button" ${approveTop.enabled ? "" : "disabled"} onclick="approveFederationTopRequest()">${escapeHtml(String(approveTop.label || "Approve Top Remote Request"))}</button>
           <button class="btn-secondary" type="button" ${rejectTop.enabled ? "" : "disabled"} onclick="rejectFederationTopRequest()">${escapeHtml(String(rejectTop.label || "Reject Top Remote Request"))}</button>
           <button class="btn-secondary" type="button" ${revoke.enabled ? "" : "disabled"} onclick="revokeFederationNode()">${escapeHtml(String(revoke.label || "Revoke Node"))}</button>
@@ -4263,7 +4270,7 @@
           document.getElementById("federation-detail-summary").textContent =
             "Node detail will render from the backend federation contract.";
           document.getElementById("federation-detail-controls").innerHTML =
-            `<input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" /><input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" /><button class="btn-secondary" type="button" disabled>Approve Top Remote Request</button><button class="btn-secondary" type="button" disabled>Reject Top Remote Request</button><button class="btn-secondary" type="button" disabled>Revoke Node</button>`;
+            `<input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" /><input class="chamber-input" type="text" id="federation-sync-summary" placeholder="Continuity sync summary" /><input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" /><button class="btn-secondary" type="button" disabled>Sync Continuity</button><button class="btn-secondary" type="button" disabled>Approve Top Remote Request</button><button class="btn-secondary" type="button" disabled>Reject Top Remote Request</button><button class="btn-secondary" type="button" disabled>Revoke Node</button>`;
           document.getElementById("federation-detail").textContent = formatJson(
             currentFederationSurface.detail && typeof currentFederationSurface.detail === "object"
               ? currentFederationSurface.detail
@@ -4319,6 +4326,38 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to revoke federation node."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function syncFederationNode() {
+        const focused = Array.isArray(currentFederationRows)
+          ? currentFederationRows.find((row) => String(row?.node_id || "").trim() === String(currentFederationFocusId || "").trim())
+          : null;
+        const nodeId = String(focused?.node_id || "").trim();
+        if (!nodeId) {
+          return;
+        }
+        const syncSummary = String(document.getElementById("federation-sync-summary")?.value || "").trim();
+        const continuity = focused?.audit?.continuity && typeof focused.audit.continuity === "object"
+          ? focused.audit.continuity
+          : {};
+        const response = await fetch(`/api/federation/nodes/${encodeURIComponent(nodeId)}/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sync_summary: syncSummary || "Paired node continuity refreshed from Lens.",
+            pending_approvals: Number(focused?.remote_approval?.pending_count || 0) || 0,
+            active_missions: Number(continuity.active_missions || 0) || 0,
+            latest_run_id: String(continuity.latest_run_id || "").trim(),
+            latest_run_summary: String(continuity.latest_run_summary || "").trim(),
+            handback_summary: String(continuity.handback_summary || "").trim(),
+            fabric_trust: String(continuity.fabric_trust || "").trim(),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to sync paired-node continuity."));
         }
         renderBootstrap(payload);
       }
