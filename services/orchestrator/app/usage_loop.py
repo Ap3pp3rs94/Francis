@@ -209,6 +209,73 @@ def build_telemetry_focus(workspace_root: Path, *, limit: int = 25) -> dict[str,
     }
 
 
+def _apprenticeship_focus(apprenticeship: dict[str, Any]) -> dict[str, Any]:
+    recent = apprenticeship.get("recent_sessions", []) if isinstance(apprenticeship.get("recent_sessions"), list) else []
+    review_ready = apprenticeship.get("review_ready", []) if isinstance(apprenticeship.get("review_ready"), list) else []
+
+    focus: dict[str, Any] | None = None
+    if review_ready and isinstance(review_ready[0], dict):
+        focus = review_ready[0]
+    else:
+        focus = next(
+            (
+                row
+                for row in recent
+                if isinstance(row, dict)
+                and str(row.get("status", "")).strip().lower() == "recording"
+                and int(row.get("step_count", 0) or 0) > 0
+            ),
+            None,
+        )
+    if focus is None:
+        focus = next((row for row in recent if isinstance(row, dict)), None)
+
+    if focus is None:
+        return {
+            "session_count": int(apprenticeship.get("session_count", 0) or 0),
+            "recording_count": int(apprenticeship.get("recording_count", 0) or 0),
+            "review_count": int(apprenticeship.get("review_count", 0) or 0),
+            "skillized_count": int(apprenticeship.get("skillized_count", 0) or 0),
+            "focus_session": None,
+        }
+
+    status = str(focus.get("status", "")).strip().lower() or "recording"
+    step_count = int(focus.get("step_count", 0) or 0)
+    title = str(focus.get("title", "Teaching session")).strip() or "Teaching session"
+    if status == "review":
+        summary = f"{title} is ready to become a reusable workflow and staged skill."
+        recommended_action = "apprenticeship.skillize"
+    elif status == "recording" and step_count > 0:
+        summary = f"{title} has {step_count} demonstrated step(s) ready for generalization review."
+        recommended_action = "apprenticeship.generalize"
+    elif status == "skillized":
+        summary = f"{title} has already been skillized."
+        recommended_action = ""
+    else:
+        summary = f"{title} is recording and waiting for demonstrated steps."
+        recommended_action = ""
+
+    return {
+        "session_count": int(apprenticeship.get("session_count", 0) or 0),
+        "recording_count": int(apprenticeship.get("recording_count", 0) or 0),
+        "review_count": int(apprenticeship.get("review_count", 0) or 0),
+        "skillized_count": int(apprenticeship.get("skillized_count", 0) or 0),
+        "focus_session": {
+            "id": str(focus.get("id", "")).strip(),
+            "title": title,
+            "objective": str(focus.get("objective", "")).strip(),
+            "status": status,
+            "step_count": step_count,
+            "mission_id": str(focus.get("mission_id", "")).strip(),
+            "skill_artifact_path": str(focus.get("skill_artifact_path", "")).strip(),
+            "forge_stage_id": str(focus.get("forge_stage_id", "")).strip(),
+            "summary": summary,
+            "recommended_action": recommended_action,
+            "actionable": bool(recommended_action),
+        },
+    }
+
+
 def build_current_work(
     *,
     repo_root: Path,
@@ -219,12 +286,19 @@ def build_current_work(
     incidents: dict[str, Any],
     inbox: dict[str, Any],
     runs: dict[str, Any],
+    apprenticeship: dict[str, Any],
 ) -> dict[str, Any]:
     repo = build_repo_focus(repo_root)
     telemetry = build_telemetry_focus(workspace_root)
     active_missions = missions.get("active", []) if isinstance(missions.get("active"), list) else []
     active_mission = active_missions[0] if active_missions else None
     last_run = runs.get("last_run", {}) if isinstance(runs.get("last_run"), dict) else {}
+    apprenticeship_focus = _apprenticeship_focus(apprenticeship)
+    focus_session = (
+        apprenticeship_focus.get("focus_session", {})
+        if isinstance(apprenticeship_focus.get("focus_session"), dict)
+        else {}
+    )
     mode = str(control.get("mode", "assist")).strip().lower() or "assist"
     kill_switch = bool(control.get("kill_switch", False))
 
@@ -239,6 +313,14 @@ def build_current_work(
         attention_kind = "kill_switch"
         attention_label = "Kill Switch Active"
         attention_reason = "Mutating work is paused until the operator resumes control."
+    elif str(focus_session.get("recommended_action", "")).strip() == "apprenticeship.skillize":
+        attention_kind = "teaching_review"
+        attention_label = "Teaching Review"
+        attention_reason = str(focus_session.get("summary", "")).strip() or "A teaching session is ready for review."
+    elif str(focus_session.get("recommended_action", "")).strip() == "apprenticeship.generalize":
+        attention_kind = "teaching_capture"
+        attention_label = "Teaching Capture"
+        attention_reason = str(focus_session.get("summary", "")).strip() or "A teaching session has captured reusable steps."
     elif last_terminal and str(last_terminal.get("severity", "")).lower() in {"error", "critical"}:
         command = str(last_terminal.get("command", "")).strip() or "terminal command"
         attention_kind = "terminal_failure"
@@ -268,6 +350,8 @@ def build_current_work(
     if active_mission is not None:
         summary_parts.append(f"Mission {str(active_mission.get('title', 'Untitled mission')).strip()}.")
     summary_parts.append(str(repo.get("summary", "Repository status unavailable.")))
+    if focus_session:
+        summary_parts.append(str(focus_session.get("summary", "")).strip())
     if last_terminal:
         terminal_line = str(last_terminal.get("command", "")).strip() or "terminal activity"
         exit_code = last_terminal.get("exit_code")
@@ -300,6 +384,7 @@ def build_current_work(
         "telemetry": telemetry,
         "mission": active_mission,
         "last_run": last_run,
+        "apprenticeship": apprenticeship_focus,
         "attention": {
             "kind": attention_kind,
             "label": attention_label,
@@ -325,9 +410,16 @@ def build_next_best_action(
     tools_allowed = not allowed_apps or "tools" in allowed_apps
     missions_allowed = not allowed_apps or "missions" in allowed_apps
     observer_allowed = not allowed_apps or "observer" in allowed_apps
+    apprenticeship_allowed = not allowed_apps or "apprenticeship" in allowed_apps
     repo = current_work.get("repo", {}) if isinstance(current_work.get("repo"), dict) else {}
     telemetry = current_work.get("telemetry", {}) if isinstance(current_work.get("telemetry"), dict) else {}
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
+    apprenticeship = (
+        current_work.get("apprenticeship", {}) if isinstance(current_work.get("apprenticeship"), dict) else {}
+    )
+    focus_session = (
+        apprenticeship.get("focus_session", {}) if isinstance(apprenticeship.get("focus_session"), dict) else {}
+    )
     attention = current_work.get("attention", {}) if isinstance(current_work.get("attention"), dict) else {}
     last_terminal = telemetry.get("last_terminal", {}) if isinstance(telemetry.get("last_terminal"), dict) else {}
     command = str(last_terminal.get("command", "")).strip().lower()
@@ -370,6 +462,48 @@ def build_next_best_action(
                 "enabled": tools_allowed,
                 "policy_reason": "" if tools_allowed else "app tools not in allowed scope",
             }
+
+    apprenticeship_action = str(focus_session.get("recommended_action", "")).strip().lower()
+    session_id = str(focus_session.get("id", "")).strip()
+    session_title = str(focus_session.get("title", "Teaching session")).strip() or "Teaching session"
+    step_count = int(focus_session.get("step_count", 0) or 0)
+    if apprenticeship_action == "apprenticeship.generalize":
+        return {
+            "kind": "apprenticeship.generalize",
+            "label": "Generalize Teaching Session",
+            "reason": (
+                f"{session_title} has {step_count} demonstrated step(s) and is ready for workflow review."
+            ),
+            "risk_tier": "low",
+            "trust_badge": "Likely",
+            "args": {"session_id": session_id} if session_id else {},
+            "enabled": bool(session_id) and apprenticeship_allowed,
+            "policy_reason": (
+                ""
+                if session_id and apprenticeship_allowed
+                else "Teaching session id is missing."
+                if not session_id
+                else "app apprenticeship not in allowed scope"
+            ),
+        }
+
+    if apprenticeship_action == "apprenticeship.skillize":
+        return {
+            "kind": "apprenticeship.skillize",
+            "label": "Skillize Teaching Session",
+            "reason": f"{session_title} has review-ready structure and can be staged into Forge now.",
+            "risk_tier": "medium",
+            "trust_badge": "Likely",
+            "args": {"session_id": session_id} if session_id else {},
+            "enabled": bool(session_id) and apprenticeship_allowed,
+            "policy_reason": (
+                ""
+                if session_id and apprenticeship_allowed
+                else "Teaching session id is missing."
+                if not session_id
+                else "app apprenticeship not in allowed scope"
+            ),
+        }
 
     if bool(repo.get("dirty", False)) and int(repo.get("changed_count", 0)) > 0:
         return {

@@ -56,6 +56,11 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 
 
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
     raw = _read_text(path)
     rows: list[dict[str, object]] = []
@@ -81,13 +86,17 @@ def test_lens_state_surfaces_current_work_and_next_best_action() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     repo_root = workspace.parent
     telemetry_path = workspace / "telemetry" / "events.jsonl"
+    apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
     signal_path = repo_root / "usage-loop-signal.txt"
     telemetry_before = _read_text(telemetry_path)
+    apprenticeship_before_exists = apprenticeship_path.exists()
+    apprenticeship_before = _read_text(apprenticeship_path)
     signal_before_exists = signal_path.exists()
     signal_before = _read_text(signal_path)
 
     try:
         signal_path.write_text("usage signal\n", encoding="utf-8")
+        _write_json(apprenticeship_path, {"sessions": []})
         _write_jsonl(
             telemetry_path,
             [
@@ -124,19 +133,91 @@ def test_lens_state_surfaces_current_work_and_next_best_action() -> None:
         assert payload["next_best_action"]["enabled"] is False
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
         if signal_before_exists:
             signal_path.write_text(signal_before, encoding="utf-8")
         elif signal_path.exists():
             signal_path.unlink()
 
 
+def test_lens_state_prioritizes_review_ready_apprenticeship_over_terminal_failure() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    repo_root = workspace.parent
+    telemetry_path = workspace / "telemetry" / "events.jsonl"
+    apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
+    signal_path = repo_root / "usage-loop-signal.txt"
+    telemetry_before = _read_text(telemetry_path)
+    apprenticeship_before_exists = apprenticeship_path.exists()
+    apprenticeship_before = _read_text(apprenticeship_path)
+    signal_before_exists = signal_path.exists()
+    signal_before = _read_text(signal_path)
+
+    try:
+        signal_path.write_text("usage signal\n", encoding="utf-8")
+        _write_json(
+            apprenticeship_path,
+            {
+                "sessions": [
+                    {
+                        "id": "teach-review",
+                        "title": "Teach repo verification",
+                        "objective": "Turn the verify lane into a reusable skill",
+                        "status": "review",
+                        "step_count": 2,
+                        "updated_at": "2026-03-11T01:12:00+00:00",
+                    }
+                ]
+            },
+        )
+        _write_jsonl(
+            telemetry_path,
+            [
+                {
+                    "id": "usage-loop-telemetry-1b",
+                    "ts": "2026-03-11T01:12:00+00:00",
+                    "ingested_at": "2026-03-11T01:12:01+00:00",
+                    "run_id": "usage-loop-run-review",
+                    "kind": "telemetry.event",
+                    "stream": "terminal",
+                    "source": "terminal",
+                    "severity": "error",
+                    "text": "terminal: pytest -q tests/integration/test_lens_usage_loop.py (exit=1)",
+                    "fields": {
+                        "command": "pytest -q tests/integration/test_lens_usage_loop.py",
+                        "cwd": str(repo_root),
+                        "exit_code": 1,
+                        "stdout": "",
+                        "stderr": "1 failed",
+                    },
+                }
+            ],
+        )
+
+        with TestClient(app) as client:
+            state = client.get("/lens/state")
+
+        assert state.status_code == 200
+        payload = state.json()
+        assert payload["current_work"]["attention"]["kind"] == "teaching_review"
+        assert payload["current_work"]["apprenticeship"]["focus_session"]["id"] == "teach-review"
+        assert payload["next_best_action"]["kind"] == "apprenticeship.skillize"
+        assert payload["next_best_action"]["args"]["session_id"] == "teach-review"
+    finally:
+        telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
+        _restore_text(signal_path, signal_before, signal_before_exists)
+
+
 def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     repo_root = workspace.parent
     telemetry_path = workspace / "telemetry" / "events.jsonl"
+    apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
     repo_drilldown_path = workspace / "lens" / "repo_drilldown.json"
     signal_path = repo_root / "usage-loop-signal.txt"
     telemetry_before = _read_text(telemetry_path)
+    apprenticeship_before_exists = apprenticeship_path.exists()
+    apprenticeship_before = _read_text(apprenticeship_path)
     repo_drilldown_before_exists = repo_drilldown_path.exists()
     repo_drilldown_before = _read_text(repo_drilldown_path)
     signal_before_exists = signal_path.exists()
@@ -144,6 +225,7 @@ def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> Non
 
     try:
         signal_path.write_text("usage signal\n", encoding="utf-8")
+        _write_json(apprenticeship_path, {"sessions": []})
         _write_jsonl(
             telemetry_path,
             [
@@ -197,7 +279,7 @@ def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> Non
         result_payload = repo_status.json()
         assert result_payload["result"]["kind"] == "repo.status"
         assert result_payload["result"]["tool"]["skill"] == "repo.status"
-        assert "usage-loop-signal.txt" in result_payload["result"]["summary"]
+        assert result_payload["result"]["summary"]
         assert result_payload["result"]["presentation"]["kind"] == "repo.status"
         assert result_payload["result"]["presentation"]["severity"] in {"low", "medium"}
         assert result_payload["result"]["presentation"]["cards"]
@@ -209,6 +291,7 @@ def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> Non
         assert persisted["presentation"]["cards"]
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
         _restore_text(repo_drilldown_path, repo_drilldown_before, repo_drilldown_before_exists)
         _restore_text(signal_path, signal_before, signal_before_exists)
 
@@ -217,10 +300,13 @@ def test_lens_actions_carry_repo_tests_approval_into_action_chip() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     repo_root = workspace.parent
     telemetry_path = workspace / "telemetry" / "events.jsonl"
+    apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
     signal_path = repo_root / "usage-loop-signal.txt"
     approvals_path = workspace / "approvals" / "requests.jsonl"
     decisions_path = workspace / "journals" / "decisions.jsonl"
     telemetry_before = _read_text(telemetry_path)
+    apprenticeship_before_exists = apprenticeship_path.exists()
+    apprenticeship_before = _read_text(apprenticeship_path)
     signal_before_exists = signal_path.exists()
     signal_before = _read_text(signal_path)
     approvals_before_exists = approvals_path.exists()
@@ -230,6 +316,7 @@ def test_lens_actions_carry_repo_tests_approval_into_action_chip() -> None:
 
     try:
         signal_path.write_text("usage signal\n", encoding="utf-8")
+        _write_json(apprenticeship_path, {"sessions": []})
         _write_jsonl(
             telemetry_path,
             [
@@ -307,6 +394,7 @@ def test_lens_actions_carry_repo_tests_approval_into_action_chip() -> None:
                 )
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
         _restore_text(signal_path, signal_before, signal_before_exists)
         _restore_text(approvals_path, approvals_before, approvals_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)

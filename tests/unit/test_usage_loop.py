@@ -70,6 +70,7 @@ def test_usage_loop_prefers_repo_tests_after_terminal_failure(tmp_path: Path) ->
         incidents={"open_count": 0, "highest_severity": "nominal"},
         inbox={"alert_count": 0},
         runs={"last_run": {}},
+        apprenticeship={"session_count": 0, "recording_count": 0, "review_count": 0, "skillized_count": 0},
     )
 
     next_action = build_next_best_action(current_work=current_work, control={"mode": "assist", "kill_switch": False})
@@ -78,3 +79,106 @@ def test_usage_loop_prefers_repo_tests_after_terminal_failure(tmp_path: Path) ->
     assert next_action["kind"] == "repo.tests"
     assert next_action["enabled"] is False
     assert "requires approval" in next_action["policy_reason"].lower()
+
+
+def test_usage_loop_prioritizes_apprenticeship_generalization_when_steps_are_recorded(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    workspace_root = repo_root / "workspace"
+    repo_root.mkdir()
+    workspace_root.mkdir()
+    _git(repo_root, "init")
+
+    current_work = build_current_work(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        control={"mode": "assist", "kill_switch": False, "scopes": {"apps": ["apprenticeship", "observer"]}},
+        missions={"active": [], "backlog": []},
+        approvals={"pending_count": 0},
+        incidents={"open_count": 0, "highest_severity": "nominal"},
+        inbox={"alert_count": 0},
+        runs={"last_run": {}},
+        apprenticeship={
+            "session_count": 1,
+            "recording_count": 1,
+            "review_count": 0,
+            "skillized_count": 0,
+            "recent_sessions": [
+                {
+                    "id": "teach-generalize",
+                    "title": "Teach repo verification",
+                    "objective": "Turn verification into a reusable workflow",
+                    "status": "recording",
+                    "step_count": 2,
+                    "mission_id": "mission-verify",
+                }
+            ],
+            "review_ready": [],
+        },
+    )
+
+    next_action = build_next_best_action(
+        current_work=current_work,
+        control={"mode": "assist", "kill_switch": False, "scopes": {"apps": ["apprenticeship", "observer"]}},
+    )
+
+    assert current_work["attention"]["kind"] == "teaching_capture"
+    assert current_work["apprenticeship"]["focus_session"]["id"] == "teach-generalize"
+    assert next_action["kind"] == "apprenticeship.generalize"
+    assert next_action["enabled"] is True
+    assert next_action["args"]["session_id"] == "teach-generalize"
+
+
+def test_usage_loop_prioritizes_apprenticeship_skillize_when_review_ready(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    workspace_root = repo_root / "workspace"
+    repo_root.mkdir()
+    workspace_root.mkdir()
+    _git(repo_root, "init")
+
+    current_work = build_current_work(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        control={"mode": "assist", "kill_switch": False, "scopes": {"apps": ["apprenticeship", "observer"]}},
+        missions={"active": [], "backlog": []},
+        approvals={"pending_count": 0},
+        incidents={"open_count": 0, "highest_severity": "nominal"},
+        inbox={"alert_count": 0},
+        runs={"last_run": {}},
+        apprenticeship={
+            "session_count": 1,
+            "recording_count": 0,
+            "review_count": 1,
+            "skillized_count": 0,
+            "recent_sessions": [
+                {
+                    "id": "teach-skillize",
+                    "title": "Teach HUD review",
+                    "objective": "Package the review workflow",
+                    "status": "review",
+                    "step_count": 3,
+                    "mission_id": "mission-review",
+                }
+            ],
+            "review_ready": [
+                {
+                    "id": "teach-skillize",
+                    "title": "Teach HUD review",
+                    "objective": "Package the review workflow",
+                    "status": "review",
+                    "step_count": 3,
+                    "mission_id": "mission-review",
+                }
+            ],
+        },
+    )
+
+    next_action = build_next_best_action(
+        current_work=current_work,
+        control={"mode": "assist", "kill_switch": False, "scopes": {"apps": ["apprenticeship", "observer"]}},
+    )
+
+    assert current_work["attention"]["kind"] == "teaching_review"
+    assert current_work["apprenticeship"]["focus_session"]["id"] == "teach-skillize"
+    assert next_action["kind"] == "apprenticeship.skillize"
+    assert next_action["enabled"] is True
+    assert next_action["args"]["session_id"] == "teach-skillize"

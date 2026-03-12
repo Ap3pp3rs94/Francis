@@ -834,6 +834,7 @@
             <div class="desktop-pill"><strong>Repo</strong><span id="work-repo-pill">status unavailable</span></div>
             <div class="desktop-pill"><strong>Mission</strong><span id="work-mission-pill">no active mission</span></div>
             <div class="desktop-pill"><strong>Last Run</strong><span id="work-run-pill">no recent run</span></div>
+            <div class="desktop-pill"><strong>Teaching</strong><span id="work-teaching-pill">no active teaching session</span></div>
           </div>
           <p class="meta" id="work-attention-detail">
             No immediate work pressure is visible.
@@ -843,6 +844,9 @@
           </p>
           <p class="meta tiny" id="work-link-state">
             Link state will resolve from live workspace continuity.
+          </p>
+          <p class="meta tiny" id="work-teaching-detail">
+            Teaching pressure will render from the apprenticeship contract.
           </p>
           <h3>Changed Paths</h3>
           <ul class="list" id="work-paths">
@@ -3758,6 +3762,14 @@
           : {};
         const mission = currentWork.mission && typeof currentWork.mission === "object" ? currentWork.mission : null;
         const lastRun = currentWork.last_run && typeof currentWork.last_run === "object" ? currentWork.last_run : {};
+        const apprenticeship =
+          currentWork.apprenticeship && typeof currentWork.apprenticeship === "object"
+            ? currentWork.apprenticeship
+            : {};
+        const focusSession =
+          apprenticeship.focus_session && typeof apprenticeship.focus_session === "object"
+            ? apprenticeship.focus_session
+            : {};
         const blockers = Array.isArray(currentWork.blockers) ? currentWork.blockers : [];
         const topPaths = Array.isArray(repo.top_paths) ? repo.top_paths : [];
         const nextAction = currentWork.next_action && typeof currentWork.next_action === "object"
@@ -3805,6 +3817,9 @@
         document.getElementById("work-run-pill").textContent = lastRun?.run_id
           ? `${lastRun.run_id} | ${lastRun.phase || "unknown"}`
           : "no recent run";
+        document.getElementById("work-teaching-pill").textContent = focusSession?.title
+          ? `${String(focusSession.title)} | ${String(focusSession.status || apprenticeship.state || "active")}`
+          : "no active teaching session";
         document.getElementById("work-attention-detail").textContent =
           attention.reason || "No immediate work pressure is visible.";
         document.getElementById("work-link-meta").textContent = summarizeOperatorLinkContract(operatorLink) || describeOperatorLink(
@@ -3816,6 +3831,22 @@
           snapshot,
           actions,
           currentExecutionJournal,
+        );
+        document.getElementById("work-teaching-detail").textContent =
+          String(
+            focusSession.summary ||
+              apprenticeship.summary ||
+              "No teaching session is currently shaping the operator loop.",
+          );
+        applySeverityState(
+          document.getElementById("work-teaching-detail"),
+          String(
+            apprenticeship.state === "review_ready"
+              ? "high"
+              : apprenticeship.state === "generalize_ready"
+              ? "medium"
+              : "low",
+          ),
         );
 
         document.getElementById("work-paths").innerHTML = topPaths.length
@@ -3848,7 +3879,21 @@
         document.getElementById("work-repo-breakdown").innerHTML = topPaths.length
           ? topPaths.slice(0, 4).map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
           : `<li class="muted-empty">No structured drilldown evidence is available yet.</li>`;
-        applyPanelSignal("current-work-panel", repoSeverity === "unknown" ? "low" : repoSeverity);
+        const workPanelSeverity = highestSeverity(
+          [
+            { severity: repoSeverity === "unknown" ? "low" : repoSeverity },
+            {
+              severity:
+                apprenticeship.state === "review_ready"
+                  ? "high"
+                  : apprenticeship.state === "generalize_ready"
+                  ? "medium"
+                  : "low",
+            },
+          ],
+          repoSeverity === "unknown" ? "low" : repoSeverity,
+        );
+        applyPanelSignal("current-work-panel", workPanelSeverity);
 
         const command = String(terminal.command || "").trim();
         const exitCode = terminal.exit_code;

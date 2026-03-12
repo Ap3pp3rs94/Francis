@@ -471,8 +471,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["snapshot"]["objective"]["label"] == "Live Lens"
     assert body["snapshot"]["current_work"]["repo"]["available"] is True
     assert body["snapshot"]["current_work"]["repo"]["dirty"] is True
-    assert body["snapshot"]["current_work"]["attention"]["kind"] == "terminal_failure"
-    assert body["snapshot"]["next_best_action"]["kind"] == "repo.tests"
+    assert body["snapshot"]["current_work"]["attention"]["kind"] == "teaching_review"
+    assert body["snapshot"]["next_best_action"]["kind"] == "apprenticeship.skillize"
     assert body["current_work"]["surface"] == "current_work"
     assert body["shift_report"]["surface"] == "shift_report"
     assert body["shift_report"]["state"] == "away_live"
@@ -485,18 +485,20 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["apprenticeship_surface"]["focus_session_id"] == "teach-1"
     assert body["apprenticeship_surface"]["sessions"][0]["id"] == "teach-1"
     assert body["snapshot"]["autonomy"]["guardrail"]["cooldown_active"] is False
-    assert body["current_work"]["attention"]["kind"] == "terminal_failure"
+    assert body["current_work"]["attention"]["kind"] == "teaching_review"
+    assert body["current_work"]["apprenticeship"]["focus_session"]["id"] == "teach-1"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
     assert body["current_work"]["terminal_summary"].startswith("Terminal failure anchor:")
     assert any(item["kind"] == "failure" for item in body["current_work"]["terminal_breakdown"])
-    assert body["current_work"]["next_action"]["kind"] == "repo.tests"
-    assert body["current_work"]["operator_link"]["action_kind"] == "repo.tests"
+    assert body["current_work"]["next_action"]["kind"] == "apprenticeship.skillize"
+    assert body["current_work"]["operator_link"]["action_kind"] == "apprenticeship.skillize"
     assert body["current_work"]["operator_link"]["state"] in {"approval_pending", "receipt_grounded", "following"}
     assert body["current_work"]["focus_action"]["state"] in {"approval_ready", "ready", "approval_request", "blocked"}
     assert body["current_work"]["repo"]["severity"] in {"medium", "high"}
     assert body["current_work"]["next_action_signal"]["severity"] == "high"
     assert any(item["kind"] == "terminal" for item in body["current_work"]["next_action_evidence"])
+    assert any(item["kind"] == "teaching" for item in body["current_work"]["next_action_evidence"])
     assert any(item["kind"] in {"blocker", "approval"} for item in body["current_work"]["next_action_evidence"])
     assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
@@ -509,7 +511,7 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["execution_journal"]["active_run"]["run_id"] == "run-live"
     assert body["execution_journal"]["items"][0]["kind"] == "hud.bootstrap"
     assert body["execution_feed"]["surface"] == "execution_feed"
-    assert body["execution_feed"]["focus_action_kind"] == "repo.tests"
+    assert body["execution_feed"]["focus_action_kind"] == "apprenticeship.skillize"
     assert body["execution_feed"]["severity"] == "high"
     assert body["dashboard"]["mode"]["current"] == "away"
     assert any(card["id"] == "current-work" for card in body["dashboard"]["cards"])
@@ -559,6 +561,7 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "next_action_resume" in payload
     assert "next_action_evidence" in payload
     assert "fabric_evidence" in payload
+    assert "apprenticeship" in payload
 
 
 def test_hud_shift_report_route_returns_structured_surface() -> None:
@@ -850,6 +853,95 @@ def test_hud_current_work_view_adds_cited_fabric_evidence(monkeypatch, tmp_path:
     assert payload["fabric_evidence"][0]["citation"]["rel_path"] == "runs/run_ledger.jsonl"
     assert any(str(row.get("kind", "")) == "citation" for row in payload["next_action_evidence"])
     assert payload["next_action_signal"]["summary"] == "Cited local evidence is grounding the next operator move."
+
+
+def test_hud_current_work_view_prioritizes_teaching_review(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "approvals": {"pending_count": 0, "pending": []},
+            "current_work": {
+                "summary": "Teach repo verification is ready to become a reusable skill.",
+                "repo": {
+                    "available": True,
+                    "branch": "main",
+                    "dirty": True,
+                    "changed_count": 2,
+                    "staged_count": 0,
+                    "unstaged_count": 2,
+                    "untracked_count": 0,
+                    "top_paths": ["services/hud/app/static/index.html"],
+                    "summary": "Branch main | 2 change(s): 0 staged, 2 unstaged, 0 untracked",
+                },
+                "telemetry": {
+                    "last_terminal": {
+                        "command": "pytest -q tests/integration/test_hud_foundation.py",
+                        "exit_code": 1,
+                        "stderr": "1 failed",
+                        "stdout": "",
+                        "severity": "error",
+                        "text": "terminal failure",
+                    }
+                },
+                "attention": {
+                    "kind": "teaching_review",
+                    "label": "Teaching Review",
+                    "reason": "Teach repo verification is generalized and ready to skillize after 2 demonstrated step(s).",
+                },
+                "blockers": ["1 approval(s) are pending."],
+                "mission": None,
+                "last_run": {},
+                "apprenticeship": {
+                    "session_count": 1,
+                    "recording_count": 0,
+                    "review_count": 1,
+                    "skillized_count": 0,
+                    "focus_session": {
+                        "id": "teach-review",
+                        "title": "Teach repo verification",
+                        "objective": "Turn verify flow into a reusable skill",
+                        "status": "review",
+                        "step_count": 2,
+                        "summary": "Teach repo verification is generalized and ready to skillize after 2 demonstrated step(s).",
+                        "recommended_action": "apprenticeship.skillize",
+                    },
+                },
+            },
+            "fabric": {"calibration": {"confidence_counts": {}, "stale_current_state_count": 0}},
+            "next_best_action": {
+                "kind": "apprenticeship.skillize",
+                "label": "Skillize Teaching Session",
+                "reason": "Teach repo verification has review-ready structure and can be staged into Forge now.",
+                "args": {"session_id": "teach-review"},
+            },
+        }
+
+    monkeypatch.setattr(current_work_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(
+        current_work_view,
+        "get_lens_actions",
+        lambda max_actions=8: {
+            "action_chips": [
+                {
+                    "kind": "apprenticeship.skillize",
+                    "label": "Skillize Teaching Session",
+                    "enabled": True,
+                    "risk_tier": "medium",
+                    "reason": "Teach repo verification is ready to stage into Forge.",
+                    "execute_via": {"payload": {"args": {"session_id": "teach-review"}}},
+                }
+            ]
+        },
+    )
+
+    payload = current_work_view.get_current_work_view()
+
+    assert payload["attention"]["kind"] == "teaching_review"
+    assert payload["apprenticeship"]["focus_session"]["id"] == "teach-review"
+    assert payload["next_action"]["kind"] == "apprenticeship.skillize"
+    assert payload["focus_action"]["execute_kind"] == "apprenticeship.skillize"
+    assert payload["focus_action"]["args"]["session_id"] == "teach-review"
+    assert payload["next_action_signal"]["summary"] == "A reviewed teaching session is ready to become a staged skill."
+    assert any(str(row.get("kind", "")) == "teaching" for row in payload["next_action_evidence"])
 
 
 def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:

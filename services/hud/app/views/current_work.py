@@ -115,6 +115,7 @@ def _fabric_query_text(
     next_action: dict[str, Any],
     terminal: dict[str, Any],
     mission: dict[str, Any] | None,
+    apprenticeship: dict[str, Any] | None,
     blockers: list[str],
 ) -> str:
     tokens: list[str] = []
@@ -138,6 +139,15 @@ def _fabric_query_text(
     if isinstance(mission, dict):
         _push(mission.get("title"))
         _push(mission.get("objective"))
+    if isinstance(apprenticeship, dict):
+        focus_session = (
+            apprenticeship.get("focus_session", {})
+            if isinstance(apprenticeship.get("focus_session"), dict)
+            else {}
+        )
+        _push(focus_session.get("title"))
+        _push(focus_session.get("objective"))
+        _push(focus_session.get("summary"))
     for blocker in blockers[:1]:
         _push(blocker)
     return " ".join(tokens[:6])
@@ -148,6 +158,7 @@ def _build_fabric_evidence(
     next_action: dict[str, Any],
     terminal: dict[str, Any],
     mission: dict[str, Any] | None,
+    apprenticeship: dict[str, Any] | None,
     blockers: list[str],
     last_run: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -159,6 +170,7 @@ def _build_fabric_evidence(
         next_action=next_action,
         terminal=terminal,
         mission=mission,
+        apprenticeship=apprenticeship,
         blockers=blockers,
     )
     if not query:
@@ -478,9 +490,11 @@ def _build_next_action_evidence(
     next_action_resume: dict[str, object],
     next_action: dict[str, Any],
     mission: dict[str, Any] | None,
+    apprenticeship: dict[str, Any] | None,
     last_run: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     evidence: list[dict[str, str]] = []
+    focus_kind = _normalize_usage_action_kind(next_action.get("kind"))
     terminal_summary = _terminal_summary(terminal)
     if terminal_summary.startswith("Terminal failure anchor:"):
         evidence.append(_evidence_row(kind="terminal", severity="high", detail=terminal_summary))
@@ -507,6 +521,32 @@ def _build_next_action_evidence(
         extra = str(next_action_resume.get("detail", "")).strip()
         if extra:
             evidence.append(_evidence_row(kind="resume", severity="medium", detail=extra))
+
+    if isinstance(apprenticeship, dict):
+        focus_session = (
+            apprenticeship.get("focus_session", {})
+            if isinstance(apprenticeship.get("focus_session"), dict)
+            else {}
+        )
+        if focus_session:
+            session_title = str(focus_session.get("title", "Teaching session")).strip() or "Teaching session"
+            step_count = int(focus_session.get("step_count", 0) or 0)
+            if focus_kind == "apprenticeship.generalize":
+                evidence.append(
+                    _evidence_row(
+                        kind="teaching",
+                        severity="medium",
+                        detail=f"{session_title} has {step_count} demonstrated step(s) ready for generalization review.",
+                    )
+                )
+            elif focus_kind == "apprenticeship.skillize":
+                evidence.append(
+                    _evidence_row(
+                        kind="teaching",
+                        severity="medium",
+                        detail=f"{session_title} already has a reviewed workflow and is ready to stage into Forge.",
+                    )
+                )
 
     fabric = snapshot.get("fabric", {}) if isinstance(snapshot.get("fabric"), dict) else {}
     calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
@@ -541,6 +581,7 @@ def _build_next_action_evidence(
         next_action=next_action,
         terminal=terminal,
         mission=mission,
+        apprenticeship=apprenticeship,
         blockers=blockers,
         last_run=last_run,
     )
@@ -577,6 +618,9 @@ def get_current_work_view(
     blockers = current_work.get("blockers", []) if isinstance(current_work.get("blockers"), list) else []
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
     last_run = current_work.get("last_run", {}) if isinstance(current_work.get("last_run"), dict) else {}
+    apprenticeship = (
+        current_work.get("apprenticeship", {}) if isinstance(current_work.get("apprenticeship"), dict) else {}
+    )
     next_action_resume = _build_next_action_resume(snapshot=snapshot, next_action=next_best_action)
     operator_link = _build_operator_link(
         next_action=next_best_action,
@@ -595,9 +639,11 @@ def get_current_work_view(
         next_action_resume=next_action_resume,
         next_action=next_best_action,
         mission=mission,
+        apprenticeship=apprenticeship,
         last_run=last_run,
     )
     next_action_severity = _max_evidence_severity(next_action_evidence)
+    next_action_kind = _normalize_usage_action_kind(next_best_action.get("kind"))
 
     return {
         "status": "ok",
@@ -635,6 +681,7 @@ def get_current_work_view(
         "terminal_breakdown": _terminal_breakdown(terminal),
         "mission": mission,
         "last_run": last_run,
+        "apprenticeship": apprenticeship,
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],
         "next_action": next_best_action,
         "operator_link": operator_link,
@@ -644,6 +691,10 @@ def get_current_work_view(
             "summary": (
                 "Approval-backed continuation is ready to resume from the queue."
                 if str(next_action_resume.get("state", "")).strip().lower() == "approval_ready"
+                else "A teaching session is ready to turn demonstration into a reusable workflow."
+                if next_action_kind == "apprenticeship.generalize"
+                else "A reviewed teaching session is ready to become a staged skill."
+                if next_action_kind == "apprenticeship.skillize"
                 else "Cited local evidence is grounding the next operator move."
                 if fabric_evidence
                 else

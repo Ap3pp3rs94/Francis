@@ -452,6 +452,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         incidents=incidents,
         inbox=inbox,
         runs=runs,
+        apprenticeship=apprenticeship,
     )
     next_best_action = build_next_best_action(current_work=current_work, control=control)
 

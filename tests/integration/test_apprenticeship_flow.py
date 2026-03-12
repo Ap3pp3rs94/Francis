@@ -166,3 +166,43 @@ def test_lens_execute_can_create_and_record_teaching_session(monkeypatch, tmp_pa
     detail = client.get(f"/apprenticeship/sessions/{session_id}")
     assert detail.status_code == 200
     assert detail.json()["replay"]["step_count"] == 1
+
+
+def test_lens_state_prioritizes_teaching_sessions_in_current_work(monkeypatch, tmp_path: Path) -> None:
+    _wire_workspace(monkeypatch, tmp_path)
+
+    created = client.post(
+        "/apprenticeship/sessions",
+        json={"title": "Teach repo review", "objective": "Capture review workflow", "tags": ["review"]},
+    )
+    assert created.status_code == 200
+    session_id = created.json()["session"]["id"]
+
+    step = client.post(
+        f"/apprenticeship/sessions/{session_id}/steps",
+        json={"kind": "command", "action": "git diff -- README.md", "intent": "review changed docs"},
+    )
+    assert step.status_code == 200
+
+    state = client.get("/lens/state")
+    assert state.status_code == 200
+    payload = state.json()
+    assert payload["current_work"]["attention"]["kind"] == "teaching_capture"
+    assert payload["current_work"]["apprenticeship"]["focus_session"]["id"] == session_id
+    assert payload["current_work"]["apprenticeship"]["focus_session"]["recommended_action"] == "apprenticeship.generalize"
+    assert payload["next_best_action"]["kind"] == "apprenticeship.generalize"
+    assert payload["next_best_action"]["args"]["session_id"] == session_id
+
+    generalized = client.post(
+        "/lens/actions/execute",
+        json={"kind": "apprenticeship.generalize", "args": {"session_id": session_id}},
+    )
+    assert generalized.status_code == 200
+
+    reviewed_state = client.get("/lens/state")
+    assert reviewed_state.status_code == 200
+    reviewed_payload = reviewed_state.json()
+    assert reviewed_payload["current_work"]["attention"]["kind"] == "teaching_review"
+    assert reviewed_payload["current_work"]["apprenticeship"]["focus_session"]["recommended_action"] == "apprenticeship.skillize"
+    assert reviewed_payload["next_best_action"]["kind"] == "apprenticeship.skillize"
+    assert reviewed_payload["next_best_action"]["args"]["session_id"] == session_id
