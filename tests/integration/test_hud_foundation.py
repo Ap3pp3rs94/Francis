@@ -20,6 +20,7 @@ import services.hud.app.views.federation as federation_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.managed_copies as managed_copies_view
+import services.hud.app.views.portability as portability_view
 import services.hud.app.views.missions as missions_view
 import services.hud.app.views.repo_drilldown as repo_drilldown_view
 import services.hud.app.views.runs as runs_view
@@ -127,6 +128,13 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Revoke Node" in response.text
     assert "Managed Copies" in response.text
     assert "Managed copies will render from the governed copy registry." in response.text
+    assert "Governed Portability" in response.text
+    assert "Portability will render from governed continuity bundles." in response.text
+    assert "Portability Preview" in response.text
+    assert "Continuity warnings will render from the backend contract." in response.text
+    assert "Export Continuity Bundle" in response.text
+    assert "Preview Latest Import" in response.text
+    assert "Apply Previewed Import" in response.text
     assert "Managed Copy Detail" in response.text
     assert "Managed copy detail will render from the backend contract." in response.text
     assert "Create Managed Copy" in response.text
@@ -224,6 +232,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["swarm"]["surface"] == "swarm"
     assert body["federation"]["surface"] == "federation"
     assert body["managed_copies"]["surface"] == "managed_copies"
+    assert body["portability"]["surface"] == "portability"
     assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
@@ -246,6 +255,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "swarm",
         "federation",
         "managed_copies",
+        "portability",
         "apprenticeship_surface",
         "approval_queue",
         "execution_journal",
@@ -859,6 +869,23 @@ def test_hud_managed_copies_route_returns_structured_surface() -> None:
     assert "focus_copy_id" in payload
     assert "cards" in payload
     assert "copies" in payload
+    assert "detail" in payload
+
+
+def test_hud_portability_route_returns_structured_surface() -> None:
+    response = client.get("/api/portability")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "portability"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "preview_state" in payload
+    assert "cards" in payload
+    assert "exports" in payload
+    assert "imports" in payload
+    assert "preview" in payload
+    assert "controls" in payload
     assert "detail" in payload
 
 
@@ -2651,3 +2678,81 @@ def test_hud_voice_command_preview_surface_uses_voice_operator(monkeypatch) -> N
     assert payload["run_id"] == "voice-preview-1"
     assert payload["intent"]["kind"] == "action.suggestion"
     assert payload["matches"][0]["kind"] == "control.panic"
+def test_hud_portability_view_exposes_governed_preview(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "portability": {
+                "summary": "1 export bundle(s), 1 import application(s), preview ready with 2 warning(s).",
+                "severity": "high",
+                "preview_state": "ready",
+                "export_count": 1,
+                "import_count": 1,
+                "continuity": {
+                    "mode": "pilot",
+                    "pending_approvals": 2,
+                },
+                "exports": [
+                    {
+                        "bundle_id": "bundle-1",
+                        "label": "Repo continuity",
+                        "created_at": "2026-03-12T10:00:00+00:00",
+                        "created_by": "architect",
+                        "path": "portability/exports/bundle-1.json",
+                        "summary": "3 mission(s), 2 capability entry(ies), 1 paired node(s), 2 pending approval(s).",
+                        "counts": {
+                            "mission_count": 3,
+                            "pending_approvals": 2,
+                            "capability_count": 2,
+                            "paired_node_count": 1,
+                            "managed_copy_count": 1,
+                            "swarm_unit_count": 4,
+                        },
+                    }
+                ],
+                "imports": [
+                    {
+                        "import_id": "import-1",
+                        "bundle_id": "bundle-1",
+                        "preview_id": "preview-1",
+                        "source_path": "D:/francis/workspace/portability/exports/bundle-1.json",
+                        "applied_at": "2026-03-12T11:00:00+00:00",
+                        "applied_by": "architect",
+                        "summary": "Applied governed continuity from Repo continuity; mode set to assist, approvals archived, live authority withheld.",
+                        "warning_count": 2,
+                        "warnings": ["Mode downgraded", "Nodes stale until revalidated"],
+                        "restored_sections": ["control", "missions"],
+                        "archived_sections": ["approvals_archive", "takeover"],
+                    }
+                ],
+                "preview": {
+                    "preview_id": "preview-1",
+                    "bundle_id": "bundle-1",
+                    "bundle_label": "Repo continuity",
+                    "source_path": "D:/francis/workspace/portability/exports/bundle-1.json",
+                    "summary": "Preview Repo continuity: 7 continuity section(s) restore, 4 archive-only section(s), 2 warning(s).",
+                    "severity": "high",
+                    "warnings": ["Imported mode pilot is downgraded to assist until authority is re-confirmed.", "Imported paired nodes are restored as stale metadata and require revalidation."],
+                    "cards": [{"label": "Warnings", "value": "2", "tone": "high"}],
+                    "restore_sections": [{"id": "control", "label": "Control posture", "count": "1 state", "policy": "Mode imports as assist."}],
+                    "archive_sections": [{"id": "takeover", "label": "Takeover and handbacks", "count": "2 handback export(s)", "policy": "Pilot and Away authority remain historical only."}],
+                    "effects": {"applied_mode": "assist"},
+                },
+            }
+        }
+
+    monkeypatch.setattr(portability_view, "build_lens_snapshot", _snapshot)
+
+    payload = portability_view.get_portability_view()
+
+    assert payload["surface"] == "portability"
+    assert payload["preview_state"] == "ready"
+    assert payload["focus_bundle_id"] == "bundle-1"
+    assert payload["focus_import_id"] == "import-1"
+    assert payload["preview"]["warnings"]
+    assert payload["controls"]["preview_latest"]["bundle_id"] == "bundle-1"
+    assert payload["controls"]["apply_preview"]["preview_id"] == "preview-1"
+    assert payload["exports"][0]["audit"]["counts"]["mission_count"] == 3
+    assert payload["imports"][0]["audit"]["detail_state"] == "current"
+
+
+

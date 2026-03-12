@@ -14,6 +14,7 @@ from services.orchestrator.app.approvals_store import list_requests, pending_cou
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from services.orchestrator.app.federation_store import load_or_init_topology
 from services.orchestrator.app.managed_copy_store import build_managed_copy_state
+from services.orchestrator.app.portability_store import build_portability_state
 from services.orchestrator.app.swarm_store import build_swarm_state
 from services.orchestrator.app.takeover_snapshot import load_takeover_state
 from services.orchestrator.app.usage_loop import build_current_work, build_next_best_action
@@ -452,6 +453,15 @@ def _materialize_managed_copies(workspace_root: Path) -> dict[str, Any]:
     }
 
 
+def _materialize_portability(workspace_root: Path) -> dict[str, Any]:
+    repo_root = workspace_root.parent.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    return build_portability_state(fs, repo_root=repo_root, workspace_root=workspace_root)
+
+
 def _materialize_autonomy(workspace_root: Path) -> dict[str, Any]:
     budget_raw = _read_json(workspace_root / "autonomy" / "action_budget_state.json", {})
     if not isinstance(budget_raw, dict):
@@ -529,6 +539,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     swarm = _materialize_swarm(resolved_workspace)
     federation = _materialize_federation(resolved_workspace)
     managed_copies = _materialize_managed_copies(resolved_workspace)
+    portability = _materialize_portability(resolved_workspace)
     apprenticeship = _materialize_apprenticeship(resolved_workspace)
     fabric = _materialize_fabric(resolved_workspace)
     current_work = build_current_work(
@@ -565,6 +576,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "swarm": swarm,
         "federation": federation,
         "managed_copies": managed_copies,
+        "portability": portability,
         "apprenticeship": apprenticeship,
         "fabric": fabric,
         "current_work": current_work,

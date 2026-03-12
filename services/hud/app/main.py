@@ -35,6 +35,7 @@ from services.hud.app.views.federation import get_federation_view
 from services.hud.app.views.inbox import get_inbox_view
 from services.hud.app.views.incidents import get_incidents_view
 from services.hud.app.views.managed_copies import get_managed_copies_view
+from services.hud.app.views.portability import get_portability_view
 from services.hud.app.views.missions import get_missions_view
 from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
@@ -69,6 +70,14 @@ from services.orchestrator.app.routes.managed_copies import (
     managed_copy_delta,
     managed_copy_quarantine,
     managed_copy_replace,
+)
+from services.orchestrator.app.routes.portability import (
+    PortabilityExportRequest,
+    PortabilityImportApplyRequest,
+    PortabilityImportPreviewRequest,
+    portability_export,
+    portability_import_apply,
+    portability_import_preview,
 )
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
@@ -168,6 +177,7 @@ def _build_hud_payload(
         "swarm": get_swarm_view(snapshot=snapshot_payload),
         "federation": get_federation_view(snapshot=snapshot_payload),
         "managed_copies": get_managed_copies_view(snapshot=snapshot_payload),
+        "portability": get_portability_view(snapshot=snapshot_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "action_deck": action_deck,
@@ -214,6 +224,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "swarm",
         "federation",
         "managed_copies",
+        "portability",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -336,6 +347,10 @@ def _build_app() -> FastAPI:
     def managed_copies_surface() -> dict[str, object]:
         return get_managed_copies_view()
 
+    @app.get("/api/portability")
+    def portability_surface() -> dict[str, object]:
+        return get_portability_view()
+
     @app.get("/api/apprenticeship")
     def apprenticeship_surface() -> dict[str, object]:
         return get_apprenticeship_view()
@@ -434,6 +449,30 @@ def _build_app() -> FastAPI:
             "runs": refresh_payload["runs"],
             "fabric": refresh_payload["fabric"],
         }
+
+    @app.post("/api/portability/export")
+    def portability_export_route(request: Request, payload: PortabilityExportRequest) -> dict[str, object]:
+        result = portability_export(request, payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/portability/import/preview")
+    def portability_import_preview_route(
+        request: Request,
+        payload: PortabilityImportPreviewRequest,
+    ) -> dict[str, object]:
+        result = portability_import_preview(request, payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/portability/import/apply")
+    def portability_import_apply_route(
+        request: Request,
+        payload: PortabilityImportApplyRequest,
+    ) -> dict[str, object]:
+        result = portability_import_apply(request, payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
 
     @app.post("/api/apprenticeship/sessions")
     def apprenticeship_create(payload: HudApprenticeshipSessionCreateRequest) -> dict[str, object]:
@@ -979,3 +1018,4 @@ def _build_app() -> FastAPI:
 
 
 app = _build_app()
+

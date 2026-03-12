@@ -974,6 +974,62 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="portability-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Governed Portability</h2>
+            <span class="meta tiny" id="portability-meta">Continuity export and import state loading from Lens</span>
+          </div>
+          <p id="portability-summary" class="hero-copy">
+            Portability will render from governed continuity bundles.
+          </p>
+          <div class="desktop-grid" id="portability-cards">
+            <div class="desktop-pill"><strong>Exports</strong><span>Continuity cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="portability-controls">
+            <button class="btn-primary" type="button" onclick="exportPortabilityBundle()">Export Continuity Bundle</button>
+            <button class="btn-secondary" type="button" onclick="previewLatestPortabilityImport()" disabled>Preview Latest Import</button>
+            <button class="btn-secondary" type="button" onclick="applyPortabilityPreview()" disabled>Apply Previewed Import</button>
+          </div>
+          <p class="meta tiny" id="portability-controls-meta">
+            Governed continuity controls will render from the backend contract.
+          </p>
+          <h3>Recent Exports</h3>
+          <ul class="list" id="portability-exports">
+            <li class="muted-empty">Portability exports will render from the backend contract.</li>
+          </ul>
+          <h3>Recent Imports</h3>
+          <ul class="list" id="portability-imports">
+            <li class="muted-empty">Portability imports will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="portability-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Portability Preview</h2>
+            <span class="meta tiny" id="portability-detail-meta">No preview selected</span>
+          </div>
+          <p id="portability-detail-summary" class="hero-copy">
+            Portability preview will render from governed export and import state.
+          </p>
+          <div class="desktop-grid" id="portability-detail-cards">
+            <div class="desktop-pill"><strong>Preview</strong><span>Continuity warnings will render from the backend contract.</span></div>
+          </div>
+          <h3>Warnings</h3>
+          <ul class="list" id="portability-warnings">
+            <li class="muted-empty">Continuity warnings will render from the backend contract.</li>
+          </ul>
+          <h3>Restore Plan</h3>
+          <ul class="list" id="portability-restore-list">
+            <li class="muted-empty">Restore sections will render from the backend contract.</li>
+          </ul>
+          <h3>Archive Plan</h3>
+          <ul class="list" id="portability-archive-list">
+            <li class="muted-empty">Archive-only sections will render from the backend contract.</li>
+          </ul>
+          <pre class="console" id="portability-detail">Portability audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="swarm-panel" data-signal="low">
           <div class="panel-head">
             <h2>Swarm Units</h2>
@@ -1403,6 +1459,7 @@
       let currentSwarmSurface = { units: [], delegations: [] };
       let currentFederationSurface = { nodes: [] };
       let currentManagedCopiesSurface = { copies: [] };
+      let currentPortabilitySurface = { exports: [], imports: [] };
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
@@ -1424,6 +1481,8 @@
       let currentFederationRows = [];
       let currentManagedCopyFocusId = "";
       let currentManagedCopyRows = [];
+      let currentPortabilityExportId = "";
+      let currentPortabilityImportId = "";
       let currentMissionRows = [];
       let currentIncidentRows = [];
       let currentInboxRows = [];
@@ -2586,6 +2645,7 @@
         currentSwarmSurface = payload.swarm || { units: [], delegations: [] };
         currentFederationSurface = payload.federation || { nodes: [] };
         currentManagedCopiesSurface = payload.managed_copies || { copies: [] };
+        currentPortabilitySurface = payload.portability || { exports: [], imports: [] };
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
         currentActionDeck = payload.action_deck || { items: [] };
@@ -2655,6 +2715,9 @@
         }
         if (shouldRender("managed_copies")) {
           renderManagedCopiesSurface(currentManagedCopiesSurface);
+        }
+        if (shouldRender("portability")) {
+          renderPortabilitySurface(currentPortabilitySurface);
         }
         if (
           shouldRender("current_work") ||
@@ -2726,6 +2789,7 @@
           swarm: currentSwarmSurface || { units: [], delegations: [] },
           federation: currentFederationSurface || { nodes: [] },
           managed_copies: currentManagedCopiesSurface || { copies: [] },
+          portability: currentPortabilitySurface || { exports: [], imports: [] },
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
           action_deck: currentActionDeck || { items: [] },
@@ -4493,6 +4557,198 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to replace managed copy."));
+        }
+        renderBootstrap(payload);
+      }
+
+      function inspectPortabilityExport(index) {
+        const row = Array.isArray(currentPortabilitySurface?.exports) ? currentPortabilitySurface.exports[index] : null;
+        if (!row) {
+          return;
+        }
+        currentPortabilityExportId = String(row.bundle_id || "").trim();
+        renderPortabilityDetail(currentPortabilitySurface);
+      }
+
+      function inspectPortabilityImport(index) {
+        const row = Array.isArray(currentPortabilitySurface?.imports) ? currentPortabilitySurface.imports[index] : null;
+        if (!row) {
+          return;
+        }
+        currentPortabilityImportId = String(row.import_id || "").trim();
+        renderPortabilityDetail(currentPortabilitySurface);
+      }
+
+      function renderPortabilityDetail(surface) {
+        const preview = surface?.preview && typeof surface.preview === "object" ? surface.preview : {};
+        const exports = Array.isArray(surface?.exports) ? surface.exports : [];
+        const imports = Array.isArray(surface?.imports) ? surface.imports : [];
+        const focusedExport = exports.find((row) => String(row?.bundle_id || "").trim() === String(currentPortabilityExportId || surface?.focus_bundle_id || "").trim()) || null;
+        const focusedImport = imports.find((row) => String(row?.import_id || "").trim() === String(currentPortabilityImportId || surface?.focus_import_id || "").trim()) || null;
+        document.getElementById("portability-detail-meta").textContent =
+          String(preview.preview_id || preview.bundle_id || "No preview selected").trim() || "No preview selected";
+        document.getElementById("portability-detail-summary").textContent =
+          String(preview.summary || "Portability preview will render from governed export and import state.");
+        applySeverityState(
+          document.getElementById("portability-detail-summary"),
+          String(preview.severity || surface?.severity || "low"),
+        );
+        applyPanelSignal("portability-detail-panel", String(preview.severity || surface?.severity || "low"));
+        renderDetailCards(
+          "portability-detail-cards",
+          Array.isArray(preview.cards) ? preview.cards : [],
+          "Preview",
+        );
+        const warnings = Array.isArray(preview.warnings) ? preview.warnings : [];
+        document.getElementById("portability-warnings").innerHTML = warnings.length
+          ? warnings.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
+          : '<li class="muted-empty">Continuity warnings will render from the backend contract.</li>';
+        const restoreSections = Array.isArray(preview.restore_sections) ? preview.restore_sections : [];
+        document.getElementById("portability-restore-list").innerHTML = restoreSections.length
+          ? restoreSections.map((item) => `<li><strong>${escapeHtml(String(item.label || item.id || "Section"))}</strong> <span class="meta">(${escapeHtml(String(item.count || "0"))})</span><br />${escapeHtml(String(item.policy || ""))}</li>`).join("")
+          : '<li class="muted-empty">Restore sections will render from the backend contract.</li>';
+        const archiveSections = Array.isArray(preview.archive_sections) ? preview.archive_sections : [];
+        document.getElementById("portability-archive-list").innerHTML = archiveSections.length
+          ? archiveSections.map((item) => `<li><strong>${escapeHtml(String(item.label || item.id || "Section"))}</strong> <span class="meta">(${escapeHtml(String(item.count || "0"))})</span><br />${escapeHtml(String(item.policy || ""))}</li>`).join("")
+          : '<li class="muted-empty">Archive-only sections will render from the backend contract.</li>';
+        document.getElementById("portability-detail").textContent = formatJson({
+          continuity: surface?.detail?.continuity || {},
+          preview,
+          focused_export_audit: focusedExport?.audit || surface?.detail?.focused_export_audit || {},
+          focused_import_audit: focusedImport?.audit || surface?.detail?.focused_import_audit || {},
+        });
+      }
+
+      function renderPortabilitySurface(surface) {
+        currentPortabilitySurface = surface || { exports: [], imports: [] };
+        const exports = Array.isArray(currentPortabilitySurface.exports) ? currentPortabilitySurface.exports : [];
+        const imports = Array.isArray(currentPortabilitySurface.imports) ? currentPortabilitySurface.imports : [];
+        document.getElementById("portability-meta").textContent =
+          `${exports.length} export(s) | ${imports.length} import(s) | ${String(currentPortabilitySurface.preview_state || "idle")}`;
+        document.getElementById("portability-summary").textContent =
+          String(currentPortabilitySurface.summary || "Portability will render from governed continuity bundles.");
+        applySeverityState(
+          document.getElementById("portability-summary"),
+          String(currentPortabilitySurface.severity || "low"),
+        );
+        applyPanelSignal("portability-panel", String(currentPortabilitySurface.severity || "low"));
+        renderDetailCards(
+          "portability-cards",
+          Array.isArray(currentPortabilitySurface.cards) ? currentPortabilitySurface.cards : [],
+          "Continuity",
+        );
+        const controls = currentPortabilitySurface.controls && typeof currentPortabilitySurface.controls === "object"
+          ? currentPortabilitySurface.controls
+          : {};
+        const exportControl = controls.export && typeof controls.export === "object" ? controls.export : {};
+        const previewControl = controls.preview_latest && typeof controls.preview_latest === "object" ? controls.preview_latest : {};
+        const applyControl = controls.apply_preview && typeof controls.apply_preview === "object" ? controls.apply_preview : {};
+        document.getElementById("portability-controls").innerHTML = `
+          <button class="btn-primary" type="button" onclick="exportPortabilityBundle()" ${exportControl.enabled === false ? "disabled" : ""}>${escapeHtml(String(exportControl.label || "Export Continuity Bundle"))}</button>
+          <button class="btn-secondary" type="button" onclick="previewLatestPortabilityImport()" ${previewControl.enabled ? "" : "disabled"}>${escapeHtml(String(previewControl.label || "Preview Latest Import"))}</button>
+          <button class="btn-secondary" type="button" onclick="applyPortabilityPreview()" ${applyControl.enabled ? "" : "disabled"}>${escapeHtml(String(applyControl.label || "Apply Previewed Import"))}</button>
+        `;
+        document.getElementById("portability-controls-meta").textContent =
+          `${String(exportControl.summary || "Export governed continuity from the backend contract.")} ${String(previewControl.summary || "")} ${String(applyControl.summary || "")}`.trim();
+        document.getElementById("portability-exports").innerHTML = exports.length
+          ? exports.map((row, index) => `
+              <li>
+                <div class="action-top">
+                  <div class="action-label">${escapeHtml(String(row.label || row.bundle_id || "Continuity Bundle"))}</div>
+                  <div class="badge-row">
+                    <span class="badge ${String(row.detail_state || "").trim().toLowerCase() === "current" ? "risk-medium" : "risk-low"}">${escapeHtml(String(row.detail_state || "historical"))}</span>
+                  </div>
+                </div>
+                <p class="meta">${escapeHtml(String(row.summary || "No export summary is available."))}</p>
+                <div class="action-buttons">
+                  <button class="btn-secondary" type="button" onclick="inspectPortabilityExport(${index})">Inspect</button>
+                  <button class="btn-secondary" type="button" onclick="previewSpecificPortabilityBundle('${escapeHtml(String(row.bundle_id || ""))}')">Preview</button>
+                </div>
+              </li>
+            `).join("")
+          : '<li class="muted-empty">Portability exports will render from the backend contract.</li>';
+        document.getElementById("portability-imports").innerHTML = imports.length
+          ? imports.map((row, index) => `
+              <li>
+                <div class="action-top">
+                  <div class="action-label">${escapeHtml(String(row.import_id || row.bundle_id || "Import"))}</div>
+                  <div class="badge-row">
+                    <span class="badge ${String(row.detail_state || "").trim().toLowerCase() === "current" ? "risk-medium" : "risk-low"}">${escapeHtml(String(row.detail_state || "historical"))}</span>
+                  </div>
+                </div>
+                <p class="meta">${escapeHtml(String(row.summary || "No import summary is available."))}</p>
+                <div class="action-buttons">
+                  <button class="btn-secondary" type="button" onclick="inspectPortabilityImport(${index})">Inspect</button>
+                </div>
+              </li>
+            `).join("")
+          : '<li class="muted-empty">Portability imports will render from the backend contract.</li>';
+
+        if (exports.length) {
+          currentPortabilityExportId = String(currentPortabilitySurface.focus_bundle_id || currentPortabilityExportId || exports[0]?.bundle_id || "").trim();
+        } else {
+          currentPortabilityExportId = "";
+        }
+        if (imports.length) {
+          currentPortabilityImportId = String(currentPortabilitySurface.focus_import_id || currentPortabilityImportId || imports[0]?.import_id || "").trim();
+        } else {
+          currentPortabilityImportId = "";
+        }
+        renderPortabilityDetail(currentPortabilitySurface);
+      }
+
+      async function exportPortabilityBundle() {
+        const response = await fetch("/api/portability/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to export continuity bundle."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function previewSpecificPortabilityBundle(bundleId) {
+        if (!bundleId) {
+          return;
+        }
+        const response = await fetch("/api/portability/import/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bundle_id: String(bundleId) }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to preview continuity bundle."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function previewLatestPortabilityImport() {
+        const control = currentPortabilitySurface?.controls?.preview_latest;
+        const bundleId = String(control?.bundle_id || currentPortabilitySurface?.focus_bundle_id || "").trim();
+        if (!bundleId) {
+          return;
+        }
+        await previewSpecificPortabilityBundle(bundleId);
+      }
+
+      async function applyPortabilityPreview() {
+        const control = currentPortabilitySurface?.controls?.apply_preview;
+        const previewId = String(control?.preview_id || currentPortabilitySurface?.preview?.preview_id || "").trim();
+        if (!previewId) {
+          return;
+        }
+        const response = await fetch("/api/portability/import/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ preview_id: previewId }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to apply continuity preview."));
         }
         renderBootstrap(payload);
       }

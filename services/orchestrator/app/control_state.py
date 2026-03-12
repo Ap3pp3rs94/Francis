@@ -14,6 +14,7 @@ DEFAULT_ALLOWED_APPS = [
     "forge",
     "apprenticeship",
     "fabric",
+    "portability",
     "swarm",
     "observer",
     "autonomy",
