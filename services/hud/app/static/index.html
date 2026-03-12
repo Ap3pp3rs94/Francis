@@ -920,6 +920,61 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="swarm-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Swarm Units</h2>
+            <span class="meta tiny" id="swarm-meta">Delegation registry loading from Lens</span>
+          </div>
+          <p id="swarm-summary" class="hero-copy">
+            Swarm units will render from the governed delegation registry.
+          </p>
+          <div class="desktop-grid" id="swarm-cards">
+            <div class="desktop-pill"><strong>Swarm</strong><span>Delegation cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="swarm-create-row">
+            <select class="chamber-input" id="swarm-target-unit">
+              <option value="planner">planner</option>
+              <option value="repo_operator">repo_operator</option>
+              <option value="verifier">verifier</option>
+              <option value="memory_curator">memory_curator</option>
+              <option value="incident_guard">incident_guard</option>
+            </select>
+            <input class="chamber-input" type="text" id="swarm-action-kind" placeholder="Action kind" />
+            <input class="chamber-input" type="text" id="swarm-summary-input" placeholder="Delegation summary" />
+            <button class="btn-primary" type="button" onclick="delegateSwarmWork()">Delegate Work</button>
+          </div>
+          <p class="meta tiny" id="swarm-create-meta">
+            Delegation defaults will come from the backend swarm contract.
+          </p>
+          <div class="desktop-grid" id="swarm-unit-cards">
+            <div class="desktop-pill"><strong>Unit</strong><span>Unit role cards will render from the backend contract.</span></div>
+          </div>
+          <ul class="list" id="swarm-delegation-list">
+            <li class="muted-empty">Delegation rows will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="swarm-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Delegation Detail</h2>
+            <span class="meta tiny" id="swarm-detail-meta">No delegation selected</span>
+          </div>
+          <p id="swarm-detail-summary" class="hero-copy">
+            Delegation detail will render from the backend swarm contract.
+          </p>
+          <div class="desktop-grid" id="swarm-detail-cards">
+            <div class="desktop-pill"><strong>Delegation</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="swarm-detail-controls">
+            <input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" />
+            <button class="btn-secondary" type="button" disabled>Lease Delegation</button>
+            <button class="btn-secondary" type="button" disabled>Complete Delegation</button>
+            <button class="btn-secondary" type="button" disabled>Fail Delegation</button>
+          </div>
+          <pre class="console" id="swarm-detail">Swarm audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="current-work-panel" data-signal="low">
           <div class="panel-head">
             <h2>Current Work Focus</h2>
@@ -1291,6 +1346,7 @@
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
       let currentCapabilityLibrary = { entries: [] };
+      let currentSwarmSurface = { units: [], delegations: [] };
       let currentFederationSurface = { nodes: [] };
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
@@ -1307,6 +1363,8 @@
       let currentRunsSurface = { run_groups: [] };
       let currentCapabilityFocusId = "";
       let currentCapabilityRows = [];
+      let currentSwarmFocusId = "";
+      let currentSwarmRows = [];
       let currentFederationFocusId = "";
       let currentFederationRows = [];
       let currentMissionRows = [];
@@ -2462,6 +2520,7 @@
         currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentCapabilityLibrary = payload.capability_library || { entries: [] };
+        currentSwarmSurface = payload.swarm || { units: [], delegations: [] };
         currentFederationSurface = payload.federation || { nodes: [] };
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
@@ -2523,6 +2582,9 @@
         }
         if (shouldRender("capability_library")) {
           renderCapabilityLibrary(currentCapabilityLibrary);
+        }
+        if (shouldRender("swarm")) {
+          renderSwarmSurface(currentSwarmSurface);
         }
         if (shouldRender("federation")) {
           renderFederationSurface(currentFederationSurface);
@@ -2594,6 +2656,7 @@
           shift_report: currentShiftReport || {},
           repo_drilldown: currentRepoDrilldown || {},
           capability_library: currentCapabilityLibrary || { entries: [] },
+          swarm: currentSwarmSurface || { units: [], delegations: [] },
           federation: currentFederationSurface || { nodes: [] },
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
@@ -4112,6 +4175,217 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to revoke federation node."));
+        }
+        renderBootstrap(payload);
+      }
+
+      function inspectSwarmDelegation(index) {
+        const row = Array.isArray(currentSwarmRows) ? currentSwarmRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentSwarmFocusId = String(row.delegation_id || "").trim();
+        document.getElementById("swarm-detail-meta").textContent =
+          `${String(row.target_label || row.target_unit_id || "unit")} | ${String(row.action_kind || "task")} | ${String(row.status || "queued")}`;
+        document.getElementById("swarm-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No swarm detail is available.");
+        renderDetailCards("swarm-detail-cards", row.detail_cards, "Delegation");
+        const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const lease = controls.lease && typeof controls.lease === "object" ? controls.lease : {};
+        const complete = controls.complete && typeof controls.complete === "object" ? controls.complete : {};
+        const fail = controls.fail && typeof controls.fail === "object" ? controls.fail : {};
+        document.getElementById("swarm-detail-controls").innerHTML = `
+          <input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" value="${escapeHtml(String(row.status || "").trim().toLowerCase() === "completed" ? String(row.audit?.result_summary || "") : String(row.audit?.last_error || ""))}" />
+          <button class="btn-secondary" type="button" ${lease.enabled ? "" : "disabled"} onclick="leaseSwarmDelegation()">${escapeHtml(String(lease.label || "Lease Delegation"))}</button>
+          <button class="btn-secondary" type="button" ${complete.enabled ? "" : "disabled"} onclick="completeSwarmDelegation()">${escapeHtml(String(complete.label || "Complete Delegation"))}</button>
+          <button class="btn-secondary" type="button" ${fail.enabled ? "" : "disabled"} onclick="failSwarmDelegation()">${escapeHtml(String(fail.label || "Fail Delegation"))}</button>
+        `;
+        document.getElementById("swarm-detail").textContent = formatJson(row.audit || row);
+        applyPanelSignal(
+          "swarm-detail-panel",
+          String(row.status || "").trim().toLowerCase() === "deadlettered"
+            ? "high"
+            : String(row.status || "").trim().toLowerCase() === "leased"
+              ? "medium"
+              : "low",
+        );
+      }
+
+      function renderSwarmSurface(surface) {
+        currentSwarmSurface = surface || { units: [], delegations: [] };
+        currentSwarmRows = Array.isArray(currentSwarmSurface.delegations) ? currentSwarmSurface.delegations : [];
+        const units = Array.isArray(currentSwarmSurface.units) ? currentSwarmSurface.units : [];
+        document.getElementById("swarm-meta").textContent =
+          `${units.length} unit(s) | ${Number(currentSwarmRows.length || 0)} delegation(s) | ${String(currentSwarmSurface.severity || "low")}`;
+        document.getElementById("swarm-summary").textContent =
+          String(currentSwarmSurface.summary || "Swarm units will render from the governed delegation registry.");
+        applySeverityState(
+          document.getElementById("swarm-summary"),
+          String(currentSwarmSurface.severity || "low"),
+        );
+        applyPanelSignal("swarm-panel", String(currentSwarmSurface.severity || "low"));
+        renderDetailCards(
+          "swarm-cards",
+          Array.isArray(currentSwarmSurface.cards) ? currentSwarmSurface.cards : [],
+          "Swarm",
+        );
+        const defaults = currentSwarmSurface.defaults && typeof currentSwarmSurface.defaults === "object"
+          ? currentSwarmSurface.defaults
+          : {};
+        document.getElementById("swarm-target-unit").value = String(defaults.default_target_unit_id || "planner");
+        document.getElementById("swarm-action-kind").value =
+          String(document.getElementById("swarm-action-kind")?.value || defaults.action_kinds?.[0] || "").trim();
+        document.getElementById("swarm-summary-input").value =
+          String(document.getElementById("swarm-summary-input")?.value || "").trim();
+        document.getElementById("swarm-create-meta").textContent =
+          `Suggested actions: ${Array.isArray(defaults.action_kinds) && defaults.action_kinds.length ? defaults.action_kinds.slice(0, 4).join(", ") : "mission.plan, repo.tests, verify.receipts"}`;
+        document.getElementById("swarm-unit-cards").innerHTML = units.length
+          ? units
+              .map(
+                (row) => `
+                  <div class="desktop-pill">
+                    <strong>${escapeHtml(String(row.label || "Unit"))}</strong>
+                    <span>${escapeHtml(String(row.role || "unit"))} | ${escapeHtml(String(row.state || "ready"))} | ${Number(row.active_count || 0)} active</span>
+                  </div>
+                `,
+              )
+              .join("")
+          : `<div class="desktop-pill"><strong>Unit</strong><span>Unit role cards will render from the backend contract.</span></div>`;
+        document.getElementById("swarm-delegation-list").innerHTML = currentSwarmRows.length
+          ? currentSwarmRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(String(row.target_label || row.target_unit_id || "Unit"))}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(String(row.status || "low").trim().toLowerCase() === "deadlettered" ? "high" : String(row.status || "").trim().toLowerCase() === "leased" ? "medium" : "low")}">${escapeHtml(String(row.status || "queued"))}</span>
+                        <span class="badge risk-low">${escapeHtml(String(row.action_kind || "task"))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(String(row.summary || "No delegation summary is available."))}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectSwarmDelegation(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Delegation rows will render from the backend contract.</li>`;
+        if (currentSwarmRows.length) {
+          const focusDelegationId = String(currentSwarmSurface.focus_delegation_id || currentSwarmFocusId || "").trim();
+          const focusIndex = focusDelegationId
+            ? currentSwarmRows.findIndex((row) => String(row.delegation_id || "").trim() === focusDelegationId)
+            : -1;
+          inspectSwarmDelegation(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          currentSwarmFocusId = "";
+          renderDetailCards("swarm-detail-cards", [], "Delegation");
+          document.getElementById("swarm-detail-meta").textContent = "No delegation selected";
+          document.getElementById("swarm-detail-summary").textContent =
+            "Delegation detail will render from the backend swarm contract.";
+          document.getElementById("swarm-detail-controls").innerHTML =
+            `<input class="chamber-input" type="text" id="swarm-detail-note" placeholder="Result or failure note" /><button class="btn-secondary" type="button" disabled>Lease Delegation</button><button class="btn-secondary" type="button" disabled>Complete Delegation</button><button class="btn-secondary" type="button" disabled>Fail Delegation</button>`;
+          document.getElementById("swarm-detail").textContent = formatJson(
+            currentSwarmSurface.detail && typeof currentSwarmSurface.detail === "object"
+              ? currentSwarmSurface.detail
+              : { delegations: [] },
+          );
+          applyPanelSignal("swarm-detail-panel", "low");
+        }
+      }
+
+      async function delegateSwarmWork() {
+        const targetUnitId = String(document.getElementById("swarm-target-unit")?.value || "planner").trim();
+        const actionKind = String(document.getElementById("swarm-action-kind")?.value || "").trim();
+        const summary = String(document.getElementById("swarm-summary-input")?.value || "").trim();
+        if (!targetUnitId || !actionKind || !summary) {
+          return;
+        }
+        const response = await fetch("/api/swarm/delegate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            target_unit_id: targetUnitId,
+            action_kind: actionKind,
+            summary,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to delegate swarm work."));
+        }
+        document.getElementById("swarm-summary-input").value = "";
+        renderBootstrap(payload);
+      }
+
+      async function leaseSwarmDelegation() {
+        const focused = Array.isArray(currentSwarmRows)
+          ? currentSwarmRows.find((row) => String(row?.delegation_id || "").trim() === String(currentSwarmFocusId || "").trim())
+          : null;
+        const delegationId = String(focused?.delegation_id || "").trim();
+        const unitId = String(focused?.target_unit_id || "").trim();
+        if (!delegationId || !unitId) {
+          return;
+        }
+        const response = await fetch(`/api/swarm/delegations/${encodeURIComponent(delegationId)}/lease`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unit_id: unitId }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to lease delegation."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function completeSwarmDelegation() {
+        const focused = Array.isArray(currentSwarmRows)
+          ? currentSwarmRows.find((row) => String(row?.delegation_id || "").trim() === String(currentSwarmFocusId || "").trim())
+          : null;
+        const delegationId = String(focused?.delegation_id || "").trim();
+        const unitId = String(focused?.target_unit_id || "").trim();
+        if (!delegationId || !unitId) {
+          return;
+        }
+        const resultSummary = String(document.getElementById("swarm-detail-note")?.value || "").trim();
+        const response = await fetch(`/api/swarm/delegations/${encodeURIComponent(delegationId)}/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            unit_id: unitId,
+            result_summary: resultSummary || "Delegation completed and handed back cleanly.",
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to complete delegation."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function failSwarmDelegation() {
+        const focused = Array.isArray(currentSwarmRows)
+          ? currentSwarmRows.find((row) => String(row?.delegation_id || "").trim() === String(currentSwarmFocusId || "").trim())
+          : null;
+        const delegationId = String(focused?.delegation_id || "").trim();
+        const unitId = String(focused?.target_unit_id || "").trim();
+        if (!delegationId || !unitId) {
+          return;
+        }
+        const error = String(document.getElementById("swarm-detail-note")?.value || "").trim();
+        const response = await fetch(`/api/swarm/delegations/${encodeURIComponent(delegationId)}/fail`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            unit_id: unitId,
+            error: error || "Delegation could not complete safely.",
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to fail delegation."));
         }
         renderBootstrap(payload);
       }

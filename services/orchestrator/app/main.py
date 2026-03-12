@@ -43,6 +43,7 @@ def _build_app() -> FastAPI:
     from services.orchestrator.app.routes.presence import router as presence_router
     from services.orchestrator.app.routes.receipts import router as receipts_router
     from services.orchestrator.app.routes.runs import router as runs_router
+    from services.orchestrator.app.routes.swarm import router as swarm_router
     from services.orchestrator.app.routes.telemetry import router as telemetry_router
     from services.orchestrator.app.routes.tools import router as tools_router
     from services.orchestrator.app.routes.worker import router as worker_router
@@ -60,6 +61,7 @@ def _build_app() -> FastAPI:
     app.include_router(capabilities_router)
     app.include_router(control_router)
     app.include_router(fabric_router)
+    app.include_router(swarm_router)
     app.include_router(federation_router)
     app.include_router(telemetry_router)
     app.include_router(receipts_router)

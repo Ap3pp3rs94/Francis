@@ -23,6 +23,7 @@ import services.hud.app.views.missions as missions_view
 import services.hud.app.views.repo_drilldown as repo_drilldown_view
 import services.hud.app.views.runs as runs_view
 import services.hud.app.views.shift_report as shift_report_view
+import services.hud.app.views.swarm as swarm_view
 from services.hud.app.main import app
 
 
@@ -123,6 +124,14 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Node detail will render from the backend federation contract." in response.text
     assert "Pair Node" in response.text
     assert "Revoke Node" in response.text
+    assert "Swarm Units" in response.text
+    assert "Swarm units will render from the governed delegation registry." in response.text
+    assert "Delegation Detail" in response.text
+    assert "Delegation detail will render from the backend swarm contract." in response.text
+    assert "Delegate Work" in response.text
+    assert "Lease Delegation" in response.text
+    assert "Complete Delegation" in response.text
+    assert "Fail Delegation" in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
     assert "Capability pressure will render from the internal library contract." in response.text
@@ -203,6 +212,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["shift_report"]["surface"] == "shift_report"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["capability_library"]["surface"] == "capability_library"
+    assert body["swarm"]["surface"] == "swarm"
     assert body["federation"]["surface"] == "federation"
     assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert body["approval_queue"]["surface"] == "approval_queue"
@@ -223,6 +233,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "swarm",
         "federation",
         "apprenticeship_surface",
         "approval_queue",
@@ -278,6 +289,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(swarm_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(federation_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -320,6 +332,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["shift_report"]["surface"] == "shift_report"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["capability_library"]["surface"] == "capability_library"
+    assert payload["swarm"]["surface"] == "swarm"
     assert payload["federation"]["surface"] == "federation"
     assert payload["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert payload["approval_queue"]["surface"] == "approval_queue"
@@ -336,6 +349,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["surface_digests"]["current_work"]
     assert payload["surface_digests"]["shift_report"]
     assert payload["surface_digests"]["capability_library"]
+    assert payload["surface_digests"]["swarm"]
     assert payload["surface_digests"]["federation"]
     assert payload["surface_digests"]["apprenticeship_surface"]
 
@@ -411,6 +425,68 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
                 }
             ]
         },
+    )
+    _write_json(
+        workspace_root / "swarm" / "units.json",
+        {
+            "version": 1,
+            "updated_at": "2026-03-11T12:00:00+00:00",
+            "units": [
+                {
+                    "unit_id": "coordinator",
+                    "label": "Coordinator",
+                    "role": "coordinator",
+                    "summary": "Routes bounded delegation.",
+                    "capabilities": ["delegate.route"],
+                    "delegatable": False,
+                    "local": True,
+                    "queued_count": 0,
+                    "active_count": 0,
+                    "completed_count": 0,
+                    "deadletter_count": 0,
+                    "state": "ready",
+                },
+                {
+                    "unit_id": "repo_operator",
+                    "label": "Repo Operator",
+                    "role": "repo_operator",
+                    "summary": "Carries repo checks.",
+                    "capabilities": ["repo.tests"],
+                    "delegatable": True,
+                    "local": True,
+                    "queued_count": 1,
+                    "active_count": 0,
+                    "completed_count": 0,
+                    "deadletter_count": 0,
+                    "state": "queued",
+                },
+            ],
+        },
+    )
+    _write_jsonl(
+        workspace_root / "swarm" / "delegations.jsonl",
+        [
+            {
+                "id": "delegation-live-1",
+                "ts": "2026-03-11T12:03:00+00:00",
+                "kind": "swarm.delegation",
+                "run_id": "run-live",
+                "trace_id": "run-live",
+                "source_unit_id": "coordinator",
+                "target_unit_id": "repo_operator",
+                "source_label": "Coordinator",
+                "target_label": "Repo Operator",
+                "action_kind": "repo.tests",
+                "summary": "Run the fast HUD checks.",
+                "handoff_note": "Keep one Francis presence while verifying the repo lane.",
+                "scope_apps": ["control", "approvals", "lens"],
+                "authority_basis": "mode=away actor=architect",
+                "status": "queued",
+                "attempts": 0,
+                "max_attempts": 2,
+                "next_run_after": "2026-03-11T12:03:00+00:00",
+            }
+        ],
     )
     _write_json(
         workspace_root / "federation" / "topology.json",
@@ -612,6 +688,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["capability_library"]["surface"] == "capability_library"
     assert body["capability_library"]["focus_entry_id"] == "cap-live-1"
     assert body["capability_library"]["entries"][0]["id"] == "cap-live-1"
+    assert body["swarm"]["surface"] == "swarm"
+    assert body["swarm"]["focus_delegation_id"] == "delegation-live-1"
+    assert body["swarm"]["delegations"][0]["delegation_id"] == "delegation-live-1"
     assert body["federation"]["surface"] == "federation"
     assert body["federation"]["focus_node_id"] == "node-home"
     assert body["federation"]["nodes"][1]["node_id"] == "node-home"
@@ -721,6 +800,21 @@ def test_hud_capability_library_route_returns_structured_surface() -> None:
     assert "focus_entry_id" in payload
     assert "cards" in payload
     assert "entries" in payload
+    assert "detail" in payload
+
+
+def test_hud_swarm_route_returns_structured_surface() -> None:
+    response = client.get("/api/swarm")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "swarm"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_delegation_id" in payload
+    assert "cards" in payload
+    assert "units" in payload
+    assert "delegations" in payload
     assert "detail" in payload
 
 
@@ -1395,6 +1489,88 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
     assert focused["controls"]["revoke"]["enabled"] is True
     local = next(row for row in payload["nodes"] if row["node_id"] == "node-local")
     assert local["controls"]["revoke"]["enabled"] is False
+
+
+def test_hud_swarm_view_exposes_focus_and_audit(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "swarm": {
+                "summary": "6 unit(s) advertised, 1 queued delegation(s), 0 active, 1 deadlettered.",
+                "unit_count": 6,
+                "queued_count": 1,
+                "leased_count": 0,
+                "completed_count": 0,
+                "deadletter_count": 1,
+                "units": [
+                    {
+                        "unit_id": "planner",
+                        "label": "Planner",
+                        "role": "planner",
+                        "summary": "Breaks work into bounded next moves.",
+                        "capabilities": ["mission.plan"],
+                        "state": "ready",
+                        "queued_count": 0,
+                        "active_count": 0,
+                        "completed_count": 0,
+                        "deadletter_count": 0,
+                    },
+                    {
+                        "unit_id": "repo_operator",
+                        "label": "Repo Operator",
+                        "role": "repo_operator",
+                        "summary": "Carries repo checks.",
+                        "capabilities": ["repo.tests"],
+                        "state": "attention",
+                        "queued_count": 1,
+                        "active_count": 0,
+                        "completed_count": 0,
+                        "deadletter_count": 1,
+                    },
+                ],
+                "delegations": [
+                    {
+                        "id": "delegation-live-1",
+                        "source_unit_id": "coordinator",
+                        "target_unit_id": "repo_operator",
+                        "source_label": "Coordinator",
+                        "target_label": "Repo Operator",
+                        "action_kind": "repo.tests",
+                        "summary": "Run the fast HUD checks.",
+                        "handoff_note": "Keep one Francis presence while verifying the repo lane.",
+                        "authority_basis": "mode=assist actor=architect",
+                        "run_id": "run-live",
+                        "trace_id": "trace-live",
+                        "scope_apps": ["control", "approvals", "lens"],
+                        "status": "deadlettered",
+                        "attempts": 1,
+                        "max_attempts": 1,
+                        "last_error": "Receipt chain needs operator review.",
+                        "last_failure_reason": "deadlettered",
+                    }
+                ],
+                "deadletter": [
+                    {
+                        "id": "delegation-live-1",
+                        "target_unit_id": "repo_operator",
+                        "status": "deadlettered",
+                    }
+                ],
+            }
+        }
+
+    monkeypatch.setattr(swarm_view, "build_lens_snapshot", _snapshot)
+
+    payload = swarm_view.get_swarm_view()
+
+    assert payload["surface"] == "swarm"
+    assert payload["focus_delegation_id"] == "delegation-live-1"
+    assert payload["severity"] == "high"
+    focused = next(row for row in payload["delegations"] if row["delegation_id"] == "delegation-live-1")
+    assert focused["detail_state"] == "current"
+    assert focused["audit"]["status"] == "deadlettered"
+    assert focused["audit"]["action_kind"] == "repo.tests"
+    assert focused["controls"]["lease"]["enabled"] is False
+    assert focused["controls"]["fail"]["enabled"] is False
 
 
 def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:

@@ -12,6 +12,7 @@ from francis_core.workspace_fs import WorkspaceFS
 
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from services.orchestrator.app.federation_store import load_or_init_topology
+from services.orchestrator.app.swarm_store import build_swarm_state
 from services.orchestrator.app.takeover_snapshot import load_takeover_state
 from services.orchestrator.app.usage_loop import build_current_work, build_next_best_action
 
@@ -395,6 +396,27 @@ def _materialize_federation(workspace_root: Path) -> dict[str, Any]:
     }
 
 
+def _materialize_swarm(workspace_root: Path) -> dict[str, Any]:
+    repo_root = workspace_root.parent.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    state = build_swarm_state(fs, repo_root=repo_root, workspace_root=workspace_root)
+    return {
+        "units": state["units"],
+        "delegations": state["delegations"],
+        "deadletter": state["deadletter"],
+        "unit_count": state["unit_count"],
+        "queued_count": state["queued_count"],
+        "leased_count": state["leased_count"],
+        "completed_count": state["completed_count"],
+        "deadletter_count": state["deadletter_count"],
+        "summary": state["summary"],
+        "updated_at": state["updated_at"],
+    }
+
+
 def _materialize_autonomy(workspace_root: Path) -> dict[str, Any]:
     budget_raw = _read_json(workspace_root / "autonomy" / "action_budget_state.json", {})
     if not isinstance(budget_raw, dict):
@@ -469,6 +491,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     security = _materialize_security(resolved_workspace)
     runs = _materialize_runs(resolved_workspace)
     autonomy = _materialize_autonomy(resolved_workspace)
+    swarm = _materialize_swarm(resolved_workspace)
     federation = _materialize_federation(resolved_workspace)
     apprenticeship = _materialize_apprenticeship(resolved_workspace)
     fabric = _materialize_fabric(resolved_workspace)
@@ -503,6 +526,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "security": security,
         "runs": runs,
         "autonomy": autonomy,
+        "swarm": swarm,
         "federation": federation,
         "apprenticeship": apprenticeship,
         "fabric": fabric,

@@ -38,6 +38,17 @@ from services.hud.app.views.missions import get_missions_view
 from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
 from services.hud.app.views.shift_report import get_shift_report_view
+from services.hud.app.views.swarm import get_swarm_view
+from services.orchestrator.app.routes.swarm import (
+    SwarmCompleteRequest,
+    SwarmDelegateRequest,
+    SwarmFailRequest,
+    SwarmLeaseRequest,
+    swarm_complete,
+    swarm_delegate,
+    swarm_fail,
+    swarm_lease,
+)
 from services.orchestrator.app.routes.federation import (
     FederationPairRequest,
     FederationRevokeRequest,
@@ -139,6 +150,7 @@ def _build_hud_payload(
         ),
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "capability_library": get_capability_library_view(snapshot=snapshot_payload),
+        "swarm": get_swarm_view(snapshot=snapshot_payload),
         "federation": get_federation_view(snapshot=snapshot_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
@@ -183,6 +195,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "swarm",
         "federation",
         "approval_queue",
         "blocked_actions",
@@ -215,6 +228,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "swarm",
         "federation",
         "approval_queue",
         "blocked_actions",
@@ -291,6 +305,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/capability-library")
     def capability_library() -> dict[str, object]:
         return get_capability_library_view()
+
+    @app.get("/api/swarm")
+    def swarm_surface() -> dict[str, object]:
+        return get_swarm_view()
 
     @app.get("/api/federation")
     def federation_surface() -> dict[str, object]:
@@ -380,6 +398,7 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
             "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
@@ -415,6 +434,7 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
             "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
@@ -457,6 +477,7 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
             "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
@@ -487,6 +508,7 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
             "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
@@ -521,6 +543,143 @@ def _build_app() -> FastAPI:
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/swarm/delegate")
+    def hud_swarm_delegate(request: Request, payload: SwarmDelegateRequest) -> dict[str, object]:
+        result = swarm_delegate(request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/swarm/delegations/{delegation_id}/lease")
+    def hud_swarm_lease(
+        delegation_id: str,
+        request: Request,
+        payload: SwarmLeaseRequest,
+    ) -> dict[str, object]:
+        result = swarm_lease(delegation_id, request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/swarm/delegations/{delegation_id}/complete")
+    def hud_swarm_complete(
+        delegation_id: str,
+        request: Request,
+        payload: SwarmCompleteRequest,
+    ) -> dict[str, object]:
+        result = swarm_complete(delegation_id, request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/swarm/delegations/{delegation_id}/fail")
+    def hud_swarm_fail(
+        delegation_id: str,
+        request: Request,
+        payload: SwarmFailRequest,
+    ) -> dict[str, object]:
+        result = swarm_fail(delegation_id, request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
             "federation": refresh_payload["federation"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
