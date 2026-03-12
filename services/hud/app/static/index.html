@@ -1318,6 +1318,10 @@
             <button class="btn-secondary" type="button" disabled>Open User Data</button>
           </div>
           <pre class="console" id="desktop-decommission">Decommission guidance will render here once the shell bridge is attached.</pre>
+          <h3>Support Bundle</h3>
+          <div class="desktop-grid" id="desktop-support-cards">
+            <div class="desktop-pill"><strong>Support</strong><span>Governed support-bundle state will render here once the shell bridge is attached.</span></div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -2077,6 +2081,55 @@
             ];
       }
 
+      function buildDesktopSupportCards() {
+        const support = desktopState.lifecycle?.support && typeof desktopState.lifecycle.support === "object"
+          ? desktopState.lifecycle.support
+          : null;
+        const preflight = desktopState.lifecycle?.preflight && typeof desktopState.lifecycle.preflight === "object"
+          ? desktopState.lifecycle.preflight
+          : null;
+        const recovery = desktopState.recovery && typeof desktopState.recovery === "object"
+          ? desktopState.recovery
+          : null;
+
+        if (!support) {
+          return [
+            { label: "Support", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Support-bundle export posture will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return [
+          {
+            label: "Summary",
+            value: support.lastBundleAt
+              ? `Last support bundle exported at ${String(support.lastBundleAt)}.`
+              : "No governed support bundle exported yet.",
+            tone: support.lastBundleAt ? "medium" : "low",
+          },
+          {
+            label: "Last Export",
+            value: String(support.lastBundleAt || "never"),
+            tone: support.lastBundleAt ? "medium" : "low",
+          },
+          {
+            label: "Last Path",
+            value: String(support.lastBundlePath || "not recorded"),
+            tone: support.lastBundlePath ? "medium" : "low",
+          },
+          {
+            label: "Preflight",
+            value: String(preflight?.summary || "Preflight summary unavailable"),
+            tone: preflight?.blocked > 0 ? "high" : preflight?.attention > 0 ? "medium" : "low",
+          },
+          {
+            label: "Recovery",
+            value: recovery?.needed ? String(recovery.message || recovery.status || "attention") : "Recovery nominal",
+            tone: recovery?.needed ? "medium" : "low",
+          },
+        ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2091,11 +2144,12 @@
         const decommissionCards = document.getElementById("desktop-decommission-cards");
         const decommissionActions = document.getElementById("desktop-decommission-actions");
         const decommissionDetail = document.getElementById("desktop-decommission");
+        const supportCards = document.getElementById("desktop-support-cards");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !meta || !recoveryCards || !updateCards || !display) {
           return;
         }
 
@@ -2186,6 +2240,7 @@
           <button class="${desktopState.alwaysOnTop ? "btn-primary" : "btn-secondary"}" type="button" ${disabled} onclick="toggleDesktopAlwaysOnTop()">${desktopState.alwaysOnTop ? "Release Topmost" : "Pin Topmost"}</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="restartDesktopHud()">Restart HUD</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopSupportBundle()">Export Support Bundle</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="importDesktopShellState()">Import Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="createDesktopRollbackSnapshot()">Create Snapshot</button>
           <button class="btn-secondary" type="button" ${desktopState.available && rollback?.latest?.backupId ? "" : "disabled"} onclick="restoreDesktopRollbackSnapshot()">Restore Latest Snapshot</button>
@@ -2245,8 +2300,10 @@
         renderDetailCards("desktop-preflight-cards", buildDesktopPreflightCards(), "Preflight");
         renderDetailCards("desktop-rollback-cards", buildDesktopRollbackCards(), "Rollback");
         renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
+        renderDetailCards("desktop-support-cards", buildDesktopSupportCards(), "Support");
         decommissionActions.innerHTML = `
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopSupportBundle()">Export Support Bundle</button>
           <button class="btn-secondary" type="button" ${desktopState.available && decommission?.installRoot ? "" : "disabled"} onclick="openDesktopLifecyclePath('install_root', 'install root')">Open Install Root</button>
           <button class="btn-secondary" type="button" ${desktopState.available && decommission?.userDataPath ? "" : "disabled"} onclick="openDesktopLifecyclePath('user_data', 'user data')">Open User Data</button>
           <button class="btn-secondary" type="button" ${desktopState.available && decommission?.workspaceRoot ? "" : "disabled"} onclick="openDesktopLifecyclePath('workspace_root', 'workspace root')">Open Workspace Root</button>
@@ -2316,6 +2373,26 @@
           desktopNotice = `${String(label || "Path")} opened.`;
         } catch (error) {
           desktopNotice = `Open path failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function exportDesktopSupportBundle() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.exportSupportBundle !== "function") {
+          desktopNotice = "Support-bundle export is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.exportSupportBundle(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = "Support bundle export completed or was dismissed.";
+        } catch (error) {
+          desktopNotice = `Support-bundle export failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }

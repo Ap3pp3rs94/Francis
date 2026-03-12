@@ -36,10 +36,17 @@ const {
   loadPortabilityState,
   savePortabilityState,
 } = require("./overlay-portability");
+const {
+  buildDefaultSupportState,
+  getSupportStatePath,
+  loadSupportState,
+  saveSupportState,
+} = require("./support-state");
 const { describeRetainedState } = require("./retained-state");
 const { buildPreflightState } = require("./preflight");
 const { createShellBackup, restoreShellBackup, summarizeBackups } = require("./backup-state");
 const { buildDecommissionPlan } = require("./decommission-plan");
+const { buildSupportBundle } = require("./support-bundle");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -54,6 +61,7 @@ let updateState = null;
 let buildInfo = null;
 let portabilityState = null;
 let backupState = null;
+let supportState = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
@@ -216,6 +224,7 @@ function getLifecycleState() {
         }),
     ),
     portability: portabilityState || buildDefaultPortabilityState(),
+    support: supportState || buildDefaultSupportState(),
     retainedState: app.isReady()
       ? describeRetainedState({
           userDataPath: app.getPath("userData"),
@@ -283,6 +292,7 @@ function getLifecycleState() {
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
     updateStatePath: app.isReady() ? getUpdateStatePath(app.getPath("userData")) : null,
+    supportStatePath: app.isReady() ? getSupportStatePath(app.getPath("userData")) : null,
     session,
   };
 }
@@ -407,6 +417,7 @@ function restoreLatestRollbackSnapshot(win = mainWindow) {
     sessionSchemaVersion: SESSION_STATE_VERSION,
   });
   portabilityState = loadPortabilityState(app.getPath("userData"));
+  supportState = loadSupportState(app.getPath("userData"));
   refreshBackupState();
 
   if (safeWindow) {
@@ -545,6 +556,7 @@ function resetRetainedShellState(win = mainWindow) {
     sessionSchemaVersion: SESSION_STATE_VERSION,
   });
   portabilityState = savePortabilityState(app.getPath("userData"), buildDefaultPortabilityState());
+  supportState = saveSupportState(app.getPath("userData"), buildDefaultSupportState());
   refreshBackupState();
   setOverlayRecovery({ needed: false, status: "nominal", message: "", lastExitReason: "" });
 
@@ -556,6 +568,48 @@ function resetRetainedShellState(win = mainWindow) {
 
   log("Reset retained shell state", {
     targetDisplayId: overlayPreferences.targetDisplayId,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+async function exportSupportBundle(win = mainWindow) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const timestamp = new Date().toISOString().replaceAll(":", "-");
+  const selected = await dialog.showSaveDialog(safeWindow || undefined, {
+    title: "Export Francis Overlay Support Bundle",
+    defaultPath: path.join(app.getPath("documents"), `francis-overlay-support-${timestamp}.json`),
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+
+  if (selected.canceled || !selected.filePath) {
+    return getOverlayState(safeWindow);
+  }
+
+  const overlaySnapshot = getOverlayState(safeWindow);
+  const payload = buildSupportBundle({
+    generatedAt: new Date().toISOString(),
+    hudUrl: HUD_URL,
+    overlay: overlaySnapshot,
+    lifecycle: overlaySnapshot.lifecycle,
+    hud: overlaySnapshot.hud,
+    recovery: overlaySnapshot.recovery,
+    display: overlaySnapshot.displayInfo,
+  });
+
+  fs.writeFileSync(selected.filePath, JSON.stringify(payload, null, 2), "utf8");
+  supportState = saveSupportState(app.getPath("userData"), {
+    ...(supportState || buildDefaultSupportState()),
+    lastBundleAt: payload.generatedAt,
+    lastBundlePath: selected.filePath,
+  });
+  log("Exported support bundle", {
+    filePath: selected.filePath,
+    summary: payload.summary,
   });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
@@ -655,6 +709,14 @@ function updateTray() {
         click: () => {
           exportShellState(requireWindow()).catch((error) => {
             log("Tray shell export failed", error instanceof Error ? error.message : String(error));
+          });
+        },
+      },
+      {
+        label: "Export Support Bundle",
+        click: () => {
+          exportSupportBundle(requireWindow()).catch((error) => {
+            log("Tray support bundle export failed", error instanceof Error ? error.message : String(error));
           });
         },
       },
@@ -1286,6 +1348,7 @@ function registerIpc() {
   ipcMain.handle("overlay:reset-shell-state", () => resetRetainedShellState(requireWindow()));
   ipcMain.handle("overlay:create-rollback-snapshot", () => createRollbackSnapshot("manual", "Created from the desktop shell."));
   ipcMain.handle("overlay:restore-latest-rollback", () => restoreLatestRollbackSnapshot(requireWindow()));
+  ipcMain.handle("overlay:export-support-bundle", () => exportSupportBundle(requireWindow()));
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
@@ -1416,6 +1479,7 @@ if (!app.requestSingleInstanceLock()) {
     buildInfo = resolveBuildIdentity(app, __dirname);
     sessionState = loadSessionState(app.getPath("userData"));
     portabilityState = loadPortabilityState(app.getPath("userData"));
+    supportState = loadSupportState(app.getPath("userData"));
     const priorUpdateState = loadUpdateState(app.getPath("userData"), {
       buildIdentity: buildInfo.identity,
       preferencesSchemaVersion: PREFERENCES_VERSION,

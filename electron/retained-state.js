@@ -5,6 +5,7 @@ const { PREFERENCES_FILE } = require("./preferences");
 const { SESSION_STATE_FILE } = require("./session-state");
 const { UPDATE_STATE_FILE } = require("./update-state");
 const { PORTABILITY_STATE_FILE } = require("./overlay-portability");
+const { SUPPORT_STATE_FILE } = require("./support-state");
 
 const SHELL_STATE_FILES = [
   {
@@ -34,6 +35,13 @@ const SHELL_STATE_FILES = [
     fileName: PORTABILITY_STATE_FILE,
     removable: true,
     description: "Most recent shell export/import activity and limits.",
+  },
+  {
+    id: "support",
+    label: "Support Bundle Ledger",
+    fileName: SUPPORT_STATE_FILE,
+    removable: true,
+    description: "Most recent governed support-bundle export activity.",
   },
 ];
 

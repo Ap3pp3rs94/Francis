@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   exportShellState() {
     return ipcRenderer.invoke("overlay:export-shell-state");
   },
+  exportSupportBundle() {
+    return ipcRenderer.invoke("overlay:export-support-bundle");
+  },
   importShellState() {
     return ipcRenderer.invoke("overlay:import-shell-state");
   },

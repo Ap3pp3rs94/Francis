@@ -5,10 +5,11 @@ const { PREFERENCES_FILE } = require("./preferences");
 const { SESSION_STATE_FILE } = require("./session-state");
 const { UPDATE_STATE_FILE } = require("./update-state");
 const { PORTABILITY_STATE_FILE } = require("./overlay-portability");
+const { SUPPORT_STATE_FILE } = require("./support-state");
 
 const BACKUP_ROOT_DIR = "overlay-backups";
 const MANIFEST_FILE = "manifest.json";
-const TRACKED_FILES = [PREFERENCES_FILE, SESSION_STATE_FILE, UPDATE_STATE_FILE, PORTABILITY_STATE_FILE];
+const TRACKED_FILES = [PREFERENCES_FILE, SESSION_STATE_FILE, UPDATE_STATE_FILE, PORTABILITY_STATE_FILE, SUPPORT_STATE_FILE];
 
 function getBackupRoot(userDataPath) {
   return path.join(userDataPath, BACKUP_ROOT_DIR);
