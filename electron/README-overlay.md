@@ -38,7 +38,8 @@ That PowerShell helper checks the HUD URL first and, if it is down, lets the Ele
 ## Package
 
 - `npm run overlay:pack` builds an unpacked portable app directory for local verification
-- `npm run overlay:dist` builds the portable Windows executable in `dist/overlay`
+- `npm run overlay:installer` builds a guided NSIS installer in `dist/overlay`
+- `npm run overlay:dist` builds both the portable executable and the NSIS installer in `dist/overlay`
 
 The packaged shell includes the Francis HUD Python source under `resources/python-src` and will attempt to boot it locally when no HUD server is already running.
 Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / `overlay:dist` do it for you. That stages a bundled Python runtime under `dist/python-runtime-staging` and packages it as `resources/python-runtime`.
@@ -60,6 +61,8 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
 - The shell also stores a small `overlay-session.json` continuity record so crash recovery can be surfaced on the next launch.
 - The Windows portable build is unsigned. SmartScreen or local policy may require an explicit trust decision until code signing is added.
+- The NSIS installer is also unsigned. SmartScreen or local policy may require an explicit trust decision until code signing is added.
+- Uninstall removes installed app files and shortcuts, but retained shell state under Electron user data is intentionally not deleted automatically.
 - Packaging assumes the build machine can supply a valid base Python home. If that is not discoverable from `.venv/pyvenv.cfg`, set `FRANCIS_OVERLAY_PYTHON_HOME` before running the package scripts.
 
 ## Current Operator Surface
@@ -75,7 +78,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD can now inspect and acknowledge lifecycle update notices instead of treating build changes as silent mutation
 - recovery now overrides startup posture safely, so unclean exits re-enter visible and interactive instead of hiding authority questions
 - the HUD and tray can now export/import safe shell posture with explicit limits around login settings and live authority
-- the shell can now be packaged into a portable Windows artifact with the Orb icon and current shell controls intact
+- the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
 
 ## Next Extensions
 

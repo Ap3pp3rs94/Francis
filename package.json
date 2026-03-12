@@ -11,7 +11,8 @@
     "overlay:test": "node --test electron/preferences.test.cjs electron/session-state.test.cjs electron/login-item.test.cjs electron/startup-profile.test.cjs electron/build-info.test.cjs electron/update-state.test.cjs electron/overlay-portability.test.cjs electron/python-runtime.test.cjs electron/hud-runtime.test.cjs",
     "overlay:prepare-runtime": "node electron/prepare-python-runtime.cjs",
     "overlay:pack": "npm run overlay:prepare-runtime && electron-builder --dir --win",
-    "overlay:dist": "npm run overlay:prepare-runtime && electron-builder --win portable"
+    "overlay:installer": "npm run overlay:prepare-runtime && electron-builder --win nsis",
+    "overlay:dist": "npm run overlay:prepare-runtime && electron-builder --win portable nsis"
   },
   "devDependencies": {
     "electron": "40.8.0",
@@ -147,9 +148,30 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
         }
-      ],
-      "artifactName": "Francis-Overlay-${version}-${arch}.${ext}"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Francis Overlay",
+      "uninstallDisplayName": "Francis Overlay",
+      "artifactName": "Francis-Overlay-${version}-${arch}-installer.${ext}"
+    },
+    "portable": {
+      "artifactName": "Francis-Overlay-${version}-${arch}-portable.${ext}"
     }
   }
 }
