@@ -8,6 +8,7 @@ from apps.api.main import app as orchestrator_app
 import services.hud.app.main as hud_main
 import services.hud.app.views.approval_queue as approval_queue_view
 import services.hud.app.views.action_deck as action_deck_view
+import services.hud.app.views.apprenticeship as apprenticeship_view
 import services.hud.app.views.blocked_actions as blocked_actions_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
@@ -100,6 +101,12 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Away-safe task posture will render from the backend contract." in response.text
     assert "Shift report actions will render from the backend contract." in response.text
     assert "Shift report detail will render from away continuity and handback state." in response.text
+    assert "Teaching Sessions" in response.text
+    assert "Teaching sessions will render from bounded demonstrations, replay, and review state." in response.text
+    assert "Start Session" in response.text
+    assert "Record Step" in response.text
+    assert "Replay lines will render from the backend contract." in response.text
+    assert "Generalized workflow detail will render from the backend contract." in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
     assert "Approval Queue" in response.text
@@ -178,6 +185,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["current_work"]["surface"] == "current_work"
     assert body["shift_report"]["surface"] == "shift_report"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
+    assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
     assert body["action_deck"]["surface"] == "action_deck"
@@ -195,6 +203,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "current_work",
         "shift_report",
         "repo_drilldown",
+        "apprenticeship_surface",
         "approval_queue",
         "execution_journal",
         "execution_feed",
@@ -247,6 +256,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_feed_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -286,6 +296,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["current_work"]["surface"] == "current_work"
     assert payload["shift_report"]["surface"] == "shift_report"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
+    assert payload["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["blocked_actions"]["surface"] == "blocked_actions"
     assert payload["action_deck"]["surface"] == "action_deck"
@@ -299,6 +310,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert "surface_digests" in payload
     assert payload["surface_digests"]["current_work"]
     assert payload["surface_digests"]["shift_report"]
+    assert payload["surface_digests"]["apprenticeship_surface"]
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -469,6 +481,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["shift_report"]["recommendations"]
     assert body["shift_report"]["controls"]["current_work"]["target_surface"] == "current_work"
     assert "away_safe_tasks" in body["shift_report"]
+    assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
+    assert body["apprenticeship_surface"]["focus_session_id"] == "teach-1"
+    assert body["apprenticeship_surface"]["sessions"][0]["id"] == "teach-1"
     assert body["snapshot"]["autonomy"]["guardrail"]["cooldown_active"] is False
     assert body["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
@@ -576,6 +591,21 @@ def test_hud_repo_drilldown_route_returns_structured_surface() -> None:
     assert "controls" in payload
     assert set(payload["controls"].keys()) == {"status", "diff", "lint", "tests"}
     assert "audit" in payload
+    assert "detail" in payload
+
+
+def test_hud_apprenticeship_route_returns_structured_surface() -> None:
+    response = client.get("/api/apprenticeship")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "apprenticeship_surface"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_session_id" in payload
+    assert "cards" in payload
+    assert "sessions" in payload
+    assert "controls" in payload
     assert "detail" in payload
 
 
@@ -1042,6 +1072,110 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
     assert payload["away_safe_tasks"]["summary"] == "1 away-safe task(s) ready, 1 gated."
     assert payload["away_safe_tasks"]["allowed"][0]["kind"] == "observer.scan"
     assert payload["away_safe_tasks"]["gated"][0]["kind"] == "worker.cycle"
+
+
+def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    _write_json(
+        workspace_root / "apprenticeship" / "sessions.json",
+        {
+            "sessions": [
+                {
+                    "id": "teach-current",
+                    "title": "Teach Repo Triage",
+                    "objective": "Capture repo review flow",
+                    "status": "recording",
+                    "step_count": 2,
+                    "created_at": "2026-03-11T10:00:00+00:00",
+                    "updated_at": "2026-03-11T10:05:00+00:00",
+                    "last_event_at": "2026-03-11T10:05:00+00:00",
+                    "generalization": {
+                        "summary": "Reusable repo triage workflow.",
+                        "workflow": [
+                            {
+                                "index": 1,
+                                "intent": "inspect repo state",
+                                "kind": "command",
+                                "action_template": "git status --short",
+                            }
+                        ],
+                        "parameter_candidates": [{"name": "artifact_path_1", "example": "README.md"}],
+                    },
+                }
+            ]
+        },
+    )
+    _write_jsonl(
+        workspace_root / "apprenticeship" / "sessions" / "teach-current.jsonl",
+        [
+            {
+                "id": "step-1",
+                "index": 1,
+                "kind": "command",
+                "action": "git status --short",
+                "intent": "inspect repo state",
+            },
+            {
+                "id": "step-2",
+                "index": 2,
+                "kind": "command",
+                "action": "git diff -- README.md",
+                "intent": "inspect changed file",
+                "artifact_path": "README.md",
+            },
+        ],
+    )
+
+    monkeypatch.setattr(apprenticeship_view, "get_workspace_root", lambda: workspace_root)
+    monkeypatch.setattr(
+        apprenticeship_view,
+        "build_lens_snapshot",
+        lambda: {"apprenticeship": {"session_count": 1, "recording_count": 1, "review_count": 0, "skillized_count": 0}},
+    )
+
+    payload = apprenticeship_view.get_apprenticeship_view()
+
+    assert payload["surface"] == "apprenticeship_surface"
+    assert payload["focus_session_id"] == "teach-current"
+    assert payload["sessions"][0]["detail_state"] == "current"
+    assert payload["sessions"][0]["detail_cards"]
+    assert payload["detail"]["replay"]["step_count"] == 2
+    assert payload["detail"]["generalization"]["summary"] == "Reusable repo triage workflow."
+    assert payload["controls"]["create_session"]["enabled"] is True
+    assert payload["controls"]["record_step"]["enabled"] is True
+    assert payload["controls"]["generalize"]["execute_kind"] == "apprenticeship.generalize"
+    assert payload["controls"]["skillize"]["execute_kind"] == "apprenticeship.skillize"
+
+
+def test_hud_apprenticeship_create_and_record_routes(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+    monkeypatch.setattr(apprenticeship_view, "get_workspace_root", lambda: workspace_root)
+
+    created = client.post(
+        "/api/apprenticeship/sessions",
+        json={"title": "Teach Lens Review", "objective": "Capture review flow", "tags": ["lens", "review"]},
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    session_id = created_body["session"]["id"]
+    assert created_body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
+
+    recorded = client.post(
+        f"/api/apprenticeship/sessions/{session_id}/steps",
+        json={
+            "kind": "command",
+            "action": "pytest -q tests/integration/test_hud_foundation.py",
+            "intent": "verify HUD contract",
+            "artifact_path": "tests/integration/test_hud_foundation.py",
+        },
+    )
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["step"]["intent"] == "verify HUD contract"
+    assert recorded_body["apprenticeship_surface"]["focus_session_id"] == session_id
+    assert recorded_body["apprenticeship_surface"]["detail"]["replay"]["step_count"] == 1
+    assert recorded_body["apprenticeship_surface"]["controls"]["generalize"]["enabled"] is True
 
 
 def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:

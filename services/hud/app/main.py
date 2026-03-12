@@ -20,6 +20,11 @@ from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_a
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
 from services.hud.app.views.action_deck import get_action_deck_view
+from services.hud.app.views.apprenticeship import (
+    create_apprenticeship_session_record,
+    get_apprenticeship_view,
+    record_apprenticeship_step,
+)
 from services.hud.app.views.blocked_actions import get_blocked_actions_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
@@ -61,6 +66,24 @@ class HudFabricQueryRequest(BaseModel):
     mission_id: str | None = None
     include_related: bool = True
     refresh: bool = False
+
+
+class HudApprenticeshipSessionCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    objective: str = ""
+    mission_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    created_by: str = "hud.operator"
+
+
+class HudApprenticeshipStepCreateRequest(BaseModel):
+    kind: str = Field(default="command", min_length=1, max_length=40)
+    action: str = Field(min_length=1, max_length=400)
+    intent: str = Field(min_length=1, max_length=200)
+    artifact_path: str = ""
+    notes: str = ""
+    inputs: dict[str, object] = Field(default_factory=dict)
+    outputs: dict[str, object] = Field(default_factory=dict)
 
 
 def _build_hud_payload(
@@ -110,6 +133,7 @@ def _build_hud_payload(
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "action_deck": action_deck,
+        "apprenticeship_surface": get_apprenticeship_view(snapshot=snapshot_payload),
         "execution_journal": execution_journal,
         "execution_feed": get_execution_feed_view(
             snapshot=snapshot_payload,
@@ -151,6 +175,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "approval_queue",
         "blocked_actions",
         "action_deck",
+        "apprenticeship_surface",
         "execution_journal",
         "execution_feed",
         "dashboard",
@@ -180,6 +205,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "approval_queue",
         "blocked_actions",
         "action_deck",
+        "apprenticeship_surface",
         "execution_journal",
         "execution_feed",
         "dashboard",
@@ -247,6 +273,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/repo-drilldown")
     def repo_drilldown() -> dict[str, object]:
         return get_repo_drilldown_view()
+
+    @app.get("/api/apprenticeship")
+    def apprenticeship_surface() -> dict[str, object]:
+        return get_apprenticeship_view()
 
     @app.get("/api/execution-journal")
     def execution_journal() -> dict[str, object]:
@@ -329,6 +359,81 @@ def _build_app() -> FastAPI:
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/apprenticeship/sessions")
+    def apprenticeship_create(payload: HudApprenticeshipSessionCreateRequest) -> dict[str, object]:
+        result = create_apprenticeship_session_record(
+            title=payload.title,
+            objective=payload.objective,
+            mission_id=payload.mission_id,
+            tags=payload.tags,
+            created_by=payload.created_by,
+        )
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/apprenticeship/sessions/{session_id}/steps")
+    def apprenticeship_record_step(session_id: str, payload: HudApprenticeshipStepCreateRequest) -> dict[str, object]:
+        try:
+            result = record_apprenticeship_step(
+                session_id=session_id,
+                kind=payload.kind,
+                action=payload.action,
+                intent=payload.intent,
+                artifact_path=payload.artifact_path,
+                notes=payload.notes,
+                inputs=payload.inputs,
+                outputs=payload.outputs,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
             "execution_journal": refresh_payload["execution_journal"],
             "execution_feed": refresh_payload["execution_feed"],
             "dashboard": refresh_payload["dashboard"],

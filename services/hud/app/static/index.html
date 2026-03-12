@@ -759,6 +759,68 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="apprenticeship-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Teaching Sessions</h2>
+            <span class="meta tiny" id="apprenticeship-meta">Teaching session UX loading from Lens</span>
+          </div>
+          <p id="apprenticeship-summary" class="hero-copy">
+            Teaching sessions will render from bounded demonstrations, replay, and review state.
+          </p>
+          <div class="desktop-grid" id="apprenticeship-cards">
+            <div class="desktop-pill"><strong>Teach</strong><span>Session counts will render from the backend contract.</span></div>
+          </div>
+          <div class="input-row">
+            <input type="text" id="apprenticeship-title" placeholder="Session title" />
+            <button class="btn-primary" type="button" onclick="createTeachingSession()">Start Session</button>
+          </div>
+          <div class="input-row">
+            <input type="text" id="apprenticeship-objective" placeholder="Objective (optional)" />
+            <input type="text" id="apprenticeship-tags" placeholder="Tags (comma separated)" />
+          </div>
+          <ul class="list" id="apprenticeship-sessions">
+            <li class="muted-empty">Teaching session rows will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="apprenticeship-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Teaching Session Detail</h2>
+            <span class="meta tiny" id="apprenticeship-detail-meta">No teaching session selected</span>
+          </div>
+          <p id="apprenticeship-detail-summary" class="hero-copy">
+            Replay, generalization, and skillization detail will render from the backend contract.
+          </p>
+          <div class="desktop-grid" id="apprenticeship-detail-cards">
+            <div class="desktop-pill"><strong>Session</strong><span>Teaching detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="input-row">
+            <input type="text" id="apprenticeship-step-action" placeholder="Demonstrated action" />
+            <button class="btn-secondary" type="button" onclick="recordTeachingStep()">Record Step</button>
+          </div>
+          <div class="input-row">
+            <input type="text" id="apprenticeship-step-intent" placeholder="Intent" />
+            <input type="text" id="apprenticeship-step-artifact" placeholder="Artifact path (optional)" />
+          </div>
+          <div class="input-row">
+            <input type="text" id="apprenticeship-step-notes" placeholder="Notes (optional)" />
+            <div class="work-action-row" id="apprenticeship-controls">
+              <button class="btn-secondary" type="button" disabled>Generalize</button>
+              <button class="btn-primary" type="button" disabled>Skillize</button>
+            </div>
+          </div>
+          <h3>Replay</h3>
+          <ul class="list" id="apprenticeship-replay">
+            <li class="muted-empty">Replay lines will render from the backend contract.</li>
+          </ul>
+          <h3>Generalization</h3>
+          <ul class="list" id="apprenticeship-generalization">
+            <li class="muted-empty">Generalized workflow detail will render from the backend contract.</li>
+          </ul>
+          <pre class="console" id="apprenticeship-detail">Teaching session detail will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="current-work-panel" data-signal="low">
           <div class="panel-head">
             <h2>Current Work Focus</h2>
@@ -1124,6 +1186,7 @@
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
+      let currentApprenticeshipSurface = { sessions: [] };
       let currentDashboard = {};
       let currentVoiceSurface = {};
       let currentOrbSurface = {};
@@ -1137,6 +1200,8 @@
       let currentIncidentRows = [];
       let currentInboxRows = [];
       let currentRunRows = [];
+      let currentApprenticeshipRows = [];
+      let currentApprenticeshipFocusId = "";
       let currentOrb = null;
       let currentFocusActionChip = null;
       let lastOperatorLink = {
@@ -2284,6 +2349,7 @@
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
         currentActionDeck = payload.action_deck || { items: [] };
+        currentApprenticeshipSurface = payload.apprenticeship_surface || { sessions: [] };
         currentMissionsSurface = payload.missions || {};
         currentIncidentsSurface = payload.incidents || {};
         currentFabricSurface = payload.fabric || {};
@@ -2334,6 +2400,9 @@
         }
         if (shouldRender("shift_report") || shouldRender("snapshot")) {
           renderShiftReportSurface(currentShiftReport);
+        }
+        if (shouldRender("apprenticeship_surface")) {
+          renderApprenticeshipSurface(currentApprenticeshipSurface);
         }
         if (
           shouldRender("current_work") ||
@@ -2404,6 +2473,7 @@
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
           action_deck: currentActionDeck || { items: [] },
+          apprenticeship_surface: currentApprenticeshipSurface || { sessions: [] },
           execution_journal: currentExecutionJournal || { items: [] },
           execution_feed: currentExecutionFeed || {},
           missions: currentMissionsSurface || {},
@@ -3456,6 +3526,221 @@
           return;
         }
         focusHudSurface(String(control.target_surface || ""));
+      }
+
+      function resolveFocusedApprenticeshipRow(surface = currentApprenticeshipSurface) {
+        const rows = Array.isArray(surface?.sessions) ? surface.sessions : [];
+        if (!rows.length) {
+          return null;
+        }
+        const preferredId = String(currentApprenticeshipFocusId || surface?.focus_session_id || "").trim();
+        if (preferredId) {
+          const matched = rows.find((row) => String(row?.id || "").trim() === preferredId);
+          if (matched) {
+            return matched;
+          }
+        }
+        return rows[0];
+      }
+
+      function inspectApprenticeshipSession(index) {
+        const row = Array.isArray(currentApprenticeshipRows) ? currentApprenticeshipRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentApprenticeshipFocusId = String(row.id || "").trim();
+        const detail = row.detail && typeof row.detail === "object" ? row.detail : {};
+        const replay = Array.isArray(detail.replay?.lines) ? detail.replay.lines : [];
+        const workflow = Array.isArray(detail.generalization?.workflow) ? detail.generalization.workflow : [];
+        const parameters = Array.isArray(detail.generalization?.parameter_candidates)
+          ? detail.generalization.parameter_candidates
+          : [];
+        document.getElementById("apprenticeship-detail-meta").textContent =
+          `${escapeHtml(row.status || "unknown")} | ${Number(row.step_count || 0)} step(s)`;
+        document.getElementById("apprenticeship-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No teaching session detail is available.");
+        renderDetailCards("apprenticeship-detail-cards", row.detail_cards, "Session");
+        document.getElementById("apprenticeship-replay").innerHTML = replay.length
+          ? replay.map((line) => `<li>${escapeHtml(String(line))}</li>`).join("")
+          : `<li class="muted-empty">Replay lines will render from the backend contract.</li>`;
+        document.getElementById("apprenticeship-generalization").innerHTML = workflow.length || parameters.length
+          ? [
+              ...workflow.map(
+                (step) =>
+                  `<li><strong>${escapeHtml(String(step.intent || "intent"))}</strong> <span class="meta">| ${escapeHtml(String(step.kind || "command"))}</span> ${escapeHtml(String(step.action_template || "No action template recorded."))}</li>`,
+              ),
+              ...parameters.map(
+                (candidate) =>
+                  `<li><strong>Parameter</strong> <span class="meta">| ${escapeHtml(String(candidate.name || "parameter"))}</span> ${escapeHtml(String(candidate.example || "No example recorded."))}</li>`,
+              ),
+            ].join("")
+          : `<li class="muted-empty">Generalized workflow detail will render from the backend contract.</li>`;
+        document.getElementById("apprenticeship-detail").textContent = formatJson(detail.audit || row.audit || row);
+        const controls = row.controls && typeof row.controls === "object"
+          ? row.controls
+          : currentApprenticeshipSurface?.controls && typeof currentApprenticeshipSurface.controls === "object"
+            ? currentApprenticeshipSurface.controls
+            : {};
+        const generalize = controls.generalize || {};
+        const skillize = controls.skillize || {};
+        document.getElementById("apprenticeship-controls").innerHTML = `
+          <button class="btn-secondary" type="button" ${generalize.enabled ? "" : "disabled"} onclick="runApprenticeshipControl('generalize')">${escapeHtml(generalize.label || "Generalize")}</button>
+          <button class="btn-primary" type="button" ${skillize.enabled ? "" : "disabled"} onclick="runApprenticeshipControl('skillize')">${escapeHtml(skillize.label || "Skillize")}</button>
+        `;
+      }
+
+      function renderApprenticeshipSurface(surface) {
+        currentApprenticeshipSurface = surface || { sessions: [] };
+        currentApprenticeshipRows = Array.isArray(currentApprenticeshipSurface.sessions)
+          ? currentApprenticeshipSurface.sessions
+          : [];
+        document.getElementById("apprenticeship-meta").textContent =
+          `${Number(currentApprenticeshipRows.length || 0)} session(s) | ${String(currentApprenticeshipSurface.severity || "low")}`;
+        document.getElementById("apprenticeship-summary").textContent =
+          String(currentApprenticeshipSurface.summary || "Teaching sessions will render from bounded demonstrations, replay, and review state.");
+        applySeverityState(
+          document.getElementById("apprenticeship-summary"),
+          String(currentApprenticeshipSurface.severity || "low"),
+        );
+        renderDetailCards(
+          "apprenticeship-cards",
+          Array.isArray(currentApprenticeshipSurface.cards) ? currentApprenticeshipSurface.cards : [],
+          "Teach",
+        );
+        document.getElementById("apprenticeship-sessions").innerHTML = currentApprenticeshipRows.length
+          ? currentApprenticeshipRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(row.title || "Teaching session")}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(row.status === "review" ? "high" : row.status === "recording" ? "medium" : "low")}">${escapeHtml(row.status || "unknown")}</span>
+                        <span class="badge risk-low">${escapeHtml(String(row.step_count || 0))} step(s)</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(row.summary || "No teaching summary is available.")}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectApprenticeshipSession(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Teaching session rows will render from the backend contract.</li>`;
+        const focused = resolveFocusedApprenticeshipRow(currentApprenticeshipSurface);
+        if (focused) {
+          currentApprenticeshipFocusId = String(focused.id || "").trim();
+          const focusIndex = currentApprenticeshipRows.findIndex(
+            (row) => String(row?.id || "").trim() === currentApprenticeshipFocusId,
+          );
+          inspectApprenticeshipSession(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          document.getElementById("apprenticeship-detail-meta").textContent = "No teaching session selected";
+          document.getElementById("apprenticeship-detail-summary").textContent =
+            "Replay, generalization, and skillization detail will render from the backend contract.";
+          renderDetailCards("apprenticeship-detail-cards", [], "Session");
+          document.getElementById("apprenticeship-replay").innerHTML =
+            `<li class="muted-empty">Replay lines will render from the backend contract.</li>`;
+          document.getElementById("apprenticeship-generalization").innerHTML =
+            `<li class="muted-empty">Generalized workflow detail will render from the backend contract.</li>`;
+          document.getElementById("apprenticeship-controls").innerHTML =
+            `<button class="btn-secondary" type="button" disabled>Generalize</button><button class="btn-primary" type="button" disabled>Skillize</button>`;
+          document.getElementById("apprenticeship-detail").textContent = formatJson(
+            currentApprenticeshipSurface.detail && typeof currentApprenticeshipSurface.detail === "object"
+              ? currentApprenticeshipSurface.detail
+              : { sessions: currentApprenticeshipRows },
+          );
+        }
+      }
+
+      async function createTeachingSession() {
+        const title = String(document.getElementById("apprenticeship-title")?.value || "").trim();
+        const objective = String(document.getElementById("apprenticeship-objective")?.value || "").trim();
+        const tags = String(document.getElementById("apprenticeship-tags")?.value || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        if (!title) {
+          return;
+        }
+        const response = await fetch("/api/apprenticeship/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, objective, tags }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("apprenticeship-detail").textContent = formatJson(payload);
+          return;
+        }
+        document.getElementById("apprenticeship-title").value = "";
+        document.getElementById("apprenticeship-objective").value = "";
+        document.getElementById("apprenticeship-tags").value = "";
+        renderBootstrap(payload);
+      }
+
+      async function recordTeachingStep() {
+        const focused = resolveFocusedApprenticeshipRow(currentApprenticeshipSurface);
+        const sessionId = String(focused?.id || "").trim();
+        if (!sessionId) {
+          return;
+        }
+        const action = String(document.getElementById("apprenticeship-step-action")?.value || "").trim();
+        const intent = String(document.getElementById("apprenticeship-step-intent")?.value || "").trim();
+        const artifactPath = String(document.getElementById("apprenticeship-step-artifact")?.value || "").trim();
+        const notes = String(document.getElementById("apprenticeship-step-notes")?.value || "").trim();
+        if (!action || !intent) {
+          return;
+        }
+        const response = await fetch(`/api/apprenticeship/sessions/${encodeURIComponent(sessionId)}/steps`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "command",
+            action,
+            intent,
+            artifact_path: artifactPath,
+            notes,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("apprenticeship-detail").textContent = formatJson(payload);
+          return;
+        }
+        document.getElementById("apprenticeship-step-action").value = "";
+        document.getElementById("apprenticeship-step-intent").value = "";
+        document.getElementById("apprenticeship-step-artifact").value = "";
+        document.getElementById("apprenticeship-step-notes").value = "";
+        renderBootstrap(payload);
+      }
+
+      async function runApprenticeshipControl(controlKey) {
+        const controls = currentApprenticeshipSurface?.controls && typeof currentApprenticeshipSurface.controls === "object"
+          ? currentApprenticeshipSurface.controls
+          : {};
+        const control = controls[controlKey];
+        if (!control || !control.enabled || String(control.control_type || "") !== "execute") {
+          return;
+        }
+        const response = await fetch("/api/actions/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: control.execute_kind,
+            args: control.args || {},
+            dry_run: false,
+            role: "architect",
+            user: "hud.operator",
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          document.getElementById("apprenticeship-detail").textContent = formatJson(payload);
+          return;
+        }
+        renderBootstrap(payload);
       }
 
       function renderCurrentWork(surface, snapshot, actions) {
