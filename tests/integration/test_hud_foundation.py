@@ -1370,7 +1370,8 @@ def test_hud_stream_emits_sse_bootstrap_updates(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
-    assert response.text.count("event: bootstrap") >= 2
+    assert response.text.count("event: bootstrap") == 1
+    assert response.text.count("event: surface_update") >= 1
     assert "event: end" in response.text
 
 

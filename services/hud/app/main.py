@@ -161,6 +161,41 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
     return digests
 
 
+def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "snapshot",
+        "actions",
+        "voice",
+        "orb",
+        "current_work",
+        "repo_drilldown",
+        "approval_queue",
+        "blocked_actions",
+        "action_deck",
+        "execution_journal",
+        "execution_feed",
+        "dashboard",
+        "missions",
+        "incidents",
+        "inbox",
+        "runs",
+        "fabric",
+    )
+    payload: dict[str, Any] = {
+        "status": refreshed.get("status", "ok"),
+        "service": refreshed.get("service", "hud"),
+        "version": refreshed.get("version", SERVICE_VERSION),
+        "surface_digests": refreshed.get("surface_digests", {}),
+    }
+    changed: list[str] = []
+    for key in keys:
+        if previous.get(key) != refreshed.get(key):
+            payload[key] = refreshed.get(key)
+            changed.append(key)
+    payload["changed"] = changed
+    return payload
+
+
 def _sse_event(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -338,14 +373,16 @@ def _build_app() -> FastAPI:
                 refreshed = _build_bootstrap_payload(max_actions=max_actions)
                 refreshed_digest = _payload_digest(refreshed)
                 if refreshed_digest != digest:
+                    update_payload = _surface_update_payload(bootstrap, refreshed)
+                    bootstrap = refreshed
                     digest = refreshed_digest
                     updates += 1
                     yield _sse_event(
-                        "bootstrap",
+                        "surface_update",
                         {
                             "stream_id": stream_id,
                             "digest": digest,
-                            "payload": refreshed,
+                            "payload": update_payload,
                         },
                     )
                     continue

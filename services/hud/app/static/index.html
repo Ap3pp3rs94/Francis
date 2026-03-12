@@ -1094,6 +1094,12 @@
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
+      let currentDashboard = {};
+      let currentVoiceSurface = {};
+      let currentOrbSurface = {};
+      let currentMissionsSurface = {};
+      let currentIncidentsSurface = {};
+      let currentFabricSurface = {};
       let currentInboxSurface = { messages: [] };
       let currentRunsSurface = { run_groups: [] };
       let currentMissionRows = [];
@@ -2238,28 +2244,34 @@
         };
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
         currentSnapshot = payload.snapshot || null;
+        currentDashboard = payload.dashboard || {};
+        currentVoiceSurface = payload.voice || {};
+        currentOrbSurface = payload.orb || {};
         currentCurrentWork = payload.current_work || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
         currentActionDeck = payload.action_deck || { items: [] };
+        currentMissionsSurface = payload.missions || {};
+        currentIncidentsSurface = payload.incidents || {};
+        currentFabricSurface = payload.fabric || {};
         currentInboxSurface = payload.inbox || { messages: [] };
         currentRunsSurface = payload.runs || { run_groups: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
         currentExecutionFeed = payload.execution_feed || {};
 
         if (shouldRender("dashboard") || shouldRender("snapshot")) {
-          const mode = payload.dashboard.mode;
+          const mode = currentDashboard.mode;
           const modeRow = document.getElementById("mode-row");
           modeRow.innerHTML = [
             `<div class="pill"><strong>Mode</strong><span>${escapeHtml(mode.current)}</span></div>`,
             `<div class="pill"><strong>Kill Switch</strong><span>${mode.kill_switch ? "active" : "clear"}</span></div>`,
-            `<div class="pill"><strong>Objective</strong><span>${escapeHtml(payload.dashboard.objective.label)}</span></div>`,
+            `<div class="pill"><strong>Objective</strong><span>${escapeHtml(currentDashboard.objective.label)}</span></div>`,
             `<div class="pill"><strong>Pending Approvals</strong><span>${payload.snapshot.approvals.pending_count}</span></div>`,
           ].join("");
 
           const cards = document.getElementById("cards");
-          cards.innerHTML = payload.dashboard.cards
+          cards.innerHTML = currentDashboard.cards
             .map(
               (card) => {
                 const signal = String(card.signal || "low").trim().toLowerCase() || "low";
@@ -2286,7 +2298,7 @@
         }
 
         if (shouldRender("orb")) {
-          renderOrb(payload.orb || {});
+          renderOrb(currentOrbSurface);
         }
         if (
           shouldRender("current_work") ||
@@ -2311,10 +2323,10 @@
           renderExecutionFeedSurface(currentExecutionFeed);
         }
         if (shouldRender("missions")) {
-          renderMissionStack(payload.missions || {});
+          renderMissionStack(currentMissionsSurface);
         }
         if (shouldRender("incidents") || shouldRender("runs") || shouldRender("snapshot")) {
-          renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
+          renderIncidents(currentIncidentsSurface, currentIncidentsSurface?.security || payload.snapshot?.security || {}, payload.runs || {});
         }
         if (shouldRender("inbox")) {
           renderInboxSurface(currentInboxSurface);
@@ -2326,11 +2338,11 @@
           renderActions(currentActionDeck, currentBlockedActions);
         }
         if (shouldRender("fabric") || shouldRender("snapshot")) {
-          renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
-          renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
+          renderFabricSummary(currentFabricSurface || { summary: payload.snapshot?.fabric || {} });
+          renderFabricBootstrapDetail(currentFabricSurface || { summary: payload.snapshot?.fabric || {} });
         }
         if (shouldRender("voice")) {
-          renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+          renderVoiceBriefing(currentVoiceSurface, { source: "stream" });
         }
         const focusSyncKeys = ["snapshot", "current_work", "actions", "approval_queue", "execution_journal", "execution_feed"];
         const focusSyncChanged = focusSyncKeys.some((key) => shouldRender(key));
@@ -2339,6 +2351,32 @@
         }
         currentSurfaceDigests = nextSurfaceDigests;
         document.body.dataset.boot = "ready";
+      }
+
+      function snapshotHudPayload() {
+        return {
+          status: "ok",
+          service: "hud",
+          version: "0.2.0",
+          snapshot: currentSnapshot || {},
+          actions: currentActions || { action_chips: [], blocked_actions: [] },
+          dashboard: currentDashboard || {},
+          voice: currentVoiceSurface || {},
+          orb: currentOrbSurface || {},
+          current_work: currentCurrentWork || {},
+          repo_drilldown: currentRepoDrilldown || {},
+          approval_queue: currentApprovalQueue || { items: [] },
+          blocked_actions: currentBlockedActions || { items: [] },
+          action_deck: currentActionDeck || { items: [] },
+          execution_journal: currentExecutionJournal || { items: [] },
+          execution_feed: currentExecutionFeed || {},
+          missions: currentMissionsSurface || {},
+          incidents: currentIncidentsSurface || {},
+          inbox: currentInboxSurface || { messages: [] },
+          runs: currentRunsSurface || { run_groups: [] },
+          fabric: currentFabricSurface || {},
+          surface_digests: currentSurfaceDigests || {},
+        };
       }
 
       function summarizeSecurity(security) {
@@ -4441,6 +4479,22 @@
           const message = JSON.parse(event.data);
           renderBootstrap(message.payload);
           setStreamStatus("live", message.stream_id.slice(0, 8));
+        });
+
+        streamSource.addEventListener("surface_update", (event) => {
+          const message = JSON.parse(event.data);
+          const partial = message.payload && typeof message.payload === "object" ? message.payload : {};
+          const merged = {
+            ...snapshotHudPayload(),
+            ...partial,
+            surface_digests:
+              partial.surface_digests && typeof partial.surface_digests === "object"
+                ? partial.surface_digests
+                : currentSurfaceDigests,
+          };
+          renderBootstrap(merged);
+          const changed = Array.isArray(partial.changed) ? partial.changed.slice(0, 3).join(",") : "update";
+          setStreamStatus("live", `${message.stream_id.slice(0, 8)} | ${changed}`);
         });
 
         streamSource.addEventListener("heartbeat", (event) => {
