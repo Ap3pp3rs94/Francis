@@ -1291,6 +1291,10 @@
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
+          <h3>Recovery Briefing</h3>
+          <div class="desktop-grid" id="desktop-recovery-cards">
+            <div class="desktop-pill"><strong>Recovery</strong><span>Recovery briefing will render here when the shell restores from an unclean exit.</span></div>
+          </div>
           <pre class="console" id="desktop-display">Desktop shell detail will render here. Browser mode until Electron is attached.</pre>
         </article>
         <article class="panel accent">
@@ -1525,7 +1529,10 @@
         targetDisplayId: null,
         activeDisplayId: null,
         preferencesPath: null,
+        launchOnStartup: false,
+        recovery: null,
         hud: null,
+        lifecycle: null,
         shortcuts: {
           toggleOverlay: "Ctrl+Shift+Alt+F",
           toggleClickThrough: "Ctrl+Shift+Alt+C",
@@ -1692,6 +1699,99 @@
         return titleCase(hud.mode);
       }
 
+      function buildDesktopRecoveryCards() {
+        const recovery = desktopState.recovery;
+        const session = desktopState.lifecycle?.session && typeof desktopState.lifecycle.session === "object"
+          ? desktopState.lifecycle.session
+          : {};
+        const mission = currentCurrentWork?.mission && typeof currentCurrentWork.mission === "object"
+          ? currentCurrentWork.mission
+          : null;
+        const lastRun = currentCurrentWork?.last_run && typeof currentCurrentWork.last_run === "object"
+          ? currentCurrentWork.last_run
+          : null;
+        const pendingApprovals = Number(
+          currentApprovalQueue?.pending_count
+          || (Array.isArray(currentApprovalQueue?.items) ? currentApprovalQueue.items.length : 0)
+          || 0,
+        );
+        const nextResume = currentCurrentWork?.next_action_resume && typeof currentCurrentWork.next_action_resume === "object"
+          ? currentCurrentWork.next_action_resume
+          : null;
+        const focusAction = currentCurrentWork?.focus_action && typeof currentCurrentWork.focus_action === "object"
+          ? currentCurrentWork.focus_action
+          : null;
+        const handbackSummary = String(currentShiftReport?.detail?.handback?.summary || "").trim();
+
+        if (!recovery?.needed) {
+          return [
+            { label: "Recovery", value: "nominal", tone: "low" },
+            {
+              label: "Startup",
+              value: desktopState.launchOnStartup ? "resident at login" : "manual launch",
+              tone: desktopState.launchOnStartup ? "medium" : "low",
+            },
+            {
+              label: "Safe Resume",
+              value: focusAction?.label || "No recovery action needed",
+              tone: "low",
+            },
+          ];
+        }
+
+        const resumeLabel = nextResume?.label
+          || focusAction?.label
+          || (pendingApprovals > 0 ? "Review approvals before resuming" : "Inspect current work before resuming");
+
+        return [
+          {
+            label: "Recovery",
+            value: String(recovery.status || "attention"),
+            tone: "high",
+          },
+          {
+            label: "Last Exit",
+            value: String(session.lastExitReason || recovery.lastExitReason || "unclean_exit"),
+            tone: "high",
+          },
+          {
+            label: "Exit Time",
+            value: String(session.lastExitAt || "unknown"),
+            tone: "medium",
+          },
+          {
+            label: "Mission",
+            value: mission?.title ? String(mission.title) : "No active mission surfaced",
+            tone: mission?.title ? "medium" : "low",
+          },
+          {
+            label: "Pending Approvals",
+            value: String(pendingApprovals),
+            tone: pendingApprovals > 0 ? "high" : "low",
+          },
+          {
+            label: "Last Run",
+            value: lastRun?.run_id ? `${String(lastRun.run_id)}${lastRun.summary ? ` | ${String(lastRun.summary)}` : ""}` : "No recent run surfaced",
+            tone: lastRun?.run_id ? "medium" : "low",
+          },
+          {
+            label: "Handback",
+            value: handbackSummary || "No explicit handback summary recorded",
+            tone: handbackSummary ? "medium" : "low",
+          },
+          {
+            label: "Safe Resume",
+            value: resumeLabel,
+            tone: nextResume?.can_resume ? "medium" : "high",
+          },
+          {
+            label: "Authority",
+            value: "Pilot and Away do not auto-resume after recovery.",
+            tone: "high",
+          },
+        ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -1699,8 +1799,9 @@
         const actions = document.getElementById("desktop-actions");
         const targets = document.getElementById("desktop-targets");
         const meta = document.getElementById("desktop-meta");
+        const recoveryCards = document.getElementById("desktop-recovery-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !meta || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !meta || !recoveryCards || !display) {
           return;
         }
 
@@ -1809,6 +1910,7 @@
         meta.textContent = desktopState.available
           ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
+        renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
