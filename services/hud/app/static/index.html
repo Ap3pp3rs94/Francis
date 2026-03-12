@@ -1298,6 +1298,10 @@
           <div class="desktop-grid" id="desktop-portability-cards">
             <div class="desktop-pill"><strong>Portability</strong><span>Export and import posture will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Retained State</h3>
+          <div class="desktop-grid" id="desktop-retained-state-cards">
+            <div class="desktop-pill"><strong>Retained</strong><span>Retained local state will render here once the shell bridge is attached.</span></div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -1898,6 +1902,59 @@
         ];
       }
 
+      function buildDesktopRetainedStateCards() {
+        const retained = desktopState.lifecycle?.retainedState && typeof desktopState.lifecycle.retainedState === "object"
+          ? desktopState.lifecycle.retainedState
+          : null;
+
+        if (!retained) {
+          return [
+            { label: "Retained", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Retained-state posture will appear once the desktop bridge is attached.", tone: "low" },
+          ];
+        }
+
+        const workspaceRoot = Array.isArray(retained.items)
+          ? retained.items.find((item) => item.id === "workspace_root")
+          : null;
+        const startupEntry = Array.isArray(retained.items)
+          ? retained.items.find((item) => item.id === "launch_at_login")
+          : null;
+
+        return [
+          {
+            label: "Summary",
+            value: String(retained.summary || "Retained state summary unavailable"),
+            tone: retained.removableCount > 0 ? "medium" : "low",
+          },
+          {
+            label: "Retained Surfaces",
+            value: String(retained.retainedCount || 0),
+            tone: retained.retainedCount > 0 ? "medium" : "low",
+          },
+          {
+            label: "Removable Surfaces",
+            value: String(retained.removableCount || 0),
+            tone: retained.removableCount > 0 ? "medium" : "low",
+          },
+          {
+            label: "Workspace Root",
+            value: workspaceRoot?.path ? String(workspaceRoot.path) : "not surfaced",
+            tone: workspaceRoot?.exists ? "medium" : "low",
+          },
+          {
+            label: "Workspace Entries",
+            value: String(workspaceRoot?.entryCount || 0),
+            tone: workspaceRoot?.entryCount ? "medium" : "low",
+          },
+          {
+            label: "Launch At Login",
+            value: startupEntry?.enabled ? "enabled" : startupEntry?.exists ? "disabled" : "unavailable",
+            tone: startupEntry?.enabled ? "medium" : "low",
+          },
+        ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -1906,11 +1963,12 @@
         const targets = document.getElementById("desktop-targets");
         const startupProfiles = document.getElementById("desktop-startup-profiles");
         const portabilityCards = document.getElementById("desktop-portability-cards");
+        const retainedStateCards = document.getElementById("desktop-retained-state-cards");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !meta || !recoveryCards || !updateCards || !display) {
           return;
         }
 
@@ -2000,6 +2058,7 @@
           <button class="btn-secondary" type="button" ${disabled} onclick="restartDesktopHud()">Restart HUD</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="importDesktopShellState()">Import Shell State</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="resetDesktopShellState()">Reset Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="resetDesktopLayout()">Reset Layout</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="toggleDesktopDevTools()">DevTools</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="refreshDesktopDisplay()">Refresh Display</button>
@@ -2051,6 +2110,7 @@
         renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
         renderDetailCards("desktop-update-cards", buildDesktopUpdateCards(), "Update");
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");
+        renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
@@ -2081,6 +2141,26 @@
         } catch (error) {
           desktopState = normalizeDesktopState(null, null);
           desktopNotice = `Desktop bridge sync failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function resetDesktopShellState() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.resetShellState !== "function") {
+          desktopNotice = "Retained-state reset is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.resetShellState(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = "Local shell state reset to defaults. Workspace continuity was not deleted.";
+        } catch (error) {
+          desktopNotice = `Shell-state reset failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }

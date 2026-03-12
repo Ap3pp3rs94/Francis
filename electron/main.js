@@ -34,6 +34,7 @@ const {
   loadPortabilityState,
   savePortabilityState,
 } = require("./overlay-portability");
+const { describeRetainedState } = require("./retained-state");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -186,6 +187,7 @@ function getLifecycleState() {
   const login = getLaunchAtLoginState(app);
   const hudState = getHudState();
   const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
+  const workspaceRoot = app.isReady() ? path.join(app.getPath("userData"), "workspace") : null;
   const session = {
     ...(sessionState || buildDefaultSessionState()),
     hudCrashCount: hudState ? Number(hudState.crashCount || 0) : Number(sessionState?.hudCrashCount || 0),
@@ -208,6 +210,17 @@ function getLifecycleState() {
         }),
     ),
     portability: portabilityState || buildDefaultPortabilityState(),
+    retainedState: app.isReady()
+      ? describeRetainedState({
+          userDataPath: app.getPath("userData"),
+          workspaceRoot,
+          launchAtLogin: login,
+        })
+      : describeRetainedState({
+          userDataPath: ".",
+          workspaceRoot: null,
+          launchAtLogin: login,
+        }),
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
@@ -363,6 +376,48 @@ async function importShellState(win = mainWindow) {
   log("Imported overlay shell state", {
     filePath,
     startupProfile: overlayPreferences.startupProfile,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+function resetRetainedShellState(win = mainWindow) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const targetDisplay = getResolvedTargetDisplay(screen.getPrimaryDisplay().id);
+
+  try {
+    setLaunchAtLogin(app, false);
+  } catch (error) {
+    log("Reset shell state could not clear launch-at-login", error instanceof Error ? error.message : String(error));
+  }
+
+  overlayPreferences = savePreferences(
+    app.getPath("userData"),
+    buildDefaultPreferences(targetDisplay),
+    getDisplayContext().displays,
+    getDisplayContext().primaryDisplayId,
+  );
+  sessionState = saveSessionState(app.getPath("userData"), buildDefaultSessionState());
+  updateState = reconcileUpdateState(app.getPath("userData"), {
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    preferencesSchemaVersion: PREFERENCES_VERSION,
+    sessionSchemaVersion: SESSION_STATE_VERSION,
+  });
+  portabilityState = savePortabilityState(app.getPath("userData"), buildDefaultPortabilityState());
+  setOverlayRecovery({ needed: false, status: "nominal", message: "", lastExitReason: "" });
+
+  if (safeWindow) {
+    safeWindow.setBounds(overlayPreferences.windowBounds);
+    applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
+    applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
+  }
+
+  log("Reset retained shell state", {
+    targetDisplayId: overlayPreferences.targetDisplayId,
   });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
@@ -1038,6 +1093,7 @@ function registerIpc() {
   ipcMain.handle("overlay:acknowledge-update-notice", () => dismissUpdateNotice());
   ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
   ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));
+  ipcMain.handle("overlay:reset-shell-state", () => resetRetainedShellState(requireWindow()));
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));

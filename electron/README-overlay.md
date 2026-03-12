@@ -19,6 +19,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - records build identity and lifecycle update posture so source checkouts and packaged builds are both inspectable
 - persists session continuity so unclean exits and managed HUD crashes surface as recovery state on the next launch
 - supports guarded shell-state export and import so overlay posture can move machines without replaying authority
+- exposes retained-state posture so uninstall and reinstall do not feel haunted
 - reuses an already-running HUD if one exists, otherwise attempts to start the local HUD server automatically
 
 ## Run
@@ -78,6 +79,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD can now inspect and acknowledge lifecycle update notices instead of treating build changes as silent mutation
 - recovery now overrides startup posture safely, so unclean exits re-enter visible and interactive instead of hiding authority questions
 - the HUD and tray can now export/import safe shell posture with explicit limits around login settings and live authority
+- the HUD can now inspect retained shell surfaces and reset local shell residue without deleting workspace continuity
 - the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
 
 ## Next Extensions
