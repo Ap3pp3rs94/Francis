@@ -46,6 +46,173 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _clip(value: object, *, limit: int = 96) -> str:
+    text = " ".join(str(value or "").strip().split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _slug_tag(value: object) -> str:
+    token = "".join(
+        ch.lower()
+        if ch.isalnum()
+        else "-"
+        for ch in str(value or "").strip()
+    )
+    token = "-".join(part for part in token.split("-") if part)
+    return token[:32]
+
+
+def _mission_from_snapshot(snapshot: dict[str, object]) -> dict[str, Any]:
+    current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
+    mission = current_work.get("mission")
+    if isinstance(mission, dict):
+        return mission
+    missions = snapshot.get("missions", {}) if isinstance(snapshot.get("missions"), dict) else {}
+    active = missions.get("active", []) if isinstance(missions.get("active"), list) else []
+    if active and isinstance(active[0], dict):
+        return active[0]
+    return {}
+
+
+def _teaching_context(snapshot: dict[str, object]) -> dict[str, Any]:
+    current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
+    repo = current_work.get("repo", {}) if isinstance(current_work.get("repo"), dict) else {}
+    telemetry = current_work.get("telemetry", {}) if isinstance(current_work.get("telemetry"), dict) else {}
+    terminal = telemetry.get("last_terminal", {}) if isinstance(telemetry.get("last_terminal"), dict) else {}
+    attention = current_work.get("attention", {}) if isinstance(current_work.get("attention"), dict) else {}
+    next_action = (
+        snapshot.get("next_best_action", {}) if isinstance(snapshot.get("next_best_action"), dict) else {}
+    )
+    objective = snapshot.get("objective", {}) if isinstance(snapshot.get("objective"), dict) else {}
+    mission = _mission_from_snapshot(snapshot)
+    mission_title = str(mission.get("title", "")).strip()
+    mission_objective = str(mission.get("objective", "")).strip()
+    next_label = str(next_action.get("label", "")).strip()
+    next_reason = str(next_action.get("reason", "")).strip()
+    next_kind = str(next_action.get("kind", "")).strip().lower()
+    branch = str(repo.get("branch", "unknown")).strip() or "unknown"
+    changed_count = int(repo.get("changed_count", 0) or 0)
+    top_paths = [str(item).strip() for item in repo.get("top_paths", []) if str(item).strip()]
+    top_path = top_paths[0] if top_paths else ""
+    command = str(terminal.get("command", "")).strip()
+    attention_label = str(attention.get("label", "Stable")).strip() or "Stable"
+    attention_reason = str(attention.get("reason", "")).strip()
+
+    if mission_title:
+        title = f"Teach {mission_title}"
+    elif next_label:
+        title = f"Teach {next_label}"
+    elif top_path:
+        title = f"Teach {Path(top_path).stem.replace('_', ' ').replace('-', ' ').strip() or 'Current'} workflow"
+    else:
+        title = f"Teach {branch} workflow"
+
+    if mission_objective:
+        session_objective = mission_objective
+    elif str(objective.get("label", "")).strip():
+        session_objective = str(objective.get("label", "")).strip()
+    elif next_reason:
+        session_objective = next_reason
+    elif command:
+        session_objective = f"Capture the workflow around `{_clip(command, limit=72)}`."
+    elif attention_reason:
+        session_objective = attention_reason
+    else:
+        session_objective = "Capture the current workflow as a reusable bounded teaching session."
+
+    tags: list[str] = []
+    for candidate in (
+        "teaching",
+        mission_title,
+        next_kind.split(".", 1)[0] if next_kind else "",
+        attention.get("kind", ""),
+        branch if branch != "unknown" else "",
+    ):
+        slug = _slug_tag(candidate)
+        if slug and slug not in tags:
+            tags.append(slug)
+
+    if command:
+        record_action = command
+    elif next_label:
+        record_action = next_label
+    elif top_path:
+        record_action = f"Inspect {top_path}"
+    else:
+        record_action = "Describe the demonstrated step"
+
+    if next_reason:
+        record_intent = next_reason
+    elif mission_objective:
+        record_intent = mission_objective
+    elif mission_title:
+        record_intent = f"Advance {mission_title}."
+    elif attention_reason:
+        record_intent = attention_reason
+    else:
+        record_intent = "Capture the demonstrated operator step as reusable workflow knowledge."
+
+    summary_parts = []
+    if mission_title:
+        summary_parts.append(f"Mission {mission_title} is the current teaching anchor.")
+    if command:
+        summary_parts.append(f"Latest terminal command: {_clip(command, limit=84)}.")
+    elif next_label:
+        summary_parts.append(f"Next move: {next_label}.")
+    if top_path:
+        summary_parts.append(f"Primary repo path: {top_path}.")
+    if not summary_parts:
+        summary_parts.append("Teaching defaults are grounded in the current repo and operator context.")
+
+    cards = [
+        {
+            "label": "Mission",
+            "value": mission_title or "no active mission",
+            "tone": "medium" if mission_title else "low",
+        },
+        {
+            "label": "Repo",
+            "value": f"{branch} | {changed_count} change(s)" if repo else "status unavailable",
+            "tone": "medium" if changed_count > 0 else "low",
+        },
+        {
+            "label": "Terminal",
+            "value": _clip(command or "no recent terminal command", limit=44),
+            "tone": "high" if command else "low",
+        },
+        {
+            "label": "Next Move",
+            "value": _clip(next_label or attention_label or "no current move", limit=44),
+            "tone": "medium" if next_label else "low",
+        },
+        {
+            "label": "Path",
+            "value": top_path or "not anchored",
+            "tone": "medium" if top_path else "low",
+        },
+    ]
+
+    return {
+        "summary": " ".join(summary_parts),
+        "cards": cards,
+        "create_defaults": {
+            "title": _clip(title, limit=96) or "Teach Current Workflow",
+            "objective": _clip(session_objective, limit=180),
+            "mission_id": str(mission.get("id", "")).strip() or None,
+            "tags": tags,
+        },
+        "record_defaults": {
+            "kind": "command",
+            "action": _clip(record_action, limit=240),
+            "intent": _clip(record_intent, limit=180),
+            "artifact_path": top_path,
+            "notes": "",
+        },
+    }
+
+
 def _citation_label(citation: dict[str, Any]) -> str:
     rel_path = str(citation.get("rel_path", "")).strip()
     if not rel_path:
@@ -229,6 +396,7 @@ def _base_control(
     enabled: bool,
     summary: str,
     args: dict[str, object] | None = None,
+    defaults: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     return {
         "kind": kind,
@@ -238,6 +406,7 @@ def _base_control(
         "control_type": "execute",
         "execute_kind": kind,
         "args": args or {},
+        "defaults": defaults or {},
     }
 
 
@@ -248,10 +417,14 @@ def _session_controls(
     workspace_root: Path,
     session: dict[str, Any],
     steps: list[dict[str, Any]],
+    teaching_context: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     session_id = str(session.get("id", "")).strip()
     title = str(session.get("title", "Teaching session")).strip() or "Teaching session"
     generalization = session.get("generalization", {}) if isinstance(session.get("generalization"), dict) else {}
+    record_defaults = (
+        teaching_context.get("record_defaults", {}) if isinstance(teaching_context.get("record_defaults"), dict) else {}
+    )
     can_write, write_reason = _action_allowed(
         fs=fs,
         repo_root=repo_root,
@@ -277,11 +450,12 @@ def _session_controls(
             label="Record Step",
             enabled=can_write and bool(session_id),
             summary=(
-                f"Record another demonstrated step into {title}."
+                f"Record another demonstrated step into {title} using the live repo and terminal context."
                 if can_write and bool(session_id)
                 else f"Step recording is blocked: {write_reason}."
             ),
             args={"session_id": session_id, "step_kind": "command"},
+            defaults=record_defaults,
         ),
         "generalize": _base_control(
             kind="apprenticeship.generalize",
@@ -393,6 +567,7 @@ def _session_detail(
     repo_root: Path,
     workspace_root: Path,
     session: dict[str, Any],
+    teaching_context: dict[str, Any],
 ) -> dict[str, Any]:
     steps = load_session_steps(fs, str(session.get("id", "")).strip())
     replay = build_replay(session, steps)
@@ -405,6 +580,7 @@ def _session_detail(
         workspace_root=workspace_root,
         session=session,
         steps=steps,
+        teaching_context=teaching_context,
     )
     return {
         "session": session,
@@ -443,6 +619,7 @@ def _session_row(
     repo_root: Path,
     workspace_root: Path,
     session: dict[str, Any],
+    teaching_context: dict[str, Any],
 ) -> dict[str, Any]:
     detail = _session_detail(
         root=root,
@@ -450,6 +627,7 @@ def _session_row(
         repo_root=repo_root,
         workspace_root=workspace_root,
         session=session,
+        teaching_context=teaching_context,
     )
     return {
         "id": str(session.get("id", "")).strip(),
@@ -583,6 +761,7 @@ def get_apprenticeship_view(
     sessions = [row for row in list_sessions(fs, limit=12) if isinstance(row, dict)]
     focus_session = _focus_session(sessions)
     focus_session_id = str((focus_session or {}).get("id", "")).strip()
+    teaching_context = _teaching_context(snapshot)
     rows = [
         _session_row(
             root=root,
@@ -590,6 +769,7 @@ def get_apprenticeship_view(
             repo_root=repo_root,
             workspace_root=root,
             session=session,
+            teaching_context=teaching_context,
         )
         for session in sessions
     ]
@@ -601,15 +781,32 @@ def get_apprenticeship_view(
         workspace_root=root,
         action="apprenticeship.write",
     )
-    objective = snapshot.get("objective", {}) if isinstance(snapshot.get("objective"), dict) else {}
-    missions = snapshot.get("missions", {}) if isinstance(snapshot.get("missions"), dict) else {}
-    active_missions = missions.get("active", []) if isinstance(missions.get("active"), list) else []
-    default_mission_id = (
-        str(active_missions[0].get("id", "")).strip()
-        if active_missions and isinstance(active_missions[0], dict)
-        else ""
-    )
     focused_controls = focused_row.get("controls", {}) if isinstance(focused_row, dict) else {}
+    create_defaults = (
+        teaching_context.get("create_defaults", {})
+        if isinstance(teaching_context.get("create_defaults"), dict)
+        else {}
+    )
+    record_defaults = (
+        teaching_context.get("record_defaults", {})
+        if isinstance(teaching_context.get("record_defaults"), dict)
+        else {}
+    )
+    record_control = focused_controls.get(
+        "record_step",
+        _base_control(
+            kind="apprenticeship.step.record",
+            label="Record Step",
+            enabled=False,
+            summary="Select or start a teaching session before recording steps.",
+            defaults=record_defaults,
+        ),
+    )
+    if isinstance(record_control, dict):
+        record_control = {
+            **record_control,
+            "defaults": record_defaults,
+        }
 
     return {
         "status": "ok",
@@ -639,30 +836,21 @@ def get_apprenticeship_view(
                 "tone": "low",
             },
         ],
+        "context": teaching_context,
         "sessions": rows,
         "controls": {
             "create_session": {
                 "kind": "apprenticeship.session.create",
                 "label": "Start Teaching Session",
                 "enabled": create_allowed,
-                "summary": "Start a bounded teaching session for the current workflow."
+                "summary": teaching_context.get("summary", "Start a bounded teaching session for the current workflow.")
                 if create_allowed
                 else f"Teaching sessions are blocked: {create_reason}.",
                 "control_type": "create_session",
                 "execute_kind": "apprenticeship.session.create",
-                "defaults": {
-                    "title": "",
-                    "objective": str(objective.get("label", "")).strip(),
-                    "mission_id": default_mission_id,
-                    "tags": "",
-                },
+                "defaults": create_defaults,
             },
-            "record_step": focused_controls.get("record_step", _base_control(
-                kind="apprenticeship.step.record",
-                label="Record Step",
-                enabled=False,
-                summary="Select or start a teaching session before recording steps.",
-            )),
+            "record_step": record_control,
             "generalize": focused_controls.get("generalize", _base_control(
                 kind="apprenticeship.generalize",
                 label="Generalize",

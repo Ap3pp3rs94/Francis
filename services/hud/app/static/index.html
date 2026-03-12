@@ -770,6 +770,12 @@
           <div class="desktop-grid" id="apprenticeship-cards">
             <div class="desktop-pill"><strong>Teach</strong><span>Session counts will render from the backend contract.</span></div>
           </div>
+          <p class="meta" id="apprenticeship-context-summary">
+            Teaching defaults will ground themselves in the current mission, repo, and terminal context.
+          </p>
+          <div class="desktop-grid" id="apprenticeship-context-cards">
+            <div class="desktop-pill"><strong>Context</strong><span>Teaching context cards will render from the backend contract.</span></div>
+          </div>
           <div class="input-row">
             <input type="text" id="apprenticeship-title" placeholder="Session title" />
             <button class="btn-primary" type="button" onclick="createTeachingSession()">Start Session</button>
@@ -1210,6 +1216,8 @@
       let currentRunRows = [];
       let currentApprenticeshipRows = [];
       let currentApprenticeshipFocusId = "";
+      let currentApprenticeshipCreateDefaultsKey = "";
+      let currentApprenticeshipRecordDefaultsKey = "";
       let currentOrb = null;
       let currentFocusActionChip = null;
       let lastOperatorLink = {
@@ -3551,6 +3559,68 @@
         return rows[0];
       }
 
+      function apprenticeshipControl(controlKey) {
+        const controls = currentApprenticeshipSurface?.controls && typeof currentApprenticeshipSurface.controls === "object"
+          ? currentApprenticeshipSurface.controls
+          : {};
+        const control = controls[controlKey];
+        return control && typeof control === "object" ? control : {};
+      }
+
+      function apprenticeshipDefaults(controlKey) {
+        const control = apprenticeshipControl(controlKey);
+        const defaults = control.defaults && typeof control.defaults === "object" ? control.defaults : {};
+        return defaults;
+      }
+
+      function applyInputDefault(elementId, value, { force = false } = {}) {
+        const element = document.getElementById(elementId);
+        if (!element) {
+          return;
+        }
+        const currentValue = String(element.value || "");
+        if (!force && currentValue.trim()) {
+          return;
+        }
+        element.value = String(value || "");
+      }
+
+      function applyApprenticeshipDefaults({ forceCreate = false, forceRecord = false } = {}) {
+        const createDefaults = apprenticeshipDefaults("create_session");
+        const createKey = JSON.stringify(createDefaults);
+        applyInputDefault("apprenticeship-title", createDefaults.title, {
+          force: forceCreate || createKey !== currentApprenticeshipCreateDefaultsKey,
+        });
+        applyInputDefault("apprenticeship-objective", createDefaults.objective, {
+          force: forceCreate || createKey !== currentApprenticeshipCreateDefaultsKey,
+        });
+        applyInputDefault(
+          "apprenticeship-tags",
+          Array.isArray(createDefaults.tags) ? createDefaults.tags.join(", ") : "",
+          { force: forceCreate || createKey !== currentApprenticeshipCreateDefaultsKey },
+        );
+        currentApprenticeshipCreateDefaultsKey = createKey;
+
+        const recordDefaults = apprenticeshipDefaults("record_step");
+        const recordKey = JSON.stringify({
+          focus: String(currentApprenticeshipFocusId || "").trim(),
+          defaults: recordDefaults,
+        });
+        applyInputDefault("apprenticeship-step-action", recordDefaults.action, {
+          force: forceRecord || recordKey !== currentApprenticeshipRecordDefaultsKey,
+        });
+        applyInputDefault("apprenticeship-step-intent", recordDefaults.intent, {
+          force: forceRecord || recordKey !== currentApprenticeshipRecordDefaultsKey,
+        });
+        applyInputDefault("apprenticeship-step-artifact", recordDefaults.artifact_path, {
+          force: forceRecord || recordKey !== currentApprenticeshipRecordDefaultsKey,
+        });
+        applyInputDefault("apprenticeship-step-notes", recordDefaults.notes, {
+          force: forceRecord || recordKey !== currentApprenticeshipRecordDefaultsKey,
+        });
+        currentApprenticeshipRecordDefaultsKey = recordKey;
+      }
+
       function inspectApprenticeshipSession(index) {
         const row = Array.isArray(currentApprenticeshipRows) ? currentApprenticeshipRows[index] : null;
         if (!row) {
@@ -3614,6 +3684,7 @@
           <button class="btn-secondary" type="button" ${generalize.enabled ? "" : "disabled"} onclick="runApprenticeshipControl('generalize')">${escapeHtml(generalize.label || "Generalize")}</button>
           <button class="btn-primary" type="button" ${skillize.enabled ? "" : "disabled"} onclick="runApprenticeshipControl('skillize')">${escapeHtml(skillize.label || "Skillize")}</button>
         `;
+        applyApprenticeshipDefaults({ forceRecord: true });
       }
 
       function renderApprenticeshipSurface(surface) {
@@ -3633,6 +3704,16 @@
           "apprenticeship-cards",
           Array.isArray(currentApprenticeshipSurface.cards) ? currentApprenticeshipSurface.cards : [],
           "Teach",
+        );
+        const context = currentApprenticeshipSurface.context && typeof currentApprenticeshipSurface.context === "object"
+          ? currentApprenticeshipSurface.context
+          : {};
+        document.getElementById("apprenticeship-context-summary").textContent =
+          String(context.summary || "Teaching defaults will ground themselves in the current mission, repo, and terminal context.");
+        renderDetailCards(
+          "apprenticeship-context-cards",
+          Array.isArray(context.cards) ? context.cards : [],
+          "Context",
         );
         document.getElementById("apprenticeship-sessions").innerHTML = currentApprenticeshipRows.length
           ? currentApprenticeshipRows
@@ -3663,6 +3744,7 @@
           );
           inspectApprenticeshipSession(focusIndex >= 0 ? focusIndex : 0);
         } else {
+          applyApprenticeshipDefaults({ forceRecord: true });
           document.getElementById("apprenticeship-detail-meta").textContent = "No teaching session selected";
           document.getElementById("apprenticeship-detail-summary").textContent =
             "Replay, generalization, and skillization detail will render from the backend contract.";
@@ -3682,12 +3764,16 @@
           );
           applyPanelSignal("apprenticeship-detail-panel", "low");
         }
+        applyApprenticeshipDefaults();
       }
 
       async function createTeachingSession() {
-        const title = String(document.getElementById("apprenticeship-title")?.value || "").trim();
-        const objective = String(document.getElementById("apprenticeship-objective")?.value || "").trim();
-        const tags = String(document.getElementById("apprenticeship-tags")?.value || "")
+        const createDefaults = apprenticeshipDefaults("create_session");
+        const title = String(document.getElementById("apprenticeship-title")?.value || createDefaults.title || "").trim();
+        const objective = String(document.getElementById("apprenticeship-objective")?.value || createDefaults.objective || "").trim();
+        const tagsSource = String(document.getElementById("apprenticeship-tags")?.value || "")
+          .trim() || (Array.isArray(createDefaults.tags) ? createDefaults.tags.join(", ") : "");
+        const tags = String(tagsSource || "")
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean);
@@ -3697,7 +3783,12 @@
         const response = await fetch("/api/apprenticeship/sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, objective, tags }),
+          body: JSON.stringify({
+            title,
+            objective,
+            mission_id: createDefaults.mission_id || null,
+            tags,
+          }),
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -3716,10 +3807,11 @@
         if (!sessionId) {
           return;
         }
-        const action = String(document.getElementById("apprenticeship-step-action")?.value || "").trim();
-        const intent = String(document.getElementById("apprenticeship-step-intent")?.value || "").trim();
-        const artifactPath = String(document.getElementById("apprenticeship-step-artifact")?.value || "").trim();
-        const notes = String(document.getElementById("apprenticeship-step-notes")?.value || "").trim();
+        const recordDefaults = apprenticeshipDefaults("record_step");
+        const action = String(document.getElementById("apprenticeship-step-action")?.value || recordDefaults.action || "").trim();
+        const intent = String(document.getElementById("apprenticeship-step-intent")?.value || recordDefaults.intent || "").trim();
+        const artifactPath = String(document.getElementById("apprenticeship-step-artifact")?.value || recordDefaults.artifact_path || "").trim();
+        const notes = String(document.getElementById("apprenticeship-step-notes")?.value || recordDefaults.notes || "").trim();
         if (!action || !intent) {
           return;
         }
@@ -3727,7 +3819,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            kind: "command",
+            kind: String(recordDefaults.kind || "command").trim() || "command",
             action,
             intent,
             artifact_path: artifactPath,

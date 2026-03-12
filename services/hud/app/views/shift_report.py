@@ -78,6 +78,18 @@ def _trust_posture(snapshot: dict[str, object], handback: dict[str, Any]) -> str
     return "Likely"
 
 
+def _teaching_focus(current_work: dict[str, Any]) -> dict[str, Any]:
+    apprenticeship = (
+        current_work.get("apprenticeship", {}) if isinstance(current_work.get("apprenticeship"), dict) else {}
+    )
+    focus_session = (
+        apprenticeship.get("focus_session", {})
+        if isinstance(apprenticeship.get("focus_session"), dict)
+        else {}
+    )
+    return focus_session
+
+
 def _shift_state(
     *,
     mode: str,
@@ -134,6 +146,7 @@ def _detail_cards(
     last_run_id: str,
     approvals_pending: int,
     incidents_open: int,
+    teaching_label: str,
     trust: str,
     autonomy_label: str,
 ) -> list[dict[str, str]]:
@@ -143,6 +156,7 @@ def _detail_cards(
         {"label": "Mission", "value": mission_title, "tone": "high" if mission_title != "No active mission" else "low"},
         {"label": "Latest Run", "value": last_run_id or "none", "tone": "medium" if last_run_id else "low"},
         {"label": "Approvals", "value": str(approvals_pending), "tone": "high" if approvals_pending else "low"},
+        {"label": "Teaching", "value": teaching_label or "idle", "tone": "medium" if teaching_label and teaching_label != "idle" else "low"},
         {"label": "Autonomy", "value": autonomy_label, "tone": "high" if "cooldown" in autonomy_label.lower() or "halt" in autonomy_label.lower() else "low"},
         {"label": "Trust", "value": trust, "tone": "high" if trust == "Uncertain" else "medium" if trust == "Likely" else "low"},
     ]
@@ -164,6 +178,7 @@ def _build_evidence(
     last_run: dict[str, Any],
     handback: dict[str, Any],
     next_action: dict[str, Any],
+    teaching_focus: dict[str, Any],
     trust: str,
     autonomy: dict[str, Any],
 ) -> list[dict[str, str]]:
@@ -199,6 +214,21 @@ def _build_evidence(
         if summary:
             detail += f" | {summary}"
         evidence.append(_evidence_row(kind="run", severity="medium", detail=detail))
+
+    teaching_status = str(teaching_focus.get("status", "")).strip().lower()
+    if teaching_status:
+        teaching_title = str(teaching_focus.get("title", "Teaching session")).strip() or "Teaching session"
+        teaching_steps = _int(teaching_focus.get("step_count"))
+        teaching_summary = str(teaching_focus.get("summary", "")).strip() or (
+            f"{teaching_title} is {teaching_status} with {teaching_steps} demonstrated step(s)."
+        )
+        evidence.append(
+            _evidence_row(
+                kind="teaching",
+                severity="medium" if teaching_status in {"recording", "review"} else "low",
+                detail=teaching_summary,
+            )
+        )
 
     if approvals_pending > 0:
         evidence.append(
@@ -273,7 +303,7 @@ def _build_evidence(
                 detail=f"Current continuity posture is {trust}.",
             )
         )
-    return evidence[:6]
+    return evidence[:8]
 
 
 def _recommendations(
@@ -284,6 +314,7 @@ def _recommendations(
     trust: str,
     next_action: dict[str, Any],
     handback: dict[str, Any],
+    teaching_focus: dict[str, Any],
     autonomy: dict[str, Any],
 ) -> list[str]:
     rows: list[str] = []
@@ -297,6 +328,12 @@ def _recommendations(
     reactor = autonomy.get("reactor", {}) if isinstance(autonomy.get("reactor"), dict) else {}
     if bool(guardrail.get("cooldown_active")) or str(reactor.get("halted_reason", "")).strip():
         rows.append("Inspect the autonomy budget and guardrail posture before resuming Away work.")
+    teaching_action = str(teaching_focus.get("recommended_action", "")).strip().lower()
+    teaching_title = str(teaching_focus.get("title", "the current teaching session")).strip() or "the current teaching session"
+    if teaching_action == "apprenticeship.generalize":
+        rows.append(f"Open Teaching Sessions and generalize {teaching_title} before the capture context drifts.")
+    elif teaching_action == "apprenticeship.skillize":
+        rows.append(f"Open Teaching Sessions and skillize {teaching_title} while review context is still fresh.")
     next_label = str(next_action.get("label", "")).strip()
     if next_label:
         rows.append(f"Resume with {next_label}.")
@@ -314,6 +351,7 @@ def _build_controls(
     current_work: dict[str, Any],
     approvals_pending: int,
     incidents_open: int,
+    teaching_focus: dict[str, Any],
     autonomy: dict[str, Any],
     actions: dict[str, object],
 ) -> dict[str, dict[str, Any]]:
@@ -384,6 +422,17 @@ def _build_controls(
             "control_type": "surface",
             "enabled": True,
             "target_surface": "current_work",
+        },
+        "teaching": {
+            "kind": "shift.teaching",
+            "label": "Open Teaching Sessions",
+            "summary": (
+                str(teaching_focus.get("summary", "")).strip()
+                or "Review the current teaching session and its next apprenticeship step."
+            ),
+            "control_type": "surface",
+            "enabled": bool(teaching_focus),
+            "target_surface": "apprenticeship_surface",
         },
         "guardrail_reset": {
             "kind": "shift.guardrail_reset",
@@ -466,6 +515,7 @@ def get_shift_report_view(
     trust = _trust_posture(snapshot, handback)
     if current_work is None:
         current_work = get_current_work_view(snapshot=snapshot, actions=actions)
+    teaching_focus = _teaching_focus(current_work)
     state = _shift_state(
         mode=mode,
         approvals_pending=approvals_pending,
@@ -502,6 +552,7 @@ def get_shift_report_view(
         last_run=last_run,
         handback=handback,
         next_action=next_action,
+        teaching_focus=teaching_focus,
         trust=trust,
         autonomy=autonomy,
     )
@@ -512,12 +563,14 @@ def get_shift_report_view(
         trust=trust,
         next_action=next_action,
         handback=handback,
+        teaching_focus=teaching_focus,
         autonomy=autonomy,
     )
     controls = _build_controls(
         current_work=current_work,
         approvals_pending=approvals_pending,
         incidents_open=incidents_open,
+        teaching_focus=teaching_focus,
         autonomy=autonomy,
         actions=actions,
     )
@@ -536,6 +589,11 @@ def get_shift_report_view(
             last_run_id=last_run_id,
             approvals_pending=approvals_pending,
             incidents_open=incidents_open,
+            teaching_label=(
+                f"{str(teaching_focus.get('status', '')).strip() or 'idle'}"
+                if teaching_focus
+                else "idle"
+            ),
             trust=trust,
             autonomy_label=(
                 f"cooldown {_int(autonomy.get('guardrail', {}).get('cooldown_remaining_ticks'))} tick(s)"
@@ -560,6 +618,9 @@ def get_shift_report_view(
                 else {},
                 "operator_link": current_work.get("operator_link", {})
                 if isinstance(current_work.get("operator_link"), dict)
+                else {},
+                "apprenticeship": current_work.get("apprenticeship", {})
+                if isinstance(current_work.get("apprenticeship"), dict)
                 else {},
             },
             "latest_run": last_run,

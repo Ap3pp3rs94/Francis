@@ -103,6 +103,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Shift report detail will render from away continuity and handback state." in response.text
     assert "Teaching Sessions" in response.text
     assert "Teaching sessions will render from bounded demonstrations, replay, and review state." in response.text
+    assert "Teaching defaults will ground themselves in the current mission, repo, and terminal context." in response.text
+    assert "Teaching context cards will render from the backend contract." in response.text
     assert "Start Session" in response.text
     assert "Record Step" in response.text
     assert "Replay lines will render from the backend contract." in response.text
@@ -1155,6 +1157,16 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
                     "phase": "verify",
                     "summary": "Away validation completed.",
                 },
+                "apprenticeship": {
+                    "focus_session": {
+                        "id": "teach-night",
+                        "title": "Teach Validation Handoff",
+                        "status": "review",
+                        "step_count": 3,
+                        "summary": "Teach Validation Handoff is ready to become a reusable workflow and staged skill.",
+                        "recommended_action": "apprenticeship.skillize",
+                    }
+                },
             },
             "autonomy": {
                 "budget": {
@@ -1240,11 +1252,14 @@ def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
     assert payload["controls"]["resume"]["execute_kind"] == "repo.tests"
     assert payload["controls"]["approvals"]["target_surface"] == "approval_queue"
     assert payload["controls"]["incidents"]["target_surface"] == "incidents"
+    assert payload["controls"]["teaching"]["target_surface"] == "apprenticeship_surface"
     assert payload["controls"]["guardrail_reset"]["enabled"] is True
     assert payload["controls"]["guardrail_reset"]["execute_kind"] == "autonomy.reactor.guardrail.reset"
     assert payload["away_safe_tasks"]["summary"] == "1 away-safe task(s) ready, 1 gated."
     assert payload["away_safe_tasks"]["allowed"][0]["kind"] == "observer.scan"
     assert payload["away_safe_tasks"]["gated"][0]["kind"] == "worker.cycle"
+    assert any(str(item.get("kind", "")) == "teaching" for item in payload["evidence"])
+    assert payload["detail"]["current_work"]["apprenticeship"]["focus_session"]["id"] == "teach-night"
 
 
 def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path: Path) -> None:
@@ -1303,7 +1318,46 @@ def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path
     monkeypatch.setattr(
         apprenticeship_view,
         "build_lens_snapshot",
-        lambda: {"apprenticeship": {"session_count": 1, "recording_count": 1, "review_count": 0, "skillized_count": 0}},
+        lambda: {
+            "objective": {"label": "Capture repo triage workflow"},
+            "next_best_action": {
+                "kind": "repo.tests",
+                "label": "Run Fast Checks",
+                "reason": "The latest test command failed and needs a clean replay.",
+            },
+            "current_work": {
+                "mission": {
+                    "id": "mission-repo-triage",
+                    "title": "Repo Triage",
+                    "objective": "Capture repo review flow",
+                },
+                "repo": {
+                    "available": True,
+                    "branch": "main",
+                    "dirty": True,
+                    "changed_count": 2,
+                    "top_paths": ["tests/integration/test_hud_foundation.py"],
+                },
+                "telemetry": {
+                    "last_terminal": {
+                        "command": "pytest -q tests/integration/test_hud_foundation.py",
+                        "severity": "error",
+                    }
+                },
+                "attention": {
+                    "kind": "terminal_failure",
+                    "label": "Terminal Failure",
+                    "reason": "The latest terminal command failed and needs review.",
+                },
+                "apprenticeship": {
+                    "session_count": 1,
+                    "recording_count": 1,
+                    "review_count": 0,
+                    "skillized_count": 0,
+                },
+            },
+            "apprenticeship": {"session_count": 1, "recording_count": 1, "review_count": 0, "skillized_count": 0},
+        },
     )
     monkeypatch.setattr(apprenticeship_view, "load_snapshot", lambda fs: {"artifacts": []})
     monkeypatch.setattr(
@@ -1337,6 +1391,9 @@ def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path
     assert payload["sessions"][0]["detail_summary"].endswith("Grounded by 1 cited artifact(s).")
     assert payload["controls"]["create_session"]["enabled"] is True
     assert payload["controls"]["record_step"]["enabled"] is True
+    assert payload["context"]["create_defaults"]["title"] == "Teach Repo Triage"
+    assert payload["context"]["record_defaults"]["action"] == "pytest -q tests/integration/test_hud_foundation.py"
+    assert payload["controls"]["record_step"]["defaults"]["artifact_path"] == "tests/integration/test_hud_foundation.py"
     assert payload["controls"]["generalize"]["execute_kind"] == "apprenticeship.generalize"
     assert payload["controls"]["skillize"]["execute_kind"] == "apprenticeship.skillize"
 
