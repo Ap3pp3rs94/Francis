@@ -1310,6 +1310,14 @@
           <div class="desktop-grid" id="desktop-rollback-cards">
             <div class="desktop-pill"><strong>Rollback</strong><span>Rollback snapshots will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Decommission</h3>
+          <div class="desktop-grid" id="desktop-decommission-cards">
+            <div class="desktop-pill"><strong>Decommission</strong><span>Clean uninstall guidance will render here once the shell bridge is attached.</span></div>
+          </div>
+          <div class="desktop-actions" id="desktop-decommission-actions">
+            <button class="btn-secondary" type="button" disabled>Open User Data</button>
+          </div>
+          <pre class="console" id="desktop-decommission">Decommission guidance will render here once the shell bridge is attached.</pre>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -2046,6 +2054,29 @@
         ];
       }
 
+      function buildDesktopDecommissionCards() {
+        const decommission = desktopState.lifecycle?.decommission && typeof desktopState.lifecycle.decommission === "object"
+          ? desktopState.lifecycle.decommission
+          : null;
+
+        if (!decommission) {
+          return [
+            { label: "Decommission", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Clean uninstall guidance will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(decommission.cards) && decommission.cards.length
+          ? decommission.cards
+          : [
+              {
+                label: "Summary",
+                value: String(decommission.summary || "No decommission summary surfaced"),
+                tone: "low",
+              },
+            ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2057,11 +2088,14 @@
         const retainedStateCards = document.getElementById("desktop-retained-state-cards");
         const preflightCards = document.getElementById("desktop-preflight-cards");
         const rollbackCards = document.getElementById("desktop-rollback-cards");
+        const decommissionCards = document.getElementById("desktop-decommission-cards");
+        const decommissionActions = document.getElementById("desktop-decommission-actions");
+        const decommissionDetail = document.getElementById("desktop-decommission");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !meta || !recoveryCards || !updateCards || !display) {
           return;
         }
 
@@ -2080,6 +2114,7 @@
         const startupProfile = lifecycle?.startupProfile || null;
         const update = lifecycle?.update || null;
         const rollback = lifecycle?.rollback || null;
+        const decommission = lifecycle?.decommission || null;
         const session = lifecycle?.session || null;
         const hudRuntimeMode = desktopState.available ? formatHudRuntimeMode(hudRuntime) : "n/a";
         const buildLabel = desktopState.available
@@ -2209,6 +2244,32 @@
         renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
         renderDetailCards("desktop-preflight-cards", buildDesktopPreflightCards(), "Preflight");
         renderDetailCards("desktop-rollback-cards", buildDesktopRollbackCards(), "Rollback");
+        renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
+        decommissionActions.innerHTML = `
+          <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && decommission?.installRoot ? "" : "disabled"} onclick="openDesktopLifecyclePath('install_root', 'install root')">Open Install Root</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && decommission?.userDataPath ? "" : "disabled"} onclick="openDesktopLifecyclePath('user_data', 'user data')">Open User Data</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && decommission?.workspaceRoot ? "" : "disabled"} onclick="openDesktopLifecyclePath('workspace_root', 'workspace root')">Open Workspace Root</button>
+        `;
+        decommissionDetail.textContent = decommission
+          ? [
+              `Summary | ${String(decommission.summary || "No decommission summary surfaced")}`,
+              "",
+              "Steps",
+              ...(Array.isArray(decommission.steps) && decommission.steps.length
+                ? decommission.steps.map((step, index) => `${index + 1}. ${String(step)}`)
+                : ["1. No decommission steps surfaced."]),
+              "",
+              "Cleanup Commands",
+              `Shell Residue | ${String(decommission.shellResidueCommand || "none")}`,
+              `Workspace Continuity | ${String(decommission.continuityCommand || "none")}`,
+              "",
+              "Paths",
+              `Install Root | ${String(decommission.installRoot || "unavailable")}`,
+              `User Data | ${String(decommission.userDataPath || "unavailable")}`,
+              `Workspace Root | ${String(decommission.workspaceRoot || "unavailable")}`,
+            ].join("\n")
+          : "Decommission guidance will render here once the shell bridge is attached.";
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
@@ -2239,6 +2300,22 @@
         } catch (error) {
           desktopState = normalizeDesktopState(null, null);
           desktopNotice = `Desktop bridge sync failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function openDesktopLifecyclePath(target, label) {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.openPath !== "function") {
+          desktopNotice = "Lifecycle path opening is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          await bridge.openPath(target);
+          desktopNotice = `${String(label || "Path")} opened.`;
+        } catch (error) {
+          desktopNotice = `Open path failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }

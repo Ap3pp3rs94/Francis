@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   restoreLatestRollback() {
     return ipcRenderer.invoke("overlay:restore-latest-rollback");
   },
+  openPath(target) {
+    return ipcRenderer.invoke("overlay:open-path", assertString("target", target));
+  },
   setTargetDisplay(displayId) {
     return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
   },

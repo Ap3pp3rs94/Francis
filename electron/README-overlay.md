@@ -22,6 +22,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - exposes retained-state posture so uninstall and reinstall do not feel haunted
 - surfaces first-run and reinstall diagnostics so runtime placement and writable roots are inspectable
 - keeps rollback snapshots of shell state so updates, imports, and resets have a governed fallback path
+- surfaces an explicit decommission plan so uninstall and reinstall are inspectable instead of haunted
 - reuses an already-running HUD if one exists, otherwise attempts to start the local HUD server automatically
 
 ## Run
@@ -84,6 +85,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD can now inspect retained shell surfaces and reset local shell residue without deleting workspace continuity
 - the HUD can now inspect preflight diagnostics for runtime health, writable roots, startup support, and build posture
 - the HUD and tray can now create and restore shell rollback snapshots without replaying live authority or workspace state
+- the HUD can now surface exact decommission steps, retained paths, and generated cleanup commands before uninstall
 - the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
 
 ## Next Extensions

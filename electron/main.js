@@ -1,6 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen, shell } = require("electron");
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
@@ -39,6 +39,7 @@ const {
 const { describeRetainedState } = require("./retained-state");
 const { buildPreflightState } = require("./preflight");
 const { createShellBackup, restoreShellBackup, summarizeBackups } = require("./backup-state");
+const { buildDecommissionPlan } = require("./decommission-plan");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -252,6 +253,32 @@ function getLifecycleState() {
     rollback: app.isReady()
       ? (backupState || summarizeBackups(app.getPath("userData")))
       : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] },
+    decommission: buildDecommissionPlan({
+      buildIdentity: currentBuild.identity,
+      distribution: currentBuild.distribution,
+      installRoot: app.isReady()
+        ? (currentBuild.packaged ? path.dirname(process.execPath) : app.getAppPath())
+        : null,
+      execPath: app.isReady() ? process.execPath : null,
+      userDataPath: app.isReady() ? app.getPath("userData") : null,
+      workspaceRoot,
+      retainedState: app.isReady()
+        ? describeRetainedState({
+            userDataPath: app.getPath("userData"),
+            workspaceRoot,
+            launchAtLogin: login,
+          })
+        : describeRetainedState({
+            userDataPath: ".",
+            workspaceRoot: null,
+            launchAtLogin: login,
+          }),
+      rollbackState: app.isReady()
+        ? (backupState || summarizeBackups(app.getPath("userData")))
+        : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] },
+      portabilityState: portabilityState || buildDefaultPortabilityState(),
+      launchAtLogin: login,
+    }),
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
@@ -1185,6 +1212,37 @@ function requireWindow() {
   return mainWindow;
 }
 
+async function openLifecyclePath(target) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const lifecycle = getLifecycleState();
+  const pathMap = {
+    install_root: lifecycle.decommission?.installRoot || null,
+    user_data: lifecycle.decommission?.userDataPath || null,
+    workspace_root: lifecycle.decommission?.workspaceRoot || null,
+  };
+  const targetPath = pathMap[String(target || "")] || null;
+  if (!targetPath) {
+    throw new Error("Requested lifecycle path is unavailable");
+  }
+
+  const result = await shell.openPath(targetPath);
+  if (result) {
+    throw new Error(result);
+  }
+
+  log("Opened lifecycle path", {
+    target,
+    path: targetPath,
+  });
+  return {
+    target: String(target),
+    path: targetPath,
+  };
+}
+
 async function restartHudAndRefreshWindow(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
   if (!hudRuntime) {
@@ -1233,6 +1291,7 @@ function registerIpc() {
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
   ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(requireWindow()));
   ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
+  ipcMain.handle("overlay:open-path", (_event, target) => openLifecyclePath(target));
 
   ipcMain.handle("overlay:minimize", () => {
     const win = requireWindow();

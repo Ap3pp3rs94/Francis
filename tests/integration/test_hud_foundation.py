@@ -100,6 +100,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Retained State" in response.text
     assert "Preflight" in response.text
     assert "Rollback Snapshots" in response.text
+    assert "Decommission" in response.text
     assert "Display Target" in response.text
     assert "Startup Profile" in response.text
     assert "Start At Login" in response.text
