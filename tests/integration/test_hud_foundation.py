@@ -19,6 +19,7 @@ import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.missions as missions_view
 import services.hud.app.views.repo_drilldown as repo_drilldown_view
 import services.hud.app.views.runs as runs_view
+import services.hud.app.views.shift_report as shift_report_view
 from services.hud.app.main import app
 
 
@@ -92,6 +93,11 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "The Orb rides directly over the cursor." in response.text
     assert "Hold the moving Orb itself to panic stop" in response.text
+    assert "Shift Report" in response.text
+    assert "Shift report will render from away continuity, handback, and mission state." in response.text
+    assert "Return briefing cards will render from the backend contract." in response.text
+    assert "Mission-centered return evidence will render here." in response.text
+    assert "Shift report detail will render from away continuity and handback state." in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
     assert "Approval Queue" in response.text
@@ -168,6 +174,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["dashboard"]["surface"] == "dashboard"
     assert body["actions"]["status"] == "ok"
     assert body["current_work"]["surface"] == "current_work"
+    assert body["shift_report"]["surface"] == "shift_report"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
@@ -184,6 +191,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "snapshot",
         "actions",
         "current_work",
+        "shift_report",
         "repo_drilldown",
         "approval_queue",
         "execution_journal",
@@ -238,6 +246,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_feed_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -273,6 +282,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     payload = hud_main._build_bootstrap_payload()
 
     assert payload["current_work"]["surface"] == "current_work"
+    assert payload["shift_report"]["surface"] == "shift_report"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["blocked_actions"]["surface"] == "blocked_actions"
@@ -286,6 +296,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["runs"]["active_run"]["run_id"] == "run-1"
     assert "surface_digests" in payload
     assert payload["surface_digests"]["current_work"]
+    assert payload["surface_digests"]["shift_report"]
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -449,6 +460,11 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["snapshot"]["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["snapshot"]["next_best_action"]["kind"] == "repo.tests"
     assert body["current_work"]["surface"] == "current_work"
+    assert body["shift_report"]["surface"] == "shift_report"
+    assert body["shift_report"]["state"] == "away_live"
+    assert body["shift_report"]["summary"].startswith("Away Mode is active on Live Lens.")
+    assert any(item["kind"] == "mission" for item in body["shift_report"]["evidence"])
+    assert body["shift_report"]["recommendations"]
     assert body["current_work"]["attention"]["kind"] == "terminal_failure"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
@@ -522,6 +538,21 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "next_action_signal" in payload
     assert "next_action_resume" in payload
     assert "next_action_evidence" in payload
+
+
+def test_hud_shift_report_route_returns_structured_surface() -> None:
+    response = client.get("/api/shift-report")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "shift_report"
+    assert payload["state"] in {"idle", "away_live", "return_briefing"}
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "cards" in payload
+    assert "evidence" in payload
+    assert "recommendations" in payload
+    assert "detail" in payload
 
 
 def test_hud_repo_drilldown_route_returns_structured_surface() -> None:
@@ -838,6 +869,73 @@ def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Pa
     assert payload["controls"]["status"]["execute_kind"] == "repo.status"
     assert payload["controls"]["tests"]["execute_kind"] == "repo.tests"
     assert payload["controls"]["tests"]["args"]["approval_id"] == "approval-tests"
+
+
+def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "control": {"mode": "assist"},
+            "missions": {
+                "active": [
+                    {
+                        "id": "mission-night-shift",
+                        "title": "Night Shift Build",
+                        "objective": "Carry work through the return briefing",
+                        "status": "active",
+                        "priority": "high",
+                    }
+                ]
+            },
+            "approvals": {"pending_count": 1, "pending": [{"id": "approval-tests"}]},
+            "incidents": {
+                "open_count": 1,
+                "highest_severity": "high",
+                "items": [{"id": "incident-1", "summary": "Observer error pressure is still open."}],
+            },
+            "runs": {
+                "last_run": {
+                    "run_id": "run-night-1",
+                    "phase": "verify",
+                    "summary": "Away validation completed.",
+                }
+            },
+            "takeover": {
+                "handback_available": True,
+                "handback": {
+                    "summary": "Validation completed and one approval was left queued.",
+                    "reason": "Night shift advanced the safe validation lane.",
+                    "pending_approvals": 1,
+                    "run_id": "run-night-1",
+                    "trace_id": "trace-night-1",
+                    "handed_back_at": "2026-03-11T09:00:00+00:00",
+                    "fabric_posture": {"trust": "Likely"},
+                },
+            },
+            "next_best_action": {
+                "kind": "repo.tests",
+                "label": "Run Fast Checks",
+                "reason": "The validation lane is ready for review.",
+            },
+            "fabric": {
+                "calibration": {
+                    "confidence_counts": {"confirmed": 1, "likely": 1, "uncertain": 0},
+                    "stale_current_state_count": 0,
+                }
+            },
+        }
+
+    monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _snapshot)
+
+    payload = shift_report_view.get_shift_report_view()
+
+    assert payload["state"] == "return_briefing"
+    assert payload["severity"] == "high"
+    assert payload["summary"].startswith("Return briefing for Night Shift Build.")
+    assert payload["cards"][0]["label"] == "State"
+    assert any(str(item.get("kind", "")) == "handback" for item in payload["evidence"])
+    assert payload["detail"]["handback"]["summary"] == "Validation completed and one approval was left queued."
+    assert payload["detail"]["handback"]["trust"] == "Likely"
+    assert payload["recommendations"][0] == "Review the pending approvals before resuming execution."
 
 
 def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:
@@ -1327,6 +1425,7 @@ def test_hud_action_execute_can_mutate_and_refresh_snapshot() -> None:
         assert payload["voice"]["surface"] == "voice"
         assert payload["orb"]["surface"] == "orb"
         assert payload["current_work"]["surface"] == "current_work"
+        assert payload["shift_report"]["surface"] == "shift_report"
         assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
         assert payload["approval_queue"]["surface"] == "approval_queue"
         assert payload["blocked_actions"]["surface"] == "blocked_actions"
@@ -1339,6 +1438,7 @@ def test_hud_action_execute_can_mutate_and_refresh_snapshot() -> None:
         assert payload["inbox"]["surface"] == "inbox"
         assert payload["runs"]["surface"] == "runs"
         assert payload["fabric"]["surface"] == "fabric"
+        assert payload["surface_digests"]["shift_report"]
         assert payload["surface_digests"]["execution_feed"]
     finally:
         _set_scope(original_scope)

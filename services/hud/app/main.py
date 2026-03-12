@@ -30,6 +30,7 @@ from services.hud.app.views.incidents import get_incidents_view
 from services.hud.app.views.missions import get_missions_view
 from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
+from services.hud.app.views.shift_report import get_shift_report_view
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
 SERVICE_VERSION = "0.2.0"
@@ -100,6 +101,7 @@ def _build_hud_payload(
             voice=voice,
         ),
         "current_work": current_work,
+        "shift_report": get_shift_report_view(snapshot=snapshot_payload),
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
@@ -140,6 +142,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "voice",
         "orb",
         "current_work",
+        "shift_report",
         "repo_drilldown",
         "approval_queue",
         "blocked_actions",
@@ -168,6 +171,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "voice",
         "orb",
         "current_work",
+        "shift_report",
         "repo_drilldown",
         "approval_queue",
         "blocked_actions",
@@ -219,6 +223,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/current-work")
     def current_work() -> dict[str, object]:
         return get_current_work_view()
+
+    @app.get("/api/shift-report")
+    def shift_report() -> dict[str, object]:
+        return get_shift_report_view()
 
     @app.get("/api/approval-queue")
     def approval_queue() -> dict[str, object]:
@@ -313,6 +321,7 @@ def _build_app() -> FastAPI:
             "voice": refresh_payload["voice"],
             "orb": refresh_payload["orb"],
             "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],

@@ -728,6 +728,29 @@
 
       <section class="grid" id="cards"></section>
 
+      <section class="stack">
+        <article class="panel accent" id="shift-report-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Shift Report</h2>
+            <span class="meta tiny" id="shift-report-meta">Away continuity loading from Lens</span>
+          </div>
+          <p id="shift-report-summary" class="hero-copy">
+            Shift report will render from away continuity, handback, and mission state.
+          </p>
+          <div class="desktop-grid" id="shift-report-cards">
+            <div class="desktop-pill"><strong>Shift</strong><span>Return briefing cards will render from the backend contract.</span></div>
+          </div>
+          <ul class="list" id="shift-report-evidence">
+            <li class="muted-empty">Mission-centered return evidence will render here.</li>
+          </ul>
+          <h3>Recommended Next Steps</h3>
+          <ul class="list" id="shift-report-recommendations">
+            <li class="muted-empty">Recommended next steps will render here.</li>
+          </ul>
+          <pre class="console" id="shift-report-detail">Shift report detail will render from away continuity and handback state.</pre>
+        </article>
+      </section>
+
       <section class="split">
         <article class="panel" id="current-work-panel" data-signal="low">
           <div class="panel-head">
@@ -1097,6 +1120,7 @@
       let currentDashboard = {};
       let currentVoiceSurface = {};
       let currentOrbSurface = {};
+      let currentShiftReport = {};
       let currentMissionsSurface = {};
       let currentIncidentsSurface = {};
       let currentFabricSurface = {};
@@ -2248,6 +2272,7 @@
         currentVoiceSurface = payload.voice || {};
         currentOrbSurface = payload.orb || {};
         currentCurrentWork = payload.current_work || {};
+        currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
@@ -2299,6 +2324,9 @@
 
         if (shouldRender("orb")) {
           renderOrb(currentOrbSurface);
+        }
+        if (shouldRender("shift_report") || shouldRender("snapshot")) {
+          renderShiftReportSurface(currentShiftReport);
         }
         if (
           shouldRender("current_work") ||
@@ -2364,6 +2392,7 @@
           voice: currentVoiceSurface || {},
           orb: currentOrbSurface || {},
           current_work: currentCurrentWork || {},
+          shift_report: currentShiftReport || {},
           repo_drilldown: currentRepoDrilldown || {},
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
@@ -3286,6 +3315,57 @@
               .join("")
           : `<li class="muted-empty">No execution evidence is available yet.</li>`;
         document.getElementById("execution-output").textContent = formatJson(detail);
+      }
+
+      function renderShiftReportSurface(surface) {
+        const report = surface && typeof surface === "object" ? surface : {};
+        const detail = report.detail && typeof report.detail === "object" ? report.detail : {};
+        const latestRun = detail.latest_run && typeof detail.latest_run === "object" ? detail.latest_run : {};
+        const cards = Array.isArray(report.cards) ? report.cards : [];
+        const evidence = Array.isArray(report.evidence) ? report.evidence : [];
+        const recommendations = Array.isArray(report.recommendations) ? report.recommendations : [];
+        const state = String(report.state || detail.state || "idle").trim() || "idle";
+        const mode = String(detail.mode || "assist").trim() || "assist";
+        const runId = String(latestRun.run_id || "none").trim() || "none";
+
+        document.getElementById("shift-report-meta").textContent = `${state} | ${mode} | ${runId}`;
+        document.getElementById("shift-report-summary").textContent =
+          String(report.summary || "Shift report will render from away continuity, handback, and mission state.");
+        applySeverityState(document.getElementById("shift-report-summary"), String(report.severity || "low"));
+        applyPanelSignal("shift-report-panel", String(report.severity || "low"));
+
+        document.getElementById("shift-report-cards").innerHTML = cards.length
+          ? cards
+              .map(
+                (card) => `
+                  <div class="desktop-pill">
+                    <strong>${escapeHtml(String(card.label || "Shift"))}</strong>
+                    <span class="severity-${escapeHtml(String(card.tone || "low"))}">${escapeHtml(String(card.value || "unavailable"))}</span>
+                  </div>
+                `,
+              )
+              .join("")
+          : `<div class="desktop-pill"><strong>Shift</strong><span>Return briefing cards will render from the backend contract.</span></div>`;
+
+        document.getElementById("shift-report-evidence").innerHTML = evidence.length
+          ? evidence
+              .map(
+                (item) => `
+                  <li>
+                    <strong>${escapeHtml(titleCase(String(item.kind || "signal")))}</strong>
+                    <span class="meta"> | ${escapeHtml(String(item.severity || "low"))}</span>
+                    ${escapeHtml(String(item.detail || "No shift-report evidence provided."))}
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Mission-centered return evidence will render here.</li>`;
+
+        document.getElementById("shift-report-recommendations").innerHTML = recommendations.length
+          ? recommendations.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
+          : `<li class="muted-empty">Recommended next steps will render here.</li>`;
+
+        document.getElementById("shift-report-detail").textContent = formatJson(detail);
       }
 
       function renderCurrentWork(surface, snapshot, actions) {
