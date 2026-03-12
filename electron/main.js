@@ -22,6 +22,8 @@ const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
 const { normalizeStartupProfile, resolveStartupProfile } = require("./startup-profile");
 const { resolveBuildIdentity } = require("./build-info");
 const {
+  loadUpdateState,
+  saveUpdateState,
   acknowledgeUpdateNotice,
   buildUpdatePosture,
   getUpdateStatePath,
@@ -36,6 +38,7 @@ const {
 } = require("./overlay-portability");
 const { describeRetainedState } = require("./retained-state");
 const { buildPreflightState } = require("./preflight");
+const { createShellBackup, restoreShellBackup, summarizeBackups } = require("./backup-state");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -49,6 +52,7 @@ let sessionState = null;
 let updateState = null;
 let buildInfo = null;
 let portabilityState = null;
+let backupState = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
@@ -245,6 +249,9 @@ function getLifecycleState() {
           buildIdentity: currentBuild.identity,
           distribution: currentBuild.distribution,
         }),
+    rollback: app.isReady()
+      ? (backupState || summarizeBackups(app.getPath("userData")))
+      : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] },
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
@@ -321,6 +328,74 @@ function dismissUpdateNotice() {
   return getOverlayState(mainWindow);
 }
 
+function refreshBackupState() {
+  if (!app.isReady()) {
+    backupState = { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] };
+    return backupState;
+  }
+  backupState = summarizeBackups(app.getPath("userData"));
+  return backupState;
+}
+
+function createRollbackSnapshot(reason = "manual", note = "") {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+  const manifest = createShellBackup(app.getPath("userData"), {
+    reason,
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    note,
+  });
+  refreshBackupState();
+  log("Created rollback snapshot", {
+    backupId: manifest.backupId,
+    reason: manifest.reason,
+  });
+  notifyOverlayState(mainWindow);
+  return getOverlayState(mainWindow);
+}
+
+function restoreLatestRollbackSnapshot(win = mainWindow) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const latest = refreshBackupState().latest;
+  if (!latest?.backupId) {
+    throw new Error("No rollback snapshot is available");
+  }
+
+  createShellBackup(app.getPath("userData"), {
+    reason: "pre_restore",
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    note: `Before restoring rollback snapshot ${latest.backupId}`,
+  });
+  const manifest = restoreShellBackup(app.getPath("userData"), latest.backupId);
+  overlayPreferences = loadPreferences(app.getPath("userData"), getDisplayContext().displays, getDisplayContext().primaryDisplayId);
+  sessionState = loadSessionState(app.getPath("userData"));
+  updateState = loadUpdateState(app.getPath("userData"), {
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    preferencesSchemaVersion: PREFERENCES_VERSION,
+    sessionSchemaVersion: SESSION_STATE_VERSION,
+  });
+  portabilityState = loadPortabilityState(app.getPath("userData"));
+  refreshBackupState();
+
+  if (safeWindow) {
+    safeWindow.setBounds(overlayPreferences.windowBounds);
+    applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
+    applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
+  }
+
+  log("Restored rollback snapshot", {
+    backupId: manifest.backupId,
+    reason: manifest.reason,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
 async function exportShellState(win = mainWindow) {
   if (!app.isReady()) {
     throw new Error("Application is not ready");
@@ -380,6 +455,11 @@ async function importShellState(win = mainWindow) {
   }
 
   const filePath = selected.filePaths[0];
+  createShellBackup(app.getPath("userData"), {
+    reason: "pre_import",
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    note: `Before importing shell state from ${filePath}`,
+  });
   const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
   const imported = extractPortablePreferences(raw);
   overlayPreferences = persistOverlayPreferences(safeWindow, imported);
@@ -401,6 +481,7 @@ async function importShellState(win = mainWindow) {
     filePath,
     startupProfile: overlayPreferences.startupProfile,
   });
+  refreshBackupState();
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
 }
@@ -412,6 +493,11 @@ function resetRetainedShellState(win = mainWindow) {
 
   const safeWindow = win && !win.isDestroyed() ? win : null;
   const targetDisplay = getResolvedTargetDisplay(screen.getPrimaryDisplay().id);
+  createShellBackup(app.getPath("userData"), {
+    reason: "pre_reset",
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    note: "Before resetting retained shell state",
+  });
 
   try {
     setLaunchAtLogin(app, false);
@@ -432,6 +518,7 @@ function resetRetainedShellState(win = mainWindow) {
     sessionSchemaVersion: SESSION_STATE_VERSION,
   });
   portabilityState = savePortabilityState(app.getPath("userData"), buildDefaultPortabilityState());
+  refreshBackupState();
   setOverlayRecovery({ needed: false, status: "nominal", message: "", lastExitReason: "" });
 
   if (safeWindow) {
@@ -550,6 +637,27 @@ function updateTray() {
           importShellState(requireWindow()).catch((error) => {
             log("Tray shell import failed", error instanceof Error ? error.message : String(error));
           });
+        },
+      },
+      {
+        label: "Create Rollback Snapshot",
+        click: () => {
+          try {
+            createRollbackSnapshot("manual", "Created from tray control surface.");
+          } catch (error) {
+            log("Tray rollback snapshot failed", error instanceof Error ? error.message : String(error));
+          }
+        },
+      },
+      {
+        label: "Restore Latest Snapshot",
+        enabled: Boolean(overlaySnapshot.lifecycle?.rollback?.latest?.backupId),
+        click: () => {
+          try {
+            restoreLatestRollbackSnapshot(requireWindow());
+          } catch (error) {
+            log("Tray rollback restore failed", error instanceof Error ? error.message : String(error));
+          }
         },
       },
       { type: "separator" },
@@ -1118,6 +1226,8 @@ function registerIpc() {
   ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
   ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));
   ipcMain.handle("overlay:reset-shell-state", () => resetRetainedShellState(requireWindow()));
+  ipcMain.handle("overlay:create-rollback-snapshot", () => createRollbackSnapshot("manual", "Created from the desktop shell."));
+  ipcMain.handle("overlay:restore-latest-rollback", () => restoreLatestRollbackSnapshot(requireWindow()));
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
@@ -1247,11 +1357,31 @@ if (!app.requestSingleInstanceLock()) {
     buildInfo = resolveBuildIdentity(app, __dirname);
     sessionState = loadSessionState(app.getPath("userData"));
     portabilityState = loadPortabilityState(app.getPath("userData"));
+    const priorUpdateState = loadUpdateState(app.getPath("userData"), {
+      buildIdentity: buildInfo.identity,
+      preferencesSchemaVersion: PREFERENCES_VERSION,
+      sessionSchemaVersion: SESSION_STATE_VERSION,
+    });
+    if (priorUpdateState.currentBuild && priorUpdateState.currentBuild !== buildInfo.identity) {
+      const manifest = createShellBackup(app.getPath("userData"), {
+        reason: "pre_update",
+        buildIdentity: priorUpdateState.currentBuild,
+        note: `Before loading build ${buildInfo.identity}`,
+      });
+      priorUpdateState.lastBackupId = manifest.backupId;
+      priorUpdateState.lastBackupAt = manifest.createdAt;
+      saveUpdateState(app.getPath("userData"), priorUpdateState, {
+        buildIdentity: buildInfo.identity,
+        preferencesSchemaVersion: PREFERENCES_VERSION,
+        sessionSchemaVersion: SESSION_STATE_VERSION,
+      });
+    }
     updateState = reconcileUpdateState(app.getPath("userData"), {
       buildIdentity: buildInfo.identity,
       preferencesSchemaVersion: PREFERENCES_VERSION,
       sessionSchemaVersion: SESSION_STATE_VERSION,
     });
+    refreshBackupState();
     if (sessionState.lastExitClean === false) {
       setOverlayRecovery({
         needed: true,

@@ -8,7 +8,7 @@
   "scripts": {
     "overlay:start": "electron .",
     "overlay:dev": "powershell -ExecutionPolicy Bypass -File electron/dev-run.ps1",
-    "overlay:test": "node --test electron/preferences.test.cjs electron/session-state.test.cjs electron/login-item.test.cjs electron/startup-profile.test.cjs electron/build-info.test.cjs electron/update-state.test.cjs electron/overlay-portability.test.cjs electron/retained-state.test.cjs electron/preflight.test.cjs electron/python-runtime.test.cjs electron/hud-runtime.test.cjs",
+    "overlay:test": "node --test electron/preferences.test.cjs electron/session-state.test.cjs electron/login-item.test.cjs electron/startup-profile.test.cjs electron/build-info.test.cjs electron/update-state.test.cjs electron/overlay-portability.test.cjs electron/retained-state.test.cjs electron/preflight.test.cjs electron/backup-state.test.cjs electron/python-runtime.test.cjs electron/hud-runtime.test.cjs",
     "overlay:prepare-runtime": "node electron/prepare-python-runtime.cjs",
     "overlay:pack": "npm run overlay:prepare-runtime && electron-builder --dir --win",
     "overlay:installer": "npm run overlay:prepare-runtime && electron-builder --win nsis",

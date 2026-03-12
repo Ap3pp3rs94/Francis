@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   resetShellState() {
     return ipcRenderer.invoke("overlay:reset-shell-state");
   },
+  createRollbackSnapshot() {
+    return ipcRenderer.invoke("overlay:create-rollback-snapshot");
+  },
+  restoreLatestRollback() {
+    return ipcRenderer.invoke("overlay:restore-latest-rollback");
+  },
   setTargetDisplay(displayId) {
     return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
   },

@@ -1306,6 +1306,10 @@
           <div class="desktop-grid" id="desktop-preflight-cards">
             <div class="desktop-pill"><strong>Preflight</strong><span>Startup diagnostics will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Rollback Snapshots</h3>
+          <div class="desktop-grid" id="desktop-rollback-cards">
+            <div class="desktop-pill"><strong>Rollback</strong><span>Rollback snapshots will render here once the shell bridge is attached.</span></div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -1995,6 +1999,53 @@
         ];
       }
 
+      function buildDesktopRollbackCards() {
+        const rollback = desktopState.lifecycle?.rollback && typeof desktopState.lifecycle.rollback === "object"
+          ? desktopState.lifecycle.rollback
+          : null;
+
+        if (!rollback) {
+          return [
+            { label: "Rollback", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Rollback snapshots will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        const latest = rollback.latest && typeof rollback.latest === "object" ? rollback.latest : null;
+        return [
+          {
+            label: "Summary",
+            value: String(rollback.summary || "No rollback summary surfaced"),
+            tone: rollback.count > 0 ? "medium" : "low",
+          },
+          {
+            label: "Snapshot Count",
+            value: String(rollback.count || 0),
+            tone: rollback.count > 0 ? "medium" : "low",
+          },
+          {
+            label: "Latest Reason",
+            value: String(latest?.reason || "none"),
+            tone: latest?.reason ? "medium" : "low",
+          },
+          {
+            label: "Latest Build",
+            value: String(latest?.buildIdentity || "unknown"),
+            tone: latest?.buildIdentity ? "medium" : "low",
+          },
+          {
+            label: "Latest Time",
+            value: String(latest?.createdAt || "never"),
+            tone: latest?.createdAt ? "medium" : "low",
+          },
+          {
+            label: "Latest Note",
+            value: String(latest?.note || "No operator note captured"),
+            tone: latest?.note ? "low" : "low",
+          },
+        ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2005,11 +2056,12 @@
         const portabilityCards = document.getElementById("desktop-portability-cards");
         const retainedStateCards = document.getElementById("desktop-retained-state-cards");
         const preflightCards = document.getElementById("desktop-preflight-cards");
+        const rollbackCards = document.getElementById("desktop-rollback-cards");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !meta || !recoveryCards || !updateCards || !display) {
           return;
         }
 
@@ -2027,6 +2079,7 @@
         const loginState = lifecycle?.launchAtLogin || null;
         const startupProfile = lifecycle?.startupProfile || null;
         const update = lifecycle?.update || null;
+        const rollback = lifecycle?.rollback || null;
         const session = lifecycle?.session || null;
         const hudRuntimeMode = desktopState.available ? formatHudRuntimeMode(hudRuntime) : "n/a";
         const buildLabel = desktopState.available
@@ -2099,6 +2152,8 @@
           <button class="btn-secondary" type="button" ${disabled} onclick="restartDesktopHud()">Restart HUD</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="importDesktopShellState()">Import Shell State</button>
+          <button class="btn-secondary" type="button" ${disabled} onclick="createDesktopRollbackSnapshot()">Create Snapshot</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && rollback?.latest?.backupId ? "" : "disabled"} onclick="restoreDesktopRollbackSnapshot()">Restore Latest Snapshot</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="resetDesktopShellState()">Reset Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="resetDesktopLayout()">Reset Layout</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="toggleDesktopDevTools()">DevTools</button>
@@ -2153,6 +2208,7 @@
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");
         renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
         renderDetailCards("desktop-preflight-cards", buildDesktopPreflightCards(), "Preflight");
+        renderDetailCards("desktop-rollback-cards", buildDesktopRollbackCards(), "Rollback");
         display.textContent = formatJson({
           bounds: desktopState.bounds || null,
           targetDisplayId: desktopState.targetDisplayId,
@@ -2183,6 +2239,46 @@
         } catch (error) {
           desktopState = normalizeDesktopState(null, null);
           desktopNotice = `Desktop bridge sync failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function createDesktopRollbackSnapshot() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.createRollbackSnapshot !== "function") {
+          desktopNotice = "Rollback snapshots are unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.createRollbackSnapshot(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = "Rollback snapshot created.";
+        } catch (error) {
+          desktopNotice = `Rollback snapshot failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function restoreDesktopRollbackSnapshot() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.restoreLatestRollback !== "function") {
+          desktopNotice = "Rollback restore is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.restoreLatestRollback(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = "Latest rollback snapshot restored.";
+        } catch (error) {
+          desktopNotice = `Rollback restore failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }
