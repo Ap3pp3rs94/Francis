@@ -53,8 +53,12 @@ from services.orchestrator.app.routes.federation import (
     FederationPairRequest,
     FederationRevokeRequest,
     federation_pair,
+    federation_node_approvals,
+    federation_remote_approval_approve,
+    federation_remote_approval_reject,
     federation_revoke,
 )
+from services.orchestrator.app.routes.control import ControlRemoteApprovalDecisionRequest
 from services.voice.app.operator import build_live_operator_briefing, build_operator_presence, preview_operator_command
 
 SERVICE_VERSION = "0.2.0"
@@ -531,6 +535,124 @@ def _build_app() -> FastAPI:
         payload: FederationRevokeRequest,
     ) -> dict[str, object]:
         result = federation_revoke(node_id, request, payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.get("/api/federation/nodes/{node_id}/approvals")
+    def hud_federation_node_approvals(
+        node_id: str,
+        request: Request,
+        status: str = "pending",
+        limit: int = 20,
+    ) -> dict[str, object]:
+        result = federation_node_approvals(node_id=node_id, request=request, status=status, limit=limit)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/federation/nodes/{node_id}/approvals/{approval_id}/approve")
+    def hud_federation_approval_approve(
+        node_id: str,
+        approval_id: str,
+        request: Request,
+        payload: ControlRemoteApprovalDecisionRequest | None = None,
+    ) -> dict[str, object]:
+        result = federation_remote_approval_approve(
+            node_id=node_id,
+            approval_id=approval_id,
+            request=request,
+            payload=payload,
+        )
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+            "snapshot": refresh_payload["snapshot"],
+            "actions": refresh_payload["actions"],
+            "voice": refresh_payload["voice"],
+            "orb": refresh_payload["orb"],
+            "current_work": refresh_payload["current_work"],
+            "shift_report": refresh_payload["shift_report"],
+            "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
+            "swarm": refresh_payload["swarm"],
+            "federation": refresh_payload["federation"],
+            "approval_queue": refresh_payload["approval_queue"],
+            "blocked_actions": refresh_payload["blocked_actions"],
+            "action_deck": refresh_payload["action_deck"],
+            "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
+            "execution_journal": refresh_payload["execution_journal"],
+            "execution_feed": refresh_payload["execution_feed"],
+            "dashboard": refresh_payload["dashboard"],
+            "missions": refresh_payload["missions"],
+            "incidents": refresh_payload["incidents"],
+            "inbox": refresh_payload["inbox"],
+            "runs": refresh_payload["runs"],
+            "fabric": refresh_payload["fabric"],
+        }
+
+    @app.post("/api/federation/nodes/{node_id}/approvals/{approval_id}/reject")
+    def hud_federation_approval_reject(
+        node_id: str,
+        approval_id: str,
+        request: Request,
+        payload: ControlRemoteApprovalDecisionRequest | None = None,
+    ) -> dict[str, object]:
+        result = federation_remote_approval_reject(
+            node_id=node_id,
+            approval_id=approval_id,
+            request=request,
+            payload=payload,
+        )
         refresh_payload = _build_hud_payload()
         return {
             **refresh_payload,

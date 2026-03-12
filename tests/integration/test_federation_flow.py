@@ -203,3 +203,133 @@ def test_federation_pair_heartbeat_and_revoke_flow() -> None:
         _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)
         _restore_text(log_path, log_before, log_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)
+
+
+def test_federation_remote_approval_is_node_attributed_and_revocable() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    topology_path = workspace / "federation" / "topology.json"
+    approvals_path = workspace / "approvals" / "requests.jsonl"
+    run_ledger_path = workspace / "runs" / "run_ledger.jsonl"
+    log_path = workspace / "logs" / "francis.log.jsonl"
+    decisions_path = workspace / "journals" / "decisions.jsonl"
+    topology_before_exists = topology_path.exists()
+    topology_before = _read_text(topology_path)
+    approvals_before_exists = approvals_path.exists()
+    approvals_before = _read_text(approvals_path)
+    run_ledger_before_exists = run_ledger_path.exists()
+    run_ledger_before = _read_text(run_ledger_path)
+    log_before_exists = log_path.exists()
+    log_before = _read_text(log_path)
+    decisions_before_exists = decisions_path.exists()
+    decisions_before = _read_text(decisions_path)
+
+    try:
+        with TestClient(app) as client:
+            original_mode = _get_mode(client)
+            original_scope = _get_scope(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                _set_scope(client, _enable_apps(original_scope, ["federation", "control", "approvals", "receipts", "lens"]))
+
+                pair = client.post(
+                    "/federation/pair",
+                    json={
+                        "label": "Phone Node",
+                        "role": "phone",
+                        "trust_level": "scoped",
+                        "apps": ["control", "approvals", "lens"],
+                        "remote_approvals": True,
+                        "away_continuity": False,
+                        "receipt_summary": True,
+                        "notes": "Phone node for governed remote approvals.",
+                    },
+                )
+                assert pair.status_code == 200
+                node_id = str(pair.json()["node"]["node_id"]).strip()
+                assert node_id
+
+                request_one = client.post(
+                    "/approvals/request",
+                    json={"action": "repo.tests", "reason": "federated approval test", "metadata": {"source": "pytest"}},
+                )
+                assert request_one.status_code == 200
+                approval_id = str(request_one.json()["approval"]["id"]).strip()
+                assert approval_id
+
+                pending = client.get(f"/federation/nodes/{node_id}/approvals", params={"status": "pending", "limit": 20})
+                assert pending.status_code == 200
+                pending_payload = pending.json()
+                assert pending_payload["via_node"]["node_id"] == node_id
+                assert any(str(row.get("id", "")).strip() == approval_id for row in pending_payload.get("approvals", []))
+
+                approved = client.post(
+                    f"/federation/nodes/{node_id}/approvals/{approval_id}/approve",
+                    json={"note": "phone approved from federation"},
+                )
+                assert approved.status_code == 200
+                approved_payload = approved.json()
+                assert approved_payload["approval"]["status"] == "approved"
+                assert approved_payload["via_node"]["node_id"] == node_id
+                assert approved_payload["decision"]["via_node"]["node_id"] == node_id
+
+                revoke = client.post(
+                    f"/federation/nodes/{node_id}/revoke",
+                    json={"reason": "Remote approval path revoked."},
+                )
+                assert revoke.status_code == 200
+
+                request_two = client.post(
+                    "/approvals/request",
+                    json={"action": "tools.run", "reason": "revoked node denial", "metadata": {"source": "pytest"}},
+                )
+                assert request_two.status_code == 200
+                approval_id_two = str(request_two.json()["approval"]["id"]).strip()
+                assert approval_id_two
+
+                denied = client.post(
+                    f"/federation/nodes/{node_id}/approvals/{approval_id_two}/reject",
+                    json={"note": "should be denied"},
+                )
+                assert denied.status_code == 409
+            finally:
+                _set_scope(client, original_scope)
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
+
+        decisions_rows = _read_jsonl(decisions_path)
+        approval_decision = next(
+            row
+            for row in reversed(decisions_rows)
+            if str(row.get("kind", "")).strip() == "approval.decision"
+            and str(row.get("request_id", "")).strip() == approval_id
+        )
+        assert approval_decision["via_node"]["node_id"] == node_id
+        assert approval_decision["metadata"]["decision_surface"] == "control.remote.approvals"
+
+        control_receipt = next(
+            row
+            for row in reversed(decisions_rows)
+            if str(row.get("kind", "")).strip() == "control.remote.approval.approved"
+            and str(row.get("approval_id", "")).strip() == approval_id
+        )
+        assert control_receipt["via_node"]["node_id"] == node_id
+
+        ledger_rows = _read_jsonl(run_ledger_path)
+        ledger_receipt = next(
+            row
+            for row in reversed(ledger_rows)
+            if str(row.get("kind", "")).strip() == "control.remote.approval.approved"
+            and str((row.get("summary", {}) if isinstance(row.get("summary"), dict) else {}).get("approval_id", "")).strip()
+            == approval_id
+        )
+        ledger_summary = ledger_receipt.get("summary", {}) if isinstance(ledger_receipt.get("summary"), dict) else {}
+        assert ledger_summary["via_node_id"] == node_id
+    finally:
+        _restore_text(topology_path, topology_before, topology_before_exists)
+        _restore_text(approvals_path, approvals_before, approvals_before_exists)
+        _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)
+        _restore_text(log_path, log_before, log_before_exists)
+        _restore_text(decisions_path, decisions_before, decisions_before_exists)

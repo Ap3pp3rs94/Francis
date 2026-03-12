@@ -14,6 +14,12 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from services.orchestrator.app.control_state import check_action_allowed
+from services.orchestrator.app.routes.control import (
+    ControlRemoteApprovalDecisionRequest,
+    control_remote_approval_approve,
+    control_remote_approval_reject,
+    control_remote_approvals,
+)
 from services.orchestrator.app.federation_store import (
     load_or_init_topology,
     heartbeat_node,
@@ -172,6 +178,23 @@ def federation_state(request: Request) -> dict[str, Any]:
     return _build_state_payload()
 
 
+@router.get("/federation/nodes/{node_id}/approvals")
+def federation_node_approvals(
+    node_id: str,
+    request: Request,
+    status: str = "pending",
+    limit: int = 20,
+) -> dict[str, Any]:
+    _enforce_control("federation.read")
+    _enforce_rbac(request, "federation.read")
+    return control_remote_approvals(
+        request=request,
+        status=status,
+        limit=limit,
+        node_id=str(node_id).strip(),
+    )
+
+
 @router.post("/federation/pair")
 def federation_pair(request: Request, payload: FederationPairRequest) -> dict[str, Any]:
     _enforce_control("federation.write")
@@ -292,3 +315,45 @@ def federation_revoke(node_id: str, request: Request, payload: FederationRevokeR
         },
     )
     return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "node": node, "topology": topology}
+
+
+@router.post("/federation/nodes/{node_id}/approvals/{approval_id}/approve")
+def federation_remote_approval_approve(
+    node_id: str,
+    approval_id: str,
+    request: Request,
+    payload: ControlRemoteApprovalDecisionRequest | None = None,
+) -> dict[str, Any]:
+    _enforce_control("federation.write")
+    _enforce_rbac(request, "federation.write")
+    body = payload or ControlRemoteApprovalDecisionRequest()
+    return control_remote_approval_approve(
+        approval_id=str(approval_id).strip(),
+        request=request,
+        payload=ControlRemoteApprovalDecisionRequest(
+            note=body.note,
+            session_id=body.session_id,
+            node_id=str(node_id).strip(),
+        ),
+    )
+
+
+@router.post("/federation/nodes/{node_id}/approvals/{approval_id}/reject")
+def federation_remote_approval_reject(
+    node_id: str,
+    approval_id: str,
+    request: Request,
+    payload: ControlRemoteApprovalDecisionRequest | None = None,
+) -> dict[str, Any]:
+    _enforce_control("federation.write")
+    _enforce_rbac(request, "federation.write")
+    body = payload or ControlRemoteApprovalDecisionRequest()
+    return control_remote_approval_reject(
+        approval_id=str(approval_id).strip(),
+        request=request,
+        payload=ControlRemoteApprovalDecisionRequest(
+            note=body.note,
+            session_id=body.session_id,
+            node_id=str(node_id).strip(),
+        ),
+    )

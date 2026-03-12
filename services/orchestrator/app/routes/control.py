@@ -23,6 +23,7 @@ from francis_policy.rbac import can
 from francis_presence.rituals import build_handback_ritual
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.approvals_store import add_decision, get_request, list_requests, pending_count
+from services.orchestrator.app.federation_store import get_paired_node, node_has_app_scope
 
 from services.orchestrator.app.control_state import (
     VALID_MODES,
@@ -101,6 +102,7 @@ class ControlTakeoverHandbackExportRequest(BaseModel):
 class ControlRemoteApprovalDecisionRequest(BaseModel):
     note: str = ""
     session_id: str | None = None
+    node_id: str | None = None
 
 
 class ControlRemotePanicRequest(ControlPanicRequest):
@@ -160,6 +162,39 @@ def _enforce_remote_control(action: str) -> None:
     )
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
+
+
+def _remote_approval_node_context(node: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "node_id": str(node.get("node_id", "")).strip(),
+        "label": str(node.get("label", "")).strip(),
+        "role": str(node.get("role", "")).strip(),
+        "trust_level": str(node.get("trust_level", "")).strip(),
+        "status": str(node.get("status", "")).strip(),
+    }
+
+
+def _resolve_remote_approval_node(node_id: str | None, *, require_active: bool) -> dict[str, Any] | None:
+    normalized_node_id = str(node_id or "").strip()
+    if not normalized_node_id:
+        return None
+    node = get_paired_node(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        node_id=normalized_node_id,
+    )
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Federation node not found: {normalized_node_id}")
+    status = str(node.get("status", "")).strip().lower() or "active"
+    if require_active and status != "active":
+        raise HTTPException(status_code=409, detail=f"Federation node {normalized_node_id} is {status}, not active")
+    capabilities = node.get("capabilities", {}) if isinstance(node.get("capabilities"), dict) else {}
+    if not bool(capabilities.get("remote_approvals", False)):
+        raise HTTPException(status_code=403, detail=f"Federation node {normalized_node_id} cannot handle remote approvals")
+    if not node_has_app_scope(node, "approvals"):
+        raise HTTPException(status_code=403, detail=f"Federation node {normalized_node_id} lacks approvals scope")
+    return node
 
 
 def _default_takeover_state() -> dict[str, Any]:
@@ -372,6 +407,7 @@ def _record_control_receipt(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_session_id = str(session_id or "").strip()
+    via_node = metadata.get("via_node") if isinstance(metadata, dict) and isinstance(metadata.get("via_node"), dict) else None
     receipt = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
@@ -397,13 +433,16 @@ def _record_control_receipt(
             "reason": reason,
             "before_mode": before.get("mode"),
             "before_kill_switch": before.get("kill_switch"),
-                "after_mode": after.get("mode"),
-                "after_kill_switch": after.get("kill_switch"),
-                "before_status": before.get("status"),
-                "after_status": after.get("status"),
-                "objective": after.get("objective") or before.get("objective"),
-                "session_id": normalized_session_id or None,
-            },
+            "after_mode": after.get("mode"),
+            "after_kill_switch": after.get("kill_switch"),
+            "before_status": before.get("status"),
+            "after_status": after.get("status"),
+            "objective": after.get("objective") or before.get("objective"),
+            "session_id": normalized_session_id or None,
+            "approval_id": metadata.get("approval_id") if isinstance(metadata, dict) else None,
+            "via_node_id": via_node.get("node_id") if via_node else None,
+            "via_node_label": via_node.get("label") if via_node else None,
+        },
     )
     return receipt
 
@@ -889,6 +928,7 @@ def _build_remote_feed_rows(
                         "after": row.get("after", {}) if isinstance(row.get("after"), dict) else {},
                         "approval_id": str(row.get("approval_id", "")).strip() or None,
                         "artifact_path": str(row.get("artifact_path", "")).strip() or None,
+                        "via_node": row.get("via_node", {}) if isinstance(row.get("via_node"), dict) else {},
                     },
                 }
             )
@@ -1294,10 +1334,12 @@ def control_remote_approvals(
     status: str = "pending",
     action: str | None = None,
     limit: int = 50,
+    node_id: str | None = None,
 ) -> dict:
     _enforce_remote_control("control.remote.read")
     _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
+    remote_node = _resolve_remote_approval_node(node_id, require_active=True)
     approvals_list = list_requests(
         _fs,
         status=str(status).strip().lower() or None,
@@ -1309,6 +1351,7 @@ def control_remote_approvals(
         "count": len(approvals_list),
         "pending_count": pending_count(_fs),
         "approvals": approvals_list,
+        "via_node": _remote_approval_node_context(remote_node) if remote_node is not None else None,
     }
 
 
@@ -1981,10 +2024,12 @@ def _control_remote_approval_decision(
     if not normalized_approval_id:
         raise HTTPException(status_code=400, detail="approval_id is required")
     normalized_note = str(body.note).strip()
+    remote_node = _resolve_remote_approval_node(body.node_id, require_active=True)
     normalized_payload = {
         "approval_id": normalized_approval_id,
         "note": normalized_note,
         "session_id": str(body.session_id or "").strip() or None,
+        "node_id": str(body.node_id or "").strip() or None,
     }
     assessment = assess_untrusted_input(
         surface="control",
@@ -2009,6 +2054,7 @@ def _control_remote_approval_decision(
     before = get_request(_fs, normalized_approval_id)
     if before is None:
         raise HTTPException(status_code=404, detail=f"Approval not found: {normalized_approval_id}")
+    via_node = _remote_approval_node_context(remote_node) if remote_node is not None else None
 
     try:
         decision_event = add_decision(
@@ -2018,6 +2064,10 @@ def _control_remote_approval_decision(
             decision=decision,
             decided_by=role,
             note=normalized_note,
+            metadata={
+                "decision_surface": "control.remote.approvals",
+                "via_node": via_node,
+            },
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2046,7 +2096,10 @@ def _control_remote_approval_decision(
             "decided_by": role,
         },
         session_id=normalized_session_id,
-        metadata={"approval_id": normalized_approval_id},
+        metadata={
+            "approval_id": normalized_approval_id,
+            "via_node": via_node,
+        },
     )
     append_takeover_activity(
         run_id=run_id,
@@ -2058,6 +2111,7 @@ def _control_remote_approval_decision(
             "action": after.get("action"),
             "status": after.get("status"),
             "note": normalized_note,
+            "via_node": via_node,
         },
         ok=True,
         session_id=normalized_session_id,
@@ -2070,6 +2124,7 @@ def _control_remote_approval_decision(
         "approval": after,
         "decision": decision_event,
         "receipt_id": receipt.get("id"),
+        "via_node": via_node,
     }
 
 

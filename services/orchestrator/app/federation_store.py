@@ -153,6 +153,33 @@ def _write_topology(fs: WorkspaceFS, topology: dict[str, Any]) -> dict[str, Any]
     return topology
 
 
+def get_paired_node(
+    fs: WorkspaceFS,
+    *,
+    repo_root: Path,
+    workspace_root: Path,
+    node_id: str,
+) -> dict[str, Any] | None:
+    normalized_node_id = str(node_id).strip()
+    if not normalized_node_id:
+        return None
+    topology = load_or_init_topology(fs, repo_root=repo_root, workspace_root=workspace_root)
+    paired_nodes = topology.get("paired_nodes", []) if isinstance(topology.get("paired_nodes"), list) else []
+    for entry in paired_nodes:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("node_id", "")).strip() == normalized_node_id:
+            return entry
+    return None
+
+
+def node_has_app_scope(node: dict[str, Any], app: str) -> bool:
+    scopes = node.get("scopes", {}) if isinstance(node.get("scopes"), dict) else {}
+    apps = scopes.get("apps", []) if isinstance(scopes.get("apps"), list) else []
+    normalized_app = str(app).strip().lower()
+    return normalized_app in {str(item).strip().lower() for item in apps if isinstance(item, str)}
+
+
 def load_or_init_topology(
     fs: WorkspaceFS,
     *,

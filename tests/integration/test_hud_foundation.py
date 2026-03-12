@@ -830,6 +830,9 @@ def test_hud_federation_route_returns_structured_surface() -> None:
     assert "cards" in payload
     assert "nodes" in payload
     assert "detail" in payload
+    if payload["nodes"]:
+        assert "audit" in payload["nodes"][0]
+        assert "controls" in payload["nodes"][0]
 
 
 def test_hud_apprenticeship_route_returns_structured_surface() -> None:
@@ -1428,6 +1431,17 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
                 "paired_count": 2,
                 "stale_count": 1,
                 "revoked_count": 0,
+                "remote_pending_count": 2,
+                "remote_pending_preview": [
+                    {
+                        "id": "approval-remote-1",
+                        "action": "repo.tests",
+                        "reason": "Run the fast repo checks remotely.",
+                        "requested_by": "architect",
+                        "run_id": "run-remote-1",
+                        "status": "pending",
+                    }
+                ],
                 "local_node": {
                     "node_id": "node-local",
                     "label": "Primary Node",
@@ -1487,8 +1501,13 @@ def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
     assert focused["audit"]["status"] == "stale"
     assert focused["audit"]["capabilities"]["remote_approvals"] is True
     assert focused["controls"]["revoke"]["enabled"] is True
+    assert focused["audit"]["remote_approval"]["availability"] == "blocked"
     local = next(row for row in payload["nodes"] if row["node_id"] == "node-local")
     assert local["controls"]["revoke"]["enabled"] is False
+    phone = next(row for row in payload["nodes"] if row["node_id"] == "node-phone")
+    assert phone["audit"]["remote_approval"]["pending_count"] == 2
+    assert phone["controls"]["approve_top"]["enabled"] is True
+    assert phone["controls"]["approve_top"]["approval_id"] == "approval-remote-1"
 
 
 def test_hud_swarm_view_exposes_focus_and_audit(monkeypatch) -> None:

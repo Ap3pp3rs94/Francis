@@ -913,6 +913,9 @@
           </div>
           <div class="work-action-row" id="federation-detail-controls">
             <input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" />
+            <input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" />
+            <button class="btn-secondary" type="button" disabled>Approve Top Remote Request</button>
+            <button class="btn-secondary" type="button" disabled>Reject Top Remote Request</button>
             <button class="btn-secondary" type="button" disabled>Revoke Node</button>
           </div>
           <pre class="console" id="federation-detail">Federation audit will render from the backend contract.</pre>
@@ -4048,8 +4051,17 @@
         const revoke = row.controls && row.controls.revoke && typeof row.controls.revoke === "object"
           ? row.controls.revoke
           : {};
+        const approveTop = row.controls && row.controls.approve_top && typeof row.controls.approve_top === "object"
+          ? row.controls.approve_top
+          : {};
+        const rejectTop = row.controls && row.controls.reject_top && typeof row.controls.reject_top === "object"
+          ? row.controls.reject_top
+          : {};
         document.getElementById("federation-detail-controls").innerHTML = `
           <input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" value="${escapeHtml(String(revoke.enabled ? "Operator revoked node trust." : ""))}" />
+          <input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" value="${escapeHtml(String(approveTop.enabled || rejectTop.enabled ? "Paired node decision from Lens." : ""))}" />
+          <button class="btn-secondary" type="button" ${approveTop.enabled ? "" : "disabled"} onclick="approveFederationTopRequest()">${escapeHtml(String(approveTop.label || "Approve Top Remote Request"))}</button>
+          <button class="btn-secondary" type="button" ${rejectTop.enabled ? "" : "disabled"} onclick="rejectFederationTopRequest()">${escapeHtml(String(rejectTop.label || "Reject Top Remote Request"))}</button>
           <button class="btn-secondary" type="button" ${revoke.enabled ? "" : "disabled"} onclick="revokeFederationNode()">${escapeHtml(String(revoke.label || "Revoke Node"))}</button>
         `;
         document.getElementById("federation-detail").textContent = formatJson(row.audit || row);
@@ -4119,7 +4131,7 @@
           document.getElementById("federation-detail-summary").textContent =
             "Node detail will render from the backend federation contract.";
           document.getElementById("federation-detail-controls").innerHTML =
-            `<input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" /><button class="btn-secondary" type="button" disabled>Revoke Node</button>`;
+            `<input class="chamber-input" type="text" id="federation-revoke-reason" placeholder="Revocation reason" /><input class="chamber-input" type="text" id="federation-approval-note" placeholder="Remote approval note" /><button class="btn-secondary" type="button" disabled>Approve Top Remote Request</button><button class="btn-secondary" type="button" disabled>Reject Top Remote Request</button><button class="btn-secondary" type="button" disabled>Revoke Node</button>`;
           document.getElementById("federation-detail").textContent = formatJson(
             currentFederationSurface.detail && typeof currentFederationSurface.detail === "object"
               ? currentFederationSurface.detail
@@ -4175,6 +4187,50 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail || payload.message || "Failed to revoke federation node."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function approveFederationTopRequest() {
+        const focused = Array.isArray(currentFederationRows)
+          ? currentFederationRows.find((row) => String(row?.node_id || "").trim() === String(currentFederationFocusId || "").trim())
+          : null;
+        const nodeId = String(focused?.node_id || "").trim();
+        const approvalId = String(focused?.controls?.approve_top?.approval_id || "").trim();
+        if (!nodeId || !approvalId) {
+          return;
+        }
+        const note = String(document.getElementById("federation-approval-note")?.value || "").trim();
+        const response = await fetch(`/api/federation/nodes/${encodeURIComponent(nodeId)}/approvals/${encodeURIComponent(approvalId)}/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note, node_id: nodeId }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to approve remote request."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function rejectFederationTopRequest() {
+        const focused = Array.isArray(currentFederationRows)
+          ? currentFederationRows.find((row) => String(row?.node_id || "").trim() === String(currentFederationFocusId || "").trim())
+          : null;
+        const nodeId = String(focused?.node_id || "").trim();
+        const approvalId = String(focused?.controls?.reject_top?.approval_id || "").trim();
+        if (!nodeId || !approvalId) {
+          return;
+        }
+        const note = String(document.getElementById("federation-approval-note")?.value || "").trim();
+        const response = await fetch(`/api/federation/nodes/${encodeURIComponent(nodeId)}/approvals/${encodeURIComponent(approvalId)}/reject`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note, node_id: nodeId }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to reject remote request."));
         }
         renderBootstrap(payload);
       }

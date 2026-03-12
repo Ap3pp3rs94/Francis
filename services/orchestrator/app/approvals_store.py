@@ -132,6 +132,7 @@ def add_decision(
     decision: str,
     decided_by: str,
     note: str = "",
+    metadata: dict | None = None,
 ) -> dict | None:
     request = get_request(fs, approval_id)
     if request is None:
@@ -156,6 +157,12 @@ def add_decision(
         "decided_by": decided_by,
         "note": note,
     }
+    normalized_metadata = metadata if isinstance(metadata, dict) else {}
+    if normalized_metadata:
+        event["metadata"] = normalized_metadata
+        via_node = normalized_metadata.get("via_node")
+        if isinstance(via_node, dict):
+            event["via_node"] = via_node
     _append_jsonl(fs, DECISIONS_PATH, event)
     return event
 

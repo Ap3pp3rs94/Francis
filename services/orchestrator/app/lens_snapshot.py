@@ -10,6 +10,7 @@ from francis_brain.recall import summarize_fabric
 from francis_core.clock import utc_now_iso
 from francis_core.workspace_fs import WorkspaceFS
 
+from services.orchestrator.app.approvals_store import list_requests, pending_count
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from services.orchestrator.app.federation_store import load_or_init_topology
 from services.orchestrator.app.swarm_store import build_swarm_state
@@ -381,6 +382,18 @@ def _materialize_federation(workspace_root: Path) -> dict[str, Any]:
     active_count = sum(1 for row in paired_nodes if str(row.get("status", "")).strip().lower() == "active")
     stale_count = sum(1 for row in paired_nodes if str(row.get("status", "")).strip().lower() == "stale")
     revoked_count = sum(1 for row in paired_nodes if str(row.get("status", "")).strip().lower() == "revoked")
+    remote_pending_preview = [
+        {
+            "id": str(row.get("id", "")).strip(),
+            "action": str(row.get("action", "")).strip(),
+            "reason": str(row.get("reason", "")).strip(),
+            "requested_by": str(row.get("requested_by", "")).strip(),
+            "run_id": str(row.get("run_id", "")).strip(),
+            "status": str(row.get("status", "")).strip(),
+        }
+        for row in list_requests(fs, status="pending", limit=3)
+        if isinstance(row, dict)
+    ]
     return {
         "local_node": local_node,
         "paired_nodes": paired_nodes,
@@ -388,6 +401,8 @@ def _materialize_federation(workspace_root: Path) -> dict[str, Any]:
         "active_count": active_count,
         "stale_count": stale_count,
         "revoked_count": revoked_count,
+        "remote_pending_count": pending_count(fs),
+        "remote_pending_preview": remote_pending_preview,
         "summary": (
             f"Local node {str(local_node.get('label', 'Primary Node')).strip() or 'Primary Node'} "
             f"with {len(paired_nodes)} paired node(s), {stale_count} stale, {revoked_count} revoked."
