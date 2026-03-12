@@ -96,6 +96,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Desktop Shell" in response.text
     assert "Recovery Briefing" in response.text
     assert "Update Discipline" in response.text
+    assert "Shell Portability" in response.text
     assert "Display Target" in response.text
     assert "Startup Profile" in response.text
     assert "Start At Login" in response.text

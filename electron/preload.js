@@ -47,6 +47,12 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   acknowledgeUpdateNotice() {
     return ipcRenderer.invoke("overlay:acknowledge-update-notice");
   },
+  exportShellState() {
+    return ipcRenderer.invoke("overlay:export-shell-state");
+  },
+  importShellState() {
+    return ipcRenderer.invoke("overlay:import-shell-state");
+  },
   setTargetDisplay(displayId) {
     return ipcRenderer.invoke("overlay:set-target-display", assertFiniteNumber("displayId", displayId));
   },

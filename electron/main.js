@@ -1,5 +1,6 @@
 const path = require("node:path");
-const { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, screen } = require("electron");
+const fs = require("node:fs");
+const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen } = require("electron");
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
@@ -26,6 +27,13 @@ const {
   getUpdateStatePath,
   reconcileUpdateState,
 } = require("./update-state");
+const {
+  buildDefaultPortabilityState,
+  buildOverlayExportPayload,
+  extractPortablePreferences,
+  loadPortabilityState,
+  savePortabilityState,
+} = require("./overlay-portability");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -38,6 +46,7 @@ let overlayPreferences = null;
 let sessionState = null;
 let updateState = null;
 let buildInfo = null;
+let portabilityState = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
@@ -198,6 +207,7 @@ function getLifecycleState() {
           sessionSchemaVersion: SESSION_STATE_VERSION,
         }),
     ),
+    portability: portabilityState || buildDefaultPortabilityState(),
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
@@ -272,6 +282,90 @@ function dismissUpdateNotice() {
   });
   notifyOverlayState(mainWindow);
   return getOverlayState(mainWindow);
+}
+
+async function exportShellState(win = mainWindow) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const defaultName = `francis-overlay-state-${new Date().toISOString().slice(0, 10)}.json`;
+  const selected = await dialog.showSaveDialog(safeWindow || undefined, {
+    title: "Export Francis Overlay Shell State",
+    defaultPath: path.join(app.getPath("documents"), defaultName),
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+
+  if (selected.canceled || !selected.filePath) {
+    return getOverlayState(safeWindow);
+  }
+
+  const payload = buildOverlayExportPayload({
+    buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    exportedAt: new Date().toISOString(),
+    preferences: {
+      ...(overlayPreferences || {}),
+      windowBounds: getWindowOrPreferenceBounds(safeWindow),
+      ignoreMouseEvents: overlayState.ignoreMouseEvents,
+      alwaysOnTop: safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop,
+    },
+  });
+
+  fs.writeFileSync(selected.filePath, JSON.stringify(payload, null, 2), "utf8");
+  portabilityState = savePortabilityState(app.getPath("userData"), {
+    ...(portabilityState || buildDefaultPortabilityState()),
+    lastExportAt: payload.exportedAt,
+    lastExportPath: selected.filePath,
+  });
+  log("Exported overlay shell state", {
+    filePath: selected.filePath,
+    startupProfile: payload.shell.startupProfile,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+async function importShellState(win = mainWindow) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const selected = await dialog.showOpenDialog(safeWindow || undefined, {
+    title: "Import Francis Overlay Shell State",
+    properties: ["openFile"],
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+
+  if (selected.canceled || !Array.isArray(selected.filePaths) || !selected.filePaths[0]) {
+    return getOverlayState(safeWindow);
+  }
+
+  const filePath = selected.filePaths[0];
+  const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  const imported = extractPortablePreferences(raw);
+  overlayPreferences = persistOverlayPreferences(safeWindow, imported);
+
+  if (safeWindow) {
+    safeWindow.setBounds(overlayPreferences.windowBounds);
+    applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
+    applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
+  }
+
+  portabilityState = savePortabilityState(app.getPath("userData"), {
+    ...(portabilityState || buildDefaultPortabilityState()),
+    lastImportAt: new Date().toISOString(),
+    lastImportPath: filePath,
+    lastImportStatus: "applied",
+    lastImportMessage: "Imported safe shell preferences only. Launch-at-login and authority state remain local.",
+  });
+  log("Imported overlay shell state", {
+    filePath,
+    startupProfile: overlayPreferences.startupProfile,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
 }
 
 function notifyOverlayState(win = mainWindow) {
@@ -360,6 +454,22 @@ function updateTray() {
         click: () => {
           restartHudAndRefreshWindow(requireWindow()).catch((error) => {
             log("Tray HUD restart failed", error instanceof Error ? error.message : String(error));
+          });
+        },
+      },
+      {
+        label: "Export Shell State",
+        click: () => {
+          exportShellState(requireWindow()).catch((error) => {
+            log("Tray shell export failed", error instanceof Error ? error.message : String(error));
+          });
+        },
+      },
+      {
+        label: "Import Shell State",
+        click: () => {
+          importShellState(requireWindow()).catch((error) => {
+            log("Tray shell import failed", error instanceof Error ? error.message : String(error));
           });
         },
       },
@@ -926,6 +1036,8 @@ function registerIpc() {
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
   ipcMain.handle("overlay:acknowledge-update-notice", () => dismissUpdateNotice());
+  ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
+  ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
@@ -1054,6 +1166,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     buildInfo = resolveBuildIdentity(app, __dirname);
     sessionState = loadSessionState(app.getPath("userData"));
+    portabilityState = loadPortabilityState(app.getPath("userData"));
     updateState = reconcileUpdateState(app.getPath("userData"), {
       buildIdentity: buildInfo.identity,
       preferencesSchemaVersion: PREFERENCES_VERSION,
