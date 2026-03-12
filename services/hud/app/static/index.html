@@ -964,13 +964,14 @@
           <div class="desktop-grid" id="managed-copies-detail-cards">
             <div class="desktop-pill"><strong>Copy</strong><span>Detail cards will render from the backend contract.</span></div>
           </div>
-          <div class="work-action-row" id="managed-copies-detail-controls">
-            <input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" />
-            <input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" />
-            <button class="btn-secondary" type="button" disabled>Record Safe Delta</button>
-            <button class="btn-secondary" type="button" disabled>Quarantine Copy</button>
-            <button class="btn-secondary" type="button" disabled>Replace From Clean Baseline</button>
-          </div>
+            <div class="work-action-row" id="managed-copies-detail-controls">
+              <input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" />
+              <input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" />
+              <button class="btn-secondary" type="button" disabled>Materialize Runtime</button>
+              <button class="btn-secondary" type="button" disabled>Record Safe Delta</button>
+              <button class="btn-secondary" type="button" disabled>Quarantine Copy</button>
+              <button class="btn-secondary" type="button" disabled>Replace From Clean Baseline</button>
+            </div>
           <pre class="console" id="managed-copies-detail">Managed-copy audit will render from the backend contract.</pre>
         </article>
       </section>
@@ -4418,12 +4419,14 @@
           String(row.detail_summary || row.summary || "No managed-copy detail is available.");
         renderDetailCards("managed-copies-detail-cards", row.detail_cards, "Managed copy");
         const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const materialize = controls.materialize && typeof controls.materialize === "object" ? controls.materialize : {};
         const recordDelta = controls.record_delta && typeof controls.record_delta === "object" ? controls.record_delta : {};
         const quarantine = controls.quarantine && typeof controls.quarantine === "object" ? controls.quarantine : {};
         const replace = controls.replace && typeof controls.replace === "object" ? controls.replace : {};
         document.getElementById("managed-copies-detail-controls").innerHTML = `
           <input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" value="${escapeHtml(String(row.audit?.last_delta_summary || ""))}" />
           <input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" value="${escapeHtml(String(row.status || "").trim().toLowerCase() === "quarantined" ? String(row.audit?.quarantine_reason || "") : "")}" />
+          <button class="btn-secondary" type="button" ${materialize.enabled ? "" : "disabled"} onclick="materializeManagedCopy()">${escapeHtml(String(materialize.label || "Materialize Runtime"))}</button>
           <button class="btn-secondary" type="button" ${recordDelta.enabled ? "" : "disabled"} onclick="recordManagedCopyDelta()">${escapeHtml(String(recordDelta.label || "Record Safe Delta"))}</button>
           <button class="btn-secondary" type="button" ${quarantine.enabled ? "" : "disabled"} onclick="quarantineManagedCopy()">${escapeHtml(String(quarantine.label || "Quarantine Copy"))}</button>
           <button class="btn-secondary" type="button" ${replace.enabled ? "" : "disabled"} onclick="replaceManagedCopy()">${escapeHtml(String(replace.label || "Replace From Clean Baseline"))}</button>
@@ -4431,7 +4434,9 @@
         document.getElementById("managed-copies-detail").textContent = formatJson(row.audit || row);
         applyPanelSignal(
           "managed-copies-detail-panel",
-          String(row.status || "").trim().toLowerCase() === "quarantined"
+          Number(row.audit?.runtime?.missing_count || 0) > 0
+            ? "medium"
+            : String(row.status || "").trim().toLowerCase() === "quarantined"
             ? "high"
             : String(row.status || "").trim().toLowerCase() === "replaced"
               ? "medium"
@@ -4442,8 +4447,10 @@
       function renderManagedCopiesSurface(surface) {
         currentManagedCopiesSurface = surface || { copies: [] };
         currentManagedCopyRows = Array.isArray(currentManagedCopiesSurface.copies) ? currentManagedCopiesSurface.copies : [];
+        const materializedCount = Number(currentManagedCopiesSurface.materialized_count || 0);
+        const runtimeDriftCount = Number(currentManagedCopiesSurface.unmaterialized_count || 0);
         document.getElementById("managed-copies-meta").textContent =
-          `${currentManagedCopyRows.length} copy(ies) | ${String(currentManagedCopiesSurface.severity || "low")}`;
+          `${currentManagedCopyRows.length} copy(ies) | ${materializedCount} materialized | ${runtimeDriftCount} runtime drift | ${String(currentManagedCopiesSurface.severity || "low")}`;
         document.getElementById("managed-copies-summary").textContent =
           String(currentManagedCopiesSurface.summary || "Managed copies will render from the governed copy registry.");
         applySeverityState(
@@ -4497,7 +4504,7 @@
           document.getElementById("managed-copies-detail-summary").textContent =
             "Managed copy detail will render from the backend contract.";
           document.getElementById("managed-copies-detail-controls").innerHTML =
-            `<input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" /><input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" /><button class="btn-secondary" type="button" disabled>Record Safe Delta</button><button class="btn-secondary" type="button" disabled>Quarantine Copy</button><button class="btn-secondary" type="button" disabled>Replace From Clean Baseline</button>`;
+            `<input class="chamber-input" type="text" id="managed-copies-delta-summary" placeholder="Safe delta summary" /><input class="chamber-input" type="text" id="managed-copies-reason" placeholder="Quarantine or replacement reason" /><button class="btn-secondary" type="button" disabled>Materialize Runtime</button><button class="btn-secondary" type="button" disabled>Record Safe Delta</button><button class="btn-secondary" type="button" disabled>Quarantine Copy</button><button class="btn-secondary" type="button" disabled>Replace From Clean Baseline</button>`;
           document.getElementById("managed-copies-detail").textContent = formatJson(
             currentManagedCopiesSurface.detail && typeof currentManagedCopiesSurface.detail === "object"
               ? currentManagedCopiesSurface.detail
@@ -4528,6 +4535,24 @@
           throw new Error(String(payload.detail || payload.message || "Failed to create managed copy."));
         }
         document.getElementById("managed-copies-customer-label").value = "";
+        renderBootstrap(payload);
+      }
+
+      async function materializeManagedCopy() {
+        const focused = Array.isArray(currentManagedCopyRows)
+          ? currentManagedCopyRows.find((row) => String(row?.copy_id || "").trim() === String(currentManagedCopyFocusId || "").trim())
+          : null;
+        const copyId = String(focused?.copy_id || "").trim();
+        if (!copyId) {
+          return;
+        }
+        const response = await fetch(`/api/managed-copies/copies/${encodeURIComponent(copyId)}/materialize`, {
+          method: "POST",
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to materialize managed copy runtime."));
+        }
         renderBootstrap(payload);
       }
 

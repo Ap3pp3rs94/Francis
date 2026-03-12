@@ -18,6 +18,7 @@ from services.orchestrator.app.federation_store import get_paired_node
 from services.orchestrator.app.managed_copy_store import (
     build_managed_copy_state,
     create_copy,
+    materialize_copy,
     quarantine_copy,
     record_delta,
     replace_copy,
@@ -223,6 +224,33 @@ def managed_copy_delta(copy_id: str, request: Request, payload: ManagedCopyDelta
         },
     )
     return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "delta": delta, "state": build_managed_copy_state(_fs)}
+
+
+@router.post("/managed-copies/copies/{copy_id}/materialize")
+def managed_copy_materialize(copy_id: str, request: Request) -> dict[str, Any]:
+    _enforce_control("managed_copies.write", mutating=True)
+    role = _enforce_rbac(request, "managed_copies.write")
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
+    copy_entry = materialize_copy(_fs, copy_id=str(copy_id).strip())
+    if copy_entry is None:
+        raise HTTPException(status_code=404, detail=f"Managed copy not found: {copy_id}")
+    runtime = copy_entry.get("runtime", {}) if isinstance(copy_entry.get("runtime"), dict) else {}
+    _record_managed_copy_receipt(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="managed.copy.materialized",
+        actor=role,
+        copy_id=str(copy_entry.get("copy_id", "")).strip(),
+        reason="Materialized managed copy runtime namespace.",
+        summary={
+            "customer_label": str(copy_entry.get("customer_label", "")).strip(),
+            "namespace_root": str(runtime.get("namespace_root", "")).strip(),
+            "materialized": bool(runtime.get("materialized", False)),
+            "missing_count": int(runtime.get("missing_count", 0) or 0),
+        },
+    )
+    return {"status": "ok", "run_id": run_id, "trace_id": trace_id, "copy": copy_entry, "state": build_managed_copy_state(_fs)}
 
 
 @router.post("/managed-copies/copies/{copy_id}/quarantine")

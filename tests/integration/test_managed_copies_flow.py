@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from francis_brain.ledger import RunLedger
+from francis_core.workspace_fs import WorkspaceFS
+import services.orchestrator.app.routes.managed_copies as managed_copies_routes
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -64,6 +68,16 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return rows
 
 
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _remove_tree(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def _restore_text(path: Path, content: str, existed: bool) -> None:
     if existed:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,6 +103,7 @@ def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
     log_before = _read_text(log_path)
     decisions_before_exists = decisions_path.exists()
     decisions_before = _read_text(decisions_path)
+    runtime_roots: list[Path] = []
 
     try:
         with TestClient(app) as client:
@@ -112,6 +127,14 @@ def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
                 created_payload = created.json()
                 copy_id = str(created_payload["copy"]["copy_id"]).strip()
                 assert copy_id
+                created_runtime = created_payload["copy"].get("runtime", {})
+                runtime_roots.append(workspace / str(created_runtime.get("namespace_root", "")).strip())
+                assert created_runtime["materialized"] is True
+                assert (workspace / str(created_runtime["manifest_path"])).exists()
+                assert (workspace / str(created_runtime["health_path"])).exists()
+                assert (workspace / str(created_runtime["ledger_path"])).exists()
+                assert (workspace / str(created_runtime["decisions_path"])).exists()
+                assert (workspace / str(created_runtime["inbox_path"])).exists()
 
                 delta = client.post(
                     f"/managed-copies/copies/{copy_id}/delta",
@@ -143,6 +166,10 @@ def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
                 assert replaced_payload["replaced"]["status"] == "replaced"
                 assert replaced_payload["replacement"]["status"] == "active"
                 assert replaced_payload["replacement"]["replaces_copy_id"] == copy_id
+                replacement_runtime = replaced_payload["replacement"].get("runtime", {})
+                runtime_roots.append(workspace / str(replacement_runtime.get("namespace_root", "")).strip())
+                assert replacement_runtime["materialized"] is True
+                assert (workspace / str(replacement_runtime["manifest_path"])).exists()
             finally:
                 _set_scope(client, original_scope)
                 _set_mode(
@@ -175,3 +202,71 @@ def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
         _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)
         _restore_text(log_path, log_before, log_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)
+        for runtime_root in runtime_roots:
+            _remove_tree(runtime_root)
+
+
+def test_managed_copy_materialize_route_recovers_legacy_runtime_namespace(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    repo_root = tmp_path.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
+    namespace_root = "managed_copies/copy-legacy-runtime"
+    _write_json(
+        workspace_root / "managed_copies" / "registry.json",
+        {
+            "version": 1,
+            "updated_at": "2026-03-12T09:00:00+00:00",
+            "copies": [
+                {
+                    "copy_id": "copy-legacy-runtime",
+                    "customer_label": "Legacy Copy",
+                    "status": "active",
+                    "baseline_version": "francis-core",
+                    "sla_tier": "standard",
+                    "workspace_namespace": namespace_root,
+                    "capability_packs": ["pack.alpha"],
+                    "created_by": "architect",
+                    "created_at": "2026-03-12T08:59:00+00:00",
+                    "delta_count": 0,
+                    "last_delta_summary": "",
+                    "isolation": {
+                        "customer_isolated": True,
+                        "data_pooling": False,
+                        "delta_model": "safe_signals_only",
+                    },
+                }
+            ],
+        },
+    )
+
+    monkeypatch.setattr(managed_copies_routes, "_workspace_root", workspace_root)
+    monkeypatch.setattr(managed_copies_routes, "_repo_root", repo_root)
+    monkeypatch.setattr(managed_copies_routes, "_fs", fs)
+    monkeypatch.setattr(managed_copies_routes, "_ledger", ledger)
+    monkeypatch.setattr(managed_copies_routes, "_enforce_control", lambda *args, **kwargs: None)
+    monkeypatch.setattr(managed_copies_routes, "_enforce_rbac", lambda request, action: "architect")
+
+    with TestClient(app) as client:
+        response = client.post("/managed-copies/copies/copy-legacy-runtime/materialize")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["copy"]["runtime"]["materialized"] is True
+    assert payload["state"]["materialized_count"] == 1
+    assert payload["state"]["unmaterialized_count"] == 0
+
+    runtime = payload["copy"]["runtime"]
+    assert (workspace_root / str(runtime["manifest_path"])).exists()
+    assert (workspace_root / str(runtime["health_path"])).exists()
+    assert (workspace_root / str(runtime["ledger_path"])).exists()
+    assert (workspace_root / str(runtime["decisions_path"])).exists()
+    assert (workspace_root / str(runtime["inbox_path"])).exists()
+
+    ledger_rows = _read_jsonl(workspace_root / "runs" / "run_ledger.jsonl")
+    assert any(str(row.get("kind", "")).strip() == "managed.copy.materialized" for row in ledger_rows)

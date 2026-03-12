@@ -868,6 +868,8 @@ def test_hud_managed_copies_route_returns_structured_surface() -> None:
     assert "summary" in payload
     assert "severity" in payload
     assert "focus_copy_id" in payload
+    assert "materialized_count" in payload
+    assert "unmaterialized_count" in payload
     assert "cards" in payload
     assert "copies" in payload
     assert "detail" in payload
@@ -1613,12 +1615,14 @@ def test_hud_managed_copies_view_exposes_focus_and_audit(monkeypatch) -> None:
     def _snapshot() -> dict[str, object]:
         return {
             "managed_copies": {
-                "summary": "2 managed copy(ies), 1 active, 1 quarantined, 0 replaced, 2 safe delta(s).",
+                "summary": "2 managed copy(ies), 1 active, 1 quarantined, 0 replaced, 1 materialized, 1 with runtime drift, 2 safe delta(s).",
                 "copy_count": 2,
                 "active_count": 1,
                 "quarantined_count": 1,
                 "replaced_count": 0,
                 "delta_count": 2,
+                "materialized_count": 1,
+                "unmaterialized_count": 1,
                 "copies": [
                     {
                         "copy_id": "copy-active",
@@ -1641,6 +1645,20 @@ def test_hud_managed_copies_view_exposes_focus_and_audit(monkeypatch) -> None:
                         "replaces_copy_id": None,
                         "notes": "Premium managed copy.",
                         "isolation": {"customer_isolated": True, "data_pooling": False, "delta_model": "safe_signals_only"},
+                        "runtime": {
+                            "namespace_root": "managed_copies/copy-active",
+                            "materialized": True,
+                            "materialized_at": "2026-03-11T12:00:30+00:00",
+                            "last_checked_at": "2026-03-11T12:13:00+00:00",
+                            "missing_count": 0,
+                            "missing_paths": [],
+                            "manifest_path": "managed_copies/copy-active/runtime/managed_copy.json",
+                            "health_path": "managed_copies/copy-active/runtime/health.json",
+                            "ledger_path": "managed_copies/copy-active/runs/run_ledger.jsonl",
+                            "decisions_path": "managed_copies/copy-active/journals/decisions.jsonl",
+                            "inbox_path": "managed_copies/copy-active/inbox/messages.jsonl",
+                            "health_status": "active",
+                        },
                     },
                     {
                         "copy_id": "copy-quarantine",
@@ -1663,6 +1681,23 @@ def test_hud_managed_copies_view_exposes_focus_and_audit(monkeypatch) -> None:
                         "replaces_copy_id": None,
                         "notes": "Critical managed copy.",
                         "isolation": {"customer_isolated": True, "data_pooling": False, "delta_model": "safe_signals_only"},
+                        "runtime": {
+                            "namespace_root": "managed_copies/copy-quarantine",
+                            "materialized": False,
+                            "materialized_at": None,
+                            "last_checked_at": "2026-03-11T12:13:00+00:00",
+                            "missing_count": 2,
+                            "missing_paths": [
+                                "managed_copies/copy-quarantine/runtime/managed_copy.json",
+                                "managed_copies/copy-quarantine/runtime/health.json",
+                            ],
+                            "manifest_path": "managed_copies/copy-quarantine/runtime/managed_copy.json",
+                            "health_path": "managed_copies/copy-quarantine/runtime/health.json",
+                            "ledger_path": "managed_copies/copy-quarantine/runs/run_ledger.jsonl",
+                            "decisions_path": "managed_copies/copy-quarantine/journals/decisions.jsonl",
+                            "inbox_path": "managed_copies/copy-quarantine/inbox/messages.jsonl",
+                            "health_status": "quarantined",
+                        },
                     },
                 ],
                 "deltas": [],
@@ -1679,8 +1714,12 @@ def test_hud_managed_copies_view_exposes_focus_and_audit(monkeypatch) -> None:
     focused = next(row for row in payload["copies"] if row["copy_id"] == "copy-quarantine")
     assert focused["detail_state"] == "current"
     assert focused["audit"]["quarantine_reason"] == "Rogue signal detected."
+    assert focused["audit"]["runtime"]["materialized"] is False
+    assert focused["audit"]["runtime"]["missing_count"] == 2
+    assert focused["controls"]["materialize"]["enabled"] is True
     assert focused["controls"]["replace"]["enabled"] is True
     active = next(row for row in payload["copies"] if row["copy_id"] == "copy-active")
+    assert active["audit"]["runtime"]["materialized"] is True
     assert active["controls"]["record_delta"]["enabled"] is True
 
 

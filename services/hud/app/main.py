@@ -73,6 +73,7 @@ from services.orchestrator.app.routes.managed_copies import (
     ManagedCopyReplaceRequest,
     managed_copy_create,
     managed_copy_delta,
+    managed_copy_materialize,
     managed_copy_quarantine,
     managed_copy_replace,
 )
@@ -794,6 +795,15 @@ def _build_app() -> FastAPI:
         payload: ManagedCopyDeltaRequest,
     ) -> dict[str, object]:
         result = managed_copy_delta(copy_id=copy_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {
+            **refresh_payload,
+            **result,
+        }
+
+    @app.post("/api/managed-copies/copies/{copy_id}/materialize")
+    def hud_managed_copy_materialize(copy_id: str, request: Request) -> dict[str, object]:
+        result = managed_copy_materialize(copy_id=copy_id, request=request)
         refresh_payload = _build_hud_payload()
         return {
             **refresh_payload,

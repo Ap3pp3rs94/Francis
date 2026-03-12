@@ -11,22 +11,42 @@ def _detail_state(copy_id: str, focus_copy_id: str) -> str:
     return "historical"
 
 
+def _runtime(copy_row: dict[str, Any]) -> dict[str, Any]:
+    return copy_row.get("runtime", {}) if isinstance(copy_row.get("runtime"), dict) else {}
+
+
+def _runtime_summary(copy_row: dict[str, Any]) -> str:
+    runtime = _runtime(copy_row)
+    materialized = bool(runtime.get("materialized", False))
+    missing_count = int(runtime.get("missing_count", 0) or 0)
+    if materialized:
+        return "runtime namespace materialized"
+    if missing_count:
+        return f"runtime drift: {missing_count} required path(s) missing"
+    return "runtime namespace not yet materialized"
+
+
 def _row_summary(copy_row: dict[str, Any]) -> str:
     label = str(copy_row.get("customer_label", "Managed Copy")).strip() or "Managed Copy"
     status = str(copy_row.get("status", "active")).strip() or "active"
     baseline = str(copy_row.get("baseline_version", "francis-core")).strip() or "francis-core"
     delta_count = int(copy_row.get("delta_count", 0) or 0)
-    return f"{label} is {status} on {baseline} with {delta_count} safe delta(s) recorded."
+    return f"{label} is {status} on {baseline} with {delta_count} safe delta(s) recorded and {_runtime_summary(copy_row)}."
 
 
 def _detail_cards(copy_row: dict[str, Any]) -> list[dict[str, str]]:
     status = str(copy_row.get("status", "active")).strip().lower() or "active"
     delta_count = int(copy_row.get("delta_count", 0) or 0)
+    runtime = _runtime(copy_row)
+    materialized = bool(runtime.get("materialized", False))
+    missing_count = int(runtime.get("missing_count", 0) or 0)
     return [
         {"label": "Status", "value": status, "tone": "high" if status == "quarantined" else "medium" if status == "replaced" else "low"},
         {"label": "SLA", "value": str(copy_row.get("sla_tier", "standard")).strip() or "standard", "tone": "medium"},
         {"label": "Baseline", "value": str(copy_row.get("baseline_version", "francis-core")).strip() or "francis-core", "tone": "low"},
         {"label": "Namespace", "value": str(copy_row.get("workspace_namespace", "")).strip() or "managed_copies", "tone": "low"},
+        {"label": "Runtime", "value": "materialized" if materialized else "runtime drift", "tone": "low" if materialized else "medium"},
+        {"label": "Missing Paths", "value": str(missing_count), "tone": "medium" if missing_count else "low"},
         {"label": "Delta Count", "value": str(delta_count), "tone": "high" if delta_count else "low"},
         {"label": "Isolation", "value": "signals only", "tone": "low"},
     ]
@@ -34,6 +54,7 @@ def _detail_cards(copy_row: dict[str, Any]) -> list[dict[str, str]]:
 
 def _audit(copy_row: dict[str, Any], detail_state: str) -> dict[str, Any]:
     isolation = copy_row.get("isolation", {}) if isinstance(copy_row.get("isolation"), dict) else {}
+    runtime = _runtime(copy_row)
     return {
         "copy_id": str(copy_row.get("copy_id", "")).strip(),
         "customer_label": str(copy_row.get("customer_label", "")).strip(),
@@ -57,6 +78,22 @@ def _audit(copy_row: dict[str, Any], detail_state: str) -> dict[str, Any]:
             "data_pooling": bool(isolation.get("data_pooling", False)),
             "delta_model": str(isolation.get("delta_model", "safe_signals_only")).strip() or "safe_signals_only",
         },
+        "runtime": {
+            "namespace_root": str(runtime.get("namespace_root", "")).strip(),
+            "materialized": bool(runtime.get("materialized", False)),
+            "materialized_at": runtime.get("materialized_at"),
+            "last_checked_at": runtime.get("last_checked_at"),
+            "missing_count": int(runtime.get("missing_count", 0) or 0),
+            "missing_paths": runtime.get("missing_paths", []) if isinstance(runtime.get("missing_paths"), list) else [],
+            "manifest_path": str(runtime.get("manifest_path", "")).strip(),
+            "health_path": str(runtime.get("health_path", "")).strip(),
+            "ledger_path": str(runtime.get("ledger_path", "")).strip(),
+            "decisions_path": str(runtime.get("decisions_path", "")).strip(),
+            "inbox_path": str(runtime.get("inbox_path", "")).strip(),
+            "health_status": str(runtime.get("health_status", "")).strip() or str(copy_row.get("status", "")).strip() or "active",
+            "manifest_updated_at": runtime.get("manifest_updated_at"),
+            "health_updated_at": runtime.get("health_updated_at"),
+        },
     }
 
 
@@ -64,7 +101,20 @@ def _controls(copy_row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     copy_id = str(copy_row.get("copy_id", "")).strip()
     status = str(copy_row.get("status", "active")).strip().lower() or "active"
     active = status == "active"
+    runtime = _runtime(copy_row)
+    materialized = bool(runtime.get("materialized", False))
     return {
+        "materialize": {
+            "label": "Refresh Runtime" if materialized else "Materialize Runtime",
+            "enabled": bool(copy_id),
+            "kind": "managed_copies.materialize",
+            "summary": (
+                "Reconcile the managed copy namespace manifest, health file, and runtime journals."
+                if bool(copy_id)
+                else "Managed copy runtime cannot be materialized without a copy id."
+            ),
+            "copy_id": copy_id,
+        },
         "record_delta": {
             "label": "Record Safe Delta",
             "enabled": bool(copy_id) and active,
@@ -107,7 +157,16 @@ def get_managed_copies_view(*, snapshot: dict[str, object] | None = None) -> dic
     managed = snapshot.get("managed_copies", {}) if isinstance(snapshot.get("managed_copies"), dict) else {}
     copies = [row for row in managed.get("copies", []) if isinstance(row, dict)]
 
-    focus_row = next((row for row in copies if str(row.get("status", "")).strip().lower() == "quarantined"), None)
+    focus_row = next(
+        (
+            row
+            for row in copies
+            if not bool((_runtime(row)).get("materialized", False))
+        ),
+        None,
+    )
+    if focus_row is None:
+        focus_row = next((row for row in copies if str(row.get("status", "")).strip().lower() == "quarantined"), None)
     if focus_row is None:
         focus_row = next((row for row in copies if int(row.get("delta_count", 0) or 0) > 0), None)
     if focus_row is None:
@@ -134,13 +193,17 @@ def get_managed_copies_view(*, snapshot: dict[str, object] | None = None) -> dic
 
     focused = next((row for row in rows if str(row.get("copy_id", "")).strip() == focus_copy_id), None)
     quarantined_count = int(managed.get("quarantined_count", 0) or 0)
-    severity = "high" if quarantined_count > 0 else "medium" if rows else "low"
+    materialized_count = int(managed.get("materialized_count", 0) or 0)
+    unmaterialized_count = int(managed.get("unmaterialized_count", 0) or max(len(rows) - materialized_count, 0))
+    severity = "high" if quarantined_count > 0 else "medium" if unmaterialized_count > 0 or rows else "low"
     return {
         "status": "ok",
         "surface": "managed_copies",
         "summary": str(managed.get("summary", "")).strip() or "No managed copies have been created yet.",
         "severity": severity,
         "focus_copy_id": focus_copy_id,
+        "materialized_count": materialized_count,
+        "unmaterialized_count": unmaterialized_count,
         "creation": {
             "default_baseline_version": "francis-core",
             "default_sla_tier": "standard",
@@ -151,6 +214,8 @@ def get_managed_copies_view(*, snapshot: dict[str, object] | None = None) -> dic
             {"label": "Active", "value": str(int(managed.get("active_count", 0) or 0)), "tone": "low"},
             {"label": "Quarantined", "value": str(quarantined_count), "tone": "high" if quarantined_count else "low"},
             {"label": "Replaced", "value": str(int(managed.get("replaced_count", 0) or 0)), "tone": "medium" if int(managed.get("replaced_count", 0) or 0) else "low"},
+            {"label": "Materialized", "value": str(materialized_count), "tone": "low" if materialized_count else "medium"},
+            {"label": "Runtime Drift", "value": str(unmaterialized_count), "tone": "medium" if unmaterialized_count else "low"},
             {"label": "Safe Deltas", "value": str(int(managed.get("delta_count", 0) or 0)), "tone": "medium" if int(managed.get("delta_count", 0) or 0) else "low"},
         ],
         "copies": rows,

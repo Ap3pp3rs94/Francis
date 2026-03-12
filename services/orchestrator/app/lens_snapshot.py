@@ -448,6 +448,8 @@ def _materialize_managed_copies(workspace_root: Path) -> dict[str, Any]:
         "quarantined_count": state["quarantined_count"],
         "replaced_count": state["replaced_count"],
         "delta_count": state["delta_count"],
+        "materialized_count": state["materialized_count"],
+        "unmaterialized_count": state["unmaterialized_count"],
         "summary": state["summary"],
         "updated_at": state.get("updated_at"),
     }
