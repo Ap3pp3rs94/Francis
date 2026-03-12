@@ -31,6 +31,8 @@ class ActionChip(TypedDict, total=False):
 
 REQUIRED_ACTION_FIELDS: dict[str, list[str]] = {
     "mission.tick": ["mission_id"],
+    "apprenticeship.session.create": ["title"],
+    "apprenticeship.step.record": ["session_id", "action", "intent"],
     "apprenticeship.generalize": ["session_id"],
     "apprenticeship.skillize": ["session_id"],
     "control.takeover.request": ["objective"],
@@ -164,6 +166,11 @@ def _required_fallbacks(kind: str, args: dict[str, Any], snapshot: dict[str, Any
         normalized["note"] = str(normalized.get("note", "")).strip() or "Approved from HUD Lens."
     elif kind == "control.remote.approval.reject":
         normalized["note"] = str(normalized.get("note", "")).strip() or "Rejected from HUD Lens."
+    elif kind == "apprenticeship.session.create":
+        normalized["objective"] = str(normalized.get("objective", "")).strip() or str(objective.get("label", "")).strip()
+        normalized["tags"] = [str(tag).strip().lower() for tag in normalized.get("tags", []) if str(tag).strip()]
+    elif kind == "apprenticeship.step.record":
+        normalized["step_kind"] = str(normalized.get("step_kind", "")).strip().lower() or "command"
 
     return normalized
 

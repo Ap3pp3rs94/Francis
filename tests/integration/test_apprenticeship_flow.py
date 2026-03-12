@@ -125,3 +125,44 @@ def test_lens_surfaces_apprenticeship_actions(monkeypatch, tmp_path: Path) -> No
     assert post_generalize_actions.status_code == 200
     action_kinds = [chip.get("kind") for chip in post_generalize_actions.json()["action_chips"]]
     assert "apprenticeship.skillize" in action_kinds
+
+
+def test_lens_execute_can_create_and_record_teaching_session(monkeypatch, tmp_path: Path) -> None:
+    _wire_workspace(monkeypatch, tmp_path)
+
+    created = client.post(
+        "/lens/actions/execute",
+        json={
+            "kind": "apprenticeship.session.create",
+            "args": {
+                "title": "Teach focused verification",
+                "objective": "Capture HUD verification flow",
+                "tags": ["hud", "verification"],
+            },
+        },
+    )
+    assert created.status_code == 200
+    created_summary = created.json()["result"]["summary"]
+    session_id = created_summary["session"]["id"]
+    assert created_summary["session"]["title"] == "Teach focused verification"
+
+    recorded = client.post(
+        "/lens/actions/execute",
+        json={
+            "kind": "apprenticeship.step.record",
+            "args": {
+                "session_id": session_id,
+                "action": "pytest -q tests/integration/test_hud_foundation.py",
+                "intent": "verify HUD contract",
+                "artifact_path": "tests/integration/test_hud_foundation.py",
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    recorded_summary = recorded.json()["result"]["summary"]
+    assert recorded_summary["session"]["id"] == session_id
+    assert recorded_summary["step"]["intent"] == "verify HUD contract"
+
+    detail = client.get(f"/apprenticeship/sessions/{session_id}")
+    assert detail.status_code == 200
+    assert detail.json()["replay"]["step_count"] == 1

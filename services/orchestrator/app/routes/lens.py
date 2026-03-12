@@ -84,7 +84,11 @@ from services.orchestrator.app.routes.autonomy import (
     autonomy_reactor_tick,
 )
 from services.orchestrator.app.routes.apprenticeship import (
+    ApprenticeshipSessionCreateRequest,
     ApprenticeshipSkillizeRequest,
+    ApprenticeshipStepRequest,
+    apprenticeship_add_step,
+    apprenticeship_create_session,
     apprenticeship_generalize,
     apprenticeship_skillize,
 )
@@ -1485,6 +1489,53 @@ def _execute_lens_action(
         if dry_run:
             return {"status": "dry_run", "kind": normalized_kind, "execution_args": {"session_id": session_id}}
         summary = apprenticeship_generalize(request, session_id=session_id)
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "apprenticeship.session.create":
+        _enforce_rbac(role, "apprenticeship.write")
+        _enforce_action_scope(app="apprenticeship", action="apprenticeship.write", mutating=True)
+        title = str(args.get("title", "")).strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="title is required for apprenticeship.session.create")
+        create_payload = ApprenticeshipSessionCreateRequest(
+            title=title,
+            objective=str(args.get("objective", "")).strip(),
+            mission_id=str(args.get("mission_id", "")).strip() or None,
+            tags=[str(tag).strip() for tag in args.get("tags", []) if isinstance(tag, str) and str(tag).strip()],
+        )
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": create_payload.model_dump()}
+        summary = apprenticeship_create_session(request, payload=create_payload)
+        return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "apprenticeship.step.record":
+        _enforce_rbac(role, "apprenticeship.write")
+        _enforce_action_scope(app="apprenticeship", action="apprenticeship.write", mutating=True)
+        session_id = str(args.get("session_id", "")).strip()
+        action_value = str(args.get("action", "")).strip()
+        intent_value = str(args.get("intent", "")).strip()
+        if not session_id:
+            raise HTTPException(status_code=400, detail="session_id is required for apprenticeship.step.record")
+        if not action_value:
+            raise HTTPException(status_code=400, detail="action is required for apprenticeship.step.record")
+        if not intent_value:
+            raise HTTPException(status_code=400, detail="intent is required for apprenticeship.step.record")
+        step_payload = ApprenticeshipStepRequest(
+            kind=str(args.get("step_kind", "command")).strip() or "command",
+            action=action_value,
+            intent=intent_value,
+            artifact_path=str(args.get("artifact_path", "")).strip(),
+            notes=str(args.get("notes", "")).strip(),
+            inputs=args.get("inputs", {}) if isinstance(args.get("inputs"), dict) else {},
+            outputs=args.get("outputs", {}) if isinstance(args.get("outputs"), dict) else {},
+        )
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "execution_args": {"session_id": session_id, **step_payload.model_dump()},
+            }
+        summary = apprenticeship_add_step(request, session_id=session_id, payload=step_payload)
         return {"status": "ok", "kind": normalized_kind, "summary": summary}
 
     if normalized_kind == "apprenticeship.skillize":
