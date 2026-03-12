@@ -261,7 +261,31 @@ def apprenticeship_skillize(
     _enforce_control("apprenticeship.skillize", mutating=True)
     _enforce_rbac(request, "apprenticeship.skillize")
     run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = str(getattr(request.state, "trace_id", None) or run_id)
     normalized_payload = payload or ApprenticeshipSkillizeRequest()
+    normalized_input = {
+        "session_id": str(session_id).strip(),
+        **normalized_payload.model_dump(),
+    }
+    assessment = assess_untrusted_input(
+        surface="apprenticeship",
+        action="apprenticeship.skillize",
+        payload=normalized_input,
+    )
+    if assessment.get("quarantined", False):
+        quarantine = quarantine_untrusted_input(
+            _fs,
+            run_id=run_id,
+            trace_id=trace_id,
+            surface="apprenticeship",
+            action="apprenticeship.skillize",
+            payload=normalized_input,
+            assessment=assessment,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"message": assessment["message"], "quarantine": quarantine},
+        )
 
     session = get_session(_fs, session_id)
     if session is None:
