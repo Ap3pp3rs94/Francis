@@ -15,8 +15,9 @@ from francis_brain.ledger import RunLedger
 from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
-from francis_forge.promotion import promote_stage
 from francis_forge.catalog import list_entries
+from francis_forge.library import build_promotion_rules, build_quality_standard
+from francis_forge.promotion import promote_stage
 from francis_policy.tool_policy import approval_policy_for_tool
 from francis_policy.rbac import can
 from francis_skills.contracts import SkillCall
@@ -546,6 +547,8 @@ def _build_capability_presentation(
     validation = entry.get("validation", {}) if isinstance(entry.get("validation"), dict) else {}
     diff_summary = entry.get("diff_summary", {}) if isinstance(entry.get("diff_summary"), dict) else {}
     tool_pack = entry.get("tool_pack", {}) if isinstance(entry.get("tool_pack"), dict) else {}
+    quality_standard = build_quality_standard(entry)
+    promotion_rules = build_promotion_rules(entry, approval_status="approved" if approval_id else "")
     summary = (
         f"{name} {version} is active in the governed capability library."
         if status == "active"
@@ -559,6 +562,11 @@ def _build_capability_presentation(
             "label": "Validation",
             "value": "passed" if bool(validation.get("ok")) else "needs review",
             "tone": "low" if bool(validation.get("ok")) else "high",
+        },
+        {
+            "label": "Quality",
+            "value": str(quality_standard.get("score", "")).strip() or "0/0",
+            "tone": "low" if bool(quality_standard.get("ok")) else "high",
         },
         {
             "label": "Files",
@@ -618,6 +626,8 @@ def _build_capability_presentation(
             "entry": entry,
             "approval_id": approval_id,
             "status": status,
+            "quality_standard": quality_standard,
+            "promotion_rules": promotion_rules,
         },
     }
 
@@ -1606,7 +1616,10 @@ def _execute_lens_action(
                 },
             )
         actual_approval_id = approval_id or str(approval_detail.get("approval_request_id", "")).strip() or None
-        promoted = promote_stage(_fs, stage_id)
+        try:
+            promoted = promote_stage(_fs, stage_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if promoted is None:
             raise HTTPException(status_code=404, detail=f"Stage not found: {stage_id}")
         _ledger.append(

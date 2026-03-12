@@ -6,6 +6,7 @@ from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
+from francis_forge.library import build_capability_library, build_promotion_rules, build_quality_standard
 from francis_skills.toolbelt.git import repo_status
 from services.orchestrator.app.approvals_store import list_requests
 
@@ -301,39 +302,34 @@ def _capability_approval(fs: WorkspaceFS, stage_id: str) -> dict[str, Any] | Non
 def _capability_focus(workspace_root: Path) -> dict[str, Any]:
     fs = _build_fs(workspace_root)
     entries = [row for row in list_entries(fs) if isinstance(row, dict)]
-    staged_count = sum(
-        1 for row in entries if str(row.get("status", "")).strip().lower() == "staged"
-    )
-    active_count = sum(
-        1 for row in entries if str(row.get("status", "")).strip().lower() == "active"
-    )
+    library = build_capability_library(entries)
+    packs = [row for row in library.get("packs", []) if isinstance(row, dict)]
+    staged_count = int(library.get("staged_pack_count", 0) or 0)
+    active_count = int(library.get("active_pack_count", 0) or 0)
 
-    focus_entry = next(
-        (
-            row
-            for row in reversed(entries)
-            if str(row.get("status", "")).strip().lower() == "staged"
-        ),
-        None,
+    focus_pack = next((row for row in packs if int(row.get("staged_count", 0) or 0) > 0), None)
+    if focus_pack is None:
+        focus_pack = next((row for row in packs if int(row.get("active_count", 0) or 0) > 0), None)
+    focus_entry = (
+        focus_pack.get("focus_version", {})
+        if isinstance(focus_pack, dict) and isinstance(focus_pack.get("focus_version"), dict)
+        else None
     )
     if focus_entry is None:
-        focus_entry = next(
-            (
-                row
-                for row in reversed(entries)
-                if str(row.get("status", "")).strip().lower() == "active"
-            ),
-            None,
-        )
+        focus_entry = None
 
     if focus_entry is None:
         return {
             "catalog_count": len(entries),
+            "pack_count": int(library.get("pack_count", 0) or 0),
             "staged_count": staged_count,
             "active_count": active_count,
             "summary": "No governed capability packs are cataloged yet.",
             "focus_entry": None,
         }
+
+    if focus_entry is None:
+        focus_pack = None
 
     entry_id = str(focus_entry.get("id", "")).strip()
     status = str(focus_entry.get("status", "")).strip().lower() or "staged"
@@ -344,33 +340,38 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
     name = str(focus_entry.get("name", "Capability pack")).strip() or "Capability pack"
     risk_tier = str(focus_entry.get("risk_tier", "low")).strip().lower() or "low"
     tool_pack = focus_entry.get("tool_pack", {}) if isinstance(focus_entry.get("tool_pack"), dict) else {}
-    validation = focus_entry.get("validation", {}) if isinstance(focus_entry.get("validation"), dict) else {}
     diff_summary = focus_entry.get("diff_summary", {}) if isinstance(focus_entry.get("diff_summary"), dict) else {}
+    quality_standard = build_quality_standard(focus_entry)
+    promotion_rules = build_promotion_rules(focus_entry, approval_status=approval_status)
+    pack_id = str((focus_pack or {}).get("pack_id", "")).strip() or str(focus_entry.get("slug", "")).strip()
+    version_count = int((focus_pack or {}).get("version_count", 0) or 0)
 
     if status == "staged":
         if approval_status == "approved" and approval_id:
-            summary = f"{name} {version} is staged and already approved for promotion."
+            summary = f"{name} {version} in pack {pack_id} is staged and already approved for promotion."
         elif approval_status == "pending" and approval_id:
-            summary = f"{name} {version} is staged and waiting on promotion approval {approval_id}."
+            summary = f"{name} {version} in pack {pack_id} is staged and waiting on promotion approval {approval_id}."
         elif approval_status == "rejected":
-            summary = f"{name} {version} is staged after a rejected promotion request and needs a fresh operator decision."
+            summary = f"{name} {version} in pack {pack_id} is staged after a rejected promotion request and needs a fresh operator decision."
         else:
-            summary = f"{name} {version} is staged and ready for governed promotion into the active library."
+            summary = f"{name} {version} in pack {pack_id} is staged and ready for governed promotion into the active library."
         recommended_action = "forge.promote"
     elif status == "active":
-        summary = f"{name} {version} is active in the internal capability library."
+        summary = f"{name} {version} is active in pack {pack_id} inside the internal capability library."
         recommended_action = ""
     else:
-        summary = f"{name} {version} is cataloged with status {status}."
+        summary = f"{name} {version} is cataloged in pack {pack_id} with status {status}."
         recommended_action = ""
 
     return {
         "catalog_count": len(entries),
+        "pack_count": int(library.get("pack_count", 0) or 0),
         "staged_count": staged_count,
         "active_count": active_count,
         "summary": summary,
         "focus_entry": {
             "id": entry_id,
+            "pack_id": pack_id,
             "name": name,
             "slug": str(focus_entry.get("slug", "")).strip(),
             "version": version,
@@ -382,7 +383,11 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
             "summary": summary,
             "recommended_action": recommended_action,
             "actionable": bool(recommended_action and entry_id),
-            "validation_ok": bool(validation.get("ok")),
+            "validation_ok": bool(quality_standard.get("ok")),
+            "quality_standard": quality_standard,
+            "promotion_rules": promotion_rules,
+            "version_count": version_count,
+            "active_version": str((focus_pack or {}).get("active_version", "")).strip(),
             "file_count": int(diff_summary.get("file_count", 0) or 0),
             "tool_pack_skill": str(tool_pack.get("skill_name", "")).strip(),
         },

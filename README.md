@@ -453,7 +453,7 @@ Extend continuity across nodes and devices under zero-trust defaults and revocab
 
 ### Stage 17 - Capability economy
 
-Turn useful capability into governed, versioned, tested, documented, promotable assets, with an internal library surface that makes staged packs, approvals, and promotions visible inside Lens.
+Turn useful capability into governed, versioned, tested, documented, promotable assets, with pack-level lineage, quality standards, promotion rules, and an internal library surface that makes staged packs, approvals, and promotions visible inside Lens.
 
 ### Stage 18 - Managed copies
 

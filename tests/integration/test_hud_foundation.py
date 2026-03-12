@@ -1439,11 +1439,15 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
     payload = capability_library_view.get_capability_library_view()
 
     assert payload["focus_entry_id"] == "cap-promote"
-    assert payload["summary"] == "1 staged capability pack(s) and 1 active pack(s) are in the internal library."
+    assert payload["focus_pack_id"] == "capability-promote"
+    assert payload["summary"] == "2 capability pack(s), 1 staged, 1 active, 0 superseded."
     focused = next(row for row in payload["entries"] if row["id"] == "cap-promote")
     assert focused["detail_state"] == "current"
+    assert focused["pack_id"] == "capability-promote"
     assert focused["audit"]["approval_status"] == "approved"
     assert focused["audit"]["tool_pack_skill"] == "forge.pack.capability-promote"
+    assert focused["audit"]["quality_standard"]["ok"] is True
+    assert focused["audit"]["promotion_rules"]["ready"] is True
     assert focused["controls"]["request_approval"]["enabled"] is False
     assert focused["controls"]["promote"]["enabled"] is True
     assert focused["controls"]["promote"]["args"]["approval_id"] == "approval-promote"

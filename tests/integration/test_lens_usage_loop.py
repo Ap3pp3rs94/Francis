@@ -126,7 +126,16 @@ def test_lens_state_surfaces_current_work_and_next_best_action() -> None:
         )
 
         with TestClient(app) as client:
-            state = client.get("/lens/state")
+            original_mode = _get_mode(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                state = client.get("/lens/state")
+            finally:
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
 
         assert state.status_code == 200
         payload = state.json()
@@ -199,7 +208,16 @@ def test_lens_state_prioritizes_review_ready_apprenticeship_over_terminal_failur
         )
 
         with TestClient(app) as client:
-            state = client.get("/lens/state")
+            original_mode = _get_mode(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                state = client.get("/lens/state")
+            finally:
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
 
         assert state.status_code == 200
         payload = state.json()
@@ -286,7 +304,16 @@ def test_lens_state_prioritizes_staged_capability_over_terminal_failure() -> Non
         )
 
         with TestClient(app) as client:
-            state = client.get("/lens/state")
+            original_mode = _get_mode(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                state = client.get("/lens/state")
+            finally:
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
 
         assert state.status_code == 200
         payload = state.json()

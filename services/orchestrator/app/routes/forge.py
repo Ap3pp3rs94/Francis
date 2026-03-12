@@ -13,6 +13,7 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import add_entry, list_entries
 from francis_forge.diff_analyzer import summarize_files
+from francis_forge.library import build_capability_library, build_quality_standard, next_patch_version
 from francis_forge.proposal_engine import propose
 from francis_forge.promotion import promote_stage
 from francis_forge.scaffold_generator import generate_stage_files
@@ -185,6 +186,14 @@ def forge_catalog(request: Request) -> dict:
     return {"status": "ok", "entries": list_entries(_fs)}
 
 
+@router.get("/forge/library")
+def forge_library(request: Request) -> dict:
+    _enforce_control("forge.read", mutating=False)
+    _enforce_rbac(request, "forge.read")
+    library = build_capability_library(list_entries(_fs))
+    return {"status": "ok", **library}
+
+
 @router.post("/forge/stage")
 def forge_stage(request: Request, payload: ForgeStageRequest) -> dict:
     _enforce_control("forge.stage", mutating=True)
@@ -236,22 +245,35 @@ def forge_stage(request: Request, payload: ForgeStageRequest) -> dict:
 
     validation = validate_stage(_fs, list(all_files.keys()))
     diff_summary = summarize_files(all_files)
+    version = next_patch_version(list_entries(_fs), spec.slug)
+    quality_standard = build_quality_standard(
+        {
+            "slug": spec.slug,
+            "version": version,
+            "validation": validation,
+            "diff_summary": diff_summary,
+            "tool_pack": tool_pack_manifest,
+        }
+    )
     entry = add_entry(
         _fs,
         {
             "id": stage_id,
             "name": spec.name,
             "slug": spec.slug,
+            "pack_id": spec.slug,
             "description": spec.description,
             "rationale": spec.rationale,
             "tags": spec.tags,
             "risk_tier": spec.risk_tier,
             "status": "staged",
+            "version": version,
             "path": stage_rel_root,
             "created_at": utc_now_iso(),
             "validation": validation,
             "diff_summary": diff_summary,
             "tool_pack": tool_pack_manifest,
+            "quality_standard": quality_standard,
         },
     )
 
@@ -261,9 +283,11 @@ def forge_stage(request: Request, payload: ForgeStageRequest) -> dict:
         summary={
             "stage_id": stage_id,
             "name": spec.name,
+            "version": version,
             "validation_ok": validation.get("ok"),
             "file_count": diff_summary.get("file_count"),
             "tool_pack_skill": tool_pack_skill,
+            "quality_ok": quality_standard.get("ok"),
         },
     )
     return {
@@ -271,6 +295,7 @@ def forge_stage(request: Request, payload: ForgeStageRequest) -> dict:
         "run_id": run_id,
         "stage_id": stage_id,
         "entry": entry,
+        "quality_standard": quality_standard,
         "written_files": sorted(all_files.keys()),
     }
 
@@ -288,7 +313,10 @@ def forge_promote(stage_id: str, request: Request) -> dict:
         metadata={"path": f"/forge/promote/{stage_id}", "stage_id": stage_id},
     )
 
-    promoted = promote_stage(_fs, stage_id)
+    try:
+        promoted = promote_stage(_fs, stage_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if promoted is None:
         raise HTTPException(status_code=404, detail=f"Stage not found: {stage_id}")
 
