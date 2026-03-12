@@ -13,7 +13,10 @@ from francis_brain.apprenticeship import (
     load_session_steps,
     summarize_apprenticeship,
 )
+from francis_brain.calibration import summarize_fabric_posture
 from francis_brain.ledger import RunLedger
+from francis_brain.memory_store import load_snapshot
+from francis_brain.recall import query_fabric
 from francis_core.clock import utc_now_iso
 from francis_core.workspace_fs import WorkspaceFS
 from services.hud.app.state import build_lens_snapshot, get_workspace_root
@@ -41,6 +44,129 @@ def _read_json(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _citation_label(citation: dict[str, Any]) -> str:
+    rel_path = str(citation.get("rel_path", "")).strip()
+    if not rel_path:
+        return "uncited"
+    line = citation.get("line")
+    if isinstance(line, int) and line > 0:
+        return f"{rel_path}:{line}"
+    record_index = citation.get("record_index")
+    if isinstance(record_index, int) and record_index >= 0:
+        return f"{rel_path}#record-{record_index}"
+    return rel_path
+
+
+def _session_query_text(
+    *,
+    session: dict[str, Any],
+    steps: list[dict[str, Any]],
+    skill_artifact: dict[str, Any],
+) -> str:
+    tokens: list[str] = []
+    seen: set[str] = set()
+
+    def _push(value: object) -> None:
+        text = " ".join(str(value or "").strip().split())
+        if not text:
+            return
+        lowered = text.lower()
+        if lowered in seen:
+            return
+        seen.add(lowered)
+        tokens.append(text)
+
+    _push(session.get("title"))
+    _push(session.get("objective"))
+    _push(session.get("mission_id"))
+    generalization = session.get("generalization", {}) if isinstance(session.get("generalization"), dict) else {}
+    _push(generalization.get("summary"))
+    for step in steps[:2]:
+        if not isinstance(step, dict):
+            continue
+        _push(step.get("intent"))
+        _push(step.get("action"))
+        _push(step.get("artifact_path"))
+    forge_payload = skill_artifact.get("forge_payload", {}) if isinstance(skill_artifact.get("forge_payload"), dict) else {}
+    _push(forge_payload.get("name"))
+    _push(forge_payload.get("description"))
+    return " ".join(tokens[:8])
+
+
+def _fabric_evidence(
+    *,
+    fs: WorkspaceFS,
+    session: dict[str, Any],
+    steps: list[dict[str, Any]],
+    skill_artifact: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if load_snapshot(fs) is None:
+        return []
+
+    query = _session_query_text(session=session, steps=steps, skill_artifact=skill_artifact)
+    if not query:
+        return []
+
+    try:
+        payload = query_fabric(
+            fs,
+            query=query,
+            limit=3,
+            mission_id=str(session.get("mission_id", "")).strip() or None,
+            include_related=True,
+            refresh=False,
+        )
+    except Exception:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for row in payload.get("results", []):
+        if not isinstance(row, dict):
+            continue
+        citation = row.get("citation", {}) if isinstance(row.get("citation"), dict) else {}
+        title = str(row.get("title", "")).strip() or str(row.get("artifact_id", "Artifact")).strip() or "Artifact"
+        summary = str(row.get("summary", "")).strip() or "No summary available."
+        rows.append(
+            {
+                "title": title,
+                "summary": summary,
+                "artifact_id": str(row.get("artifact_id", "")).strip(),
+                "source": str(row.get("source", "")).strip(),
+                "trust_badge": str(row.get("trust_badge", row.get("confidence", "Uncertain"))).strip() or "Uncertain",
+                "citation": citation,
+                "detail": f"{title} | {_citation_label(citation)} | {summary}",
+            }
+        )
+    return rows
+
+
+def _trust_posture(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    counts = {"confirmed": 0, "likely": 0, "uncertain": 0}
+    citation_ready_count = 0
+    for row in rows:
+        trust = str(row.get("trust_badge", "")).strip().lower()
+        if trust == "confirmed":
+            counts["confirmed"] += 1
+        elif trust == "likely":
+            counts["likely"] += 1
+        else:
+            counts["uncertain"] += 1
+        citation = row.get("citation", {}) if isinstance(row.get("citation"), dict) else {}
+        if str(citation.get("rel_path", "")).strip():
+            citation_ready_count += 1
+
+    return summarize_fabric_posture(
+        {
+            "citation_ready_count": citation_ready_count,
+            "calibration": {
+                "confidence_counts": counts,
+                "stale_current_state_count": 0,
+                "done_claim_ready_count": counts["confirmed"],
+            },
+        }
+    )
 
 
 def _session_status(session: dict[str, Any]) -> str:
@@ -198,6 +324,8 @@ def _detail_cards(
     *,
     session: dict[str, Any] | None,
     skill_artifact: dict[str, Any],
+    trust_posture: dict[str, Any],
+    fabric_evidence: list[dict[str, Any]],
 ) -> list[dict[str, str]]:
     if not isinstance(session, dict):
         return [{"label": "Session", "value": "no teaching session", "tone": "low"}]
@@ -225,6 +353,20 @@ def _detail_cards(
             if isinstance(generalization.get("parameter_candidates"), list)
             else "0",
             "tone": "medium" if generalization else "low",
+        },
+        {
+            "label": "Trust",
+            "value": str(trust_posture.get("trust", "Uncertain")).strip() or "Uncertain",
+            "tone": "low"
+            if str(trust_posture.get("trust", "Uncertain")).strip() == "Confirmed"
+            else "medium"
+            if str(trust_posture.get("trust", "Uncertain")).strip() == "Likely"
+            else "high",
+        },
+        {
+            "label": "Citations",
+            "value": str(len(fabric_evidence)),
+            "tone": "low" if fabric_evidence else "medium",
         },
         {
             "label": "Skill Artifact",
@@ -255,6 +397,8 @@ def _session_detail(
     steps = load_session_steps(fs, str(session.get("id", "")).strip())
     replay = build_replay(session, steps)
     skill_artifact = _skill_artifact(root, session)
+    fabric_evidence = _fabric_evidence(fs=fs, session=session, steps=steps, skill_artifact=skill_artifact)
+    trust_posture = _trust_posture(fabric_evidence)
     controls = _session_controls(
         fs=fs,
         repo_root=repo_root,
@@ -269,6 +413,8 @@ def _session_detail(
         if isinstance(session.get("generalization"), dict)
         else {},
         "skill_artifact": skill_artifact,
+        "fabric_evidence": fabric_evidence,
+        "trust_posture": trust_posture,
         "controls": controls,
         "audit": {
             "session_id": str(session.get("id", "")).strip(),
@@ -278,6 +424,8 @@ def _session_detail(
             "skill_artifact_path": str(session.get("skill_artifact_path", "")).strip(),
             "forge_stage_id": str(session.get("forge_stage_id", "")).strip(),
             "replay_step_count": len(replay.get("steps", [])),
+            "fabric_trust": str(trust_posture.get("trust", "Uncertain")).strip() or "Uncertain",
+            "fabric_evidence_count": len(fabric_evidence),
             "parameter_count": len(
                 session.get("generalization", {}).get("parameter_candidates", [])
                 if isinstance(session.get("generalization"), dict)
@@ -319,9 +467,19 @@ def _session_row(
             if isinstance(detail.get("generalization"), dict)
             and str(detail["generalization"].get("summary", "")).strip()
             else _session_summary(session)
+        )
+        + (
+            f" Grounded by {len(detail.get('fabric_evidence', []))} cited artifact(s)."
+            if isinstance(detail.get("fabric_evidence"), list) and detail.get("fabric_evidence")
+            else ""
         ),
         "detail_state": _detail_state(session),
-        "detail_cards": _detail_cards(session=session, skill_artifact=detail.get("skill_artifact", {})),
+        "detail_cards": _detail_cards(
+            session=session,
+            skill_artifact=detail.get("skill_artifact", {}),
+            trust_posture=detail.get("trust_posture", {}) if isinstance(detail.get("trust_posture"), dict) else {},
+            fabric_evidence=detail.get("fabric_evidence", []) if isinstance(detail.get("fabric_evidence"), list) else [],
+        ),
         "controls": detail.get("controls", {}),
         "detail": detail,
         "audit": detail.get("audit", {}),

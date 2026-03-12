@@ -1305,6 +1305,23 @@ def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path
         "build_lens_snapshot",
         lambda: {"apprenticeship": {"session_count": 1, "recording_count": 1, "review_count": 0, "skillized_count": 0}},
     )
+    monkeypatch.setattr(apprenticeship_view, "load_snapshot", lambda fs: {"artifacts": []})
+    monkeypatch.setattr(
+        apprenticeship_view,
+        "query_fabric",
+        lambda fs, **kwargs: {
+            "results": [
+                {
+                    "artifact_id": "artifact-1",
+                    "title": "run_ledger.jsonl",
+                    "summary": "Captured repo triage receipts.",
+                    "source": "runs",
+                    "trust_badge": "Likely",
+                    "citation": {"rel_path": "runs/run_ledger.jsonl", "record_index": 0},
+                }
+            ]
+        },
+    )
 
     payload = apprenticeship_view.get_apprenticeship_view()
 
@@ -1314,6 +1331,10 @@ def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path
     assert payload["sessions"][0]["detail_cards"]
     assert payload["detail"]["replay"]["step_count"] == 2
     assert payload["detail"]["generalization"]["summary"] == "Reusable repo triage workflow."
+    assert payload["detail"]["fabric_evidence"][0]["citation"]["rel_path"] == "runs/run_ledger.jsonl"
+    assert payload["detail"]["trust_posture"]["trust"] == "Likely"
+    assert payload["detail"]["audit"]["fabric_evidence_count"] == 1
+    assert payload["sessions"][0]["detail_summary"].endswith("Grounded by 1 cited artifact(s).")
     assert payload["controls"]["create_session"]["enabled"] is True
     assert payload["controls"]["record_step"]["enabled"] is True
     assert payload["controls"]["generalize"]["execute_kind"] == "apprenticeship.generalize"

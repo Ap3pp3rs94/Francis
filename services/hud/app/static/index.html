@@ -816,6 +816,10 @@
           <ul class="list" id="apprenticeship-generalization">
             <li class="muted-empty">Generalized workflow detail will render from the backend contract.</li>
           </ul>
+          <h3>Related Evidence</h3>
+          <ul class="list" id="apprenticeship-evidence">
+            <li class="muted-empty">Related fabric evidence will render from the backend contract.</li>
+          </ul>
           <pre class="console" id="apprenticeship-detail">Teaching session detail will render from the backend contract.</pre>
         </article>
       </section>
@@ -3559,8 +3563,11 @@
         const parameters = Array.isArray(detail.generalization?.parameter_candidates)
           ? detail.generalization.parameter_candidates
           : [];
+        const fabricEvidence = Array.isArray(detail.fabric_evidence) ? detail.fabric_evidence : [];
+        const trustPosture =
+          detail.trust_posture && typeof detail.trust_posture === "object" ? detail.trust_posture : {};
         document.getElementById("apprenticeship-detail-meta").textContent =
-          `${escapeHtml(row.status || "unknown")} | ${Number(row.step_count || 0)} step(s)`;
+          `${escapeHtml(row.status || "unknown")} | ${Number(row.step_count || 0)} step(s) | ${escapeHtml(String(trustPosture.trust || "Uncertain"))}`;
         document.getElementById("apprenticeship-detail-summary").textContent =
           String(row.detail_summary || row.summary || "No teaching session detail is available.");
         renderDetailCards("apprenticeship-detail-cards", row.detail_cards, "Session");
@@ -3579,7 +3586,23 @@
               ),
             ].join("")
           : `<li class="muted-empty">Generalized workflow detail will render from the backend contract.</li>`;
+        document.getElementById("apprenticeship-evidence").innerHTML = fabricEvidence.length
+          ? fabricEvidence
+              .map(
+                (item) =>
+                  `<li><strong>${escapeHtml(String(item.title || "Artifact"))}</strong> <span class="meta">| ${escapeHtml(String(item.trust_badge || "Uncertain"))}</span> ${escapeHtml(String(item.detail || "No evidence detail provided."))}</li>`,
+              )
+              .join("")
+          : `<li class="muted-empty">Related fabric evidence will render from the backend contract.</li>`;
         document.getElementById("apprenticeship-detail").textContent = formatJson(detail.audit || row.audit || row);
+        applyPanelSignal(
+          "apprenticeship-detail-panel",
+          String(trustPosture.trust || "Uncertain").toLowerCase() === "confirmed"
+            ? "low"
+            : String(trustPosture.trust || "Uncertain").toLowerCase() === "likely"
+            ? "medium"
+            : "high",
+        );
         const controls = row.controls && typeof row.controls === "object"
           ? row.controls
           : currentApprenticeshipSurface?.controls && typeof currentApprenticeshipSurface.controls === "object"
@@ -3648,6 +3671,8 @@
             `<li class="muted-empty">Replay lines will render from the backend contract.</li>`;
           document.getElementById("apprenticeship-generalization").innerHTML =
             `<li class="muted-empty">Generalized workflow detail will render from the backend contract.</li>`;
+          document.getElementById("apprenticeship-evidence").innerHTML =
+            `<li class="muted-empty">Related fabric evidence will render from the backend contract.</li>`;
           document.getElementById("apprenticeship-controls").innerHTML =
             `<button class="btn-secondary" type="button" disabled>Generalize</button><button class="btn-primary" type="button" disabled>Skillize</button>`;
           document.getElementById("apprenticeship-detail").textContent = formatJson(
@@ -3655,6 +3680,7 @@
               ? currentApprenticeshipSurface.detail
               : { sessions: currentApprenticeshipRows },
           );
+          applyPanelSignal("apprenticeship-detail-panel", "low");
         }
       }
 
