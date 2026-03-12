@@ -1091,6 +1091,7 @@
       let currentExecutionFeed = {};
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
+      let currentSurfaceDigests = {};
       let currentBlockedActions = { items: [] };
       let currentInboxSurface = { messages: [] };
       let currentRunsSurface = { run_groups: [] };
@@ -2222,6 +2223,18 @@
 
       function renderBootstrap(payload) {
         document.body.dataset.boot = "hydrating";
+        const nextSurfaceDigests = payload.surface_digests && typeof payload.surface_digests === "object"
+          ? payload.surface_digests
+          : {};
+        const previousSurfaceDigests = currentSurfaceDigests && typeof currentSurfaceDigests === "object"
+          ? currentSurfaceDigests
+          : {};
+        const shouldRender = (key) => {
+          if (!nextSurfaceDigests[key]) {
+            return true;
+          }
+          return String(previousSurfaceDigests[key] || "") !== String(nextSurfaceDigests[key] || "");
+        };
         currentActions = payload.actions || { action_chips: [], blocked_actions: [] };
         currentSnapshot = payload.snapshot || null;
         currentCurrentWork = payload.current_work || {};
@@ -2233,56 +2246,92 @@
         currentExecutionJournal = payload.execution_journal || { items: [] };
         currentExecutionFeed = payload.execution_feed || {};
 
-        const mode = payload.dashboard.mode;
-        const modeRow = document.getElementById("mode-row");
-        modeRow.innerHTML = [
-          `<div class="pill"><strong>Mode</strong><span>${escapeHtml(mode.current)}</span></div>`,
-          `<div class="pill"><strong>Kill Switch</strong><span>${mode.kill_switch ? "active" : "clear"}</span></div>`,
-          `<div class="pill"><strong>Objective</strong><span>${escapeHtml(payload.dashboard.objective.label)}</span></div>`,
-          `<div class="pill"><strong>Pending Approvals</strong><span>${payload.snapshot.approvals.pending_count}</span></div>`,
-        ].join("");
+        if (shouldRender("dashboard") || shouldRender("snapshot")) {
+          const mode = payload.dashboard.mode;
+          const modeRow = document.getElementById("mode-row");
+          modeRow.innerHTML = [
+            `<div class="pill"><strong>Mode</strong><span>${escapeHtml(mode.current)}</span></div>`,
+            `<div class="pill"><strong>Kill Switch</strong><span>${mode.kill_switch ? "active" : "clear"}</span></div>`,
+            `<div class="pill"><strong>Objective</strong><span>${escapeHtml(payload.dashboard.objective.label)}</span></div>`,
+            `<div class="pill"><strong>Pending Approvals</strong><span>${payload.snapshot.approvals.pending_count}</span></div>`,
+          ].join("");
 
-        const cards = document.getElementById("cards");
-        cards.innerHTML = payload.dashboard.cards
-          .map(
-            (card) => {
-              const signal = String(card.signal || "low").trim().toLowerCase() || "low";
-              const evidence = Array.isArray(card.evidence) ? card.evidence : [];
-              return `
-                <article class="card ${card.tone === "accent" ? "accent" : ""}" data-signal="${escapeHtml(signal)}">
-                  <div class="card-top">
-                    <h2>${escapeHtml(card.title)}</h2>
-                    <span class="badge risk-${escapeHtml(signal)}">${escapeHtml(signal)}</span>
-                  </div>
-                  <p>${escapeHtml(card.summary || card.body || "No dashboard summary is available.")}</p>
-                  <ul class="list card-evidence">
-                    ${
-                      evidence.length
-                        ? evidence.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
-                        : `<li class="muted-empty">Dashboard evidence will render from the backend contract.</li>`
-                    }
-                  </ul>
-                </article>
-              `;
-            },
-          )
-          .join("");
+          const cards = document.getElementById("cards");
+          cards.innerHTML = payload.dashboard.cards
+            .map(
+              (card) => {
+                const signal = String(card.signal || "low").trim().toLowerCase() || "low";
+                const evidence = Array.isArray(card.evidence) ? card.evidence : [];
+                return `
+                  <article class="card ${card.tone === "accent" ? "accent" : ""}" data-signal="${escapeHtml(signal)}">
+                    <div class="card-top">
+                      <h2>${escapeHtml(card.title)}</h2>
+                      <span class="badge risk-${escapeHtml(signal)}">${escapeHtml(signal)}</span>
+                    </div>
+                    <p>${escapeHtml(card.summary || card.body || "No dashboard summary is available.")}</p>
+                    <ul class="list card-evidence">
+                      ${
+                        evidence.length
+                          ? evidence.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")
+                          : `<li class="muted-empty">Dashboard evidence will render from the backend contract.</li>`
+                      }
+                    </ul>
+                  </article>
+                `;
+              },
+            )
+            .join("");
+        }
 
-        renderOrb(payload.orb || {});
-        renderCurrentWork(currentCurrentWork, payload.snapshot || {}, currentActions);
-        renderRepoDrilldownSurface(currentRepoDrilldown);
-        renderApprovalQueue(currentApprovalQueue);
-        renderExecutionJournal(currentExecutionJournal);
-        renderExecutionFeedSurface(currentExecutionFeed);
-        renderMissionStack(payload.missions || {});
-        renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
-        renderInboxSurface(currentInboxSurface);
-        renderRunsSurface(currentRunsSurface);
-        renderActions(currentActions, currentBlockedActions);
-        renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
-        renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
-        renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+        if (shouldRender("orb")) {
+          renderOrb(payload.orb || {});
+        }
+        if (
+          shouldRender("current_work") ||
+          shouldRender("snapshot") ||
+          shouldRender("actions") ||
+          shouldRender("repo_drilldown") ||
+          shouldRender("approval_queue") ||
+          shouldRender("execution_journal")
+        ) {
+          renderCurrentWork(currentCurrentWork, payload.snapshot || {}, currentActions);
+        }
+        if (shouldRender("repo_drilldown")) {
+          renderRepoDrilldownSurface(currentRepoDrilldown);
+        }
+        if (shouldRender("approval_queue")) {
+          renderApprovalQueue(currentApprovalQueue);
+        }
+        if (shouldRender("execution_journal")) {
+          renderExecutionJournal(currentExecutionJournal);
+        }
+        if (shouldRender("execution_feed")) {
+          renderExecutionFeedSurface(currentExecutionFeed);
+        }
+        if (shouldRender("missions")) {
+          renderMissionStack(payload.missions || {});
+        }
+        if (shouldRender("incidents") || shouldRender("runs") || shouldRender("snapshot")) {
+          renderIncidents(payload.incidents || {}, payload.incidents?.security || payload.snapshot?.security || {}, payload.runs || {});
+        }
+        if (shouldRender("inbox")) {
+          renderInboxSurface(currentInboxSurface);
+        }
+        if (shouldRender("runs")) {
+          renderRunsSurface(currentRunsSurface);
+        }
+        if (shouldRender("actions") || shouldRender("blocked_actions")) {
+          renderActions(currentActions, currentBlockedActions);
+        }
+        if (shouldRender("fabric") || shouldRender("snapshot")) {
+          renderFabricSummary(payload.fabric || { summary: payload.snapshot?.fabric || {} });
+          renderFabricBootstrapDetail(payload.fabric || { summary: payload.snapshot?.fabric || {} });
+        }
+        if (shouldRender("voice")) {
+          renderVoiceBriefing(payload.voice || {}, { source: "stream" });
+        }
         syncUsageFocusPanels(payload.snapshot || {}, currentActions, currentApprovalQueue, currentExecutionJournal);
+        currentSurfaceDigests = nextSurfaceDigests;
         document.body.dataset.boot = "ready";
       }
 

@@ -80,7 +80,7 @@ def _build_hud_payload(
         snapshot=snapshot_payload,
         actions_payload=actions_payload,
     )
-    return {
+    payload = {
         "status": "ok",
         "service": "hud",
         "version": SERVICE_VERSION,
@@ -113,6 +113,8 @@ def _build_hud_payload(
         "runs": get_runs_view(snapshot=snapshot_payload),
         "fabric": get_fabric_surface(refresh=False, defer_if_missing=True),
     }
+    payload["surface_digests"] = _surface_digests(payload)
+    return payload
 
 
 def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
@@ -122,6 +124,33 @@ def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
 def _payload_digest(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
+    keys = (
+        "snapshot",
+        "actions",
+        "voice",
+        "orb",
+        "current_work",
+        "repo_drilldown",
+        "approval_queue",
+        "blocked_actions",
+        "execution_journal",
+        "execution_feed",
+        "dashboard",
+        "missions",
+        "incidents",
+        "inbox",
+        "runs",
+        "fabric",
+    )
+    digests: dict[str, str] = {}
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            digests[key] = _payload_digest(value)
+    return digests
 
 
 def _sse_event(event: str, data: dict[str, Any]) -> str:

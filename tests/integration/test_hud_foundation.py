@@ -178,6 +178,23 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["fabric"]["surface"] == "fabric"
     assert body["voice"]["surface"] == "voice"
     assert body["orb"]["surface"] == "orb"
+    assert set(body["surface_digests"].keys()) >= {
+        "snapshot",
+        "actions",
+        "current_work",
+        "repo_drilldown",
+        "approval_queue",
+        "execution_journal",
+        "execution_feed",
+        "dashboard",
+        "missions",
+        "incidents",
+        "inbox",
+        "runs",
+        "fabric",
+        "voice",
+        "orb",
+    }
 
 
 def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
@@ -262,6 +279,8 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["incidents"]["items"][0]["summary"] == "clear"
     assert payload["inbox"]["messages"][0]["title"] == "Inbox clear"
     assert payload["runs"]["active_run"]["run_id"] == "run-1"
+    assert "surface_digests" in payload
+    assert payload["surface_digests"]["current_work"]
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -1262,6 +1281,7 @@ def test_hud_action_execute_can_mutate_and_refresh_snapshot() -> None:
         assert payload["inbox"]["surface"] == "inbox"
         assert payload["runs"]["surface"] == "runs"
         assert payload["fabric"]["surface"] == "fabric"
+        assert payload["surface_digests"]["execution_feed"]
     finally:
         _set_scope(original_scope)
         _set_mode(str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
