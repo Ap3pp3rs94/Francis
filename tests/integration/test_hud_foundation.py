@@ -558,6 +558,7 @@ def test_hud_current_work_route_returns_structured_focus() -> None:
     assert "next_action_signal" in payload
     assert "next_action_resume" in payload
     assert "next_action_evidence" in payload
+    assert "fabric_evidence" in payload
 
 
 def test_hud_shift_report_route_returns_structured_surface() -> None:
@@ -769,6 +770,86 @@ def test_hud_current_work_view_surfaces_approval_ready_resume(monkeypatch) -> No
         str(row.get("kind", "")) == "resume" and "approval-tests" in str(row.get("detail", ""))
         for row in payload["next_action_evidence"]
     )
+
+
+def test_hud_current_work_view_adds_cited_fabric_evidence(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    _write_json(
+        workspace_root / "brain" / "fabric" / "snapshot.json",
+        {
+            "generated_at": "2026-03-11T11:10:00+00:00",
+            "summary": {
+                "artifact_count": 1,
+                "citation_ready_count": 1,
+                "source_counts": {"runs.last": 1},
+                "lane_counts": {"hot": 1, "warm": 0, "cold": 0},
+            },
+            "artifacts": [
+                {
+                    "id": "runs.last:run-live",
+                    "source": "runs.last",
+                    "kind": "run",
+                    "title": "Latest verify run",
+                    "body": "pytest -q tests/integration/test_hud_foundation.py failed with 1 failed while verifying HUD contract",
+                    "ts": "2026-03-11T11:09:00+00:00",
+                    "status": "failed",
+                    "severity": "high",
+                    "verification_status": "failed",
+                    "retention_lane": "hot",
+                    "provenance": {"rel_path": "runs/run_ledger.jsonl", "record_index": 0},
+                    "relationships": {"run_id": "run-live", "mission_id": "mission-live"},
+                }
+            ],
+        },
+    )
+
+    def _snapshot() -> dict[str, object]:
+        return {
+            "current_work": {
+                "summary": "Tests are failing on the HUD contract.",
+                "repo": {
+                    "available": True,
+                    "branch": "main",
+                    "dirty": True,
+                    "changed_count": 2,
+                    "top_paths": ["tests/integration/test_hud_foundation.py"],
+                },
+                "telemetry": {
+                    "last_terminal": {
+                        "command": "pytest -q tests/integration/test_hud_foundation.py",
+                        "exit_code": 1,
+                        "stderr": "1 failed",
+                        "severity": "error",
+                    }
+                },
+                "attention": {"kind": "terminal_failure", "label": "Terminal Failure"},
+                "blockers": [],
+                "mission": {"id": "mission-live", "title": "HUD contract", "objective": "Verify HUD surface"},
+                "last_run": {"run_id": "run-live", "phase": "verify", "summary": "HUD verification failed"},
+            },
+            "fabric": {"calibration": {"confidence_counts": {"confirmed": 1, "likely": 0, "uncertain": 0}}},
+            "next_best_action": {
+                "kind": "repo.tests",
+                "label": "Run Fast Checks",
+                "reason": "The latest test command failed.",
+            },
+            "approvals": {"pending_count": 0, "pending": []},
+        }
+
+    monkeypatch.setattr(current_work_view, "get_workspace_root", lambda: workspace_root)
+    monkeypatch.setattr(current_work_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(
+        current_work_view,
+        "get_lens_actions",
+        lambda max_actions=8: {"action_chips": [{"kind": "repo.tests", "label": "Run Fast Checks", "enabled": True}]},
+    )
+
+    payload = current_work_view.get_current_work_view()
+
+    assert payload["fabric_evidence"]
+    assert payload["fabric_evidence"][0]["citation"]["rel_path"] == "runs/run_ledger.jsonl"
+    assert any(str(row.get("kind", "")) == "citation" for row in payload["next_action_evidence"])
+    assert payload["next_action_signal"]["summary"] == "Cited local evidence is grounding the next operator move."
 
 
 def test_hud_blocked_actions_view_adds_detail_contract(monkeypatch) -> None:

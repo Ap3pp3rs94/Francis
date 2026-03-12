@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from francis_brain.memory_store import load_snapshot
+from francis_brain.recall import query_fabric
+from francis_core.workspace_fs import WorkspaceFS
 from services.hud.app.orchestrator_bridge import get_lens_actions
-from services.hud.app.state import build_lens_snapshot
+from services.hud.app.state import build_lens_snapshot, get_workspace_root
 
 
 def _normalize_usage_action_kind(value: object) -> str:
@@ -12,6 +15,14 @@ def _normalize_usage_action_kind(value: object) -> str:
         return ""
     suffix = ".request_approval"
     return raw[: -len(suffix)] if raw.endswith(suffix) else raw
+
+
+def _build_fs() -> WorkspaceFS:
+    workspace_root = get_workspace_root().resolve()
+    return WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
 
 
 def _first_meaningful_line(*values: object) -> str:
@@ -84,6 +95,114 @@ def _terminal_breakdown(terminal: dict[str, Any]) -> list[dict[str, str]]:
     elif severity != "error":
         rows.append(_evidence_row(kind="result", severity="low", detail="No visible failure edge was detected."))
     return rows[:4]
+
+
+def _citation_label(citation: dict[str, Any]) -> str:
+    rel_path = str(citation.get("rel_path", "")).strip()
+    if not rel_path:
+        return "uncited"
+    line = citation.get("line")
+    if isinstance(line, int) and line > 0:
+        return f"{rel_path}:{line}"
+    record_index = citation.get("record_index")
+    if isinstance(record_index, int) and record_index >= 0:
+        return f"{rel_path}#record-{record_index}"
+    return rel_path
+
+
+def _fabric_query_text(
+    *,
+    next_action: dict[str, Any],
+    terminal: dict[str, Any],
+    mission: dict[str, Any] | None,
+    blockers: list[str],
+) -> str:
+    tokens: list[str] = []
+    seen: set[str] = set()
+
+    def _push(value: object) -> None:
+        text = " ".join(str(value or "").strip().split())
+        if not text:
+            return
+        lowered = text.lower()
+        if lowered in seen:
+            return
+        seen.add(lowered)
+        tokens.append(text)
+
+    _push(next_action.get("kind"))
+    _push(next_action.get("label"))
+    _push(next_action.get("reason"))
+    _push(terminal.get("command"))
+    _push(_first_meaningful_line(terminal.get("stderr", ""), terminal.get("stdout", ""), terminal.get("text", "")))
+    if isinstance(mission, dict):
+        _push(mission.get("title"))
+        _push(mission.get("objective"))
+    for blocker in blockers[:1]:
+        _push(blocker)
+    return " ".join(tokens[:6])
+
+
+def _build_fabric_evidence(
+    *,
+    next_action: dict[str, Any],
+    terminal: dict[str, Any],
+    mission: dict[str, Any] | None,
+    blockers: list[str],
+    last_run: dict[str, Any],
+) -> list[dict[str, Any]]:
+    fs = _build_fs()
+    if load_snapshot(fs) is None:
+        return []
+
+    query = _fabric_query_text(
+        next_action=next_action,
+        terminal=terminal,
+        mission=mission,
+        blockers=blockers,
+    )
+    if not query:
+        return []
+
+    try:
+        payload = query_fabric(
+            fs,
+            query=query,
+            limit=2,
+            run_id=str(last_run.get("run_id", "")).strip() or None,
+            mission_id=str((mission or {}).get("id", "")).strip() or None,
+            include_related=True,
+            refresh=False,
+        )
+    except Exception:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for row in payload.get("results", []):
+        if not isinstance(row, dict):
+            continue
+        citation = row.get("citation", {}) if isinstance(row.get("citation"), dict) else {}
+        title = str(row.get("title", "")).strip() or str(row.get("artifact_id", "Artifact")).strip() or "Artifact"
+        summary = str(row.get("summary", "")).strip() or "No summary available."
+        detail = (
+            f"{title} | {str(row.get('trust_badge', row.get('confidence', 'Uncertain'))).strip()} | "
+            f"{_citation_label(citation)} | {summary}"
+        )
+        rows.append(
+            {
+                "kind": "citation",
+                "severity": "medium"
+                if str(row.get("confidence", "")).strip().lower() == "uncertain"
+                else "low",
+                "detail": detail,
+                "citation": citation,
+                "artifact_id": str(row.get("artifact_id", "")).strip(),
+                "source": str(row.get("source", "")).strip(),
+                "title": title,
+                "trust_badge": str(row.get("trust_badge", row.get("confidence", "Uncertain"))).strip() or "Uncertain",
+            }
+        )
+    return rows
 
 
 def _evidence_row(*, kind: str, severity: str, detail: str) -> dict[str, str]:
@@ -357,7 +476,10 @@ def _build_next_action_evidence(
     blockers: list[str],
     terminal: dict[str, Any],
     next_action_resume: dict[str, object],
-) -> list[dict[str, str]]:
+    next_action: dict[str, Any],
+    mission: dict[str, Any] | None,
+    last_run: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     evidence: list[dict[str, str]] = []
     terminal_summary = _terminal_summary(terminal)
     if terminal_summary.startswith("Terminal failure anchor:"):
@@ -415,7 +537,23 @@ def _build_next_action_evidence(
         if summary:
             evidence.append(_evidence_row(kind="context", severity="low", detail=summary))
 
-    return evidence[:4]
+    fabric_evidence = _build_fabric_evidence(
+        next_action=next_action,
+        terminal=terminal,
+        mission=mission,
+        blockers=blockers,
+        last_run=last_run,
+    )
+    evidence.extend(
+        {
+            "kind": str(row.get("kind", "citation")).strip() or "citation",
+            "severity": str(row.get("severity", "low")).strip().lower() or "low",
+            "detail": str(row.get("detail", "")).strip() or "No citation detail provided.",
+        }
+        for row in fabric_evidence[:2]
+    )
+
+    return evidence[:6], fabric_evidence
 
 
 def get_current_work_view(
@@ -450,11 +588,14 @@ def get_current_work_view(
         next_action=next_best_action,
         next_action_resume=next_action_resume,
     )
-    next_action_evidence = _build_next_action_evidence(
+    next_action_evidence, fabric_evidence = _build_next_action_evidence(
         snapshot=snapshot,
         blockers=[str(item).strip() for item in blockers if str(item).strip()],
         terminal=terminal,
         next_action_resume=next_action_resume,
+        next_action=next_best_action,
+        mission=mission,
+        last_run=last_run,
     )
     next_action_severity = _max_evidence_severity(next_action_evidence)
 
@@ -503,6 +644,8 @@ def get_current_work_view(
             "summary": (
                 "Approval-backed continuation is ready to resume from the queue."
                 if str(next_action_resume.get("state", "")).strip().lower() == "approval_ready"
+                else "Cited local evidence is grounding the next operator move."
+                if fabric_evidence
                 else
                 "High-pressure evidence is driving the next operator move."
                 if next_action_severity == "high"
@@ -513,4 +656,5 @@ def get_current_work_view(
         },
         "next_action_resume": next_action_resume,
         "next_action_evidence": next_action_evidence,
+        "fabric_evidence": fabric_evidence,
     }
