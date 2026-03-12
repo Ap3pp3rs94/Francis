@@ -831,6 +831,41 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="capability-library-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Capability Library</h2>
+            <span class="meta tiny" id="capability-library-meta">Capability catalog loading from Lens</span>
+          </div>
+          <p id="capability-library-summary" class="hero-copy">
+            Capability packs will render from the governed internal library.
+          </p>
+          <div class="desktop-grid" id="capability-library-cards">
+            <div class="desktop-pill"><strong>Capability</strong><span>Catalog cards will render from the backend contract.</span></div>
+          </div>
+          <ul class="list" id="capability-library-list">
+            <li class="muted-empty">Capability rows will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="capability-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Capability Detail</h2>
+            <span class="meta tiny" id="capability-detail-meta">No capability selected</span>
+          </div>
+          <p id="capability-detail-summary" class="hero-copy">
+            Capability detail will render from staged and active library state.
+          </p>
+          <div class="desktop-grid" id="capability-detail-cards">
+            <div class="desktop-pill"><strong>Capability</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="capability-detail-controls">
+            <button class="btn-secondary" type="button" disabled>Request Promotion Approval</button>
+            <button class="btn-primary" type="button" disabled>Promote Capability</button>
+          </div>
+          <pre class="console" id="capability-detail">Capability audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="current-work-panel" data-signal="low">
           <div class="panel-head">
             <h2>Current Work Focus</h2>
@@ -845,6 +880,7 @@
             <div class="desktop-pill"><strong>Mission</strong><span id="work-mission-pill">no active mission</span></div>
             <div class="desktop-pill"><strong>Last Run</strong><span id="work-run-pill">no recent run</span></div>
             <div class="desktop-pill"><strong>Teaching</strong><span id="work-teaching-pill">no active teaching session</span></div>
+            <div class="desktop-pill"><strong>Capability</strong><span id="work-capability-pill">no staged capability pressure</span></div>
           </div>
           <p class="meta" id="work-attention-detail">
             No immediate work pressure is visible.
@@ -857,6 +893,9 @@
           </p>
           <p class="meta tiny" id="work-teaching-detail">
             Teaching pressure will render from the apprenticeship contract.
+          </p>
+          <p class="meta tiny" id="work-capability-detail">
+            Capability pressure will render from the internal library contract.
           </p>
           <h3>Changed Paths</h3>
           <ul class="list" id="work-paths">
@@ -1197,6 +1236,7 @@
       let currentExecutionFeed = {};
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
+      let currentCapabilityLibrary = { entries: [] };
       let currentSurfaceDigests = {};
       let currentActionDeck = { items: [] };
       let currentBlockedActions = { items: [] };
@@ -1210,6 +1250,8 @@
       let currentFabricSurface = {};
       let currentInboxSurface = { messages: [] };
       let currentRunsSurface = { run_groups: [] };
+      let currentCapabilityFocusId = "";
+      let currentCapabilityRows = [];
       let currentMissionRows = [];
       let currentIncidentRows = [];
       let currentInboxRows = [];
@@ -2362,6 +2404,7 @@
         currentCurrentWork = payload.current_work || {};
         currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
+        currentCapabilityLibrary = payload.capability_library || { entries: [] };
         currentApprovalQueue = payload.approval_queue || { items: [] };
         currentBlockedActions = payload.blocked_actions || { items: [] };
         currentActionDeck = payload.action_deck || { items: [] };
@@ -2419,6 +2462,9 @@
         }
         if (shouldRender("apprenticeship_surface")) {
           renderApprenticeshipSurface(currentApprenticeshipSurface);
+        }
+        if (shouldRender("capability_library")) {
+          renderCapabilityLibrary(currentCapabilityLibrary);
         }
         if (
           shouldRender("current_work") ||
@@ -2486,6 +2532,7 @@
           current_work: currentCurrentWork || {},
           shift_report: currentShiftReport || {},
           repo_drilldown: currentRepoDrilldown || {},
+          capability_library: currentCapabilityLibrary || { entries: [] },
           approval_queue: currentApprovalQueue || { items: [] },
           blocked_actions: currentBlockedActions || { items: [] },
           action_deck: currentActionDeck || { items: [] },
@@ -3767,6 +3814,101 @@
         applyApprenticeshipDefaults();
       }
 
+      function inspectCapabilityEntry(index) {
+        const row = Array.isArray(currentCapabilityRows) ? currentCapabilityRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentCapabilityFocusId = String(row.id || "").trim();
+        document.getElementById("capability-detail-meta").textContent =
+          `${String(row.status || "unknown")} | ${String(row.version || "0.1.0")} | ${String(row.id || "unknown")}`;
+        document.getElementById("capability-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No capability detail is available.");
+        renderDetailCards("capability-detail-cards", row.detail_cards, "Capability");
+        const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const requestApproval = controls.request_approval && typeof controls.request_approval === "object"
+          ? controls.request_approval
+          : {};
+        const promote = controls.promote && typeof controls.promote === "object" ? controls.promote : {};
+        document.getElementById("capability-detail-controls").innerHTML = `
+          <button class="btn-secondary" type="button" ${requestApproval.enabled ? "" : "disabled"} onclick="runCapabilityControl('request_approval')">${escapeHtml(String(requestApproval.label || "Request Promotion Approval"))}</button>
+          <button class="btn-primary" type="button" ${promote.enabled ? "" : "disabled"} onclick="runCapabilityControl('promote')">${escapeHtml(String(promote.label || "Promote Capability"))}</button>
+        `;
+        document.getElementById("capability-detail").textContent = formatJson(row.audit || row);
+        const capabilitySignal = String(
+          row.status === "staged"
+            ? row.risk_tier || "medium"
+            : row.status === "active"
+            ? "low"
+            : "low",
+        ).trim().toLowerCase() || "low";
+        applyPanelSignal(
+          "capability-detail-panel",
+          capabilitySignal,
+        );
+      }
+
+      function renderCapabilityLibrary(surface) {
+        currentCapabilityLibrary = surface || { entries: [] };
+        currentCapabilityRows = Array.isArray(currentCapabilityLibrary.entries) ? currentCapabilityLibrary.entries : [];
+        document.getElementById("capability-library-meta").textContent =
+          `${currentCapabilityRows.length} cataloged | ${String(currentCapabilityLibrary.severity || "low")}`;
+        document.getElementById("capability-library-summary").textContent =
+          String(currentCapabilityLibrary.summary || "Capability packs will render from the governed internal library.");
+        applySeverityState(
+          document.getElementById("capability-library-summary"),
+          String(currentCapabilityLibrary.severity || "low"),
+        );
+        applyPanelSignal("capability-library-panel", String(currentCapabilityLibrary.severity || "low"));
+        renderDetailCards(
+          "capability-library-cards",
+          Array.isArray(currentCapabilityLibrary.cards) ? currentCapabilityLibrary.cards : [],
+          "Capability",
+        );
+        document.getElementById("capability-library-list").innerHTML = currentCapabilityRows.length
+          ? currentCapabilityRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(String(row.name || "Capability pack"))}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(String(row.risk_tier || "low"))}">${escapeHtml(String(row.risk_tier || "low"))}</span>
+                        <span class="badge ${String(row.status || "").trim().toLowerCase() === "active" ? "risk-low" : "risk-medium"}">${escapeHtml(String(row.status || "staged"))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(String(row.summary || "No capability summary is available."))}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectCapabilityEntry(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Capability rows will render from the backend contract.</li>`;
+        if (currentCapabilityRows.length) {
+          const focusEntryId = String(currentCapabilityLibrary.focus_entry_id || currentCapabilityFocusId || "").trim();
+          const focusIndex = focusEntryId
+            ? currentCapabilityRows.findIndex((row) => String(row.id || "").trim() === focusEntryId)
+            : -1;
+          inspectCapabilityEntry(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          currentCapabilityFocusId = "";
+          renderDetailCards("capability-detail-cards", [], "Capability");
+          document.getElementById("capability-detail-meta").textContent = "No capability selected";
+          document.getElementById("capability-detail-summary").textContent =
+            "Capability detail will render from staged and active library state.";
+          document.getElementById("capability-detail-controls").innerHTML =
+            `<button class="btn-secondary" type="button" disabled>Request Promotion Approval</button><button class="btn-primary" type="button" disabled>Promote Capability</button>`;
+          document.getElementById("capability-detail").textContent = formatJson(
+            currentCapabilityLibrary.detail && typeof currentCapabilityLibrary.detail === "object"
+              ? currentCapabilityLibrary.detail
+              : { entries: [] },
+          );
+          applyPanelSignal("capability-detail-panel", "low");
+        }
+      }
+
       async function createTeachingSession() {
         const createDefaults = apprenticeshipDefaults("create_session");
         const title = String(document.getElementById("apprenticeship-title")?.value || createDefaults.title || "").trim();
@@ -3884,9 +4026,17 @@
           currentWork.apprenticeship && typeof currentWork.apprenticeship === "object"
             ? currentWork.apprenticeship
             : {};
+        const capabilities =
+          currentWork.capabilities && typeof currentWork.capabilities === "object"
+            ? currentWork.capabilities
+            : {};
         const focusSession =
           apprenticeship.focus_session && typeof apprenticeship.focus_session === "object"
             ? apprenticeship.focus_session
+            : {};
+        const focusCapability =
+          capabilities.focus_entry && typeof capabilities.focus_entry === "object"
+            ? capabilities.focus_entry
             : {};
         const blockers = Array.isArray(currentWork.blockers) ? currentWork.blockers : [];
         const topPaths = Array.isArray(repo.top_paths) ? repo.top_paths : [];
@@ -3938,6 +4088,9 @@
         document.getElementById("work-teaching-pill").textContent = focusSession?.title
           ? `${String(focusSession.title)} | ${String(focusSession.status || apprenticeship.state || "active")}`
           : "no active teaching session";
+        document.getElementById("work-capability-pill").textContent = focusCapability?.name
+          ? `${String(focusCapability.name)} | ${String(focusCapability.status || "staged")}`
+          : "no staged capability pressure";
         document.getElementById("work-attention-detail").textContent =
           attention.reason || "No immediate work pressure is visible.";
         document.getElementById("work-link-meta").textContent = summarizeOperatorLinkContract(operatorLink) || describeOperatorLink(
@@ -3956,6 +4109,12 @@
               apprenticeship.summary ||
               "No teaching session is currently shaping the operator loop.",
           );
+        document.getElementById("work-capability-detail").textContent =
+          String(
+            focusCapability.summary ||
+              capabilities.summary ||
+              "No capability pack is currently shaping the operator loop.",
+          );
         applySeverityState(
           document.getElementById("work-teaching-detail"),
           String(
@@ -3963,6 +4122,16 @@
               ? "high"
               : apprenticeship.state === "generalize_ready"
               ? "medium"
+              : "low",
+          ),
+        );
+        applySeverityState(
+          document.getElementById("work-capability-detail"),
+          String(
+            focusCapability.status === "staged"
+              ? "medium"
+              : focusCapability.status === "active"
+              ? "low"
               : "low",
           ),
         );
@@ -4006,6 +4175,14 @@
                   ? "high"
                   : apprenticeship.state === "generalize_ready"
                   ? "medium"
+                  : "low",
+            },
+            {
+              severity:
+                focusCapability.status === "staged"
+                  ? "medium"
+                  : focusCapability.status === "active"
+                  ? "low"
                   : "low",
             },
           ],
@@ -4926,6 +5103,22 @@
           return;
         }
         await executeActionWithArgs(String(chip.kind || "repo.tests"), {}, false);
+      }
+
+      async function runCapabilityControl(controlKey) {
+        const focused = Array.isArray(currentCapabilityRows)
+          ? currentCapabilityRows.find((row) => String(row?.id || "").trim() === String(currentCapabilityFocusId || "").trim())
+          : null;
+        const controls = focused?.controls && typeof focused.controls === "object" ? focused.controls : {};
+        const control = controls[controlKey];
+        if (!control || !control.enabled) {
+          return;
+        }
+        await executeActionWithArgs(
+          String(control.execute_kind || control.kind || ""),
+          control.args && typeof control.args === "object" ? control.args : {},
+          false,
+        );
       }
 
       async function approveQueueItem(approvalId) {

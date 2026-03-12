@@ -26,6 +26,7 @@ from services.hud.app.views.apprenticeship import (
     record_apprenticeship_step,
 )
 from services.hud.app.views.blocked_actions import get_blocked_actions_view
+from services.hud.app.views.capability_library import get_capability_library_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
 from services.hud.app.views.execution_feed import get_execution_feed_view
@@ -130,6 +131,7 @@ def _build_hud_payload(
             current_work=current_work,
         ),
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
+        "capability_library": get_capability_library_view(snapshot=snapshot_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "action_deck": action_deck,
@@ -172,6 +174,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "current_work",
         "shift_report",
         "repo_drilldown",
+        "capability_library",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -202,6 +205,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "current_work",
         "shift_report",
         "repo_drilldown",
+        "capability_library",
         "approval_queue",
         "blocked_actions",
         "action_deck",
@@ -273,6 +277,10 @@ def _build_app() -> FastAPI:
     @app.get("/api/repo-drilldown")
     def repo_drilldown() -> dict[str, object]:
         return get_repo_drilldown_view()
+
+    @app.get("/api/capability-library")
+    def capability_library() -> dict[str, object]:
+        return get_capability_library_view()
 
     @app.get("/api/apprenticeship")
     def apprenticeship_surface() -> dict[str, object]:
@@ -357,6 +365,7 @@ def _build_app() -> FastAPI:
             "current_work": refresh_payload["current_work"],
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
             "apprenticeship_surface": refresh_payload["apprenticeship_surface"],
@@ -390,6 +399,7 @@ def _build_app() -> FastAPI:
             "current_work": refresh_payload["current_work"],
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
             "action_deck": refresh_payload["action_deck"],
@@ -430,6 +440,7 @@ def _build_app() -> FastAPI:
             "current_work": refresh_payload["current_work"],
             "shift_report": refresh_payload["shift_report"],
             "repo_drilldown": refresh_payload["repo_drilldown"],
+            "capability_library": refresh_payload["capability_library"],
             "approval_queue": refresh_payload["approval_queue"],
             "blocked_actions": refresh_payload["blocked_actions"],
             "action_deck": refresh_payload["action_deck"],

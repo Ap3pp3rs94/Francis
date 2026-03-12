@@ -116,6 +116,7 @@ def _fabric_query_text(
     terminal: dict[str, Any],
     mission: dict[str, Any] | None,
     apprenticeship: dict[str, Any] | None,
+    capabilities: dict[str, Any] | None,
     blockers: list[str],
 ) -> str:
     tokens: list[str] = []
@@ -148,6 +149,15 @@ def _fabric_query_text(
         _push(focus_session.get("title"))
         _push(focus_session.get("objective"))
         _push(focus_session.get("summary"))
+    if isinstance(capabilities, dict):
+        focus_entry = (
+            capabilities.get("focus_entry", {})
+            if isinstance(capabilities.get("focus_entry"), dict)
+            else {}
+        )
+        _push(focus_entry.get("name"))
+        _push(focus_entry.get("summary"))
+        _push(focus_entry.get("tool_pack_skill"))
     for blocker in blockers[:1]:
         _push(blocker)
     return " ".join(tokens[:6])
@@ -159,6 +169,7 @@ def _build_fabric_evidence(
     terminal: dict[str, Any],
     mission: dict[str, Any] | None,
     apprenticeship: dict[str, Any] | None,
+    capabilities: dict[str, Any] | None,
     blockers: list[str],
     last_run: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -171,6 +182,7 @@ def _build_fabric_evidence(
         terminal=terminal,
         mission=mission,
         apprenticeship=apprenticeship,
+        capabilities=capabilities,
         blockers=blockers,
     )
     if not query:
@@ -491,6 +503,7 @@ def _build_next_action_evidence(
     next_action: dict[str, Any],
     mission: dict[str, Any] | None,
     apprenticeship: dict[str, Any] | None,
+    capabilities: dict[str, Any] | None,
     last_run: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     evidence: list[dict[str, str]] = []
@@ -548,6 +561,42 @@ def _build_next_action_evidence(
                     )
                 )
 
+    if isinstance(capabilities, dict):
+        focus_entry = (
+            capabilities.get("focus_entry", {})
+            if isinstance(capabilities.get("focus_entry"), dict)
+            else {}
+        )
+        if focus_entry:
+            capability_name = str(focus_entry.get("name", "Capability pack")).strip() or "Capability pack"
+            if focus_kind == "forge.promote":
+                evidence.append(
+                    _evidence_row(
+                        kind="capability",
+                        severity="medium",
+                        detail=str(focus_entry.get("summary", "")).strip()
+                        or f"{capability_name} is staged for governed promotion.",
+                    )
+                )
+                approval_status = str(focus_entry.get("approval_status", "")).strip().lower()
+                approval_id = str(focus_entry.get("approval_id", "")).strip()
+                if approval_status == "pending" and approval_id:
+                    evidence.append(
+                        _evidence_row(
+                            kind="approval",
+                            severity="high",
+                            detail=f"Capability promotion approval {approval_id} is pending.",
+                        )
+                    )
+                elif approval_status == "approved" and approval_id:
+                    evidence.append(
+                        _evidence_row(
+                            kind="approval",
+                            severity="medium",
+                            detail=f"Capability promotion approval {approval_id} is already approved.",
+                        )
+                    )
+
     fabric = snapshot.get("fabric", {}) if isinstance(snapshot.get("fabric"), dict) else {}
     calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
     confidence_counts = (
@@ -582,6 +631,7 @@ def _build_next_action_evidence(
         terminal=terminal,
         mission=mission,
         apprenticeship=apprenticeship,
+        capabilities=capabilities,
         blockers=blockers,
         last_run=last_run,
     )
@@ -621,6 +671,9 @@ def get_current_work_view(
     apprenticeship = (
         current_work.get("apprenticeship", {}) if isinstance(current_work.get("apprenticeship"), dict) else {}
     )
+    capabilities = (
+        current_work.get("capabilities", {}) if isinstance(current_work.get("capabilities"), dict) else {}
+    )
     next_action_resume = _build_next_action_resume(snapshot=snapshot, next_action=next_best_action)
     operator_link = _build_operator_link(
         next_action=next_best_action,
@@ -640,6 +693,7 @@ def get_current_work_view(
         next_action=next_best_action,
         mission=mission,
         apprenticeship=apprenticeship,
+        capabilities=capabilities,
         last_run=last_run,
     )
     next_action_severity = _max_evidence_severity(next_action_evidence)
@@ -682,6 +736,7 @@ def get_current_work_view(
         "mission": mission,
         "last_run": last_run,
         "apprenticeship": apprenticeship,
+        "capabilities": capabilities,
         "blockers": [str(item).strip() for item in blockers if str(item).strip()],
         "next_action": next_best_action,
         "operator_link": operator_link,
@@ -695,6 +750,8 @@ def get_current_work_view(
                 if next_action_kind == "apprenticeship.generalize"
                 else "A reviewed teaching session is ready to become a staged skill."
                 if next_action_kind == "apprenticeship.skillize"
+                else "A staged capability is ready to become an active governed asset."
+                if next_action_kind == "forge.promote"
                 else "Cited local evidence is grounding the next operator move."
                 if fabric_evidence
                 else

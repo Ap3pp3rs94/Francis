@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis_core.workspace_fs import WorkspaceFS
+from francis_forge.catalog import list_entries
 from francis_skills.toolbelt.git import repo_status
+from services.orchestrator.app.approvals_store import list_requests
 
 SEVERITY_ORDER = {
     "critical": 4,
@@ -276,6 +279,116 @@ def _apprenticeship_focus(apprenticeship: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_fs(workspace_root: Path) -> WorkspaceFS:
+    return WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+
+
+def _capability_approval(fs: WorkspaceFS, stage_id: str) -> dict[str, Any] | None:
+    requests = list_requests(fs, action="forge.promote", limit=100)
+    for row in reversed(requests):
+        if not isinstance(row, dict):
+            continue
+        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+        if str(metadata.get("stage_id", "")).strip() != stage_id:
+            continue
+        return row
+    return None
+
+
+def _capability_focus(workspace_root: Path) -> dict[str, Any]:
+    fs = _build_fs(workspace_root)
+    entries = [row for row in list_entries(fs) if isinstance(row, dict)]
+    staged_count = sum(
+        1 for row in entries if str(row.get("status", "")).strip().lower() == "staged"
+    )
+    active_count = sum(
+        1 for row in entries if str(row.get("status", "")).strip().lower() == "active"
+    )
+
+    focus_entry = next(
+        (
+            row
+            for row in reversed(entries)
+            if str(row.get("status", "")).strip().lower() == "staged"
+        ),
+        None,
+    )
+    if focus_entry is None:
+        focus_entry = next(
+            (
+                row
+                for row in reversed(entries)
+                if str(row.get("status", "")).strip().lower() == "active"
+            ),
+            None,
+        )
+
+    if focus_entry is None:
+        return {
+            "catalog_count": len(entries),
+            "staged_count": staged_count,
+            "active_count": active_count,
+            "summary": "No governed capability packs are cataloged yet.",
+            "focus_entry": None,
+        }
+
+    entry_id = str(focus_entry.get("id", "")).strip()
+    status = str(focus_entry.get("status", "")).strip().lower() or "staged"
+    approval = _capability_approval(fs, entry_id) if entry_id else None
+    approval_id = str((approval or {}).get("id", "")).strip()
+    approval_status = str((approval or {}).get("status", "")).strip().lower()
+    version = str(focus_entry.get("version", "")).strip() or "0.1.0"
+    name = str(focus_entry.get("name", "Capability pack")).strip() or "Capability pack"
+    risk_tier = str(focus_entry.get("risk_tier", "low")).strip().lower() or "low"
+    tool_pack = focus_entry.get("tool_pack", {}) if isinstance(focus_entry.get("tool_pack"), dict) else {}
+    validation = focus_entry.get("validation", {}) if isinstance(focus_entry.get("validation"), dict) else {}
+    diff_summary = focus_entry.get("diff_summary", {}) if isinstance(focus_entry.get("diff_summary"), dict) else {}
+
+    if status == "staged":
+        if approval_status == "approved" and approval_id:
+            summary = f"{name} {version} is staged and already approved for promotion."
+        elif approval_status == "pending" and approval_id:
+            summary = f"{name} {version} is staged and waiting on promotion approval {approval_id}."
+        elif approval_status == "rejected":
+            summary = f"{name} {version} is staged after a rejected promotion request and needs a fresh operator decision."
+        else:
+            summary = f"{name} {version} is staged and ready for governed promotion into the active library."
+        recommended_action = "forge.promote"
+    elif status == "active":
+        summary = f"{name} {version} is active in the internal capability library."
+        recommended_action = ""
+    else:
+        summary = f"{name} {version} is cataloged with status {status}."
+        recommended_action = ""
+
+    return {
+        "catalog_count": len(entries),
+        "staged_count": staged_count,
+        "active_count": active_count,
+        "summary": summary,
+        "focus_entry": {
+            "id": entry_id,
+            "name": name,
+            "slug": str(focus_entry.get("slug", "")).strip(),
+            "version": version,
+            "status": status,
+            "risk_tier": risk_tier,
+            "path": str(focus_entry.get("path", "")).strip(),
+            "approval_id": approval_id,
+            "approval_status": approval_status,
+            "summary": summary,
+            "recommended_action": recommended_action,
+            "actionable": bool(recommended_action and entry_id),
+            "validation_ok": bool(validation.get("ok")),
+            "file_count": int(diff_summary.get("file_count", 0) or 0),
+            "tool_pack_skill": str(tool_pack.get("skill_name", "")).strip(),
+        },
+    }
+
+
 def build_current_work(
     *,
     repo_root: Path,
@@ -290,6 +403,7 @@ def build_current_work(
 ) -> dict[str, Any]:
     repo = build_repo_focus(repo_root)
     telemetry = build_telemetry_focus(workspace_root)
+    capabilities = _capability_focus(workspace_root)
     active_missions = missions.get("active", []) if isinstance(missions.get("active"), list) else []
     active_mission = active_missions[0] if active_missions else None
     last_run = runs.get("last_run", {}) if isinstance(runs.get("last_run"), dict) else {}
@@ -297,6 +411,11 @@ def build_current_work(
     focus_session = (
         apprenticeship_focus.get("focus_session", {})
         if isinstance(apprenticeship_focus.get("focus_session"), dict)
+        else {}
+    )
+    focus_capability = (
+        capabilities.get("focus_entry", {})
+        if isinstance(capabilities.get("focus_entry"), dict)
         else {}
     )
     mode = str(control.get("mode", "assist")).strip().lower() or "assist"
@@ -321,6 +440,10 @@ def build_current_work(
         attention_kind = "teaching_capture"
         attention_label = "Teaching Capture"
         attention_reason = str(focus_session.get("summary", "")).strip() or "A teaching session has captured reusable steps."
+    elif str(focus_capability.get("recommended_action", "")).strip() == "forge.promote":
+        attention_kind = "capability_review"
+        attention_label = "Capability Review"
+        attention_reason = str(focus_capability.get("summary", "")).strip() or "A staged capability is ready for governed review."
     elif last_terminal and str(last_terminal.get("severity", "")).lower() in {"error", "critical"}:
         command = str(last_terminal.get("command", "")).strip() or "terminal command"
         attention_kind = "terminal_failure"
@@ -352,6 +475,8 @@ def build_current_work(
     summary_parts.append(str(repo.get("summary", "Repository status unavailable.")))
     if focus_session:
         summary_parts.append(str(focus_session.get("summary", "")).strip())
+    if focus_capability:
+        summary_parts.append(str(focus_capability.get("summary", "")).strip())
     if last_terminal:
         terminal_line = str(last_terminal.get("command", "")).strip() or "terminal activity"
         exit_code = last_terminal.get("exit_code")
@@ -376,6 +501,8 @@ def build_current_work(
         blockers.append(str(last_terminal.get("text", "")).strip() or "Recent terminal failure detected.")
     if int(inbox.get("alert_count", 0)) > 0:
         blockers.append(f"{int(inbox.get('alert_count', 0))} inbox alert(s) need review.")
+    if str(focus_capability.get("approval_status", "")).strip().lower() == "pending":
+        blockers.append("Capability promotion approval is pending.")
 
     return {
         "summary": " ".join(part for part in summary_parts if part),
@@ -385,6 +512,7 @@ def build_current_work(
         "mission": active_mission,
         "last_run": last_run,
         "apprenticeship": apprenticeship_focus,
+        "capabilities": capabilities,
         "attention": {
             "kind": attention_kind,
             "label": attention_label,
@@ -411,6 +539,7 @@ def build_next_best_action(
     missions_allowed = not allowed_apps or "missions" in allowed_apps
     observer_allowed = not allowed_apps or "observer" in allowed_apps
     apprenticeship_allowed = not allowed_apps or "apprenticeship" in allowed_apps
+    forge_allowed = not allowed_apps or "forge" in allowed_apps
     repo = current_work.get("repo", {}) if isinstance(current_work.get("repo"), dict) else {}
     telemetry = current_work.get("telemetry", {}) if isinstance(current_work.get("telemetry"), dict) else {}
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
@@ -419,6 +548,12 @@ def build_next_best_action(
     )
     focus_session = (
         apprenticeship.get("focus_session", {}) if isinstance(apprenticeship.get("focus_session"), dict) else {}
+    )
+    capabilities = (
+        current_work.get("capabilities", {}) if isinstance(current_work.get("capabilities"), dict) else {}
+    )
+    focus_capability = (
+        capabilities.get("focus_entry", {}) if isinstance(capabilities.get("focus_entry"), dict) else {}
     )
     attention = current_work.get("attention", {}) if isinstance(current_work.get("attention"), dict) else {}
     last_terminal = telemetry.get("last_terminal", {}) if isinstance(telemetry.get("last_terminal"), dict) else {}
@@ -503,6 +638,44 @@ def build_next_best_action(
                 if not session_id
                 else "app apprenticeship not in allowed scope"
             ),
+        }
+
+    capability_action = str(focus_capability.get("recommended_action", "")).strip().lower()
+    stage_id = str(focus_capability.get("id", "")).strip()
+    approval_status = str(focus_capability.get("approval_status", "")).strip().lower()
+    approval_id = str(focus_capability.get("approval_id", "")).strip()
+    if capability_action == "forge.promote":
+        if approval_status == "approved" and approval_id:
+            return {
+                "kind": "forge.promote",
+                "label": "Promote Capability",
+                "reason": str(focus_capability.get("summary", "")).strip()
+                or "The staged capability is ready to enter the active library.",
+                "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
+                "trust_badge": "Confirmed",
+                "args": {"stage_id": stage_id, "approval_id": approval_id} if stage_id else {},
+                "enabled": bool(stage_id) and forge_allowed,
+                "policy_reason": (
+                    "" if stage_id and forge_allowed else "Stage id is missing." if not stage_id else "app forge not in allowed scope"
+                ),
+            }
+        pending_reason = (
+            f"Promotion approval {approval_id} is still pending."
+            if approval_status == "pending" and approval_id
+            else "Promotion requires approval before execution."
+        )
+        if approval_status == "rejected":
+            pending_reason = "Promotion approval was rejected and needs a fresh operator decision."
+        return {
+            "kind": "forge.promote",
+            "label": "Promote Capability",
+            "reason": str(focus_capability.get("summary", "")).strip()
+            or "The staged capability is ready for governed promotion.",
+            "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
+            "trust_badge": "Likely",
+            "args": {"stage_id": stage_id} if stage_id else {},
+            "enabled": False,
+            "policy_reason": pending_reason if forge_allowed else "app forge not in allowed scope",
         }
 
     if bool(repo.get("dirty", False)) and int(repo.get("changed_count", 0)) > 0:

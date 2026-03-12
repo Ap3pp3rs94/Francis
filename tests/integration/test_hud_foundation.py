@@ -10,6 +10,7 @@ import services.hud.app.views.approval_queue as approval_queue_view
 import services.hud.app.views.action_deck as action_deck_view
 import services.hud.app.views.apprenticeship as apprenticeship_view
 import services.hud.app.views.blocked_actions as blocked_actions_view
+import services.hud.app.views.capability_library as capability_library_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
@@ -109,8 +110,15 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Record Step" in response.text
     assert "Replay lines will render from the backend contract." in response.text
     assert "Generalized workflow detail will render from the backend contract." in response.text
+    assert "Capability Library" in response.text
+    assert "Capability packs will render from the governed internal library." in response.text
+    assert "Capability Detail" in response.text
+    assert "Capability detail will render from staged and active library state." in response.text
+    assert "Request Promotion Approval" in response.text
+    assert "Promote Capability" in response.text
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
+    assert "Capability pressure will render from the internal library contract." in response.text
     assert "Approval Queue" in response.text
     assert "Approval Detail" in response.text
     assert "Approval summary will render from the current workspace queue." in response.text
@@ -187,6 +195,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["current_work"]["surface"] == "current_work"
     assert body["shift_report"]["surface"] == "shift_report"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
+    assert body["capability_library"]["surface"] == "capability_library"
     assert body["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["blocked_actions"]["surface"] == "blocked_actions"
@@ -205,6 +214,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "current_work",
         "shift_report",
         "repo_drilldown",
+        "capability_library",
         "apprenticeship_surface",
         "approval_queue",
         "execution_journal",
@@ -258,6 +268,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -298,6 +309,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["current_work"]["surface"] == "current_work"
     assert payload["shift_report"]["surface"] == "shift_report"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
+    assert payload["capability_library"]["surface"] == "capability_library"
     assert payload["apprenticeship_surface"]["surface"] == "apprenticeship_surface"
     assert payload["approval_queue"]["surface"] == "approval_queue"
     assert payload["blocked_actions"]["surface"] == "blocked_actions"
@@ -312,6 +324,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert "surface_digests" in payload
     assert payload["surface_digests"]["current_work"]
     assert payload["surface_digests"]["shift_report"]
+    assert payload["surface_digests"]["capability_library"]
     assert payload["surface_digests"]["apprenticeship_surface"]
 
 
@@ -364,8 +377,28 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
                 "action": "forge.promote",
                 "reason": "Promote a staged capability",
                 "requested_by": "architect.ap3pp",
+                "metadata": {"stage_id": "cap-live-1", "action_kind": "forge.promote"},
             }
         ],
+    )
+    _write_json(
+        workspace_root / "forge" / "catalog.json",
+        {
+            "entries": [
+                {
+                    "id": "cap-live-1",
+                    "name": "Live Capability",
+                    "slug": "live-capability",
+                    "description": "Capability visible in the HUD library.",
+                    "risk_tier": "medium",
+                    "status": "staged",
+                    "path": "forge/staging/cap-live-1",
+                    "validation": {"ok": True},
+                    "diff_summary": {"file_count": 3},
+                    "tool_pack": {"skill_name": "forge.pack.live-capability"},
+                }
+            ]
+        },
     )
     _write_jsonl(
         workspace_root / "incidents" / "incidents.jsonl",
@@ -489,6 +522,8 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert body["snapshot"]["autonomy"]["guardrail"]["cooldown_active"] is False
     assert body["current_work"]["attention"]["kind"] == "teaching_review"
     assert body["current_work"]["apprenticeship"]["focus_session"]["id"] == "teach-1"
+    assert body["current_work"]["capabilities"]["focus_entry"]["id"] == "cap-live-1"
+    assert body["current_work"]["capabilities"]["focus_entry"]["recommended_action"] == "forge.promote"
     assert body["current_work"]["repo"]["top_paths"][0] == "usage-signal.txt"
     assert body["current_work"]["terminal"]["command"] == "pytest -q tests/integration/test_hud_foundation.py"
     assert body["current_work"]["terminal_summary"].startswith("Terminal failure anchor:")
@@ -505,6 +540,9 @@ def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -
     assert any("approval" in item.lower() or "terminal" in item.lower() for item in body["current_work"]["blockers"])
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["repo_drilldown"]["state"] in {"idle", "ready"}
+    assert body["capability_library"]["surface"] == "capability_library"
+    assert body["capability_library"]["focus_entry_id"] == "cap-live-1"
+    assert body["capability_library"]["entries"][0]["id"] == "cap-live-1"
     assert body["approval_queue"]["surface"] == "approval_queue"
     assert body["approval_queue"]["pending_count"] == 1
     assert body["approval_queue"]["items"][0]["id"] == "approval-1"
@@ -597,6 +635,20 @@ def test_hud_repo_drilldown_route_returns_structured_surface() -> None:
     assert "controls" in payload
     assert set(payload["controls"].keys()) == {"status", "diff", "lint", "tests"}
     assert "audit" in payload
+    assert "detail" in payload
+
+
+def test_hud_capability_library_route_returns_structured_surface() -> None:
+    response = client.get("/api/capability-library")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "capability_library"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_entry_id" in payload
+    assert "cards" in payload
+    assert "entries" in payload
     assert "detail" in payload
 
 
@@ -1081,6 +1133,111 @@ def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Pa
     assert payload["controls"]["status"]["execute_kind"] == "repo.status"
     assert payload["controls"]["tests"]["execute_kind"] == "repo.tests"
     assert payload["controls"]["tests"]["args"]["approval_id"] == "approval-tests"
+
+
+def test_hud_capability_library_view_exposes_focus_and_controls(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(capability_library_view, "get_workspace_root", lambda: workspace_root)
+    _write_json(
+        workspace_root / "forge" / "catalog.json",
+        {
+            "entries": [
+                {
+                    "id": "cap-promote",
+                    "name": "Capability Promote",
+                    "slug": "capability-promote",
+                    "description": "A staged capability ready for library promotion.",
+                    "risk_tier": "medium",
+                    "status": "staged",
+                    "version": "0.4.0",
+                    "path": "forge/staging/cap-promote",
+                    "validation": {"ok": True},
+                    "diff_summary": {"file_count": 5},
+                    "tool_pack": {"skill_name": "forge.pack.capability-promote"},
+                },
+                {
+                    "id": "cap-active",
+                    "name": "Capability Active",
+                    "slug": "capability-active",
+                    "description": "An active capability already in the library.",
+                    "risk_tier": "low",
+                    "status": "active",
+                    "version": "1.0.0",
+                    "path": "forge/library/cap-active",
+                    "validation": {"ok": True},
+                    "diff_summary": {"file_count": 2},
+                    "tool_pack": {"skill_name": "forge.pack.capability-active"},
+                },
+            ]
+        },
+    )
+    _write_jsonl(
+        workspace_root / "approvals" / "requests.jsonl",
+        [
+            {
+                "id": "approval-promote",
+                "ts": "2026-03-11T12:00:00+00:00",
+                "run_id": "run-promote",
+                "action": "forge.promote",
+                "reason": "Promote staged capability",
+                "requested_by": "architect",
+                "metadata": {"stage_id": "cap-promote", "action_kind": "forge.promote"},
+            }
+        ],
+    )
+    _write_jsonl(
+        workspace_root / "journals" / "decisions.jsonl",
+        [
+            {
+                "id": "decision-promote",
+                "ts": "2026-03-11T12:01:00+00:00",
+                "run_id": "run-promote",
+                "kind": "approval.decision",
+                "request_id": "approval-promote",
+                "action": "forge.promote",
+                "decision": "approved",
+                "decided_by": "architect",
+                "note": "ready to promote",
+            }
+        ],
+    )
+
+    def _snapshot() -> dict[str, object]:
+        return {
+            "current_work": {
+                "capabilities": {
+                    "summary": "A staged capability is ready for governed promotion.",
+                    "focus_entry": {
+                        "id": "cap-promote",
+                        "name": "Capability Promote",
+                        "status": "staged",
+                        "summary": "Capability Promote 0.4.0 is staged and already approved for promotion.",
+                        "approval_id": "approval-promote",
+                        "approval_status": "approved",
+                        "recommended_action": "forge.promote",
+                        "risk_tier": "medium",
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _snapshot)
+
+    payload = capability_library_view.get_capability_library_view()
+
+    assert payload["focus_entry_id"] == "cap-promote"
+    assert payload["summary"] == "1 staged capability pack(s) and 1 active pack(s) are in the internal library."
+    focused = next(row for row in payload["entries"] if row["id"] == "cap-promote")
+    assert focused["detail_state"] == "current"
+    assert focused["audit"]["approval_status"] == "approved"
+    assert focused["audit"]["tool_pack_skill"] == "forge.pack.capability-promote"
+    assert focused["controls"]["request_approval"]["enabled"] is False
+    assert focused["controls"]["promote"]["enabled"] is True
+    assert focused["controls"]["promote"]["args"]["approval_id"] == "approval-promote"
+    assert focused["detail_cards"]
 
 
 def test_hud_shift_report_view_builds_return_briefing(monkeypatch) -> None:

@@ -87,16 +87,20 @@ def test_lens_state_surfaces_current_work_and_next_best_action() -> None:
     repo_root = workspace.parent
     telemetry_path = workspace / "telemetry" / "events.jsonl"
     apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
+    catalog_path = workspace / "forge" / "catalog.json"
     signal_path = repo_root / "usage-loop-signal.txt"
     telemetry_before = _read_text(telemetry_path)
     apprenticeship_before_exists = apprenticeship_path.exists()
     apprenticeship_before = _read_text(apprenticeship_path)
+    catalog_before_exists = catalog_path.exists()
+    catalog_before = _read_text(catalog_path)
     signal_before_exists = signal_path.exists()
     signal_before = _read_text(signal_path)
 
     try:
         signal_path.write_text("usage signal\n", encoding="utf-8")
         _write_json(apprenticeship_path, {"sessions": []})
+        _write_json(catalog_path, {"entries": []})
         _write_jsonl(
             telemetry_path,
             [
@@ -134,6 +138,7 @@ def test_lens_state_surfaces_current_work_and_next_best_action() -> None:
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
         _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
+        _restore_text(catalog_path, catalog_before, catalog_before_exists)
         if signal_before_exists:
             signal_path.write_text(signal_before, encoding="utf-8")
         elif signal_path.exists():
@@ -205,6 +210,98 @@ def test_lens_state_prioritizes_review_ready_apprenticeship_over_terminal_failur
     finally:
         telemetry_path.write_text(telemetry_before, encoding="utf-8")
         _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
+        _restore_text(signal_path, signal_before, signal_before_exists)
+
+
+def test_lens_state_prioritizes_staged_capability_over_terminal_failure() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    repo_root = workspace.parent
+    telemetry_path = workspace / "telemetry" / "events.jsonl"
+    apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
+    catalog_path = workspace / "forge" / "catalog.json"
+    approvals_path = workspace / "approvals" / "requests.jsonl"
+    decisions_path = workspace / "journals" / "decisions.jsonl"
+    signal_path = repo_root / "usage-loop-signal.txt"
+    telemetry_before = _read_text(telemetry_path)
+    apprenticeship_before_exists = apprenticeship_path.exists()
+    apprenticeship_before = _read_text(apprenticeship_path)
+    catalog_before_exists = catalog_path.exists()
+    catalog_before = _read_text(catalog_path)
+    approvals_before_exists = approvals_path.exists()
+    approvals_before = _read_text(approvals_path)
+    decisions_before_exists = decisions_path.exists()
+    decisions_before = _read_text(decisions_path)
+    signal_before_exists = signal_path.exists()
+    signal_before = _read_text(signal_path)
+
+    try:
+        signal_path.write_text("usage signal\n", encoding="utf-8")
+        _write_json(apprenticeship_path, {"sessions": []})
+        _write_json(
+            catalog_path,
+            {
+                "entries": [
+                    {
+                        "id": "cap-stage",
+                        "name": "Capability Stage",
+                        "slug": "capability-stage",
+                        "description": "A staged capability ready for governed promotion.",
+                        "risk_tier": "medium",
+                        "status": "staged",
+                        "version": "0.3.0",
+                        "path": "forge/staging/cap-stage",
+                        "validation": {"ok": True},
+                        "diff_summary": {"file_count": 4},
+                        "tool_pack": {"skill_name": "forge.pack.capability-stage"},
+                    }
+                ]
+            },
+        )
+        approvals_path.parent.mkdir(parents=True, exist_ok=True)
+        approvals_path.write_text("", encoding="utf-8")
+        decisions_path.parent.mkdir(parents=True, exist_ok=True)
+        decisions_path.write_text("", encoding="utf-8")
+        _write_jsonl(
+            telemetry_path,
+            [
+                {
+                    "id": "usage-loop-capability-telemetry-1",
+                    "ts": "2026-03-11T01:15:00+00:00",
+                    "ingested_at": "2026-03-11T01:15:01+00:00",
+                    "run_id": "usage-loop-capability-run",
+                    "kind": "telemetry.event",
+                    "stream": "terminal",
+                    "source": "terminal",
+                    "severity": "error",
+                    "text": "terminal: pytest -q tests/integration/test_lens_usage_loop.py (exit=1)",
+                    "fields": {
+                        "command": "pytest -q tests/integration/test_lens_usage_loop.py",
+                        "cwd": str(repo_root),
+                        "exit_code": 1,
+                        "stdout": "",
+                        "stderr": "1 failed",
+                    },
+                }
+            ],
+        )
+
+        with TestClient(app) as client:
+            state = client.get("/lens/state")
+
+        assert state.status_code == 200
+        payload = state.json()
+        assert payload["current_work"]["attention"]["kind"] == "capability_review"
+        assert payload["current_work"]["capabilities"]["focus_entry"]["id"] == "cap-stage"
+        assert payload["current_work"]["capabilities"]["focus_entry"]["recommended_action"] == "forge.promote"
+        assert payload["next_best_action"]["kind"] == "forge.promote"
+        assert payload["next_best_action"]["enabled"] is False
+        assert payload["next_best_action"]["args"]["stage_id"] == "cap-stage"
+    finally:
+        telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
+        _restore_text(catalog_path, catalog_before, catalog_before_exists)
+        _restore_text(approvals_path, approvals_before, approvals_before_exists)
+        _restore_text(decisions_path, decisions_before, decisions_before_exists)
         _restore_text(signal_path, signal_before, signal_before_exists)
 
 
@@ -398,6 +495,165 @@ def test_lens_actions_carry_repo_tests_approval_into_action_chip() -> None:
         _restore_text(signal_path, signal_before, signal_before_exists)
         _restore_text(approvals_path, approvals_before, approvals_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)
+
+
+def test_lens_actions_request_and_execute_capability_promotion() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    catalog_path = workspace / "forge" / "catalog.json"
+    approvals_path = workspace / "approvals" / "requests.jsonl"
+    decisions_path = workspace / "journals" / "decisions.jsonl"
+    run_ledger_path = workspace / "runs" / "run_ledger.jsonl"
+    catalog_before_exists = catalog_path.exists()
+    catalog_before = _read_text(catalog_path)
+    approvals_before_exists = approvals_path.exists()
+    approvals_before = _read_text(approvals_path)
+    decisions_before_exists = decisions_path.exists()
+    decisions_before = _read_text(decisions_path)
+    run_ledger_before_exists = run_ledger_path.exists()
+    run_ledger_before = _read_text(run_ledger_path)
+
+    try:
+        _write_json(
+            catalog_path,
+            {
+                "entries": [
+                    {
+                        "id": "cap-promote",
+                        "name": "Capability Promote",
+                        "slug": "capability-promote",
+                        "description": "A staged capability ready for promotion.",
+                        "risk_tier": "medium",
+                        "status": "staged",
+                        "version": "0.4.0",
+                        "path": "forge/staging/cap-promote",
+                        "validation": {"ok": True},
+                        "diff_summary": {"file_count": 5},
+                        "tool_pack": {"skill_name": "forge.pack.capability-promote"},
+                    }
+                ]
+            },
+        )
+        approvals_path.parent.mkdir(parents=True, exist_ok=True)
+        approvals_path.write_text("", encoding="utf-8")
+        decisions_path.parent.mkdir(parents=True, exist_ok=True)
+        decisions_path.write_text("", encoding="utf-8")
+
+        with TestClient(app) as client:
+            original_mode = _get_mode(client)
+            original_scope = _get_scope(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                _set_scope(client, _enable_apps(original_scope, ["forge", "approvals", "control", "lens"]))
+
+                actions = client.get("/lens/actions")
+                assert actions.status_code == 200
+                action_chips = actions.json()["action_chips"]
+                promote_chip = next(
+                    chip for chip in action_chips if str(chip.get("kind", "")).strip() == "forge.promote"
+                )
+                request_chip = next(
+                    chip
+                    for chip in action_chips
+                    if str(chip.get("kind", "")).strip() == "forge.promote.request_approval"
+                )
+                assert promote_chip["enabled"] is False
+                assert request_chip["enabled"] is True
+                assert request_chip["execute_via"]["payload"]["args"]["stage_id"] == "cap-promote"
+
+                request_approval = client.post(
+                    "/lens/actions/execute",
+                    json={"kind": "forge.promote.request_approval", "args": {"stage_id": "cap-promote"}},
+                )
+                assert request_approval.status_code == 200
+                approval_id = str(request_approval.json()["result"]["approval"]["id"]).strip()
+                assert approval_id
+
+                pending_actions = client.get("/lens/actions")
+                assert pending_actions.status_code == 200
+                pending_promote = next(
+                    chip
+                    for chip in pending_actions.json()["action_chips"]
+                    if str(chip.get("kind", "")).strip() == "forge.promote"
+                )
+                assert pending_promote["enabled"] is False
+                assert "pending" in str(pending_promote.get("policy_reason", "")).lower()
+                assert not any(
+                    str(chip.get("kind", "")).strip() == "forge.promote.request_approval"
+                    for chip in pending_actions.json()["action_chips"]
+                )
+
+                approve = client.post(
+                    "/lens/actions/execute",
+                    json={
+                        "kind": "control.remote.approval.approve",
+                        "args": {"approval_id": approval_id, "note": "approve capability promotion"},
+                    },
+                )
+                assert approve.status_code == 200
+
+                approved_actions = client.get("/lens/actions")
+                assert approved_actions.status_code == 200
+                approved_promote = next(
+                    chip
+                    for chip in approved_actions.json()["action_chips"]
+                    if str(chip.get("kind", "")).strip() == "forge.promote"
+                )
+                assert approved_promote["enabled"] is False
+                assert "assist mode" in str(approved_promote.get("policy_reason", "")).lower()
+
+                _set_mode(client, "pilot", kill_switch=False)
+                pilot_actions = client.get("/lens/actions")
+                assert pilot_actions.status_code == 200
+                approved_promote = next(
+                    chip
+                    for chip in pilot_actions.json()["action_chips"]
+                    if str(chip.get("kind", "")).strip() == "forge.promote"
+                )
+                assert approved_promote["enabled"] is True
+                promote_args = approved_promote.get("execute_via", {}).get("payload", {}).get("args", {})
+                assert promote_args.get("stage_id") == "cap-promote"
+                assert promote_args.get("approval_id") == approval_id
+
+                promote = client.post(
+                    "/lens/actions/execute",
+                    json={
+                        "kind": "forge.promote",
+                        "args": {"stage_id": "cap-promote", "approval_id": approval_id},
+                    },
+                )
+            finally:
+                _set_scope(client, original_scope)
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
+
+        assert promote.status_code == 200
+        result_payload = promote.json()
+        assert result_payload["result"]["kind"] == "forge.promote"
+        assert result_payload["result"]["tool"]["skill"] == "forge.promote"
+        assert result_payload["result"]["tool"]["approval_id"] == approval_id
+        assert result_payload["result"]["presentation"]["kind"] == "forge.promote"
+        assert result_payload["result"]["entry"]["status"] == "active"
+        assert result_payload["result"]["tool_pack_registered"] is True
+        catalog = json.loads(_read_text(catalog_path))
+        promoted_entry = next(entry for entry in catalog["entries"] if entry["id"] == "cap-promote")
+        assert promoted_entry["status"] == "active"
+        assert promoted_entry["promoted_at"]
+        ledger_rows = _read_jsonl(run_ledger_path)
+        forge_receipt = next(
+            row for row in reversed(ledger_rows) if str(row.get("kind", "")).strip() == "forge.promote"
+        )
+        summary = forge_receipt.get("summary", {}) if isinstance(forge_receipt.get("summary"), dict) else {}
+        assert summary["stage_id"] == "cap-promote"
+        assert summary["status"] == "active"
+        assert summary["approval_id"] == approval_id
+    finally:
+        _restore_text(catalog_path, catalog_before, catalog_before_exists)
+        _restore_text(approvals_path, approvals_before, approvals_before_exists)
+        _restore_text(decisions_path, decisions_before, decisions_before_exists)
+        _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)
 
 
 def test_lens_execute_repo_tests_with_approved_request() -> None:
