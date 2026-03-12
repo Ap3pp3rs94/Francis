@@ -511,6 +511,8 @@ def test_hud_repo_drilldown_route_returns_structured_surface() -> None:
     assert "summary" in payload
     assert "severity" in payload
     assert "cards" in payload
+    assert "controls" in payload
+    assert set(payload["controls"].keys()) == {"status", "diff", "lint", "tests"}
     assert "audit" in payload
     assert "detail" in payload
 
@@ -714,6 +716,24 @@ def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Pa
         }
 
     monkeypatch.setattr(repo_drilldown_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(
+        repo_drilldown_view,
+        "get_lens_actions",
+        lambda max_actions=8: {
+            "action_chips": [
+                {"kind": "repo.status", "label": "Repo Status", "enabled": True, "risk_tier": "low"},
+                {"kind": "repo.diff", "label": "Local Diff", "enabled": True, "risk_tier": "low"},
+                {"kind": "repo.lint", "label": "Ruff Check", "enabled": True, "risk_tier": "medium"},
+                {
+                    "kind": "repo.tests",
+                    "label": "Fast Checks",
+                    "enabled": True,
+                    "risk_tier": "medium",
+                    "execute_via": {"payload": {"args": {"lane": "fast", "approval_id": "approval-tests"}}},
+                },
+            ]
+        },
+    )
     _write_json(
         workspace_root / "lens" / "repo_drilldown.json",
         {
@@ -738,6 +758,9 @@ def test_hud_repo_drilldown_view_exposes_compact_audit(monkeypatch, tmp_path: Pa
     assert payload["audit"]["run_id"] == "run-tests"
     assert payload["audit"]["card_count"] == 1
     assert payload["audit"]["evidence_count"] == 1
+    assert payload["controls"]["status"]["execute_kind"] == "repo.status"
+    assert payload["controls"]["tests"]["execute_kind"] == "repo.tests"
+    assert payload["controls"]["tests"]["args"]["approval_id"] == "approval-tests"
 
 
 def test_hud_missions_view_exposes_focus_and_audit(monkeypatch) -> None:

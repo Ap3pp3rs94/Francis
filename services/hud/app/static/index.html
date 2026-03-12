@@ -2197,19 +2197,19 @@
         const repoStatus = document.getElementById("repo-action-status");
         if (repoStatus && repoStatus instanceof HTMLElement) {
           repoStatus.addEventListener("click", () => {
-            runRepoAction("repo.status");
+            runRepoControl("status");
           });
         }
         const repoDiff = document.getElementById("repo-action-diff");
         if (repoDiff && repoDiff instanceof HTMLElement) {
           repoDiff.addEventListener("click", () => {
-            runRepoAction("repo.diff");
+            runRepoControl("diff");
           });
         }
         const repoLint = document.getElementById("repo-action-lint");
         if (repoLint && repoLint instanceof HTMLElement) {
           repoLint.addEventListener("click", () => {
-            runRepoAction("repo.lint");
+            runRepoControl("lint");
           });
         }
         const repoTests = document.getElementById("repo-action-tests");
@@ -2475,6 +2475,12 @@
       function resolveActionChipByKind(kind, actions) {
         const chips = Array.isArray(actions?.action_chips) ? actions.action_chips : [];
         return chips.find((chip) => String(chip.kind || "").trim().toLowerCase() === String(kind || "").trim().toLowerCase()) || null;
+      }
+
+      function getRepoDrilldownControl(controlId, surface = currentRepoDrilldown) {
+        const controls = surface?.controls && typeof surface.controls === "object" ? surface.controls : {};
+        const control = controls?.[controlId];
+        return control && typeof control === "object" ? control : null;
       }
 
       function setLastOperatorLink(next = {}) {
@@ -3390,10 +3396,11 @@
           executeButton.textContent = "Execute";
         }
 
-        const statusChip = resolveActionChipByKind("repo.status", actions);
-        const diffChip = resolveActionChipByKind("repo.diff", actions);
-        const lintChip = resolveActionChipByKind("repo.lint", actions);
+        const statusChip = getRepoDrilldownControl("status") || resolveActionChipByKind("repo.status", actions);
+        const diffChip = getRepoDrilldownControl("diff") || resolveActionChipByKind("repo.diff", actions);
+        const lintChip = getRepoDrilldownControl("lint") || resolveActionChipByKind("repo.lint", actions);
         const testsChip =
+          getRepoDrilldownControl("tests") ||
           resolveActionChipByKind("repo.tests", actions) ||
           resolveActionChipByKind("repo.tests.request_approval", actions);
         const statusButton = document.getElementById("repo-action-status");
@@ -4177,7 +4184,24 @@
         return response;
       }
 
+      async function runRepoControl(controlId) {
+        const control = getRepoDrilldownControl(controlId);
+        if (!control || !control.enabled) {
+          return;
+        }
+        await executeActionWithArgs(
+          String(control.execute_kind || control.kind || ""),
+          control.args && typeof control.args === "object" ? control.args : {},
+          false,
+        );
+      }
+
       async function runRepoTestsAction() {
+        const control = getRepoDrilldownControl("tests");
+        if (control) {
+          await runRepoControl("tests");
+          return;
+        }
         const chip =
           resolveActionChipByKind("repo.tests", currentActions) ||
           resolveActionChipByKind("repo.tests.request_approval", currentActions);

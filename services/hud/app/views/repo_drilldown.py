@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot, get_workspace_root
 
 
@@ -70,13 +71,101 @@ def _idle_audit(repo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def get_repo_drilldown_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
+def _normalize_usage_action_kind(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    suffix = ".request_approval"
+    return raw[: -len(suffix)] if raw.endswith(suffix) else raw
+
+
+def _find_action_chip(actions: dict[str, object], kind: str) -> dict[str, Any] | None:
+    chips = actions.get("action_chips", []) if isinstance(actions.get("action_chips"), list) else []
+    lowered = str(kind or "").strip().lower()
+    for chip in chips:
+        if str(chip.get("kind", "")).strip().lower() == lowered:
+            return chip
+    return None
+
+
+def _chip_args(chip: dict[str, Any]) -> dict[str, object]:
+    execute_via = chip.get("execute_via", {}) if isinstance(chip.get("execute_via"), dict) else {}
+    payload = execute_via.get("payload", {}) if isinstance(execute_via.get("payload"), dict) else {}
+    if isinstance(payload.get("args"), dict):
+        return dict(payload.get("args", {}))
+    if isinstance(chip.get("args"), dict):
+        return dict(chip.get("args", {}))
+    return {}
+
+
+def _build_control(
+    *,
+    control_id: str,
+    label: str,
+    preferred_kind: str,
+    actions: dict[str, object],
+) -> dict[str, object]:
+    direct_chip = _find_action_chip(actions, preferred_kind)
+    chip = direct_chip
+    if chip is None and preferred_kind == "repo.tests":
+        chip = _find_action_chip(actions, "repo.tests.request_approval")
+    if chip is None:
+        return {
+            "id": control_id,
+            "label": label,
+            "kind": preferred_kind,
+            "execute_kind": preferred_kind,
+            "enabled": False,
+            "state": "unavailable",
+            "summary": f"{label} is not available in the current Lens action set.",
+            "risk_tier": "low",
+            "args": {},
+        }
+
+    chip_kind = str(chip.get("kind", "")).strip() or preferred_kind
+    enabled = bool(chip.get("enabled", False))
+    normalized_kind = _normalize_usage_action_kind(chip_kind)
+    state = "ready" if enabled and chip_kind == preferred_kind else "approval_request" if enabled else "blocked"
+    if preferred_kind != "repo.tests":
+        state = "ready" if enabled else "blocked"
+    return {
+        "id": control_id,
+        "label": str(chip.get("label", "")).strip() or label,
+        "kind": normalized_kind or preferred_kind,
+        "execute_kind": chip_kind,
+        "enabled": enabled,
+        "state": state,
+        "summary": str(chip.get("policy_reason", "")).strip()
+        or str(chip.get("reason", "")).strip()
+        or f"{label} is available.",
+        "risk_tier": str(chip.get("risk_tier", "low")).strip().lower() or "low",
+        "args": _chip_args(chip),
+    }
+
+
+def _controls(actions: dict[str, object]) -> dict[str, dict[str, object]]:
+    return {
+        "status": _build_control(control_id="status", label="Repo Status", preferred_kind="repo.status", actions=actions),
+        "diff": _build_control(control_id="diff", label="Local Diff", preferred_kind="repo.diff", actions=actions),
+        "lint": _build_control(control_id="lint", label="Ruff Check", preferred_kind="repo.lint", actions=actions),
+        "tests": _build_control(control_id="tests", label="Fast Checks", preferred_kind="repo.tests", actions=actions),
+    }
+
+
+def get_repo_drilldown_view(
+    *,
+    snapshot: dict[str, object] | None = None,
+    actions: dict[str, object] | None = None,
+) -> dict[str, object]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
+    if actions is None:
+        actions = get_lens_actions(max_actions=8)
 
     state = _read_json(_repo_drilldown_path())
     current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
     repo = current_work.get("repo", {}) if isinstance(current_work.get("repo"), dict) else {}
+    controls = _controls(actions)
 
     if state:
         presentation = state.get("presentation", {}) if isinstance(state.get("presentation"), dict) else {}
@@ -90,6 +179,7 @@ def get_repo_drilldown_view(*, snapshot: dict[str, object] | None = None) -> dic
             "severity": str(presentation.get("severity", "low")).strip().lower() or "low",
             "cards": presentation.get("cards", []) if isinstance(presentation.get("cards"), list) else [],
             "evidence": presentation.get("evidence", []) if isinstance(presentation.get("evidence"), list) else [],
+            "controls": controls,
             "audit": _ready_audit(state=state, presentation=presentation),
             "detail": {
                 "run_id": str(state.get("run_id", "")).strip(),
@@ -112,6 +202,7 @@ def get_repo_drilldown_view(*, snapshot: dict[str, object] | None = None) -> dic
         "severity": str(repo.get("severity", "low")).strip().lower() or "low",
         "cards": _idle_cards(repo),
         "evidence": [],
+        "controls": controls,
         "audit": _idle_audit(repo),
         "detail": {
             "branch": str(repo.get("branch", "unknown")).strip() or "unknown",

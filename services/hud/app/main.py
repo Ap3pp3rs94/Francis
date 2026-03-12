@@ -94,7 +94,7 @@ def _build_hud_payload(
             voice=voice,
         ),
         "current_work": current_work,
-        "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload),
+        "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "execution_journal": execution_journal,
