@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const SESSION_STATE_FILE = "overlay-session.json";
+const SESSION_STATE_VERSION = 1;
 
 function getSessionStatePath(userDataPath) {
   return path.join(userDataPath, SESSION_STATE_FILE);
@@ -9,7 +10,7 @@ function getSessionStatePath(userDataPath) {
 
 function buildDefaultSessionState() {
   return {
-    version: 1,
+    version: SESSION_STATE_VERSION,
     lastLaunchAt: null,
     lastExitAt: null,
     lastExitClean: true,
@@ -25,7 +26,7 @@ function normalizeSessionState(raw) {
     return defaults;
   }
   return {
-    version: 1,
+    version: SESSION_STATE_VERSION,
     lastLaunchAt: raw.lastLaunchAt || null,
     lastExitAt: raw.lastExitAt || null,
     lastExitClean: raw.lastExitClean !== false,
@@ -55,6 +56,7 @@ function saveSessionState(userDataPath, state) {
 
 module.exports = {
   SESSION_STATE_FILE,
+  SESSION_STATE_VERSION,
   buildDefaultSessionState,
   getSessionStatePath,
   loadSessionState,

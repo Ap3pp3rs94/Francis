@@ -16,6 +16,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - creates a tray control surface for show/hide, click-through, topmost, HUD restart, and quit
 - persists overlay bounds, target display, always-on-top, and click-through state in the Electron user-data directory
 - reflects the current launch-at-login state in the desktop shell lifecycle surface
+- records build identity and lifecycle update posture so source checkouts and packaged builds are both inspectable
 - persists session continuity so unclean exits and managed HUD crashes surface as recovery state on the next launch
 - reuses an already-running HUD if one exists, otherwise attempts to start the local HUD server automatically
 
@@ -70,6 +71,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the shell exposes HUD runtime state and can restart the managed HUD from the desktop control surface
 - the tray mirrors those same shell controls so recovery does not depend on the HUD remaining interactive
 - the HUD can now inspect build/session lifecycle state and toggle Start At Login from the desktop shell surface
+- the HUD can now inspect and acknowledge lifecycle update notices instead of treating build changes as silent mutation
 - recovery now overrides startup posture safely, so unclean exits re-enter visible and interactive instead of hiding authority questions
 - the shell can now be packaged into a portable Windows artifact with the Orb icon and current shell controls intact
 

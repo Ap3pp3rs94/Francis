@@ -3,6 +3,7 @@ const { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, sc
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
+  PREFERENCES_VERSION,
   getPreferencesPath,
   loadPreferences,
   normalizeBounds,
@@ -10,6 +11,7 @@ const {
   savePreferences,
 } = require("./preferences");
 const {
+  SESSION_STATE_VERSION,
   buildDefaultSessionState,
   getSessionStatePath,
   loadSessionState,
@@ -17,6 +19,13 @@ const {
 } = require("./session-state");
 const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
 const { normalizeStartupProfile, resolveStartupProfile } = require("./startup-profile");
+const { resolveBuildIdentity } = require("./build-info");
+const {
+  acknowledgeUpdateNotice,
+  buildUpdatePosture,
+  getUpdateStatePath,
+  reconcileUpdateState,
+} = require("./update-state");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -27,6 +36,8 @@ let tray = null;
 let ipcRegistered = false;
 let overlayPreferences = null;
 let sessionState = null;
+let updateState = null;
+let buildInfo = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
@@ -162,6 +173,7 @@ function getDisplayInfo(win = mainWindow) {
 }
 
 function getLifecycleState() {
+  const currentBuild = buildInfo || resolveBuildIdentity(app, __dirname);
   const login = getLaunchAtLoginState(app);
   const hudState = getHudState();
   const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
@@ -171,14 +183,25 @@ function getLifecycleState() {
     hudLastError: hudState?.lastError || sessionState?.hudLastError || null,
   };
   return {
-    packaged: Boolean(app.isPackaged),
-    distribution: app.isPackaged ? "portable" : "source",
-    version: typeof app.getVersion === "function" ? app.getVersion() : "unknown",
+    packaged: currentBuild.packaged,
+    distribution: currentBuild.distribution,
+    version: currentBuild.version,
+    revision: currentBuild.revision,
+    buildIdentity: currentBuild.identity,
     launchAtLogin: login,
     startupProfile,
+    update: buildUpdatePosture(
+      updateState ||
+        reconcileUpdateState(app.getPath("userData"), {
+          buildIdentity: currentBuild.identity,
+          preferencesSchemaVersion: PREFERENCES_VERSION,
+          sessionSchemaVersion: SESSION_STATE_VERSION,
+        }),
+    ),
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,
     sessionStatePath: app.isReady() ? getSessionStatePath(app.getPath("userData")) : null,
+    updateStatePath: app.isReady() ? getUpdateStatePath(app.getPath("userData")) : null,
     session,
   };
 }
@@ -236,6 +259,19 @@ function setStartupProfile(profileId) {
   });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
+}
+
+function dismissUpdateNotice() {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+  updateState = acknowledgeUpdateNotice(app.getPath("userData"), updateState || {}, new Date().toISOString());
+  log("Acknowledged update notice", {
+    build: updateState.currentBuild,
+    notice: updateState.notice,
+  });
+  notifyOverlayState(mainWindow);
+  return getOverlayState(mainWindow);
 }
 
 function notifyOverlayState(win = mainWindow) {
@@ -304,6 +340,19 @@ function updateTray() {
             }
           },
         })),
+      },
+      {
+        label: overlaySnapshot.lifecycle?.update?.pendingNotice
+          ? `Acknowledge Update (${overlaySnapshot.lifecycle.update.currentBuild})`
+          : `Build ${overlaySnapshot.lifecycle?.update?.currentBuild || overlaySnapshot.lifecycle?.buildIdentity || "unknown"}`,
+        enabled: Boolean(overlaySnapshot.lifecycle?.update?.pendingNotice),
+        click: () => {
+          try {
+            dismissUpdateNotice();
+          } catch (error) {
+            log("Tray update notice acknowledge failed", error instanceof Error ? error.message : String(error));
+          }
+        },
       },
       { type: "separator" },
       {
@@ -876,6 +925,7 @@ function registerIpc() {
   ipcMain.handle("overlay:set-launch-at-login", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
+  ipcMain.handle("overlay:acknowledge-update-notice", () => dismissUpdateNotice());
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
@@ -1002,7 +1052,13 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.whenReady().then(async () => {
+    buildInfo = resolveBuildIdentity(app, __dirname);
     sessionState = loadSessionState(app.getPath("userData"));
+    updateState = reconcileUpdateState(app.getPath("userData"), {
+      buildIdentity: buildInfo.identity,
+      preferencesSchemaVersion: PREFERENCES_VERSION,
+      sessionSchemaVersion: SESSION_STATE_VERSION,
+    });
     if (sessionState.lastExitClean === false) {
       setOverlayRecovery({
         needed: true,
