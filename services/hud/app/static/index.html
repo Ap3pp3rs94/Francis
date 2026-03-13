@@ -5533,7 +5533,7 @@
         }
         currentCapabilityFocusId = String(row.id || "").trim();
         document.getElementById("capability-detail-meta").textContent =
-          `${String(row.status || "unknown")} | ${String(row.version || "0.1.0")} | ${String(row.id || "unknown")}`;
+          `${String(row.status || "unknown")} | ${String(row.provenance_label || "Internal")} | ${String(row.version || "0.1.0")} | ${String(row.id || "unknown")}`;
         document.getElementById("capability-detail-summary").textContent =
           String(row.detail_summary || row.summary || "No capability detail is available.");
         renderDetailCards("capability-detail-cards", row.detail_cards, "Capability");
@@ -5587,6 +5587,7 @@
                       <div class="badge-row">
                         <span class="badge risk-${escapeHtml(String(row.risk_tier || "low"))}">${escapeHtml(String(row.risk_tier || "low"))}</span>
                         <span class="badge ${String(row.status || "").trim().toLowerCase() === "active" ? "risk-low" : "risk-medium"}">${escapeHtml(String(row.status || "staged"))}</span>
+                        <span class="badge risk-${escapeHtml(String(row.provenance_tone || "low"))}">${escapeHtml(String(row.provenance_label || "Internal"))}</span>
                       </div>
                     </div>
                     <p class="meta">${escapeHtml(String(row.summary || "No capability summary is available."))}</p>

@@ -268,6 +268,8 @@ def test_lens_state_prioritizes_staged_capability_over_terminal_failure() -> Non
                         "status": "staged",
                         "version": "0.3.0",
                         "path": "forge/staging/cap-stage",
+                        "imported_from_bundle_id": "bundle-usage-capability",
+                        "imported_at": "2026-03-11T01:10:00+00:00",
                         "validation": {"ok": True},
                         "diff_summary": {"file_count": 4},
                         "tool_pack": {"skill_name": "forge.pack.capability-stage"},
@@ -320,6 +322,9 @@ def test_lens_state_prioritizes_staged_capability_over_terminal_failure() -> Non
         assert payload["current_work"]["attention"]["kind"] == "capability_review"
         assert payload["current_work"]["capabilities"]["focus_entry"]["id"] == "cap-stage"
         assert payload["current_work"]["capabilities"]["focus_entry"]["recommended_action"] == "forge.promote"
+        assert payload["current_work"]["capabilities"]["focus_entry"]["provenance"]["kind"] == "local_import"
+        assert payload["current_work"]["capabilities"]["focus_entry"]["provenance"]["review_required"] is True
+        assert any("provenance" in blocker.lower() or "local review" in blocker.lower() for blocker in payload["current_work"]["blockers"])
         assert payload["next_best_action"]["kind"] == "forge.promote"
         assert payload["next_best_action"]["enabled"] is False
         assert payload["next_best_action"]["args"]["stage_id"] == "cap-stage"
@@ -330,6 +335,100 @@ def test_lens_state_prioritizes_staged_capability_over_terminal_failure() -> Non
         _restore_text(approvals_path, approvals_before, approvals_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)
         _restore_text(signal_path, signal_before, signal_before_exists)
+
+
+def test_lens_promote_blocks_external_capability_without_traceable_provenance() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    catalog_path = workspace / "forge" / "catalog.json"
+    approvals_path = workspace / "approvals" / "requests.jsonl"
+    decisions_path = workspace / "journals" / "decisions.jsonl"
+    catalog_before_exists = catalog_path.exists()
+    catalog_before = _read_text(catalog_path)
+    approvals_before_exists = approvals_path.exists()
+    approvals_before = _read_text(approvals_path)
+    decisions_before_exists = decisions_path.exists()
+    decisions_before = _read_text(decisions_path)
+
+    try:
+        _write_json(
+            catalog_path,
+            {
+                "entries": [
+                    {
+                        "id": "cap-promote-blocked",
+                        "name": "Capability External",
+                        "slug": "capability-imported",
+                        "status": "staged",
+                        "version": "0.5.0",
+                        "path": "forge/staging/cap-promote-blocked",
+                        "validation": {"ok": True},
+                        "diff_summary": {
+                            "file_count": 2,
+                            "files": [
+                                {"path": "forge/staging/cap-promote-blocked/README.md"},
+                                {"path": "forge/staging/cap-promote-blocked/tests/test_capability_imported.py"},
+                            ],
+                        },
+                        "tool_pack": {"skill_name": "forge.pack.capability-imported"},
+                        "provenance": {"source_kind": "third_party"},
+                    }
+                ]
+            },
+        )
+        approvals_path.parent.mkdir(parents=True, exist_ok=True)
+        approvals_path.write_text("", encoding="utf-8")
+        decisions_path.parent.mkdir(parents=True, exist_ok=True)
+        decisions_path.write_text("", encoding="utf-8")
+
+        with TestClient(app) as client:
+            original_mode = _get_mode(client)
+            original_scope = _get_scope(client)
+            try:
+                _set_mode(client, "pilot", kill_switch=False)
+                _set_scope(client, _enable_apps(original_scope, ["forge", "lens", "approvals"]))
+                request_response = client.post(
+                    "/approvals/request",
+                    json={
+                        "action": "forge.promote",
+                        "reason": "Promote external capability",
+                        "metadata": {"stage_id": "cap-promote-blocked", "action_kind": "forge.promote"},
+                    },
+                )
+                assert request_response.status_code == 200
+                approval_id = str(request_response.json()["approval"]["id"]).strip()
+                assert approval_id
+                decide_response = client.post(
+                    f"/approvals/{approval_id}/decision",
+                    json={"decision": "approved", "note": "approval is present but provenance anchors are not"},
+                )
+                assert decide_response.status_code == 200
+                response = client.post(
+                    "/lens/actions/execute",
+                    json={
+                        "kind": "forge.promote",
+                        "args": {
+                            "stage_id": "cap-promote-blocked",
+                            "approval_id": approval_id,
+                        },
+                    },
+                )
+            finally:
+                _set_scope(client, original_scope)
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
+
+        assert response.status_code == 409
+        detail = response.json()["detail"]
+        assert detail["message"] == "Capability is not promotion-ready"
+        assert detail["rule"] == "provenance"
+        assert "provenance" in detail["reason"].lower()
+    finally:
+        _restore_text(catalog_path, catalog_before, catalog_before_exists)
+        _restore_text(approvals_path, approvals_before, approvals_before_exists)
+        _restore_text(decisions_path, decisions_before, decisions_before_exists)
 
 
 def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> None:

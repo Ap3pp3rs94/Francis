@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import add_entry, list_entries
-from francis_forge.library import build_capability_library, build_quality_standard, next_patch_version
+from francis_forge.library import (
+    build_capability_library,
+    build_capability_provenance,
+    build_promotion_rules,
+    build_quality_standard,
+    next_patch_version,
+)
 from francis_forge.promotion import promote_stage
 
 
@@ -66,6 +72,71 @@ def test_capability_quality_standard_requires_docs_tests_and_tool_pack() -> None
 
     assert quality["ok"] is True
     assert quality["score"] == "5/5"
+
+
+def test_capability_provenance_requires_review_for_external_imports() -> None:
+    pending = build_capability_provenance(
+        {
+            "id": "capability-import",
+            "status": "staged",
+            "imported_from_bundle_id": "bundle-123",
+            "imported_at": "2026-03-13T12:00:00+00:00",
+        },
+        approval_status="pending",
+    )
+    approved = build_capability_provenance(
+        {
+            "id": "capability-import",
+            "status": "staged",
+            "imported_from_bundle_id": "bundle-123",
+            "imported_at": "2026-03-13T12:00:00+00:00",
+        },
+        approval_status="approved",
+    )
+
+    assert pending["kind"] == "local_import"
+    assert pending["label"] == "Local Import"
+    assert pending["review_required"] is True
+    assert pending["promotion_ready"] is False
+    assert approved["review_state"] == "approved"
+    assert approved["promotion_ready"] is True
+    assert approved["source_label"] == "portability bundle bundle-123"
+
+
+def test_capability_provenance_rule_blocks_third_party_without_traceable_review() -> None:
+    entry = {
+        "id": "capability-third-party",
+        "status": "staged",
+        "validation": {"ok": True},
+        "diff_summary": {
+            "file_count": 2,
+            "files": [
+                {"path": "forge/staging/capability-third-party/README.md"},
+                {"path": "forge/staging/capability-third-party/tests/test_capability_third_party.py"},
+            ],
+        },
+        "tool_pack": {"skill_name": "forge.pack.capability-third-party"},
+        "provenance": {"source_kind": "third_party"},
+    }
+
+    blocked = build_promotion_rules(entry, approval_status="approved")
+    allowed = build_promotion_rules(
+        {
+            **entry,
+            "provenance": {
+                "source_kind": "third_party",
+                "source_ref": "gh://community/capability-pack",
+                "review_state": "approved",
+            },
+        },
+        approval_status="approved",
+    )
+
+    assert blocked["ready"] is False
+    provenance_rule = next(rule for rule in blocked["rules"] if rule["kind"] == "provenance")
+    assert provenance_rule["ok"] is False
+    assert "provenance anchors" in provenance_rule["detail"].lower()
+    assert allowed["ready"] is True
 
 
 def test_promote_stage_supersedes_prior_active_version(tmp_path) -> None:

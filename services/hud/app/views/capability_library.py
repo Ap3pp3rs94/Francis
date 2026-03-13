@@ -5,7 +5,12 @@ from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
-from francis_forge.library import build_capability_library, build_promotion_rules, build_quality_standard
+from francis_forge.library import (
+    build_capability_library,
+    build_capability_provenance,
+    build_promotion_rules,
+    build_quality_standard,
+)
 from services.hud.app.state import build_lens_snapshot, get_workspace_root
 from services.orchestrator.app.approvals_store import list_requests
 from services.orchestrator.app.control_state import check_action_allowed
@@ -93,12 +98,25 @@ def _detail_state(pack_id: str, focus_pack_id: str) -> str:
     return "current" if pack_id == focus_pack_id else "historical"
 
 
+def _first_failed_rule_detail(rules: dict[str, Any]) -> str:
+    for row in rules.get("rules", []) if isinstance(rules.get("rules"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        if bool(row.get("ok")):
+            continue
+        detail = str(row.get("detail", "")).strip()
+        if detail:
+            return detail
+    return ""
+
+
 def _detail_cards(entry: dict[str, Any], approval: dict[str, Any] | None, pack: dict[str, Any]) -> list[dict[str, str]]:
     validation = entry.get("validation", {}) if isinstance(entry.get("validation"), dict) else {}
     diff_summary = entry.get("diff_summary", {}) if isinstance(entry.get("diff_summary"), dict) else {}
     tool_pack = entry.get("tool_pack", {}) if isinstance(entry.get("tool_pack"), dict) else {}
     approval_status = str((approval or {}).get("status", "")).strip().lower()
     quality = build_quality_standard(entry)
+    provenance = build_capability_provenance(entry, approval_status=approval_status)
     return [
         {
             "label": "Status",
@@ -136,6 +154,27 @@ def _detail_cards(entry: dict[str, Any], approval: dict[str, Any] | None, pack: 
             "tone": "low" if int(pack.get("version_count", 0) or 0) > 1 else "medium",
         },
         {
+            "label": "Provenance",
+            "value": str(provenance.get("label", "Internal")).strip() or "Internal",
+            "tone": str(provenance.get("tone", "low")).strip() or "low",
+        },
+        {
+            "label": "Review",
+            "value": str(provenance.get("review_label", "self-governed")).strip() or "self-governed",
+            "tone": (
+                "low"
+                if str(provenance.get("review_state", "")).strip() in {"approved", "internal"}
+                else "high"
+                if str(provenance.get("review_state", "")).strip() in {"quarantined", "revoked", "rejected"}
+                else "medium"
+            ),
+        },
+        {
+            "label": "Source",
+            "value": str(provenance.get("source_label", "generated inside Francis")).strip() or "generated inside Francis",
+            "tone": "low" if bool(provenance.get("traceable")) else "high",
+        },
+        {
             "label": "Promotion",
             "value": approval_status or ("active" if _entry_status(entry) == "active" else "not requested"),
             "tone": "medium" if approval_status == "pending" else "low",
@@ -153,7 +192,9 @@ def _audit(entry: dict[str, Any], approval: dict[str, Any] | None, detail_state:
     diff_summary = entry.get("diff_summary", {}) if isinstance(entry.get("diff_summary"), dict) else {}
     tool_pack = entry.get("tool_pack", {}) if isinstance(entry.get("tool_pack"), dict) else {}
     quality_standard = build_quality_standard(entry)
-    promotion_rules = build_promotion_rules(entry, approval_status=str((approval or {}).get("status", "")).strip().lower())
+    approval_status = str((approval or {}).get("status", "")).strip().lower()
+    promotion_rules = build_promotion_rules(entry, approval_status=approval_status)
+    provenance = build_capability_provenance(entry, approval_status=approval_status)
     return {
         "id": str(entry.get("id", "")).strip(),
         "pack_id": _pack_id(entry),
@@ -172,6 +213,7 @@ def _audit(entry: dict[str, Any], approval: dict[str, Any] | None, detail_state:
         "promoted_at": str(entry.get("promoted_at", "")).strip(),
         "quality_standard": quality_standard,
         "promotion_rules": promotion_rules,
+        "provenance": provenance,
         "pack": {
             "pack_id": str(pack.get("pack_id", "")).strip(),
             "version_count": int(pack.get("version_count", 0) or 0),
@@ -197,6 +239,10 @@ def _row_controls(
     status = _entry_status(entry)
     approval_status = str((approval or {}).get("status", "")).strip().lower()
     approval_id = str((approval or {}).get("id", "")).strip()
+    provenance = build_capability_provenance(entry, approval_status=approval_status)
+    promotion_rules = build_promotion_rules(entry, approval_status=approval_status)
+    promotion_ready = bool(promotion_rules.get("ready"))
+    promotion_blocker = _first_failed_rule_detail(promotion_rules) or str(provenance.get("promotion_rule_detail", "")).strip()
     promote_allowed, promote_reason = _action_allowed(
         fs=fs,
         repo_root=repo_root,
@@ -232,12 +278,14 @@ def _row_controls(
         "promote": {
             "kind": "forge.promote",
             "label": "Promote Capability",
-            "enabled": status == "staged" and approval_status == "approved" and promote_allowed,
+            "enabled": status == "staged" and approval_status == "approved" and promote_allowed and promotion_ready,
             "summary": (
                 f"Promote {str(entry.get('name', 'staged capability')).strip() or 'the staged capability'} into the active library."
-                if status == "staged" and approval_status == "approved" and promote_allowed
+                if status == "staged" and approval_status == "approved" and promote_allowed and promotion_ready
                 else "Capability is already active."
                 if status == "active"
+                else promotion_blocker
+                if status == "staged" and approval_status == "approved" and not promotion_ready
                 else f"Promotion is waiting on approval {approval_id}."
                 if approval_status == "pending"
                 else f"Promotion is blocked: {promote_reason}."
@@ -256,22 +304,36 @@ def _entry_summary(entry: dict[str, Any], approval: dict[str, Any] | None, pack:
     version = _entry_version(entry)
     name = str(entry.get("name", "Capability pack")).strip() or "Capability pack"
     approval_status = str((approval or {}).get("status", "")).strip().lower()
+    provenance = build_capability_provenance(entry, approval_status=approval_status)
+    promotion_rules = build_promotion_rules(entry, approval_status=approval_status)
+    promotion_blocker = _first_failed_rule_detail(promotion_rules)
     if status == "staged":
         suffix = (
             f" Approval is {approval_status}."
             if approval_status
             else " Promotion approval has not been requested yet."
         )
-        return (
+        summary = (
             f"{name} {version} is staged in pack {str(pack.get('pack_id', '')).strip() or 'capability'} "
             f"with {int(pack.get('version_count', 0) or 0)} version(s).{suffix}"
         )
+        if not bool(promotion_rules.get("ready")):
+            summary = f"{summary} {promotion_blocker or str(provenance.get('promotion_rule_detail', '')).strip()}".strip()
+        elif provenance.get("kind") != "internal":
+            summary = f"{summary} {str(provenance.get('summary', '')).strip()}".strip()
+        return summary
     if status == "active":
-        return (
+        summary = (
             f"{name} {version} is active in pack {str(pack.get('pack_id', '')).strip() or 'capability'} "
             f"with {int(pack.get('version_count', 0) or 0)} tracked version(s)."
         )
-    return f"{name} {version} is cataloged in pack {str(pack.get('pack_id', '')).strip() or 'capability'} with status {status}."
+        if provenance.get("kind") != "internal":
+            summary = f"{summary} {str(provenance.get('summary', '')).strip()}".strip()
+        return summary
+    summary = f"{name} {version} is cataloged in pack {str(pack.get('pack_id', '')).strip() or 'capability'} with status {status}."
+    if provenance.get("kind") != "internal":
+        summary = f"{summary} {str(provenance.get('summary', '')).strip()}".strip()
+    return summary
 
 
 def get_capability_library_view(
@@ -303,6 +365,10 @@ def get_capability_library_view(
     staged_count = 0
     active_count = 0
     superseded_count = 0
+    external_count = 0
+    review_required_count = 0
+    revoked_count = 0
+    high_provenance_count = 0
     for pack in packs:
         entry = pack.get("focus_version", {}) if isinstance(pack.get("focus_version"), dict) else {}
         if not entry:
@@ -315,6 +381,16 @@ def get_capability_library_view(
         if status == "superseded":
             superseded_count += 1
         approval = _approval_for_stage(fs, str(entry.get("id", "")).strip())
+        approval_status = str((approval or {}).get("status", "")).strip().lower()
+        provenance = build_capability_provenance(entry, approval_status=approval_status)
+        if bool(provenance.get("external")):
+            external_count += 1
+        if bool(provenance.get("review_required")):
+            review_required_count += 1
+        if bool(provenance.get("revoked")) or bool(provenance.get("quarantined")):
+            revoked_count += 1
+        if str(provenance.get("tone", "")).strip() == "high":
+            high_provenance_count += 1
         detail_state = _detail_state(str(pack.get("pack_id", "")).strip(), focus_pack_id)
         rows.append(
             {
@@ -324,6 +400,9 @@ def get_capability_library_view(
                 "version": _entry_version(entry),
                 "status": status,
                 "risk_tier": str(entry.get("risk_tier", "low")).strip().lower() or "low",
+                "provenance_label": str(provenance.get("label", "Internal")).strip() or "Internal",
+                "provenance_tone": str(provenance.get("tone", "low")).strip() or "low",
+                "provenance_summary": str(provenance.get("summary", "")).strip(),
                 "summary": _entry_summary(entry, approval, pack),
                 "detail_summary": _entry_summary(entry, approval, pack),
                 "detail_state": detail_state,
@@ -339,7 +418,7 @@ def get_capability_library_view(
             }
         )
 
-    severity = "medium" if staged_count > 0 else "low"
+    severity = "high" if high_provenance_count > 0 else "medium" if staged_count > 0 or review_required_count > 0 or external_count > 0 else "low"
     summary = (
         f"{int(library.get('pack_count', 0) or 0)} capability pack(s), {staged_count} staged, {active_count} active, {superseded_count} superseded."
         if rows
@@ -359,6 +438,9 @@ def get_capability_library_view(
             {"label": "Staged", "value": str(staged_count), "tone": "medium" if staged_count else "low"},
             {"label": "Active", "value": str(active_count), "tone": "low"},
             {"label": "Superseded", "value": str(superseded_count), "tone": "medium" if superseded_count else "low"},
+            {"label": "External", "value": str(external_count), "tone": "medium" if external_count else "low"},
+            {"label": "Review", "value": str(review_required_count), "tone": "high" if review_required_count else "low"},
+            {"label": "Revoked", "value": str(revoked_count), "tone": "high" if revoked_count else "low"},
         ],
         "entries": rows,
         "detail": {

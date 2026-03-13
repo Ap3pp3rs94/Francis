@@ -6,7 +6,7 @@ from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
-from francis_forge.library import build_capability_library, build_promotion_rules, build_quality_standard
+from francis_forge.library import build_capability_library, build_capability_provenance, build_promotion_rules, build_quality_standard
 from francis_skills.toolbelt.git import repo_status
 from services.orchestrator.app.approvals_store import list_requests
 
@@ -299,6 +299,18 @@ def _capability_approval(fs: WorkspaceFS, stage_id: str) -> dict[str, Any] | Non
     return None
 
 
+def _first_failed_rule_detail(rules: dict[str, Any]) -> str:
+    for row in rules.get("rules", []) if isinstance(rules.get("rules"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        if bool(row.get("ok")):
+            continue
+        detail = str(row.get("detail", "")).strip()
+        if detail:
+            return detail
+    return ""
+
+
 def _capability_focus(workspace_root: Path) -> dict[str, Any]:
     fs = _build_fs(workspace_root)
     entries = [row for row in list_entries(fs) if isinstance(row, dict)]
@@ -343,12 +355,19 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
     diff_summary = focus_entry.get("diff_summary", {}) if isinstance(focus_entry.get("diff_summary"), dict) else {}
     quality_standard = build_quality_standard(focus_entry)
     promotion_rules = build_promotion_rules(focus_entry, approval_status=approval_status)
+    provenance = build_capability_provenance(focus_entry, approval_status=approval_status)
     pack_id = str((focus_pack or {}).get("pack_id", "")).strip() or str(focus_entry.get("slug", "")).strip()
     version_count = int((focus_pack or {}).get("version_count", 0) or 0)
+    first_failed_rule = _first_failed_rule_detail(promotion_rules)
 
     if status == "staged":
-        if approval_status == "approved" and approval_id:
+        if approval_status == "approved" and approval_id and bool(promotion_rules.get("ready")):
             summary = f"{name} {version} in pack {pack_id} is staged and already approved for promotion."
+        elif approval_status == "approved" and approval_id:
+            summary = (
+                f"{name} {version} in pack {pack_id} has approval recorded but still needs policy review before promotion. "
+                f"{first_failed_rule or str(provenance.get('summary', '')).strip()}"
+            ).strip()
         elif approval_status == "pending" and approval_id:
             summary = f"{name} {version} in pack {pack_id} is staged and waiting on promotion approval {approval_id}."
         elif approval_status == "rejected":
@@ -362,6 +381,10 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
     else:
         summary = f"{name} {version} is cataloged in pack {pack_id} with status {status}."
         recommended_action = ""
+
+    provenance_summary = str(provenance.get("summary", "")).strip()
+    if provenance_summary and provenance.get("kind") != "internal" and provenance_summary not in summary:
+        summary = f"{summary} {provenance_summary}".strip()
 
     return {
         "catalog_count": len(entries),
@@ -382,10 +405,11 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
             "approval_status": approval_status,
             "summary": summary,
             "recommended_action": recommended_action,
-            "actionable": bool(recommended_action and entry_id),
+            "actionable": bool(recommended_action and entry_id and promotion_rules.get("ready")),
             "validation_ok": bool(quality_standard.get("ok")),
             "quality_standard": quality_standard,
             "promotion_rules": promotion_rules,
+            "provenance": provenance,
             "version_count": version_count,
             "active_version": str((focus_pack or {}).get("active_version", "")).strip(),
             "file_count": int(diff_summary.get("file_count", 0) or 0),
@@ -508,6 +532,20 @@ def build_current_work(
         blockers.append(f"{int(inbox.get('alert_count', 0))} inbox alert(s) need review.")
     if str(focus_capability.get("approval_status", "")).strip().lower() == "pending":
         blockers.append("Capability promotion approval is pending.")
+    capability_provenance = (
+        focus_capability.get("provenance", {}) if isinstance(focus_capability.get("provenance"), dict) else {}
+    )
+    if bool(capability_provenance.get("review_required")):
+        blockers.append(
+            str(capability_provenance.get("promotion_rule_detail", "")).strip()
+            or str(capability_provenance.get("summary", "")).strip()
+            or "Capability provenance review is still required."
+        )
+    elif bool(capability_provenance.get("quarantined")) or bool(capability_provenance.get("revoked")):
+        blockers.append(
+            str(capability_provenance.get("summary", "")).strip()
+            or "Capability provenance blocks promotion."
+        )
 
     return {
         "summary": " ".join(part for part in summary_parts if part),
@@ -649,8 +687,13 @@ def build_next_best_action(
     stage_id = str(focus_capability.get("id", "")).strip()
     approval_status = str(focus_capability.get("approval_status", "")).strip().lower()
     approval_id = str(focus_capability.get("approval_id", "")).strip()
+    promotion_rules = (
+        focus_capability.get("promotion_rules", {}) if isinstance(focus_capability.get("promotion_rules"), dict) else {}
+    )
+    promotion_ready = bool(promotion_rules.get("ready"))
+    promotion_blocker = _first_failed_rule_detail(promotion_rules)
     if capability_action == "forge.promote":
-        if approval_status == "approved" and approval_id:
+        if approval_status == "approved" and approval_id and promotion_ready:
             return {
                 "kind": "forge.promote",
                 "label": "Promote Capability",
@@ -671,6 +714,8 @@ def build_next_best_action(
         )
         if approval_status == "rejected":
             pending_reason = "Promotion approval was rejected and needs a fresh operator decision."
+        elif approval_status == "approved" and approval_id and not promotion_ready:
+            pending_reason = promotion_blocker or "Capability provenance still needs review before promotion."
         return {
             "kind": "forge.promote",
             "label": "Promote Capability",

@@ -16,7 +16,7 @@ from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
-from francis_forge.library import build_promotion_rules, build_quality_standard
+from francis_forge.library import build_capability_provenance, build_promotion_rules, build_quality_standard
 from francis_forge.promotion import promote_stage
 from francis_policy.tool_policy import approval_policy_for_tool
 from francis_policy.rbac import can
@@ -549,6 +549,7 @@ def _build_capability_presentation(
     tool_pack = entry.get("tool_pack", {}) if isinstance(entry.get("tool_pack"), dict) else {}
     quality_standard = build_quality_standard(entry)
     promotion_rules = build_promotion_rules(entry, approval_status="approved" if approval_id else "")
+    provenance = build_capability_provenance(entry, approval_status="approved" if approval_id else "")
     summary = (
         f"{name} {version} is active in the governed capability library."
         if status == "active"
@@ -572,6 +573,22 @@ def _build_capability_presentation(
             "label": "Files",
             "value": str(int(diff_summary.get("file_count", 0) or 0)),
             "tone": "low" if int(diff_summary.get("file_count", 0) or 0) > 0 else "medium",
+        },
+        {
+            "label": "Provenance",
+            "value": str(provenance.get("label", "Internal")).strip() or "Internal",
+            "tone": str(provenance.get("tone", "low")).strip() or "low",
+        },
+        {
+            "label": "Review",
+            "value": str(provenance.get("review_label", "self-governed")).strip() or "self-governed",
+            "tone": (
+                "low"
+                if str(provenance.get("review_state", "")).strip() in {"approved", "internal"}
+                else "high"
+                if str(provenance.get("review_state", "")).strip() in {"quarantined", "revoked", "rejected"}
+                else "medium"
+            ),
         },
     ]
     if str(tool_pack.get("skill_name", "")).strip():
@@ -616,18 +633,33 @@ def _build_capability_presentation(
                 "detail": f"Registered tool-pack skill {str(tool_pack.get('skill_name', '')).strip()}.",
             }
         )
+    evidence.append(
+        {
+            "kind": "provenance",
+            "severity": str(provenance.get("tone", "low")).strip() or "low",
+            "detail": str(provenance.get("summary", "")).strip()
+            or "Capability provenance is not available.",
+        }
+    )
     return {
         "kind": "forge.promote",
         "summary": summary,
-        "severity": "low" if status == "active" else "medium",
-        "cards": cards[:6],
-        "evidence": evidence[:4],
+        "severity": (
+            "high"
+            if str(provenance.get("tone", "")).strip() == "high"
+            else "low"
+            if status == "active"
+            else "medium"
+        ),
+        "cards": cards[:8],
+        "evidence": evidence[:5],
         "detail": {
             "entry": entry,
             "approval_id": approval_id,
             "status": status,
             "quality_standard": quality_standard,
             "promotion_rules": promotion_rules,
+            "provenance": provenance,
         },
     }
 
@@ -1616,6 +1648,26 @@ def _execute_lens_action(
                 },
             )
         actual_approval_id = approval_id or str(approval_detail.get("approval_request_id", "")).strip() or None
+        catalog_entries = [row for row in list_entries(_fs) if isinstance(row, dict)]
+        staged_entry = next((row for row in catalog_entries if str(row.get("id", "")).strip() == stage_id), None)
+        if staged_entry is None:
+            raise HTTPException(status_code=404, detail=f"Stage not found: {stage_id}")
+        promotion_rules = build_promotion_rules(staged_entry, approval_status="approved")
+        for rule in promotion_rules.get("rules", []) if isinstance(promotion_rules.get("rules"), list) else []:
+            if not isinstance(rule, dict):
+                continue
+            if bool(rule.get("ok")):
+                continue
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Capability is not promotion-ready",
+                    "stage_id": stage_id,
+                    "rule": str(rule.get("kind", "")).strip() or "promotion_rule",
+                    "reason": str(rule.get("detail", "")).strip() or "Promotion rules are not satisfied.",
+                    "promotion_rules": promotion_rules,
+                },
+            )
         try:
             promoted = promote_stage(_fs, stage_id)
         except ValueError as exc:

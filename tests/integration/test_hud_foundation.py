@@ -1415,6 +1415,8 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
                     "status": "staged",
                     "version": "0.4.0",
                     "path": "forge/staging/cap-promote",
+                    "imported_from_bundle_id": "bundle-capability",
+                    "imported_at": "2026-03-11T11:50:00+00:00",
                     "validation": {"ok": True},
                     "diff_summary": {"file_count": 5},
                     "tool_pack": {"skill_name": "forge.pack.capability-promote"},
@@ -1428,6 +1430,11 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
                     "status": "active",
                     "version": "1.0.0",
                     "path": "forge/library/cap-active",
+                    "provenance": {
+                        "source_kind": "vendor",
+                        "vendor": "Francis Verified Vendor",
+                        "review_state": "approved",
+                    },
                     "validation": {"ok": True},
                     "diff_summary": {"file_count": 2},
                     "tool_pack": {"skill_name": "forge.pack.capability-active"},
@@ -1495,14 +1502,19 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
     focused = next(row for row in payload["entries"] if row["id"] == "cap-promote")
     assert focused["detail_state"] == "current"
     assert focused["pack_id"] == "capability-promote"
+    assert focused["provenance_label"] == "Local Import"
+    assert focused["provenance_tone"] == "low"
     assert focused["audit"]["approval_status"] == "approved"
     assert focused["audit"]["tool_pack_skill"] == "forge.pack.capability-promote"
     assert focused["audit"]["quality_standard"]["ok"] is True
     assert focused["audit"]["promotion_rules"]["ready"] is True
+    assert focused["audit"]["provenance"]["kind"] == "local_import"
+    assert focused["audit"]["provenance"]["review_state"] == "approved"
     assert focused["controls"]["request_approval"]["enabled"] is False
     assert focused["controls"]["promote"]["enabled"] is True
     assert focused["controls"]["promote"]["args"]["approval_id"] == "approval-promote"
     assert focused["detail_cards"]
+    assert any(card["label"] == "External" for card in payload["cards"])
 
 
 def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:
