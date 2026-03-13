@@ -82,3 +82,43 @@ test("repair plan stays nominal when no repair signals are active", () => {
   assert.equal(plan.actions.restore_snapshot.enabled, false);
   assert.equal(plan.steps[0], "No repair actions are required right now.");
 });
+
+test("repair plan surfaces provider posture when model execution is narrowed", () => {
+  const plan = buildRepairPlan({
+    update: {
+      pendingNotice: false,
+    },
+    preflight: {
+      blocked: 0,
+      attention: 0,
+    },
+    migration: {
+      blocked: 0,
+      attention: 0,
+    },
+    recovery: {
+      needed: false,
+    },
+    rollback: {
+      count: 1,
+    },
+    portability: {
+      lastImportStatus: "idle",
+    },
+    support: {
+      lastBundleAt: "2026-03-12T12:00:00Z",
+    },
+    hud: {
+      mode: "managed",
+    },
+    provider: {
+      severity: "medium",
+      activeProviderLabel: "OpenAI",
+      summary: "OpenAI is the only active provider. Provider failure will narrow model-backed work immediately.",
+    },
+  });
+
+  assert.equal(plan.severity, "medium");
+  assert.ok(plan.steps.some((step) => /provider posture/i.test(step)));
+  assert.equal(plan.cards.at(-1).label, "Provider");
+});

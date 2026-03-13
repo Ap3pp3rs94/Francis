@@ -29,6 +29,7 @@ function buildPreflightState({
   sessionStatePath = null,
   updateStatePath = null,
   hudState = null,
+  provider = null,
   launchAtLogin = null,
   buildIdentity = "unknown",
   distribution = "source",
@@ -89,6 +90,20 @@ function buildPreflightState({
       detail: `${distribution} | ${buildIdentity}`,
     },
   ];
+
+  if (provider && typeof provider === "object") {
+    checks.push({
+      id: "provider",
+      label: "Provider Posture",
+      status:
+        provider.severity === "high"
+          ? "blocked"
+          : provider.severity === "medium"
+            ? "attention"
+            : "ok",
+      detail: String(provider.summary || "Provider posture unavailable"),
+    });
+  }
 
   const blocked = checks.filter((entry) => entry.status === "blocked").length;
   const attention = checks.filter((entry) => entry.status === "attention").length;

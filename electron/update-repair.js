@@ -7,6 +7,7 @@ function buildRepairPlan({
   portability = null,
   support = null,
   hud = null,
+  provider = null,
   decommission = null,
 } = {}) {
   const blocked = Number(preflight?.blocked || 0);
@@ -19,6 +20,7 @@ function buildRepairPlan({
   const hudMode = String(hud?.mode || "unknown");
   const portabilityBlocked = String(portability?.lastImportStatus || "idle") === "blocked";
   const supportExported = Boolean(support?.lastBundleAt);
+  const providerSeverity = String(provider?.severity || "low");
 
   let severity = "low";
   let summary = "Repair posture is nominal.";
@@ -28,7 +30,7 @@ function buildRepairPlan({
       migrationBlocked > 0
         ? `${migrationBlocked} retained state migration check${migrationBlocked === 1 ? " is" : "s are"} blocked. Repair before trusting continuity.`
         : `${blocked} startup or continuity checks are blocked. Repair before trusting the updated shell.`;
-  } else if (recoveryNeeded || updatePending || attention > 0 || migrationAttention > 0 || portabilityBlocked || hudMode === "crashed") {
+  } else if (recoveryNeeded || updatePending || attention > 0 || migrationAttention > 0 || portabilityBlocked || hudMode === "crashed" || providerSeverity === "high" || providerSeverity === "medium") {
     severity = "medium";
     summary = updatePending
       ? "A new build or schema change needs inspection before continuity is treated as settled."
@@ -36,6 +38,8 @@ function buildRepairPlan({
         ? `${migrationAttention} retained state migration check${migrationAttention === 1 ? "" : "s"} need review before continuity is treated as settled.`
       : recoveryNeeded
         ? "Recovery needs inspection before the shell is treated as fully normal."
+        : providerSeverity === "high" || providerSeverity === "medium"
+          ? String(provider?.summary || "Provider posture needs inspection before model-backed execution is trusted.")
         : portabilityBlocked
           ? "A shell import was blocked and needs operator repair."
           : `${attention} checks still need attention.`;
@@ -47,6 +51,9 @@ function buildRepairPlan({
   }
   if (migrationBlocked > 0 || migrationAttention > 0) {
     steps.push("Review retained shell state versions and decide whether to normalize in place, reset local shell state, or restore a rollback snapshot.");
+  }
+  if (providerSeverity === "high" || providerSeverity === "medium") {
+    steps.push("Inspect provider posture, declare the active provider path explicitly, and verify fallback behavior before trusting model-backed execution.");
   }
   if (blocked > 0 || recoveryNeeded || hudMode === "crashed") {
     steps.push("Restart the managed HUD and confirm preflight returns to nominal or attention instead of blocked.");
@@ -133,6 +140,11 @@ function buildRepairPlan({
         ? String(portability?.lastImportMessage || "Portable shell import blocked")
         : String(portability?.lastImportStatus || "idle"),
       tone: portabilityBlocked ? "high" : "low",
+    },
+    {
+      label: "Provider",
+      value: String(provider?.activeProviderLabel || "none"),
+      tone: providerSeverity,
     },
   ];
 

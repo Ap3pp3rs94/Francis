@@ -1362,6 +1362,13 @@
           <div class="desktop-grid" id="desktop-provenance-cards">
             <div class="desktop-pill"><strong>Provenance</strong><span>Build and runtime provenance will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Provider Posture</h3>
+          <div class="desktop-grid" id="desktop-provider-cards">
+            <div class="desktop-pill"><strong>Provider</strong><span>Model-provider routing and fallback posture will render here once the shell bridge is attached.</span></div>
+          </div>
+          <ul class="list" id="desktop-provider-list">
+            <li class="muted-empty">Provider posture will render here once the shell bridge is attached.</li>
+          </ul>
           <h3>Lifecycle History</h3>
           <div class="desktop-grid" id="desktop-history-cards">
             <div class="desktop-pill"><strong>History</strong><span>Recent shell lifecycle actions will render here once the shell bridge is attached.</span></div>
@@ -2404,6 +2411,29 @@
             ];
       }
 
+      function buildDesktopProviderCards() {
+        const provider = desktopState.lifecycle?.provider && typeof desktopState.lifecycle.provider === "object"
+          ? desktopState.lifecycle.provider
+          : null;
+
+        if (!provider) {
+          return [
+            { label: "Provider", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Model-provider routing and fallback posture will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(provider.cards) && provider.cards.length
+          ? provider.cards
+          : [
+              {
+                label: "Summary",
+                value: String(provider.summary || "No provider posture surfaced"),
+                tone: "low",
+              },
+            ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2423,6 +2453,8 @@
         const decommissionDetail = document.getElementById("desktop-decommission");
         const supportCards = document.getElementById("desktop-support-cards");
         const provenanceCards = document.getElementById("desktop-provenance-cards");
+        const providerCards = document.getElementById("desktop-provider-cards");
+        const providerList = document.getElementById("desktop-provider-list");
         const historyCards = document.getElementById("desktop-history-cards");
         const historyList = document.getElementById("desktop-history-list");
         const meta = document.getElementById("desktop-meta");
@@ -2432,7 +2464,7 @@
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2621,7 +2653,17 @@
         renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
         renderDetailCards("desktop-support-cards", buildDesktopSupportCards(), "Support");
         renderDetailCards("desktop-provenance-cards", buildDesktopProvenanceCards(), "Provenance");
+        renderDetailCards("desktop-provider-cards", buildDesktopProviderCards(), "Provider");
         renderDetailCards("desktop-history-cards", buildDesktopHistoryCards(), "History");
+        const providerItems = Array.isArray(lifecycle?.provider?.items) ? lifecycle.provider.items : [];
+        providerList.innerHTML = providerItems.length
+          ? providerItems
+              .map(
+                (item) =>
+                  `<li><strong>${escapeHtml(String(item.label || "Provider"))}</strong><br /><span class="meta">${escapeHtml(String(item.summary || "No provider summary"))}</span></li>`,
+              )
+              .join("")
+          : '<li class="muted-empty">Provider posture will render here once the shell bridge is attached.</li>';
         const historyItems = Array.isArray(lifecycle?.history?.items) ? lifecycle.history.items : [];
         historyList.innerHTML = historyItems.length
           ? historyItems

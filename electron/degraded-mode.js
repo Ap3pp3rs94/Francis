@@ -4,6 +4,7 @@ function buildDegradedModePosture({
   update = null,
   recovery = null,
   hud = null,
+  provider = null,
   startupProfile = null,
 } = {}) {
   const blockedChecks = Number(preflight?.blocked || 0);
@@ -14,6 +15,8 @@ function buildDegradedModePosture({
   const hudReady = hud?.ready !== false;
   const updatePending = Boolean(update?.pendingNotice);
   const recoveryNeeded = Boolean(recovery?.needed);
+  const providerSeverity = String(provider?.severity || "low");
+  const providerSummary = String(provider?.summary || "");
 
   let mode = "nominal";
   let summary = "Shell posture is nominal.";
@@ -37,6 +40,9 @@ function buildDegradedModePosture({
           : !hudReady
             ? "The managed HUD is not fully ready. Keep work inspection-first until runtime health returns."
             : `${attentionChecks} shell checks need attention. Operate in reduced mode until they clear.`;
+  } else if (providerSeverity === "high" || providerSeverity === "medium") {
+    mode = "reduced";
+    summary = providerSummary || "Provider posture needs review before model-backed execution is treated as settled.";
   }
 
   const continuityTrust = mode === "restricted" ? "unsafe" : mode === "reduced" ? "review" : "current";
@@ -54,6 +60,9 @@ function buildDegradedModePosture({
     restrictions.push("Treat retained continuity as inspection-only until blocked checks or migrations are cleared.");
   } else if (mode === "reduced") {
     restrictions.push("Treat continuity as review-first until update, migration, or recovery posture returns to current.");
+    if (providerSeverity === "high" || providerSeverity === "medium") {
+      restrictions.push("Treat model-backed execution as narrowed until provider posture is explicit and current.");
+    }
   } else {
     restrictions.push("No degraded-mode restrictions are active.");
   }
@@ -95,6 +104,11 @@ function buildDegradedModePosture({
         label: "HUD Runtime",
         value: hudMode,
         tone: hudMode === "crashed" ? "high" : hudMode === "managed" ? "medium" : "low",
+      },
+      {
+        label: "Provider",
+        value: provider?.activeProviderLabel || "none",
+        tone: providerSeverity,
       },
     ],
   };

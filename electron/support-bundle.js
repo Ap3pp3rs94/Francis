@@ -6,6 +6,7 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
   const update = lifecycle?.update || {};
   const migration = lifecycle?.migration || {};
   const rollback = lifecycle?.rollback || {};
+  const provider = lifecycle?.provider || {};
   const parts = [];
 
   if (preflight.blocked > 0) {
@@ -28,6 +29,10 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
 
   if (degradedMode.mode && degradedMode.mode !== "nominal") {
     parts.push(`degraded mode ${String(degradedMode.mode)}`);
+  }
+
+  if (provider.severity === "high" || provider.severity === "medium") {
+    parts.push(`provider ${String(provider.activeProviderLabel || "unconfigured")} ${String(provider.severity)}`);
   }
 
   if (recovery?.needed) {
@@ -76,6 +81,7 @@ function buildSupportBundle({
       startupProfile: lifecycle?.startupProfile || null,
       accessibility: lifecycle?.accessibility || null,
       history: lifecycle?.history || null,
+      provider: lifecycle?.provider || null,
       launchAtLogin: lifecycle?.launchAtLogin || null,
       degradedMode: lifecycle?.degradedMode || null,
       update: lifecycle?.update || null,
