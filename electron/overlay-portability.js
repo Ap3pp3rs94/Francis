@@ -5,6 +5,89 @@ const { normalizeStartupProfile } = require("./startup-profile");
 
 const PORTABILITY_STATE_FILE = "overlay-portability.json";
 const PORTABILITY_STATE_VERSION = 1;
+const PORTABILITY_EXPORT_VERSION = 1;
+
+function extractVersionCore(version) {
+  return String(version || "").trim().split("+")[0] || "unknown";
+}
+
+function buildCompatibilityChannel(version) {
+  const core = extractVersionCore(version);
+  const match = core.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) {
+    return "unknown";
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major === 0 ? `0.${minor}` : String(major);
+}
+
+function buildPortabilityCompatibility({
+  buildIdentity = "unknown",
+  version = null,
+} = {}) {
+  const safeVersion = extractVersionCore(version || buildIdentity);
+  return {
+    exportVersion: PORTABILITY_EXPORT_VERSION,
+    buildIdentity: String(buildIdentity || "unknown"),
+    version: safeVersion,
+    channel: buildCompatibilityChannel(safeVersion),
+    portabilityStateVersion: PORTABILITY_STATE_VERSION,
+  };
+}
+
+function assessPortablePayloadCompatibility(raw, { currentBuildIdentity = "unknown", currentVersion = "unknown" } = {}) {
+  if (!raw || typeof raw !== "object") {
+    return {
+      compatible: false,
+      status: "blocked",
+      summary: "Portable shell payload is unreadable.",
+    };
+  }
+
+  const compatibility = raw.compatibility && typeof raw.compatibility === "object"
+    ? raw.compatibility
+    : buildPortabilityCompatibility({
+        buildIdentity: typeof raw.buildIdentity === "string" ? raw.buildIdentity : "unknown",
+        version: typeof raw.version === "string" ? raw.version : currentVersion,
+      });
+
+  const current = buildPortabilityCompatibility({
+    buildIdentity: currentBuildIdentity,
+    version: currentVersion,
+  });
+
+  if (Number(compatibility.exportVersion || 0) !== PORTABILITY_EXPORT_VERSION) {
+    return {
+      compatible: false,
+      status: "blocked",
+      summary: `Portable shell payload export version ${String(compatibility.exportVersion || "unknown")} is not supported by this shell.`,
+      exportedBuildIdentity: compatibility.buildIdentity || "unknown",
+      exportedChannel: compatibility.channel || "unknown",
+    };
+  }
+
+  if (String(compatibility.channel || "unknown") !== String(current.channel || "unknown")) {
+    return {
+      compatible: false,
+      status: "blocked",
+      summary: `Portable shell payload channel ${String(compatibility.channel || "unknown")} does not match current channel ${String(current.channel || "unknown")}.`,
+      exportedBuildIdentity: compatibility.buildIdentity || "unknown",
+      exportedChannel: compatibility.channel || "unknown",
+    };
+  }
+
+  return {
+    compatible: true,
+    status: compatibility.buildIdentity === current.buildIdentity ? "current" : "compatible",
+    summary:
+      compatibility.buildIdentity === current.buildIdentity
+        ? `Portable shell payload matches current build ${current.buildIdentity}.`
+        : `Portable shell payload from ${String(compatibility.buildIdentity || "unknown")} is compatible with current channel ${current.channel}.`,
+    exportedBuildIdentity: compatibility.buildIdentity || "unknown",
+    exportedChannel: compatibility.channel || "unknown",
+  };
+}
 
 function getPortabilityStatePath(userDataPath) {
   return path.join(userDataPath, PORTABILITY_STATE_FILE);
@@ -57,13 +140,18 @@ function savePortabilityState(userDataPath, state) {
 
 function buildOverlayExportPayload({
   buildIdentity = "unknown",
+  version = null,
   exportedAt = new Date().toISOString(),
   preferences = {},
 } = {}) {
   return {
-    version: 1,
+    version: PORTABILITY_EXPORT_VERSION,
     exportedAt,
     buildIdentity,
+    compatibility: buildPortabilityCompatibility({
+      buildIdentity,
+      version,
+    }),
     shell: {
       startupProfile: normalizeStartupProfile(preferences.startupProfile),
       alwaysOnTop: preferences.alwaysOnTop !== false,
@@ -89,9 +177,14 @@ function buildOverlayExportPayload({
   };
 }
 
-function extractPortablePreferences(raw) {
+function extractPortablePreferences(raw, options = {}) {
   if (!raw || typeof raw !== "object" || !raw.shell || typeof raw.shell !== "object") {
     throw new Error("Portable shell payload is missing the shell block");
+  }
+
+  const compatibility = assessPortablePayloadCompatibility(raw, options);
+  if (!compatibility.compatible) {
+    throw new Error(compatibility.summary);
   }
 
   return {
@@ -114,9 +207,13 @@ function extractPortablePreferences(raw) {
 }
 
 module.exports = {
+  PORTABILITY_EXPORT_VERSION,
   PORTABILITY_STATE_FILE,
   PORTABILITY_STATE_VERSION,
+  assessPortablePayloadCompatibility,
+  buildCompatibilityChannel,
   buildDefaultPortabilityState,
+  buildPortabilityCompatibility,
   buildOverlayExportPayload,
   extractPortablePreferences,
   getPortabilityStatePath,

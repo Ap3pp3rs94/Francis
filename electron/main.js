@@ -30,6 +30,7 @@ const {
   reconcileUpdateState,
 } = require("./update-state");
 const {
+  assessPortablePayloadCompatibility,
   buildDefaultPortabilityState,
   buildOverlayExportPayload,
   extractPortablePreferences,
@@ -461,6 +462,7 @@ async function exportShellState(win = mainWindow) {
 
   const payload = buildOverlayExportPayload({
     buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    version: (buildInfo || resolveBuildIdentity(app, __dirname)).version,
     exportedAt: new Date().toISOString(),
     preferences: {
       ...(overlayPreferences || {}),
@@ -507,7 +509,29 @@ async function importShellState(win = mainWindow) {
     note: `Before importing shell state from ${filePath}`,
   });
   const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  const imported = extractPortablePreferences(raw);
+  const compatibility = assessPortablePayloadCompatibility(raw, {
+    currentBuildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    currentVersion: (buildInfo || resolveBuildIdentity(app, __dirname)).version,
+  });
+  if (!compatibility.compatible) {
+    portabilityState = savePortabilityState(app.getPath("userData"), {
+      ...(portabilityState || buildDefaultPortabilityState()),
+      lastImportAt: new Date().toISOString(),
+      lastImportPath: filePath,
+      lastImportStatus: compatibility.status,
+      lastImportMessage: compatibility.summary,
+    });
+    log("Blocked overlay shell import", {
+      filePath,
+      summary: compatibility.summary,
+    });
+    notifyOverlayState(safeWindow);
+    throw new Error(compatibility.summary);
+  }
+  const imported = extractPortablePreferences(raw, {
+    currentBuildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
+    currentVersion: (buildInfo || resolveBuildIdentity(app, __dirname)).version,
+  });
   overlayPreferences = persistOverlayPreferences(safeWindow, imported);
 
   if (safeWindow) {
@@ -521,7 +545,7 @@ async function importShellState(win = mainWindow) {
     lastImportAt: new Date().toISOString(),
     lastImportPath: filePath,
     lastImportStatus: "applied",
-    lastImportMessage: "Imported safe shell preferences only. Launch-at-login and authority state remain local.",
+    lastImportMessage: `${compatibility.summary} Imported safe shell preferences only. Launch-at-login and authority state remain local.`,
   });
   log("Imported overlay shell state", {
     filePath,
