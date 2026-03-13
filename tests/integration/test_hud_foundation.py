@@ -97,6 +97,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Recovery Briefing" in response.text
     assert "Degraded Mode" in response.text
     assert "Update Discipline" in response.text
+    assert "Update Delivery" in response.text
     assert "Repair Path" in response.text
     assert "Shell Portability" in response.text
     assert "Retained State" in response.text

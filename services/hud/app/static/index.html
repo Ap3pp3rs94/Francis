@@ -1437,6 +1437,13 @@
           <div class="desktop-grid" id="desktop-update-cards">
             <div class="desktop-pill"><strong>Update</strong><span>Build and schema posture will render here once the shell lifecycle is available.</span></div>
           </div>
+          <h3>Update Delivery</h3>
+          <div class="desktop-grid" id="desktop-delivery-cards">
+            <div class="desktop-pill"><strong>Delivery</strong><span>Update channel, rollback path, and trust guidance will render here once the shell lifecycle is available.</span></div>
+          </div>
+          <ul class="list" id="desktop-delivery-list">
+            <li class="muted-empty">Update delivery posture will render here once the shell bridge is attached.</li>
+          </ul>
           <h3>Repair Path</h3>
           <div class="desktop-grid" id="desktop-repair-cards">
             <div class="desktop-pill"><strong>Repair</strong><span>Guided repair actions will render here once the shell lifecycle is available.</span></div>
@@ -2036,6 +2043,29 @@
         ];
       }
 
+      function buildDesktopDeliveryCards() {
+        const delivery = desktopState.lifecycle?.delivery && typeof desktopState.lifecycle.delivery === "object"
+          ? desktopState.lifecycle.delivery
+          : null;
+
+        if (!delivery) {
+          return [
+            { label: "Delivery", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Update channel, rollback path, and trust guidance will appear once the shell lifecycle is available.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(delivery.cards) && delivery.cards.length
+          ? delivery.cards
+          : [
+              {
+                label: "Summary",
+                value: String(delivery.summary || "No update-delivery summary surfaced"),
+                tone: String(delivery.severity || "low"),
+              },
+            ];
+      }
+
       function buildDesktopDegradedModeCards() {
         const degradedMode = desktopState.lifecycle?.degradedMode && typeof desktopState.lifecycle.degradedMode === "object"
           ? desktopState.lifecycle.degradedMode
@@ -2562,10 +2592,12 @@
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const degradedModeCards = document.getElementById("desktop-degraded-mode-cards");
         const updateCards = document.getElementById("desktop-update-cards");
+        const deliveryCards = document.getElementById("desktop-delivery-cards");
+        const deliveryList = document.getElementById("desktop-delivery-list");
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !accessibilityList || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !authorityCards || !authorityList || !signingCards || !signingList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !accessibilityList || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !authorityCards || !authorityList || !signingCards || !signingList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !deliveryCards || !deliveryList || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2775,6 +2807,7 @@
         renderDetailCards("desktop-accessibility-cards", buildDesktopAccessibilityCards(), "Accessibility");
         renderDetailCards("desktop-degraded-mode-cards", buildDesktopDegradedModeCards(), "Degraded");
         renderDetailCards("desktop-update-cards", buildDesktopUpdateCards(), "Update");
+        renderDetailCards("desktop-delivery-cards", buildDesktopDeliveryCards(), "Delivery");
         renderDetailCards("desktop-repair-cards", buildDesktopRepairCards(), "Repair");
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");
         renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
@@ -2824,6 +2857,15 @@
               )
               .join("")
           : '<li class="muted-empty">Signing posture will render here once the shell bridge is attached.</li>';
+        const deliveryItems = Array.isArray(lifecycle?.delivery?.items) ? lifecycle.delivery.items : [];
+        deliveryList.innerHTML = deliveryItems.length
+          ? deliveryItems
+              .map(
+                (item) =>
+                  `<li><strong>${escapeHtml(String(item.label || "Delivery"))}</strong><br /><span class="meta">${escapeHtml(String(item.summary || "No update-delivery summary"))}</span></li>`,
+              )
+              .join("")
+          : '<li class="muted-empty">Update delivery posture will render here once the shell bridge is attached.</li>';
         const historyItems = Array.isArray(lifecycle?.history?.items) ? lifecycle.history.items : [];
         historyList.innerHTML = historyItems.length
           ? historyItems

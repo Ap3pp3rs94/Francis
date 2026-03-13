@@ -1,14 +1,26 @@
+const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-function buildIdentity({ version, packaged, revision = null }) {
+function resolvePackagedDistribution(execPath) {
+  if (typeof execPath !== "string" || !execPath.trim()) {
+    return "portable";
+  }
+  const installRoot = path.dirname(execPath);
+  const uninstallPath = path.join(installRoot, "Uninstall Francis Overlay.exe");
+  return fs.existsSync(uninstallPath) ? "installer" : "portable";
+}
+
+function buildIdentity({ version, packaged, revision = null, distribution = null }) {
   const safeVersion = typeof version === "string" && version.trim() ? version.trim() : "unknown";
   const safeRevision = typeof revision === "string" && revision.trim() ? revision.trim() : null;
-  const distribution = packaged ? "portable" : "source";
+  const safeDistribution = packaged
+    ? (typeof distribution === "string" && distribution.trim() ? distribution.trim() : "portable")
+    : "source";
 
   return {
     packaged: Boolean(packaged),
-    distribution,
+    distribution: safeDistribution,
     version: safeVersion,
     revision: safeRevision,
     identity: !packaged && safeRevision ? `${safeVersion}+${safeRevision}` : safeVersion,
@@ -32,11 +44,13 @@ function resolveBuildIdentity(appLike, appDir) {
   const version = typeof appLike?.getVersion === "function" ? appLike.getVersion() : "unknown";
   const repoRoot = path.resolve(appDir, "..");
   const revision = packaged ? null : readGitRevision(repoRoot);
-  return buildIdentity({ version, packaged, revision });
+  const distribution = packaged ? resolvePackagedDistribution(process.execPath) : "source";
+  return buildIdentity({ version, packaged, revision, distribution });
 }
 
 module.exports = {
   buildIdentity,
   readGitRevision,
   resolveBuildIdentity,
+  resolvePackagedDistribution,
 };

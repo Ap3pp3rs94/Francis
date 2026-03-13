@@ -4,6 +4,7 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
   const preflight = lifecycle?.preflight || {};
   const degradedMode = lifecycle?.degradedMode || {};
   const update = lifecycle?.update || {};
+  const delivery = lifecycle?.delivery || {};
   const migration = lifecycle?.migration || {};
   const rollback = lifecycle?.rollback || {};
   const provider = lifecycle?.provider || {};
@@ -21,6 +22,10 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
 
   if (update.pendingNotice) {
     parts.push(`update notice ${String(update.currentBuild || "pending")}`);
+  }
+
+  if (delivery.severity === "high" || delivery.severity === "medium") {
+    parts.push(`delivery ${String(delivery.channel || "unknown")} ${String(delivery.severity)}`);
   }
 
   if (migration.blocked > 0) {
@@ -97,6 +102,7 @@ function buildSupportBundle({
       launchAtLogin: lifecycle?.launchAtLogin || null,
       degradedMode: lifecycle?.degradedMode || null,
       update: lifecycle?.update || null,
+      delivery: lifecycle?.delivery || null,
       portability: lifecycle?.portability || null,
       retainedState: lifecycle?.retainedState || null,
       preflight: lifecycle?.preflight || null,

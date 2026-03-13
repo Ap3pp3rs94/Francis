@@ -59,6 +59,7 @@ const { createShellBackup, restoreShellBackup, summarizeBackups } = require("./b
 const { buildDecommissionPlan } = require("./decommission-plan");
 const { buildSupportBundle } = require("./support-bundle");
 const { buildRepairPlan } = require("./update-repair");
+const { buildUpdateDeliveryPosture } = require("./update-delivery");
 const { buildShellMigrationPosture } = require("./state-migrations");
 const { repairShellState } = require("./state-repair");
 const { buildDegradedModePosture } = require("./degraded-mode");
@@ -383,12 +384,13 @@ function getLifecycleState() {
   const rollback = ready
     ? (backupState || summarizeBackups(userDataPath))
     : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] };
+  const installRoot = ready
+    ? (currentBuild.packaged ? path.dirname(process.execPath) : app.getAppPath())
+    : null;
   const decommission = buildDecommissionPlan({
     buildIdentity: currentBuild.identity,
     distribution: currentBuild.distribution,
-    installRoot: ready
-      ? (currentBuild.packaged ? path.dirname(process.execPath) : app.getAppPath())
-      : null,
+    installRoot,
     execPath: ready ? process.execPath : null,
     userDataPath,
     workspaceRoot,
@@ -396,6 +398,14 @@ function getLifecycleState() {
     rollbackState: rollback,
     portabilityState: portability,
     launchAtLogin: login,
+  });
+  const delivery = buildUpdateDeliveryPosture({
+    distribution: currentBuild.distribution,
+    buildIdentity: currentBuild.identity,
+    update,
+    rollback,
+    signing,
+    installRoot,
   });
   const repair = buildRepairPlan({
     update,
@@ -422,6 +432,7 @@ function getLifecycleState() {
     startupProfile,
     accessibility,
     update,
+    delivery,
     portability,
     support,
     history,

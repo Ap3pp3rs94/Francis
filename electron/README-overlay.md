@@ -26,6 +26,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - surfaces authority posture so user, node, service, connector, and support authority stay distinguishable without exposing secret material
 - surfaces signing posture so Windows packaging trust is inspectable before unsigned builds are treated as settled
 - surfaces a guided repair path when updates, recovery, portability, or runtime checks leave the shell in an attention state
+- surfaces explicit update-delivery posture so source, portable, and installer update paths are inspectable before the shell is treated as routine
 - can repair retained shell state in place by normalizing legacy ledgers and quarantining unreadable ones before resetting only the affected files
 - persists session continuity so unclean exits and managed HUD crashes surface as recovery state on the next launch
 - supports guarded shell-state export and import so overlay posture can move machines without replaying authority
@@ -101,6 +102,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD now surfaces model-provider posture so remote dependency and fallback narrowing are inspectable before execution is trusted
 - the HUD now surfaces authority posture so connector credentials, support bindings, and secret-handling limits are inspectable without leaking raw values
 - the HUD now surfaces signing posture so packaged distribution trust is explicit instead of being inferred from SmartScreen prompts
+- the HUD now surfaces update-delivery posture so the safe path for source, portable, and installer updates is explicit
 - the HUD and tray can now execute bounded retained-state repair instead of forcing a broad shell reset for every migration problem
 - recovery now overrides startup posture safely, so unclean exits re-enter visible and interactive instead of hiding authority questions
 - the HUD and tray can now export/import safe shell posture with explicit limits around login settings and live authority
