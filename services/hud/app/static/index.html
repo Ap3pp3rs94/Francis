@@ -1337,6 +1337,10 @@
           <div class="desktop-grid" id="desktop-recovery-cards">
             <div class="desktop-pill"><strong>Recovery</strong><span>Recovery briefing will render here when the shell restores from an unclean exit.</span></div>
           </div>
+          <h3>Degraded Mode</h3>
+          <div class="desktop-grid" id="desktop-degraded-mode-cards">
+            <div class="desktop-pill"><strong>Degraded</strong><span>Reduced-trust shell posture will render here once the shell lifecycle is available.</span></div>
+          </div>
           <h3>Update Discipline</h3>
           <div class="desktop-grid" id="desktop-update-cards">
             <div class="desktop-pill"><strong>Update</strong><span>Build and schema posture will render here once the shell lifecycle is available.</span></div>
@@ -1891,6 +1895,29 @@
         ];
       }
 
+      function buildDesktopDegradedModeCards() {
+        const degradedMode = desktopState.lifecycle?.degradedMode && typeof desktopState.lifecycle.degradedMode === "object"
+          ? desktopState.lifecycle.degradedMode
+          : null;
+
+        if (!degradedMode) {
+          return [
+            { label: "Degraded", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Reduced-trust shell posture will appear once the shell lifecycle is available.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(degradedMode.cards) && degradedMode.cards.length
+          ? degradedMode.cards
+          : [
+              {
+                label: "Summary",
+                value: String(degradedMode.summary || "No degraded-mode summary surfaced"),
+                tone: String(degradedMode.mode === "restricted" ? "high" : degradedMode.mode === "reduced" ? "medium" : "low"),
+              },
+            ];
+      }
+
       function buildDesktopRepairCards() {
         const repair = desktopState.lifecycle?.repair && typeof desktopState.lifecycle.repair === "object"
           ? desktopState.lifecycle.repair
@@ -2268,11 +2295,12 @@
         const provenanceCards = document.getElementById("desktop-provenance-cards");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
+        const degradedModeCards = document.getElementById("desktop-degraded-mode-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2290,6 +2318,7 @@
         const loginState = lifecycle?.launchAtLogin || null;
         const startupProfile = lifecycle?.startupProfile || null;
         const update = lifecycle?.update || null;
+        const degradedMode = lifecycle?.degradedMode || null;
         const repair = lifecycle?.repair || null;
         const rollback = lifecycle?.rollback || null;
         const decommission = lifecycle?.decommission || null;
@@ -2314,6 +2343,10 @@
         summary.textContent = desktopState.available
           ? desktopState.ignoreMouseEvents
             ? `The overlay is in click-through mode. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control without dropping the overlay.`
+            : degradedMode?.mode === "restricted"
+              ? `${String(degradedMode.summary || "The shell is in a restricted degraded mode.")} Keep repair work interactive and visible.`
+              : degradedMode?.mode === "reduced"
+                ? `${String(degradedMode.summary || "The shell is in a reduced degraded mode.")} Treat continuity as review-first until posture returns to current.`
             : hudRuntime?.mode === "managed"
               ? `The Electron shell started the local HUD itself and is currently running on ${targetDisplayLabel}.`
               : hudRuntime?.mode === "external"
@@ -2342,6 +2375,7 @@
           ["Active Display", activeDisplayLabel],
           ["Recovery", recovery?.needed ? String(recovery.status || "attention") : "nominal"],
           ["Startup Profile", String(startupProfile?.label || "Operator Overlay")],
+          ["Degraded Mode", String(degradedMode?.mode || "nominal")],
           ["Build Identity", String(lifecycle?.buildIdentity || "unknown")],
           ["Update Status", String(update?.notice || "current")],
           ["Bounds", boundsLabel],
@@ -2418,6 +2452,7 @@
           ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | startup ${String(startupProfile?.requested || "operator")} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
+        renderDetailCards("desktop-degraded-mode-cards", buildDesktopDegradedModeCards(), "Degraded");
         renderDetailCards("desktop-update-cards", buildDesktopUpdateCards(), "Update");
         renderDetailCards("desktop-repair-cards", buildDesktopRepairCards(), "Repair");
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");

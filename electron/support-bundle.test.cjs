@@ -19,6 +19,7 @@ test("support bundle captures lifecycle recovery and display posture", () => {
     lifecycle: {
       buildIdentity: "0.1.0+abc1234",
       distribution: "installer",
+      degradedMode: { mode: "reduced" },
       preflight: { blocked: 1, attention: 0 },
       migration: { blocked: 0, attention: 2 },
       update: { pendingNotice: true, currentBuild: "0.1.0+abc1234" },
@@ -36,8 +37,10 @@ test("support bundle captures lifecycle recovery and display posture", () => {
   assert.match(bundle.summary, /preflight/i);
   assert.match(bundle.summary, /update notice/i);
   assert.match(bundle.summary, /migration/i);
+  assert.match(bundle.summary, /degraded mode/i);
   assert.match(bundle.summary, /recovery/i);
   assert.match(bundle.summary, /rollback/i);
   assert.equal(bundle.lifecycle.decommission.summary, "clean uninstall available");
   assert.equal(bundle.lifecycle.migration.attention, 2);
+  assert.equal(bundle.lifecycle.degradedMode.mode, "reduced");
 });

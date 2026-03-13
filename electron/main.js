@@ -54,6 +54,7 @@ const { buildDecommissionPlan } = require("./decommission-plan");
 const { buildSupportBundle } = require("./support-bundle");
 const { buildRepairPlan } = require("./update-repair");
 const { buildShellMigrationPosture } = require("./state-migrations");
+const { buildDegradedModePosture } = require("./degraded-mode");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -272,6 +273,14 @@ function getLifecycleState() {
         distribution: currentBuild.distribution,
       });
   const migration = ready ? buildShellMigrationPosture(userDataPath) : buildShellMigrationPosture(null);
+  const degradedMode = buildDegradedModePosture({
+    preflight,
+    migration,
+    update,
+    recovery: overlayRecovery,
+    hud: hudState,
+    startupProfile,
+  });
   const rollback = ready
     ? (backupState || summarizeBackups(userDataPath))
     : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] };
@@ -311,6 +320,7 @@ function getLifecycleState() {
     update,
     portability,
     support,
+    degradedMode,
     provenance: buildProvenance || {
       summary: "Build provenance is unavailable.",
       version: 1,
@@ -320,6 +330,7 @@ function getLifecycleState() {
     retainedState,
     preflight,
     migration,
+    degradedMode,
     rollback,
     decommission,
     repair,

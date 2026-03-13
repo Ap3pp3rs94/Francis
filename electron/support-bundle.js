@@ -2,6 +2,7 @@ const SUPPORT_BUNDLE_VERSION = 1;
 
 function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
   const preflight = lifecycle?.preflight || {};
+  const degradedMode = lifecycle?.degradedMode || {};
   const update = lifecycle?.update || {};
   const migration = lifecycle?.migration || {};
   const rollback = lifecycle?.rollback || {};
@@ -23,6 +24,10 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
     parts.push(`${migration.blocked} migration checks blocked`);
   } else if (migration.attention > 0) {
     parts.push(`${migration.attention} migration checks need review`);
+  }
+
+  if (degradedMode.mode && degradedMode.mode !== "nominal") {
+    parts.push(`degraded mode ${String(degradedMode.mode)}`);
   }
 
   if (recovery?.needed) {
@@ -70,6 +75,7 @@ function buildSupportBundle({
       revision: lifecycle?.revision || null,
       startupProfile: lifecycle?.startupProfile || null,
       launchAtLogin: lifecycle?.launchAtLogin || null,
+      degradedMode: lifecycle?.degradedMode || null,
       update: lifecycle?.update || null,
       portability: lifecycle?.portability || null,
       retainedState: lifecycle?.retainedState || null,
