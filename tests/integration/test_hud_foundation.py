@@ -108,6 +108,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Build Provenance" in response.text
     assert "Provider Posture" in response.text
     assert "Authority Posture" in response.text
+    assert "Signing Posture" in response.text
     assert "Lifecycle History" in response.text
     assert "Display Target" in response.text
     assert "Startup Profile" in response.text

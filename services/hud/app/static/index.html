@@ -1376,6 +1376,13 @@
           <ul class="list" id="desktop-authority-list">
             <li class="muted-empty">Authority posture will render here once the shell bridge is attached.</li>
           </ul>
+          <h3>Signing Posture</h3>
+          <div class="desktop-grid" id="desktop-signing-cards">
+            <div class="desktop-pill"><strong>Signing</strong><span>Windows packaging trust and signing readiness will render here once the shell bridge is attached.</span></div>
+          </div>
+          <ul class="list" id="desktop-signing-list">
+            <li class="muted-empty">Signing posture will render here once the shell bridge is attached.</li>
+          </ul>
           <h3>Lifecycle History</h3>
           <div class="desktop-grid" id="desktop-history-cards">
             <div class="desktop-pill"><strong>History</strong><span>Recent shell lifecycle actions will render here once the shell bridge is attached.</span></div>
@@ -2464,6 +2471,29 @@
             ];
       }
 
+      function buildDesktopSigningCards() {
+        const signing = desktopState.lifecycle?.signing && typeof desktopState.lifecycle.signing === "object"
+          ? desktopState.lifecycle.signing
+          : null;
+
+        if (!signing) {
+          return [
+            { label: "Signing", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Windows packaging trust and signing readiness will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(signing.cards) && signing.cards.length
+          ? signing.cards
+          : [
+              {
+                label: "Summary",
+                value: String(signing.summary || "No signing posture surfaced"),
+                tone: "low",
+              },
+            ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2487,6 +2517,8 @@
         const providerList = document.getElementById("desktop-provider-list");
         const authorityCards = document.getElementById("desktop-authority-cards");
         const authorityList = document.getElementById("desktop-authority-list");
+        const signingCards = document.getElementById("desktop-signing-cards");
+        const signingList = document.getElementById("desktop-signing-list");
         const historyCards = document.getElementById("desktop-history-cards");
         const historyList = document.getElementById("desktop-history-list");
         const meta = document.getElementById("desktop-meta");
@@ -2496,7 +2528,7 @@
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !authorityCards || !authorityList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !authorityCards || !authorityList || !signingCards || !signingList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2687,6 +2719,7 @@
         renderDetailCards("desktop-provenance-cards", buildDesktopProvenanceCards(), "Provenance");
         renderDetailCards("desktop-provider-cards", buildDesktopProviderCards(), "Provider");
         renderDetailCards("desktop-authority-cards", buildDesktopAuthorityCards(), "Authority");
+        renderDetailCards("desktop-signing-cards", buildDesktopSigningCards(), "Signing");
         renderDetailCards("desktop-history-cards", buildDesktopHistoryCards(), "History");
         const providerItems = Array.isArray(lifecycle?.provider?.items) ? lifecycle.provider.items : [];
         providerList.innerHTML = providerItems.length
@@ -2706,6 +2739,15 @@
               )
               .join("")
           : '<li class="muted-empty">Authority posture will render here once the shell bridge is attached.</li>';
+        const signingItems = Array.isArray(lifecycle?.signing?.items) ? lifecycle.signing.items : [];
+        signingList.innerHTML = signingItems.length
+          ? signingItems
+              .map(
+                (item) =>
+                  `<li><strong>${escapeHtml(String(item.label || "Signing"))}</strong><br /><span class="meta">${escapeHtml(String(item.summary || "No signing summary"))}</span></li>`,
+              )
+              .join("")
+          : '<li class="muted-empty">Signing posture will render here once the shell bridge is attached.</li>';
         const historyItems = Array.isArray(lifecycle?.history?.items) ? lifecycle.history.items : [];
         historyList.innerHTML = historyItems.length
           ? historyItems

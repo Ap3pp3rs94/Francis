@@ -9,6 +9,7 @@ function buildRepairPlan({
   hud = null,
   provider = null,
   authority = null,
+  signing = null,
   decommission = null,
 } = {}) {
   const blocked = Number(preflight?.blocked || 0);
@@ -23,6 +24,7 @@ function buildRepairPlan({
   const supportExported = Boolean(support?.lastBundleAt);
   const providerSeverity = String(provider?.severity || "low");
   const authoritySeverity = String(authority?.severity || "low");
+  const signingSeverity = String(signing?.severity || "low");
 
   let severity = "low";
   let summary = "Repair posture is nominal.";
@@ -32,7 +34,7 @@ function buildRepairPlan({
       migrationBlocked > 0
         ? `${migrationBlocked} retained state migration check${migrationBlocked === 1 ? " is" : "s are"} blocked. Repair before trusting continuity.`
         : `${blocked} startup or continuity checks are blocked. Repair before trusting the updated shell.`;
-  } else if (recoveryNeeded || updatePending || attention > 0 || migrationAttention > 0 || portabilityBlocked || hudMode === "crashed" || providerSeverity === "high" || providerSeverity === "medium" || authoritySeverity === "high" || authoritySeverity === "medium") {
+  } else if (recoveryNeeded || updatePending || attention > 0 || migrationAttention > 0 || portabilityBlocked || hudMode === "crashed" || providerSeverity === "high" || providerSeverity === "medium" || authoritySeverity === "high" || authoritySeverity === "medium" || signingSeverity === "high" || signingSeverity === "medium") {
     severity = "medium";
     summary = updatePending
       ? "A new build or schema change needs inspection before continuity is treated as settled."
@@ -44,6 +46,8 @@ function buildRepairPlan({
           ? String(authority?.summary || "Authority posture needs inspection before connector-backed execution is trusted.")
         : providerSeverity === "high" || providerSeverity === "medium"
           ? String(provider?.summary || "Provider posture needs inspection before model-backed execution is trusted.")
+        : signingSeverity === "high" || signingSeverity === "medium"
+          ? String(signing?.summary || "Signing posture needs inspection before packaged distribution trust is treated as settled.")
         : portabilityBlocked
           ? "A shell import was blocked and needs operator repair."
           : `${attention} checks still need attention.`;
@@ -61,6 +65,9 @@ function buildRepairPlan({
   }
   if (authoritySeverity === "high" || authoritySeverity === "medium") {
     steps.push("Inspect authority posture, confirm node and service identity explicitly, and verify support or connector authority bindings before trusting connector-backed execution.");
+  }
+  if (signingSeverity === "high" || signingSeverity === "medium") {
+    steps.push("Inspect Windows signing posture and treat packaged distribution trust as review-first until signer inputs or signed artifacts are explicit.");
   }
   if (blocked > 0 || recoveryNeeded || hudMode === "crashed") {
     steps.push("Restart the managed HUD and confirm preflight returns to nominal or attention instead of blocked.");
@@ -161,6 +168,11 @@ function buildRepairPlan({
       label: "Authority",
       value: authoritySeverity === "low" ? "current" : authoritySeverity,
       tone: authoritySeverity,
+    },
+    {
+      label: "Signing",
+      value: signingSeverity === "low" ? "current" : signingSeverity,
+      tone: signingSeverity,
     },
   ];
 

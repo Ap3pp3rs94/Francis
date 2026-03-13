@@ -31,6 +31,7 @@ function buildPreflightState({
   hudState = null,
   provider = null,
   authority = null,
+  signing = null,
   launchAtLogin = null,
   buildIdentity = "unknown",
   distribution = "source",
@@ -117,6 +118,20 @@ function buildPreflightState({
             ? "attention"
             : "ok",
       detail: String(authority.summary || "Authority posture unavailable"),
+    });
+  }
+
+  if (signing && typeof signing === "object") {
+    checks.push({
+      id: "signing",
+      label: "Signing Posture",
+      status:
+        signing.severity === "high"
+          ? "blocked"
+          : signing.severity === "medium"
+            ? "attention"
+            : "ok",
+      detail: String(signing.summary || "Signing posture unavailable"),
     });
   }
 

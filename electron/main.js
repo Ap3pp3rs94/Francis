@@ -59,6 +59,7 @@ const { repairShellState } = require("./state-repair");
 const { buildDegradedModePosture } = require("./degraded-mode");
 const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
+const { buildSigningPosture } = require("./signing-posture");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -310,6 +311,11 @@ function getLifecycleState() {
     portability,
     provider,
   });
+  const signing = buildSigningPosture({
+    env: process.env,
+    distribution: currentBuild.distribution,
+    packaged: currentBuild.packaged,
+  });
   const preflight = ready
     ? buildPreflightState({
         userDataPath,
@@ -320,6 +326,7 @@ function getLifecycleState() {
         hudState,
         provider,
         authority,
+        signing,
         launchAtLogin: login,
         buildIdentity: currentBuild.identity,
         distribution: currentBuild.distribution,
@@ -333,6 +340,7 @@ function getLifecycleState() {
         hudState,
         provider,
         authority,
+        signing,
         launchAtLogin: login,
         buildIdentity: currentBuild.identity,
         distribution: currentBuild.distribution,
@@ -346,6 +354,7 @@ function getLifecycleState() {
     hud: hudState,
     provider,
     authority,
+    signing,
     startupProfile,
   });
   const rollback = ready
@@ -376,6 +385,7 @@ function getLifecycleState() {
     hud: hudState,
     provider,
     authority,
+    signing,
     decommission,
   });
   const history = buildLifecycleHistorySurface(lifecycleHistoryState || buildDefaultLifecycleHistoryState());
@@ -394,6 +404,7 @@ function getLifecycleState() {
     history,
     provider,
     authority,
+    signing,
     degradedMode,
     provenance: buildProvenance || {
       summary: "Build provenance is unavailable.",

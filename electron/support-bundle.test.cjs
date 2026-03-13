@@ -24,6 +24,7 @@ test("support bundle captures lifecycle recovery and display posture", () => {
       history: { count: 2, latestKind: "support.export" },
       provider: { severity: "medium", activeProviderLabel: "OpenAI", fallbackSummary: "none" },
       authority: { severity: "medium", supportConfigured: true, supportBound: false },
+      signing: { severity: "medium", mode: "unsigned", ready: false },
       preflight: { blocked: 1, attention: 0 },
       migration: { blocked: 0, attention: 2 },
       update: { pendingNotice: true, currentBuild: "0.1.0+abc1234" },
@@ -44,6 +45,7 @@ test("support bundle captures lifecycle recovery and display posture", () => {
   assert.match(bundle.summary, /degraded mode/i);
   assert.match(bundle.summary, /provider/i);
   assert.match(bundle.summary, /authority/i);
+  assert.match(bundle.summary, /signing/i);
   assert.match(bundle.summary, /recovery/i);
   assert.match(bundle.summary, /rollback/i);
   assert.equal(bundle.lifecycle.decommission.summary, "clean uninstall available");
@@ -53,4 +55,5 @@ test("support bundle captures lifecycle recovery and display posture", () => {
   assert.equal(bundle.lifecycle.history.latestKind, "support.export");
   assert.equal(bundle.lifecycle.provider.activeProviderLabel, "OpenAI");
   assert.equal(bundle.lifecycle.authority.supportConfigured, true);
+  assert.equal(bundle.lifecycle.signing.mode, "unsigned");
 });

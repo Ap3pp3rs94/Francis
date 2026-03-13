@@ -36,6 +36,10 @@ test("repair plan escalates when blocked checks and rollback are present", () =>
       severity: "high",
       summary: "Support authority is configured without a tenant or managed-copy binding.",
     },
+    signing: {
+      severity: "medium",
+      summary: "Packaged Windows builds are currently unsigned.",
+    },
     decommission: {
       userDataPath: "C:\\Users\\Alice\\AppData\\Roaming\\Francis Overlay",
     },
@@ -80,6 +84,9 @@ test("repair plan stays nominal when no repair signals are active", () => {
       mode: "external",
     },
     authority: {
+      severity: "low",
+    },
+    signing: {
       severity: "low",
     },
   });
@@ -127,6 +134,9 @@ test("repair plan surfaces provider posture when model execution is narrowed", (
     authority: {
       severity: "low",
     },
+    signing: {
+      severity: "low",
+    },
   });
 
   assert.equal(plan.severity, "medium");
@@ -169,9 +179,57 @@ test("repair plan surfaces authority posture when support or connector identity 
       severity: "medium",
       summary: "Connector or support authority is configured while node or service identity remains implicit.",
     },
+    signing: {
+      severity: "low",
+    },
   });
 
   assert.equal(plan.severity, "medium");
   assert.ok(plan.steps.some((step) => /authority posture/i.test(step)));
   assert.ok(plan.cards.some((entry) => entry.label === "Authority"));
+});
+
+test("repair plan surfaces signing posture when packaged trust is unsigned", () => {
+  const plan = buildRepairPlan({
+    update: {
+      pendingNotice: false,
+    },
+    preflight: {
+      blocked: 0,
+      attention: 0,
+    },
+    migration: {
+      blocked: 0,
+      attention: 0,
+    },
+    recovery: {
+      needed: false,
+    },
+    rollback: {
+      count: 1,
+    },
+    portability: {
+      lastImportStatus: "idle",
+    },
+    support: {
+      lastBundleAt: "2026-03-12T12:00:00Z",
+    },
+    hud: {
+      mode: "managed",
+    },
+    provider: {
+      severity: "low",
+    },
+    authority: {
+      severity: "low",
+    },
+    signing: {
+      severity: "medium",
+      summary: "Packaged Windows builds are currently unsigned. Installer trust remains blocked on certificate material.",
+    },
+  });
+
+  assert.equal(plan.severity, "medium");
+  assert.ok(plan.steps.some((step) => /Windows signing posture/i.test(step)));
+  assert.ok(plan.cards.some((entry) => entry.label === "Signing"));
 });

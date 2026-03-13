@@ -8,6 +8,7 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
   const rollback = lifecycle?.rollback || {};
   const provider = lifecycle?.provider || {};
   const authority = lifecycle?.authority || {};
+  const signing = lifecycle?.signing || {};
   const parts = [];
 
   if (preflight.blocked > 0) {
@@ -38,6 +39,10 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
 
   if (authority.severity === "high" || authority.severity === "medium") {
     parts.push(`authority ${String(authority.severity)}`);
+  }
+
+  if (signing.severity === "high" || signing.severity === "medium") {
+    parts.push(`signing ${String(signing.mode || signing.severity)}`);
   }
 
   if (recovery?.needed) {
@@ -88,6 +93,7 @@ function buildSupportBundle({
       history: lifecycle?.history || null,
       provider: lifecycle?.provider || null,
       authority: lifecycle?.authority || null,
+      signing: lifecycle?.signing || null,
       launchAtLogin: lifecycle?.launchAtLogin || null,
       degradedMode: lifecycle?.degradedMode || null,
       update: lifecycle?.update || null,

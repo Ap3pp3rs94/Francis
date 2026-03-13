@@ -6,6 +6,7 @@ function buildDegradedModePosture({
   hud = null,
   provider = null,
   authority = null,
+  signing = null,
   startupProfile = null,
 } = {}) {
   const blockedChecks = Number(preflight?.blocked || 0);
@@ -20,6 +21,8 @@ function buildDegradedModePosture({
   const providerSummary = String(provider?.summary || "");
   const authoritySeverity = String(authority?.severity || "low");
   const authoritySummary = String(authority?.summary || "");
+  const signingSeverity = String(signing?.severity || "low");
+  const signingSummary = String(signing?.summary || "");
 
   let mode = "nominal";
   let summary = "Shell posture is nominal.";
@@ -49,6 +52,9 @@ function buildDegradedModePosture({
   } else if (authoritySeverity === "high" || authoritySeverity === "medium") {
     mode = "reduced";
     summary = authoritySummary || "Authority posture needs review before connector-backed execution is treated as settled.";
+  } else if (signingSeverity === "high" || signingSeverity === "medium") {
+    mode = "reduced";
+    summary = signingSummary || "Signing posture needs review before packaged distribution trust is treated as settled.";
   }
 
   const continuityTrust = mode === "restricted" ? "unsafe" : mode === "reduced" ? "review" : "current";
@@ -71,6 +77,9 @@ function buildDegradedModePosture({
     }
     if (authoritySeverity === "high" || authoritySeverity === "medium") {
       restrictions.push("Treat connector-backed or support-level execution as review-first until authority posture is explicit and current.");
+    }
+    if (signingSeverity === "high" || signingSeverity === "medium") {
+      restrictions.push("Treat packaged distribution trust as review-first until Windows signing posture is explicit and current.");
     }
   } else {
     restrictions.push("No degraded-mode restrictions are active.");
@@ -123,6 +132,11 @@ function buildDegradedModePosture({
         label: "Authority",
         value: authoritySeverity === "low" ? "current" : authoritySeverity,
         tone: authoritySeverity,
+      },
+      {
+        label: "Signing",
+        value: signingSeverity === "low" ? "current" : signingSeverity,
+        tone: signingSeverity,
       },
     ],
   };
