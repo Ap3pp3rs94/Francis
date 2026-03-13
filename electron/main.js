@@ -55,6 +55,7 @@ const { buildDecommissionPlan } = require("./decommission-plan");
 const { buildSupportBundle } = require("./support-bundle");
 const { buildRepairPlan } = require("./update-repair");
 const { buildShellMigrationPosture } = require("./state-migrations");
+const { repairShellState } = require("./state-repair");
 const { buildDegradedModePosture } = require("./degraded-mode");
 const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
@@ -805,6 +806,60 @@ function resetRetainedShellState(win = mainWindow) {
   return getOverlayState(safeWindow);
 }
 
+function executeRetainedStateRepair(win = mainWindow) {
+  if (!app.isReady()) {
+    throw new Error("Application is not ready");
+  }
+
+  const safeWindow = win && !win.isDestroyed() ? win : null;
+  const currentBuild = buildInfo || resolveBuildIdentity(app, __dirname);
+  createShellBackup(app.getPath("userData"), {
+    reason: "pre_repair",
+    buildIdentity: currentBuild.identity,
+    note: "Before repairing retained shell state",
+  });
+  const repairResult = repairShellState(app.getPath("userData"), {
+    displays: getDisplayContext().displays,
+    primaryDisplayId: getDisplayContext().primaryDisplayId,
+    buildIdentity: currentBuild.identity,
+    preferencesSchemaVersion: PREFERENCES_VERSION,
+    sessionSchemaVersion: SESSION_STATE_VERSION,
+    portabilitySchemaVersion: PORTABILITY_STATE_VERSION,
+    supportSchemaVersion: SUPPORT_STATE_VERSION,
+  });
+
+  overlayPreferences = loadPreferences(
+    app.getPath("userData"),
+    getDisplayContext().displays,
+    getDisplayContext().primaryDisplayId,
+  );
+  sessionState = loadSessionState(app.getPath("userData"));
+  updateState = loadUpdateState(app.getPath("userData"), {
+    buildIdentity: currentBuild.identity,
+    preferencesSchemaVersion: PREFERENCES_VERSION,
+    sessionSchemaVersion: SESSION_STATE_VERSION,
+    portabilitySchemaVersion: PORTABILITY_STATE_VERSION,
+    supportSchemaVersion: SUPPORT_STATE_VERSION,
+  });
+  portabilityState = loadPortabilityState(app.getPath("userData"));
+  supportState = loadSupportState(app.getPath("userData"));
+  refreshBackupState();
+
+  if (safeWindow) {
+    safeWindow.setBounds(overlayPreferences.windowBounds);
+    applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
+    applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
+  }
+
+  log("Executed retained state repair", repairResult);
+  recordLifecycleHistory("shell.repair", repairResult.summary, {
+    tone: repairResult.quarantinedCount > 0 ? "high" : repairResult.repairedCount > 0 ? "medium" : "low",
+    detail: repairResult,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
 async function exportSupportBundle(win = mainWindow) {
   if (!app.isReady()) {
     throw new Error("Application is not ready");
@@ -953,6 +1008,20 @@ function updateTray() {
           restartHudAndRefreshWindow(requireWindow()).catch((error) => {
             log("Tray HUD restart failed", error instanceof Error ? error.message : String(error));
           });
+        },
+      },
+      {
+        label: "Repair Retained State",
+        enabled: Boolean(
+          (overlaySnapshot.lifecycle?.migration?.blocked || 0) > 0 ||
+          (overlaySnapshot.lifecycle?.migration?.attention || 0) > 0,
+        ),
+        click: () => {
+          try {
+            executeRetainedStateRepair(requireWindow());
+          } catch (error) {
+            log("Tray shell repair failed", error instanceof Error ? error.message : String(error));
+          }
         },
       },
       {
@@ -1602,6 +1671,7 @@ function registerIpc() {
   ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
   ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));
   ipcMain.handle("overlay:reset-shell-state", () => resetRetainedShellState(requireWindow()));
+  ipcMain.handle("overlay:repair-shell-state", () => executeRetainedStateRepair(requireWindow()));
   ipcMain.handle("overlay:create-rollback-snapshot", () => createRollbackSnapshot("manual", "Created from the desktop shell."));
   ipcMain.handle("overlay:restore-latest-rollback", () => restoreLatestRollbackSnapshot(requireWindow()));
   ipcMain.handle("overlay:export-support-bundle", () => exportSupportBundle(requireWindow()));

@@ -42,6 +42,7 @@ test("repair plan escalates when blocked checks and rollback are present", () =>
   });
 
   assert.equal(plan.severity, "high");
+  assert.equal(plan.actions.repair_shell_state.enabled, true);
   assert.equal(plan.actions.reset_shell_state.enabled, true);
   assert.equal(plan.actions.restore_snapshot.enabled, true);
   assert.equal(plan.actions.export_support_bundle.enabled, true);

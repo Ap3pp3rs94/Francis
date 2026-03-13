@@ -87,6 +87,10 @@ function buildRepairPlan({
       enabled: hudMode !== "external",
       label: "Restart HUD",
     },
+    repair_shell_state: {
+      enabled: migrationBlocked > 0 || migrationAttention > 0,
+      label: "Repair Retained State",
+    },
     reset_shell_state: {
       enabled: migrationBlocked > 0 || migrationAttention > 0,
       label: "Reset Shell State",

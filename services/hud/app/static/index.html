@@ -2718,6 +2718,7 @@
         repairActions.innerHTML = `
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.acknowledge_update?.enabled ? "" : "disabled"} onclick="acknowledgeDesktopUpdateNotice()">${escapeHtml(String(repair?.actions?.acknowledge_update?.label || "Acknowledge Update"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restart_hud?.enabled ? "" : "disabled"} onclick="restartDesktopHud()">${escapeHtml(String(repair?.actions?.restart_hud?.label || "Restart HUD"))}</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.repair_shell_state?.enabled ? "" : "disabled"} onclick="repairDesktopShellState()">${escapeHtml(String(repair?.actions?.repair_shell_state?.label || "Repair Retained State"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.reset_shell_state?.enabled ? "" : "disabled"} onclick="resetDesktopShellState()">${escapeHtml(String(repair?.actions?.reset_shell_state?.label || "Reset Shell State"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restore_snapshot?.enabled ? "" : "disabled"} onclick="restoreDesktopRollbackSnapshot()">${escapeHtml(String(repair?.actions?.restore_snapshot?.label || "Restore Latest Snapshot"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.export_support_bundle?.enabled ? "" : "disabled"} onclick="exportDesktopSupportBundle()">${escapeHtml(String(repair?.actions?.export_support_bundle?.label || "Export Support Bundle"))}</button>
@@ -2856,6 +2857,26 @@
           desktopNotice = "Latest rollback snapshot restored.";
         } catch (error) {
           desktopNotice = `Rollback restore failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function repairDesktopShellState() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.repairShellState !== "function") {
+          desktopNotice = "Retained-state repair is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.repairShellState(),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = "Affected retained state was repaired in place. Only stale or unreadable ledgers were touched.";
+        } catch (error) {
+          desktopNotice = `Retained-state repair failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }
