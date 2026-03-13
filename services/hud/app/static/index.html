@@ -1322,6 +1322,10 @@
           <div class="desktop-grid" id="desktop-support-cards">
             <div class="desktop-pill"><strong>Support</strong><span>Governed support-bundle state will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Build Provenance</h3>
+          <div class="desktop-grid" id="desktop-provenance-cards">
+            <div class="desktop-pill"><strong>Provenance</strong><span>Build and runtime provenance will render here once the shell bridge is attached.</span></div>
+          </div>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -2130,6 +2134,64 @@
         ];
       }
 
+      function buildDesktopProvenanceCards() {
+        const provenance = desktopState.lifecycle?.provenance && typeof desktopState.lifecycle.provenance === "object"
+          ? desktopState.lifecycle.provenance
+          : null;
+
+        if (!provenance) {
+          return [
+            { label: "Provenance", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Build and runtime provenance will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        const inputs = provenance.inputs && typeof provenance.inputs === "object" ? provenance.inputs : {};
+        const runtime = provenance.runtime && typeof provenance.runtime === "object" ? provenance.runtime : {};
+        return [
+          {
+            label: "Summary",
+            value: String(provenance.summary || "No provenance summary surfaced"),
+            tone: runtime.exists ? "medium" : "low",
+          },
+          {
+            label: "Build",
+            value: String(provenance.buildIdentity || desktopState.lifecycle?.buildIdentity || "unknown"),
+            tone: "medium",
+          },
+          {
+            label: "Targets",
+            value: Array.isArray(provenance.targets) && provenance.targets.length ? provenance.targets.join(", ") : "source-only",
+            tone: "medium",
+          },
+          {
+            label: "Runtime Root",
+            value: String(runtime.root || "unavailable"),
+            tone: runtime.exists ? "medium" : "low",
+          },
+          {
+            label: "Runtime Entries",
+            value: String(runtime.entryCount || 0),
+            tone: runtime.entryCount > 0 ? "medium" : "low",
+          },
+          {
+            label: "package.json",
+            value: inputs.packageJson?.sha256 ? String(inputs.packageJson.sha256).slice(0, 16) : "missing",
+            tone: inputs.packageJson?.exists ? "medium" : "high",
+          },
+          {
+            label: "package-lock",
+            value: inputs.packageLock?.sha256 ? String(inputs.packageLock.sha256).slice(0, 16) : "missing",
+            tone: inputs.packageLock?.exists ? "medium" : "high",
+          },
+          {
+            label: "pyproject",
+            value: inputs.pyproject?.sha256 ? String(inputs.pyproject.sha256).slice(0, 16) : "missing",
+            tone: inputs.pyproject?.exists ? "medium" : "high",
+          },
+        ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2145,11 +2207,12 @@
         const decommissionActions = document.getElementById("desktop-decommission-actions");
         const decommissionDetail = document.getElementById("desktop-decommission");
         const supportCards = document.getElementById("desktop-support-cards");
+        const provenanceCards = document.getElementById("desktop-provenance-cards");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !updateCards || !display) {
           return;
         }
 
@@ -2301,6 +2364,7 @@
         renderDetailCards("desktop-rollback-cards", buildDesktopRollbackCards(), "Rollback");
         renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
         renderDetailCards("desktop-support-cards", buildDesktopSupportCards(), "Support");
+        renderDetailCards("desktop-provenance-cards", buildDesktopProvenanceCards(), "Provenance");
         decommissionActions.innerHTML = `
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopSupportBundle()">Export Support Bundle</button>

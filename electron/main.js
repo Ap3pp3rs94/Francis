@@ -42,6 +42,7 @@ const {
   loadSupportState,
   saveSupportState,
 } = require("./support-state");
+const { buildRuntimeProvenance, loadGeneratedProvenance } = require("./build-provenance");
 const { describeRetainedState } = require("./retained-state");
 const { buildPreflightState } = require("./preflight");
 const { createShellBackup, restoreShellBackup, summarizeBackups } = require("./backup-state");
@@ -62,6 +63,7 @@ let buildInfo = null;
 let portabilityState = null;
 let backupState = null;
 let supportState = null;
+let buildProvenance = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
@@ -225,6 +227,12 @@ function getLifecycleState() {
     ),
     portability: portabilityState || buildDefaultPortabilityState(),
     support: supportState || buildDefaultSupportState(),
+    provenance: buildProvenance || {
+      summary: "Build provenance is unavailable.",
+      version: 1,
+      buildIdentity: currentBuild.identity,
+      distribution: currentBuild.distribution,
+    },
     retainedState: app.isReady()
       ? describeRetainedState({
           userDataPath: app.getPath("userData"),
@@ -1477,6 +1485,12 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.whenReady().then(async () => {
     buildInfo = resolveBuildIdentity(app, __dirname);
+    buildProvenance =
+      loadGeneratedProvenance(path.resolve(__dirname, "..")) ||
+      buildRuntimeProvenance({
+        appLike: app,
+        appDir: __dirname,
+      });
     sessionState = loadSessionState(app.getPath("userData"));
     portabilityState = loadPortabilityState(app.getPath("userData"));
     supportState = loadSupportState(app.getPath("userData"));

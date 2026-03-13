@@ -24,6 +24,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - keeps rollback snapshots of shell state so updates, imports, and resets have a governed fallback path
 - surfaces an explicit decommission plan so uninstall and reinstall are inspectable instead of haunted
 - exports a governed support bundle so lifecycle, recovery, and runtime state can leave the shell as evidence
+- records build provenance so packaged/runtime inputs are inspectable instead of implicit
 - reuses an already-running HUD if one exists, otherwise attempts to start the local HUD server automatically
 
 ## Run
@@ -88,6 +89,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD and tray can now create and restore shell rollback snapshots without replaying live authority or workspace state
 - the HUD can now surface exact decommission steps, retained paths, and generated cleanup commands before uninstall
 - the HUD and tray can now export a governed support bundle with lifecycle, recovery, runtime, and display posture
+- the HUD now surfaces build provenance for package inputs, package targets, and bundled runtime posture
 - the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
 
 ## Next Extensions

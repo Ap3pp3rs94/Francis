@@ -69,6 +69,7 @@ function buildSupportBundle({
       preflight: lifecycle?.preflight || null,
       rollback: lifecycle?.rollback || null,
       decommission: lifecycle?.decommission || null,
+      provenance: lifecycle?.provenance || null,
       session: lifecycle?.session || null,
     },
     hud,

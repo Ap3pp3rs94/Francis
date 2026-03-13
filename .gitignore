@@ -7,3 +7,4 @@ node_modules/
 output/playwright/
 dist/overlay/
 dist/python-runtime-staging/
+electron/generated/
