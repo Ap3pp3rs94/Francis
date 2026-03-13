@@ -108,8 +108,10 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Build Provenance" in response.text
     assert "Display Target" in response.text
     assert "Startup Profile" in response.text
+    assert "Accessibility" in response.text
     assert "Start At Login" in response.text
     assert "Restart HUD" in response.text
+    assert "Reduced-motion and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "The Orb rides directly over the cursor." in response.text
     assert "Hold the moving Orb itself to panic stop" in response.text

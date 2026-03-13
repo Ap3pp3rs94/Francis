@@ -1,6 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
@@ -11,6 +11,7 @@ const {
   resolveTargetDisplay,
   savePreferences,
 } = require("./preferences");
+const { buildAccessibilityState, normalizeMotionMode } = require("./accessibility");
 const {
   SESSION_STATE_VERSION,
   buildDefaultSessionState,
@@ -93,6 +94,23 @@ function log(message, extra) {
     return;
   }
   console.log(`[francis-overlay] ${message}`, extra);
+}
+
+function readSystemReducedMotionPreference() {
+  try {
+    if (typeof systemPreferences?.getAnimationSettings === "function") {
+      const settings = systemPreferences.getAnimationSettings();
+      if (typeof settings?.prefersReducedMotion === "boolean") {
+        return settings.prefersReducedMotion;
+      }
+      if (typeof settings?.shouldRenderRichAnimation === "boolean") {
+        return !settings.shouldRenderRichAnimation;
+      }
+    }
+  } catch (error) {
+    log("Could not read system reduced-motion preference", error instanceof Error ? error.message : String(error));
+  }
+  return false;
 }
 
 function setOverlayRecovery(next = {}) {
@@ -210,6 +228,10 @@ function getLifecycleState() {
   const login = getLaunchAtLoginState(app);
   const hudState = getHudState();
   const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
+  const accessibility = buildAccessibilityState({
+    motionMode: overlayPreferences?.motionMode,
+    systemReducedMotion: readSystemReducedMotionPreference(),
+  });
   const ready = app.isReady();
   const userDataPath = ready ? app.getPath("userData") : null;
   const workspaceRoot = ready ? path.join(userDataPath, "workspace") : null;
@@ -317,6 +339,7 @@ function getLifecycleState() {
     buildIdentity: currentBuild.identity,
     launchAtLogin: login,
     startupProfile,
+    accessibility,
     update,
     portability,
     support,
@@ -393,6 +416,22 @@ function setStartupProfile(profileId) {
   log("Updated startup profile", {
     requested: profileId,
     startupProfile: normalized,
+  });
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+function setMotionMode(modeId) {
+  const normalized = normalizeMotionMode(modeId);
+  const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (app.isReady()) {
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      motionMode: normalized,
+    });
+  }
+  log("Updated motion mode", {
+    requested: modeId,
+    motionMode: normalized,
   });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
@@ -749,6 +788,21 @@ function updateTray() {
               setStartupProfile(profile.id);
             } catch (error) {
               log("Tray startup profile update failed", error instanceof Error ? error.message : String(error));
+            }
+          },
+        })),
+      },
+      {
+        label: "Motion Mode",
+        submenu: (overlaySnapshot.lifecycle?.accessibility?.options || []).map((option) => ({
+          label: option.label,
+          type: "radio",
+          checked: overlayPreferences?.motionMode === option.id,
+          click: () => {
+            try {
+              setMotionMode(option.id);
+            } catch (error) {
+              log("Tray motion mode update failed", error instanceof Error ? error.message : String(error));
             }
           },
         })),
@@ -1413,6 +1467,7 @@ function registerIpc() {
   ipcMain.handle("overlay:set-launch-at-login", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
+  ipcMain.handle("overlay:set-motion-mode", (_event, modeId) => setMotionMode(modeId));
   ipcMain.handle("overlay:acknowledge-update-notice", () => dismissUpdateNotice());
   ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
   ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));

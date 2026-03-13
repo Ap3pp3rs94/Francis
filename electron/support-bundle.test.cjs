@@ -20,6 +20,7 @@ test("support bundle captures lifecycle recovery and display posture", () => {
       buildIdentity: "0.1.0+abc1234",
       distribution: "installer",
       degradedMode: { mode: "reduced" },
+      accessibility: { motionMode: "reduce", effectiveMotionMode: "reduce" },
       preflight: { blocked: 1, attention: 0 },
       migration: { blocked: 0, attention: 2 },
       update: { pendingNotice: true, currentBuild: "0.1.0+abc1234" },
@@ -43,4 +44,5 @@ test("support bundle captures lifecycle recovery and display posture", () => {
   assert.equal(bundle.lifecycle.decommission.summary, "clean uninstall available");
   assert.equal(bundle.lifecycle.migration.attention, 2);
   assert.equal(bundle.lifecycle.degradedMode.mode, "reduced");
+  assert.equal(bundle.lifecycle.accessibility.motionMode, "reduce");
 });

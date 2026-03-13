@@ -74,6 +74,7 @@ function buildSupportBundle({
       version: lifecycle?.version || "unknown",
       revision: lifecycle?.revision || null,
       startupProfile: lifecycle?.startupProfile || null,
+      accessibility: lifecycle?.accessibility || null,
       launchAtLogin: lifecycle?.launchAtLogin || null,
       degradedMode: lifecycle?.degradedMode || null,
       update: lifecycle?.update || null,

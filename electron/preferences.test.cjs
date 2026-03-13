@@ -54,6 +54,7 @@ test("savePreferences persists normalized bounds and booleans on the target disp
       alwaysOnTop: false,
       ignoreMouseEvents: true,
       startupProfile: "quiet",
+      motionMode: "reduce",
       windowBounds: { x: 1900, y: 800, width: 1400, height: 1100 },
     },
     DISPLAYS,
@@ -66,6 +67,7 @@ test("savePreferences persists normalized bounds and booleans on the target disp
   assert.equal(saved.alwaysOnTop, false);
   assert.equal(saved.ignoreMouseEvents, true);
   assert.equal(saved.startupProfile, "quiet");
+  assert.equal(saved.motionMode, "reduce");
   assert.deepEqual(saved, loaded);
   assert.equal(saved.windowBounds.x, 1536);
   assert.equal(saved.windowBounds.y, 0);
@@ -103,6 +105,7 @@ test("preferences normalize unknown startup profiles back to operator", () => {
     {
       targetDisplayId: 101,
       startupProfile: "bad-profile",
+      motionMode: "not-real",
       windowBounds: { x: 32, y: 48, width: 900, height: 720 },
     },
     DISPLAYS,
@@ -110,6 +113,7 @@ test("preferences normalize unknown startup profiles back to operator", () => {
   );
 
   assert.equal(saved.startupProfile, "operator");
+  assert.equal(saved.motionMode, "system");
 });
 
 test("loadPreferences ignores malformed json and returns defaults", () => {

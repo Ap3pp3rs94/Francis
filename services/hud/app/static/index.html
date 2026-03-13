@@ -31,6 +31,28 @@
           linear-gradient(160deg, #f8f5ee 0%, #ebe7de 100%);
       }
 
+      :focus-visible {
+        outline: 3px solid rgba(180, 71, 45, 0.6);
+        outline-offset: 3px;
+      }
+
+      html[data-motion-mode="reduce"] *,
+      html[data-motion-mode="reduce"] *::before,
+      html[data-motion-mode="reduce"] *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+
+      html[data-motion-mode="reduce"] #orb-render-root,
+      html[data-motion-mode="reduce"] #orb-render-root canvas {
+        filter:
+          drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18))
+          contrast(1.02)
+          saturate(0.82);
+      }
+
       body.orb-cursor-active,
       body.orb-cursor-active * {
         cursor: none !important;
@@ -1294,6 +1316,16 @@
               <button class="btn-secondary" type="button" disabled>Operator Overlay</button>
             </div>
           </div>
+          <h3>Accessibility</h3>
+          <div class="desktop-grid" id="desktop-accessibility-cards">
+            <div class="desktop-pill"><strong>Accessibility</strong><span>Reduced-motion and keyboard posture will render here once the shell bridge is attached.</span></div>
+          </div>
+          <div class="desktop-targets" id="desktop-accessibility-actions">
+            <span class="meta tiny desktop-targets-label">Motion Mode</span>
+            <div class="desktop-actions">
+              <button class="btn-secondary" type="button" disabled>System Motion</button>
+            </div>
+          </div>
           <h3>Shell Portability</h3>
           <div class="desktop-grid" id="desktop-portability-cards">
             <div class="desktop-pill"><strong>Portability</strong><span>Export and import posture will render here once the shell bridge is attached.</span></div>
@@ -1719,6 +1751,35 @@
         };
       }
 
+      function getSystemReducedMotionPreference() {
+        try {
+          return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+        } catch {
+          return false;
+        }
+      }
+
+      function getDesktopAccessibility() {
+        const accessibility = desktopState.lifecycle?.accessibility;
+        return accessibility && typeof accessibility === "object" ? accessibility : null;
+      }
+
+      function getEffectiveMotionMode() {
+        const accessibility = getDesktopAccessibility();
+        const requested = String(accessibility?.motionMode || "system");
+        return requested === "reduce" || (requested === "system" && getSystemReducedMotionPreference())
+          ? "reduce"
+          : "full";
+      }
+
+      function isReducedMotionEnabled() {
+        return getEffectiveMotionMode() === "reduce";
+      }
+
+      function applyAccessibilityPosture() {
+        document.documentElement.dataset.motionMode = getEffectiveMotionMode();
+      }
+
       function getDesktopDisplays() {
         return Array.isArray(desktopState.displayInfo?.displays) ? desktopState.displayInfo.displays : [];
       }
@@ -2099,6 +2160,43 @@
             ];
       }
 
+      function buildDesktopAccessibilityCards() {
+        const accessibility = getDesktopAccessibility();
+
+        if (!accessibility) {
+          return [
+            { label: "Accessibility", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Reduced-motion and keyboard posture will appear once the desktop bridge is attached.", tone: "low" },
+          ];
+        }
+
+        const effectiveMotionMode = getEffectiveMotionMode();
+        const keyboardSummary = desktopState.available
+          ? `Overlay ${desktopState.shortcuts.toggleOverlay} | input ${desktopState.shortcuts.toggleClickThrough}`
+          : "Keyboard shell shortcuts appear once the desktop bridge is attached.";
+
+        return [
+          ...(Array.isArray(accessibility.cards) ? accessibility.cards : []),
+          {
+            label: "Keyboard",
+            value: keyboardSummary,
+            tone: "low",
+          },
+          {
+            label: "Focus",
+            value: "Strong focus-visible outlines are enabled for keyboard navigation.",
+            tone: "low",
+          },
+          {
+            label: "Renderer",
+            value: effectiveMotionMode === "reduce"
+              ? "Orb drift, card transitions, and animation are reduced."
+              : "Full motion posture is active.",
+            tone: effectiveMotionMode === "reduce" ? "medium" : "low",
+          },
+        ];
+      }
+
       function buildDesktopRollbackCards() {
         const rollback = desktopState.lifecycle?.rollback && typeof desktopState.lifecycle.rollback === "object"
           ? desktopState.lifecycle.rollback
@@ -2283,6 +2381,8 @@
         const actions = document.getElementById("desktop-actions");
         const targets = document.getElementById("desktop-targets");
         const startupProfiles = document.getElementById("desktop-startup-profiles");
+        const accessibilityCards = document.getElementById("desktop-accessibility-cards");
+        const accessibilityActions = document.getElementById("desktop-accessibility-actions");
         const portabilityCards = document.getElementById("desktop-portability-cards");
         const retainedStateCards = document.getElementById("desktop-retained-state-cards");
         const preflightCards = document.getElementById("desktop-preflight-cards");
@@ -2300,7 +2400,7 @@
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2317,6 +2417,8 @@
         const lifecycle = desktopState.lifecycle;
         const loginState = lifecycle?.launchAtLogin || null;
         const startupProfile = lifecycle?.startupProfile || null;
+        const accessibility = lifecycle?.accessibility || null;
+        const effectiveMotionMode = getEffectiveMotionMode();
         const update = lifecycle?.update || null;
         const degradedMode = lifecycle?.degradedMode || null;
         const repair = lifecycle?.repair || null;
@@ -2375,6 +2477,7 @@
           ["Active Display", activeDisplayLabel],
           ["Recovery", recovery?.needed ? String(recovery.status || "attention") : "nominal"],
           ["Startup Profile", String(startupProfile?.label || "Operator Overlay")],
+          ["Motion", titleCase(effectiveMotionMode)],
           ["Degraded Mode", String(degradedMode?.mode || "nominal")],
           ["Build Identity", String(lifecycle?.buildIdentity || "unknown")],
           ["Update Status", String(update?.notice || "current")],
@@ -2448,10 +2551,33 @@
           <p class="meta tiny">${escapeHtml(String(startupProfile?.description || "Startup profile controls how the overlay boots on the next launch."))}</p>
         `;
 
+        accessibilityActions.innerHTML = `
+          <span class="meta tiny desktop-targets-label">Motion Mode</span>
+          <div class="desktop-actions">
+            ${
+              Array.isArray(accessibility?.options) && accessibility.options.length
+                ? accessibility.options
+                    .map(
+                      (option) =>
+                        `<button class="${String(accessibility.motionMode || "system") === option.id ? "btn-primary" : "btn-secondary"}" type="button" ${
+                          desktopState.available ? "" : "disabled"
+                        } onclick="setDesktopMotionMode('${escapeHtml(option.id)}')">${escapeHtml(option.label)}</button>`,
+                    )
+                    .join("")
+                : '<button class="btn-secondary" type="button" disabled>System Motion</button>'
+            }
+          </div>
+          <p class="meta tiny">${escapeHtml(String(
+            accessibility?.summary ||
+            "Reduced-motion accessibility will follow the current shell posture once the bridge is attached.",
+          ))}</p>
+        `;
+
         meta.textContent = desktopState.available
           ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | startup ${String(startupProfile?.requested || "operator")} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
+        renderDetailCards("desktop-accessibility-cards", buildDesktopAccessibilityCards(), "Accessibility");
         renderDetailCards("desktop-degraded-mode-cards", buildDesktopDegradedModeCards(), "Degraded");
         renderDetailCards("desktop-update-cards", buildDesktopUpdateCards(), "Update");
         renderDetailCards("desktop-repair-cards", buildDesktopRepairCards(), "Repair");
@@ -2507,6 +2633,7 @@
           display: desktopState.displayInfo || null,
           preferencesPath: desktopState.preferencesPath || null,
         });
+        applyAccessibilityPosture();
       }
 
       async function syncDesktopState() {
@@ -2786,6 +2913,29 @@
         renderDesktopShell();
       }
 
+      async function setDesktopMotionMode(modeId) {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.setMotionMode !== "function") {
+          desktopNotice = "Accessibility motion control is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.setMotionMode(String(modeId || "system")),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          const accessibility = desktopState.lifecycle?.accessibility;
+          desktopNotice = accessibility?.reducedMotion
+            ? "Reduced-motion posture enabled."
+            : `Motion mode saved: ${String(accessibility?.motionMode || modeId || "system")}.`;
+        } catch (error) {
+          desktopNotice = `Accessibility update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
       async function setDesktopIgnoreMouseEvents(ignore) {
         const bridge = getDesktopBridge();
         if (!bridge) {
@@ -2884,6 +3034,7 @@
         const bridge = getDesktopBridge();
         if (!bridge) {
           desktopState = normalizeDesktopState(null, null);
+          applyAccessibilityPosture();
           renderDesktopShell();
           return;
         }
@@ -2975,15 +3126,24 @@
         const lastVy = Number.isFinite(orbMotion.pointerVy) ? orbMotion.pointerVy : 0;
         const velocityCarry = Math.max(0.1, Math.min(0.45, Number(handback.velocity_carry || 0.26)));
         const releaseBias = Math.max(0.08, Math.min(0.4, Number(handback.release_bias || 0.18)));
-        const arcLift = Math.max(36, Math.min(96, Number(handback.arc_lift_px || 56)));
+        const reducedMotion = isReducedMotionEnabled();
+        const arcLift = reducedMotion
+          ? Math.max(20, Math.min(44, Number(handback.arc_lift_px || 56) * 0.46))
+          : Math.max(36, Math.min(96, Number(handback.arc_lift_px || 56)));
         const releaseX = lastVx * velocityCarry * 12;
         const releaseY = lastVy * velocityCarry * 8;
 
         orbHandback.active = true;
         orbHandback.startAt = performance.now();
-        orbHandback.durationMs = Math.max(600, Number(handback.duration_ms || 1100));
-        orbHandback.lingerMs = Math.max(40, Number(handback.linger_ms || 90));
-        orbHandback.settleMs = Math.max(60, Number(handback.settle_ms || 140));
+        orbHandback.durationMs = reducedMotion
+          ? Math.max(320, Number(handback.duration_ms || 1100) * 0.55)
+          : Math.max(600, Number(handback.duration_ms || 1100));
+        orbHandback.lingerMs = reducedMotion
+          ? Math.max(20, Number(handback.linger_ms || 90) * 0.35)
+          : Math.max(40, Number(handback.linger_ms || 90));
+        orbHandback.settleMs = reducedMotion
+          ? Math.max(40, Number(handback.settle_ms || 140) * 0.5)
+          : Math.max(60, Number(handback.settle_ms || 140));
         orbHandback.fromX = fromX;
         orbHandback.fromY = fromY;
         orbHandback.toX = toX;
@@ -3208,7 +3368,7 @@
       function getOrbMotionProfile() {
         const movement = currentOrb?.movement || {};
         const cursorLock = Boolean(movement.cursor_lock);
-        return {
+        const base = {
           cursorLock,
           profile: String(movement.profile || (cursorLock ? "cursor_lock" : "cursor_drift")),
           leadStrength: Number(movement.lead_strength ?? (cursorLock ? 0.06 : 0.035)),
@@ -3224,6 +3384,26 @@
           lockRadius: Number(movement.lock_radius ?? (cursorLock ? 0.8 : 1.4)),
           orbitBias: Number(movement.orbit_bias ?? 0),
           interjectionBias: Number(movement.interjection_bias ?? 0),
+        };
+        if (!isReducedMotionEnabled()) {
+          return base;
+        }
+        return {
+          ...base,
+          profile: base.cursorLock ? "cursor_guard" : "cursor_lock",
+          leadStrength: base.leadStrength * 0.42,
+          settleStrength: Math.max(0.18, base.settleStrength * 0.82),
+          damping: Math.min(0.92, base.damping + 0.12),
+          driftStrength: base.driftStrength * 0.12,
+          microStrength: base.microStrength * 0.08,
+          verticalBias: base.verticalBias * 0.45,
+          hesitationMs: Math.max(120, base.hesitationMs * 0.66),
+          correctionStrength: base.correctionStrength * 0.5,
+          correctionCap: Math.max(2, base.correctionCap * 0.4),
+          leadCap: Math.max(4, base.leadCap * 0.45),
+          lockRadius: Math.max(0.55, base.lockRadius * 0.72),
+          orbitBias: base.orbitBias * 0.08,
+          interjectionBias: base.interjectionBias * 0.3,
         };
       }
 
@@ -7426,6 +7606,18 @@
           scheduleReconnect();
         };
       }
+
+      try {
+        const motionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+        if (motionQuery && typeof motionQuery.addEventListener === "function") {
+          motionQuery.addEventListener("change", () => {
+            applyAccessibilityPosture();
+            renderDesktopShell();
+          });
+        }
+      } catch {}
+
+      applyAccessibilityPosture();
 
       loadSurface()
         .then(() => {
