@@ -17,6 +17,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - persists overlay bounds, target display, always-on-top, and click-through state in the Electron user-data directory
 - reflects the current launch-at-login state in the desktop shell lifecycle surface
 - records build identity and lifecycle update posture so source checkouts and packaged builds are both inspectable
+- surfaces retained-state migration posture so stale or unreadable shell schemas are visible before continuity is trusted
 - surfaces a guided repair path when updates, recovery, portability, or runtime checks leave the shell in an attention state
 - persists session continuity so unclean exits and managed HUD crashes surface as recovery state on the next launch
 - supports guarded shell-state export and import so overlay posture can move machines without replaying authority
@@ -85,6 +86,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD can now inspect build/session lifecycle state and toggle Start At Login from the desktop shell surface
 - the HUD can now inspect and acknowledge lifecycle update notices instead of treating build changes as silent mutation
 - the HUD now surfaces a repair path with restart, rollback, support-bundle, and user-data actions when update posture degrades
+- the HUD now surfaces migration discipline across retained shell files so schema drift and unreadable state stop being silent
 - recovery now overrides startup posture safely, so unclean exits re-enter visible and interactive instead of hiding authority questions
 - the HUD and tray can now export/import safe shell posture with explicit limits around login settings and live authority
 - the HUD can now inspect retained shell surfaces and reset local shell residue without deleting workspace continuity

@@ -1306,6 +1306,10 @@
           <div class="desktop-grid" id="desktop-preflight-cards">
             <div class="desktop-pill"><strong>Preflight</strong><span>Startup diagnostics will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Migration Discipline</h3>
+          <div class="desktop-grid" id="desktop-migration-cards">
+            <div class="desktop-pill"><strong>Migration</strong><span>Schema migration posture will render here once the shell bridge is attached.</span></div>
+          </div>
           <h3>Rollback Snapshots</h3>
           <div class="desktop-grid" id="desktop-rollback-cards">
             <div class="desktop-pill"><strong>Rollback</strong><span>Rollback snapshots will render here once the shell bridge is attached.</span></div>
@@ -2045,6 +2049,29 @@
         ];
       }
 
+      function buildDesktopMigrationCards() {
+        const migration = desktopState.lifecycle?.migration && typeof desktopState.lifecycle.migration === "object"
+          ? desktopState.lifecycle.migration
+          : null;
+
+        if (!migration) {
+          return [
+            { label: "Migration", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Schema migration posture will appear once the desktop bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(migration.cards) && migration.cards.length
+          ? migration.cards
+          : [
+              {
+                label: "Summary",
+                value: String(migration.summary || "Migration posture unavailable"),
+                tone: migration.blocked > 0 ? "high" : migration.attention > 0 ? "medium" : "low",
+              },
+            ];
+      }
+
       function buildDesktopRollbackCards() {
         const rollback = desktopState.lifecycle?.rollback && typeof desktopState.lifecycle.rollback === "object"
           ? desktopState.lifecycle.rollback
@@ -2232,6 +2259,7 @@
         const portabilityCards = document.getElementById("desktop-portability-cards");
         const retainedStateCards = document.getElementById("desktop-retained-state-cards");
         const preflightCards = document.getElementById("desktop-preflight-cards");
+        const migrationCards = document.getElementById("desktop-migration-cards");
         const rollbackCards = document.getElementById("desktop-rollback-cards");
         const decommissionCards = document.getElementById("desktop-decommission-cards");
         const decommissionActions = document.getElementById("desktop-decommission-actions");
@@ -2244,7 +2272,7 @@
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2395,6 +2423,7 @@
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");
         renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
         renderDetailCards("desktop-preflight-cards", buildDesktopPreflightCards(), "Preflight");
+        renderDetailCards("desktop-migration-cards", buildDesktopMigrationCards(), "Migration");
         renderDetailCards("desktop-rollback-cards", buildDesktopRollbackCards(), "Rollback");
         renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
         renderDetailCards("desktop-support-cards", buildDesktopSupportCards(), "Support");
@@ -2402,6 +2431,7 @@
         repairActions.innerHTML = `
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.acknowledge_update?.enabled ? "" : "disabled"} onclick="acknowledgeDesktopUpdateNotice()">${escapeHtml(String(repair?.actions?.acknowledge_update?.label || "Acknowledge Update"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restart_hud?.enabled ? "" : "disabled"} onclick="restartDesktopHud()">${escapeHtml(String(repair?.actions?.restart_hud?.label || "Restart HUD"))}</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.reset_shell_state?.enabled ? "" : "disabled"} onclick="resetDesktopShellState()">${escapeHtml(String(repair?.actions?.reset_shell_state?.label || "Reset Shell State"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restore_snapshot?.enabled ? "" : "disabled"} onclick="restoreDesktopRollbackSnapshot()">${escapeHtml(String(repair?.actions?.restore_snapshot?.label || "Restore Latest Snapshot"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.export_support_bundle?.enabled ? "" : "disabled"} onclick="exportDesktopSupportBundle()">${escapeHtml(String(repair?.actions?.export_support_bundle?.label || "Export Support Bundle"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.open_user_data?.enabled ? "" : "disabled"} onclick="openDesktopLifecyclePath('user_data', 'user data')">${escapeHtml(String(repair?.actions?.open_user_data?.label || "Open User Data"))}</button>

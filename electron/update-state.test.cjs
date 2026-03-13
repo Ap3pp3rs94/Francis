@@ -23,6 +23,8 @@ test("update state creates a first-run record without a pending notice", () => {
     now: "2026-03-12T08:00:00Z",
     preferencesSchemaVersion: 3,
     sessionSchemaVersion: 1,
+    portabilitySchemaVersion: 1,
+    supportSchemaVersion: 1,
   });
 
   assert.equal(path.basename(getUpdateStatePath(userDataPath)), UPDATE_STATE_FILE);
@@ -37,6 +39,8 @@ test("update state raises a pending notice when the build identity changes", () 
     now: "2026-03-12T08:00:00Z",
     preferencesSchemaVersion: 3,
     sessionSchemaVersion: 1,
+    portabilitySchemaVersion: 1,
+    supportSchemaVersion: 1,
   });
 
   const updated = reconcileUpdateState(userDataPath, {
@@ -44,6 +48,8 @@ test("update state raises a pending notice when the build identity changes", () 
     now: "2026-03-12T09:00:00Z",
     preferencesSchemaVersion: 3,
     sessionSchemaVersion: 1,
+    portabilitySchemaVersion: 1,
+    supportSchemaVersion: 1,
   });
 
   assert.equal(updated.notice, "updated");
@@ -59,6 +65,8 @@ test("acknowledging an update notice clears the pending state", () => {
     now: "2026-03-12T08:00:00Z",
     preferencesSchemaVersion: 3,
     sessionSchemaVersion: 1,
+    portabilitySchemaVersion: 1,
+    supportSchemaVersion: 1,
   });
 
   const updated = reconcileUpdateState(userDataPath, {
@@ -66,6 +74,8 @@ test("acknowledging an update notice clears the pending state", () => {
     now: "2026-03-12T09:00:00Z",
     preferencesSchemaVersion: 3,
     sessionSchemaVersion: 1,
+    portabilitySchemaVersion: 1,
+    supportSchemaVersion: 1,
   });
 
   const acknowledged = acknowledgeUpdateNotice(userDataPath, updated, "2026-03-12T09:10:00Z");
@@ -75,4 +85,5 @@ test("acknowledging an update notice clears the pending state", () => {
   assert.equal(acknowledged.notice, "acknowledged");
   assert.equal(posture.compatibility, "current");
   assert.match(posture.summary, /Running build/);
+  assert.match(posture.schemaSummary, /portability v1/);
 });

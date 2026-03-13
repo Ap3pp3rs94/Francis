@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const UPDATE_STATE_FILE = "overlay-update-state.json";
-const UPDATE_STATE_VERSION = 1;
+const UPDATE_STATE_VERSION = 2;
 
 function getUpdateStatePath(userDataPath) {
   return path.join(userDataPath, UPDATE_STATE_FILE);
@@ -13,6 +13,8 @@ function buildDefaultUpdateState({
   now = null,
   preferencesSchemaVersion = null,
   sessionSchemaVersion = null,
+  portabilitySchemaVersion = null,
+  supportSchemaVersion = null,
 } = {}) {
   return {
     version: UPDATE_STATE_VERSION,
@@ -25,6 +27,8 @@ function buildDefaultUpdateState({
     acknowledgedAt: null,
     preferencesSchemaVersion,
     sessionSchemaVersion,
+    portabilitySchemaVersion,
+    supportSchemaVersion,
     lastSchemaSyncAt: now,
   };
 }
@@ -49,6 +53,12 @@ function normalizeUpdateState(raw, defaults = buildDefaultUpdateState()) {
     sessionSchemaVersion: Number.isFinite(Number(raw.sessionSchemaVersion))
       ? Number(raw.sessionSchemaVersion)
       : defaults.sessionSchemaVersion,
+    portabilitySchemaVersion: Number.isFinite(Number(raw.portabilitySchemaVersion))
+      ? Number(raw.portabilitySchemaVersion)
+      : defaults.portabilitySchemaVersion,
+    supportSchemaVersion: Number.isFinite(Number(raw.supportSchemaVersion))
+      ? Number(raw.supportSchemaVersion)
+      : defaults.supportSchemaVersion,
     lastSchemaSyncAt: typeof raw.lastSchemaSyncAt === "string" ? raw.lastSchemaSyncAt : defaults.lastSchemaSyncAt,
   };
 }
@@ -80,6 +90,8 @@ function reconcileUpdateState(
     now = new Date().toISOString(),
     preferencesSchemaVersion = null,
     sessionSchemaVersion = null,
+    portabilitySchemaVersion = null,
+    supportSchemaVersion = null,
   } = {},
 ) {
   const filePath = getUpdateStatePath(userDataPath);
@@ -88,6 +100,8 @@ function reconcileUpdateState(
     now,
     preferencesSchemaVersion,
     sessionSchemaVersion,
+    portabilitySchemaVersion,
+    supportSchemaVersion,
   });
 
   let prior = null;
@@ -105,13 +119,17 @@ function reconcileUpdateState(
   const buildChanged = prior.currentBuild !== buildIdentity;
   const schemaChanged =
     prior.preferencesSchemaVersion !== preferencesSchemaVersion ||
-    prior.sessionSchemaVersion !== sessionSchemaVersion;
+    prior.sessionSchemaVersion !== sessionSchemaVersion ||
+    prior.portabilitySchemaVersion !== portabilitySchemaVersion ||
+    prior.supportSchemaVersion !== supportSchemaVersion;
 
   const next = {
     ...prior,
     currentBuild: buildIdentity,
     preferencesSchemaVersion,
     sessionSchemaVersion,
+    portabilitySchemaVersion,
+    supportSchemaVersion,
     lastSchemaSyncAt: now,
   };
 
@@ -164,7 +182,12 @@ function buildUpdatePosture(state) {
     ...state,
     compatibility,
     summary,
-    schemaSummary: `prefs v${String(state.preferencesSchemaVersion ?? "unknown")} | session v${String(state.sessionSchemaVersion ?? "unknown")}`,
+    schemaSummary: [
+      `prefs v${String(state.preferencesSchemaVersion ?? "unknown")}`,
+      `session v${String(state.sessionSchemaVersion ?? "unknown")}`,
+      `portability v${String(state.portabilitySchemaVersion ?? "unknown")}`,
+      `support v${String(state.supportSchemaVersion ?? "unknown")}`,
+    ].join(" | "),
   };
 }
 

@@ -12,6 +12,10 @@ test("repair plan escalates when blocked checks and rollback are present", () =>
       blocked: 2,
       attention: 1,
     },
+    migration: {
+      blocked: 1,
+      attention: 1,
+    },
     recovery: {
       needed: true,
     },
@@ -34,6 +38,7 @@ test("repair plan escalates when blocked checks and rollback are present", () =>
   });
 
   assert.equal(plan.severity, "high");
+  assert.equal(plan.actions.reset_shell_state.enabled, true);
   assert.equal(plan.actions.restore_snapshot.enabled, true);
   assert.equal(plan.actions.export_support_bundle.enabled, true);
   assert.equal(plan.actions.open_user_data.enabled, true);
@@ -47,6 +52,10 @@ test("repair plan stays nominal when no repair signals are active", () => {
       pendingNotice: false,
     },
     preflight: {
+      blocked: 0,
+      attention: 0,
+    },
+    migration: {
       blocked: 0,
       attention: 0,
     },
@@ -69,6 +78,7 @@ test("repair plan stays nominal when no repair signals are active", () => {
 
   assert.equal(plan.severity, "low");
   assert.equal(plan.actions.acknowledge_update.enabled, false);
+  assert.equal(plan.actions.reset_shell_state.enabled, false);
   assert.equal(plan.actions.restore_snapshot.enabled, false);
   assert.equal(plan.steps[0], "No repair actions are required right now.");
 });

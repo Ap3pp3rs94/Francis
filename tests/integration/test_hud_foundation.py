@@ -100,6 +100,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Shell Portability" in response.text
     assert "Retained State" in response.text
     assert "Preflight" in response.text
+    assert "Migration Discipline" in response.text
     assert "Rollback Snapshots" in response.text
     assert "Decommission" in response.text
     assert "Support Bundle" in response.text

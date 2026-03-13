@@ -3,6 +3,7 @@ const SUPPORT_BUNDLE_VERSION = 1;
 function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
   const preflight = lifecycle?.preflight || {};
   const update = lifecycle?.update || {};
+  const migration = lifecycle?.migration || {};
   const rollback = lifecycle?.rollback || {};
   const parts = [];
 
@@ -16,6 +17,12 @@ function buildSupportSummary(lifecycle = {}, hud = null, recovery = null) {
 
   if (update.pendingNotice) {
     parts.push(`update notice ${String(update.currentBuild || "pending")}`);
+  }
+
+  if (migration.blocked > 0) {
+    parts.push(`${migration.blocked} migration checks blocked`);
+  } else if (migration.attention > 0) {
+    parts.push(`${migration.attention} migration checks need review`);
   }
 
   if (recovery?.needed) {
@@ -67,6 +74,7 @@ function buildSupportBundle({
       portability: lifecycle?.portability || null,
       retainedState: lifecycle?.retainedState || null,
       preflight: lifecycle?.preflight || null,
+      migration: lifecycle?.migration || null,
       rollback: lifecycle?.rollback || null,
       decommission: lifecycle?.decommission || null,
       provenance: lifecycle?.provenance || null,

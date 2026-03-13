@@ -20,6 +20,7 @@ test("support bundle captures lifecycle recovery and display posture", () => {
       buildIdentity: "0.1.0+abc1234",
       distribution: "installer",
       preflight: { blocked: 1, attention: 0 },
+      migration: { blocked: 0, attention: 2 },
       update: { pendingNotice: true, currentBuild: "0.1.0+abc1234" },
       rollback: { count: 2 },
       decommission: { summary: "clean uninstall available" },
@@ -34,7 +35,9 @@ test("support bundle captures lifecycle recovery and display posture", () => {
   assert.equal(bundle.overlay.targetDisplayId, 2);
   assert.match(bundle.summary, /preflight/i);
   assert.match(bundle.summary, /update notice/i);
+  assert.match(bundle.summary, /migration/i);
   assert.match(bundle.summary, /recovery/i);
   assert.match(bundle.summary, /rollback/i);
   assert.equal(bundle.lifecycle.decommission.summary, "clean uninstall available");
+  assert.equal(bundle.lifecycle.migration.attention, 2);
 });
