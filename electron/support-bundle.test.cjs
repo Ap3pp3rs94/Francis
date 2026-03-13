@@ -21,6 +21,7 @@ test("support bundle captures lifecycle recovery and display posture", () => {
       distribution: "installer",
       degradedMode: { mode: "reduced" },
       accessibility: { motionMode: "reduce", effectiveMotionMode: "reduce" },
+      history: { count: 2, latestKind: "support.export" },
       preflight: { blocked: 1, attention: 0 },
       migration: { blocked: 0, attention: 2 },
       update: { pendingNotice: true, currentBuild: "0.1.0+abc1234" },
@@ -45,4 +46,5 @@ test("support bundle captures lifecycle recovery and display posture", () => {
   assert.equal(bundle.lifecycle.migration.attention, 2);
   assert.equal(bundle.lifecycle.degradedMode.mode, "reduced");
   assert.equal(bundle.lifecycle.accessibility.motionMode, "reduce");
+  assert.equal(bundle.lifecycle.history.latestKind, "support.export");
 });

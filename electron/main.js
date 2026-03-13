@@ -56,6 +56,13 @@ const { buildSupportBundle } = require("./support-bundle");
 const { buildRepairPlan } = require("./update-repair");
 const { buildShellMigrationPosture } = require("./state-migrations");
 const { buildDegradedModePosture } = require("./degraded-mode");
+const {
+  buildDefaultLifecycleHistoryState,
+  buildLifecycleHistorySurface,
+  getLifecycleHistoryPath,
+  loadLifecycleHistoryState,
+  recordLifecycleEvent,
+} = require("./lifecycle-history");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -72,6 +79,7 @@ let portabilityState = null;
 let backupState = null;
 let supportState = null;
 let buildProvenance = null;
+let lifecycleHistoryState = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
@@ -120,6 +128,25 @@ function setOverlayRecovery(next = {}) {
     message: String(next.message || ""),
     lastExitReason: String(next.lastExitReason || ""),
   };
+}
+
+function recordLifecycleHistory(kind, summary, { tone = "low", detail = {} } = {}) {
+  if (!app.isReady()) {
+    return null;
+  }
+  lifecycleHistoryState = recordLifecycleEvent(
+    app.getPath("userData"),
+    lifecycleHistoryState || buildDefaultLifecycleHistoryState(),
+    {
+      id: `${Date.now()}-${String(kind || "event")}`,
+      at: new Date().toISOString(),
+      kind: String(kind || "shell.event"),
+      summary: String(summary || "Lifecycle event recorded."),
+      tone: String(tone || "low"),
+      detail: detail && typeof detail === "object" ? detail : {},
+    },
+  );
+  return lifecycleHistoryState;
 }
 
 function markSessionLaunch() {
@@ -331,6 +358,7 @@ function getLifecycleState() {
     hud: hudState,
     decommission,
   });
+  const history = buildLifecycleHistorySurface(lifecycleHistoryState || buildDefaultLifecycleHistoryState());
   return {
     packaged: currentBuild.packaged,
     distribution: currentBuild.distribution,
@@ -343,6 +371,7 @@ function getLifecycleState() {
     update,
     portability,
     support,
+    history,
     degradedMode,
     provenance: buildProvenance || {
       summary: "Build provenance is unavailable.",
@@ -362,6 +391,7 @@ function getLifecycleState() {
     sessionStatePath: userDataPath ? getSessionStatePath(userDataPath) : null,
     updateStatePath: userDataPath ? getUpdateStatePath(userDataPath) : null,
     supportStatePath: userDataPath ? getSupportStatePath(userDataPath) : null,
+    historyStatePath: userDataPath ? getLifecycleHistoryPath(userDataPath) : null,
     session,
   };
 }
@@ -401,6 +431,14 @@ function setLaunchAtLoginEnabled(enabled) {
     });
   }
   log("Updated launch-at-login state", nextState);
+  recordLifecycleHistory(
+    "shell.launch_at_login",
+    nextState.enabled ? "Launch at login enabled." : "Launch at login disabled.",
+    {
+      tone: nextState.enabled ? "medium" : "low",
+      detail: nextState,
+    },
+  );
   notifyOverlayState(safeWindow);
   return nextState;
 }
@@ -417,6 +455,14 @@ function setStartupProfile(profileId) {
     requested: profileId,
     startupProfile: normalized,
   });
+  recordLifecycleHistory(
+    "shell.startup_profile",
+    `Startup profile set to ${normalized}.`,
+    {
+      tone: "low",
+      detail: { requested: profileId, startupProfile: normalized },
+    },
+  );
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
 }
@@ -433,6 +479,14 @@ function setMotionMode(modeId) {
     requested: modeId,
     motionMode: normalized,
   });
+  recordLifecycleHistory(
+    "shell.motion_mode",
+    `Motion mode set to ${normalized}.`,
+    {
+      tone: normalized === "reduce" ? "medium" : "low",
+      detail: { requested: modeId, motionMode: normalized },
+    },
+  );
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
 }
@@ -446,6 +500,14 @@ function dismissUpdateNotice() {
     build: updateState.currentBuild,
     notice: updateState.notice,
   });
+  recordLifecycleHistory(
+    "update.acknowledged",
+    `Update notice acknowledged for ${String(updateState.currentBuild || "unknown build")}.`,
+    {
+      tone: "medium",
+      detail: { build: updateState.currentBuild, notice: updateState.notice },
+    },
+  );
   notifyOverlayState(mainWindow);
   return getOverlayState(mainWindow);
 }
@@ -472,6 +534,10 @@ function createRollbackSnapshot(reason = "manual", note = "") {
   log("Created rollback snapshot", {
     backupId: manifest.backupId,
     reason: manifest.reason,
+  });
+  recordLifecycleHistory("rollback.snapshot", `Rollback snapshot ${manifest.backupId} created.`, {
+    tone: "medium",
+    detail: manifest,
   });
   notifyOverlayState(mainWindow);
   return getOverlayState(mainWindow);
@@ -500,9 +566,12 @@ function restoreLatestRollbackSnapshot(win = mainWindow) {
     buildIdentity: (buildInfo || resolveBuildIdentity(app, __dirname)).identity,
     preferencesSchemaVersion: PREFERENCES_VERSION,
     sessionSchemaVersion: SESSION_STATE_VERSION,
+    portabilitySchemaVersion: PORTABILITY_STATE_VERSION,
+    supportSchemaVersion: SUPPORT_STATE_VERSION,
   });
   portabilityState = loadPortabilityState(app.getPath("userData"));
   supportState = loadSupportState(app.getPath("userData"));
+  lifecycleHistoryState = loadLifecycleHistoryState(app.getPath("userData"));
   refreshBackupState();
 
   if (safeWindow) {
@@ -514,6 +583,10 @@ function restoreLatestRollbackSnapshot(win = mainWindow) {
   log("Restored rollback snapshot", {
     backupId: manifest.backupId,
     reason: manifest.reason,
+  });
+  recordLifecycleHistory("rollback.restore", `Rollback snapshot ${manifest.backupId} restored.`, {
+    tone: "high",
+    detail: manifest,
   });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
@@ -558,6 +631,14 @@ async function exportShellState(win = mainWindow) {
     filePath: selected.filePath,
     startupProfile: payload.shell.startupProfile,
   });
+  recordLifecycleHistory("portability.export", `Shell state exported to ${selected.filePath}.`, {
+    tone: "low",
+    detail: {
+      filePath: selected.filePath,
+      startupProfile: payload.shell.startupProfile,
+      motionMode: payload.shell.motionMode,
+    },
+  });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
 }
@@ -601,6 +682,13 @@ async function importShellState(win = mainWindow) {
       filePath,
       summary: compatibility.summary,
     });
+    recordLifecycleHistory("portability.import_blocked", compatibility.summary, {
+      tone: "high",
+      detail: {
+        filePath,
+        compatibility,
+      },
+    });
     notifyOverlayState(safeWindow);
     throw new Error(compatibility.summary);
   }
@@ -626,6 +714,15 @@ async function importShellState(win = mainWindow) {
   log("Imported overlay shell state", {
     filePath,
     startupProfile: overlayPreferences.startupProfile,
+  });
+  recordLifecycleHistory("portability.import", `Shell state imported from ${filePath}.`, {
+    tone: "medium",
+    detail: {
+      filePath,
+      startupProfile: overlayPreferences.startupProfile,
+      motionMode: overlayPreferences.motionMode,
+      compatibility,
+    },
   });
   refreshBackupState();
   notifyOverlayState(safeWindow);
@@ -679,6 +776,10 @@ function resetRetainedShellState(win = mainWindow) {
   log("Reset retained shell state", {
     targetDisplayId: overlayPreferences.targetDisplayId,
   });
+  recordLifecycleHistory("shell.reset", "Retained shell state reset to defaults.", {
+    tone: "medium",
+    detail: { targetDisplayId: overlayPreferences.targetDisplayId },
+  });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
 }
@@ -720,6 +821,10 @@ async function exportSupportBundle(win = mainWindow) {
   log("Exported support bundle", {
     filePath: selected.filePath,
     summary: payload.summary,
+  });
+  recordLifecycleHistory("support.export", `Support bundle exported to ${selected.filePath}.`, {
+    tone: "medium",
+    detail: { filePath: selected.filePath, summary: payload.summary },
   });
   notifyOverlayState(safeWindow);
   return getOverlayState(safeWindow);
@@ -1441,6 +1546,10 @@ async function restartHudAndRefreshWindow(win = mainWindow) {
     await loadHud(safeWindow);
     notifyOverlayState(safeWindow);
   }
+  recordLifecycleHistory("hud.restart", "Managed HUD restarted from the overlay shell.", {
+    tone: "medium",
+    detail: getHudState() || {},
+  });
   return getOverlayState(safeWindow);
 }
 
@@ -1612,10 +1721,13 @@ if (!app.requestSingleInstanceLock()) {
     sessionState = loadSessionState(app.getPath("userData"));
     portabilityState = loadPortabilityState(app.getPath("userData"));
     supportState = loadSupportState(app.getPath("userData"));
+    lifecycleHistoryState = loadLifecycleHistoryState(app.getPath("userData"));
     const priorUpdateState = loadUpdateState(app.getPath("userData"), {
       buildIdentity: buildInfo.identity,
       preferencesSchemaVersion: PREFERENCES_VERSION,
       sessionSchemaVersion: SESSION_STATE_VERSION,
+      portabilitySchemaVersion: PORTABILITY_STATE_VERSION,
+      supportSchemaVersion: SUPPORT_STATE_VERSION,
     });
     if (priorUpdateState.currentBuild && priorUpdateState.currentBuild !== buildInfo.identity) {
       const manifest = createShellBackup(app.getPath("userData"), {
@@ -1629,6 +1741,8 @@ if (!app.requestSingleInstanceLock()) {
         buildIdentity: buildInfo.identity,
         preferencesSchemaVersion: PREFERENCES_VERSION,
         sessionSchemaVersion: SESSION_STATE_VERSION,
+        portabilitySchemaVersion: PORTABILITY_STATE_VERSION,
+        supportSchemaVersion: SUPPORT_STATE_VERSION,
       });
     }
     updateState = reconcileUpdateState(app.getPath("userData"), {

@@ -1362,6 +1362,13 @@
           <div class="desktop-grid" id="desktop-provenance-cards">
             <div class="desktop-pill"><strong>Provenance</strong><span>Build and runtime provenance will render here once the shell bridge is attached.</span></div>
           </div>
+          <h3>Lifecycle History</h3>
+          <div class="desktop-grid" id="desktop-history-cards">
+            <div class="desktop-pill"><strong>History</strong><span>Recent shell lifecycle actions will render here once the shell bridge is attached.</span></div>
+          </div>
+          <ul class="list" id="desktop-history-list">
+            <li class="muted-empty">Lifecycle history will render here once the shell bridge is attached.</li>
+          </ul>
           <p class="meta tiny" id="desktop-meta">
             Electron-only bridge. In browser mode there is no desktop shell control surface.
           </p>
@@ -2374,6 +2381,29 @@
         ];
       }
 
+      function buildDesktopHistoryCards() {
+        const history = desktopState.lifecycle?.history && typeof desktopState.lifecycle.history === "object"
+          ? desktopState.lifecycle.history
+          : null;
+
+        if (!history) {
+          return [
+            { label: "History", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Recent shell lifecycle actions will appear once the shell bridge is attached.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(history.cards) && history.cards.length
+          ? history.cards
+          : [
+              {
+                label: "Summary",
+                value: String(history.summary || "No lifecycle history surfaced"),
+                tone: "low",
+              },
+            ];
+      }
+
       function renderDesktopShell() {
         const status = document.getElementById("desktop-status");
         const summary = document.getElementById("desktop-summary");
@@ -2393,6 +2423,8 @@
         const decommissionDetail = document.getElementById("desktop-decommission");
         const supportCards = document.getElementById("desktop-support-cards");
         const provenanceCards = document.getElementById("desktop-provenance-cards");
+        const historyCards = document.getElementById("desktop-history-cards");
+        const historyList = document.getElementById("desktop-history-list");
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const degradedModeCards = document.getElementById("desktop-degraded-mode-cards");
@@ -2400,7 +2432,7 @@
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2589,6 +2621,16 @@
         renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
         renderDetailCards("desktop-support-cards", buildDesktopSupportCards(), "Support");
         renderDetailCards("desktop-provenance-cards", buildDesktopProvenanceCards(), "Provenance");
+        renderDetailCards("desktop-history-cards", buildDesktopHistoryCards(), "History");
+        const historyItems = Array.isArray(lifecycle?.history?.items) ? lifecycle.history.items : [];
+        historyList.innerHTML = historyItems.length
+          ? historyItems
+              .map(
+                (item) =>
+                  `<li><strong>${escapeHtml(String(item.summary || "Lifecycle event"))}</strong><br /><span class="meta">${escapeHtml(String(item.kind || "shell.event"))} | ${escapeHtml(String(item.at || "unknown time"))}</span></li>`,
+              )
+              .join("")
+          : '<li class="muted-empty">Lifecycle history will render here once the shell bridge is attached.</li>';
         repairActions.innerHTML = `
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.acknowledge_update?.enabled ? "" : "disabled"} onclick="acknowledgeDesktopUpdateNotice()">${escapeHtml(String(repair?.actions?.acknowledge_update?.label || "Acknowledge Update"))}</button>
           <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restart_hud?.enabled ? "" : "disabled"} onclick="restartDesktopHud()">${escapeHtml(String(repair?.actions?.restart_hud?.label || "Restart HUD"))}</button>
