@@ -49,6 +49,7 @@ const { buildPreflightState } = require("./preflight");
 const { createShellBackup, restoreShellBackup, summarizeBackups } = require("./backup-state");
 const { buildDecommissionPlan } = require("./decommission-plan");
 const { buildSupportBundle } = require("./support-bundle");
+const { buildRepairPlan } = require("./update-repair");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
@@ -296,6 +297,72 @@ function getLifecycleState() {
         : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] },
       portabilityState: portabilityState || buildDefaultPortabilityState(),
       launchAtLogin: login,
+    }),
+    repair: buildRepairPlan({
+      update: buildUpdatePosture(
+        updateState ||
+          reconcileUpdateState(app.getPath("userData"), {
+            buildIdentity: currentBuild.identity,
+            preferencesSchemaVersion: PREFERENCES_VERSION,
+            sessionSchemaVersion: SESSION_STATE_VERSION,
+          }),
+      ),
+      preflight: app.isReady()
+        ? buildPreflightState({
+            userDataPath: app.getPath("userData"),
+            workspaceRoot,
+            preferencesPath: getPreferencesPath(app.getPath("userData")),
+            sessionStatePath: getSessionStatePath(app.getPath("userData")),
+            updateStatePath: getUpdateStatePath(app.getPath("userData")),
+            hudState,
+            launchAtLogin: login,
+            buildIdentity: currentBuild.identity,
+            distribution: currentBuild.distribution,
+          })
+        : buildPreflightState({
+            userDataPath: null,
+            workspaceRoot: null,
+            preferencesPath: null,
+            sessionStatePath: null,
+            updateStatePath: null,
+            hudState,
+            launchAtLogin: login,
+            buildIdentity: currentBuild.identity,
+            distribution: currentBuild.distribution,
+          }),
+      recovery: overlayRecovery,
+      rollback: app.isReady()
+        ? (backupState || summarizeBackups(app.getPath("userData")))
+        : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] },
+      portability: portabilityState || buildDefaultPortabilityState(),
+      support: supportState || buildDefaultSupportState(),
+      hud: hudState,
+      decommission: buildDecommissionPlan({
+        buildIdentity: currentBuild.identity,
+        distribution: currentBuild.distribution,
+        installRoot: app.isReady()
+          ? (currentBuild.packaged ? path.dirname(process.execPath) : app.getAppPath())
+          : null,
+        execPath: app.isReady() ? process.execPath : null,
+        userDataPath: app.isReady() ? app.getPath("userData") : null,
+        workspaceRoot,
+        retainedState: app.isReady()
+          ? describeRetainedState({
+              userDataPath: app.getPath("userData"),
+              workspaceRoot,
+              launchAtLogin: login,
+            })
+          : describeRetainedState({
+              userDataPath: ".",
+              workspaceRoot: null,
+              launchAtLogin: login,
+            }),
+        rollbackState: app.isReady()
+          ? (backupState || summarizeBackups(app.getPath("userData")))
+          : { count: 0, latest: null, summary: "Rollback snapshots unavailable until the shell is ready.", items: [] },
+        portabilityState: portabilityState || buildDefaultPortabilityState(),
+        launchAtLogin: login,
+      }),
     }),
     userDataPath: app.isReady() ? app.getPath("userData") : null,
     preferencesPath: app.isReady() ? getPreferencesPath(app.getPath("userData")) : null,

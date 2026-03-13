@@ -70,6 +70,7 @@ function buildSupportBundle({
       rollback: lifecycle?.rollback || null,
       decommission: lifecycle?.decommission || null,
       provenance: lifecycle?.provenance || null,
+      repair: lifecycle?.repair || null,
       session: lifecycle?.session || null,
     },
     hud,

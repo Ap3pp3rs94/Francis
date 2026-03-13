@@ -1337,6 +1337,13 @@
           <div class="desktop-grid" id="desktop-update-cards">
             <div class="desktop-pill"><strong>Update</strong><span>Build and schema posture will render here once the shell lifecycle is available.</span></div>
           </div>
+          <h3>Repair Path</h3>
+          <div class="desktop-grid" id="desktop-repair-cards">
+            <div class="desktop-pill"><strong>Repair</strong><span>Guided repair actions will render here once the shell lifecycle is available.</span></div>
+          </div>
+          <div class="desktop-actions" id="desktop-repair-actions">
+            <button class="btn-secondary" type="button" disabled>Restart HUD</button>
+          </div>
           <pre class="console" id="desktop-display">Desktop shell detail will render here. Browser mode until Electron is attached.</pre>
         </article>
         <article class="panel accent">
@@ -1880,6 +1887,29 @@
         ];
       }
 
+      function buildDesktopRepairCards() {
+        const repair = desktopState.lifecycle?.repair && typeof desktopState.lifecycle.repair === "object"
+          ? desktopState.lifecycle.repair
+          : null;
+
+        if (!repair) {
+          return [
+            { label: "Repair", value: "unavailable", tone: "low" },
+            { label: "Summary", value: "Guided repair steps will appear once the shell lifecycle is available.", tone: "low" },
+          ];
+        }
+
+        return Array.isArray(repair.cards) && repair.cards.length
+          ? repair.cards
+          : [
+              {
+                label: "Summary",
+                value: String(repair.summary || "No repair summary surfaced"),
+                tone: String(repair.severity || "low"),
+              },
+            ];
+      }
+
       function buildDesktopPortabilityCards() {
         const portability = desktopState.lifecycle?.portability && typeof desktopState.lifecycle.portability === "object"
           ? desktopState.lifecycle.portability
@@ -2211,8 +2241,10 @@
         const meta = document.getElementById("desktop-meta");
         const recoveryCards = document.getElementById("desktop-recovery-cards");
         const updateCards = document.getElementById("desktop-update-cards");
+        const repairCards = document.getElementById("desktop-repair-cards");
+        const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !updateCards || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !portabilityCards || !retainedStateCards || !preflightCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !meta || !recoveryCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2230,6 +2262,7 @@
         const loginState = lifecycle?.launchAtLogin || null;
         const startupProfile = lifecycle?.startupProfile || null;
         const update = lifecycle?.update || null;
+        const repair = lifecycle?.repair || null;
         const rollback = lifecycle?.rollback || null;
         const decommission = lifecycle?.decommission || null;
         const session = lifecycle?.session || null;
@@ -2358,6 +2391,7 @@
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
         renderDetailCards("desktop-update-cards", buildDesktopUpdateCards(), "Update");
+        renderDetailCards("desktop-repair-cards", buildDesktopRepairCards(), "Repair");
         renderDetailCards("desktop-portability-cards", buildDesktopPortabilityCards(), "Portability");
         renderDetailCards("desktop-retained-state-cards", buildDesktopRetainedStateCards(), "Retained");
         renderDetailCards("desktop-preflight-cards", buildDesktopPreflightCards(), "Preflight");
@@ -2365,6 +2399,13 @@
         renderDetailCards("desktop-decommission-cards", buildDesktopDecommissionCards(), "Decommission");
         renderDetailCards("desktop-support-cards", buildDesktopSupportCards(), "Support");
         renderDetailCards("desktop-provenance-cards", buildDesktopProvenanceCards(), "Provenance");
+        repairActions.innerHTML = `
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.acknowledge_update?.enabled ? "" : "disabled"} onclick="acknowledgeDesktopUpdateNotice()">${escapeHtml(String(repair?.actions?.acknowledge_update?.label || "Acknowledge Update"))}</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restart_hud?.enabled ? "" : "disabled"} onclick="restartDesktopHud()">${escapeHtml(String(repair?.actions?.restart_hud?.label || "Restart HUD"))}</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.restore_snapshot?.enabled ? "" : "disabled"} onclick="restoreDesktopRollbackSnapshot()">${escapeHtml(String(repair?.actions?.restore_snapshot?.label || "Restore Latest Snapshot"))}</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.export_support_bundle?.enabled ? "" : "disabled"} onclick="exportDesktopSupportBundle()">${escapeHtml(String(repair?.actions?.export_support_bundle?.label || "Export Support Bundle"))}</button>
+          <button class="btn-secondary" type="button" ${desktopState.available && repair?.actions?.open_user_data?.enabled ? "" : "disabled"} onclick="openDesktopLifecyclePath('user_data', 'user data')">${escapeHtml(String(repair?.actions?.open_user_data?.label || "Open User Data"))}</button>
+        `;
         decommissionActions.innerHTML = `
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopShellState()">Export Shell State</button>
           <button class="btn-secondary" type="button" ${disabled} onclick="exportDesktopSupportBundle()">Export Support Bundle</button>
