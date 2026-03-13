@@ -27,6 +27,8 @@ test("overlay portability export includes safe shell preferences and import limi
     preferences: {
       startupProfile: "quiet",
       motionMode: "reduce",
+      contrastMode: "high",
+      densityMode: "compact",
       alwaysOnTop: false,
       ignoreMouseEvents: true,
       targetDisplayId: 202,
@@ -39,6 +41,8 @@ test("overlay portability export includes safe shell preferences and import limi
   assert.equal(payload.compatibility.channel, "0.1");
   assert.equal(payload.shell.startupProfile, "quiet");
   assert.equal(payload.shell.motionMode, "reduce");
+  assert.equal(payload.shell.contrastMode, "high");
+  assert.equal(payload.shell.densityMode, "compact");
   assert.equal(payload.shell.ignoreMouseEvents, true);
   assert.match(payload.limits.launchAtLogin, /Not imported automatically/);
 });
@@ -55,6 +59,8 @@ test("overlay portability import only extracts safe portable preferences", () =>
     shell: {
       startupProfile: "core_only",
       motionMode: "full",
+      contrastMode: "standard",
+      densityMode: "comfortable",
       alwaysOnTop: true,
       ignoreMouseEvents: false,
       targetDisplayId: 101,
@@ -67,6 +73,8 @@ test("overlay portability import only extracts safe portable preferences", () =>
 
   assert.equal(preferences.startupProfile, "core_only");
   assert.equal(preferences.motionMode, "full");
+  assert.equal(preferences.contrastMode, "standard");
+  assert.equal(preferences.densityMode, "comfortable");
   assert.equal(preferences.targetDisplayId, 101);
   assert.deepEqual(preferences.windowBounds, {
     x: 0,

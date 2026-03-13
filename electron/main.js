@@ -1,6 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
@@ -11,7 +11,12 @@ const {
   resolveTargetDisplay,
   savePreferences,
 } = require("./preferences");
-const { buildAccessibilityState, normalizeMotionMode } = require("./accessibility");
+const {
+  buildAccessibilityState,
+  normalizeContrastMode,
+  normalizeDensityMode,
+  normalizeMotionMode,
+} = require("./accessibility");
 const {
   SESSION_STATE_VERSION,
   buildDefaultSessionState,
@@ -121,6 +126,17 @@ function readSystemReducedMotionPreference() {
     }
   } catch (error) {
     log("Could not read system reduced-motion preference", error instanceof Error ? error.message : String(error));
+  }
+  return false;
+}
+
+function readSystemHighContrastPreference() {
+  try {
+    if (typeof nativeTheme?.shouldUseHighContrastColors === "boolean") {
+      return nativeTheme.shouldUseHighContrastColors;
+    }
+  } catch (error) {
+    log("Could not read system high-contrast preference", error instanceof Error ? error.message : String(error));
   }
   return false;
 }
@@ -262,6 +278,13 @@ function getLifecycleState() {
   const accessibility = buildAccessibilityState({
     motionMode: overlayPreferences?.motionMode,
     systemReducedMotion: readSystemReducedMotionPreference(),
+    contrastMode: overlayPreferences?.contrastMode,
+    systemHighContrast: readSystemHighContrastPreference(),
+    densityMode: overlayPreferences?.densityMode,
+    shortcuts: {
+      toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
+      toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
+    },
   });
   const ready = app.isReady();
   const userDataPath = ready ? app.getPath("userData") : null;
@@ -518,6 +541,54 @@ function setMotionMode(modeId) {
     {
       tone: normalized === "reduce" ? "medium" : "low",
       detail: { requested: modeId, motionMode: normalized },
+    },
+  );
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+function setContrastMode(modeId) {
+  const normalized = normalizeContrastMode(modeId);
+  const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (app.isReady()) {
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      contrastMode: normalized,
+    });
+  }
+  log("Updated contrast mode", {
+    requested: modeId,
+    contrastMode: normalized,
+  });
+  recordLifecycleHistory(
+    "shell.contrast_mode",
+    `Contrast mode set to ${normalized}.`,
+    {
+      tone: normalized === "high" ? "medium" : "low",
+      detail: { requested: modeId, contrastMode: normalized },
+    },
+  );
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+function setDensityMode(modeId) {
+  const normalized = normalizeDensityMode(modeId);
+  const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (app.isReady()) {
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      densityMode: normalized,
+    });
+  }
+  log("Updated density mode", {
+    requested: modeId,
+    densityMode: normalized,
+  });
+  recordLifecycleHistory(
+    "shell.density_mode",
+    `Density mode set to ${normalized}.`,
+    {
+      tone: normalized === "compact" ? "medium" : "low",
+      detail: { requested: modeId, densityMode: normalized },
     },
   );
   notifyOverlayState(safeWindow);
@@ -995,6 +1066,36 @@ function updateTray() {
               setMotionMode(option.id);
             } catch (error) {
               log("Tray motion mode update failed", error instanceof Error ? error.message : String(error));
+            }
+          },
+        })),
+      },
+      {
+        label: "Contrast Mode",
+        submenu: (overlaySnapshot.lifecycle?.accessibility?.contrastOptions || []).map((option) => ({
+          label: option.label,
+          type: "radio",
+          checked: overlayPreferences?.contrastMode === option.id,
+          click: () => {
+            try {
+              setContrastMode(option.id);
+            } catch (error) {
+              log("Tray contrast mode update failed", error instanceof Error ? error.message : String(error));
+            }
+          },
+        })),
+      },
+      {
+        label: "Density Mode",
+        submenu: (overlaySnapshot.lifecycle?.accessibility?.densityOptions || []).map((option) => ({
+          label: option.label,
+          type: "radio",
+          checked: overlayPreferences?.densityMode === option.id,
+          click: () => {
+            try {
+              setDensityMode(option.id);
+            } catch (error) {
+              log("Tray density mode update failed", error instanceof Error ? error.message : String(error));
             }
           },
         })),
@@ -1678,6 +1779,8 @@ function registerIpc() {
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
   ipcMain.handle("overlay:set-motion-mode", (_event, modeId) => setMotionMode(modeId));
+  ipcMain.handle("overlay:set-contrast-mode", (_event, modeId) => setContrastMode(modeId));
+  ipcMain.handle("overlay:set-density-mode", (_event, modeId) => setDensityMode(modeId));
   ipcMain.handle("overlay:acknowledge-update-notice", () => dismissUpdateNotice());
   ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
   ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));

@@ -2,11 +2,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const PREFERENCES_FILE = "overlay-preferences.json";
-const PREFERENCES_VERSION = 4;
+const PREFERENCES_VERSION = 5;
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 360;
 const { DEFAULT_STARTUP_PROFILE, normalizeStartupProfile } = require("./startup-profile");
-const { DEFAULT_MOTION_MODE, normalizeMotionMode } = require("./accessibility");
+const {
+  DEFAULT_CONTRAST_MODE,
+  DEFAULT_DENSITY_MODE,
+  DEFAULT_MOTION_MODE,
+  normalizeContrastMode,
+  normalizeDensityMode,
+  normalizeMotionMode,
+} = require("./accessibility");
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -80,6 +87,8 @@ function buildDefaultPreferences(display) {
     ignoreMouseEvents: false,
     startupProfile: DEFAULT_STARTUP_PROFILE,
     motionMode: DEFAULT_MOTION_MODE,
+    contrastMode: DEFAULT_CONTRAST_MODE,
+    densityMode: DEFAULT_DENSITY_MODE,
     windowBounds: normalizeBounds(null, display.workArea),
   };
 }
@@ -98,6 +107,8 @@ function normalizePreferences(raw, displays, primaryDisplayId = null) {
     ignoreMouseEvents: Boolean(raw.ignoreMouseEvents),
     startupProfile: normalizeStartupProfile(raw.startupProfile),
     motionMode: normalizeMotionMode(raw.motionMode),
+    contrastMode: normalizeContrastMode(raw.contrastMode),
+    densityMode: normalizeDensityMode(raw.densityMode),
     windowBounds: normalizeBounds(raw.windowBounds, targetDisplay.workArea),
   };
 }

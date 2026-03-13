@@ -47,6 +47,12 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   setMotionMode(modeId) {
     return ipcRenderer.invoke("overlay:set-motion-mode", assertString("modeId", modeId));
   },
+  setContrastMode(modeId) {
+    return ipcRenderer.invoke("overlay:set-contrast-mode", assertString("modeId", modeId));
+  },
+  setDensityMode(modeId) {
+    return ipcRenderer.invoke("overlay:set-density-mode", assertString("modeId", modeId));
+  },
   acknowledgeUpdateNotice() {
     return ipcRenderer.invoke("overlay:acknowledge-update-notice");
   },

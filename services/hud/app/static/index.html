@@ -16,6 +16,17 @@
         --shadow: 0 18px 55px rgba(23, 32, 42, 0.12);
       }
 
+      html[data-contrast-mode="high"] {
+        --ink: #0e151c;
+        --muted: #24313d;
+        --panel: rgba(255, 255, 255, 0.94);
+        --border: rgba(14, 21, 28, 0.26);
+        --accent: #8f301a;
+        --accent-soft: rgba(143, 48, 26, 0.16);
+        --success: #184f37;
+        --shadow: 0 18px 55px rgba(14, 21, 28, 0.18);
+      }
+
       * {
         box-sizing: border-box;
       }
@@ -36,6 +47,10 @@
         outline-offset: 3px;
       }
 
+      html[data-contrast-mode="high"] :focus-visible {
+        outline: 3px solid rgba(143, 48, 26, 0.82);
+      }
+
       html[data-motion-mode="reduce"] *,
       html[data-motion-mode="reduce"] *::before,
       html[data-motion-mode="reduce"] *::after {
@@ -51,6 +66,20 @@
           drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18))
           contrast(1.02)
           saturate(0.82);
+      }
+
+      html[data-density-mode="compact"] .shell {
+        padding: 24px 16px 40px;
+      }
+
+      html[data-density-mode="compact"] .hero,
+      html[data-density-mode="compact"] .panel {
+        padding: 22px;
+      }
+
+      html[data-density-mode="compact"] .stack,
+      html[data-density-mode="compact"] .split {
+        gap: 16px;
       }
 
       body.orb-cursor-active,
@@ -1318,7 +1347,7 @@
           </div>
           <h3>Accessibility</h3>
           <div class="desktop-grid" id="desktop-accessibility-cards">
-            <div class="desktop-pill"><strong>Accessibility</strong><span>Reduced-motion and keyboard posture will render here once the shell bridge is attached.</span></div>
+            <div class="desktop-pill"><strong>Accessibility</strong><span>Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached.</span></div>
           </div>
           <div class="desktop-targets" id="desktop-accessibility-actions">
             <span class="meta tiny desktop-targets-label">Motion Mode</span>
@@ -1326,6 +1355,9 @@
               <button class="btn-secondary" type="button" disabled>System Motion</button>
             </div>
           </div>
+          <ul class="list" id="desktop-accessibility-list">
+            <li class="muted-empty">Accessibility detail will render here once the shell bridge is attached.</li>
+          </ul>
           <h3>Shell Portability</h3>
           <div class="desktop-grid" id="desktop-portability-cards">
             <div class="desktop-pill"><strong>Portability</strong><span>Export and import posture will render here once the shell bridge is attached.</span></div>
@@ -1800,12 +1832,32 @@
           : "full";
       }
 
+      function getSystemHighContrastPreference() {
+        return window.matchMedia("(prefers-contrast: more)").matches;
+      }
+
+      function getEffectiveContrastMode() {
+        const accessibility = getDesktopAccessibility();
+        const requested = String(accessibility?.contrastMode || "system");
+        return requested === "high" || (requested === "system" && getSystemHighContrastPreference())
+          ? "high"
+          : "standard";
+      }
+
+      function getEffectiveDensityMode() {
+        const accessibility = getDesktopAccessibility();
+        const requested = String(accessibility?.densityMode || "comfortable");
+        return requested === "compact" ? "compact" : "comfortable";
+      }
+
       function isReducedMotionEnabled() {
         return getEffectiveMotionMode() === "reduce";
       }
 
       function applyAccessibilityPosture() {
         document.documentElement.dataset.motionMode = getEffectiveMotionMode();
+        document.documentElement.dataset.contrastMode = getEffectiveContrastMode();
+        document.documentElement.dataset.densityMode = getEffectiveDensityMode();
       }
 
       function getDesktopDisplays() {
@@ -2194,35 +2246,19 @@
         if (!accessibility) {
           return [
             { label: "Accessibility", value: "unavailable", tone: "low" },
-            { label: "Summary", value: "Reduced-motion and keyboard posture will appear once the desktop bridge is attached.", tone: "low" },
+            { label: "Summary", value: "Motion, contrast, density, and keyboard posture will appear once the desktop bridge is attached.", tone: "low" },
           ];
         }
 
-        const effectiveMotionMode = getEffectiveMotionMode();
-        const keyboardSummary = desktopState.available
-          ? `Overlay ${desktopState.shortcuts.toggleOverlay} | input ${desktopState.shortcuts.toggleClickThrough}`
-          : "Keyboard shell shortcuts appear once the desktop bridge is attached.";
-
-        return [
-          ...(Array.isArray(accessibility.cards) ? accessibility.cards : []),
-          {
-            label: "Keyboard",
-            value: keyboardSummary,
-            tone: "low",
-          },
-          {
-            label: "Focus",
-            value: "Strong focus-visible outlines are enabled for keyboard navigation.",
-            tone: "low",
-          },
-          {
-            label: "Renderer",
-            value: effectiveMotionMode === "reduce"
-              ? "Orb drift, card transitions, and animation are reduced."
-              : "Full motion posture is active.",
-            tone: effectiveMotionMode === "reduce" ? "medium" : "low",
-          },
-        ];
+        return Array.isArray(accessibility.cards) && accessibility.cards.length
+          ? accessibility.cards
+          : [
+              {
+                label: "Summary",
+                value: String(accessibility.summary || "No accessibility posture surfaced"),
+                tone: "low",
+              },
+            ];
       }
 
       function buildDesktopRollbackCards() {
@@ -2503,6 +2539,7 @@
         const startupProfiles = document.getElementById("desktop-startup-profiles");
         const accessibilityCards = document.getElementById("desktop-accessibility-cards");
         const accessibilityActions = document.getElementById("desktop-accessibility-actions");
+        const accessibilityList = document.getElementById("desktop-accessibility-list");
         const portabilityCards = document.getElementById("desktop-portability-cards");
         const retainedStateCards = document.getElementById("desktop-retained-state-cards");
         const preflightCards = document.getElementById("desktop-preflight-cards");
@@ -2528,7 +2565,7 @@
         const repairCards = document.getElementById("desktop-repair-cards");
         const repairActions = document.getElementById("desktop-repair-actions");
         const display = document.getElementById("desktop-display");
-        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !authorityCards || !authorityList || !signingCards || !signingList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
+        if (!status || !summary || !grid || !actions || !targets || !startupProfiles || !accessibilityCards || !accessibilityActions || !accessibilityList || !portabilityCards || !retainedStateCards || !preflightCards || !migrationCards || !rollbackCards || !decommissionCards || !decommissionActions || !decommissionDetail || !supportCards || !provenanceCards || !providerCards || !providerList || !authorityCards || !authorityList || !signingCards || !signingList || !historyCards || !historyList || !meta || !recoveryCards || !degradedModeCards || !updateCards || !repairCards || !repairActions || !display) {
           return;
         }
 
@@ -2695,9 +2732,39 @@
                 : '<button class="btn-secondary" type="button" disabled>System Motion</button>'
             }
           </div>
+          <span class="meta tiny desktop-targets-label">Contrast Mode</span>
+          <div class="desktop-actions">
+            ${
+              Array.isArray(accessibility?.contrastOptions) && accessibility.contrastOptions.length
+                ? accessibility.contrastOptions
+                    .map(
+                      (option) =>
+                        `<button class="${String(accessibility.contrastMode || "system") === option.id ? "btn-primary" : "btn-secondary"}" type="button" ${
+                          desktopState.available ? "" : "disabled"
+                        } onclick="setDesktopContrastMode('${escapeHtml(option.id)}')">${escapeHtml(option.label)}</button>`,
+                    )
+                    .join("")
+                : '<button class="btn-secondary" type="button" disabled>System Contrast</button>'
+            }
+          </div>
+          <span class="meta tiny desktop-targets-label">Density Mode</span>
+          <div class="desktop-actions">
+            ${
+              Array.isArray(accessibility?.densityOptions) && accessibility.densityOptions.length
+                ? accessibility.densityOptions
+                    .map(
+                      (option) =>
+                        `<button class="${String(accessibility.densityMode || "comfortable") === option.id ? "btn-primary" : "btn-secondary"}" type="button" ${
+                          desktopState.available ? "" : "disabled"
+                        } onclick="setDesktopDensityMode('${escapeHtml(option.id)}')">${escapeHtml(option.label)}</button>`,
+                    )
+                    .join("")
+                : '<button class="btn-secondary" type="button" disabled>Comfortable Density</button>'
+            }
+          </div>
           <p class="meta tiny">${escapeHtml(String(
             accessibility?.summary ||
-            "Reduced-motion accessibility will follow the current shell posture once the bridge is attached.",
+            "Accessibility posture will follow the current shell bridge once it is attached.",
           ))}</p>
         `;
 
@@ -2721,6 +2788,15 @@
         renderDetailCards("desktop-authority-cards", buildDesktopAuthorityCards(), "Authority");
         renderDetailCards("desktop-signing-cards", buildDesktopSigningCards(), "Signing");
         renderDetailCards("desktop-history-cards", buildDesktopHistoryCards(), "History");
+        const accessibilityItems = Array.isArray(accessibility?.items) ? accessibility.items : [];
+        accessibilityList.innerHTML = accessibilityItems.length
+          ? accessibilityItems
+              .map(
+                (item) =>
+                  `<li><strong>${escapeHtml(String(item.label || "Accessibility"))}</strong><br /><span class="meta">${escapeHtml(String(item.summary || "No accessibility summary"))}</span></li>`,
+              )
+              .join("")
+          : '<li class="muted-empty">Accessibility detail will render here once the shell bridge is attached.</li>';
         const providerItems = Array.isArray(lifecycle?.provider?.items) ? lifecycle.provider.items : [];
         providerList.innerHTML = providerItems.length
           ? providerItems
@@ -3121,6 +3197,49 @@
             : `Motion mode saved: ${String(accessibility?.motionMode || modeId || "system")}.`;
         } catch (error) {
           desktopNotice = `Accessibility update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function setDesktopContrastMode(modeId) {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.setContrastMode !== "function") {
+          desktopNotice = "Accessibility contrast control is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.setContrastMode(String(modeId || "system")),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          const accessibility = desktopState.lifecycle?.accessibility;
+          desktopNotice = accessibility?.highContrast
+            ? "High-contrast posture enabled."
+            : `Contrast mode saved: ${String(accessibility?.contrastMode || modeId || "system")}.`;
+        } catch (error) {
+          desktopNotice = `Contrast update failed: ${error?.message || error}`;
+        }
+        renderDesktopShell();
+      }
+
+      async function setDesktopDensityMode(modeId) {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.setDensityMode !== "function") {
+          desktopNotice = "Accessibility density control is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.setDensityMode(String(modeId || "comfortable")),
+            bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          desktopNotice = `Density mode saved: ${String(desktopState.lifecycle?.accessibility?.densityMode || modeId || "comfortable")}.`;
+        } catch (error) {
+          desktopNotice = `Density update failed: ${error?.message || error}`;
         }
         renderDesktopShell();
       }

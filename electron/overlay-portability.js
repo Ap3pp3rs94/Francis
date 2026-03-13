@@ -2,7 +2,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { normalizeStartupProfile } = require("./startup-profile");
-const { normalizeMotionMode } = require("./accessibility");
+const {
+  normalizeContrastMode,
+  normalizeDensityMode,
+  normalizeMotionMode,
+} = require("./accessibility");
 
 const PORTABILITY_STATE_FILE = "overlay-portability.json";
 const PORTABILITY_STATE_VERSION = 1;
@@ -156,6 +160,8 @@ function buildOverlayExportPayload({
     shell: {
       startupProfile: normalizeStartupProfile(preferences.startupProfile),
       motionMode: normalizeMotionMode(preferences.motionMode),
+      contrastMode: normalizeContrastMode(preferences.contrastMode),
+      densityMode: normalizeDensityMode(preferences.densityMode),
       alwaysOnTop: preferences.alwaysOnTop !== false,
       ignoreMouseEvents: Boolean(preferences.ignoreMouseEvents),
       targetDisplayId: Number.isFinite(Number(preferences.targetDisplayId))
@@ -192,6 +198,8 @@ function extractPortablePreferences(raw, options = {}) {
   return {
     startupProfile: normalizeStartupProfile(raw.shell.startupProfile),
     motionMode: normalizeMotionMode(raw.shell.motionMode),
+    contrastMode: normalizeContrastMode(raw.shell.contrastMode),
+    densityMode: normalizeDensityMode(raw.shell.densityMode),
     alwaysOnTop: raw.shell.alwaysOnTop !== false,
     ignoreMouseEvents: Boolean(raw.shell.ignoreMouseEvents),
     targetDisplayId: Number.isFinite(Number(raw.shell.targetDisplayId))
