@@ -30,6 +30,7 @@ function buildPreflightState({
   updateStatePath = null,
   hudState = null,
   provider = null,
+  authority = null,
   launchAtLogin = null,
   buildIdentity = "unknown",
   distribution = "source",
@@ -102,6 +103,20 @@ function buildPreflightState({
             ? "attention"
             : "ok",
       detail: String(provider.summary || "Provider posture unavailable"),
+    });
+  }
+
+  if (authority && typeof authority === "object") {
+    checks.push({
+      id: "authority",
+      label: "Authority Posture",
+      status:
+        authority.severity === "high"
+          ? "blocked"
+          : authority.severity === "medium"
+            ? "attention"
+            : "ok",
+      detail: String(authority.summary || "Authority posture unavailable"),
     });
   }
 

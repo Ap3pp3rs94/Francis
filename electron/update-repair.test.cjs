@@ -32,6 +32,10 @@ test("repair plan escalates when blocked checks and rollback are present", () =>
     hud: {
       mode: "managed",
     },
+    authority: {
+      severity: "high",
+      summary: "Support authority is configured without a tenant or managed-copy binding.",
+    },
     decommission: {
       userDataPath: "C:\\Users\\Alice\\AppData\\Roaming\\Francis Overlay",
     },
@@ -73,6 +77,9 @@ test("repair plan stays nominal when no repair signals are active", () => {
     },
     hud: {
       mode: "external",
+    },
+    authority: {
+      severity: "low",
     },
   });
 
@@ -116,9 +123,54 @@ test("repair plan surfaces provider posture when model execution is narrowed", (
       activeProviderLabel: "OpenAI",
       summary: "OpenAI is the only active provider. Provider failure will narrow model-backed work immediately.",
     },
+    authority: {
+      severity: "low",
+    },
   });
 
   assert.equal(plan.severity, "medium");
   assert.ok(plan.steps.some((step) => /provider posture/i.test(step)));
-  assert.equal(plan.cards.at(-1).label, "Provider");
+  assert.ok(plan.cards.some((entry) => entry.label === "Provider"));
+});
+
+test("repair plan surfaces authority posture when support or connector identity is ambiguous", () => {
+  const plan = buildRepairPlan({
+    update: {
+      pendingNotice: false,
+    },
+    preflight: {
+      blocked: 0,
+      attention: 0,
+    },
+    migration: {
+      blocked: 0,
+      attention: 0,
+    },
+    recovery: {
+      needed: false,
+    },
+    rollback: {
+      count: 1,
+    },
+    portability: {
+      lastImportStatus: "idle",
+    },
+    support: {
+      lastBundleAt: "2026-03-12T12:00:00Z",
+    },
+    hud: {
+      mode: "managed",
+    },
+    provider: {
+      severity: "low",
+    },
+    authority: {
+      severity: "medium",
+      summary: "Connector or support authority is configured while node or service identity remains implicit.",
+    },
+  });
+
+  assert.equal(plan.severity, "medium");
+  assert.ok(plan.steps.some((step) => /authority posture/i.test(step)));
+  assert.ok(plan.cards.some((entry) => entry.label === "Authority"));
 });

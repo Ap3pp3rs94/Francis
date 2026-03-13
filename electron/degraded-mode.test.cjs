@@ -11,6 +11,7 @@ test("degraded mode is nominal when shell posture is clean", () => {
     recovery: { needed: false },
     hud: { mode: "managed", ready: true },
     provider: { severity: "low", activeProviderLabel: "Ollama" },
+    authority: { severity: "low" },
     startupProfile: { requested: "operator" },
   });
 
@@ -27,6 +28,7 @@ test("degraded mode becomes reduced when continuity needs review", () => {
     recovery: { needed: false },
     hud: { mode: "managed", ready: true },
     provider: { severity: "low", activeProviderLabel: "Ollama" },
+    authority: { severity: "low" },
     startupProfile: { requested: "quiet" },
   });
 
@@ -43,6 +45,7 @@ test("degraded mode becomes restricted when blocked posture is present", () => {
     recovery: { needed: true },
     hud: { mode: "crashed", ready: false },
     provider: { severity: "high", activeProviderLabel: "none", summary: "No model provider is configured." },
+    authority: { severity: "high", summary: "Support authority is ambiguous." },
     startupProfile: { requested: "operator" },
   });
 
@@ -64,10 +67,31 @@ test("degraded mode becomes reduced when provider posture is not current", () =>
       activeProviderLabel: "OpenAI",
       summary: "OpenAI is the only active provider. Provider failure will narrow model-backed work immediately.",
     },
+    authority: { severity: "low" },
     startupProfile: { requested: "operator" },
   });
 
   assert.equal(posture.mode, "reduced");
   assert.match(posture.summary, /provider/i);
   assert.ok(posture.restrictions.some((entry) => /model-backed execution/i.test(entry)));
+});
+
+test("degraded mode becomes reduced when authority posture is not current", () => {
+  const posture = buildDegradedModePosture({
+    preflight: { blocked: 0, attention: 0 },
+    migration: { blocked: 0, attention: 0 },
+    update: { pendingNotice: false },
+    recovery: { needed: false },
+    hud: { mode: "managed", ready: true },
+    provider: { severity: "low", activeProviderLabel: "Ollama" },
+    authority: {
+      severity: "medium",
+      summary: "Connector or support authority is configured while node or service identity remains implicit.",
+    },
+    startupProfile: { requested: "operator" },
+  });
+
+  assert.equal(posture.mode, "reduced");
+  assert.match(posture.summary, /authority/i);
+  assert.ok(posture.restrictions.some((entry) => /connector-backed|support-level/i.test(entry)));
 });

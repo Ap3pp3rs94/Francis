@@ -8,6 +8,7 @@ function buildRepairPlan({
   support = null,
   hud = null,
   provider = null,
+  authority = null,
   decommission = null,
 } = {}) {
   const blocked = Number(preflight?.blocked || 0);
@@ -21,6 +22,7 @@ function buildRepairPlan({
   const portabilityBlocked = String(portability?.lastImportStatus || "idle") === "blocked";
   const supportExported = Boolean(support?.lastBundleAt);
   const providerSeverity = String(provider?.severity || "low");
+  const authoritySeverity = String(authority?.severity || "low");
 
   let severity = "low";
   let summary = "Repair posture is nominal.";
@@ -30,7 +32,7 @@ function buildRepairPlan({
       migrationBlocked > 0
         ? `${migrationBlocked} retained state migration check${migrationBlocked === 1 ? " is" : "s are"} blocked. Repair before trusting continuity.`
         : `${blocked} startup or continuity checks are blocked. Repair before trusting the updated shell.`;
-  } else if (recoveryNeeded || updatePending || attention > 0 || migrationAttention > 0 || portabilityBlocked || hudMode === "crashed" || providerSeverity === "high" || providerSeverity === "medium") {
+  } else if (recoveryNeeded || updatePending || attention > 0 || migrationAttention > 0 || portabilityBlocked || hudMode === "crashed" || providerSeverity === "high" || providerSeverity === "medium" || authoritySeverity === "high" || authoritySeverity === "medium") {
     severity = "medium";
     summary = updatePending
       ? "A new build or schema change needs inspection before continuity is treated as settled."
@@ -38,6 +40,8 @@ function buildRepairPlan({
         ? `${migrationAttention} retained state migration check${migrationAttention === 1 ? "" : "s"} need review before continuity is treated as settled.`
       : recoveryNeeded
         ? "Recovery needs inspection before the shell is treated as fully normal."
+        : authoritySeverity === "high" || authoritySeverity === "medium"
+          ? String(authority?.summary || "Authority posture needs inspection before connector-backed execution is trusted.")
         : providerSeverity === "high" || providerSeverity === "medium"
           ? String(provider?.summary || "Provider posture needs inspection before model-backed execution is trusted.")
         : portabilityBlocked
@@ -54,6 +58,9 @@ function buildRepairPlan({
   }
   if (providerSeverity === "high" || providerSeverity === "medium") {
     steps.push("Inspect provider posture, declare the active provider path explicitly, and verify fallback behavior before trusting model-backed execution.");
+  }
+  if (authoritySeverity === "high" || authoritySeverity === "medium") {
+    steps.push("Inspect authority posture, confirm node and service identity explicitly, and verify support or connector authority bindings before trusting connector-backed execution.");
   }
   if (blocked > 0 || recoveryNeeded || hudMode === "crashed") {
     steps.push("Restart the managed HUD and confirm preflight returns to nominal or attention instead of blocked.");
@@ -145,6 +152,11 @@ function buildRepairPlan({
       label: "Provider",
       value: String(provider?.activeProviderLabel || "none"),
       tone: providerSeverity,
+    },
+    {
+      label: "Authority",
+      value: authoritySeverity === "low" ? "current" : authoritySeverity,
+      tone: authoritySeverity,
     },
   ];
 

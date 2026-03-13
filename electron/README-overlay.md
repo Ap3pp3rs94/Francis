@@ -22,6 +22,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - persists an explicit motion-accessibility preference so reduced-motion posture is inspectable and operator-controlled
 - records a local lifecycle history so update, rollback, portability, repair, and support actions remain inspectable
 - surfaces provider posture so active model routing, fallback dependency, and privacy/runtime tradeoffs stay visible instead of hidden in environment residue
+- surfaces authority posture so user, node, service, connector, and support authority stay distinguishable without exposing secret material
 - surfaces a guided repair path when updates, recovery, portability, or runtime checks leave the shell in an attention state
 - persists session continuity so unclean exits and managed HUD crashes surface as recovery state on the next launch
 - supports guarded shell-state export and import so overlay posture can move machines without replaying authority
@@ -95,6 +96,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD now exposes motion accessibility posture and can switch among system, reduced, and full motion without leaving the overlay surface
 - the HUD now surfaces recent lifecycle actions so shell updates, rollbacks, exports, imports, and repairs leave visible local history
 - the HUD now surfaces model-provider posture so remote dependency and fallback narrowing are inspectable before execution is trusted
+- the HUD now surfaces authority posture so connector credentials, support bindings, and secret-handling limits are inspectable without leaking raw values
 - recovery now overrides startup posture safely, so unclean exits re-enter visible and interactive instead of hiding authority questions
 - the HUD and tray can now export/import safe shell posture with explicit limits around login settings and live authority
 - the HUD can now inspect retained shell surfaces and reset local shell residue without deleting workspace continuity

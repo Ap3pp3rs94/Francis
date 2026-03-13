@@ -57,6 +57,7 @@ const { buildRepairPlan } = require("./update-repair");
 const { buildShellMigrationPosture } = require("./state-migrations");
 const { buildDegradedModePosture } = require("./degraded-mode");
 const { buildProviderPosture } = require("./provider-posture");
+const { buildAuthorityPosture } = require("./authority-posture");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -303,6 +304,11 @@ function getLifecycleState() {
     env: process.env,
     hudState,
   });
+  const authority = buildAuthorityPosture({
+    env: process.env,
+    portability,
+    provider,
+  });
   const preflight = ready
     ? buildPreflightState({
         userDataPath,
@@ -312,6 +318,7 @@ function getLifecycleState() {
         updateStatePath: getUpdateStatePath(userDataPath),
         hudState,
         provider,
+        authority,
         launchAtLogin: login,
         buildIdentity: currentBuild.identity,
         distribution: currentBuild.distribution,
@@ -324,6 +331,7 @@ function getLifecycleState() {
         updateStatePath: null,
         hudState,
         provider,
+        authority,
         launchAtLogin: login,
         buildIdentity: currentBuild.identity,
         distribution: currentBuild.distribution,
@@ -336,6 +344,7 @@ function getLifecycleState() {
     recovery: overlayRecovery,
     hud: hudState,
     provider,
+    authority,
     startupProfile,
   });
   const rollback = ready
@@ -365,6 +374,7 @@ function getLifecycleState() {
     support,
     hud: hudState,
     provider,
+    authority,
     decommission,
   });
   const history = buildLifecycleHistorySurface(lifecycleHistoryState || buildDefaultLifecycleHistoryState());
@@ -382,6 +392,7 @@ function getLifecycleState() {
     support,
     history,
     provider,
+    authority,
     degradedMode,
     provenance: buildProvenance || {
       summary: "Build provenance is unavailable.",

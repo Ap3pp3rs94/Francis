@@ -5,6 +5,7 @@ function buildDegradedModePosture({
   recovery = null,
   hud = null,
   provider = null,
+  authority = null,
   startupProfile = null,
 } = {}) {
   const blockedChecks = Number(preflight?.blocked || 0);
@@ -17,6 +18,8 @@ function buildDegradedModePosture({
   const recoveryNeeded = Boolean(recovery?.needed);
   const providerSeverity = String(provider?.severity || "low");
   const providerSummary = String(provider?.summary || "");
+  const authoritySeverity = String(authority?.severity || "low");
+  const authoritySummary = String(authority?.summary || "");
 
   let mode = "nominal";
   let summary = "Shell posture is nominal.";
@@ -43,6 +46,9 @@ function buildDegradedModePosture({
   } else if (providerSeverity === "high" || providerSeverity === "medium") {
     mode = "reduced";
     summary = providerSummary || "Provider posture needs review before model-backed execution is treated as settled.";
+  } else if (authoritySeverity === "high" || authoritySeverity === "medium") {
+    mode = "reduced";
+    summary = authoritySummary || "Authority posture needs review before connector-backed execution is treated as settled.";
   }
 
   const continuityTrust = mode === "restricted" ? "unsafe" : mode === "reduced" ? "review" : "current";
@@ -62,6 +68,9 @@ function buildDegradedModePosture({
     restrictions.push("Treat continuity as review-first until update, migration, or recovery posture returns to current.");
     if (providerSeverity === "high" || providerSeverity === "medium") {
       restrictions.push("Treat model-backed execution as narrowed until provider posture is explicit and current.");
+    }
+    if (authoritySeverity === "high" || authoritySeverity === "medium") {
+      restrictions.push("Treat connector-backed or support-level execution as review-first until authority posture is explicit and current.");
     }
   } else {
     restrictions.push("No degraded-mode restrictions are active.");
@@ -109,6 +118,11 @@ function buildDegradedModePosture({
         label: "Provider",
         value: provider?.activeProviderLabel || "none",
         tone: providerSeverity,
+      },
+      {
+        label: "Authority",
+        value: authoritySeverity === "low" ? "current" : authoritySeverity,
+        tone: authoritySeverity,
       },
     ],
   };
