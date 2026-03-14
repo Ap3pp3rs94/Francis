@@ -17,7 +17,7 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_forge.catalog import list_entries
 from francis_forge.library import build_capability_provenance, build_promotion_rules, build_quality_standard
-from francis_forge.promotion import promote_stage
+from francis_forge.promotion import promote_stage, quarantine_entry, revoke_entry
 from francis_policy.tool_policy import approval_policy_for_tool
 from francis_policy.rbac import can
 from francis_skills.contracts import SkillCall
@@ -523,13 +523,14 @@ def _build_repo_presentation(
     }
 
 
-def _find_forge_promote_approval(stage_id: str) -> dict[str, Any] | None:
-    requests = list_requests(_fs, action="forge.promote", limit=100)
+def _find_capability_approval(entry_id: str, *, action: str) -> dict[str, Any] | None:
+    requests = list_requests(_fs, action=action, limit=100)
     for row in reversed(requests):
         if not isinstance(row, dict):
             continue
         metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        if str(metadata.get("stage_id", "")).strip() != stage_id:
+        target_id = str(metadata.get("entry_id", "")).strip() or str(metadata.get("stage_id", "")).strip()
+        if target_id != entry_id:
             continue
         return row
     return None
@@ -538,7 +539,9 @@ def _find_forge_promote_approval(stage_id: str) -> dict[str, Any] | None:
 def _build_capability_presentation(
     *,
     entry: dict[str, Any],
+    action_kind: str = "forge.promote",
     approval_id: str = "",
+    lifecycle_note: str = "",
 ) -> dict[str, Any]:
     status = str(entry.get("status", "")).strip().lower() or "staged"
     name = str(entry.get("name", "Capability pack")).strip() or "Capability pack"
@@ -548,15 +551,37 @@ def _build_capability_presentation(
     diff_summary = entry.get("diff_summary", {}) if isinstance(entry.get("diff_summary"), dict) else {}
     tool_pack = entry.get("tool_pack", {}) if isinstance(entry.get("tool_pack"), dict) else {}
     quality_standard = build_quality_standard(entry)
-    promotion_rules = build_promotion_rules(entry, approval_status="approved" if approval_id else "")
-    provenance = build_capability_provenance(entry, approval_status="approved" if approval_id else "")
-    summary = (
-        f"{name} {version} is active in the governed capability library."
-        if status == "active"
-        else f"{name} {version} remains staged and is not yet active."
+    provenance = build_capability_provenance(
+        entry,
+        approval_status="approved" if action_kind == "forge.promote" and approval_id else "",
     )
+    promotion_rules = build_promotion_rules(
+        entry,
+        approval_status="approved" if action_kind == "forge.promote" and approval_id else "",
+    )
+    if action_kind == "forge.quarantine":
+        summary = (
+            f"{name} {version} is quarantined and blocked from governed use."
+        )
+    elif action_kind == "forge.revoke":
+        summary = (
+            f"{name} {version} is revoked and remains cataloged only for audit continuity."
+        )
+    else:
+        summary = (
+            f"{name} {version} is active in the governed capability library."
+            if status == "active"
+            else f"{name} {version} remains staged and is not yet active."
+        )
+    note_text = str(lifecycle_note or "").strip()
+    if note_text and note_text not in summary:
+        summary = f"{summary} {note_text}".strip()
     cards = [
-        {"label": "Status", "value": status, "tone": "low" if status == "active" else "medium"},
+        {
+            "label": "Status",
+            "value": status,
+            "tone": "high" if status in {"quarantined", "revoked"} else "low" if status == "active" else "medium",
+        },
         {"label": "Version", "value": version, "tone": "low"},
         {"label": "Risk", "value": risk_tier, "tone": "medium" if risk_tier in {"medium", "high", "critical"} else "low"},
         {
@@ -601,10 +626,18 @@ def _build_capability_presentation(
         )
     if approval_id:
         cards.append({"label": "Approval", "value": approval_id, "tone": "low"})
+    if note_text:
+        cards.append(
+            {
+                "label": "Lifecycle Note",
+                "value": note_text,
+                "tone": "high" if action_kind in {"forge.quarantine", "forge.revoke"} else "medium",
+            }
+        )
     evidence = [
         {
             "kind": "capability",
-            "severity": "low" if status == "active" else "medium",
+            "severity": "high" if status in {"quarantined", "revoked"} else "low" if status == "active" else "medium",
             "detail": summary,
         },
         {
@@ -642,11 +675,11 @@ def _build_capability_presentation(
         }
     )
     return {
-        "kind": "forge.promote",
+        "kind": action_kind,
         "summary": summary,
         "severity": (
             "high"
-            if str(provenance.get("tone", "")).strip() == "high"
+            if status in {"quarantined", "revoked"} or str(provenance.get("tone", "")).strip() == "high"
             else "low"
             if status == "active"
             else "medium"
@@ -655,7 +688,9 @@ def _build_capability_presentation(
         "evidence": evidence[:5],
         "detail": {
             "entry": entry,
+            "action_kind": action_kind,
             "approval_id": approval_id,
+            "lifecycle_note": note_text,
             "status": status,
             "quality_standard": quality_standard,
             "promotion_rules": promotion_rules,
@@ -1582,7 +1617,7 @@ def _execute_lens_action(
             return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
         _enforce_rbac(role, "approvals.request")
         _enforce_action_scope(app="approvals", action="approvals.request", mutating=False)
-        existing = _find_forge_promote_approval(stage_id)
+        existing = _find_capability_approval(stage_id, action="forge.promote")
         existing_status = str((existing or {}).get("status", "")).strip().lower()
         if existing is not None and existing_status in {"pending", "approved"}:
             approval = existing
@@ -1595,6 +1630,7 @@ def _execute_lens_action(
                     metadata={
                         "path": f"/forge/promote/{stage_id}",
                         "stage_id": stage_id,
+                        "entry_id": stage_id,
                         "action_kind": "forge.promote",
                         "source": "lens.capability_library",
                     },
@@ -1612,6 +1648,85 @@ def _execute_lens_action(
             "approval": approval,
             "summary": (
                 f"Approval {str(approval.get('id', '')).strip() or 'pending'} is queued for forge.promote."
+            ),
+        }
+
+    if normalized_kind == "forge.quarantine":
+        _enforce_rbac(role, "forge.quarantine")
+        _enforce_action_scope(app="forge", action="forge.quarantine", mutating=True)
+        entry_id = str(args.get("entry_id", "")).strip() or str(args.get("stage_id", "")).strip()
+        if not entry_id:
+            raise HTTPException(status_code=400, detail="entry_id is required for forge.quarantine")
+        reason = str(args.get("reason", "")).strip() or "Capability quarantined from Lens."
+        execution_args = {"entry_id": entry_id, "reason": reason}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        updated = quarantine_entry(_fs, entry_id, reason=reason, actor=f"lens:{role}")
+        if updated is None:
+            raise HTTPException(status_code=404, detail=f"Capability entry not found: {entry_id}")
+        _ledger.append(
+            run_id=run_id,
+            kind="forge.quarantine",
+            summary={
+                "entry_id": entry_id,
+                "status": updated.get("status"),
+                "reason": reason,
+            },
+        )
+        presentation = _build_capability_presentation(
+            entry=updated,
+            action_kind=normalized_kind,
+            lifecycle_note=reason,
+        )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "forge.quarantine"},
+            "execution_args": execution_args,
+            "summary": str(presentation.get("summary", "")).strip(),
+            "presentation": presentation,
+            "entry": updated,
+        }
+
+    if normalized_kind == "forge.revoke.request_approval":
+        entry_id = str(args.get("entry_id", "")).strip() or str(args.get("stage_id", "")).strip()
+        if not entry_id:
+            raise HTTPException(status_code=400, detail="entry_id is required for forge.revoke.request_approval")
+        execution_args = {"entry_id": entry_id}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        _enforce_rbac(role, "approvals.request")
+        _enforce_action_scope(app="approvals", action="approvals.request", mutating=False)
+        existing = _find_capability_approval(entry_id, action="forge.revoke")
+        existing_status = str((existing or {}).get("status", "")).strip().lower()
+        if existing is not None and existing_status in {"pending", "approved"}:
+            approval = existing
+        else:
+            approval_response = approval_request(
+                request,
+                ApprovalRequestPayload(
+                    action="forge.revoke",
+                    reason=f"Lens requested approval to revoke capability {entry_id}.",
+                    metadata={
+                        "path": f"/forge/revoke/{entry_id}",
+                        "entry_id": entry_id,
+                        "action_kind": "forge.revoke",
+                        "source": "lens.capability_library",
+                    },
+                ),
+            )
+            approval = (
+                approval_response.get("approval", {})
+                if isinstance(approval_response.get("approval"), dict)
+                else {}
+            )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "execution_args": execution_args,
+            "approval": approval,
+            "summary": (
+                f"Approval {str(approval.get('id', '')).strip() or 'pending'} is queued for forge.revoke."
             ),
         }
 
@@ -1700,6 +1815,69 @@ def _execute_lens_action(
             "entry": promoted,
             "tool_pack_registered": tool_pack_registered,
             "tool_pack_skill": promoted.get("tool_pack", {}).get("skill_name") if tool_pack_registered else None,
+        }
+
+    if normalized_kind == "forge.revoke":
+        _enforce_rbac(role, "forge.revoke")
+        _enforce_action_scope(app="forge", action="forge.revoke", mutating=True)
+        entry_id = str(args.get("entry_id", "")).strip() or str(args.get("stage_id", "")).strip()
+        if not entry_id:
+            raise HTTPException(status_code=400, detail="entry_id is required for forge.revoke")
+        approval_id = str(args.get("approval_id", "")).strip() or None
+        reason = str(args.get("reason", "")).strip() or "Capability revoked from Lens."
+        execution_args = {"entry_id": entry_id, "approval_id": approval_id or "", "reason": reason}
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        approved, approval_detail = ensure_action_approved(
+            _fs,
+            run_id=run_id,
+            action="forge.revoke",
+            requested_by=role,
+            reason=f"Revoke capability: {entry_id}",
+            approval_id=approval_id,
+            metadata={
+                "path": f"/forge/revoke/{entry_id}",
+                "entry_id": entry_id,
+                "action_kind": "forge.revoke",
+                "source": "lens.capability_library",
+            },
+        )
+        if not approved:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Action requires approval: forge.revoke",
+                    **approval_detail,
+                },
+            )
+        actual_approval_id = approval_id or str(approval_detail.get("approval_request_id", "")).strip() or None
+        revoked = revoke_entry(_fs, entry_id, reason=reason, actor=f"lens:{role}")
+        if revoked is None:
+            raise HTTPException(status_code=404, detail=f"Capability entry not found: {entry_id}")
+        _ledger.append(
+            run_id=run_id,
+            kind="forge.revoke",
+            summary={
+                "entry_id": entry_id,
+                "status": revoked.get("status"),
+                "approval_id": actual_approval_id,
+                "reason": reason,
+            },
+        )
+        presentation = _build_capability_presentation(
+            entry=revoked,
+            action_kind=normalized_kind,
+            approval_id=actual_approval_id or "",
+            lifecycle_note=reason,
+        )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "forge.revoke", "approval_id": actual_approval_id},
+            "execution_args": execution_args,
+            "summary": str(presentation.get("summary", "")).strip(),
+            "presentation": presentation,
+            "entry": revoked,
         }
 
     if normalized_kind == "observer.scan":
@@ -1891,6 +2069,12 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"lane": "fast", "approval_id": ""}
     elif kind == "repo.tests.request_approval":
         hinted["execute_via"]["payload"]["args"] = {"lane": "fast"}
+    elif kind == "forge.quarantine":
+        hinted["execute_via"]["payload"]["args"] = {"entry_id": "<required>", "reason": ""}
+    elif kind == "forge.revoke.request_approval":
+        hinted["execute_via"]["payload"]["args"] = {"entry_id": "<required>"}
+    elif kind == "forge.revoke":
+        hinted["execute_via"]["payload"]["args"] = {"entry_id": "<required>", "approval_id": "", "reason": ""}
     elif kind == "apprenticeship.generalize":
         hinted["execute_via"]["payload"]["args"] = {"session_id": "<required>"}
     elif kind == "apprenticeship.skillize":
@@ -2350,6 +2534,16 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         "forge.promote",
         mutating=True,
     )
+    forge_quarantine_allowed, forge_quarantine_scope_reason = _check_usage_scope(
+        "forge",
+        "forge.quarantine",
+        mutating=True,
+    )
+    forge_revoke_allowed, forge_revoke_scope_reason = _check_usage_scope(
+        "forge",
+        "forge.revoke",
+        mutating=True,
+    )
     approvals_request_allowed, approvals_request_scope_reason = _check_usage_scope(
         "approvals",
         "approvals.request",
@@ -2465,68 +2659,140 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
                 }
             )
     capability_stage_id = str(capability_focus.get("id", "")).strip()
-    capability_status = str(capability_focus.get("status", "")).strip().lower()
     capability_approval_status = str(capability_focus.get("approval_status", "")).strip().lower()
     capability_approval_id = str(capability_focus.get("approval_id", "")).strip()
-    if capability_stage_id and capability_status == "staged":
+    capability_action = str(capability_focus.get("recommended_action", "")).strip().lower()
+    if capability_stage_id and capability_action:
         capability_risk = str(capability_focus.get("risk_tier", "medium")).strip().lower() or "medium"
-        capability_reason = str(capability_focus.get("summary", "")).strip() or "Staged capability is ready for governed review."
-        if capability_approval_status == "approved" and capability_approval_id:
-            usage_chip_defs.append(
-                {
-                    "kind": "forge.promote",
-                    "label": "Promote Capability",
-                    "enabled": forge_promote_allowed,
-                    "reason": capability_reason,
-                    "risk_tier": capability_risk,
-                    "trust_badge": "Confirmed",
-                    "args": {"stage_id": capability_stage_id, "approval_id": capability_approval_id},
-                    "policy_reason": "" if forge_promote_allowed else forge_promote_scope_reason,
-                }
-            )
-        else:
-            capability_policy_reason = (
-                f"Promotion approval {capability_approval_id} is pending."
-                if capability_approval_status == "pending" and capability_approval_id
-                else "Promotion approval was rejected and needs a fresh operator decision."
-                if capability_approval_status == "rejected"
-                else "Capability promotion requires approval."
-                if forge_promote_allowed
-                else forge_promote_scope_reason
-            )
-            usage_chip_defs.append(
-                {
-                    "kind": "forge.promote",
-                    "label": "Promote Capability",
-                    "enabled": False,
-                    "reason": capability_reason,
-                    "risk_tier": capability_risk,
-                    "trust_badge": "Likely",
-                    "args": {"stage_id": capability_stage_id},
-                    "policy_reason": capability_policy_reason,
-                }
-            )
-            if capability_approval_status != "pending":
-                request_enabled = approvals_request_allowed and can(role, "approvals.request")
-                request_policy_reason = (
-                    ""
-                    if request_enabled
-                    else approvals_request_scope_reason
-                    if not approvals_request_allowed
-                    else f"RBAC denied: role={role}, action=approvals.request"
+        capability_reason = str(capability_focus.get("summary", "")).strip() or "Capability is ready for governed review."
+        if capability_action == "forge.promote":
+            if capability_approval_status == "approved" and capability_approval_id:
+                usage_chip_defs.append(
+                    {
+                        "kind": "forge.promote",
+                        "label": "Promote Capability",
+                        "enabled": forge_promote_allowed,
+                        "reason": capability_reason,
+                        "risk_tier": capability_risk,
+                        "trust_badge": "Confirmed",
+                        "args": {"stage_id": capability_stage_id, "approval_id": capability_approval_id},
+                        "policy_reason": "" if forge_promote_allowed else forge_promote_scope_reason,
+                    }
+                )
+            else:
+                capability_policy_reason = (
+                    f"Promotion approval {capability_approval_id} is pending."
+                    if capability_approval_status == "pending" and capability_approval_id
+                    else "Promotion approval was rejected and needs a fresh operator decision."
+                    if capability_approval_status == "rejected"
+                    else "Capability promotion requires approval."
+                    if forge_promote_allowed
+                    else forge_promote_scope_reason
                 )
                 usage_chip_defs.append(
                     {
-                        "kind": "forge.promote.request_approval",
-                        "label": "Request Promotion Approval",
-                        "enabled": request_enabled,
+                        "kind": "forge.promote",
+                        "label": "Promote Capability",
+                        "enabled": False,
                         "reason": capability_reason,
                         "risk_tier": capability_risk,
                         "trust_badge": "Likely",
                         "args": {"stage_id": capability_stage_id},
-                        "policy_reason": request_policy_reason,
+                        "policy_reason": capability_policy_reason,
                     }
                 )
+                if capability_approval_status != "pending":
+                    request_enabled = approvals_request_allowed and can(role, "approvals.request")
+                    request_policy_reason = (
+                        ""
+                        if request_enabled
+                        else approvals_request_scope_reason
+                        if not approvals_request_allowed
+                        else f"RBAC denied: role={role}, action=approvals.request"
+                    )
+                    usage_chip_defs.append(
+                        {
+                            "kind": "forge.promote.request_approval",
+                            "label": "Request Promotion Approval",
+                            "enabled": request_enabled,
+                            "reason": capability_reason,
+                            "risk_tier": capability_risk,
+                            "trust_badge": "Likely",
+                            "args": {"stage_id": capability_stage_id},
+                            "policy_reason": request_policy_reason,
+                        }
+                    )
+        elif capability_action == "forge.quarantine":
+            usage_chip_defs.append(
+                {
+                    "kind": "forge.quarantine",
+                    "label": "Quarantine Capability",
+                    "enabled": forge_quarantine_allowed,
+                    "reason": capability_reason,
+                    "risk_tier": capability_risk,
+                    "trust_badge": "Likely",
+                    "args": {"entry_id": capability_stage_id},
+                    "policy_reason": "" if forge_quarantine_allowed else forge_quarantine_scope_reason,
+                }
+            )
+        elif capability_action == "forge.revoke":
+            if capability_approval_status == "approved" and capability_approval_id:
+                usage_chip_defs.append(
+                    {
+                        "kind": "forge.revoke",
+                        "label": "Revoke Capability",
+                        "enabled": forge_revoke_allowed,
+                        "reason": capability_reason,
+                        "risk_tier": capability_risk,
+                        "trust_badge": "Confirmed",
+                        "args": {"entry_id": capability_stage_id, "approval_id": capability_approval_id},
+                        "policy_reason": "" if forge_revoke_allowed else forge_revoke_scope_reason,
+                    }
+                )
+            else:
+                capability_policy_reason = (
+                    f"Revocation approval {capability_approval_id} is pending."
+                    if capability_approval_status == "pending" and capability_approval_id
+                    else "Revocation approval was rejected and needs a fresh operator decision."
+                    if capability_approval_status == "rejected"
+                    else "Capability revocation requires approval."
+                    if forge_revoke_allowed
+                    else forge_revoke_scope_reason
+                )
+                usage_chip_defs.append(
+                    {
+                        "kind": "forge.revoke",
+                        "label": "Revoke Capability",
+                        "enabled": False,
+                        "reason": capability_reason,
+                        "risk_tier": capability_risk,
+                        "trust_badge": "Likely",
+                        "args": {"entry_id": capability_stage_id},
+                        "policy_reason": capability_policy_reason,
+                    }
+                )
+                if capability_approval_status != "pending":
+                    request_enabled = approvals_request_allowed and can(role, "approvals.request")
+                    request_policy_reason = (
+                        ""
+                        if request_enabled
+                        else approvals_request_scope_reason
+                        if not approvals_request_allowed
+                        else f"RBAC denied: role={role}, action=approvals.request"
+                    )
+                    usage_chip_defs.append(
+                        {
+                            "kind": "forge.revoke.request_approval",
+                            "label": "Request Revocation Approval",
+                            "enabled": request_enabled,
+                            "reason": capability_reason,
+                            "risk_tier": capability_risk,
+                            "trust_badge": "Likely",
+                            "args": {"entry_id": capability_stage_id},
+                            "policy_reason": request_policy_reason,
+                        }
+                    )
+        
     if next_best_action:
         next_kind = str(next_best_action.get("kind", "")).strip().lower()
         if next_kind and not any(str(item.get("kind", "")).strip().lower() == next_kind for item in usage_chip_defs):

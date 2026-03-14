@@ -596,6 +596,42 @@ def _build_next_action_evidence(
                             detail=f"Capability promotion approval {approval_id} is already approved.",
                         )
                     )
+            elif focus_kind == "forge.quarantine":
+                evidence.append(
+                    _evidence_row(
+                        kind="capability",
+                        severity="high",
+                        detail=str(focus_entry.get("summary", "")).strip()
+                        or f"{capability_name} should be quarantined before any governed use continues.",
+                    )
+                )
+            elif focus_kind == "forge.revoke":
+                evidence.append(
+                    _evidence_row(
+                        kind="capability",
+                        severity="high",
+                        detail=str(focus_entry.get("summary", "")).strip()
+                        or f"{capability_name} should be revoked from governed use.",
+                    )
+                )
+                approval_status = str(focus_entry.get("approval_status", "")).strip().lower()
+                approval_id = str(focus_entry.get("approval_id", "")).strip()
+                if approval_status == "pending" and approval_id:
+                    evidence.append(
+                        _evidence_row(
+                            kind="approval",
+                            severity="high",
+                            detail=f"Capability revocation approval {approval_id} is pending.",
+                        )
+                    )
+                elif approval_status == "approved" and approval_id:
+                    evidence.append(
+                        _evidence_row(
+                            kind="approval",
+                            severity="medium",
+                            detail=f"Capability revocation approval {approval_id} is already approved.",
+                        )
+                    )
 
     fabric = snapshot.get("fabric", {}) if isinstance(snapshot.get("fabric"), dict) else {}
     calibration = fabric.get("calibration", {}) if isinstance(fabric.get("calibration"), dict) else {}
@@ -752,6 +788,10 @@ def get_current_work_view(
                 if next_action_kind == "apprenticeship.skillize"
                 else "A staged capability is ready to become an active governed asset."
                 if next_action_kind == "forge.promote"
+                else "A risky capability should be quarantined before further governed use."
+                if next_action_kind == "forge.quarantine"
+                else "A governed capability is ready for revocation."
+                if next_action_kind == "forge.revoke"
                 else "Cited local evidence is grounding the next operator move."
                 if fabric_evidence
                 else

@@ -431,6 +431,100 @@ def test_lens_promote_blocks_external_capability_without_traceable_provenance() 
         _restore_text(decisions_path, decisions_before, decisions_before_exists)
 
 
+def test_lens_state_surfaces_untrusted_capability_quarantine() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    repo_root = workspace.parent
+    telemetry_path = workspace / "telemetry" / "events.jsonl"
+    apprenticeship_path = workspace / "apprenticeship" / "sessions.json"
+    catalog_path = workspace / "forge" / "catalog.json"
+    signal_path = repo_root / "usage-loop-signal.txt"
+    telemetry_before = _read_text(telemetry_path)
+    apprenticeship_before_exists = apprenticeship_path.exists()
+    apprenticeship_before = _read_text(apprenticeship_path)
+    catalog_before_exists = catalog_path.exists()
+    catalog_before = _read_text(catalog_path)
+    signal_before_exists = signal_path.exists()
+    signal_before = _read_text(signal_path)
+
+    try:
+        signal_path.write_text("usage signal\n", encoding="utf-8")
+        _write_json(apprenticeship_path, {"sessions": []})
+        _write_json(
+            catalog_path,
+            {
+                "entries": [
+                    {
+                        "id": "cap-quarantine",
+                        "name": "Capability Quarantine",
+                        "slug": "capability-quarantine",
+                        "description": "An imported capability that cannot be traced safely.",
+                        "risk_tier": "high",
+                        "status": "staged",
+                        "version": "0.6.0",
+                        "path": "forge/staging/cap-quarantine",
+                        "validation": {"ok": True},
+                        "diff_summary": {
+                            "file_count": 2,
+                            "files": [
+                                {"path": "forge/staging/cap-quarantine/README.md"},
+                                {"path": "forge/staging/cap-quarantine/tests/test_capability_quarantine.py"},
+                            ],
+                        },
+                        "tool_pack": {"skill_name": "forge.pack.capability-quarantine"},
+                        "provenance": {"source_kind": "third_party"},
+                    }
+                ]
+            },
+        )
+        _write_jsonl(
+            telemetry_path,
+            [
+                {
+                    "id": "usage-loop-capability-telemetry-2",
+                    "ts": "2026-03-13T03:15:00+00:00",
+                    "ingested_at": "2026-03-13T03:15:01+00:00",
+                    "run_id": "usage-loop-capability-run-2",
+                    "kind": "telemetry.event",
+                    "stream": "terminal",
+                    "source": "terminal",
+                    "severity": "error",
+                    "text": "terminal: pytest -q tests/integration/test_lens_usage_loop.py (exit=1)",
+                    "fields": {
+                        "command": "pytest -q tests/integration/test_lens_usage_loop.py",
+                        "cwd": str(repo_root),
+                        "exit_code": 1,
+                        "stdout": "",
+                        "stderr": "1 failed",
+                    },
+                }
+            ],
+        )
+
+        with TestClient(app) as client:
+            original_mode = _get_mode(client)
+            try:
+                _set_mode(client, "assist", kill_switch=False)
+                state = client.get("/lens/state")
+            finally:
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
+
+        assert state.status_code == 200
+        payload = state.json()
+        assert payload["current_work"]["attention"]["kind"] == "capability_review"
+        assert payload["current_work"]["capabilities"]["focus_entry"]["id"] == "cap-quarantine"
+        assert payload["current_work"]["capabilities"]["focus_entry"]["recommended_action"] == "forge.quarantine"
+        assert payload["next_best_action"]["kind"] == "forge.quarantine"
+    finally:
+        telemetry_path.write_text(telemetry_before, encoding="utf-8")
+        _restore_text(apprenticeship_path, apprenticeship_before, apprenticeship_before_exists)
+        _restore_text(catalog_path, catalog_before, catalog_before_exists)
+        _restore_text(signal_path, signal_before, signal_before_exists)
+
+
 def test_lens_actions_include_repo_usage_chips_and_repo_status_executes() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
     repo_root = workspace.parent
@@ -775,6 +869,133 @@ def test_lens_actions_request_and_execute_capability_promotion() -> None:
         assert summary["stage_id"] == "cap-promote"
         assert summary["status"] == "active"
         assert summary["approval_id"] == approval_id
+    finally:
+        _restore_text(catalog_path, catalog_before, catalog_before_exists)
+        _restore_text(approvals_path, approvals_before, approvals_before_exists)
+        _restore_text(decisions_path, decisions_before, decisions_before_exists)
+        _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)
+
+
+def test_lens_actions_quarantine_and_revoke_capability() -> None:
+    workspace = Path(__file__).resolve().parents[2] / "workspace"
+    catalog_path = workspace / "forge" / "catalog.json"
+    approvals_path = workspace / "approvals" / "requests.jsonl"
+    decisions_path = workspace / "journals" / "decisions.jsonl"
+    run_ledger_path = workspace / "runs" / "run_ledger.jsonl"
+    catalog_before_exists = catalog_path.exists()
+    catalog_before = _read_text(catalog_path)
+    approvals_before_exists = approvals_path.exists()
+    approvals_before = _read_text(approvals_path)
+    decisions_before_exists = decisions_path.exists()
+    decisions_before = _read_text(decisions_path)
+    run_ledger_before_exists = run_ledger_path.exists()
+    run_ledger_before = _read_text(run_ledger_path)
+
+    try:
+        _write_json(
+            catalog_path,
+            {
+                "entries": [
+                    {
+                        "id": "cap-lifecycle",
+                        "name": "Capability Lifecycle",
+                        "slug": "capability-lifecycle",
+                        "description": "An active capability that needs governed shutdown.",
+                        "risk_tier": "high",
+                        "status": "active",
+                        "version": "1.2.0",
+                        "path": "forge/library/cap-lifecycle",
+                        "validation": {"ok": True},
+                        "diff_summary": {"file_count": 3},
+                        "tool_pack": {"skill_name": "forge.pack.capability-lifecycle"},
+                        "provenance": {
+                            "source_kind": "vendor",
+                            "vendor": "Lifecycle Vendor",
+                            "review_state": "approved",
+                        },
+                    }
+                ]
+            },
+        )
+        approvals_path.parent.mkdir(parents=True, exist_ok=True)
+        approvals_path.write_text("", encoding="utf-8")
+        decisions_path.parent.mkdir(parents=True, exist_ok=True)
+        decisions_path.write_text("", encoding="utf-8")
+
+        with TestClient(app) as client:
+            original_mode = _get_mode(client)
+            original_scope = _get_scope(client)
+            try:
+                _set_mode(client, "pilot", kill_switch=False)
+                _set_scope(client, _enable_apps(original_scope, ["forge", "approvals", "lens"]))
+
+                quarantine = client.post(
+                    "/lens/actions/execute",
+                    json={
+                        "kind": "forge.quarantine",
+                        "args": {"entry_id": "cap-lifecycle", "reason": "Capability failed provenance review."},
+                    },
+                )
+                assert quarantine.status_code == 200
+                assert quarantine.json()["result"]["entry"]["status"] == "quarantined"
+
+                request_revoke = client.post(
+                    "/lens/actions/execute",
+                    json={"kind": "forge.revoke.request_approval", "args": {"entry_id": "cap-lifecycle"}},
+                )
+                assert request_revoke.status_code == 200
+                approval_id = str(request_revoke.json()["result"]["approval"]["id"]).strip()
+                assert approval_id
+
+                decide_response = client.post(
+                    f"/approvals/{approval_id}/decision",
+                    json={"decision": "approved", "note": "Capability should be revoked after quarantine."},
+                )
+                assert decide_response.status_code == 200
+
+                revoke = client.post(
+                    "/lens/actions/execute",
+                    json={
+                        "kind": "forge.revoke",
+                        "args": {
+                            "entry_id": "cap-lifecycle",
+                            "approval_id": approval_id,
+                            "reason": "Capability is no longer trusted for governed use.",
+                        },
+                    },
+                )
+            finally:
+                _set_scope(client, original_scope)
+                _set_mode(
+                    client,
+                    str(original_mode.get("mode", "pilot")),
+                    bool(original_mode.get("kill_switch", False)),
+                )
+
+        assert revoke.status_code == 200
+        result_payload = revoke.json()
+        assert result_payload["result"]["kind"] == "forge.revoke"
+        assert result_payload["result"]["tool"]["approval_id"] == approval_id
+        assert result_payload["result"]["entry"]["status"] == "revoked"
+        assert result_payload["result"]["presentation"]["kind"] == "forge.revoke"
+        catalog = json.loads(_read_text(catalog_path))
+        lifecycle_entry = next(entry for entry in catalog["entries"] if entry["id"] == "cap-lifecycle")
+        assert lifecycle_entry["status"] == "revoked"
+        assert lifecycle_entry["quarantined_at"]
+        assert lifecycle_entry["revoked_at"]
+        ledger_rows = _read_jsonl(run_ledger_path)
+        revoke_receipt = next(
+            row for row in reversed(ledger_rows) if str(row.get("kind", "")).strip() == "forge.revoke"
+        )
+        revoke_summary = revoke_receipt.get("summary", {}) if isinstance(revoke_receipt.get("summary"), dict) else {}
+        assert revoke_summary["entry_id"] == "cap-lifecycle"
+        assert revoke_summary["approval_id"] == approval_id
+        quarantine_receipt = next(
+            row for row in reversed(ledger_rows) if str(row.get("kind", "")).strip() == "forge.quarantine"
+        )
+        quarantine_summary = quarantine_receipt.get("summary", {}) if isinstance(quarantine_receipt.get("summary"), dict) else {}
+        assert quarantine_summary["entry_id"] == "cap-lifecycle"
+        assert quarantine_summary["status"] == "quarantined"
     finally:
         _restore_text(catalog_path, catalog_before, catalog_before_exists)
         _restore_text(approvals_path, approvals_before, approvals_before_exists)

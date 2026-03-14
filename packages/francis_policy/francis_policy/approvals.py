@@ -13,5 +13,6 @@ def requires_approval(action: str) -> bool:
     )
     high_risk_exact_actions = {
         "forge.promote",
+        "forge.revoke",
     }
     return normalized.startswith(high_risk_prefixes) or normalized in high_risk_exact_actions

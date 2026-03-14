@@ -287,13 +287,14 @@ def _build_fs(workspace_root: Path) -> WorkspaceFS:
     )
 
 
-def _capability_approval(fs: WorkspaceFS, stage_id: str) -> dict[str, Any] | None:
-    requests = list_requests(fs, action="forge.promote", limit=100)
+def _capability_approval(fs: WorkspaceFS, entry_id: str, *, action: str) -> dict[str, Any] | None:
+    requests = list_requests(fs, action=action, limit=100)
     for row in reversed(requests):
         if not isinstance(row, dict):
             continue
         metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        if str(metadata.get("stage_id", "")).strip() != stage_id:
+        target_id = str(metadata.get("entry_id", "")).strip() or str(metadata.get("stage_id", "")).strip()
+        if target_id != entry_id:
             continue
         return row
     return None
@@ -321,6 +322,16 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
 
     focus_pack = next((row for row in packs if int(row.get("staged_count", 0) or 0) > 0), None)
     if focus_pack is None:
+        focus_pack = next(
+            (
+                row
+                for row in packs
+                if isinstance(row.get("focus_version"), dict)
+                and str(row["focus_version"].get("status", "")).strip().lower() == "quarantined"
+            ),
+            None,
+        )
+    if focus_pack is None:
         focus_pack = next((row for row in packs if int(row.get("active_count", 0) or 0) > 0), None)
     focus_entry = (
         focus_pack.get("focus_version", {})
@@ -345,36 +356,76 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
 
     entry_id = str(focus_entry.get("id", "")).strip()
     status = str(focus_entry.get("status", "")).strip().lower() or "staged"
-    approval = _capability_approval(fs, entry_id) if entry_id else None
-    approval_id = str((approval or {}).get("id", "")).strip()
-    approval_status = str((approval or {}).get("status", "")).strip().lower()
+    promote_approval = _capability_approval(fs, entry_id, action="forge.promote") if entry_id else None
+    promote_approval_id = str((promote_approval or {}).get("id", "")).strip()
+    promote_approval_status = str((promote_approval or {}).get("status", "")).strip().lower()
+    revoke_approval = _capability_approval(fs, entry_id, action="forge.revoke") if entry_id else None
+    revoke_approval_id = str((revoke_approval or {}).get("id", "")).strip()
+    revoke_approval_status = str((revoke_approval or {}).get("status", "")).strip().lower()
     version = str(focus_entry.get("version", "")).strip() or "0.1.0"
     name = str(focus_entry.get("name", "Capability pack")).strip() or "Capability pack"
     risk_tier = str(focus_entry.get("risk_tier", "low")).strip().lower() or "low"
     tool_pack = focus_entry.get("tool_pack", {}) if isinstance(focus_entry.get("tool_pack"), dict) else {}
     diff_summary = focus_entry.get("diff_summary", {}) if isinstance(focus_entry.get("diff_summary"), dict) else {}
     quality_standard = build_quality_standard(focus_entry)
-    promotion_rules = build_promotion_rules(focus_entry, approval_status=approval_status)
-    provenance = build_capability_provenance(focus_entry, approval_status=approval_status)
+    promotion_rules = build_promotion_rules(focus_entry, approval_status=promote_approval_status)
+    provenance = build_capability_provenance(focus_entry, approval_status=promote_approval_status)
     pack_id = str((focus_pack or {}).get("pack_id", "")).strip() or str(focus_entry.get("slug", "")).strip()
     version_count = int((focus_pack or {}).get("version_count", 0) or 0)
     first_failed_rule = _first_failed_rule_detail(promotion_rules)
+    approval_action = ""
+    approval_id = ""
+    approval_status = ""
 
-    if status == "staged":
-        if approval_status == "approved" and approval_id and bool(promotion_rules.get("ready")):
+    if status == "quarantined":
+        summary = (
+            f"{name} {version} in pack {pack_id} is quarantined and blocked from further use. "
+            "Revoke it to keep only audit continuity."
+        )
+        recommended_action = "forge.revoke"
+        approval_action = "forge.revoke"
+        approval_id = revoke_approval_id
+        approval_status = revoke_approval_status
+    elif status == "staged" and (
+        str(provenance.get("review_state", "")).strip() in {"rejected", "quarantined", "revoked"}
+        or (bool(provenance.get("external")) and not bool(provenance.get("traceable")))
+    ):
+        summary = (
+            f"{name} {version} in pack {pack_id} should be quarantined before any promotion path continues. "
+            f"{str(provenance.get('summary', '')).strip()}"
+        ).strip()
+        recommended_action = "forge.quarantine"
+    elif status == "staged":
+        if promote_approval_status == "approved" and promote_approval_id and bool(promotion_rules.get("ready")):
             summary = f"{name} {version} in pack {pack_id} is staged and already approved for promotion."
-        elif approval_status == "approved" and approval_id:
+        elif promote_approval_status == "approved" and promote_approval_id:
             summary = (
                 f"{name} {version} in pack {pack_id} has approval recorded but still needs policy review before promotion. "
                 f"{first_failed_rule or str(provenance.get('summary', '')).strip()}"
             ).strip()
-        elif approval_status == "pending" and approval_id:
-            summary = f"{name} {version} in pack {pack_id} is staged and waiting on promotion approval {approval_id}."
-        elif approval_status == "rejected":
+        elif promote_approval_status == "pending" and promote_approval_id:
+            summary = f"{name} {version} in pack {pack_id} is staged and waiting on promotion approval {promote_approval_id}."
+        elif promote_approval_status == "rejected":
             summary = f"{name} {version} in pack {pack_id} is staged after a rejected promotion request and needs a fresh operator decision."
         else:
             summary = f"{name} {version} in pack {pack_id} is staged and ready for governed promotion into the active library."
         recommended_action = "forge.promote"
+        approval_action = "forge.promote"
+        approval_id = promote_approval_id
+        approval_status = promote_approval_status
+    elif status in {"active", "superseded"} and str(provenance.get("review_state", "")).strip() in {
+        "rejected",
+        "quarantined",
+        "revoked",
+    }:
+        summary = (
+            f"{name} {version} in pack {pack_id} has review posture {str(provenance.get('review_label', 'revoked')).strip()} "
+            "and should be revoked from governed use."
+        )
+        recommended_action = "forge.revoke"
+        approval_action = "forge.revoke"
+        approval_id = revoke_approval_id
+        approval_status = revoke_approval_status
     elif status == "active":
         summary = f"{name} {version} is active in pack {pack_id} inside the internal capability library."
         recommended_action = ""
@@ -403,9 +454,19 @@ def _capability_focus(workspace_root: Path) -> dict[str, Any]:
             "path": str(focus_entry.get("path", "")).strip(),
             "approval_id": approval_id,
             "approval_status": approval_status,
+            "approval_action": approval_action,
             "summary": summary,
             "recommended_action": recommended_action,
-            "actionable": bool(recommended_action and entry_id and promotion_rules.get("ready")),
+            "actionable": bool(
+                (
+                    recommended_action == "forge.promote"
+                    and entry_id
+                    and bool(promotion_rules.get("ready"))
+                    and approval_status == "approved"
+                )
+                or (recommended_action == "forge.quarantine" and entry_id)
+                or (recommended_action == "forge.revoke" and entry_id and approval_status == "approved")
+            ),
             "validation_ok": bool(quality_standard.get("ok")),
             "quality_standard": quality_standard,
             "promotion_rules": promotion_rules,
@@ -469,7 +530,11 @@ def build_current_work(
         attention_kind = "teaching_capture"
         attention_label = "Teaching Capture"
         attention_reason = str(focus_session.get("summary", "")).strip() or "A teaching session has captured reusable steps."
-    elif str(focus_capability.get("recommended_action", "")).strip() == "forge.promote":
+    elif str(focus_capability.get("recommended_action", "")).strip() in {
+        "forge.promote",
+        "forge.quarantine",
+        "forge.revoke",
+    }:
         attention_kind = "capability_review"
         attention_label = "Capability Review"
         attention_reason = str(focus_capability.get("summary", "")).strip() or "A staged capability is ready for governed review."
@@ -530,8 +595,11 @@ def build_current_work(
         blockers.append(str(last_terminal.get("text", "")).strip() or "Recent terminal failure detected.")
     if int(inbox.get("alert_count", 0)) > 0:
         blockers.append(f"{int(inbox.get('alert_count', 0))} inbox alert(s) need review.")
-    if str(focus_capability.get("approval_status", "")).strip().lower() == "pending":
-        blockers.append("Capability promotion approval is pending.")
+    capability_approval_status = str(focus_capability.get("approval_status", "")).strip().lower()
+    capability_approval_action = str(focus_capability.get("approval_action", "")).strip().lower()
+    if capability_approval_status == "pending":
+        action_label = capability_approval_action.split(".")[-1] if capability_approval_action else "capability"
+        blockers.append(f"Capability {action_label} approval is pending.")
     capability_provenance = (
         focus_capability.get("provenance", {}) if isinstance(focus_capability.get("provenance"), dict) else {}
     )
@@ -726,6 +794,55 @@ def build_next_best_action(
             "args": {"stage_id": stage_id} if stage_id else {},
             "enabled": False,
             "policy_reason": pending_reason if forge_allowed else "app forge not in allowed scope",
+        }
+
+    if capability_action == "forge.quarantine":
+        return {
+            "kind": "forge.quarantine",
+            "label": "Quarantine Capability",
+            "reason": str(focus_capability.get("summary", "")).strip()
+            or "The capability should be quarantined before further governed use.",
+            "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
+            "trust_badge": "Likely",
+            "args": {"entry_id": stage_id} if stage_id else {},
+            "enabled": bool(stage_id) and forge_allowed,
+            "policy_reason": (
+                "" if stage_id and forge_allowed else "Capability id is missing." if not stage_id else "app forge not in allowed scope"
+            ),
+        }
+
+    if capability_action == "forge.revoke":
+        if approval_status == "approved" and approval_id:
+            return {
+                "kind": "forge.revoke",
+                "label": "Revoke Capability",
+                "reason": str(focus_capability.get("summary", "")).strip()
+                or "This capability should be revoked from governed use.",
+                "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
+                "trust_badge": "Confirmed",
+                "args": {"entry_id": stage_id, "approval_id": approval_id} if stage_id else {},
+                "enabled": bool(stage_id) and forge_allowed,
+                "policy_reason": (
+                    "" if stage_id and forge_allowed else "Capability id is missing." if not stage_id else "app forge not in allowed scope"
+                ),
+            }
+        revoke_reason = (
+            f"Revocation approval {approval_id} is still pending."
+            if approval_status == "pending" and approval_id
+            else "Revocation approval was rejected and needs a fresh operator decision."
+            if approval_status == "rejected"
+            else "Capability revocation requires approval."
+        )
+        return {
+            "kind": "forge.revoke",
+            "label": "Revoke Capability",
+            "reason": str(focus_capability.get("summary", "")).strip()
+            or "This capability should be revoked from governed use.",
+            "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
+            "trust_badge": "Likely",
+            "args": {"entry_id": stage_id} if stage_id else {},
+            "enabled": False,
+            "policy_reason": revoke_reason if forge_allowed else "app forge not in allowed scope",
         }
 
     if bool(repo.get("dirty", False)) and int(repo.get("changed_count", 0)) > 0:

@@ -9,7 +9,7 @@ from francis_forge.library import (
     build_quality_standard,
     next_patch_version,
 )
-from francis_forge.promotion import promote_stage
+from francis_forge.promotion import promote_stage, quarantine_entry, revoke_entry
 
 
 def _fs(root) -> WorkspaceFS:
@@ -188,3 +188,65 @@ def test_promote_stage_supersedes_prior_active_version(tmp_path) -> None:
     assert rows["capability-stage-v1"]["status"] == "superseded"
     assert rows["capability-stage-v1"]["superseded_by"] == "capability-stage-v2"
     assert rows["capability-stage-v2"]["status"] == "active"
+
+
+def test_quarantine_entry_marks_lifecycle_and_provenance(tmp_path) -> None:
+    fs = _fs(tmp_path)
+    add_entry(
+        fs,
+        {
+            "id": "capability-quarantine",
+            "name": "Capability Quarantine",
+            "slug": "capability-quarantine",
+            "status": "staged",
+            "version": "0.2.0",
+            "provenance": {"source_kind": "third_party", "source_ref": "gh://community/capability-quarantine"},
+        },
+    )
+
+    quarantined = quarantine_entry(
+        fs,
+        "capability-quarantine",
+        reason="Third-party provenance failed review.",
+        actor="lens:architect",
+    )
+
+    assert quarantined is not None
+    assert quarantined["status"] == "quarantined"
+    assert quarantined["quarantine_reason"] == "Third-party provenance failed review."
+    assert quarantined["quarantined_by"] == "lens:architect"
+    assert quarantined["provenance"]["review_state"] == "quarantined"
+    assert quarantined["provenance"]["review_note"] == "Third-party provenance failed review."
+
+
+def test_revoke_entry_marks_lifecycle_and_preserves_audit(tmp_path) -> None:
+    fs = _fs(tmp_path)
+    add_entry(
+        fs,
+        {
+            "id": "capability-revoke",
+            "name": "Capability Revoke",
+            "slug": "capability-revoke",
+            "status": "quarantined",
+            "version": "1.0.0",
+            "quarantined_at": "2026-03-13T01:00:00+00:00",
+            "quarantine_reason": "Quarantined before final revocation.",
+            "provenance": {"source_kind": "vendor", "vendor": "Verified Vendor", "review_state": "quarantined"},
+        },
+    )
+
+    revoked = revoke_entry(
+        fs,
+        "capability-revoke",
+        reason="Capability is no longer trusted for governed use.",
+        actor="lens:architect",
+    )
+
+    assert revoked is not None
+    assert revoked["status"] == "revoked"
+    assert revoked["previous_status"] == "quarantined"
+    assert revoked["revocation_reason"] == "Capability is no longer trusted for governed use."
+    assert revoked["revoked_by"] == "lens:architect"
+    assert revoked["quarantined_at"] == "2026-03-13T01:00:00+00:00"
+    assert revoked["provenance"]["review_state"] == "revoked"
+    assert revoked["provenance"]["review_note"] == "Capability is no longer trusted for governed use."

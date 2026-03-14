@@ -5542,13 +5542,26 @@
           ? controls.request_approval
           : {};
         const promote = controls.promote && typeof controls.promote === "object" ? controls.promote : {};
+        const quarantine = controls.quarantine && typeof controls.quarantine === "object" ? controls.quarantine : {};
+        const requestRevoke = controls.request_revoke && typeof controls.request_revoke === "object"
+          ? controls.request_revoke
+          : {};
+        const revoke = controls.revoke && typeof controls.revoke === "object" ? controls.revoke : {};
+        const lifecycleReason =
+          String(row.audit?.quarantine_reason || row.audit?.revocation_reason || "Capability lifecycle action from Lens.").trim();
         document.getElementById("capability-detail-controls").innerHTML = `
+          <input class="chamber-input" type="text" id="capability-lifecycle-reason" placeholder="Lifecycle reason" value="${escapeHtml(lifecycleReason)}" />
           <button class="btn-secondary" type="button" ${requestApproval.enabled ? "" : "disabled"} onclick="runCapabilityControl('request_approval')">${escapeHtml(String(requestApproval.label || "Request Promotion Approval"))}</button>
           <button class="btn-primary" type="button" ${promote.enabled ? "" : "disabled"} onclick="runCapabilityControl('promote')">${escapeHtml(String(promote.label || "Promote Capability"))}</button>
+          <button class="btn-secondary" type="button" ${quarantine.enabled ? "" : "disabled"} onclick="runCapabilityControl('quarantine')">${escapeHtml(String(quarantine.label || "Quarantine Capability"))}</button>
+          <button class="btn-secondary" type="button" ${requestRevoke.enabled ? "" : "disabled"} onclick="runCapabilityControl('request_revoke')">${escapeHtml(String(requestRevoke.label || "Request Revocation Approval"))}</button>
+          <button class="btn-primary" type="button" ${revoke.enabled ? "" : "disabled"} onclick="runCapabilityControl('revoke')">${escapeHtml(String(revoke.label || "Revoke Capability"))}</button>
         `;
         document.getElementById("capability-detail").textContent = formatJson(row.audit || row);
         const capabilitySignal = String(
-          row.status === "staged"
+          row.status === "quarantined" || row.status === "revoked"
+            ? "high"
+            : row.status === "staged"
             ? row.risk_tier || "medium"
             : row.status === "active"
             ? "low"
@@ -5612,7 +5625,12 @@
           document.getElementById("capability-detail-summary").textContent =
             "Capability detail will render from staged and active library state.";
           document.getElementById("capability-detail-controls").innerHTML =
-            `<button class="btn-secondary" type="button" disabled>Request Promotion Approval</button><button class="btn-primary" type="button" disabled>Promote Capability</button>`;
+            `<input class="chamber-input" type="text" id="capability-lifecycle-reason" placeholder="Lifecycle reason" value="" disabled />
+             <button class="btn-secondary" type="button" disabled>Request Promotion Approval</button>
+             <button class="btn-primary" type="button" disabled>Promote Capability</button>
+             <button class="btn-secondary" type="button" disabled>Quarantine Capability</button>
+             <button class="btn-secondary" type="button" disabled>Request Revocation Approval</button>
+             <button class="btn-primary" type="button" disabled>Revoke Capability</button>`;
           document.getElementById("capability-detail").textContent = formatJson(
             currentCapabilityLibrary.detail && typeof currentCapabilityLibrary.detail === "object"
               ? currentCapabilityLibrary.detail
@@ -7743,9 +7761,14 @@
         if (!control || !control.enabled) {
           return;
         }
+        const args = control.args && typeof control.args === "object" ? { ...control.args } : {};
+        const lifecycleReason = String(document.getElementById("capability-lifecycle-reason")?.value || "").trim();
+        if ((controlKey === "quarantine" || controlKey === "revoke") && lifecycleReason) {
+          args.reason = lifecycleReason;
+        }
         await executeActionWithArgs(
           String(control.execute_kind || control.kind || ""),
-          control.args && typeof control.args === "object" ? control.args : {},
+          args,
           false,
         );
       }

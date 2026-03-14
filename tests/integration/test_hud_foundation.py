@@ -1512,9 +1512,15 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
     assert focused["audit"]["provenance"]["review_state"] == "approved"
     assert focused["controls"]["request_approval"]["enabled"] is False
     assert focused["controls"]["promote"]["enabled"] is True
+    assert focused["controls"]["quarantine"]["enabled"] is True
     assert focused["controls"]["promote"]["args"]["approval_id"] == "approval-promote"
     assert focused["detail_cards"]
     assert any(card["label"] == "External" for card in payload["cards"])
+    assert any(card["label"] == "Quarantined" for card in payload["cards"])
+    active = next(row for row in payload["entries"] if row["id"] == "cap-active")
+    assert active["controls"]["request_revoke"]["enabled"] is True
+    assert active["controls"]["revoke"]["enabled"] is False
+    assert active["audit"]["approval_action"] == "forge.revoke"
 
 
 def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:

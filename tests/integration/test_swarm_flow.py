@@ -128,7 +128,7 @@ def test_swarm_delegate_retry_complete_and_deadletter_flow() -> None:
             original_scope = _get_scope(client)
             try:
                 _set_mode(client, "pilot", kill_switch=False)
-                _set_scope(client, _enable_apps(original_scope, ["swarm", "control", "receipts", "lens"]))
+                _set_scope(client, _enable_apps(original_scope, ["swarm", "control", "receipts", "lens", "tools"]))
 
                 delegated = client.post(
                     "/swarm/delegate",
@@ -309,7 +309,7 @@ def test_swarm_execute_supported_delegation_and_record_receipts() -> None:
             original_scope = _get_scope(client)
             try:
                 _set_mode(client, "pilot", kill_switch=False)
-                _set_scope(client, _enable_apps(original_scope, ["swarm", "control", "receipts", "lens"]))
+                _set_scope(client, _enable_apps(original_scope, ["swarm", "control", "receipts", "lens", "tools"]))
 
                 delegated = client.post(
                     "/swarm/delegate",
