@@ -238,6 +238,7 @@ The most important HUD/operator surfaces are now shifting from status cards towa
 * `Teaching Sessions` - a Stage 11 Apprenticeship surface with session creation, step capture, replay detail, generalized workflow review, cited related evidence, explicit trust posture, backend-derived create/record defaults from live mission/repo/terminal context, and governed generalize/skillize controls so bounded demonstration becomes a visible Lens workflow instead of a hidden API-only feature
 * `Capability Library` - a Stage 17 capability-economy surface with governed internal-library rows, explicit provenance classes (`Internal`, `Local Import`, `Vendor Provided`, `Third-Party`, plus quarantine/revocation posture), promotion and revocation approval state, backend-owned focus selection, compact audits, and explicit `Request Promotion Approval` / `Promote Capability` / `Quarantine Capability` / `Request Revocation Approval` / `Revoke Capability` controls so staged and compromised packs move through a real lifecycle instead of hiding as Forge residue
 * `Connector Library` - a governed connector-registry surface with explicit provenance classes (`Internal`, `Local Import`, `Vendor Provided`, `Third-Party`, plus quarantine/revocation posture), backend-owned focus selection, compact audits, and explicit `Quarantine Connector` / `Request Revocation Approval` / `Revoke Connector` controls so external integration surfaces can be reviewed, disabled, and retired under the same operator law as capability packs
+* `Dependency Library` - a governed supply-chain surface built from the repo’s real Python and Node manifests/lockfiles, with pinning posture, provenance classes, backend-owned focus selection, compact audits, and explicit `Quarantine Dependency` / `Request Revocation Approval` / `Revoke Dependency` controls so third-party package risk is inspectable and revocable instead of remaining a hidden build artifact
 * `Swarm Units` - a Stage 15 swarm surface with explicit role-bearing units, bounded delegation envelopes, lease / completion / failure controls, backend-owned delegation focus, compact audits, and deadletter visibility so internal specialization becomes inspectable instead of turning into an agent zoo
 * `Federation Topology` - a Stage 16 federation surface with explicit paired nodes, scoped trust, heartbeat / stale-state visibility, revocation controls, backend-owned focus selection, compact audits, node-attributed receipts, and paired-node remote approval controls so multi-node continuity becomes inspectable instead of vague
 * `Managed Copies` - a Stage 18 managed-copy surface with governed copy creation, customer-isolated registry rows, namespaced runtime materialization, safe-delta intake, quarantine and clean-replacement controls, backend-owned focus selection, and compact audits so commercialization starts from product law instead of hidden support workflows
@@ -272,6 +273,7 @@ The orchestrator currently exposes families such as:
 * autonomy
 * capabilities
 * connectors
+* dependencies
 * control
 * forge
 * health

@@ -30,6 +30,7 @@ from services.hud.app.views.capability_library import get_capability_library_vie
 from services.hud.app.views.connector_library import get_connector_library_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
+from services.hud.app.views.dependency_library import get_dependency_library_view
 from services.hud.app.views.execution_feed import get_execution_feed_view
 from services.hud.app.views.execution_journal import get_execution_journal_view
 from services.hud.app.views.federation import get_federation_view
@@ -73,6 +74,13 @@ from services.orchestrator.app.routes.connectors import (
     connector_quarantine,
     connector_request_revoke_approval,
     connector_revoke,
+)
+from services.orchestrator.app.routes.dependencies import (
+    DependencyLifecycleRequest,
+    DependencyRevokeRequest,
+    dependency_quarantine,
+    dependency_request_revoke_approval,
+    dependency_revoke,
 )
 from services.orchestrator.app.routes.managed_copies import (
     ManagedCopyCreateRequest,
@@ -189,6 +197,7 @@ def _build_hud_payload(
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "capability_library": get_capability_library_view(snapshot=snapshot_payload),
         "connector_library": get_connector_library_view(snapshot=snapshot_payload),
+        "dependency_library": get_dependency_library_view(snapshot=snapshot_payload),
         "swarm": get_swarm_view(snapshot=snapshot_payload),
         "federation": get_federation_view(snapshot=snapshot_payload),
         "managed_copies": get_managed_copies_view(snapshot=snapshot_payload),
@@ -237,6 +246,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "repo_drilldown",
         "capability_library",
         "connector_library",
+        "dependency_library",
         "swarm",
         "federation",
         "managed_copies",
@@ -273,6 +283,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "repo_drilldown",
         "capability_library",
         "connector_library",
+        "dependency_library",
         "swarm",
         "federation",
         "managed_copies",
@@ -356,6 +367,10 @@ def _build_app() -> FastAPI:
     def connector_library() -> dict[str, object]:
         return get_connector_library_view()
 
+    @app.get("/api/dependency-library")
+    def dependency_library() -> dict[str, object]:
+        return get_dependency_library_view()
+
     @app.post("/api/connectors/{connector_id}/quarantine")
     def hud_connector_quarantine(
         connector_id: str,
@@ -383,6 +398,36 @@ def _build_app() -> FastAPI:
         payload: ConnectorRevokeRequest,
     ) -> dict[str, object]:
         result = connector_revoke(connector_id=connector_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/dependencies/{dependency_id}/quarantine")
+    def hud_dependency_quarantine(
+        dependency_id: str,
+        request: Request,
+        payload: DependencyLifecycleRequest,
+    ) -> dict[str, object]:
+        result = dependency_quarantine(dependency_id=dependency_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/dependencies/{dependency_id}/revoke/request-approval")
+    def hud_dependency_request_revoke_approval(
+        dependency_id: str,
+        request: Request,
+        payload: DependencyLifecycleRequest,
+    ) -> dict[str, object]:
+        result = dependency_request_revoke_approval(dependency_id=dependency_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/dependencies/{dependency_id}/revoke")
+    def hud_dependency_revoke(
+        dependency_id: str,
+        request: Request,
+        payload: DependencyRevokeRequest,
+    ) -> dict[str, object]:
+        result = dependency_revoke(dependency_id=dependency_id, request=request, payload=payload)
         refresh_payload = _build_hud_payload()
         return {**refresh_payload, **result}
 

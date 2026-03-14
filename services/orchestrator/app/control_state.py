@@ -13,6 +13,7 @@ DEFAULT_ALLOWED_APPS = [
     "missions",
     "forge",
     "connectors",
+    "dependencies",
     "apprenticeship",
     "fabric",
     "portability",

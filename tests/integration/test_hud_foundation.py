@@ -15,6 +15,7 @@ import services.hud.app.views.connector_library as connector_library_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
+import services.hud.app.views.dependency_library as dependency_library_view
 import services.hud.app.views.execution_feed as execution_feed_view
 import services.hud.app.views.execution_journal as execution_journal_view
 import services.hud.app.views.federation as federation_view
@@ -149,6 +150,12 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Quarantine Connector" in response.text
     assert "Request Revocation Approval" in response.text
     assert "Revoke Connector" in response.text
+    assert "Dependency Library" in response.text
+    assert "Dependency rows will render from the governed supply-chain registry." in response.text
+    assert "Dependency Detail" in response.text
+    assert "Dependency detail will render from governed supply-chain posture." in response.text
+    assert "Quarantine Dependency" in response.text
+    assert "Revoke Dependency" in response.text
     assert "Federation Topology" in response.text
     assert "Federation topology will render from the governed node registry." in response.text
     assert "Node Detail" in response.text
@@ -259,6 +266,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["capability_library"]["surface"] == "capability_library"
     assert body["connector_library"]["surface"] == "connector_library"
+    assert body["dependency_library"]["surface"] == "dependency_library"
     assert body["swarm"]["surface"] == "swarm"
     assert body["federation"]["surface"] == "federation"
     assert body["managed_copies"]["surface"] == "managed_copies"
@@ -283,6 +291,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "repo_drilldown",
         "capability_library",
         "connector_library",
+        "dependency_library",
         "swarm",
         "federation",
         "managed_copies",
@@ -342,6 +351,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(connector_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(dependency_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(swarm_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(federation_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -386,6 +396,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["capability_library"]["surface"] == "capability_library"
     assert payload["connector_library"]["surface"] == "connector_library"
+    assert payload["dependency_library"]["surface"] == "dependency_library"
     assert payload["swarm"]["surface"] == "swarm"
     assert payload["federation"]["surface"] == "federation"
     assert payload["managed_copies"]["surface"] == "managed_copies"
@@ -405,6 +416,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["surface_digests"]["shift_report"]
     assert payload["surface_digests"]["capability_library"]
     assert payload["surface_digests"]["connector_library"]
+    assert payload["surface_digests"]["dependency_library"]
     assert payload["surface_digests"]["swarm"]
     assert payload["surface_digests"]["federation"]
     assert payload["surface_digests"]["managed_copies"]
@@ -869,6 +881,20 @@ def test_hud_connector_library_route_returns_structured_surface() -> None:
     assert "summary" in payload
     assert "severity" in payload
     assert "focus_connector_id" in payload
+    assert "cards" in payload
+    assert "entries" in payload
+    assert "detail" in payload
+
+
+def test_hud_dependency_library_route_returns_structured_surface() -> None:
+    response = client.get("/api/dependency-library")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "dependency_library"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_dependency_id" in payload
     assert "cards" in payload
     assert "entries" in payload
     assert "detail" in payload
@@ -1657,6 +1683,122 @@ def test_hud_connector_library_view_exposes_focus_and_controls(
     assert pending["provenance_label"] == "Third-Party"
     assert pending["provenance_tone"] == "high"
     assert pending["controls"]["request_revoke"]["enabled"] is True
+
+
+def test_hud_dependency_library_view_exposes_focus_and_controls(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _write_json(
+        tmp_path / "package.json",
+        {
+            "name": "francis-overlay-shell",
+            "devDependencies": {
+                "electron": "40.8.0",
+            },
+        },
+    )
+    _write_json(
+        tmp_path / "package-lock.json",
+        {
+            "name": "francis-overlay-shell",
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"devDependencies": {"electron": "40.8.0"}},
+                "node_modules/electron": {"version": "40.8.0"},
+            },
+        },
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        "\n".join(
+            [
+                "[project]",
+                'name = "francis"',
+                'version = "0.2.0"',
+                'requires-python = ">=3.10"',
+                'dependencies = ["fastapi>=0.110,<1"]',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(dependency_library_view, "get_workspace_root", lambda: workspace_root)
+    _write_json(
+        workspace_root / "dependencies" / "registry.json",
+        {
+            "dependencies": [
+                {
+                    "id": "python:francis:fastapi",
+                    "status": "quarantined",
+                    "quarantined_at": "2026-03-13T11:00:00+00:00",
+                    "quarantine_reason": "Dependency failed runtime review.",
+                    "quarantined_by": "dependencies:architect",
+                    "provenance": {"review_state": "quarantined"},
+                },
+                {
+                    "id": "node:francis-overlay-shell:electron",
+                    "provenance": {"source_kind": "vendor", "review_state": "approved"},
+                },
+            ]
+        },
+    )
+    _write_jsonl(
+        workspace_root / "approvals" / "requests.jsonl",
+        [
+            {
+                "id": "approval-dependency-revoke",
+                "ts": "2026-03-13T11:05:00+00:00",
+                "run_id": "run-dependency-revoke",
+                "action": "dependencies.revoke",
+                "reason": "Revoke fastapi from governed use",
+                "requested_by": "architect",
+                "metadata": {"dependency_id": "python:francis:fastapi", "action_kind": "dependencies.revoke"},
+            }
+        ],
+    )
+    _write_jsonl(
+        workspace_root / "journals" / "decisions.jsonl",
+        [
+            {
+                "id": "decision-dependency-revoke",
+                "ts": "2026-03-13T11:06:00+00:00",
+                "run_id": "run-dependency-revoke",
+                "kind": "approval.decision",
+                "request_id": "approval-dependency-revoke",
+                "action": "dependencies.revoke",
+                "decision": "approved",
+                "decided_by": "architect",
+                "note": "Dependency should be revoked.",
+            }
+        ],
+    )
+
+    def _snapshot() -> dict[str, object]:
+        return {"current_work": {"summary": "Dependency posture is under review."}}
+
+    monkeypatch.setattr(dependency_library_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(
+        dependency_library_view,
+        "_action_allowed",
+        lambda **kwargs: (True, ""),
+    )
+
+    payload = dependency_library_view.get_dependency_library_view()
+
+    assert payload["focus_dependency_id"] == "python:francis:fastapi"
+    assert payload["severity"] == "high"
+    focused = next(row for row in payload["entries"] if row["id"] == "python:francis:fastapi")
+    assert focused["detail_state"] == "current"
+    assert focused["provenance_label"] == "Quarantined"
+    assert focused["audit"]["approval_action"] == "dependencies.revoke"
+    assert focused["audit"]["approval_id"] == "approval-dependency-revoke"
+    assert focused["audit"]["provenance"]["kind"] == "quarantined"
+    assert focused["controls"]["quarantine"]["enabled"] is False
+    assert focused["controls"]["request_revoke"]["enabled"] is False
+    assert focused["controls"]["revoke"]["enabled"] is True
+    pinned = next(row for row in payload["entries"] if row["id"] == "node:francis-overlay-shell:electron")
+    assert pinned["provenance_label"] == "Vendor Provided"
+    assert pinned["controls"]["request_revoke"]["enabled"] is True
 
 
 def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:

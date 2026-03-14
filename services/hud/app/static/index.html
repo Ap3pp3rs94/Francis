@@ -954,6 +954,43 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="dependency-library-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Dependency Library</h2>
+            <span class="meta tiny" id="dependency-library-meta">Dependency catalog loading from Lens</span>
+          </div>
+          <p id="dependency-library-summary" class="hero-copy">
+            Dependency rows will render from the governed supply-chain registry.
+          </p>
+          <div class="desktop-grid" id="dependency-library-cards">
+            <div class="desktop-pill"><strong>Dependencies</strong><span>Dependency cards will render from the backend contract.</span></div>
+          </div>
+          <ul class="list" id="dependency-library-list">
+            <li class="muted-empty">Dependency rows will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="dependency-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Dependency Detail</h2>
+            <span class="meta tiny" id="dependency-detail-meta">No dependency selected</span>
+          </div>
+          <p id="dependency-detail-summary" class="hero-copy">
+            Dependency detail will render from governed supply-chain posture.
+          </p>
+          <div class="desktop-grid" id="dependency-detail-cards">
+            <div class="desktop-pill"><strong>Dependency</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="dependency-detail-controls">
+            <input class="chamber-input" type="text" id="dependency-lifecycle-reason" placeholder="Lifecycle reason" />
+            <button class="btn-secondary" type="button" disabled>Quarantine Dependency</button>
+            <button class="btn-secondary" type="button" disabled>Request Revocation Approval</button>
+            <button class="btn-primary" type="button" disabled>Revoke Dependency</button>
+          </div>
+          <pre class="console" id="dependency-detail">Dependency audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="federation-panel" data-signal="low">
           <div class="panel-head">
             <h2>Federation Topology</h2>
@@ -1661,6 +1698,7 @@
       let currentRepoDrilldown = null;
       let currentCapabilityLibrary = { entries: [] };
       let currentConnectorLibrary = { entries: [] };
+      let currentDependencyLibrary = { entries: [] };
       let currentSwarmSurface = { units: [], delegations: [] };
       let currentFederationSurface = { nodes: [] };
       let currentManagedCopiesSurface = { copies: [] };
@@ -1682,6 +1720,8 @@
       let currentCapabilityRows = [];
       let currentConnectorFocusId = "";
       let currentConnectorRows = [];
+      let currentDependencyFocusId = "";
+      let currentDependencyRows = [];
       let currentSwarmFocusId = "";
       let currentSwarmRows = [];
       let currentFederationFocusId = "";
@@ -4138,6 +4178,7 @@
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentCapabilityLibrary = payload.capability_library || { entries: [] };
         currentConnectorLibrary = payload.connector_library || { entries: [] };
+        currentDependencyLibrary = payload.dependency_library || { entries: [] };
         currentSwarmSurface = payload.swarm || { units: [], delegations: [] };
         currentFederationSurface = payload.federation || { nodes: [] };
         currentManagedCopiesSurface = payload.managed_copies || { copies: [] };
@@ -4205,6 +4246,9 @@
         }
         if (shouldRender("connector_library")) {
           renderConnectorLibrary(currentConnectorLibrary);
+        }
+        if (shouldRender("dependency_library")) {
+          renderDependencyLibrary(currentDependencyLibrary);
         }
         if (shouldRender("swarm")) {
           renderSwarmSurface(currentSwarmSurface);
@@ -4286,6 +4330,7 @@
           repo_drilldown: currentRepoDrilldown || {},
           capability_library: currentCapabilityLibrary || { entries: [] },
           connector_library: currentConnectorLibrary || { entries: [] },
+          dependency_library: currentDependencyLibrary || { entries: [] },
           swarm: currentSwarmSurface || { units: [], delegations: [] },
           federation: currentFederationSurface || { nodes: [] },
           managed_copies: currentManagedCopiesSurface || { copies: [] },
@@ -5844,6 +5889,170 @@
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(String(payload.detail?.message || payload.detail || payload.message || "Failed to revoke connector."));
+        }
+        renderBootstrap(payload);
+      }
+
+      function inspectDependencyEntry(index) {
+        const row = Array.isArray(currentDependencyRows) ? currentDependencyRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentDependencyFocusId = String(row.id || "").trim();
+        document.getElementById("dependency-detail-meta").textContent =
+          `${String(row.ecosystem || "unknown")} | ${String(row.section || "runtime")} | ${String(row.id || "unknown")}`;
+        document.getElementById("dependency-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No dependency detail is available.");
+        renderDetailCards("dependency-detail-cards", row.detail_cards, "Dependency");
+        const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const quarantine = controls.quarantine && typeof controls.quarantine === "object" ? controls.quarantine : {};
+        const requestRevoke = controls.request_revoke && typeof controls.request_revoke === "object"
+          ? controls.request_revoke
+          : {};
+        const revoke = controls.revoke && typeof controls.revoke === "object" ? controls.revoke : {};
+        const lifecycleReason =
+          String(row.audit?.quarantine_reason || row.audit?.revocation_reason || "Dependency lifecycle action from Lens.").trim();
+        document.getElementById("dependency-detail-controls").innerHTML = `
+          <input class="chamber-input" type="text" id="dependency-lifecycle-reason" placeholder="Lifecycle reason" value="${escapeHtml(lifecycleReason)}" />
+          <button class="btn-secondary" type="button" ${quarantine.enabled ? "" : "disabled"} onclick="quarantineDependency()">${escapeHtml(String(quarantine.label || "Quarantine Dependency"))}</button>
+          <button class="btn-secondary" type="button" ${requestRevoke.enabled ? "" : "disabled"} onclick="requestRevokeDependency()">${escapeHtml(String(requestRevoke.label || "Request Revocation Approval"))}</button>
+          <button class="btn-primary" type="button" ${revoke.enabled ? "" : "disabled"} onclick="revokeDependency()">${escapeHtml(String(revoke.label || "Revoke Dependency"))}</button>
+        `;
+        document.getElementById("dependency-detail").textContent = formatJson(row.audit || row);
+        const dependencySignal = String(
+          row.status === "quarantined" || row.status === "revoked"
+            ? "high"
+            : row.provenance_tone || row.risk_tier || "low",
+        ).trim().toLowerCase() || "low";
+        applyPanelSignal("dependency-detail-panel", dependencySignal);
+      }
+
+      function renderDependencyLibrary(surface) {
+        currentDependencyLibrary = surface || { entries: [] };
+        currentDependencyRows = Array.isArray(currentDependencyLibrary.entries) ? currentDependencyLibrary.entries : [];
+        document.getElementById("dependency-library-meta").textContent =
+          `${currentDependencyRows.length} cataloged | ${String(currentDependencyLibrary.severity || "low")}`;
+        document.getElementById("dependency-library-summary").textContent =
+          String(currentDependencyLibrary.summary || "Dependency rows will render from the governed supply-chain registry.");
+        applySeverityState(
+          document.getElementById("dependency-library-summary"),
+          String(currentDependencyLibrary.severity || "low"),
+        );
+        applyPanelSignal("dependency-library-panel", String(currentDependencyLibrary.severity || "low"));
+        renderDetailCards(
+          "dependency-library-cards",
+          Array.isArray(currentDependencyLibrary.cards) ? currentDependencyLibrary.cards : [],
+          "Dependency",
+        );
+        document.getElementById("dependency-library-list").innerHTML = currentDependencyRows.length
+          ? currentDependencyRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(String(row.name || "Dependency"))}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(String(row.risk_tier || "medium"))}">${escapeHtml(String(row.risk_tier || "medium"))}</span>
+                        <span class="badge ${String(row.status || "").trim().toLowerCase() === "declared" ? "risk-low" : "risk-high"}">${escapeHtml(String(row.status || "declared"))}</span>
+                        <span class="badge risk-${escapeHtml(String(row.provenance_tone || "low"))}">${escapeHtml(String(row.provenance_label || "Third-Party"))}</span>
+                        <span class="badge risk-${escapeHtml(String(row.section || "runtime") === "runtime" ? "medium" : "low")}">${escapeHtml(String(row.section || "runtime"))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(String(row.summary || "No dependency summary is available."))}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectDependencyEntry(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Dependency rows will render from the backend contract.</li>`;
+        if (currentDependencyRows.length) {
+          const focusDependencyId = String(currentDependencyLibrary.focus_dependency_id || currentDependencyFocusId || "").trim();
+          const focusIndex = focusDependencyId
+            ? currentDependencyRows.findIndex((row) => String(row.id || "").trim() === focusDependencyId)
+            : -1;
+          inspectDependencyEntry(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          currentDependencyFocusId = "";
+          renderDetailCards("dependency-detail-cards", [], "Dependency");
+          document.getElementById("dependency-detail-meta").textContent = "No dependency selected";
+          document.getElementById("dependency-detail-summary").textContent =
+            "Dependency detail will render from governed supply-chain posture.";
+          document.getElementById("dependency-detail-controls").innerHTML =
+            `<input class="chamber-input" type="text" id="dependency-lifecycle-reason" placeholder="Lifecycle reason" value="" disabled />
+             <button class="btn-secondary" type="button" disabled>Quarantine Dependency</button>
+             <button class="btn-secondary" type="button" disabled>Request Revocation Approval</button>
+             <button class="btn-primary" type="button" disabled>Revoke Dependency</button>`;
+          document.getElementById("dependency-detail").textContent = formatJson(
+            currentDependencyLibrary.detail && typeof currentDependencyLibrary.detail === "object"
+              ? currentDependencyLibrary.detail
+              : { entries: [] },
+          );
+          applyPanelSignal("dependency-detail-panel", "low");
+        }
+      }
+
+      async function quarantineDependency() {
+        const focused = Array.isArray(currentDependencyRows)
+          ? currentDependencyRows.find((row) => String(row?.id || "").trim() === String(currentDependencyFocusId || "").trim())
+          : null;
+        const dependencyId = String(focused?.id || "").trim();
+        if (!dependencyId) {
+          return;
+        }
+        const reason = String(document.getElementById("dependency-lifecycle-reason")?.value || "").trim();
+        const response = await fetch(`/api/dependencies/${encodeURIComponent(dependencyId)}/quarantine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to quarantine dependency."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function requestRevokeDependency() {
+        const focused = Array.isArray(currentDependencyRows)
+          ? currentDependencyRows.find((row) => String(row?.id || "").trim() === String(currentDependencyFocusId || "").trim())
+          : null;
+        const dependencyId = String(focused?.id || "").trim();
+        if (!dependencyId) {
+          return;
+        }
+        const reason = String(document.getElementById("dependency-lifecycle-reason")?.value || "").trim();
+        const response = await fetch(`/api/dependencies/${encodeURIComponent(dependencyId)}/revoke/request-approval`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to request dependency revocation approval."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function revokeDependency() {
+        const focused = Array.isArray(currentDependencyRows)
+          ? currentDependencyRows.find((row) => String(row?.id || "").trim() === String(currentDependencyFocusId || "").trim())
+          : null;
+        const dependencyId = String(focused?.id || "").trim();
+        if (!dependencyId) {
+          return;
+        }
+        const approvalId = String(focused?.audit?.approval_id || "").trim();
+        const reason = String(document.getElementById("dependency-lifecycle-reason")?.value || "").trim();
+        const response = await fetch(`/api/dependencies/${encodeURIComponent(dependencyId)}/revoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason, approval_id: approvalId || null }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail?.message || payload.detail || payload.message || "Failed to revoke dependency."));
         }
         renderBootstrap(payload);
       }
