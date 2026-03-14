@@ -27,6 +27,7 @@ from services.hud.app.views.apprenticeship import (
 )
 from services.hud.app.views.blocked_actions import get_blocked_actions_view
 from services.hud.app.views.capability_library import get_capability_library_view
+from services.hud.app.views.connector_library import get_connector_library_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.dashboard import get_dashboard_view
 from services.hud.app.views.execution_feed import get_execution_feed_view
@@ -66,6 +67,13 @@ from services.orchestrator.app.routes.federation import (
     federation_sync,
 )
 from services.orchestrator.app.routes.control import ControlRemoteApprovalDecisionRequest
+from services.orchestrator.app.routes.connectors import (
+    ConnectorLifecycleRequest,
+    ConnectorRevokeRequest,
+    connector_quarantine,
+    connector_request_revoke_approval,
+    connector_revoke,
+)
 from services.orchestrator.app.routes.managed_copies import (
     ManagedCopyCreateRequest,
     ManagedCopyDeltaRequest,
@@ -180,6 +188,7 @@ def _build_hud_payload(
         ),
         "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
         "capability_library": get_capability_library_view(snapshot=snapshot_payload),
+        "connector_library": get_connector_library_view(snapshot=snapshot_payload),
         "swarm": get_swarm_view(snapshot=snapshot_payload),
         "federation": get_federation_view(snapshot=snapshot_payload),
         "managed_copies": get_managed_copies_view(snapshot=snapshot_payload),
@@ -227,6 +236,7 @@ def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "connector_library",
         "swarm",
         "federation",
         "managed_copies",
@@ -262,6 +272,7 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "connector_library",
         "swarm",
         "federation",
         "managed_copies",
@@ -340,6 +351,40 @@ def _build_app() -> FastAPI:
     @app.get("/api/capability-library")
     def capability_library() -> dict[str, object]:
         return get_capability_library_view()
+
+    @app.get("/api/connector-library")
+    def connector_library() -> dict[str, object]:
+        return get_connector_library_view()
+
+    @app.post("/api/connectors/{connector_id}/quarantine")
+    def hud_connector_quarantine(
+        connector_id: str,
+        request: Request,
+        payload: ConnectorLifecycleRequest,
+    ) -> dict[str, object]:
+        result = connector_quarantine(connector_id=connector_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/connectors/{connector_id}/revoke/request-approval")
+    def hud_connector_request_revoke_approval(
+        connector_id: str,
+        request: Request,
+        payload: ConnectorLifecycleRequest,
+    ) -> dict[str, object]:
+        result = connector_request_revoke_approval(connector_id=connector_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
+
+    @app.post("/api/connectors/{connector_id}/revoke")
+    def hud_connector_revoke(
+        connector_id: str,
+        request: Request,
+        payload: ConnectorRevokeRequest,
+    ) -> dict[str, object]:
+        result = connector_revoke(connector_id=connector_id, request=request, payload=payload)
+        refresh_payload = _build_hud_payload()
+        return {**refresh_payload, **result}
 
     @app.get("/api/swarm")
     def swarm_surface() -> dict[str, object]:

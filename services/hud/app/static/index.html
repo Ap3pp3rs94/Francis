@@ -917,6 +917,43 @@
       </section>
 
       <section class="split">
+        <article class="panel" id="connector-library-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Connector Library</h2>
+            <span class="meta tiny" id="connector-library-meta">Connector registry loading from Lens</span>
+          </div>
+          <p id="connector-library-summary" class="hero-copy">
+            Connector entries will render from the governed connector registry.
+          </p>
+          <div class="desktop-grid" id="connector-library-cards">
+            <div class="desktop-pill"><strong>Connectors</strong><span>Connector cards will render from the backend contract.</span></div>
+          </div>
+          <ul class="list" id="connector-library-list">
+            <li class="muted-empty">Connector rows will render from the backend contract.</li>
+          </ul>
+        </article>
+        <article class="panel accent" id="connector-detail-panel" data-signal="low">
+          <div class="panel-head">
+            <h2>Connector Detail</h2>
+            <span class="meta tiny" id="connector-detail-meta">No connector selected</span>
+          </div>
+          <p id="connector-detail-summary" class="hero-copy">
+            Connector detail will render from the governed connector registry.
+          </p>
+          <div class="desktop-grid" id="connector-detail-cards">
+            <div class="desktop-pill"><strong>Connector</strong><span>Detail cards will render from the backend contract.</span></div>
+          </div>
+          <div class="work-action-row" id="connector-detail-controls">
+            <input class="chamber-input" type="text" id="connector-lifecycle-reason" placeholder="Lifecycle reason" />
+            <button class="btn-secondary" type="button" disabled>Quarantine Connector</button>
+            <button class="btn-secondary" type="button" disabled>Request Revocation Approval</button>
+            <button class="btn-primary" type="button" disabled>Revoke Connector</button>
+          </div>
+          <pre class="console" id="connector-detail">Connector audit will render from the backend contract.</pre>
+        </article>
+      </section>
+
+      <section class="split">
         <article class="panel" id="federation-panel" data-signal="low">
           <div class="panel-head">
             <h2>Federation Topology</h2>
@@ -1623,6 +1660,7 @@
       let currentCurrentWork = {};
       let currentRepoDrilldown = null;
       let currentCapabilityLibrary = { entries: [] };
+      let currentConnectorLibrary = { entries: [] };
       let currentSwarmSurface = { units: [], delegations: [] };
       let currentFederationSurface = { nodes: [] };
       let currentManagedCopiesSurface = { copies: [] };
@@ -1642,6 +1680,8 @@
       let currentRunsSurface = { run_groups: [] };
       let currentCapabilityFocusId = "";
       let currentCapabilityRows = [];
+      let currentConnectorFocusId = "";
+      let currentConnectorRows = [];
       let currentSwarmFocusId = "";
       let currentSwarmRows = [];
       let currentFederationFocusId = "";
@@ -4097,6 +4137,7 @@
         currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
         currentCapabilityLibrary = payload.capability_library || { entries: [] };
+        currentConnectorLibrary = payload.connector_library || { entries: [] };
         currentSwarmSurface = payload.swarm || { units: [], delegations: [] };
         currentFederationSurface = payload.federation || { nodes: [] };
         currentManagedCopiesSurface = payload.managed_copies || { copies: [] };
@@ -4161,6 +4202,9 @@
         }
         if (shouldRender("capability_library")) {
           renderCapabilityLibrary(currentCapabilityLibrary);
+        }
+        if (shouldRender("connector_library")) {
+          renderConnectorLibrary(currentConnectorLibrary);
         }
         if (shouldRender("swarm")) {
           renderSwarmSurface(currentSwarmSurface);
@@ -4241,6 +4285,7 @@
           shift_report: currentShiftReport || {},
           repo_drilldown: currentRepoDrilldown || {},
           capability_library: currentCapabilityLibrary || { entries: [] },
+          connector_library: currentConnectorLibrary || { entries: [] },
           swarm: currentSwarmSurface || { units: [], delegations: [] },
           federation: currentFederationSurface || { nodes: [] },
           managed_copies: currentManagedCopiesSurface || { copies: [] },
@@ -5638,6 +5683,169 @@
           );
           applyPanelSignal("capability-detail-panel", "low");
         }
+      }
+
+      function inspectConnectorEntry(index) {
+        const row = Array.isArray(currentConnectorRows) ? currentConnectorRows[index] : null;
+        if (!row) {
+          return;
+        }
+        currentConnectorFocusId = String(row.id || "").trim();
+        document.getElementById("connector-detail-meta").textContent =
+          `${String(row.status || "unknown")} | ${String(row.provenance_label || "Internal")} | ${String(row.id || "unknown")}`;
+        document.getElementById("connector-detail-summary").textContent =
+          String(row.detail_summary || row.summary || "No connector detail is available.");
+        renderDetailCards("connector-detail-cards", row.detail_cards, "Connector");
+        const controls = row.controls && typeof row.controls === "object" ? row.controls : {};
+        const quarantine = controls.quarantine && typeof controls.quarantine === "object" ? controls.quarantine : {};
+        const requestRevoke = controls.request_revoke && typeof controls.request_revoke === "object"
+          ? controls.request_revoke
+          : {};
+        const revoke = controls.revoke && typeof controls.revoke === "object" ? controls.revoke : {};
+        const lifecycleReason =
+          String(row.audit?.quarantine_reason || row.audit?.revocation_reason || "Connector lifecycle action from Lens.").trim();
+        document.getElementById("connector-detail-controls").innerHTML = `
+          <input class="chamber-input" type="text" id="connector-lifecycle-reason" placeholder="Lifecycle reason" value="${escapeHtml(lifecycleReason)}" />
+          <button class="btn-secondary" type="button" ${quarantine.enabled ? "" : "disabled"} onclick="quarantineConnector()">${escapeHtml(String(quarantine.label || "Quarantine Connector"))}</button>
+          <button class="btn-secondary" type="button" ${requestRevoke.enabled ? "" : "disabled"} onclick="requestRevokeConnector()">${escapeHtml(String(requestRevoke.label || "Request Revocation Approval"))}</button>
+          <button class="btn-primary" type="button" ${revoke.enabled ? "" : "disabled"} onclick="revokeConnector()">${escapeHtml(String(revoke.label || "Revoke Connector"))}</button>
+        `;
+        document.getElementById("connector-detail").textContent = formatJson(row.audit || row);
+        const connectorSignal = String(
+          row.status === "quarantined" || row.status === "revoked"
+            ? "high"
+            : row.provenance_tone || row.risk_tier || "low",
+        ).trim().toLowerCase() || "low";
+        applyPanelSignal("connector-detail-panel", connectorSignal);
+      }
+
+      function renderConnectorLibrary(surface) {
+        currentConnectorLibrary = surface || { entries: [] };
+        currentConnectorRows = Array.isArray(currentConnectorLibrary.entries) ? currentConnectorLibrary.entries : [];
+        document.getElementById("connector-library-meta").textContent =
+          `${currentConnectorRows.length} cataloged | ${String(currentConnectorLibrary.severity || "low")}`;
+        document.getElementById("connector-library-summary").textContent =
+          String(currentConnectorLibrary.summary || "Connector entries will render from the governed connector registry.");
+        applySeverityState(
+          document.getElementById("connector-library-summary"),
+          String(currentConnectorLibrary.severity || "low"),
+        );
+        applyPanelSignal("connector-library-panel", String(currentConnectorLibrary.severity || "low"));
+        renderDetailCards(
+          "connector-library-cards",
+          Array.isArray(currentConnectorLibrary.cards) ? currentConnectorLibrary.cards : [],
+          "Connector",
+        );
+        document.getElementById("connector-library-list").innerHTML = currentConnectorRows.length
+          ? currentConnectorRows
+              .map(
+                (row, index) => `
+                  <li>
+                    <div class="action-top">
+                      <div class="action-label">${escapeHtml(String(row.name || "Connector"))}</div>
+                      <div class="badge-row">
+                        <span class="badge risk-${escapeHtml(String(row.risk_tier || "medium"))}">${escapeHtml(String(row.risk_tier || "medium"))}</span>
+                        <span class="badge ${String(row.status || "").trim().toLowerCase() === "active" ? "risk-low" : String(row.status || "").trim().toLowerCase() === "available" ? "risk-medium" : "risk-high"}">${escapeHtml(String(row.status || "available"))}</span>
+                        <span class="badge risk-${escapeHtml(String(row.provenance_tone || "low"))}">${escapeHtml(String(row.provenance_label || "Internal"))}</span>
+                      </div>
+                    </div>
+                    <p class="meta">${escapeHtml(String(row.summary || "No connector summary is available."))}</p>
+                    <div class="action-buttons">
+                      <button class="btn-secondary" type="button" onclick="inspectConnectorEntry(${index})">Inspect</button>
+                    </div>
+                  </li>
+                `,
+              )
+              .join("")
+          : `<li class="muted-empty">Connector rows will render from the backend contract.</li>`;
+        if (currentConnectorRows.length) {
+          const focusConnectorId = String(currentConnectorLibrary.focus_connector_id || currentConnectorFocusId || "").trim();
+          const focusIndex = focusConnectorId
+            ? currentConnectorRows.findIndex((row) => String(row.id || "").trim() === focusConnectorId)
+            : -1;
+          inspectConnectorEntry(focusIndex >= 0 ? focusIndex : 0);
+        } else {
+          currentConnectorFocusId = "";
+          renderDetailCards("connector-detail-cards", [], "Connector");
+          document.getElementById("connector-detail-meta").textContent = "No connector selected";
+          document.getElementById("connector-detail-summary").textContent =
+            "Connector detail will render from the governed connector registry.";
+          document.getElementById("connector-detail-controls").innerHTML =
+            `<input class="chamber-input" type="text" id="connector-lifecycle-reason" placeholder="Lifecycle reason" value="" disabled />
+             <button class="btn-secondary" type="button" disabled>Quarantine Connector</button>
+             <button class="btn-secondary" type="button" disabled>Request Revocation Approval</button>
+             <button class="btn-primary" type="button" disabled>Revoke Connector</button>`;
+          document.getElementById("connector-detail").textContent = formatJson(
+            currentConnectorLibrary.detail && typeof currentConnectorLibrary.detail === "object"
+              ? currentConnectorLibrary.detail
+              : { entries: [] },
+          );
+          applyPanelSignal("connector-detail-panel", "low");
+        }
+      }
+
+      async function quarantineConnector() {
+        const focused = Array.isArray(currentConnectorRows)
+          ? currentConnectorRows.find((row) => String(row?.id || "").trim() === String(currentConnectorFocusId || "").trim())
+          : null;
+        const connectorId = String(focused?.id || "").trim();
+        if (!connectorId) {
+          return;
+        }
+        const reason = String(document.getElementById("connector-lifecycle-reason")?.value || "").trim();
+        const response = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/quarantine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to quarantine connector."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function requestRevokeConnector() {
+        const focused = Array.isArray(currentConnectorRows)
+          ? currentConnectorRows.find((row) => String(row?.id || "").trim() === String(currentConnectorFocusId || "").trim())
+          : null;
+        const connectorId = String(focused?.id || "").trim();
+        if (!connectorId) {
+          return;
+        }
+        const reason = String(document.getElementById("connector-lifecycle-reason")?.value || "").trim();
+        const response = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/revoke/request-approval`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail || payload.message || "Failed to request connector revocation approval."));
+        }
+        renderBootstrap(payload);
+      }
+
+      async function revokeConnector() {
+        const focused = Array.isArray(currentConnectorRows)
+          ? currentConnectorRows.find((row) => String(row?.id || "").trim() === String(currentConnectorFocusId || "").trim())
+          : null;
+        const connectorId = String(focused?.id || "").trim();
+        if (!connectorId) {
+          return;
+        }
+        const approvalId = String(focused?.audit?.approval_id || "").trim();
+        const reason = String(document.getElementById("connector-lifecycle-reason")?.value || "").trim();
+        const response = await fetch(`/api/connectors/${encodeURIComponent(connectorId)}/revoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason, approval_id: approvalId || null }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(String(payload.detail?.message || payload.detail || payload.message || "Failed to revoke connector."));
+        }
+        renderBootstrap(payload);
       }
 
       function inspectFederationNode(index) {

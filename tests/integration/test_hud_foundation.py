@@ -11,6 +11,7 @@ import services.hud.app.views.action_deck as action_deck_view
 import services.hud.app.views.apprenticeship as apprenticeship_view
 import services.hud.app.views.blocked_actions as blocked_actions_view
 import services.hud.app.views.capability_library as capability_library_view
+import services.hud.app.views.connector_library as connector_library_view
 import services.hud.app.state as hud_state
 import services.hud.app.views.current_work as current_work_view
 import services.hud.app.views.dashboard as dashboard_view
@@ -141,6 +142,13 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Capability detail will render from staged and active library state." in response.text
     assert "Request Promotion Approval" in response.text
     assert "Promote Capability" in response.text
+    assert "Connector Library" in response.text
+    assert "Connector entries will render from the governed connector registry." in response.text
+    assert "Connector Detail" in response.text
+    assert "Connector detail will render from the governed connector registry." in response.text
+    assert "Quarantine Connector" in response.text
+    assert "Request Revocation Approval" in response.text
+    assert "Revoke Connector" in response.text
     assert "Federation Topology" in response.text
     assert "Federation topology will render from the governed node registry." in response.text
     assert "Node Detail" in response.text
@@ -250,6 +258,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["shift_report"]["surface"] == "shift_report"
     assert body["repo_drilldown"]["surface"] == "repo_drilldown"
     assert body["capability_library"]["surface"] == "capability_library"
+    assert body["connector_library"]["surface"] == "connector_library"
     assert body["swarm"]["surface"] == "swarm"
     assert body["federation"]["surface"] == "federation"
     assert body["managed_copies"]["surface"] == "managed_copies"
@@ -273,6 +282,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
         "shift_report",
         "repo_drilldown",
         "capability_library",
+        "connector_library",
         "swarm",
         "federation",
         "managed_copies",
@@ -331,6 +341,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(connector_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(swarm_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(federation_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -374,6 +385,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["shift_report"]["surface"] == "shift_report"
     assert payload["repo_drilldown"]["surface"] == "repo_drilldown"
     assert payload["capability_library"]["surface"] == "capability_library"
+    assert payload["connector_library"]["surface"] == "connector_library"
     assert payload["swarm"]["surface"] == "swarm"
     assert payload["federation"]["surface"] == "federation"
     assert payload["managed_copies"]["surface"] == "managed_copies"
@@ -392,6 +404,7 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["surface_digests"]["current_work"]
     assert payload["surface_digests"]["shift_report"]
     assert payload["surface_digests"]["capability_library"]
+    assert payload["surface_digests"]["connector_library"]
     assert payload["surface_digests"]["swarm"]
     assert payload["surface_digests"]["federation"]
     assert payload["surface_digests"]["managed_copies"]
@@ -842,6 +855,20 @@ def test_hud_capability_library_route_returns_structured_surface() -> None:
     assert "summary" in payload
     assert "severity" in payload
     assert "focus_entry_id" in payload
+    assert "cards" in payload
+    assert "entries" in payload
+    assert "detail" in payload
+
+
+def test_hud_connector_library_route_returns_structured_surface() -> None:
+    response = client.get("/api/connector-library")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surface"] == "connector_library"
+    assert "summary" in payload
+    assert "severity" in payload
+    assert "focus_connector_id" in payload
     assert "cards" in payload
     assert "entries" in payload
     assert "detail" in payload
@@ -1521,6 +1548,115 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
     assert active["controls"]["request_revoke"]["enabled"] is True
     assert active["controls"]["revoke"]["enabled"] is False
     assert active["audit"]["approval_action"] == "forge.revoke"
+
+
+def test_hud_connector_library_view_exposes_focus_and_controls(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = (tmp_path / "workspace").resolve()
+    monkeypatch.setattr(connector_library_view, "get_workspace_root", lambda: workspace_root)
+    _write_json(
+        workspace_root / "connectors" / "registry.json",
+        {
+            "connectors": [
+                {
+                    "id": "vendor-sync",
+                    "name": "Vendor Sync",
+                    "slug": "vendor-sync",
+                    "description": "Vendor-provided connector under review.",
+                    "module": "vendor.connectors.sync",
+                    "status": "quarantined",
+                    "enabled": False,
+                    "risk_tier": "high",
+                    "quarantined_at": "2026-03-13T10:00:00+00:00",
+                    "quarantine_reason": "Vendor connector failed review.",
+                    "quarantined_by": "connectors:architect",
+                    "provenance": {
+                        "source_kind": "vendor",
+                        "vendor": "Verified Vendor",
+                        "source_ref": "vendor://verified/sync",
+                        "review_state": "quarantined",
+                    },
+                },
+                {
+                    "id": "community-sync",
+                    "name": "Community Sync",
+                    "slug": "community-sync",
+                    "description": "Third-party connector awaiting review.",
+                    "module": "community.connectors.sync",
+                    "status": "active",
+                    "enabled": True,
+                    "risk_tier": "medium",
+                    "provenance": {
+                        "source_kind": "third_party",
+                        "source_ref": "gh://community/sync",
+                        "review_state": "pending",
+                    },
+                },
+            ]
+        },
+    )
+    _write_jsonl(
+        workspace_root / "approvals" / "requests.jsonl",
+        [
+            {
+                "id": "approval-connector-revoke",
+                "ts": "2026-03-13T10:05:00+00:00",
+                "run_id": "run-connector-revoke",
+                "action": "connectors.revoke",
+                "reason": "Revoke vendor connector",
+                "requested_by": "architect",
+                "status": "approved",
+                "metadata": {"connector_id": "vendor-sync", "action_kind": "connectors.revoke"},
+            }
+        ],
+    )
+    _write_jsonl(
+        workspace_root / "journals" / "decisions.jsonl",
+        [
+            {
+                "id": "decision-connector-revoke",
+                "ts": "2026-03-13T10:06:00+00:00",
+                "run_id": "run-connector-revoke",
+                "kind": "approval.decision",
+                "request_id": "approval-connector-revoke",
+                "action": "connectors.revoke",
+                "decision": "approved",
+                "decided_by": "architect",
+                "note": "Connector should be revoked.",
+            }
+        ],
+    )
+
+    def _snapshot() -> dict[str, object]:
+        return {"current_work": {"summary": "Connector posture is under review."}}
+
+    monkeypatch.setattr(connector_library_view, "build_lens_snapshot", _snapshot)
+    monkeypatch.setattr(
+        connector_library_view,
+        "_action_allowed",
+        lambda **kwargs: (True, ""),
+    )
+
+    payload = connector_library_view.get_connector_library_view()
+
+    assert payload["focus_connector_id"] == "vendor-sync"
+    assert payload["severity"] == "high"
+    focused = next(row for row in payload["entries"] if row["id"] == "vendor-sync")
+    assert focused["detail_state"] == "current"
+    assert focused["provenance_label"] == "Quarantined"
+    assert focused["audit"]["approval_action"] == "connectors.revoke"
+    assert focused["audit"]["approval_id"] == "approval-connector-revoke"
+    assert focused["audit"]["provenance"]["kind"] == "quarantined"
+    assert focused["controls"]["quarantine"]["enabled"] is False
+    assert focused["controls"]["request_revoke"]["enabled"] is False
+    assert focused["controls"]["revoke"]["enabled"] is True
+    assert focused["detail_cards"]
+    pending = next(row for row in payload["entries"] if row["id"] == "community-sync")
+    assert pending["provenance_label"] == "Third-Party"
+    assert pending["provenance_tone"] == "high"
+    assert pending["controls"]["request_revoke"]["enabled"] is True
 
 
 def test_hud_federation_view_exposes_focus_and_audit(monkeypatch) -> None:

@@ -31,6 +31,7 @@ def _build_app() -> FastAPI:
     from services.orchestrator.app.routes.approvals import router as approvals_router
     from services.orchestrator.app.routes.autonomy import router as autonomy_router
     from services.orchestrator.app.routes.capabilities import router as capabilities_router
+    from services.orchestrator.app.routes.connectors import router as connectors_router
     from services.orchestrator.app.routes.control import router as control_router
     from services.orchestrator.app.routes.fabric import router as fabric_router
     from services.orchestrator.app.routes.federation import router as federation_router
@@ -61,6 +62,7 @@ def _build_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(capabilities_router)
+    app.include_router(connectors_router)
     app.include_router(control_router)
     app.include_router(fabric_router)
     app.include_router(portability_router)
