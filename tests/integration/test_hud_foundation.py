@@ -121,7 +121,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "The Orb floats independently while you keep the mouse." in response.text
-    assert "Hold the Orb itself to panic stop" in response.text
+    assert "Right-click the Orb for controls." in response.text
+    assert "Hold it to panic stop when control exposes that path in scope." in response.text
     assert "Open Lens" in response.text
     assert "Hide Lens" in response.text
     assert "Exit Francis" in response.text

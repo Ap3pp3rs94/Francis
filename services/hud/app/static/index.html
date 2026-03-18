@@ -598,11 +598,15 @@
       #overlay-dock {
         position: fixed;
         top: 18px;
-        right: 18px;
+        left: 18px;
         z-index: 140;
-        display: grid;
+        display: none;
         gap: 10px;
         width: min(360px, calc(100vw - 36px));
+      }
+
+      body[data-orb-menu="open"] #overlay-dock {
+        display: grid;
       }
 
       .overlay-dock-card,
@@ -649,10 +653,6 @@
         transform: translate3d(-999px, -999px, 0);
         transition: opacity 180ms ease;
         will-change: transform;
-        pointer-events: none;
-      }
-
-      #orb-render-root.orb-interactive {
         pointer-events: auto;
       }
 
@@ -779,7 +779,7 @@
       }
     </style>
   </head>
-  <body data-boot="loading">
+  <body data-boot="loading" data-orb-menu="closed">
     <main class="shell">
       <section class="hero">
         <div class="hero-grid">
@@ -811,7 +811,7 @@
               <div class="metric-pill"><strong>Pulse</strong><span>steady</span></div>
             </div>
             <p class="meta tiny orb-controls" id="orb-controls">
-              Hold the Orb itself to panic stop when control exposes that path in scope.
+              Right-click the Orb for controls. Hold it to panic stop when control exposes that path in scope.
             </p>
           </article>
           <div class="hero-copy-block">
@@ -1739,9 +1739,9 @@
         <span id="overlay-dock-status">Ambient overlay ready. Open Lens when you want the full operator surface.</span>
       </div>
       <div class="overlay-dock-actions" id="overlay-dock-actions">
-        <button class="btn-primary" type="button" id="overlay-open-lens" onclick="setLensViewMode('lens')">Open Lens</button>
-        <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="setLensViewMode('orb_only')">Hide Lens</button>
-        <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="hideDesktopOverlay()">Hide Overlay</button>
+        <button class="btn-primary" type="button" id="overlay-open-lens" onclick="setLensViewMode('lens'); closeOrbCommandMenu()">Open Lens</button>
+        <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="setLensViewMode('orb_only'); closeOrbCommandMenu()">Hide Lens</button>
+        <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="closeOrbCommandMenu(); hideDesktopOverlay()">Hide Overlay</button>
         <button class="btn-danger" type="button" id="overlay-exit-app" onclick="quitDesktopOverlay()">Exit Francis</button>
       </div>
     </div>
@@ -1842,6 +1842,11 @@
       let desktopNotice = "";
       let lensViewMode = "lens";
       let lensViewInitialized = false;
+      let orbCommandMenu = {
+        open: false,
+        x: 18,
+        y: 18,
+      };
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -1971,18 +1976,43 @@
       function setLensViewMode(mode) {
         lensViewMode = normalizeLensViewMode(mode);
         document.body.dataset.lensView = lensViewMode;
+        if (lensViewMode !== "orb_only") {
+          closeOrbCommandMenu();
+          return;
+        }
+        renderOverlayDock();
+      }
+
+      function closeOrbCommandMenu() {
+        orbCommandMenu.open = false;
+        document.body.dataset.orbMenu = "closed";
+        renderOverlayDock();
+      }
+
+      function openOrbCommandMenu(anchorX, anchorY) {
+        const width = Math.min(360, Math.max(240, window.innerWidth - 36));
+        const height = 132;
+        orbCommandMenu.open = true;
+        orbCommandMenu.x = Math.max(18, Math.min(window.innerWidth - width - 18, Number(anchorX) - width * 0.35));
+        orbCommandMenu.y = Math.max(18, Math.min(window.innerHeight - height - 18, Number(anchorY) - 20));
+        document.body.dataset.orbMenu = "open";
         renderOverlayDock();
       }
 
       function renderOverlayDock() {
+        const dock = document.getElementById("overlay-dock");
         const status = document.getElementById("overlay-dock-status");
         const openLens = document.getElementById("overlay-open-lens");
         const hideLens = document.getElementById("overlay-hide-lens");
         const hideOverlay = document.getElementById("overlay-hide-app");
         const exitOverlay = document.getElementById("overlay-exit-app");
-        if (!status || !openLens || !hideLens || !hideOverlay || !exitOverlay) {
+        if (!dock || !status || !openLens || !hideLens || !hideOverlay || !exitOverlay) {
           return;
         }
+
+        dock.style.left = `${Math.round(orbCommandMenu.x)}px`;
+        dock.style.top = `${Math.round(orbCommandMenu.y)}px`;
+        document.body.dataset.orbMenu = orbCommandMenu.open ? "open" : "closed";
 
         const hasBridge = desktopState.available;
         const handbackActive = isOrbHandbackActive();
@@ -3654,12 +3684,12 @@
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
         if (!panicChip) {
-          return "The Orb stays ambient and out of the way. Your mouse remains yours unless Away explicitly takes authority.";
+          return "The Orb stays ambient and out of the way. Right-click it for controls; Away is the only mode that takes cursor authority.";
         }
         if (currentOrb?.operator_cursor) {
-          return "Away cursor authority is live. Hold the Orb itself to panic stop immediately.";
+          return "Away cursor authority is live. Hold the Orb to panic stop or right-click it for controls.";
         }
-        return "The Orb stays ambient but remains the immediate stop surface when panic is in scope.";
+        return "The Orb stays ambient. Hold it to panic stop when that path is live, or right-click it for controls.";
       }
 
       function clearOrbHandback() {
@@ -4187,9 +4217,10 @@
           event.preventDefault();
         }
         const root = document.getElementById("orb-render-root");
-        if (!root || orbHoldTimer !== null) {
+        if (!root || orbHoldTimer !== null || event?.button !== 0) {
           return;
         }
+        closeOrbCommandMenu();
         const panicChip = (currentActions.action_chips || []).find(
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
@@ -4236,12 +4267,28 @@
         root.addEventListener("pointerup", endOrbHold);
         root.addEventListener("pointerleave", endOrbHold);
         root.addEventListener("pointercancel", endOrbHold);
+        root.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          endOrbHold();
+          openOrbCommandMenu(event.clientX, event.clientY);
+        });
+        root.addEventListener("dblclick", () => {
+          setLensViewMode("lens");
+        });
 
         window.addEventListener("pointermove", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
         });
         window.addEventListener("pointerdown", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
+          const rootNode = document.getElementById("orb-render-root");
+          const menuNode = document.getElementById("overlay-dock");
+          const target = event.target;
+          const inOrb = Boolean(rootNode && target instanceof Node && rootNode.contains(target));
+          const inMenu = Boolean(menuNode && target instanceof Node && menuNode.contains(target));
+          if (orbCommandMenu.open && !inOrb && !inMenu) {
+            closeOrbCommandMenu();
+          }
         });
         window.addEventListener("resize", () => {
           if (!orbMotion.lastMoveAt) {
@@ -4250,6 +4297,21 @@
             orbMotion.y = fallback.y;
             orbMotion.targetX = fallback.x;
             orbMotion.targetY = fallback.y;
+          }
+          if (orbCommandMenu.open) {
+            openOrbCommandMenu(orbCommandMenu.x, orbCommandMenu.y);
+          }
+        });
+        window.addEventListener("keydown", (event) => {
+          if (event.key !== "Escape") {
+            return;
+          }
+          if (orbCommandMenu.open) {
+            closeOrbCommandMenu();
+            return;
+          }
+          if (lensViewMode === "lens" && desktopState.available) {
+            setLensViewMode("orb_only");
           }
         });
 
