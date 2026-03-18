@@ -31,6 +31,25 @@ test("provider posture supports local primary with governed remote fallback", ()
   assert.equal(posture.fallbackProviderIds[0], "openai");
   assert.equal(posture.dependency, "hybrid");
   assert.match(posture.summary, /governed remote fallback/i);
+  assert.equal(posture.modelRoles.fast, "llama3.1:8b");
+  assert.equal(posture.modelRoles.heavy, "phi4:14b");
+});
+
+test("provider posture respects explicit fast and heavy model overrides", () => {
+  const posture = buildProviderPosture({
+    env: {
+      FRANCIS_PROVIDER: "ollama",
+      FRANCIS_OLLAMA_HOST: "http://127.0.0.1:11434",
+      FRANCIS_OLLAMA_FAST_MODEL: "llama3.2:3b",
+      FRANCIS_OLLAMA_HEAVY_MODEL: "phi4:14b-q6",
+    },
+    hudState: { mode: "managed", runtimeKind: "bundled", ready: true },
+  });
+
+  assert.equal(posture.modelRoles.fast, "llama3.2:3b");
+  assert.equal(posture.modelRoles.heavy, "phi4:14b-q6");
+  assert.ok(posture.cards.some((card) => card.label === "Fast Loop Model" && card.value === "llama3.2:3b"));
+  assert.ok(posture.cards.some((card) => card.label === "Heavy Work Model" && card.value === "phi4:14b-q6"));
 });
 
 test("provider posture warns when remote primary has no fallback", () => {

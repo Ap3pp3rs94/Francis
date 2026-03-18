@@ -381,6 +381,22 @@ This matters because a system can be philosophically correct and still fail in p
 
 Francis has to be stronger than that class of failure.
 
+### Local model routing
+
+The local-first provider path now has an explicit default split for Ollama-backed work:
+
+* fast operator loops default to `llama3.1:8b`
+* heavier local analysis, capability scaffolding, and longer-context work default to `phi4:14b`
+
+The canonical env keys for overriding that split are:
+
+* `FRANCIS_PROVIDER=ollama`
+* `FRANCIS_OLLAMA_HOST=http://127.0.0.1:11434`
+* `FRANCIS_OLLAMA_FAST_MODEL=llama3.1:8b`
+* `FRANCIS_OLLAMA_HEAVY_MODEL=phi4:14b`
+
+That keeps provider choice, host choice, and fast-vs-heavy routing explicit instead of leaving model selection buried in machine-local residue.
+
 ## Staged Roadmap In One File
 
 The long-form roadmap is expansive. This is the condensed build sequence.

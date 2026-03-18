@@ -1,5 +1,7 @@
 const ACTIVE_PROVIDER_KEYS = ["FRANCIS_PROVIDER", "FRANCIS_LLM_PROVIDER", "FRANCIS_MODEL_PROVIDER"];
 const FALLBACK_PROVIDER_KEYS = ["FRANCIS_PROVIDER_FALLBACKS", "FRANCIS_LLM_FALLBACKS", "FRANCIS_MODEL_FALLBACKS"];
+const DEFAULT_OLLAMA_FAST_MODEL = "llama3.1:8b";
+const DEFAULT_OLLAMA_HEAVY_MODEL = "phi4:14b";
 
 const PROVIDER_DEFINITIONS = [
   {
@@ -78,6 +80,30 @@ function parseFallbackProviders(env) {
     values.push(normalized);
   }
   return values;
+}
+
+function providerEnvStem(providerId) {
+  return String(providerId || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function resolveRoleModel(env, providerId, role) {
+  const stem = providerEnvStem(providerId);
+  const value = readEnvValue(env, [
+    `FRANCIS_${stem}_${role.toUpperCase()}_MODEL`,
+    `${stem}_${role.toUpperCase()}_MODEL`,
+    `FRANCIS_LOCAL_${role.toUpperCase()}_MODEL`,
+    `FRANCIS_${role.toUpperCase()}_MODEL`,
+  ]);
+  if (value) {
+    return value;
+  }
+  if (providerId === "ollama") {
+    return role === "heavy" ? DEFAULT_OLLAMA_HEAVY_MODEL : DEFAULT_OLLAMA_FAST_MODEL;
+  }
+  return "unassigned";
 }
 
 function buildProviderRecord(definition, env) {
@@ -173,6 +199,8 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
   const configuredCount = records.filter((record) => record.configured || record.implicitDefault).length;
   const dependency = describeDependency(activeRecord, fallbackRecords);
   const privacyPosture = describePrivacyPosture(dependency);
+  const fastModel = activeRecord ? resolveRoleModel(env, activeRecord.id, "fast") : "unassigned";
+  const heavyModel = activeRecord ? resolveRoleModel(env, activeRecord.id, "heavy") : "unassigned";
 
   let severity = "low";
   let summary = "Provider posture is governed.";
@@ -193,13 +221,13 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
     severity = "medium";
     summary = `${activeRecord.label} is active through an implicit or partial configuration. Verify the provider path before trusting fallback behavior.`;
   } else if (dependency === "hybrid") {
-    summary = `${activeRecord.label} is primary with governed remote fallback. Provider dependency is visible and bounded.`;
+    summary = `${activeRecord.label} is primary with governed remote fallback. Fast loops use ${fastModel}; heavy work uses ${heavyModel}.`;
   } else if (dependency === "local_first") {
-    summary = `${activeRecord.label} is the active local provider. Model-backed work stays local unless the strategy changes.`;
+    summary = `${activeRecord.label} is the active local provider. Fast loops use ${fastModel}; heavy work uses ${heavyModel}.`;
   } else if (dependency === "remote_with_local_fallback") {
-    summary = `${activeRecord.label} is primary with a local fallback path available for narrowed continuity.`;
+    summary = `${activeRecord.label} is primary with a local fallback path available for narrowed continuity. Fast loops use ${fastModel}; heavy work uses ${heavyModel}.`;
   } else {
-    summary = `${activeRecord.label} is the active provider and provider posture is visible.`;
+    summary = `${activeRecord.label} is the active provider and provider posture is visible. Fast loops use ${fastModel}; heavy work uses ${heavyModel}.`;
   }
 
   const runtime = hudState
@@ -217,6 +245,10 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
     if (!roleParts.length) {
       roleParts.push("available");
     }
+    const roleSummary =
+      activeRecord && record.id === activeRecord.id
+        ? ` | fast ${fastModel} | heavy ${heavyModel}`
+        : "";
     return {
       id: record.id,
       label: record.label,
@@ -228,7 +260,7 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
             : record.status === "attention"
               ? "medium"
               : "low",
-      summary: `${roleParts.join(" + ")} | ${record.kind} | ${record.detail}`,
+      summary: `${roleParts.join(" + ")} | ${record.kind} | ${record.detail}${roleSummary}`,
     };
   });
 
@@ -245,6 +277,10 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
     configuredCount,
     runtime,
     items,
+    modelRoles: {
+      fast: fastModel,
+      heavy: heavyModel,
+    },
     cards: [
       {
         label: "Summary",
@@ -260,6 +296,16 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
         label: "Fallback",
         value: fallbackSummary,
         tone: fallbackRecords.length ? "medium" : "low",
+      },
+      {
+        label: "Fast Loop Model",
+        value: fastModel,
+        tone: fastModel === "unassigned" ? "medium" : "low",
+      },
+      {
+        label: "Heavy Work Model",
+        value: heavyModel,
+        tone: heavyModel === "unassigned" ? "medium" : "low",
       },
       {
         label: "Dependency",
