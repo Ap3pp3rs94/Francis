@@ -1831,6 +1831,12 @@ function registerIpc() {
     return true;
   });
 
+  ipcMain.handle("overlay:quit", () => {
+    log("Quitting overlay from renderer control");
+    app.quit();
+    return true;
+  });
+
   ipcMain.handle("overlay:toggle-devtools", () => {
     const win = requireWindow();
     if (win.webContents.isDevToolsOpened()) {

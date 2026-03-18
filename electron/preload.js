@@ -104,6 +104,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   show() {
     return ipcRenderer.invoke("overlay:show");
   },
+  quit() {
+    return ipcRenderer.invoke("overlay:quit");
+  },
   toggleDevTools() {
     return ipcRenderer.invoke("overlay:toggle-devtools");
   },

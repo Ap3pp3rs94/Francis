@@ -83,6 +83,10 @@ def _is_active_execution(mode: str, snapshot: Mapping[str, Any]) -> bool:
     return mode in {"pilot", "away"} and phase in ACTIVE_EXECUTION_PHASES
 
 
+def _cursor_authority(mode: str, active_execution: bool) -> bool:
+    return mode == "away" and active_execution
+
+
 def _interjection_level(
     *,
     kill_switch: bool,
@@ -132,8 +136,14 @@ def _pulse_kind(*, posture: str, voice_lines: int, interjection_level: int) -> s
     return "steady"
 
 
-def _movement_profile(*, active_execution: bool, interjection_level: int, panic_ready: bool) -> dict[str, Any]:
-    if active_execution:
+def _movement_profile(
+    *,
+    active_execution: bool,
+    interjection_level: int,
+    panic_ready: bool,
+    cursor_authority: bool,
+) -> dict[str, Any]:
+    if cursor_authority:
         return {
             "anchor": "cursor",
             "profile": "cursor_ride",
@@ -154,45 +164,66 @@ def _movement_profile(*, active_execution: bool, interjection_level: int, panic_
             "orbit_bias": 0.06,
             "interjection_bias": round(0.04 * interjection_level, 3),
         }
+    if active_execution:
+        return {
+            "anchor": "ambient",
+            "profile": "focus_orbit",
+            "cursor_lock": False,
+            "lead_style": "focus_orbit",
+            "randomness": "operator_breathing",
+            "lead_strength": 0.028,
+            "settle_strength": 0.34,
+            "damping": 0.78,
+            "drift_strength": 0.56,
+            "micro_strength": 0.24,
+            "vertical_bias": -0.11,
+            "hesitation_ms": 240,
+            "correction_strength": 1.8,
+            "correction_cap": 2.8,
+            "lead_cap": 4.2,
+            "lock_radius": 1.0,
+            "orbit_bias": 0.18,
+            "interjection_bias": round(0.04 * interjection_level, 3),
+        }
     if panic_ready:
         return {
-            "anchor": "cursor",
-            "profile": "cursor_guard",
-            "cursor_lock": True,
+            "anchor": "ambient",
+            "profile": "guard_orbit",
+            "cursor_lock": False,
             "lead_style": "authority_guard",
             "randomness": "tension_hold",
-            "lead_strength": 0.072,
-            "settle_strength": 0.52,
-            "damping": 0.67,
-            "drift_strength": 0.2,
-            "micro_strength": 0.1,
-            "vertical_bias": -0.012,
-            "hesitation_ms": 140,
-            "correction_strength": 2.4,
-            "correction_cap": 4.2,
-            "lead_cap": 9.0,
-            "lock_radius": 0.82,
-            "orbit_bias": 0.04,
+            "lead_strength": 0.024,
+            "settle_strength": 0.38,
+            "damping": 0.78,
+            "drift_strength": 0.34,
+            "micro_strength": 0.16,
+            "vertical_bias": -0.1,
+            "hesitation_ms": 180,
+            "correction_strength": 1.9,
+            "correction_cap": 3.2,
+            "lead_cap": 4.8,
+            "lock_radius": 1.0,
+            "orbit_bias": 0.12,
             "interjection_bias": round(0.05 * interjection_level, 3),
         }
     return {
-        "anchor": "cursor",
-        "profile": "cursor_drift",
+        "anchor": "ambient",
+        "profile": "ambient_float",
         "cursor_lock": False,
-        "lead_style": "human_correction",
+        "lead_style": "ambient_float",
         "randomness": "breathing_variation",
-        "lead_strength": 0.035,
-        "settle_strength": 0.24,
-        "damping": 0.82,
-        "drift_strength": 1.35,
-        "micro_strength": 0.75,
-        "vertical_bias": -0.06,
+        "lead_strength": 0.0,
+        "settle_strength": 0.22,
+        "damping": 0.84,
+        "drift_strength": 1.05,
+        "micro_strength": 0.62,
+        "vertical_bias": -0.12,
         "hesitation_ms": 260,
-        "correction_strength": 3.4,
-        "correction_cap": 8.0,
-        "lead_cap": 14.0,
+        "correction_strength": 1.2,
+        "correction_cap": 2.2,
+        "lead_cap": 0.0,
         "lock_radius": 1.4,
-        "orbit_bias": 0.0,
+        "orbit_bias": 0.22,
         "interjection_bias": round(0.08 * interjection_level, 3),
     }
 
@@ -252,6 +283,7 @@ def build_orb_state(
         for chip in action_chips
     )
     active_execution = _is_active_execution(normalized_mode, snapshot)
+    cursor_authority = _cursor_authority(normalized_mode, active_execution)
     interjection_level = _interjection_level(
         kill_switch=kill_switch,
         incident_score=incident_score,
@@ -322,15 +354,17 @@ def build_orb_state(
     resonance = _clamp(0.18 + (0.08 * min(voice_lines, 5)) + (0.05 * interjection_level), 0.18, 0.82)
 
     if posture == "panic":
-        summary = "Kill switch is live. The Orb is now the immediate stop surface."
+        summary = "Kill switch is live. The Orb is the immediate stop surface without taking your cursor."
+    elif posture == "acting" and cursor_authority:
+        summary = "Francis is acting in away mode. Cursor authority is live and stays visible where the work is landing."
     elif posture == "acting":
-        summary = f"Francis is acting in {normalized_mode} mode. The Orb is riding the cursor so authority stays visible where the work is landing."
+        summary = f"Francis is acting in {normalized_mode} mode while leaving your mouse under your control. The Orb stays free-floating and visible."
     elif interjection_level >= 2:
         summary = "The work needs you now. The Orb is holding focus on a real decision edge."
     elif normalized_mode in {"observe", "assist"}:
-        summary = "Ambient presence is live. The Orb is calm, grounded, and ready in place."
+        summary = "Ambient presence is live. The Orb stays nearby and out of the way until the work needs attention."
     else:
-        summary = "Presence remains active and bounded while Francis keeps continuity alive."
+        summary = "Presence remains active and bounded while Francis keeps continuity alive without taking the cursor."
 
     if quarantines > 0:
         detail = (
@@ -339,8 +373,10 @@ def build_orb_state(
         )
     elif pending_approvals > 0:
         detail = f"{pending_approvals} approval(s) are waiting before the next authority edge."
+    elif active_execution and cursor_authority:
+        detail = f"Active run phase is {run_phase}. Away execution owns cursor authority and handback should remain spatial and visible."
     elif active_execution:
-        detail = f"Active run phase is {run_phase}. Handback should remain spatial and visible."
+        detail = f"Active run phase is {run_phase}. The Orb stays free-floating while you keep direct mouse control."
     else:
         detail = f"Objective remains {objective_label}."
 
@@ -353,7 +389,7 @@ def build_orb_state(
         "detail": detail,
         "conversation_ready": True,
         "panic_ready": panic_ready,
-        "operator_cursor": active_execution,
+        "operator_cursor": cursor_authority,
         "voice_channel": pulse_kind in {"voice_ready", "interjection", "execution"},
         "handback_visible": normalized_mode in {"pilot", "away"} or active_execution,
         "handback": _handback_profile(
@@ -365,6 +401,7 @@ def build_orb_state(
             active_execution=active_execution,
             interjection_level=interjection_level,
             panic_ready=panic_ready,
+            cursor_authority=cursor_authority,
         ),
         "visual": {
             "core_brightness": round(core_brightness, 3),

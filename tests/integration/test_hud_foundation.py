@@ -120,8 +120,11 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Restart HUD" in response.text
     assert "Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
-    assert "The Orb rides directly over the cursor." in response.text
-    assert "Hold the moving Orb itself to panic stop" in response.text
+    assert "The Orb floats independently while you keep the mouse." in response.text
+    assert "Hold the Orb itself to panic stop" in response.text
+    assert "Open Lens" in response.text
+    assert "Hide Lens" in response.text
+    assert "Exit Francis" in response.text
     assert "Shift Report" in response.text
     assert "Shift report will render from away continuity, handback, and mission state." in response.text
     assert "Return briefing cards will render from the backend contract." in response.text
@@ -2792,7 +2795,7 @@ def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> 
     _write_json(
         workspace_root / "control" / "state.json",
         {
-            "mode": "pilot",
+            "mode": "away",
             "kill_switch": False,
             "scopes": {
                 "repos": [str(workspace_root.parent)],
@@ -2830,7 +2833,7 @@ def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> 
     assert response.status_code == 200
     body = response.json()
     assert body["surface"] == "orb"
-    assert body["mode"] == "pilot"
+    assert body["mode"] == "away"
     assert body["posture"] == "acting"
     assert body["operator_cursor"] is True
     assert body["movement"]["anchor"] == "cursor"

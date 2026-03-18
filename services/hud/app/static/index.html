@@ -42,6 +42,10 @@
           linear-gradient(160deg, #f8f5ee 0%, #ebe7de 100%);
       }
 
+      body[data-lens-view="orb_only"] {
+        background: transparent;
+      }
+
       :focus-visible {
         outline: 3px solid rgba(180, 71, 45, 0.6);
         outline-offset: 3px;
@@ -91,6 +95,10 @@
         max-width: 1120px;
         margin: 0 auto;
         padding: 32px 20px 56px;
+      }
+
+      body[data-lens-view="orb_only"] .shell {
+        display: none;
       }
 
       .hero {
@@ -587,6 +595,50 @@
         overflow: hidden;
       }
 
+      #overlay-dock {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 140;
+        display: grid;
+        gap: 10px;
+        width: min(360px, calc(100vw - 36px));
+      }
+
+      .overlay-dock-card,
+      .overlay-dock-actions {
+        border: 1px solid rgba(23, 32, 42, 0.12);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .overlay-dock-card {
+        padding: 14px 16px;
+      }
+
+      .overlay-dock-card strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .overlay-dock-card span {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .overlay-dock-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .overlay-dock-actions button {
+        flex: 1 1 140px;
+      }
+
       #orb-render-root {
         position: absolute;
         top: 0;
@@ -735,31 +787,31 @@
             <div class="panel-head">
               <div>
                 <div class="eyebrow orb-eyebrow">Orb Chamber</div>
-                <h2 id="orb-title">Cursor-riding operator surface</h2>
+                <h2 id="orb-title">Ambient Francis Orb</h2>
               </div>
               <span class="orb-status meta tiny" id="orb-status">L0 | ambient</span>
             </div>
-            <div class="orb-stage" id="orb-stage" title="The moving Orb is the panic-stop surface when authority is live.">
+            <div class="orb-stage" id="orb-stage" title="The Orb stays free-floating unless Away execution explicitly takes cursor authority.">
               <p class="orb-stage-copy" id="orb-stage-copy">
-                The Orb rides directly over the cursor. Motion stays calm, legible, and slightly irregular so it feels operated rather than robotic.
+                The Orb floats independently while you keep the mouse. Cursor authority is reserved for Away execution.
               </p>
               <div class="orb-stage-tags">
-                <div class="orb-tag"><strong>Anchor</strong><span id="orb-anchor">cursor live</span></div>
-                <div class="orb-tag"><strong>Motion</strong><span id="orb-motion">humanized follow</span></div>
+                <div class="orb-tag"><strong>Anchor</strong><span id="orb-anchor">ambient</span></div>
+                <div class="orb-tag"><strong>Motion</strong><span id="orb-motion">free float</span></div>
               </div>
             </div>
             <p class="hero-copy orb-summary" id="orb-summary">
-              The Orb will attach to the cursor once live Lens state arrives.
+              The Orb will stay nearby and out of the way once live Lens state arrives.
             </p>
             <p class="meta orb-detail" id="orb-detail">
-              Ambient presence, operator cursor behavior, and panic readiness all resolve from one live state contract.
+              Ambient presence, interjections, away authority, and panic readiness all resolve from one live state contract.
             </p>
             <div class="orb-metrics" id="orb-metrics">
               <div class="metric-pill"><strong>Posture</strong><span>waiting</span></div>
               <div class="metric-pill"><strong>Pulse</strong><span>steady</span></div>
             </div>
             <p class="meta tiny orb-controls" id="orb-controls">
-              Hold the moving Orb itself to panic stop once the live control surface exposes the action.
+              Hold the Orb itself to panic stop when control exposes that path in scope.
             </p>
           </article>
           <div class="hero-copy-block">
@@ -767,10 +819,9 @@
             <div class="status" id="stream-status">Stream connecting</div>
             <h1>Operator overlay for live work.</h1>
             <p class="hero-copy">
-              Francis Lens is the 4th-wall HUD for missions, control mode visibility, incidents,
-              next actions, and now embodied Orb presence. The Orb is stateful, legible, and
-              governed: it reflects posture, execution, interjection pressure, and panic-stop
-              readiness in one object.
+              Francis Lens can stay out of the way until you open it. The Orb remains visible,
+              calm, and governed while the deeper operator surfaces stay hidden unless you want
+              them. Away execution is the only path that should take cursor authority.
             </p>
             <div class="mode-row" id="mode-row"></div>
           </div>
@@ -1682,6 +1733,19 @@
       </section>
     </main>
 
+    <div id="overlay-dock">
+      <div class="overlay-dock-card">
+        <strong>Francis</strong>
+        <span id="overlay-dock-status">Ambient overlay ready. Open Lens when you want the full operator surface.</span>
+      </div>
+      <div class="overlay-dock-actions" id="overlay-dock-actions">
+        <button class="btn-primary" type="button" id="overlay-open-lens" onclick="setLensViewMode('lens')">Open Lens</button>
+        <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="setLensViewMode('orb_only')">Hide Lens</button>
+        <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="hideDesktopOverlay()">Hide Overlay</button>
+        <button class="btn-danger" type="button" id="overlay-exit-app" onclick="quitDesktopOverlay()">Exit Francis</button>
+      </div>
+    </div>
+
     <div id="orb-overlay" aria-hidden="true">
       <div id="orb-render-root" aria-label="Francis Orb renderer"></div>
     </div>
@@ -1776,6 +1840,8 @@
         displayInfo: null,
       };
       let desktopNotice = "";
+      let lensViewMode = "lens";
+      let lensViewInitialized = false;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -1896,6 +1962,52 @@
           },
           displayInfo: displayInfo && typeof displayInfo === "object" ? displayInfo : null,
         };
+      }
+
+      function normalizeLensViewMode(mode) {
+        return String(mode || "").trim().toLowerCase() === "orb_only" ? "orb_only" : "lens";
+      }
+
+      function setLensViewMode(mode) {
+        lensViewMode = normalizeLensViewMode(mode);
+        document.body.dataset.lensView = lensViewMode;
+        renderOverlayDock();
+      }
+
+      function renderOverlayDock() {
+        const status = document.getElementById("overlay-dock-status");
+        const openLens = document.getElementById("overlay-open-lens");
+        const hideLens = document.getElementById("overlay-hide-lens");
+        const hideOverlay = document.getElementById("overlay-hide-app");
+        const exitOverlay = document.getElementById("overlay-exit-app");
+        if (!status || !openLens || !hideLens || !hideOverlay || !exitOverlay) {
+          return;
+        }
+
+        const hasBridge = desktopState.available;
+        const handbackActive = isOrbHandbackActive();
+        const cursorAuthority = Boolean(currentOrb?.operator_cursor);
+        const posture = String(currentOrb?.posture || "resting");
+        const mode = titleCase(String(currentOrb?.mode || "assist"));
+
+        let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
+        if (handbackActive) {
+          statusText = "Handback in progress. The Orb is returning to ambient rest in view.";
+        } else if (cursorAuthority) {
+          statusText = `Away authority is live. The Orb currently owns cursor visibility in ${mode}.`;
+        } else if (posture === "acting") {
+          statusText = `Francis is active in ${mode} while leaving your mouse under your control.`;
+        } else if (desktopState.ignoreMouseEvents) {
+          statusText = `Overlay is click-through. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control.`;
+        } else if (currentOrb?.summary) {
+          statusText = String(currentOrb.summary);
+        }
+        status.textContent = statusText;
+
+        openLens.disabled = lensViewMode === "lens";
+        hideLens.disabled = lensViewMode === "orb_only";
+        hideOverlay.disabled = !hasBridge;
+        exitOverlay.disabled = !hasBridge;
       }
 
       function getSystemReducedMotionPreference() {
@@ -3001,6 +3113,12 @@
           preferencesPath: desktopState.preferencesPath || null,
         });
         applyAccessibilityPosture();
+        if (!lensViewInitialized) {
+          setLensViewMode(desktopState.available ? "orb_only" : "lens");
+          lensViewInitialized = true;
+        } else {
+          renderOverlayDock();
+        }
       }
 
       async function syncDesktopState() {
@@ -3460,6 +3578,23 @@
         renderDesktopShell();
       }
 
+      async function quitDesktopOverlay() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.quit !== "function") {
+          desktopNotice = "Desktop exit is unavailable in browser mode.";
+          renderDesktopShell();
+          return;
+        }
+        try {
+          desktopNotice = "Exiting Francis overlay.";
+          renderDesktopShell();
+          await bridge.quit();
+        } catch (error) {
+          desktopNotice = `Overlay exit failed: ${error?.message || error}`;
+          renderDesktopShell();
+        }
+      }
+
       function initDesktopShell() {
         const bridge = getDesktopBridge();
         if (!bridge) {
@@ -3519,9 +3654,12 @@
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
         if (!panicChip) {
-          return "The Orb is following the cursor. Panic stop becomes live when control exposes it in scope.";
+          return "The Orb stays ambient and out of the way. Your mouse remains yours unless Away explicitly takes authority.";
         }
-        return "The Orb is following the cursor. Hold the moving Orb itself to panic stop immediately.";
+        if (currentOrb?.operator_cursor) {
+          return "Away cursor authority is live. Hold the Orb itself to panic stop immediately.";
+        }
+        return "The Orb stays ambient but remains the immediate stop surface when panic is in scope.";
       }
 
       function clearOrbHandback() {
@@ -3676,7 +3814,7 @@
           `${titleCase(currentOrb.posture || "resting")} | ${titleCase(currentOrb.mode || "assist")}`;
         document.getElementById("orb-status").textContent = handbackActive
           ? `L${currentOrb.interjection_level || 0} | handback`
-          : `L${currentOrb.interjection_level || 0} | ${currentOrb.operator_cursor ? "cursor active" : "ambient"}`;
+          : `L${currentOrb.interjection_level || 0} | ${currentOrb.operator_cursor ? "away authority" : "ambient"}`;
         document.getElementById("orb-summary").textContent = handbackActive
           ? "Authority ended cleanly. The Orb is returning to ambient rest in view."
           : currentOrb.summary || "Ambient presence is standing by.";
@@ -3689,24 +3827,28 @@
         document.getElementById("orb-stage-copy").textContent = handbackActive
           ? "Authority has ended cleanly. The Orb is carrying the last motion briefly, then settling back to its ambient anchor so handback stays spatial, not implied."
           : currentOrb.operator_cursor
-            ? "The Orb is riding directly on the pointer path and makes active authority spatially legible. Motion stays tight, with only small human correction instead of robotic-perfect tracking."
-            : "The Orb stays attached to the cursor path, but with softer breathing drift until the work genuinely needs attention.";
+            ? "Away execution is live. The Orb is carrying cursor authority visibly so delegated motion stays inspectable and bounded."
+            : currentOrb.posture === "acting"
+              ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away explicitly takes authority."
+              : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention.";
         document.getElementById("orb-anchor").textContent = handbackActive
           ? "ambient return"
           : currentOrb.operator_cursor
-            ? "cursor authority"
-            : "cursor ambient";
+            ? "away cursor"
+            : "free ambient";
         document.getElementById("orb-motion").textContent = handbackActive
           ? "release arc | handback"
           : currentOrb.movement?.profile === "cursor_ride"
-            ? "cursor ride | predictive commit"
-            : currentOrb.movement?.cursor_lock
-              ? "cursor guard | tension hold"
-            : "soft drift | breathing";
+            ? "away ride | predictive commit"
+            : currentOrb.movement?.profile === "focus_orbit"
+              ? "focus orbit | free float"
+              : currentOrb.movement?.profile === "guard_orbit"
+                ? "guard orbit | stop ready"
+                : "ambient float | breathing";
         const metrics = [
           ["Posture", handbackActive ? "Handback" : titleCase(currentOrb.posture || "resting")],
           ["Pulse", handbackActive ? "Return Arc" : titleCase(currentOrb.visual?.pulse_kind || "steady")],
-          ["Cursor", handbackActive ? "Returning" : currentOrb.operator_cursor ? "Visible" : "Idle"],
+          ["Mouse", handbackActive ? "Returning" : currentOrb.operator_cursor ? "Away Authority" : "User Control"],
           ["Stop Path", currentOrb.panic_ready ? "Immediate" : "Unavailable"],
         ];
         document.getElementById("orb-metrics").innerHTML = metrics
@@ -3715,6 +3857,7 @@
               `<div class="metric-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`,
           )
           .join("");
+        renderOverlayDock();
       }
 
       function renderOrb(orb) {
@@ -3726,7 +3869,7 @@
         maybeStartOrbHandback(previousOrb, currentOrb);
         renderOrbPresentation();
         mountOrbEngine();
-        document.body.classList.toggle("orb-cursor-active", canUseOrbCursor() && Boolean(currentOrb));
+        document.body.classList.toggle("orb-cursor-active", canUseOrbCursor() && Boolean(currentOrb?.operator_cursor));
         applyOrbSignals();
         if (orbAnimationFrame === null) {
           orbAnimationFrame = window.requestAnimationFrame(animateOrbOverlay);
@@ -3799,8 +3942,9 @@
         const movement = currentOrb?.movement || {};
         const cursorLock = Boolean(movement.cursor_lock);
         const base = {
+          anchor: String(movement.anchor || (cursorLock ? "cursor" : "ambient")),
           cursorLock,
-          profile: String(movement.profile || (cursorLock ? "cursor_lock" : "cursor_drift")),
+          profile: String(movement.profile || (cursorLock ? "cursor_lock" : "ambient_float")),
           leadStrength: Number(movement.lead_strength ?? (cursorLock ? 0.06 : 0.035)),
           settleStrength: Number(movement.settle_strength ?? (cursorLock ? 0.42 : 0.24)),
           damping: Number(movement.damping ?? (cursorLock ? 0.68 : 0.82)),
@@ -3820,7 +3964,7 @@
         }
         return {
           ...base,
-          profile: base.cursorLock ? "cursor_guard" : "cursor_lock",
+          profile: base.cursorLock ? "cursor_guard" : "ambient_float",
           leadStrength: base.leadStrength * 0.42,
           settleStrength: Math.max(0.18, base.settleStrength * 0.82),
           damping: Math.min(0.92, base.damping + 0.12),
@@ -3839,7 +3983,7 @@
 
       function resolveOrbHumanOffset(timestamp, motionProfile, speedFactor) {
         const rideProfile = motionProfile.profile === "cursor_ride";
-        const guardProfile = motionProfile.profile === "cursor_guard";
+        const guardProfile = motionProfile.profile === "cursor_guard" || motionProfile.profile === "guard_orbit";
         const driftStrength = motionProfile.driftStrength * (motionProfile.cursorLock ? 0.42 + speedFactor * 0.22 : 1);
         const microStrength = motionProfile.microStrength * (rideProfile ? 0.22 + speedFactor * 0.34 : 0.45 + speedFactor * 0.75);
         const x =
@@ -3907,8 +4051,8 @@
         return (
           actionTarget ||
           bundle.screenPointToOrbTarget(
-            orbMotion.pointerX || window.innerWidth * 0.54,
-            orbMotion.pointerY || window.innerHeight * 0.24,
+            currentOrb?.operator_cursor ? (orbMotion.pointerX || window.innerWidth * 0.54) : getOrbFallbackTarget().x,
+            currentOrb?.operator_cursor ? (orbMotion.pointerY || window.innerHeight * 0.24) : getOrbFallbackTarget().y,
             window.innerWidth,
             window.innerHeight,
           )
@@ -3962,7 +4106,7 @@
             window.innerWidth < 520 ? 112 : 132,
             Math.min(
               188,
-              136 + level * 8 + (currentOrb?.operator_cursor ? 12 : 0) + (currentOrb?.panic_ready ? 6 : 0),
+              136 + level * 8 + (currentOrb?.panic_ready ? 6 : 0),
             ),
           ),
         );
@@ -3985,18 +4129,23 @@
         } else {
           const motionProfile = getOrbMotionProfile();
           const fallback = getOrbFallbackTarget();
+          const useCursorAnchor = motionProfile.anchor === "cursor" || currentOrb?.operator_cursor;
           const pointerFresh =
             orbMotion.lastMoveAt > 0 &&
             timestamp - orbMotion.lastMoveAt < Math.max(700, motionProfile.hesitationMs * 6);
-          const anchorX = pointerFresh ? orbMotion.pointerX : fallback.x;
-          const anchorY = pointerFresh ? orbMotion.pointerY : fallback.y;
-          const speedFactor = Math.min(1, orbMotion.speed / 18);
+          const anchorX = useCursorAnchor && pointerFresh ? orbMotion.pointerX : fallback.x;
+          const anchorY = useCursorAnchor && pointerFresh ? orbMotion.pointerY : fallback.y;
+          const speedFactor = useCursorAnchor ? Math.min(1, orbMotion.speed / 18) : 0;
           const humanOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
-          const leadStrength = motionProfile.leadStrength * (0.6 + speedFactor * 0.4);
-          const leadX = Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVx * leadStrength));
-          const leadY = Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVy * leadStrength));
-          orbMotion.correctionX *= pointerFresh ? 0.82 : 0.68;
-          orbMotion.correctionY *= pointerFresh ? 0.82 : 0.68;
+          const leadStrength = useCursorAnchor ? motionProfile.leadStrength * (0.6 + speedFactor * 0.4) : 0;
+          const leadX = useCursorAnchor
+            ? Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVx * leadStrength))
+            : 0;
+          const leadY = useCursorAnchor
+            ? Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVy * leadStrength))
+            : 0;
+          orbMotion.correctionX *= useCursorAnchor && pointerFresh ? 0.82 : 0.68;
+          orbMotion.correctionY *= useCursorAnchor && pointerFresh ? 0.82 : 0.68;
           orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
           orbMotion.targetY =
             anchorY +
