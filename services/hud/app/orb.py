@@ -212,6 +212,7 @@ def _build_takeover_desktop_run_contract(
 
     focus_kind = str(focus_action.get("execute_kind") or focus_action.get("kind") or "").strip().lower()
     focus_args = focus_action.get("args", {}) if isinstance(focus_action.get("args"), dict) else {}
+    target_cue = _build_orb_target_cue()
     command: dict[str, Any] | None = None
     summary = ""
 
@@ -369,6 +370,8 @@ def _build_takeover_desktop_run_contract(
 
     if not isinstance(command, dict):
         return None
+    if isinstance(target_cue, dict):
+        command = {**command, "grounding": target_cue}
     return {
         "enabled": True,
         "kind": "control.takeover.desktop.enqueue",

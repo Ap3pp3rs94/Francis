@@ -144,6 +144,25 @@ def _save_state(state: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_grounding(value: Any) -> dict[str, Any]:
+    payload = value if isinstance(value, dict) else {}
+    return {
+        "title": str(payload.get("title", "")).strip(),
+        "state": str(payload.get("state", "weak")).strip().lower() or "weak",
+        "control_ready": bool(payload.get("control_ready", False)),
+        "surface_kind": str(payload.get("surface_kind", "")).strip().lower(),
+        "surface_label": str(payload.get("surface_label", "")).strip(),
+        "zone_kind": str(payload.get("zone_kind", "")).strip().lower(),
+        "zone_label": str(payload.get("zone_label", "")).strip(),
+        "target_label": str(payload.get("target_label", "")).strip(),
+        "confidence": str(payload.get("confidence", "low")).strip().lower() or "low",
+        "stability": str(payload.get("stability", "idle")).strip().lower() or "idle",
+        "window_match": str(payload.get("window_match", "weak")).strip().lower() or "weak",
+        "primary_action_label": str(payload.get("primary_action_label", "")).strip(),
+        "summary": str(payload.get("summary", "")).strip(),
+        "detail": str(payload.get("detail", "")).strip(),
+    }
+
 
 def _compact_command(row: dict[str, Any]) -> dict[str, Any]:
     args = row.get("args") if isinstance(row.get("args"), dict) else {}
@@ -162,6 +181,7 @@ def _compact_command(row: dict[str, Any]) -> dict[str, Any]:
         "claimed_by": str(row.get("claimed_by", "")).strip(),
         "completed_at": str(row.get("completed_at", "")).strip(),
         "detail": str(row.get("detail", "")).strip(),
+        "grounding": _normalize_grounding(row.get("grounding")),
     }
 
 
@@ -173,6 +193,69 @@ def _command_summary(row: dict[str, Any]) -> str:
     if reason:
         return f"{kind} is {status}. {reason}".strip()
     return f"{kind} is {status}."
+
+
+def _command_receipt_summary(
+    row: dict[str, Any],
+    *,
+    status: str,
+    actor: str,
+    human_returned: bool = False,
+) -> dict[str, Any]:
+    normalized_status = str(status or row.get("status", "queued")).strip().lower() or "queued"
+    grounding = _normalize_grounding(row.get("grounding"))
+    summary_text = _command_summary({**row, "status": normalized_status})
+    grounding_summary = str(grounding.get("summary", "")).strip()
+    if grounding_summary:
+        summary_text = f"{summary_text} {grounding_summary}".strip()
+
+    presentation_cards = [
+        {
+            "label": "Command",
+            "value": str(row.get("kind", "unknown")).strip() or "unknown",
+            "tone": "medium",
+        },
+        {
+            "label": "Status",
+            "value": normalized_status.replace("_", " "),
+            "tone": "high" if normalized_status == "failed" else "medium" if normalized_status == "claimed" else "low",
+        },
+    ]
+    if grounding_summary:
+        presentation_cards.append(
+            {
+                "label": "Grounding",
+                "value": grounding_summary,
+                "tone": "medium" if grounding.get("state") in {"concrete", "tracking"} else "low",
+            }
+        )
+    target_value = (
+        str(grounding.get("primary_action_label", "")).strip()
+        or str(grounding.get("zone_label", "")).strip()
+        or str(grounding.get("target_label", "")).strip()
+    )
+    if target_value:
+        presentation_cards.append(
+            {
+                "label": "Target",
+                "value": target_value,
+                "tone": "medium" if grounding.get("control_ready") else "low",
+            }
+        )
+
+    return {
+        "command_id": str(row.get("id", "")).strip(),
+        "command_kind": str(row.get("kind", "")).strip(),
+        "status": normalized_status,
+        "actor": str(actor or "").strip(),
+        "human_returned": bool(human_returned),
+        "summary_text": summary_text,
+        "grounding_state": str(grounding.get("state", "weak")).strip().lower() or "weak",
+        "grounding_summary": grounding_summary,
+        "grounding_control_ready": bool(grounding.get("control_ready", False)),
+        "presentation_cards": presentation_cards[:4],
+        "grounding": grounding,
+    }
 
 
 
@@ -235,6 +318,7 @@ def queue_orb_authority_command(
     kind: str,
     args: dict[str, Any] | None = None,
     reason: str = "",
+    grounding: dict[str, Any] | None = None,
     actor: str = "hud.orb",
     user: str = "hud.operator",
     run_id: str | None = None,
@@ -261,19 +345,15 @@ def queue_orb_authority_command(
         "claimed_by": "",
         "completed_at": "",
         "detail": "",
+        "grounding": _normalize_grounding(grounding),
         "result": None,
     }
     _append_jsonl(QUEUE_PATH, row)
     receipt = _record_receipt(
-        run_id=run_id,
+        run_id=effective_run_id,
         trace_id=effective_trace_id,
         kind="orb.authority.command.queued",
-        summary={
-            "command_id": row["id"],
-            "command_kind": normalized_kind,
-            "status": "queued",
-            "actor": row["actor"],
-        },
+        summary=_command_receipt_summary(row, status="queued", actor=row["actor"]),
         detail=_command_summary(row),
         actor=row["actor"],
     )
@@ -361,12 +441,7 @@ def claim_next_orb_authority_command(*, authority_live: bool, idle_seconds: floa
             run_id=str(command.get("run_id", "")).strip() or f"orb-authority:{uuid4()}",
             trace_id=str(command.get("trace_id", "")).strip() or str(command.get("run_id", "")).strip() or str(uuid4()),
             kind="orb.authority.command.claimed",
-            summary={
-                "command_id": str(command.get("id", "")).strip(),
-                "command_kind": str(command.get("kind", "")).strip(),
-                "status": "claimed",
-                "actor": actor,
-            },
+            summary=_command_receipt_summary(command, status="claimed", actor=actor),
             detail=_command_summary(command),
             actor=actor,
         )
@@ -430,13 +505,12 @@ def complete_orb_authority_command(*, command_id: str, status: str, detail: str 
             run_id=str(command.get("run_id", "")).strip() or f"orb-authority:{uuid4()}",
             trace_id=str(command.get("trace_id", "")).strip() or str(command.get("run_id", "")).strip() or str(uuid4()),
             kind=f"orb.authority.command.{normalized_status}",
-            summary={
-                "command_id": normalized_id,
-                "command_kind": str(command.get("kind", "")).strip(),
-                "status": normalized_status,
-                "actor": actor,
-                "human_returned": bool(human_returned),
-            },
+            summary=_command_receipt_summary(
+                command,
+                status=normalized_status,
+                actor=actor,
+                human_returned=human_returned,
+            ),
             detail=state_reason,
             actor=actor,
         )

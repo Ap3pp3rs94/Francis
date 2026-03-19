@@ -130,6 +130,7 @@ class ControlTakeoverDesktopCommand(BaseModel):
     kind: str = Field(min_length=1)
     args: dict[str, Any] = Field(default_factory=dict)
     reason: str = ""
+    grounding: dict[str, Any] = Field(default_factory=dict)
 
 
 class ControlTakeoverDesktopEnqueueRequest(BaseModel):
@@ -350,6 +351,7 @@ def _normalize_takeover_desktop_command(command: ControlTakeoverDesktopCommand) 
     normalized_kind = str(command.kind).strip().lower()
     args = command.args if isinstance(command.args, dict) else {}
     reason = str(command.reason or "").strip()
+    grounding = command.grounding if isinstance(command.grounding, dict) else {}
     normalized_args: dict[str, Any]
     if normalized_kind == "mouse.move":
         normalized_args = {
@@ -407,7 +409,7 @@ def _normalize_takeover_desktop_command(command: ControlTakeoverDesktopCommand) 
         reason = reason or f"Press {key} through delegated Orb authority."
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported desktop command kind: {normalized_kind}")
-    return {"kind": normalized_kind, "args": normalized_args, "reason": reason}
+    return {"kind": normalized_kind, "args": normalized_args, "reason": reason, "grounding": grounding}
 
 
 def _load_or_init_takeover_state() -> dict[str, Any]:
@@ -731,6 +733,7 @@ def _enqueue_takeover_desktop_commands(
             kind=str(command.get("kind", "")).strip(),
             args=command.get("args", {}) if isinstance(command.get("args"), dict) else {},
             reason=str(command.get("reason", "")).strip(),
+            grounding=command.get("grounding", {}) if isinstance(command.get("grounding"), dict) else {},
             actor=activity_kind_prefix,
             user=actor,
             run_id=run_id,
@@ -753,6 +756,7 @@ def _enqueue_takeover_desktop_commands(
                 "reason": queued_command.get("reason"),
                 "status": queued_command.get("status"),
                 "args": queued_command.get("args", {}),
+                "grounding": queued_command.get("grounding", {}),
             },
             ok=True,
             session_id=session_id,

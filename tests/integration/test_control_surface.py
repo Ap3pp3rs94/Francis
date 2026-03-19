@@ -1136,13 +1136,14 @@ def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> Non
 def test_control_takeover_desktop_enqueue_routes_session_scoped_commands(monkeypatch) -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
+    captured: dict[str, object] = {}
     try:
         _set_mode(c, "assist", kill_switch=False)
         _ensure_takeover_idle(c)
         monkeypatch.setattr(
             control_routes,
             "queue_orb_authority_command",
-            lambda **kwargs: {
+            lambda **kwargs: captured.update(kwargs) or {
                 "status": "ok",
                 "receipt_id": "orb-queue-receipt-1",
                 "command": {
@@ -1151,6 +1152,7 @@ def test_control_takeover_desktop_enqueue_routes_session_scoped_commands(monkeyp
                     "reason": kwargs.get("reason"),
                     "status": "queued",
                     "args": kwargs.get("args", {}),
+                    "grounding": kwargs.get("grounding", {}),
                 },
                 "authority": {
                     "surface": "orb_authority",
@@ -1190,6 +1192,12 @@ def test_control_takeover_desktop_enqueue_routes_session_scoped_commands(monkeyp
                         "kind": "mouse.move",
                         "args": {"x": 320, "y": 240, "coordinate_space": "display"},
                         "reason": "Move into the target work region.",
+                        "grounding": {
+                            "state": "concrete",
+                            "control_ready": True,
+                            "zone_label": "Francis action row",
+                            "summary": "Concrete Francis action row target. Focus Click is grounded from the Orb.",
+                        },
                     }
                 ],
             },
@@ -1201,6 +1209,8 @@ def test_control_takeover_desktop_enqueue_routes_session_scoped_commands(monkeyp
         assert queued_payload.get("session_id") == session_id
         assert queued_payload.get("commands", [])[0].get("kind") == "mouse.move"
         assert queued_payload.get("receipt_id")
+        assert isinstance(captured.get("grounding"), dict)
+        assert captured["grounding"]["state"] == "concrete"
 
         activity = c.get("/control/takeover/activity", params={"session_id": session_id, "limit": 100})
         assert activity.status_code == 200

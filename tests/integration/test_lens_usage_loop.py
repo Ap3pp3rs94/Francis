@@ -84,6 +84,7 @@ def _restore_text(path: Path, content: str, existed: bool) -> None:
 
 
 def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
+    captured: dict[str, object] = {}
     monkeypatch.setattr(
         lens_routes,
         "check_action_allowed",
@@ -91,8 +92,27 @@ def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         lens_routes,
+        "resolve_orb_focus_target",
+        lambda max_age_ms=2500: {
+            "x": 320,
+            "y": 240,
+            "surface": {"kind": "francis", "label": "Francis surface"},
+            "zone": {"kind": "francis_action_row", "label": "Francis action row"},
+            "affordances": [
+                {"kind": "focus_click", "label": "Focus Click"},
+            ],
+            "target": {
+                "label": "Francis focus point",
+                "confidence": "likely",
+                "stability": {"state": "settled"},
+                "window": {"in_bounds": True},
+            },
+        },
+    )
+    monkeypatch.setattr(
+        lens_routes,
         "queue_orb_authority_command",
-        lambda **kwargs: {
+        lambda **kwargs: captured.update(kwargs) or {
             "status": "ok",
             "receipt_id": "receipt-orb-1",
             "command": {
@@ -100,6 +120,7 @@ def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
                 "kind": kwargs.get("kind"),
                 "reason": kwargs.get("reason"),
                 "status": "queued",
+                "grounding": kwargs.get("grounding", {}),
             },
             "authority": {
                 "surface": "orb_authority",
@@ -148,9 +169,12 @@ def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
         move_payload = move_response.json()
         assert move_payload["status"] == "ok"
         assert move_payload["result"]["command"]["kind"] == "mouse.move"
+        assert move_payload["result"]["command"]["grounding"]["state"] == "concrete"
         assert move_payload["result"]["tool"]["skill"] == "orb.authority"
         assert move_payload["result"]["presentation"]["cards"][0]["label"] == "Authority"
         assert move_payload["result"]["receipt_id"] == "receipt-orb-1"
+        assert isinstance(captured.get("grounding"), dict)
+        assert captured["grounding"]["state"] == "concrete"
 
         clear_response = client.post(
             "/lens/actions/execute",
@@ -187,6 +211,7 @@ def test_lens_execute_rejects_invalid_orb_authority_coordinates(monkeypatch) -> 
 
 
 def test_lens_execute_routes_takeover_desktop_enqueue(monkeypatch) -> None:
+    captured: dict[str, object] = {}
     monkeypatch.setattr(
         lens_routes,
         "check_action_allowed",
@@ -195,7 +220,12 @@ def test_lens_execute_routes_takeover_desktop_enqueue(monkeypatch) -> None:
     monkeypatch.setattr(
         lens_routes,
         "control_takeover_desktop_enqueue",
-        lambda request, payload: {
+        lambda request, payload: captured.update(
+            {
+                "summary": payload.summary,
+                "command_grounding": payload.commands[0].grounding if payload.commands else {},
+            }
+        ) or {
             "status": "ok",
             "session_id": "takeover-session-1",
             "summary": "Queued 1 desktop command into the takeover session.",
@@ -206,6 +236,7 @@ def test_lens_execute_routes_takeover_desktop_enqueue(monkeypatch) -> None:
                     "kind": "mouse.move",
                     "reason": "Move into place.",
                     "status": "queued",
+                    "grounding": payload.commands[0].grounding if payload.commands else {},
                 }
             ],
             "authority": {
@@ -230,7 +261,16 @@ def test_lens_execute_routes_takeover_desktop_enqueue(monkeypatch) -> None:
                 "args": {
                     "summary": "Queue desktop move",
                     "commands": [
-                        {"kind": "mouse.move", "args": {"x": 320, "y": 240, "coordinate_space": "display"}}
+                        {
+                            "kind": "mouse.move",
+                            "args": {"x": 320, "y": 240, "coordinate_space": "display"},
+                            "grounding": {
+                                "state": "concrete",
+                                "control_ready": True,
+                                "zone_label": "Francis action row",
+                                "summary": "Concrete Francis action row target. Focus Click is grounded from the Orb.",
+                            },
+                        }
                     ],
                 },
                 "dry_run": False,
@@ -244,6 +284,8 @@ def test_lens_execute_routes_takeover_desktop_enqueue(monkeypatch) -> None:
     assert payload["result"]["tool"]["skill"] == "control.takeover.desktop"
     assert payload["result"]["presentation"]["cards"][0]["label"] == "Authority"
     assert payload["result"]["receipt_id"] == "receipt-desktop-1"
+    assert isinstance(captured.get("command_grounding"), dict)
+    assert captured["command_grounding"]["state"] == "concrete"
 
 
 def test_lens_state_surfaces_current_work_and_next_best_action() -> None:

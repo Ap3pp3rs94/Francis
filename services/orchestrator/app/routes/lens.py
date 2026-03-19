@@ -224,6 +224,77 @@ def _require_orb_focus_target(*, action_kind: str, max_age_ms: int = 2500) -> di
     return focus_target
 
 
+def _build_orb_authority_grounding(*, focus_target: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(focus_target, dict):
+        return None
+
+    surface = focus_target.get("surface", {}) if isinstance(focus_target.get("surface"), dict) else {}
+    zone = focus_target.get("zone", {}) if isinstance(focus_target.get("zone"), dict) else {}
+    target = focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}
+    affordances = focus_target.get("affordances", []) if isinstance(focus_target.get("affordances"), list) else []
+    target_window = target.get("window", {}) if isinstance(target.get("window"), dict) else {}
+    target_stability = target.get("stability", {}) if isinstance(target.get("stability"), dict) else {}
+
+    surface_kind = str(surface.get("kind", "")).strip().lower() or "application"
+    surface_label = str(surface.get("label", "Application surface")).strip() or "Application surface"
+    zone_kind = str(zone.get("kind", "")).strip().lower() or "application_content"
+    zone_label = str(zone.get("label", "Active zone")).strip() or "Active zone"
+    target_label = str(target.get("label", "Active focus point")).strip() or "Active focus point"
+    confidence = str(target.get("confidence", "low")).strip().lower() or "low"
+    stability = str(target_stability.get("state", "idle")).strip().lower() or "idle"
+    in_bounds = bool(target_window.get("in_bounds"))
+    primary_affordance = next(
+        (
+            row
+            for row in affordances
+            if isinstance(row, dict) and str(row.get("label", "")).strip()
+        ),
+        None,
+    )
+    primary_label = str(primary_affordance.get("label", "")).strip() if isinstance(primary_affordance, dict) else ""
+    control_ready = bool(
+        surface_kind == "francis"
+        and zone_kind.startswith("francis_")
+        and stability == "settled"
+        and confidence in {"likely", "medium"}
+        and in_bounds
+        and primary_label
+    )
+
+    if control_ready:
+        state = "concrete"
+        summary = f"Concrete {zone_label.lower()} target. {primary_label} is grounded from the Orb."
+        detail = f"{target_label} is inside the foreground Francis surface and stable enough for precise handoff."
+    elif stability == "tracking" and in_bounds:
+        state = "tracking"
+        summary = f"Tracking {zone_label.lower()} target. Let it settle before Francis acts."
+        detail = f"{target_label} is inside {surface_label.lower()}, but the cursor is still moving."
+    else:
+        state = "weak"
+        summary = f"Weak {zone_label.lower()} target. Francis is holding off until the control becomes concrete."
+        detail = (
+            f"{target_label} is not grounded enough yet"
+            + (" because it is outside the foreground window." if not in_bounds else ".")
+        )
+
+    return {
+        "title": "",
+        "state": state,
+        "control_ready": control_ready,
+        "surface_kind": surface_kind,
+        "surface_label": surface_label,
+        "zone_kind": zone_kind,
+        "zone_label": zone_label,
+        "target_label": target_label,
+        "confidence": confidence,
+        "stability": stability,
+        "window_match": "inside_foreground_window" if in_bounds else "weak",
+        "primary_action_label": primary_label,
+        "summary": summary,
+        "detail": detail,
+    }
+
+
 def _enforce_action_scope(*, app: str, action: str, mutating: bool = True) -> None:
     allowed, reason, _state = check_action_allowed(
         _fs,
@@ -455,6 +526,29 @@ def _build_orb_authority_presentation(
                 "tone": "medium",
             }
         )
+        grounding = command.get("grounding", {}) if isinstance(command.get("grounding"), dict) else {}
+        grounding_summary = str(grounding.get("summary", "")).strip()
+        grounding_target = (
+            str(grounding.get("primary_action_label", "")).strip()
+            or str(grounding.get("zone_label", "")).strip()
+            or str(grounding.get("target_label", "")).strip()
+        )
+        if grounding_summary:
+            cards.append(
+                {
+                    "label": "Grounding",
+                    "value": grounding_summary,
+                    "tone": "medium" if str(grounding.get("state", "")).strip().lower() in {"concrete", "tracking"} else "low",
+                }
+            )
+        if grounding_target:
+            cards.append(
+                {
+                    "label": "Target",
+                    "value": grounding_target,
+                    "tone": "medium" if bool(grounding.get("control_ready")) else "low",
+                }
+            )
         evidence.append(
             {
                 "kind": "queued_command",
@@ -463,6 +557,14 @@ def _build_orb_authority_presentation(
                 or f"{str(command.get('kind', 'command')).strip() or 'command'} was queued for lawful Away execution.",
             }
         )
+        if grounding_summary:
+            evidence.append(
+                {
+                    "kind": "target_grounding",
+                    "severity": "medium" if str(grounding.get("state", "")).strip().lower() in {"concrete", "tracking"} else "low",
+                    "detail": grounding_summary,
+                }
+            )
         detail["command"] = command
     if canceled_count is not None:
         cards.append(
@@ -1092,6 +1194,9 @@ def _execute_lens_action(
             **command_args,
             "reason": reason,
         }
+        grounding = _build_orb_authority_grounding(
+            focus_target=focus_target if isinstance(focus_target, dict) else resolve_orb_focus_target(max_age_ms=1200)
+        )
         if dry_run:
             return {
                 "status": "dry_run",
@@ -1109,7 +1214,14 @@ def _execute_lens_action(
             takeover_summary = control_takeover_desktop_enqueue(
                 request,
                 payload=ControlTakeoverDesktopEnqueueRequest(
-                    commands=[{"kind": command_kind, "args": command_args, "reason": reason}],
+                    commands=[
+                        {
+                            "kind": command_kind,
+                            "args": command_args,
+                            "reason": reason,
+                            "grounding": grounding or {},
+                        }
+                    ],
                     summary=reason,
                 ),
             )
@@ -1144,6 +1256,7 @@ def _execute_lens_action(
             kind=command_kind,
             args=command_args,
             reason=reason,
+            grounding=grounding,
             actor=actor,
             user=role,
             run_id=run_id,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from francis_brain.ledger import RunLedger
@@ -23,16 +24,32 @@ def _bind_temp_authority_store(monkeypatch, tmp_path: Path) -> Path:
 
 
 def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None:
-    _bind_temp_authority_store(monkeypatch, tmp_path)
+    workspace_root = _bind_temp_authority_store(monkeypatch, tmp_path)
 
     queued = orb_authority.queue_orb_authority_command(
         kind="mouse.move",
         args={"x": 320, "y": 240},
         reason="Move to the current target.",
+        grounding={
+            "state": "concrete",
+            "control_ready": True,
+            "surface_kind": "francis",
+            "surface_label": "Francis surface",
+            "zone_kind": "francis_action_row",
+            "zone_label": "Francis action row",
+            "target_label": "Francis focus point",
+            "confidence": "likely",
+            "stability": "settled",
+            "window_match": "inside_foreground_window",
+            "primary_action_label": "Focus Click",
+            "summary": "Concrete Francis action row target. Focus Click is grounded from the Orb.",
+            "detail": "Francis focus point is inside the foreground Francis surface and stable enough for precise handoff.",
+        },
     )
 
     assert queued["status"] == "ok"
     assert queued["command"]["status"] == "queued"
+    assert queued["command"]["grounding"]["state"] == "concrete"
     assert queued["authority"]["pending_count"] == 1
 
     claimed = orb_authority.claim_next_orb_authority_command(
@@ -57,6 +74,33 @@ def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None
     assert completed["command"]["status"] == "completed"
     assert completed["authority"]["state"]["live"] is False
     assert completed["authority"]["pending_count"] == 0
+
+    ledger_path = workspace_root / "runs" / "run_ledger.jsonl"
+    rows = [
+        json.loads(line)
+        for line in ledger_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    queued_summary = next(
+        row.get("summary", {})
+        for row in rows
+        if str(row.get("kind", "")).strip() == "orb.authority.command.queued"
+    )
+    claimed_summary = next(
+        row.get("summary", {})
+        for row in rows
+        if str(row.get("kind", "")).strip() == "orb.authority.command.claimed"
+    )
+    completed_summary = next(
+        row.get("summary", {})
+        for row in rows
+        if str(row.get("kind", "")).strip() == "orb.authority.command.completed"
+    )
+    assert queued_summary["grounding_state"] == "concrete"
+    assert queued_summary["grounding_control_ready"] is True
+    assert any(card["label"] == "Grounding" for card in queued_summary["presentation_cards"])
+    assert claimed_summary["grounding_state"] == "concrete"
+    assert completed_summary["grounding_state"] == "concrete"
 
 
 def test_orb_authority_state_and_cancel(monkeypatch, tmp_path: Path) -> None:
