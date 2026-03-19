@@ -77,10 +77,23 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
         "perception": {
             "state": perception.get("state"),
             "summary": perception.get("summary"),
+            "detail_summary": perception.get("detail_summary"),
             "captured_at": perception.get("captured_at"),
             "display_id": perception.get("display_id"),
+            "display": perception.get("display"),
             "cursor": perception.get("cursor"),
             "window": perception.get("window"),
+            "freshness": perception.get("freshness"),
+            "sensing": perception.get("sensing"),
+            "cards": perception.get("cards"),
+            "focus": {
+                "width": perception.get("focus", {}).get("width"),
+                "height": perception.get("focus", {}).get("height"),
+                "has_image": bool(
+                    perception.get("focus", {}).get("has_image")
+                    or perception.get("focus", {}).get("data_url")
+                ),
+            },
             "frame": {
                 "width": perception.get("frame", {}).get("width"),
                 "height": perception.get("frame", {}).get("height"),
@@ -133,7 +146,9 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
         "perception": {
             "state": perception.get("state"),
             "summary": perception.get("summary"),
+            "detail_summary": perception.get("detail_summary"),
             "captured_at": perception.get("captured_at"),
+            "freshness": perception.get("freshness"),
             "window": perception.get("window"),
         },
     }

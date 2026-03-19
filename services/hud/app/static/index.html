@@ -736,6 +736,12 @@
         gap: 10px;
       }
 
+      .overlay-dock-perception-cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
       #orb-render-root {
         position: absolute;
         top: 0;
@@ -1839,6 +1845,12 @@
         <div class="overlay-dock-perception" id="overlay-perception-summary">
           Visible desktop context is not attached yet.
         </div>
+        <div class="overlay-dock-perception-cards" id="overlay-perception-cards">
+          <div class="desktop-pill"><strong>Display</strong><span>Active display will appear here.</span></div>
+          <div class="desktop-pill"><strong>Window</strong><span>Foreground window metadata will appear here.</span></div>
+          <div class="desktop-pill"><strong>Focus</strong><span>Focused local crop state will appear here.</span></div>
+          <div class="desktop-pill"><strong>Retention</strong><span>Latest-frame-only sensing posture will appear here.</span></div>
+        </div>
         <div class="overlay-dock-reply" id="overlay-chat-reply">
           Ask a short question or give a direct command without opening Lens.
         </div>
@@ -2307,6 +2319,7 @@
         const chatInput = document.getElementById("overlay-chat-input");
         const chatSend = document.getElementById("overlay-chat-send");
         const perceptionSummary = document.getElementById("overlay-perception-summary");
+        const perceptionCards = document.getElementById("overlay-perception-cards");
         const authorityMeta = document.getElementById("overlay-authority-meta");
         const authoritySummary = document.getElementById("overlay-authority-summary");
         const authorityCards = document.getElementById("overlay-authority-cards");
@@ -2327,6 +2340,7 @@
           !chatInput ||
           !chatSend ||
           !perceptionSummary ||
+          !perceptionCards ||
           !authorityMeta ||
           !authoritySummary ||
           !authorityCards ||
@@ -2407,6 +2421,21 @@
             || currentOrb?.perception?.summary
             || "Visible desktop context is not attached yet.",
         );
+        const perceptionCardItems = Array.isArray(currentOrbPerception?.cards) && currentOrbPerception.cards.length > 0
+          ? currentOrbPerception.cards
+          : [
+              { label: "Display", value: "Active display unavailable", tone: "low" },
+              { label: "Window", value: "Foreground window metadata unavailable", tone: "low" },
+              { label: "Focus", value: "Focused local crop unavailable", tone: "low" },
+              { label: "Retention", value: "Latest frame only", tone: "low" },
+            ];
+        perceptionCards.innerHTML = perceptionCardItems
+          .map((card) => {
+            const label = escapeHtml(String(card?.label || "Perception"));
+            const value = escapeHtml(String(card?.value || "Unavailable"));
+            return `<div class="desktop-pill"><strong>${label}</strong><span>${value}</span></div>`;
+          })
+          .join("");
         authorityMeta.textContent = currentOrbAuthority?.state?.live
           ? "Away authority is live. Human return or panic stop will release immediately."
           : authorityQueueCount > 0

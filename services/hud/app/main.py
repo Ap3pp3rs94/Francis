@@ -166,14 +166,20 @@ class HudOrbChatRequest(BaseModel):
 class HudOrbPerceptionFrameRequest(BaseModel):
     captured_at: str = ""
     display_id: int | None = None
+    display_width: int = 0
+    display_height: int = 0
     idle_seconds: int = 0
     cursor_x: int | None = None
     cursor_y: int | None = None
     window_title: str = ""
     process_name: str = ""
+    window_pid: int | None = None
     frame_width: int = 0
     frame_height: int = 0
     frame_data_url: str = ""
+    focus_width: int = 0
+    focus_height: int = 0
+    focus_data_url: str = ""
 
 
 class HudOrbAuthorityCommandRequest(BaseModel):
@@ -560,16 +566,26 @@ def _build_app() -> FastAPI:
             {
                 "captured_at": payload.captured_at,
                 "display_id": payload.display_id,
+                "display": {
+                    "width": payload.display_width,
+                    "height": payload.display_height,
+                },
                 "idle_seconds": payload.idle_seconds,
                 "cursor": {"x": payload.cursor_x, "y": payload.cursor_y},
                 "window": {
                     "title": payload.window_title,
                     "process": payload.process_name,
+                    "pid": payload.window_pid,
                 },
                 "frame": {
                     "width": payload.frame_width,
                     "height": payload.frame_height,
                     "data_url": payload.frame_data_url,
+                },
+                "focus": {
+                    "width": payload.focus_width,
+                    "height": payload.focus_height,
+                    "data_url": payload.focus_data_url,
                 },
             }
         )

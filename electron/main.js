@@ -67,6 +67,7 @@ const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
 const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
+const { buildOrbFocusCropRect } = require("./orb-perception");
 const {
   canEngageOrbAuthority,
   detectHumanCursorReturn,
@@ -373,13 +374,31 @@ async function capturePerceptionFrame() {
     throw new Error("No display capture source is available");
   }
   const size = selected.thumbnail.getSize();
+  const focusRect = buildOrbFocusCropRect({
+    sourceWidth: Number(size.width || 0),
+    sourceHeight: Number(size.height || 0),
+    displayBounds: activeDisplay?.bounds || null,
+    cursorScreen: cursorPoint,
+  });
+  const focusImage =
+    focusRect && typeof selected.thumbnail.crop === "function"
+      ? selected.thumbnail.crop(focusRect)
+      : null;
   return {
     sourceId: selected.id,
     displayId: Number(selected.display_id || targetDisplayId || 0),
+    displayWidth: Number(activeDisplay?.bounds?.width || 0),
+    displayHeight: Number(activeDisplay?.bounds?.height || 0),
     width: Number(size.width || 0),
     height: Number(size.height || 0),
     capturedAt: new Date().toISOString(),
     dataUrl: `data:image/jpeg;base64,${selected.thumbnail.toJPEG(78).toString("base64")}`,
+    focusWidth: Number(focusRect?.width || 0),
+    focusHeight: Number(focusRect?.height || 0),
+    focusDataUrl:
+      focusImage && !focusImage.isEmpty()
+        ? `data:image/jpeg;base64,${focusImage.toJPEG(82).toString("base64")}`
+        : "",
   };
 }
 
@@ -2017,14 +2036,20 @@ async function pushOrbPerceptionFrame() {
       body: JSON.stringify({
         captured_at: frame?.capturedAt || "",
         display_id: frame?.displayId ?? null,
+        display_width: Number(frame?.displayWidth || 0),
+        display_height: Number(frame?.displayHeight || 0),
         idle_seconds: Number(input?.idleSeconds || 0),
         cursor_x: Number.isFinite(input?.cursorDisplay?.x) ? Math.round(input.cursorDisplay.x) : null,
         cursor_y: Number.isFinite(input?.cursorDisplay?.y) ? Math.round(input.cursorDisplay.y) : null,
         frame_width: Number(frame?.width || 0),
         frame_height: Number(frame?.height || 0),
         frame_data_url: String(frame?.dataUrl || ""),
+        focus_width: Number(frame?.focusWidth || 0),
+        focus_height: Number(frame?.focusHeight || 0),
+        focus_data_url: String(frame?.focusDataUrl || ""),
         window_title: String(foregroundWindow?.title || ""),
         process_name: String(foregroundWindow?.process || ""),
+        window_pid: Number(foregroundWindow?.pid || 0) || null,
       }),
     });
     orbPerceptionErrorLogged = false;

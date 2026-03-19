@@ -22,6 +22,7 @@ The shell now splits into two surfaces:
 - registers `Ctrl+Shift+Alt+C` as a global click-through toggle so pointer control is recoverable
 - lets the live HUD consume those shell controls directly when running inside Electron
 - keeps the Orb outside the HUD so normal desktop presence does not require the full operator surface to stay visible
+- attaches a local active-surface perception feed to the Orb using the active display thumbnail, foreground-window metadata, and a focused crop around the cursor
 - creates a tray control surface for show/hide, click-through, topmost, HUD restart, and quit
 - persists overlay bounds, target display, always-on-top, and click-through state in the Electron user-data directory
 - reflects the current launch-at-login state in the desktop shell lifecycle surface
@@ -118,6 +119,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD can now inspect retained shell surfaces and reset local shell residue without deleting workspace continuity
 - the HUD can now inspect preflight diagnostics for runtime health, writable roots, startup support, and build posture
 - the HUD and tray can now create and restore shell rollback snapshots without replaying live authority or workspace state
+- the Orb now carries a richer active-surface perception contract with freshness, retention posture, display/window metadata, and a cursor-local focus crop instead of only a generic desktop-attached banner
 - the HUD can now surface exact decommission steps, retained paths, and generated cleanup commands before uninstall
 - the HUD and tray can now export a governed support bundle with lifecycle, recovery, runtime, and display posture
 - the HUD now surfaces build provenance for package inputs, package targets, and bundled runtime posture

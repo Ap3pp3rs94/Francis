@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 import subprocess
 
@@ -133,6 +134,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Queue Save" in response.text
     assert "Queue Typed Input" in response.text
     assert "Clear Queue" in response.text
+    assert "Focused local crop state will appear here." in response.text
     assert "Shift Report" in response.text
     assert "Shift report will render from away continuity, handback, and mission state." in response.text
     assert "Return briefing cards will render from the backend contract." in response.text
@@ -270,19 +272,26 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
 def test_hud_orb_perception_route_records_live_frame() -> None:
     previous = orb_perception_view.get_orb_perception_view()
     try:
+        captured_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         response = client.post(
             "/api/orb/perception",
             json={
-                "captured_at": "2026-03-18T12:00:00Z",
+                "captured_at": captured_at,
                 "display_id": 1,
+                "display_width": 1536,
+                "display_height": 912,
                 "idle_seconds": 12,
                 "cursor_x": 144,
                 "cursor_y": 288,
                 "frame_width": 720,
                 "frame_height": 405,
                 "frame_data_url": "data:image/jpeg;base64,abc123",
+                "focus_width": 196,
+                "focus_height": 196,
+                "focus_data_url": "data:image/jpeg;base64,focus456",
                 "window_title": "Francis Lens",
                 "process_name": "electron.exe",
+                "window_pid": 4242,
             },
         )
 
@@ -291,14 +300,24 @@ def test_hud_orb_perception_route_records_live_frame() -> None:
         assert body["surface"] == "orb_perception"
         assert body["state"] == "live"
         assert body["display_id"] == 1
+        assert body["display"]["width"] == 1536
+        assert body["display"]["height"] == 912
         assert body["cursor"] == {"x": 144, "y": 288}
         assert body["window"]["title"] == "Francis Lens"
+        assert body["window"]["pid"] == 4242
         assert body["frame"]["width"] == 720
-        assert "Live desktop context is attached" in body["summary"]
+        assert body["focus"]["width"] == 196
+        assert body["freshness"]["state"] == "fresh"
+        assert body["sensing"]["retention"] == "latest_frame_only"
+        assert body["cards"][0]["label"] == "Display"
+        assert "Francis sees Display 1" in body["summary"]
 
         get_response = client.get("/api/orb/perception")
         assert get_response.status_code == 200
-        assert get_response.json()["captured_at"] == "2026-03-18T12:00:00Z"
+        get_body = get_response.json()
+        assert get_body["captured_at"] == captured_at
+        assert get_body["frame"]["data_url"] == "data:image/jpeg;base64,abc123"
+        assert get_body["focus"]["data_url"] == "data:image/jpeg;base64,focus456"
     finally:
         orb_perception_view.record_orb_perception_view(previous)
 
