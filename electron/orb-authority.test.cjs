@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   canEngageOrbAuthority,
+  detectHumanActivitySignal,
   detectHumanCursorReturn,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
@@ -47,4 +48,25 @@ test("detectHumanCursorReturn ignores synthetic grace and catches cursor deviati
 test("detectHumanKeyboardReturn waits out grace and idle reset", () => {
   assert.equal(detectHumanKeyboardReturn({ live: true, idleSeconds: 0, lastSyntheticAtMs: 900, nowMs: 1000 }), false);
   assert.equal(detectHumanKeyboardReturn({ live: true, idleSeconds: 0, lastSyntheticAtMs: 0, nowMs: 2500 }), true);
+});
+
+test("detectHumanActivitySignal respects real activity after synthetic input", () => {
+  assert.equal(
+    detectHumanActivitySignal({
+      live: true,
+      lastHumanActivitySignalAtMs: 4200,
+      lastSyntheticAtMs: 3900,
+      nowMs: 4280,
+    }),
+    true,
+  );
+  assert.equal(
+    detectHumanActivitySignal({
+      live: true,
+      lastHumanActivitySignalAtMs: 3900,
+      lastSyntheticAtMs: 4200,
+      nowMs: 4280,
+    }),
+    false,
+  );
 });

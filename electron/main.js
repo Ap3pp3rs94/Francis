@@ -70,6 +70,7 @@ const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surfac
 const { buildOrbFocusCropRect } = require("./orb-perception");
 const {
   canEngageOrbAuthority,
+  detectHumanActivitySignal,
   detectHumanCursorReturn,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
@@ -130,6 +131,8 @@ let orbAuthorityState = {
   claimedCommandId: "",
   syntheticCursor: null,
   lastSyntheticAtMs: 0,
+  lastHumanActivitySignalAtMs: 0,
+  lastHumanActivitySignalSource: "",
   lastReleaseReason: "",
   lastHumanReturnReason: "",
 };
@@ -349,6 +352,8 @@ function getOrbAuthoritySnapshot() {
     idleSeconds: Number(orbAuthorityState.idleSeconds || 0),
     thresholdSeconds: Number(orbAuthorityState.thresholdSeconds || 30),
     claimedCommandId: String(orbAuthorityState.claimedCommandId || ""),
+    lastHumanActivitySignalAtMs: Number(orbAuthorityState.lastHumanActivitySignalAtMs || 0),
+    lastHumanActivitySignalSource: String(orbAuthorityState.lastHumanActivitySignalSource || ""),
     lastReleaseReason: String(orbAuthorityState.lastReleaseReason || ""),
     lastHumanReturnReason: String(orbAuthorityState.lastHumanReturnReason || ""),
   };
@@ -521,6 +526,18 @@ async function releaseOrbAuthority(reason, { humanReturned = false } = {}) {
   notifyOverlayState(mainWindow);
 }
 
+function signalOrbHumanActivity(source = "system_active") {
+  orbAuthorityState.lastHumanActivitySignalAtMs = Date.now();
+  orbAuthorityState.lastHumanActivitySignalSource = String(source || "system_active");
+  if (!orbAuthorityState.live) {
+    return;
+  }
+  void releaseOrbAuthority(
+    `Human input resumed via ${orbAuthorityState.lastHumanActivitySignalSource}. Francis handed control back immediately.`,
+    { humanReturned: true },
+  );
+}
+
 async function executeOrbAuthorityCommand(command, inputState) {
   const payload = command && typeof command === "object" ? command : {};
   const commandId = String(payload.id || "").trim();
@@ -638,6 +655,12 @@ async function tickOrbAuthorityLoop() {
     orbAuthorityState.thresholdSeconds = thresholdSeconds;
 
     if (
+      detectHumanActivitySignal({
+        live: orbAuthorityState.live,
+        lastHumanActivitySignalAtMs: orbAuthorityState.lastHumanActivitySignalAtMs,
+        lastSyntheticAtMs: orbAuthorityState.lastSyntheticAtMs,
+        nowMs: now,
+      }) ||
       detectHumanCursorReturn({
         live: orbAuthorityState.live,
         currentCursor: inputState?.cursorScreen,
@@ -2650,6 +2673,15 @@ function registerDisplayListeners() {
   });
 }
 
+function registerPowerMonitorListeners() {
+  if (!powerMonitor || typeof powerMonitor.on !== "function") {
+    return;
+  }
+  powerMonitor.on("user-did-become-active", () => {
+    signalOrbHumanActivity("power_monitor");
+  });
+}
+
 async function initializeHudRuntime() {
   hudRuntime = createHudRuntimeManager({
     appDir: __dirname,
@@ -2733,6 +2765,7 @@ if (!app.requestSingleInstanceLock()) {
     markSessionLaunch();
     registerIpc();
     registerDisplayListeners();
+    registerPowerMonitorListeners();
     await initializeHudRuntime();
     mainWindow = createMainWindow();
     orbWindow = createOrbWindow();

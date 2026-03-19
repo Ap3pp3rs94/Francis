@@ -742,6 +742,24 @@
         gap: 10px;
       }
 
+      .overlay-perception-preview {
+        display: grid;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid rgba(23, 32, 42, 0.1);
+        border-radius: 16px;
+        background: rgba(246, 249, 252, 0.92);
+      }
+
+      .overlay-perception-preview img {
+        width: 100%;
+        max-height: 132px;
+        object-fit: cover;
+        border-radius: 12px;
+        border: 1px solid rgba(23, 32, 42, 0.12);
+        background: rgba(10, 18, 28, 0.08);
+      }
+
       #orb-render-root {
         position: absolute;
         top: 0;
@@ -1851,6 +1869,10 @@
           <div class="desktop-pill"><strong>Focus</strong><span>Focused local crop state will appear here.</span></div>
           <div class="desktop-pill"><strong>Retention</strong><span>Latest-frame-only sensing posture will appear here.</span></div>
         </div>
+        <div class="overlay-perception-preview" id="overlay-perception-preview">
+          <strong>Focus Preview</strong>
+          <span class="meta tiny">A cursor-local active-surface crop will appear here when Orb perception is live.</span>
+        </div>
         <div class="overlay-dock-reply" id="overlay-chat-reply">
           Ask a short question or give a direct command without opening Lens.
         </div>
@@ -2327,6 +2349,7 @@
         const chatSend = document.getElementById("overlay-chat-send");
         const perceptionSummary = document.getElementById("overlay-perception-summary");
         const perceptionCards = document.getElementById("overlay-perception-cards");
+        const perceptionPreview = document.getElementById("overlay-perception-preview");
         const authorityMeta = document.getElementById("overlay-authority-meta");
         const authoritySummary = document.getElementById("overlay-authority-summary");
         const authorityCards = document.getElementById("overlay-authority-cards");
@@ -2348,6 +2371,7 @@
           !chatSend ||
           !perceptionSummary ||
           !perceptionCards ||
+          !perceptionPreview ||
           !authorityMeta ||
           !authoritySummary ||
           !authorityCards ||
@@ -2443,6 +2467,17 @@
             return `<div class="desktop-pill"><strong>${label}</strong><span>${value}</span></div>`;
           })
           .join("");
+        const focusDataUrl = String(
+          currentOrbPerception?.focus?.data_url
+            || currentOrbPerception?.frame?.data_url
+            || "",
+        ).trim();
+        const focusSummary = escapeHtml(
+          String(currentOrbPerception?.detail_summary || "A cursor-local active-surface crop will appear here when Orb perception is live."),
+        );
+        perceptionPreview.innerHTML = focusDataUrl
+          ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusSummary}</span>`
+          : `<strong>Focus Preview</strong><span class="meta tiny">${focusSummary}</span>`;
         authorityMeta.textContent = currentOrbAuthority?.state?.live
           ? "Away authority is live. Human return or panic stop will release immediately."
           : authorityQueueCount > 0
