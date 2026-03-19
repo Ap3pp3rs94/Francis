@@ -228,6 +228,16 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": False,
+            "controls": {
+                "primary_action": "open_lens",
+                "primary_label": "Open Lens",
+                "secondary_action": "receipt"
+                if bool(operator_controls.get("receipt_available"))
+                else "",
+                "secondary_label": "Latest Receipt"
+                if bool(operator_controls.get("receipt_available"))
+                else "",
+            },
         }
 
     if str(operator_controls.get("run_mode", "")).strip() == "approve_and_run" and str(
@@ -250,6 +260,16 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": False,
+            "controls": {
+                "primary_action": "run",
+                "primary_label": "Approve + Run",
+                "secondary_action": "preview"
+                if bool(operator_controls.get("preview_enabled"))
+                else "",
+                "secondary_label": "Preview"
+                if bool(operator_controls.get("preview_enabled"))
+                else "",
+            },
         }
 
     if top_blocked is not None or str(focus_action.get("state", "")).strip().lower() == "blocked":
@@ -270,6 +290,16 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": False,
+            "controls": {
+                "primary_action": "open_lens",
+                "primary_label": "Open Lens",
+                "secondary_action": "preview"
+                if bool(operator_controls.get("preview_enabled"))
+                else "",
+                "secondary_label": "Preview"
+                if bool(operator_controls.get("preview_enabled"))
+                else "",
+            },
         }
 
     if _incident_rank(incident_severity) >= 2 or bool(next_action_resume.get("can_resume")):
@@ -290,6 +320,20 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": True,
+            "controls": {
+                "primary_action": "preview"
+                if bool(operator_controls.get("preview_enabled"))
+                else "open_lens",
+                "primary_label": "Preview"
+                if bool(operator_controls.get("preview_enabled"))
+                else "Open Lens",
+                "secondary_action": "open_lens"
+                if bool(operator_controls.get("preview_enabled"))
+                else "",
+                "secondary_label": "Open Lens"
+                if bool(operator_controls.get("preview_enabled"))
+                else "",
+            },
         }
 
     return {
@@ -301,6 +345,12 @@ def _build_orb_interjection_view(
         "detail": "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
         "prompt": "",
         "can_defer": True,
+        "controls": {
+            "primary_action": "",
+            "primary_label": "",
+            "secondary_action": "",
+            "secondary_label": "",
+        },
     }
 
 

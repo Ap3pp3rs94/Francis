@@ -1914,6 +1914,10 @@
           Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.
         </div>
         <div class="meta tiny" id="overlay-interjection-prompt"></div>
+        <div class="overlay-dock-operator-actions" id="overlay-interjection-actions">
+          <button class="btn-primary" type="button" id="overlay-interjection-primary" hidden onclick="executeOrbInterjectionAction('primary')">Open Lens</button>
+          <button class="btn-secondary" type="button" id="overlay-interjection-secondary" hidden onclick="executeOrbInterjectionAction('secondary')">Preview</button>
+        </div>
       </div>
       <div class="overlay-dock-operator">
         <div class="overlay-dock-chat-head">
@@ -2043,6 +2047,12 @@
         summary: "Francis is not interrupting the work.",
         detail: "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
         prompt: "",
+        controls: {
+          primary_action: "",
+          primary_label: "",
+          secondary_action: "",
+          secondary_label: "",
+        },
       };
       let currentShiftReport = {};
       let currentMissionsSurface = {};
@@ -2424,6 +2434,9 @@
         const interjectionSummary = document.getElementById("overlay-interjection-summary");
         const interjectionDetail = document.getElementById("overlay-interjection-detail");
         const interjectionPrompt = document.getElementById("overlay-interjection-prompt");
+        const interjectionActions = document.getElementById("overlay-interjection-actions");
+        const interjectionPrimary = document.getElementById("overlay-interjection-primary");
+        const interjectionSecondary = document.getElementById("overlay-interjection-secondary");
         const focusMeta = document.getElementById("overlay-focus-meta");
         const focusSummary = document.getElementById("overlay-focus-summary");
         const receiptSummary = document.getElementById("overlay-receipt-summary");
@@ -2456,6 +2469,9 @@
           !interjectionSummary ||
           !interjectionDetail ||
           !interjectionPrompt ||
+          !interjectionActions ||
+          !interjectionPrimary ||
+          !interjectionSecondary ||
           !focusMeta ||
           !focusSummary ||
           !receiptSummary ||
@@ -2554,6 +2570,20 @@
             || "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
         );
         interjectionPrompt.textContent = String(currentOrbInterjection?.prompt || "");
+        const interjectionControls = currentOrbInterjection?.controls && typeof currentOrbInterjection.controls === "object"
+          ? currentOrbInterjection.controls
+          : {};
+        const primaryLabel = String(interjectionControls.primary_label || "").trim();
+        const primaryAction = String(interjectionControls.primary_action || "").trim();
+        const secondaryLabel = String(interjectionControls.secondary_label || "").trim();
+        const secondaryAction = String(interjectionControls.secondary_action || "").trim();
+        interjectionActions.hidden = !interjectionActive || (!primaryAction && !secondaryAction);
+        interjectionPrimary.hidden = !interjectionActive || !primaryAction || !primaryLabel;
+        interjectionPrimary.textContent = primaryLabel || "Open Lens";
+        interjectionPrimary.dataset.action = primaryAction;
+        interjectionSecondary.hidden = !interjectionActive || !secondaryAction || !secondaryLabel;
+        interjectionSecondary.textContent = secondaryLabel || "Preview";
+        interjectionSecondary.dataset.action = secondaryAction;
         focusMeta.textContent = String(focusContext.meta || "No current move is surfaced yet.");
         focusSummary.textContent = String(focusContext.summary || "Francis is waiting for the next grounded move.");
         receiptSummary.textContent = String(
@@ -2960,6 +2990,33 @@
             || (context.relatedReceipt ? summarizeReceiptDetail(context.relatedReceipt) : "No latest receipt is attached to the current Orb move."),
         );
         renderOverlayDock();
+      }
+
+      async function executeOrbInterjectionAction(slot) {
+        const controls = currentOrbInterjection?.controls && typeof currentOrbInterjection.controls === "object"
+          ? currentOrbInterjection.controls
+          : {};
+        const action = String(
+          slot === "secondary" ? controls.secondary_action || "" : controls.primary_action || "",
+        ).trim().toLowerCase();
+        if (!action) {
+          return;
+        }
+        if (action === "preview") {
+          await previewOrbFocusAction();
+          return;
+        }
+        if (action === "run") {
+          await runOrbFocusAction();
+          return;
+        }
+        if (action === "receipt") {
+          showOrbLatestReceipt();
+          return;
+        }
+        if (action === "open_lens") {
+          await openLensFromOrbSurface();
+        }
       }
 
       async function queueOrbAuthorityCommand(kind, args = {}, reason = "") {

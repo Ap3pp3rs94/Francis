@@ -119,3 +119,6 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert interjection["reason_kind"] == "approval_ready"
     assert interjection["can_defer"] is False
     assert "Approval approval-1 is ready." in interjection["prompt"]
+    assert interjection["controls"]["primary_action"] == "run"
+    assert interjection["controls"]["primary_label"] == "Approve + Run"
+    assert interjection["controls"]["secondary_action"] == "preview"

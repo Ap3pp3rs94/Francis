@@ -269,6 +269,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
     assert 'const operator = currentOrbOperator && typeof currentOrbOperator === "object"' in response.text
     assert 'id="overlay-interjection"' in response.text
+    assert 'function executeOrbInterjectionAction(slot)' in response.text
+    assert 'id="overlay-interjection-primary"' in response.text
     assert 'id="overlay-perception-preview"' in response.text
     assert 'function previewOrbFocusAction()' in response.text
     assert 'function runOrbFocusAction()' in response.text
