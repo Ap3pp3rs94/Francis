@@ -326,6 +326,7 @@ def _build_takeover_desktop_run_contract(
         "repo.tests",
         "repo.tests.request_approval",
         "control.takeover.confirm",
+        "control.remote.approval.reject",
     }:
         focus_target = resolve_orb_focus_target()
         if not isinstance(focus_target, dict):
@@ -339,6 +340,11 @@ def _build_takeover_desktop_run_contract(
         zone_kind = str(zone.get("kind", "")).strip().lower()
         if zone_kind not in {"francis_action_row", "francis_navigation", "francis_workspace", "francis_footer_actions"}:
             return None
+        preferred_affordance_kinds = {"focus_click", "open_key", "confirm_key"}
+        if focus_kind == "control.remote.approval.reject":
+            if zone_kind not in {"francis_action_row", "francis_workspace", "francis_footer_actions"}:
+                return None
+            preferred_affordance_kinds = {"focus_click", "cancel_key"}
         if str(target.get("confidence", "")).strip().lower() not in {"likely", "medium"}:
             return None
         target_stability = target.get("stability", {}) if isinstance(target.get("stability"), dict) else {}
@@ -352,7 +358,7 @@ def _build_takeover_desktop_run_contract(
                 row
                 for row in affordances
                 if isinstance(row, dict)
-                and str(row.get("kind", "")).strip().lower() in {"focus_click", "open_key", "confirm_key"}
+                and str(row.get("kind", "")).strip().lower() in preferred_affordance_kinds
                 and isinstance(row.get("command"), dict)
             ),
             None,

@@ -3075,6 +3075,52 @@ def test_hud_runs_view_carries_latest_receipt_summary(monkeypatch) -> None:
     assert payload["run_groups"][1]["detail_state"] == "historical"
 
 
+def test_hud_runs_view_carries_orb_authority_receipt_cards(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "runs": {
+                "last_run": {
+                    "run_id": "run-orb",
+                    "phase": "execute",
+                    "summary": "Orb authority executed through takeover.",
+                },
+                "recent": [
+                    {
+                        "run_id": "run-orb",
+                        "event_count": 2,
+                        "last_kind": "orb.authority.command.completed",
+                        "last_ts": "2026-03-19T10:02:00+00:00",
+                    }
+                ],
+                "ledger_tail": [
+                    {
+                        "run_id": "run-orb",
+                        "ts": "2026-03-19T10:02:00+00:00",
+                        "kind": "orb.authority.command.completed",
+                        "summary": {
+                            "command_kind": "keyboard.key",
+                            "summary_text": "keyboard.key is completed. Press Escape on the Francis footer action controls.",
+                            "presentation_cards": [
+                                {"label": "Command", "value": "keyboard.key", "tone": "medium"},
+                                {"label": "Grounding", "value": "Concrete Francis footer actions target. Cancel is grounded from the Orb.", "tone": "medium"},
+                                {"label": "Target", "value": "Cancel", "tone": "medium"},
+                            ],
+                        },
+                    }
+                ],
+            }
+        }
+
+    monkeypatch.setattr(runs_view, "build_lens_snapshot", _snapshot)
+
+    payload = runs_view.get_runs_view()
+
+    assert any(card["label"] == "Grounding" for card in payload["active_run"]["detail_cards"])
+    assert any(card["label"] == "Target" for card in payload["run_groups"][0]["detail_cards"])
+    assert payload["run_groups"][0]["audit"]["latest_receipt_cards"][0]["label"] == "Command"
+    assert payload["run_groups"][0]["audit"]["latest_receipt_cards"][1]["label"] == "Grounding"
+
+
 def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> None:
     workspace_root = (tmp_path / "workspace").resolve()
     monkeypatch.setattr(hud_state, "DEFAULT_WORKSPACE_ROOT", workspace_root)

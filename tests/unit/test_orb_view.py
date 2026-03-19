@@ -614,6 +614,94 @@ def test_get_orb_view_auto_plans_navigation_open_on_francis_surface(monkeypatch)
     assert controls["desktop_run_args"]["commands"][0]["args"]["key"] == "enter"
 
 
+def test_get_orb_view_auto_plans_reject_on_francis_footer_controls(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "away"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": True, "session_id": "session-reject"},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "away", "posture": "acting", "summary": "Active"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 0},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "resolve_orb_focus_target",
+        lambda: {
+            "x": 622,
+            "y": 516,
+            "display_id": 1,
+            "surface": {"kind": "francis", "label": "Francis surface"},
+            "zone": {"kind": "francis_footer_actions", "label": "Francis footer actions"},
+            "affordances": [
+                {
+                    "kind": "cancel_key",
+                    "label": "Cancel",
+                    "summary": "Press Escape on the Francis footer action controls.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "escape"},
+                        "reason": "Press Escape on the Francis footer action controls during Orb authority.",
+                    },
+                }
+            ],
+            "target": {
+                "label": "Francis rejection control",
+                "confidence": "likely",
+                "stability": {"state": "settled"},
+                "window": {"in_bounds": True},
+            },
+            "freshness": {"state": "fresh", "age_ms": 120},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "control.remote.approval.reject",
+                "execute_kind": "control.remote.approval.reject",
+                "args": {"approval_id": "approval-9", "reason": "Scope is too broad."},
+                "enabled": True,
+                "label": "Reject Approval",
+                "reason": "The approval needs an explicit rejection path.",
+                "risk_tier": "medium",
+                "state": "ready",
+            },
+            "next_action": {"kind": "control.remote.approval.reject", "label": "Reject Approval"},
+            "next_action_resume": {},
+            "operator_link": {"action_kind": "control.remote.approval.reject"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_approval_queue_view", lambda **_: {"surface": "approval_queue", "items": []})
+    monkeypatch.setattr(orb_view, "get_execution_journal_view", lambda **_: {"surface": "execution_journal", "items": []})
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
+
+    controls = orb["operator"]["controls"]
+    assert orb["operator"]["target_cue"]["state"] == "concrete"
+    assert controls["desktop_run_enabled"] is True
+    assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
+    assert controls["desktop_run_args"]["commands"][0]["kind"] == "keyboard.key"
+    assert controls["desktop_run_args"]["commands"][0]["args"]["key"] == "escape"
+
+
 def test_get_orb_view_does_not_auto_plan_transient_francis_targets(monkeypatch) -> None:
     snapshot = {
         "control": {"mode": "away"},

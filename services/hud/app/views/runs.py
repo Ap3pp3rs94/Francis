@@ -12,11 +12,14 @@ def _receipt_summary(row: dict[str, Any]) -> str:
         if explicit:
             return explicit
         action_kind = str(summary.get("action_kind", "")).strip()
+        command_kind = str(summary.get("command_kind", "")).strip()
         result_status = str(summary.get("result_status", "")).strip()
         if action_kind and result_status:
             return f"{action_kind} {result_status}".strip()
         if action_kind:
             return action_kind
+        if command_kind:
+            return command_kind
     if isinstance(summary, str):
         return summary.strip()
     return ""
@@ -31,6 +34,23 @@ def _latest_receipt_for_run(run_id: str, ledger_tail: list[dict[str, Any]]) -> d
         if str(row.get("run_id", "")).strip() == run_id:
             return row
     return None
+
+
+def _receipt_cards(row: dict[str, Any] | None) -> list[dict[str, str]]:
+    if not isinstance(row, dict):
+        return []
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    presentation_cards = summary.get("presentation_cards", []) if isinstance(summary, dict) else []
+    cards: list[dict[str, str]] = []
+    for item in presentation_cards[:3]:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label", "")).strip()
+        value = str(item.get("value", "")).strip()
+        tone = str(item.get("tone", "low")).strip().lower() or "low"
+        if label and value:
+            cards.append({"label": label, "value": value, "tone": tone})
+    return cards
 
 
 def _detail_summary(row: dict[str, Any]) -> str:
@@ -56,6 +76,7 @@ def _detail_cards(
     event_count: int = 0,
     receipt_summary: str = "",
     receipt_kind: str = "",
+    receipt_cards: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     cards = [
         {"label": "Run", "value": run_id or "none", "tone": "medium" if run_id and run_id != "none" else "low"},
@@ -65,6 +86,8 @@ def _detail_cards(
         cards.append({"label": "Events", "value": str(event_count), "tone": "low"})
     elif summary:
         cards.append({"label": "State", "value": "active", "tone": "low"})
+    if isinstance(receipt_cards, list):
+        cards.extend(receipt_cards[:3])
     if receipt_kind:
         cards.append({"label": "Receipt", "value": receipt_kind, "tone": "low"})
     if receipt_summary:
@@ -81,6 +104,7 @@ def _audit(
     event_count: int = 0,
     receipt_summary: str = "",
     receipt_kind: str = "",
+    receipt_cards: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     return {
         "run_id": run_id,
@@ -90,6 +114,7 @@ def _audit(
         "event_count": event_count,
         "latest_receipt": receipt_summary,
         "latest_receipt_kind": receipt_kind,
+        "latest_receipt_cards": receipt_cards[:3] if isinstance(receipt_cards, list) else [],
     }
 
 
@@ -108,6 +133,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
     active_receipt = _latest_receipt_for_run(active_run["run_id"], ledger_tail)
     active_receipt_summary = _receipt_summary(active_receipt) if isinstance(active_receipt, dict) else ""
     active_receipt_kind = str(active_receipt.get("kind", "")).strip() if isinstance(active_receipt, dict) else ""
+    active_receipt_cards = _receipt_cards(active_receipt)
     active_run["detail_summary"] = _detail_summary(active_run)
     if active_receipt_summary:
         active_run["detail_summary"] = f"{active_run['detail_summary']} | {active_receipt_summary}".strip()
@@ -117,6 +143,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
         summary=active_run["summary"],
         receipt_summary=active_receipt_summary,
         receipt_kind=active_receipt_kind,
+        receipt_cards=active_receipt_cards,
     )
     active_run["detail_state"] = "current" if active_run["run_id"] != "none" else "idle"
     active_run["audit"] = _audit(
@@ -126,6 +153,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
         detail_state=active_run["detail_state"],
         receipt_summary=active_receipt_summary,
         receipt_kind=active_receipt_kind,
+        receipt_cards=active_receipt_cards,
     )
     run_groups: list[dict[str, Any]] = []
     for row in recent:
@@ -137,6 +165,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
         receipt = _latest_receipt_for_run(run_id, ledger_tail)
         receipt_summary = _receipt_summary(receipt) if isinstance(receipt, dict) else ""
         receipt_kind = str(receipt.get("kind", "")).strip() if isinstance(receipt, dict) else ""
+        receipt_cards = _receipt_cards(receipt)
         item = dict(row)
         item["detail_summary"] = _detail_summary(
             {
@@ -157,6 +186,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
             event_count=event_count,
             receipt_summary=receipt_summary,
             receipt_kind=receipt_kind,
+            receipt_cards=receipt_cards,
         )
         item["detail_state"] = _detail_state(run_id=run_id, active_run_id=active_run["run_id"])
         item["audit"] = _audit(
@@ -167,6 +197,7 @@ def get_runs_view(*, snapshot: dict[str, object] | None = None) -> dict[str, obj
             event_count=event_count,
             receipt_summary=receipt_summary,
             receipt_kind=receipt_kind,
+            receipt_cards=receipt_cards,
         )
         run_groups.append(item)
     return {
