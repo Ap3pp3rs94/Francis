@@ -178,6 +178,10 @@ class HudOrbPerceptionFrameRequest(BaseModel):
     window_y: int | None = None
     window_width: int = 0
     window_height: int = 0
+    target_stability_state: str = "idle"
+    target_stability_dwell_ms: int = 0
+    target_stability_travel_px: int = 0
+    target_stability_sample_count: int = 0
     frame_width: int = 0
     frame_height: int = 0
     frame_data_url: str = ""
@@ -586,6 +590,12 @@ def _build_app() -> FastAPI:
                         "width": payload.window_width,
                         "height": payload.window_height,
                     },
+                },
+                "target_stability": {
+                    "state": payload.target_stability_state,
+                    "dwell_ms": payload.target_stability_dwell_ms,
+                    "travel_px": payload.target_stability_travel_px,
+                    "sample_count": payload.target_stability_sample_count,
                 },
                 "frame": {
                     "width": payload.frame_width,

@@ -67,7 +67,7 @@ const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
 const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
-const { buildOrbFocusCropRect } = require("./orb-perception");
+const { buildOrbFocusCropRect, buildOrbTargetStability } = require("./orb-perception");
 const {
   canEngageOrbAuthority,
   detectHumanActivitySignal,
@@ -122,6 +122,7 @@ let orbForegroundWindow = {
   pid: null,
   updatedAt: 0,
 };
+let orbCursorStabilitySamples = [];
 let orbAuthorityState = {
   state: "human_active",
   eligible: false,
@@ -324,6 +325,37 @@ function getOrbSurfaceBounds() {
   return buildOrbWindowBounds(getSortedDisplays());
 }
 
+function getOrbTargetStability(cursorScreen) {
+  const nowMs = Date.now();
+  if (cursorScreen && Number.isFinite(cursorScreen.x) && Number.isFinite(cursorScreen.y)) {
+    const nextSample = {
+      x: Math.round(Number(cursorScreen.x)),
+      y: Math.round(Number(cursorScreen.y)),
+      at: nowMs,
+    };
+    const lastSample = orbCursorStabilitySamples[orbCursorStabilitySamples.length - 1] || null;
+    if (
+      !lastSample
+      || lastSample.x !== nextSample.x
+      || lastSample.y !== nextSample.y
+      || nowMs - lastSample.at >= 40
+    ) {
+      orbCursorStabilitySamples.push(nextSample);
+    } else {
+      lastSample.at = nowMs;
+    }
+  }
+
+  orbCursorStabilitySamples = orbCursorStabilitySamples
+    .filter((sample) => sample && Number.isFinite(sample.at) && nowMs - sample.at <= 1000)
+    .slice(-16);
+
+  return buildOrbTargetStability({
+    samples: orbCursorStabilitySamples,
+    nowMs,
+  });
+}
+
 function getOverlayInputState() {
   const cursorScreen = screen.getCursorScreenPoint();
   const activeDisplay = screen.getDisplayNearestPoint(cursorScreen);
@@ -333,6 +365,7 @@ function getOverlayInputState() {
     y: cursorScreen.y - Number(workArea.y || 0),
   };
   const idleSeconds = Number(powerMonitor?.getSystemIdleTime?.() || 0);
+  const targetStability = getOrbTargetStability(cursorScreen);
   return {
     displayId: activeDisplay.id,
     cursorScreen,
@@ -341,6 +374,7 @@ function getOverlayInputState() {
     idleSeconds,
     idleThresholdSeconds: 30,
     humanActive: idleSeconds < 30,
+    targetStability,
   };
 }
 
@@ -2077,6 +2111,10 @@ async function pushOrbPerceptionFrame() {
         window_y: Number.isFinite(foregroundWindow?.bounds?.y) ? Math.round(foregroundWindow.bounds.y) : null,
         window_width: Number(foregroundWindow?.bounds?.width || 0),
         window_height: Number(foregroundWindow?.bounds?.height || 0),
+        target_stability_state: String(input?.targetStability?.state || "idle"),
+        target_stability_dwell_ms: Number(input?.targetStability?.dwellMs || 0),
+        target_stability_travel_px: Number(input?.targetStability?.travelPx || 0),
+        target_stability_sample_count: Number(input?.targetStability?.sampleCount || 0),
       }),
     });
     orbPerceptionErrorLogged = false;

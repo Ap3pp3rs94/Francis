@@ -2685,6 +2685,7 @@
           String(surfaceContract.label || "Application surface").trim(),
           String(zoneContract.label || "Active zone").trim(),
           titleCase(String(targetContract.confidence || "low")),
+          titleCase(String(targetContract.stability?.state || "idle").replaceAll("_", " ")),
           targetContract.window?.in_bounds ? "Inside foreground window" : "Weak window match",
         ].filter(Boolean);
         const previewActionHint = affordancePreview.length

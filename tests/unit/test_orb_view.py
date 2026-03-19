@@ -249,7 +249,7 @@ def test_get_orb_view_auto_plans_francis_surface_actions_for_takeover(monkeypatc
             "y": 340,
             "display_id": 1,
             "surface": {"kind": "francis", "label": "Francis surface"},
-            "zone": {"kind": "francis_panel", "label": "Francis control panel"},
+            "zone": {"kind": "francis_workspace", "label": "Francis workspace panel"},
             "affordances": [
                 {
                     "kind": "focus_click",
@@ -265,6 +265,7 @@ def test_get_orb_view_auto_plans_francis_surface_actions_for_takeover(monkeypatc
             "target": {
                 "label": "Francis focus point",
                 "confidence": "likely",
+                "stability": {"state": "settled"},
                 "window": {"in_bounds": True},
             },
             "freshness": {"state": "fresh", "age_ms": 120},
@@ -336,7 +337,7 @@ def test_get_orb_view_auto_plans_repo_tests_request_on_francis_surface(monkeypat
             "y": 402,
             "display_id": 1,
             "surface": {"kind": "francis", "label": "Francis surface"},
-            "zone": {"kind": "francis_panel", "label": "Francis control panel"},
+            "zone": {"kind": "francis_workspace", "label": "Francis workspace panel"},
             "affordances": [
                 {
                     "kind": "focus_click",
@@ -352,6 +353,7 @@ def test_get_orb_view_auto_plans_repo_tests_request_on_francis_surface(monkeypat
             "target": {
                 "label": "Francis focus point",
                 "confidence": "likely",
+                "stability": {"state": "settled"},
                 "window": {"in_bounds": True},
             },
             "freshness": {"state": "fresh", "age_ms": 120},
@@ -388,3 +390,88 @@ def test_get_orb_view_auto_plans_repo_tests_request_on_francis_surface(monkeypat
     assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
     assert controls["desktop_run_args"]["commands"][0]["args"]["x"] == 612
     assert controls["desktop_run_args"]["commands"][0]["args"]["y"] == 402
+
+
+def test_get_orb_view_does_not_auto_plan_transient_francis_targets(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "away"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": True, "session_id": "session-5"},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "away", "posture": "acting", "summary": "Active"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 0},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "resolve_orb_focus_target",
+        lambda: {
+            "x": 612,
+            "y": 402,
+            "display_id": 1,
+            "surface": {"kind": "francis", "label": "Francis surface"},
+            "zone": {"kind": "francis_workspace", "label": "Francis workspace panel"},
+            "affordances": [
+                {
+                    "kind": "focus_click",
+                    "label": "Focus Click",
+                    "summary": "Click the focused Francis control.",
+                    "command": {
+                        "kind": "mouse.click",
+                        "args": {"x": 612, "y": 402, "button": "left", "coordinate_space": "display"},
+                        "reason": "Click the focused Francis control during Orb authority.",
+                    },
+                }
+            ],
+            "target": {
+                "label": "Francis focus point",
+                "confidence": "low",
+                "stability": {"state": "transient"},
+                "window": {"in_bounds": True},
+            },
+            "freshness": {"state": "fresh", "age_ms": 120},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "repo.tests.request_approval",
+                "execute_kind": "repo.tests.request_approval",
+                "args": {"lane": "fast"},
+                "enabled": True,
+                "label": "Request Fast Checks Approval",
+                "reason": "Tests need operator approval.",
+                "risk_tier": "low",
+                "state": "ready",
+            },
+            "next_action": {"kind": "repo.tests.request_approval", "label": "Request Fast Checks Approval"},
+            "next_action_resume": {},
+            "operator_link": {"action_kind": "repo.tests"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_approval_queue_view", lambda **_: {"surface": "approval_queue", "items": []})
+    monkeypatch.setattr(orb_view, "get_execution_journal_view", lambda **_: {"surface": "execution_journal", "items": []})
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
+
+    controls = orb["operator"]["controls"]
+    assert controls["desktop_run_enabled"] is False
+    assert controls["desktop_run_kind"] == ""

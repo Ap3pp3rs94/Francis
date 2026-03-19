@@ -12,6 +12,12 @@ _DEFAULT_PERCEPTION: dict[str, Any] = {
     },
     "cursor": {"x": None, "y": None},
     "idle_seconds": 0,
+    "target_stability": {
+        "state": "idle",
+        "dwell_ms": 0,
+        "travel_px": 0,
+        "sample_count": 0,
+    },
     "window": {
         "title": "",
         "process": "",
@@ -75,6 +81,11 @@ def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
     cursor = payload.get("cursor", {}) if isinstance(payload.get("cursor"), dict) else {}
     window = payload.get("window", {}) if isinstance(payload.get("window"), dict) else {}
     display = payload.get("display", {}) if isinstance(payload.get("display"), dict) else {}
+    target_stability = (
+        payload.get("target_stability", {})
+        if isinstance(payload.get("target_stability"), dict)
+        else {}
+    )
 
     captured_at = str(payload.get("captured_at", "")).strip() or None
     display_id = _normalize_optional_int(payload.get("display_id"))
@@ -100,6 +111,12 @@ def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "y": cursor_y,
         },
         "idle_seconds": idle_seconds,
+        "target_stability": {
+            "state": str(target_stability.get("state", "idle")).strip().lower() or "idle",
+            "dwell_ms": _normalize_dimension(target_stability.get("dwell_ms")),
+            "travel_px": _normalize_dimension(target_stability.get("travel_px")),
+            "sample_count": _normalize_dimension(target_stability.get("sample_count")),
+        },
         "window": {
             "title": window_title,
             "process": process_name,
@@ -243,6 +260,10 @@ def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], s
     window_bounds = window.get("bounds", {}) if isinstance(window.get("bounds"), dict) else {}
     x = _normalize_optional_int(cursor.get("x"))
     y = _normalize_optional_int(cursor.get("y"))
+    stability = payload.get("target_stability", {}) if isinstance(payload.get("target_stability"), dict) else {}
+    stability_state = str(stability.get("state", "idle")).strip().lower() or "idle"
+    dwell_ms = _normalize_dimension(stability.get("dwell_ms"))
+    travel_px = _normalize_dimension(stability.get("travel_px"))
     focus_attached = bool(str(focus.get("data_url", "")).strip())
     freshness_state = str(freshness.get("state", "idle")).strip().lower() or "idle"
     actionable = x is not None and y is not None and freshness_state in {"fresh", "cooling"}
@@ -269,6 +290,15 @@ def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], s
     label = label_map.get(str(surface.get("kind", "")).strip().lower(), "Active focus point")
     coordinate_summary = f"({x}, {y})" if x is not None and y is not None else "unresolved coordinates"
     crop_summary = "Local focus crop is attached." if focus_attached else "No local focus crop is attached."
+    stability_summary = (
+        f" Cursor target is settled after {dwell_ms}ms with {travel_px}px of recent travel."
+        if stability_state == "settled"
+        else f" Cursor target is still tracking with {travel_px}px of recent travel."
+        if stability_state == "tracking"
+        else f" Cursor target is transient with {travel_px}px of recent travel."
+        if stability_state == "transient"
+        else " Cursor target stability is not attached yet."
+    )
     window_summary = (
         f" Cursor is inside the foreground window at ({cursor_window_x}, {cursor_window_y})."
         if in_window and cursor_window_x is not None and cursor_window_y is not None
@@ -279,13 +309,20 @@ def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], s
     target = {
         "kind": "cursor_focus",
         "label": label,
-        "summary": f"{label} at {coordinate_summary}. {crop_summary}{window_summary}",
+        "summary": f"{label} at {coordinate_summary}. {crop_summary}{stability_summary}{window_summary}",
         "actionable": actionable,
         "confidence": "likely"
-        if actionable and focus_attached and in_window
+        if actionable and focus_attached and in_window and stability_state == "settled"
         else "medium"
-        if actionable and (focus_attached or in_window)
+        if actionable and stability_state in {"settled", "tracking"} and (focus_attached or in_window)
         else "low",
+        "stability": {
+            "state": stability_state,
+            "dwell_ms": dwell_ms,
+            "travel_px": travel_px,
+            "sample_count": _normalize_dimension(stability.get("sample_count")),
+            "summary": stability_summary.strip(),
+        },
         "window": {
             "x": cursor_window_x,
             "y": cursor_window_y,
@@ -369,14 +406,26 @@ def _infer_target_zone(payload: dict[str, Any], surface: dict[str, str], target:
             zone_label = "File list"
             zone_summary = "The cursor is over the primary file list where open/select actions usually land."
     elif surface_kind == "francis":
-        if y_ratio <= 0.18:
+        if y_ratio <= 0.12:
             zone_kind = "francis_header"
             zone_label = "Francis header"
             zone_summary = "The cursor is near the Francis control header."
+        elif y_ratio <= 0.28:
+            zone_kind = "francis_action_row"
+            zone_label = "Francis action row"
+            zone_summary = "The cursor is near primary Francis action controls."
+        elif x_ratio <= 0.3:
+            zone_kind = "francis_navigation"
+            zone_label = "Francis navigation rail"
+            zone_summary = "The cursor is near Francis navigation and surface selection controls."
+        elif y_ratio >= 0.8:
+            zone_kind = "francis_footer_actions"
+            zone_label = "Francis footer actions"
+            zone_summary = "The cursor is near Francis footer actions and confirmation controls."
         else:
-            zone_kind = "francis_panel"
-            zone_label = "Francis control panel"
-            zone_summary = "The cursor is over a Francis control panel."
+            zone_kind = "francis_workspace"
+            zone_label = "Francis workspace panel"
+            zone_summary = "The cursor is over a Francis workspace control panel."
     else:
         if y_ratio <= 0.15:
             zone_kind = "application_header"
@@ -539,6 +588,8 @@ def _build_cards(payload: dict[str, Any], freshness: dict[str, Any], surface: di
         for item in affordances[:2]
         if isinstance(item, dict) and str(item.get("label", "")).strip()
     ) or "No suggested surface actions"
+    stability = target.get("stability", {}) if isinstance(target.get("stability"), dict) else {}
+    stability_label = str(stability.get("state", "idle")).strip().replace("_", " ") or "idle"
     freshness_state = str(freshness.get("state", "idle"))
     freshness_tone = "high" if freshness_state == "stale" else "medium" if freshness_state == "cooling" else "low"
 
@@ -550,6 +601,7 @@ def _build_cards(payload: dict[str, Any], freshness: dict[str, Any], surface: di
         {"label": "Cursor", "value": cursor_label, "tone": "low"},
         {"label": "Target", "value": str(target.get("label", "Active focus point")).strip(), "tone": "medium" if target.get("actionable") else "low"},
         {"label": "Zone", "value": str(zone.get("label", "Active zone")).strip(), "tone": "low"},
+        {"label": "Stability", "value": stability_label, "tone": "medium" if str(stability.get("state", "")).strip().lower() == "settled" else "low"},
         {"label": "Action", "value": affordance_label, "tone": "medium" if affordances else "low"},
         {"label": "Focus", "value": focus_label, "tone": "medium" if str(focus.get("data_url", "")).strip() else "low"},
         {

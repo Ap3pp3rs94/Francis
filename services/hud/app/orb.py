@@ -194,9 +194,13 @@ def _build_takeover_desktop_run_contract(
         affordances = focus_target.get("affordances", []) if isinstance(focus_target.get("affordances"), list) else []
         if str(surface.get("kind", "")).strip().lower() != "francis":
             return None
-        if not str(zone.get("kind", "")).strip().lower().startswith("francis_"):
+        zone_kind = str(zone.get("kind", "")).strip().lower()
+        if zone_kind not in {"francis_action_row", "francis_workspace", "francis_footer_actions"}:
             return None
         if str(target.get("confidence", "")).strip().lower() not in {"likely", "medium"}:
+            return None
+        target_stability = target.get("stability", {}) if isinstance(target.get("stability"), dict) else {}
+        if str(target_stability.get("state", "")).strip().lower() != "settled":
             return None
         target_window = target.get("window", {}) if isinstance(target.get("window"), dict) else {}
         if not bool(target_window.get("in_bounds")):
