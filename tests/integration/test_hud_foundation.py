@@ -310,6 +310,10 @@ def test_hud_orb_perception_route_records_live_frame() -> None:
                 "idle_seconds": 12,
                 "cursor_x": 144,
                 "cursor_y": 288,
+                "window_x": 96,
+                "window_y": 72,
+                "window_width": 1280,
+                "window_height": 760,
                 "frame_width": 720,
                 "frame_height": 405,
                 "frame_data_url": "data:image/jpeg;base64,abc123",
@@ -332,6 +336,11 @@ def test_hud_orb_perception_route_records_live_frame() -> None:
         assert body["cursor"] == {"x": 144, "y": 288}
         assert body["window"]["title"] == "Francis Lens"
         assert body["window"]["pid"] == 4242
+        assert body["window"]["bounds"]["width"] == 1280
+        assert body["active_surface"]["kind"] == "francis"
+        assert body["target"]["window"]["in_bounds"] is True
+        assert body["target"]["zone"]["kind"].startswith("francis_")
+        assert isinstance(body["target"]["affordances"], list)
         assert body["frame"]["width"] == 720
         assert body["focus"]["width"] == 196
         assert body["freshness"]["state"] == "fresh"

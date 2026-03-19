@@ -175,6 +175,37 @@ def _build_takeover_desktop_run_contract(
             "reason": f"Press {key} through the active Francis takeover session.",
         }
         summary = f"Queue {key} into the active Francis takeover session."
+    elif focus_kind in {"apprenticeship.skillize", "forge.promote", "forge.revoke", "forge.quarantine"}:
+        focus_target = resolve_orb_focus_target()
+        if not isinstance(focus_target, dict):
+            return None
+        surface = focus_target.get("surface", {}) if isinstance(focus_target.get("surface"), dict) else {}
+        zone = focus_target.get("zone", {}) if isinstance(focus_target.get("zone"), dict) else {}
+        affordances = focus_target.get("affordances", []) if isinstance(focus_target.get("affordances"), list) else []
+        if str(surface.get("kind", "")).strip().lower() != "francis":
+            return None
+        if not str(zone.get("kind", "")).strip().lower().startswith("francis_"):
+            return None
+        preferred = next(
+            (
+                row
+                for row in affordances
+                if isinstance(row, dict)
+                and str(row.get("kind", "")).strip().lower() in {"focus_click", "confirm_key"}
+                and isinstance(row.get("command"), dict)
+            ),
+            None,
+        )
+        if not isinstance(preferred, dict):
+            return None
+        command = preferred.get("command", {}) if isinstance(preferred.get("command"), dict) else None
+        if not isinstance(command, dict):
+            return None
+        action_label = str(focus_action.get("label", "")).strip() or focus_kind.replace(".", " ")
+        affordance_label = str(preferred.get("label", "Confirm")).strip() or "Confirm"
+        summary = (
+            f"Queue {affordance_label.lower()} for {action_label} from the active Francis control surface."
+        )
 
     if not isinstance(command, dict):
         return None

@@ -16,7 +16,12 @@ def test_orb_perception_builds_fresh_active_surface_contract() -> None:
                 "display": {"width": 1920, "height": 1080},
                 "idle_seconds": 4,
                 "cursor": {"x": 640, "y": 288},
-                "window": {"title": "Visual Studio Code", "process": "Code.exe", "pid": 7788},
+                "window": {
+                    "title": "Visual Studio Code",
+                    "process": "Code.exe",
+                    "pid": 7788,
+                    "bounds": {"x": 120, "y": 80, "width": 1440, "height": 900},
+                },
                 "frame": {
                     "width": 720,
                     "height": 405,
@@ -40,6 +45,7 @@ def test_orb_perception_builds_fresh_active_surface_contract() -> None:
         assert perception["active_surface"]["intent"] == "code_editing"
         assert perception["target"]["kind"] == "cursor_focus"
         assert perception["target"]["actionable"] is True
+        assert perception["target"]["window"]["in_bounds"] is True
         assert perception["target"]["zone"]["kind"] == "editor_body"
         assert any(
             item["kind"] == "save_shortcut"
@@ -61,6 +67,7 @@ def test_orb_perception_builds_fresh_active_surface_contract() -> None:
         assert target is not None
         assert target["surface"]["kind"] == "editor"
         assert target["target"]["label"] == "Editor focus point"
+        assert target["target"]["window"]["in_bounds"] is True
         assert target["zone"]["kind"] == "editor_body"
         assert any(
             item["kind"] == "save_shortcut"
@@ -82,7 +89,12 @@ def test_orb_perception_infers_terminal_submit_affordance() -> None:
                 "display": {"width": 1600, "height": 900},
                 "idle_seconds": 2,
                 "cursor": {"x": 800, "y": 790},
-                "window": {"title": "Windows Terminal", "process": "Windows Terminal.exe", "pid": 9911},
+                "window": {
+                    "title": "Windows Terminal",
+                    "process": "Windows Terminal.exe",
+                    "pid": 9911,
+                    "bounds": {"x": 120, "y": 120, "width": 1200, "height": 760},
+                },
                 "frame": {"width": 640, "height": 360, "data_url": "data:image/jpeg;base64,frame789"},
                 "focus": {"width": 180, "height": 180, "data_url": "data:image/jpeg;base64,focus999"},
             }

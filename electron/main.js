@@ -2073,6 +2073,10 @@ async function pushOrbPerceptionFrame() {
         window_title: String(foregroundWindow?.title || ""),
         process_name: String(foregroundWindow?.process || ""),
         window_pid: Number(foregroundWindow?.pid || 0) || null,
+        window_x: Number.isFinite(foregroundWindow?.bounds?.x) ? Math.round(foregroundWindow.bounds.x) : null,
+        window_y: Number.isFinite(foregroundWindow?.bounds?.y) ? Math.round(foregroundWindow.bounds.y) : null,
+        window_width: Number(foregroundWindow?.bounds?.width || 0),
+        window_height: Number(foregroundWindow?.bounds?.height || 0),
       }),
     });
     orbPerceptionErrorLogged = false;

@@ -174,6 +174,10 @@ class HudOrbPerceptionFrameRequest(BaseModel):
     window_title: str = ""
     process_name: str = ""
     window_pid: int | None = None
+    window_x: int | None = None
+    window_y: int | None = None
+    window_width: int = 0
+    window_height: int = 0
     frame_width: int = 0
     frame_height: int = 0
     frame_data_url: str = ""
@@ -576,6 +580,12 @@ def _build_app() -> FastAPI:
                     "title": payload.window_title,
                     "process": payload.process_name,
                     "pid": payload.window_pid,
+                    "bounds": {
+                        "x": payload.window_x,
+                        "y": payload.window_y,
+                        "width": payload.window_width,
+                        "height": payload.window_height,
+                    },
                 },
                 "frame": {
                     "width": payload.frame_width,

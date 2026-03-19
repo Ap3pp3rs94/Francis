@@ -214,3 +214,86 @@ def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None
     assert controls["surface_action_label"] == "Save"
     assert controls["surface_action_command_kind"] == "keyboard.shortcut"
     assert controls["surface_action_command_args"]["keys"] == ["ctrl", "s"]
+
+
+def test_get_orb_view_auto_plans_francis_surface_actions_for_takeover(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "away"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": True, "session_id": "session-3"},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "away", "posture": "acting", "summary": "Active"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 0},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "resolve_orb_focus_target",
+        lambda: {
+            "x": 520,
+            "y": 340,
+            "display_id": 1,
+            "surface": {"kind": "francis", "label": "Francis surface"},
+            "zone": {"kind": "francis_panel", "label": "Francis control panel"},
+            "affordances": [
+                {
+                    "kind": "focus_click",
+                    "label": "Focus Click",
+                    "summary": "Click the focused Francis control.",
+                    "command": {
+                        "kind": "mouse.click",
+                        "args": {"x": 520, "y": 340, "button": "left", "coordinate_space": "display"},
+                        "reason": "Click the focused Francis control during Orb authority.",
+                    },
+                }
+            ],
+            "target": {"label": "Francis focus point"},
+            "freshness": {"state": "fresh", "age_ms": 120},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "forge.promote",
+                "execute_kind": "forge.promote",
+                "args": {"stage_id": "cap-promote", "approval_id": "approval-cap"},
+                "enabled": True,
+                "label": "Promote Capability",
+                "reason": "Capability is approved and ready to promote.",
+                "risk_tier": "medium",
+                "state": "ready",
+            },
+            "next_action": {"kind": "forge.promote", "label": "Promote Capability"},
+            "next_action_resume": {},
+            "operator_link": {"action_kind": "forge.promote"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_approval_queue_view", lambda **_: {"surface": "approval_queue", "items": []})
+    monkeypatch.setattr(orb_view, "get_execution_journal_view", lambda **_: {"surface": "execution_journal", "items": []})
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
+
+    controls = orb["operator"]["controls"]
+    assert controls["desktop_run_enabled"] is True
+    assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
+    assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
+    assert controls["desktop_run_args"]["commands"][0]["args"]["x"] == 520
+    assert controls["desktop_run_args"]["commands"][0]["args"]["y"] == 340

@@ -16,6 +16,12 @@ _DEFAULT_PERCEPTION: dict[str, Any] = {
         "title": "",
         "process": "",
         "pid": None,
+        "bounds": {
+            "x": None,
+            "y": None,
+            "width": 0,
+            "height": 0,
+        },
     },
     "frame": {
         "width": 0,
@@ -57,6 +63,12 @@ def _normalize_optional_int(value: Any) -> int | None:
     return number if number >= 0 else None
 
 
+def _normalize_optional_signed_int(value: Any) -> int | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
 def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
     frame = payload.get("frame", {}) if isinstance(payload.get("frame"), dict) else {}
     focus = payload.get("focus", {}) if isinstance(payload.get("focus"), dict) else {}
@@ -72,6 +84,9 @@ def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
     window_title = str(window.get("title", "")).strip()
     process_name = str(window.get("process", "")).strip()
     window_pid = _normalize_optional_int(window.get("pid"))
+    window_bounds = window.get("bounds", {}) if isinstance(window.get("bounds"), dict) else {}
+    window_x = _normalize_optional_signed_int(window_bounds.get("x")) if window_bounds.get("x") is not None else None
+    window_y = _normalize_optional_signed_int(window_bounds.get("y")) if window_bounds.get("y") is not None else None
 
     return {
         "captured_at": captured_at,
@@ -89,6 +104,12 @@ def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "title": window_title,
             "process": process_name,
             "pid": window_pid,
+            "bounds": {
+                "x": window_x,
+                "y": window_y,
+                "width": _normalize_dimension(window_bounds.get("width")),
+                "height": _normalize_dimension(window_bounds.get("height")),
+            },
         },
         "frame": {
             "width": _normalize_dimension(frame.get("width")),
@@ -145,6 +166,9 @@ def _format_window_label(window: dict[str, Any]) -> str:
     title = str(window.get("title", "")).strip()
     process_name = str(window.get("process", "")).strip()
     pid = _normalize_optional_int(window.get("pid"))
+    bounds = window.get("bounds", {}) if isinstance(window.get("bounds"), dict) else {}
+    width = _normalize_dimension(bounds.get("width"))
+    height = _normalize_dimension(bounds.get("height"))
     parts = []
     if title:
         parts.append(title)
@@ -152,6 +176,8 @@ def _format_window_label(window: dict[str, Any]) -> str:
         parts.append(process_name)
     if pid:
         parts.append(f"pid {pid}")
+    if width > 0 and height > 0:
+        parts.append(f"{width}x{height}")
     return " | ".join(parts) if parts else "No foreground window metadata"
 
 
@@ -213,11 +239,25 @@ def _infer_surface_contract(payload: dict[str, Any]) -> dict[str, str]:
 def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], surface: dict[str, str]) -> dict[str, Any]:
     cursor = payload.get("cursor", {}) if isinstance(payload.get("cursor"), dict) else {}
     focus = payload.get("focus", {}) if isinstance(payload.get("focus"), dict) else {}
+    window = payload.get("window", {}) if isinstance(payload.get("window"), dict) else {}
+    window_bounds = window.get("bounds", {}) if isinstance(window.get("bounds"), dict) else {}
     x = _normalize_optional_int(cursor.get("x"))
     y = _normalize_optional_int(cursor.get("y"))
     focus_attached = bool(str(focus.get("data_url", "")).strip())
     freshness_state = str(freshness.get("state", "idle")).strip().lower() or "idle"
     actionable = x is not None and y is not None and freshness_state in {"fresh", "cooling"}
+    window_x = window_bounds.get("x") if isinstance(window_bounds.get("x"), int) else None
+    window_y = window_bounds.get("y") if isinstance(window_bounds.get("y"), int) else None
+    window_width = _normalize_dimension(window_bounds.get("width"))
+    window_height = _normalize_dimension(window_bounds.get("height"))
+    cursor_window_x = x - window_x if x is not None and window_x is not None else None
+    cursor_window_y = y - window_y if y is not None and window_y is not None else None
+    in_window = bool(
+        cursor_window_x is not None
+        and cursor_window_y is not None
+        and 0 <= cursor_window_x <= max(1, window_width)
+        and 0 <= cursor_window_y <= max(1, window_height)
+    )
     label_map = {
         "editor": "Editor focus point",
         "terminal": "Terminal focus point",
@@ -229,12 +269,28 @@ def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], s
     label = label_map.get(str(surface.get("kind", "")).strip().lower(), "Active focus point")
     coordinate_summary = f"({x}, {y})" if x is not None and y is not None else "unresolved coordinates"
     crop_summary = "Local focus crop is attached." if focus_attached else "No local focus crop is attached."
+    window_summary = (
+        f" Cursor is inside the foreground window at ({cursor_window_x}, {cursor_window_y})."
+        if in_window and cursor_window_x is not None and cursor_window_y is not None
+        else " Cursor is not mapped cleanly into the foreground window."
+        if window_width > 0 and window_height > 0
+        else " Foreground-window bounds are unavailable."
+    )
     target = {
         "kind": "cursor_focus",
         "label": label,
-        "summary": f"{label} at {coordinate_summary}. {crop_summary}",
+        "summary": f"{label} at {coordinate_summary}. {crop_summary}{window_summary}",
         "actionable": actionable,
-        "confidence": "likely" if actionable and focus_attached else "medium" if actionable else "low",
+        "confidence": "likely"
+        if actionable and focus_attached and in_window
+        else "medium"
+        if actionable and (focus_attached or in_window)
+        else "low",
+        "window": {
+            "x": cursor_window_x,
+            "y": cursor_window_y,
+            "in_bounds": in_window,
+        },
     }
     zone = _infer_target_zone(payload, surface, target)
     affordances = _build_target_affordances(surface=surface, target=target, zone=zone, x=x, y=y)
@@ -252,12 +308,20 @@ def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], s
 def _infer_target_zone(payload: dict[str, Any], surface: dict[str, str], target: dict[str, Any]) -> dict[str, Any]:
     cursor = payload.get("cursor", {}) if isinstance(payload.get("cursor"), dict) else {}
     display = payload.get("display", {}) if isinstance(payload.get("display"), dict) else {}
+    target_window = target.get("window", {}) if isinstance(target.get("window"), dict) else {}
     width = max(1, _normalize_dimension(display.get("width")))
     height = max(1, _normalize_dimension(display.get("height")))
     x = _normalize_optional_int(cursor.get("x"))
     y = _normalize_optional_int(cursor.get("y"))
-    x_ratio = (x / width) if x is not None else 0.5
-    y_ratio = (y / height) if y is not None else 0.5
+    window_x = _normalize_optional_int(target_window.get("x"))
+    window_y = _normalize_optional_int(target_window.get("y"))
+    in_window = bool(target_window.get("in_bounds"))
+    window = payload.get("window", {}) if isinstance(payload.get("window"), dict) else {}
+    window_bounds = window.get("bounds", {}) if isinstance(window.get("bounds"), dict) else {}
+    window_width = max(1, _normalize_dimension(window_bounds.get("width")))
+    window_height = max(1, _normalize_dimension(window_bounds.get("height")))
+    x_ratio = (window_x / window_width) if in_window and window_x is not None else (x / width) if x is not None else 0.5
+    y_ratio = (window_y / window_height) if in_window and window_y is not None else (y / height) if y is not None else 0.5
     surface_kind = str(surface.get("kind", "")).strip().lower() or "application"
 
     zone_kind = "application_content"
