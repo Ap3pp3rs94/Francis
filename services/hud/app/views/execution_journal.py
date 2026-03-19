@@ -48,6 +48,8 @@ def _action_kind(summary: Any, row: dict[str, Any]) -> str:
         row.get("action_kind"),
         detail.get("action_kind"),
         summary.get("action_kind") if isinstance(summary, dict) else None,
+        detail.get("command_kind"),
+        summary.get("command_kind") if isinstance(summary, dict) else None,
         detail.get("skill"),
         summary.get("skill") if isinstance(summary, dict) else None,
     ]
@@ -93,6 +95,12 @@ def _title_for_kind(kind: str) -> str:
         "approval.decided": "Approval Decision",
         "approval.requested": "Approval Requested",
         "mission.tick": "Mission Tick",
+        "orb.authority.command.queued": "Orb Authority Queued",
+        "orb.authority.command.claimed": "Orb Authority Claimed",
+        "orb.authority.command.completed": "Orb Authority Completed",
+        "orb.authority.command.failed": "Orb Authority Failed",
+        "orb.authority.command.released": "Orb Authority Released",
+        "orb.authority.command.canceled": "Orb Authority Canceled",
     }.get(kind, kind.replace(".", " ").title())
 
 

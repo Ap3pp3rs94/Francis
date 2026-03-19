@@ -526,6 +526,94 @@ def test_get_orb_view_auto_plans_repo_tests_request_on_francis_surface(monkeypat
     assert controls["desktop_run_args"]["commands"][0]["args"]["y"] == 402
 
 
+def test_get_orb_view_auto_plans_navigation_open_on_francis_surface(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "away"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": True, "session_id": "session-nav"},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "away", "posture": "acting", "summary": "Active"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 0},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "resolve_orb_focus_target",
+        lambda: {
+            "x": 188,
+            "y": 300,
+            "display_id": 1,
+            "surface": {"kind": "francis", "label": "Francis surface"},
+            "zone": {"kind": "francis_navigation", "label": "Francis navigation rail"},
+            "affordances": [
+                {
+                    "kind": "open_key",
+                    "label": "Open",
+                    "summary": "Press Enter on the selected Francis navigation control.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "enter"},
+                        "reason": "Press Enter on the selected Francis navigation control during Orb authority.",
+                    },
+                }
+            ],
+            "target": {
+                "label": "Francis navigation selection",
+                "confidence": "likely",
+                "stability": {"state": "settled"},
+                "window": {"in_bounds": True},
+            },
+            "freshness": {"state": "fresh", "age_ms": 120},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "control.takeover.confirm",
+                "execute_kind": "control.takeover.confirm",
+                "args": {"session_id": "session-nav"},
+                "enabled": True,
+                "label": "Confirm Takeover",
+                "reason": "Navigation selection is ready to open.",
+                "risk_tier": "low",
+                "state": "ready",
+            },
+            "next_action": {"kind": "control.takeover.confirm", "label": "Confirm Takeover"},
+            "next_action_resume": {},
+            "operator_link": {"action_kind": "control.takeover.confirm"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_approval_queue_view", lambda **_: {"surface": "approval_queue", "items": []})
+    monkeypatch.setattr(orb_view, "get_execution_journal_view", lambda **_: {"surface": "execution_journal", "items": []})
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
+
+    controls = orb["operator"]["controls"]
+    assert orb["operator"]["target_cue"]["state"] == "concrete"
+    assert controls["desktop_run_enabled"] is True
+    assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
+    assert controls["desktop_run_args"]["commands"][0]["kind"] == "keyboard.key"
+    assert controls["desktop_run_args"]["commands"][0]["args"]["key"] == "enter"
+
+
 def test_get_orb_view_does_not_auto_plan_transient_francis_targets(monkeypatch) -> None:
     snapshot = {
         "control": {"mode": "away"},

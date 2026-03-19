@@ -337,7 +337,7 @@ def _build_takeover_desktop_run_contract(
         if str(surface.get("kind", "")).strip().lower() != "francis":
             return None
         zone_kind = str(zone.get("kind", "")).strip().lower()
-        if zone_kind not in {"francis_action_row", "francis_workspace", "francis_footer_actions"}:
+        if zone_kind not in {"francis_action_row", "francis_navigation", "francis_workspace", "francis_footer_actions"}:
             return None
         if str(target.get("confidence", "")).strip().lower() not in {"likely", "medium"}:
             return None
@@ -352,7 +352,7 @@ def _build_takeover_desktop_run_contract(
                 row
                 for row in affordances
                 if isinstance(row, dict)
-                and str(row.get("kind", "")).strip().lower() in {"focus_click", "confirm_key"}
+                and str(row.get("kind", "")).strip().lower() in {"focus_click", "open_key", "confirm_key"}
                 and isinstance(row.get("command"), dict)
             ),
             None,

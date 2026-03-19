@@ -2935,6 +2935,50 @@ def test_hud_execution_journal_view_normalizes_action_and_approval_keys(monkeypa
     assert approval_row["audit"]["decision"] == "approved"
 
 
+def test_hud_execution_journal_view_carries_orb_authority_receipts(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "runs": {
+                "last_run": {
+                    "run_id": "run-orb",
+                    "phase": "execute",
+                    "summary": "Orb authority moved through the takeover lane.",
+                },
+                "ledger_tail": [
+                    {
+                        "run_id": "run-orb",
+                        "ts": "2026-03-19T10:02:00+00:00",
+                        "kind": "orb.authority.command.completed",
+                        "summary": {
+                            "command_kind": "mouse.click",
+                            "summary_text": "mouse.click is completed. Click the focused Francis control.",
+                            "presentation_cards": [
+                                {"label": "Command", "value": "mouse.click", "tone": "medium"},
+                                {"label": "Grounding", "value": "Concrete Francis action row target. Focus Click is grounded from the Orb.", "tone": "medium"},
+                                {"label": "Target", "value": "Focus Click", "tone": "medium"},
+                            ],
+                            "grounding_state": "concrete",
+                        },
+                    }
+                ],
+                "recent": [],
+            }
+        }
+
+    monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _snapshot)
+
+    payload = execution_journal_view.get_execution_journal_view()
+
+    row = payload["items"][0]
+    assert row["title"] == "Orb Authority Completed"
+    assert row["action_kind"] == "mouse.click"
+    assert row["summary"].startswith("mouse.click is completed.")
+    assert row["detail_summary"].startswith("Orb Authority Completed for mouse.click.")
+    assert any(card["label"] == "Grounding" for card in row["detail_cards"])
+    assert any(card["label"] == "Target" for card in row["detail_cards"])
+    assert row["audit"]["action_kind"] == "mouse.click"
+
+
 def test_hud_inbox_view_marks_current_and_historical_messages(monkeypatch) -> None:
     def _snapshot() -> dict[str, object]:
         return {
