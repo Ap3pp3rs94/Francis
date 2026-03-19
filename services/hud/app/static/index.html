@@ -2200,6 +2200,26 @@
           <button class="btn-secondary" type="button" id="overlay-focus-receipt" onclick="showOrbLatestReceipt()">Latest Receipt</button>
         </div>
       </div>
+      <div class="overlay-dock-card">
+        <div class="overlay-dock-chat-head">
+          <strong>Motion Control</strong>
+          <span id="overlay-motion-meta">Autonomous motion will use learned human traces when the Orb moves on its own.</span>
+        </div>
+        <div class="overlay-dock-perception" id="overlay-motion-summary">
+          Autonomous is active. The Orb will trace your cursor while you are active, then explore on its own when you stop driving it.
+        </div>
+        <div class="overlay-dock-authority-cards" id="overlay-motion-cards">
+          <div class="desktop-pill"><strong>Mode</strong><span>Autonomous</span></div>
+          <div class="desktop-pill"><strong>Learned</strong><span>0 snippets</span></div>
+          <div class="desktop-pill"><strong>Replay</strong><span>Idle</span></div>
+          <div class="desktop-pill"><strong>Influence</strong><span>0%</span></div>
+        </div>
+        <div class="overlay-dock-operator-actions">
+          <button class="btn-secondary" type="button" id="overlay-motion-explore" onclick="setOrbBehaviorMode('explore')">Explore</button>
+          <button class="btn-secondary" type="button" id="overlay-motion-trace" onclick="setOrbBehaviorMode('trace')">Trace</button>
+          <button class="btn-primary" type="button" id="overlay-motion-autonomous" onclick="setOrbBehaviorMode('autonomous')">Autonomous</button>
+        </div>
+      </div>
       <div class="overlay-dock-authority">
         <div class="overlay-dock-chat-head">
           <strong>Away Authority</strong>
@@ -2492,7 +2512,9 @@
         offsetX: 0,
         offsetY: 0,
       };
+      const ORB_BEHAVIOR_MODE_STORAGE_KEY = "francis.orb.behaviorMode.v1";
       const ORB_HUMAN_PROFILE_STORAGE_KEY = "francis.orb.humanMotion.v1";
+      let orbBehaviorMode = "autonomous";
       let orbHumanMotionProfile = {
         avgSpeed: 4.4,
         avgPauseMs: 180,
@@ -2569,6 +2591,43 @@
         } catch {
           // Keep the built-in defaults if local profile restore fails.
         }
+      }
+
+      function normalizeOrbBehaviorMode(value) {
+        const normalized = String(value || "").trim().toLowerCase();
+        return normalized === "trace" || normalized === "explore" || normalized === "autonomous"
+          ? normalized
+          : "autonomous";
+      }
+
+      function loadOrbBehaviorMode() {
+        try {
+          const raw = window.localStorage?.getItem(ORB_BEHAVIOR_MODE_STORAGE_KEY);
+          orbBehaviorMode = normalizeOrbBehaviorMode(raw);
+        } catch {
+          orbBehaviorMode = "autonomous";
+        }
+      }
+
+      function persistOrbBehaviorMode() {
+        try {
+          window.localStorage?.setItem(ORB_BEHAVIOR_MODE_STORAGE_KEY, normalizeOrbBehaviorMode(orbBehaviorMode));
+        } catch {
+          // Local persistence is opportunistic; ignore storage failures.
+        }
+      }
+
+      function getOrbBehaviorMode() {
+        return normalizeOrbBehaviorMode(orbBehaviorMode);
+      }
+
+      function setOrbBehaviorMode(mode) {
+        orbBehaviorMode = normalizeOrbBehaviorMode(mode);
+        orbAutonomousReplay.active = false;
+        orbAutonomousReplay.nextStartAt = 0;
+        persistOrbBehaviorMode();
+        renderOverlayDock();
+        renderOrbPresentation();
       }
 
       function persistOrbHumanMotionProfile(force = false) {
@@ -2841,6 +2900,52 @@
         };
       }
 
+      function getOrbMotionControlState({
+        handbackActive = false,
+        cursorAuthority = false,
+        humanActive = false,
+      } = {}) {
+        const selectedMode = getOrbBehaviorMode();
+        if (handbackActive) {
+          return {
+            selectedMode,
+            effectiveMode: "handback",
+            trace: false,
+            explore: false,
+          };
+        }
+        if (cursorAuthority) {
+          return {
+            selectedMode,
+            effectiveMode: "authority",
+            trace: false,
+            explore: false,
+          };
+        }
+        if (selectedMode === "trace") {
+          return {
+            selectedMode,
+            effectiveMode: "trace",
+            trace: true,
+            explore: false,
+          };
+        }
+        if (selectedMode === "explore") {
+          return {
+            selectedMode,
+            effectiveMode: "explore",
+            trace: false,
+            explore: true,
+          };
+        }
+        return {
+          selectedMode,
+          effectiveMode: humanActive ? "trace" : "explore",
+          trace: Boolean(humanActive),
+          explore: !humanActive,
+        };
+      }
+
       function titleCase(value) {
         return String(value || "")
           .split(/[\s_-]+/)
@@ -3057,6 +3162,12 @@
         const authoritySummary = document.getElementById("overlay-authority-summary");
         const authorityCards = document.getElementById("overlay-authority-cards");
         const authorityRecent = document.getElementById("overlay-authority-recent");
+        const motionMeta = document.getElementById("overlay-motion-meta");
+        const motionSummary = document.getElementById("overlay-motion-summary");
+        const motionCards = document.getElementById("overlay-motion-cards");
+        const motionExplore = document.getElementById("overlay-motion-explore");
+        const motionTrace = document.getElementById("overlay-motion-trace");
+        const motionAutonomous = document.getElementById("overlay-motion-autonomous");
         const queueMove = document.getElementById("overlay-queue-move");
         const queueClick = document.getElementById("overlay-queue-click");
         const queueSave = document.getElementById("overlay-queue-save");
@@ -3096,6 +3207,12 @@
           !authoritySummary ||
           !authorityCards ||
           !authorityRecent ||
+          !motionMeta ||
+          !motionSummary ||
+          !motionCards ||
+          !motionExplore ||
+          !motionTrace ||
+          !motionAutonomous ||
           !queueMove ||
           !queueClick ||
           !queueSave ||
@@ -3140,6 +3257,14 @@
         const latestAuthorityReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length > 0
           ? currentOrbAuthority.recent[0]
           : null;
+        const motionControl = getOrbMotionControlState({
+          handbackActive,
+          cursorAuthority,
+          humanActive: orbSystemInput.humanActive,
+        });
+        const learnedSnippets = Array.isArray(orbHumanMotionProfile.snippetLibrary)
+          ? orbHumanMotionProfile.snippetLibrary.length
+          : 0;
         const focusContext = getOrbFocusContext();
         const surfaceAction = getOrbSurfaceActionContext([
           "submit_key",
@@ -3235,6 +3360,32 @@
           operatorReceiptCue,
           "Receipt target grounding will surface here when a latest receipt is attached to the Orb.",
         );
+        const selectedBehaviorLabel = titleCase(motionControl.selectedMode);
+        const effectiveBehaviorLabel = titleCase(String(motionControl.effectiveMode || motionControl.selectedMode).replaceAll("_", " "));
+        const replayInfluence = orbAutonomousReplay.active
+          ? Math.round(clamp(getOrbAutonomousReplayConfig().bias, 0, 1) * 100)
+          : 0;
+        motionMeta.textContent = `Selected ${selectedBehaviorLabel} | Effective ${effectiveBehaviorLabel}`;
+        motionSummary.textContent = motionControl.selectedMode === "trace"
+          ? "Trace is active. The Orb follows your cursor path while the mouse remains fully yours."
+          : motionControl.selectedMode === "explore"
+            ? "Explore is active. The Orb moves on its own while still learning your motion locally."
+            : "Autonomous is active. The Orb traces you while active, then explores with learned human motion on its own.";
+        motionCards.innerHTML = [
+          ["Mode", selectedBehaviorLabel],
+          ["Effective", effectiveBehaviorLabel],
+          ["Learned", `${learnedSnippets} snippet${learnedSnippets === 1 ? "" : "s"}`],
+          ["Replay", orbAutonomousReplay.active ? "Active" : "Idle"],
+          ["Influence", `${replayInfluence}%`],
+        ]
+          .map(
+            ([label, value]) =>
+              `<div class="desktop-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`,
+          )
+          .join("");
+        motionExplore.className = motionControl.selectedMode === "explore" ? "btn-primary" : "btn-secondary";
+        motionTrace.className = motionControl.selectedMode === "trace" ? "btn-primary" : "btn-secondary";
+        motionAutonomous.className = motionControl.selectedMode === "autonomous" ? "btn-primary" : "btn-secondary";
         focusPreview.disabled = !focusContext.canPreview;
         focusRun.disabled = !focusContext.canRun;
         focusRun.textContent = focusContext.runMode === "approve_and_run" ? "Approve + Run" : "Run";
@@ -5883,8 +6034,13 @@
         const panicChip = (currentActions.action_chips || []).find(
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
+        const selectedMode = getOrbBehaviorMode();
         if (!panicChip) {
-          return "The Orb stays ambient and out of the way. While you are active it traces the path of your cursor with a short visual lag, and it keeps its local motion-learning profile for autonomous movement only.";
+          return selectedMode === "trace"
+            ? "Trace is active. The Orb follows your cursor path with a short visual lag while keeping the mouse fully yours."
+            : selectedMode === "explore"
+              ? "Explore is active. The Orb can move on its own and keeps learning your human traces locally for better autonomous motion."
+              : "Autonomous is active. The Orb traces your cursor while you are active, then explores on its own using learned local motion.";
         }
         if (hasEffectiveOrbCursorAuthority()) {
           return "Away cursor authority is live. Hold the Orb to panic stop or right-click it for controls.";
@@ -5892,7 +6048,11 @@
         if (isOrbCursorEligible()) {
           return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Human cursor trace stays path-faithful until then, with only a slight visual lag.`;
         }
-        return "The Orb stays ambient. Hold it to panic stop when that path is live, or right-click it to chat, inspect, or open Lens. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
+        return selectedMode === "trace"
+          ? "Trace is active. Hold the Orb to panic stop when that path is live, or right-click it to chat, inspect, or open Lens."
+          : selectedMode === "explore"
+            ? "Explore is active. Hold the Orb to panic stop when that path is live, or right-click it to chat, inspect, or open Lens while it moves on its own."
+            : "Autonomous is active. Hold the Orb to panic stop when that path is live, or right-click it to chat, inspect, or open Lens. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
       }
 
       function getOrbCursorIdleThresholdMs() {
@@ -6107,6 +6267,11 @@
         const cursorAuthority = hasEffectiveOrbCursorAuthority();
         const cursorEligibility = isOrbCursorEligible();
         const authorityState = resolveOrbAuthorityState();
+        const motionControl = getOrbMotionControlState({
+          handbackActive,
+          cursorAuthority,
+          humanActive: orbSystemInput.humanActive,
+        });
         const idleThresholdSeconds = Math.round(getOrbCursorIdleThresholdMs() / 1000);
         document.getElementById("orb-title").textContent =
           `${titleCase(currentOrb.posture || "resting")} | ${titleCase(currentOrb.mode || "assist")}`;
@@ -6128,6 +6293,10 @@
             ? "Away execution is live. The Orb is carrying cursor authority visibly so delegated motion stays inspectable and bounded."
             : cursorEligibility
               ? `Away execution is live, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse and keyboard inactivity before taking cursor authority. While you remain active, the Orb traces your live cursor path with a slight visual lag.`
+              : motionControl.selectedMode === "trace"
+              ? "Trace is active. The Orb follows your cursor path directly with a short visible lag while keeping the mouse under your control."
+              : motionControl.selectedMode === "explore"
+                ? "Explore is active. The Orb moves on its own and keeps learning your human traces locally so autonomous motion stays machine-native but personal."
               : currentOrb.posture === "acting"
               ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away becomes idle-gated and takes authority after you step away. Local traces keep teaching the Orb how autonomous motion should feel."
               : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention. When you move, Francis follows your path with a short visible delay.";
@@ -6137,6 +6306,10 @@
             ? "away cursor"
             : cursorEligibility
               ? "away armed"
+            : motionControl.selectedMode === "trace"
+              ? "trace follow"
+            : motionControl.selectedMode === "explore"
+              ? "free explore"
             : "free ambient";
         document.getElementById("orb-motion").textContent = handbackActive
           ? "release arc | handback"
@@ -6144,6 +6317,10 @@
             ? "away ride | predictive commit"
             : cursorEligibility
               ? "armed idle gate | waiting"
+            : motionControl.selectedMode === "trace"
+              ? "trace replay | cursor path"
+            : motionControl.selectedMode === "explore"
+              ? "learned replay | explore"
             : currentOrb.movement?.profile === "focus_orbit"
               ? "focus orbit | free float"
               : currentOrb.movement?.profile === "guard_orbit"
@@ -6658,7 +6835,12 @@
 
         const handbackState = resolveOrbHandbackTarget(timestamp);
         const handbackActive = Boolean(handbackState);
-        const exactHumanTrace = !handbackActive && !cursorAuthority && orbSystemInput.humanActive;
+        const motionControl = getOrbMotionControlState({
+          handbackActive,
+          cursorAuthority,
+          humanActive: orbSystemInput.humanActive,
+        });
+        const exactHumanTrace = motionControl.trace;
         let positionX = 0;
         let positionY = 0;
         if (handbackState) {
@@ -6694,7 +6876,7 @@
           const anchorY = useCursorAnchor && pointerFresh ? orbMotion.pointerY : fallback.y;
           const speedFactor = useCursorAnchor ? Math.min(1, orbMotion.speed / 18) : 0;
           const ambientOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
-          const autonomousReplay = !useCursorAnchor && !orbSystemInput.humanActive
+          const autonomousReplay = !useCursorAnchor && motionControl.explore
             ? resolveOrbAutonomousReplayOffset(timestamp, motionProfile)
             : null;
           const replayBias = clamp(Number(autonomousReplay?.bias || 0), 0, 1);
@@ -11202,6 +11384,7 @@
       } catch {}
 
       applyAccessibilityPosture();
+      loadOrbBehaviorMode();
       loadOrbHumanMotionProfile();
       window.addEventListener("beforeunload", () => {
         if (orbInputSyncTimer !== null) {

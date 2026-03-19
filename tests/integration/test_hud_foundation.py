@@ -135,6 +135,10 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Queue Typed Input" in response.text
     assert "Clear Queue" in response.text
     assert "Current Move" in response.text
+    assert "Motion Control" in response.text
+    assert "Explore" in response.text
+    assert "Trace" in response.text
+    assert "Autonomous" in response.text
     assert "Preview" in response.text
     assert "Latest Receipt" in response.text
     assert "Interjections stay earned and grounded." in response.text
@@ -260,6 +264,10 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     response = client.get("/?orb=window&view=orb_only")
 
     assert response.status_code == 200
+    assert "Motion Control" in response.text
+    assert 'id="overlay-motion-explore"' in response.text
+    assert 'id="overlay-motion-trace"' in response.text
+    assert 'id="overlay-motion-autonomous"' in response.text
     assert 'const orbWindowMode = orbSurfaceMode === "window";' in response.text
     assert 'let currentOrbOperator = {' in response.text
     assert 'target.searchParams.set("orb", "window");' not in response.text
