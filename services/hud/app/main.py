@@ -15,6 +15,14 @@ from pydantic import BaseModel, Field
 
 from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
 from services.hud.app.orb import build_orb_chat_reply, get_orb_view
+from services.hud.app.orb_authority import (
+    cancel_orb_authority_queue,
+    claim_next_orb_authority_command,
+    complete_orb_authority_command,
+    get_orb_authority_view,
+    queue_orb_authority_command,
+    record_orb_authority_state,
+)
 from services.hud.app.orb_perception import get_orb_perception_view, record_orb_perception_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
@@ -161,11 +169,52 @@ class HudOrbPerceptionFrameRequest(BaseModel):
     idle_seconds: int = 0
     cursor_x: int | None = None
     cursor_y: int | None = None
+    window_title: str = ""
+    process_name: str = ""
     frame_width: int = 0
     frame_height: int = 0
     frame_data_url: str = ""
-    window_title: str = ""
-    process_name: str = ""
+
+
+class HudOrbAuthorityCommandRequest(BaseModel):
+    kind: str
+    args: dict[str, object] = Field(default_factory=dict)
+    reason: str = ""
+    actor: str = "hud.orb"
+    user: str = "hud.operator"
+    trace_id: str | None = None
+
+
+class HudOrbAuthorityClaimRequest(BaseModel):
+    authority_live: bool
+    idle_seconds: float = 0.0
+    threshold_seconds: float = 30.0
+    actor: str = "electron.orb"
+
+
+class HudOrbAuthorityCompleteRequest(BaseModel):
+    command_id: str
+    status: Literal["completed", "failed", "released", "canceled"]
+    detail: str = ""
+    result: dict[str, object] = Field(default_factory=dict)
+    actor: str = "electron.orb"
+    human_returned: bool = False
+
+
+class HudOrbAuthorityStateRequest(BaseModel):
+    state: Literal["human_active", "idle_armed", "francis_authority", "handback"]
+    eligible: bool = False
+    live: bool = False
+    idle_seconds: float = 0.0
+    threshold_seconds: float = 30.0
+    claimed_command_id: str = ""
+    reason: str = ""
+    actor: str = "electron.orb"
+
+
+class HudOrbAuthorityCancelRequest(BaseModel):
+    reason: str = ""
+    actor: str = "electron.orb"
 
 
 def _build_hud_payload(
@@ -531,6 +580,67 @@ def _build_app() -> FastAPI:
             return build_orb_chat_reply(message=payload.message)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/orb/authority")
+    def orb_authority() -> dict[str, object]:
+        return get_orb_authority_view()
+
+    @app.post("/api/orb/authority/commands")
+    def orb_authority_command(payload: HudOrbAuthorityCommandRequest) -> dict[str, object]:
+        try:
+            return queue_orb_authority_command(
+                kind=payload.kind,
+                args=payload.args,
+                reason=payload.reason,
+                actor=payload.actor,
+                user=payload.user,
+                trace_id=payload.trace_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/orb/authority/claim-next")
+    def orb_authority_claim_next(payload: HudOrbAuthorityClaimRequest) -> dict[str, object]:
+        return claim_next_orb_authority_command(
+            authority_live=payload.authority_live,
+            idle_seconds=payload.idle_seconds,
+            threshold_seconds=payload.threshold_seconds,
+            actor=payload.actor,
+        )
+
+    @app.post("/api/orb/authority/complete")
+    def orb_authority_complete(payload: HudOrbAuthorityCompleteRequest) -> dict[str, object]:
+        try:
+            return complete_orb_authority_command(
+                command_id=payload.command_id,
+                status=payload.status,
+                detail=payload.detail,
+                result=payload.result,
+                actor=payload.actor,
+                human_returned=payload.human_returned,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/orb/authority/state")
+    def orb_authority_state(payload: HudOrbAuthorityStateRequest) -> dict[str, object]:
+        try:
+            return record_orb_authority_state(
+                state=payload.state,
+                eligible=payload.eligible,
+                live=payload.live,
+                idle_seconds=payload.idle_seconds,
+                threshold_seconds=payload.threshold_seconds,
+                claimed_command_id=payload.claimed_command_id,
+                reason=payload.reason,
+                actor=payload.actor,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/orb/authority/cancel")
+    def orb_authority_cancel(payload: HudOrbAuthorityCancelRequest) -> dict[str, object]:
+        return cancel_orb_authority_queue(reason=payload.reason, actor=payload.actor)
 
     @app.post("/api/fabric/query")
     def fabric_query(payload: HudFabricQueryRequest) -> dict[str, object]:

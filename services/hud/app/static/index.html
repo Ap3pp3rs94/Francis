@@ -2278,6 +2278,8 @@
         const authorityState = resolveOrbAuthorityState();
         const posture = String(currentOrb?.posture || "resting");
         const mode = titleCase(String(currentOrb?.mode || "assist"));
+        const authoritySummary = String(currentOrb?.authority?.summary || "").trim();
+        const pendingAuthorityCount = Number(currentOrb?.authority?.pending_count || 0);
 
         let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
         if (handbackActive) {
@@ -2290,6 +2292,8 @@
           statusText = `Francis is active in ${mode} while leaving your mouse under your control.`;
         } else if (desktopState.ignoreMouseEvents) {
           statusText = `Overlay is click-through. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control.`;
+        } else if (authoritySummary) {
+          statusText = authoritySummary;
         } else if (currentOrb?.summary) {
           statusText = String(currentOrb.summary);
         }
@@ -2298,6 +2302,8 @@
           ? "Francis is responding through the Orb."
           : authorityState === "francis-authority"
             ? "Away authority is live. The quick chat surface remains available from the Orb."
+            : pendingAuthorityCount > 0
+              ? `${pendingAuthorityCount} queued Orb authority command${pendingAuthorityCount === 1 ? "" : "s"} are waiting for lawful Away control.`
             : "Compact Orb conversation surface. Stay in flow without opening Lens.";
         chatReply.textContent = orbQuickChat.error
           ? orbQuickChat.error

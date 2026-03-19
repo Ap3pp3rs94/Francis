@@ -125,6 +125,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
 - the Orb now lives in its own desktop window while the Lens HUD opens separately in external-Orb mode, and the Orb window itself is backed by the HUD's orb-only surface so the renderer path stays canonical
 - the shell now attaches live Orb perception locally by sampling the current cursor display and the foreground window title/process into the Orb surface
+- the shell now owns a governed Orb authority queue, so Away-eligible mouse and keyboard commands can be claimed locally, receipted into the workspace, and executed only after the Orb crosses the idle gate
 
 ## Next Extensions
 

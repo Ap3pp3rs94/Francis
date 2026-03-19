@@ -4,6 +4,7 @@ from typing import Any
 
 from francis_llm import chat
 from francis_presence.orb import build_orb_state
+from services.hud.app.orb_authority import get_orb_authority_view
 from services.hud.app.orb_perception import get_orb_perception_view
 from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
@@ -32,6 +33,7 @@ def get_orb_view(
         actions_payload=actions,
         voice=voice,
     )
+    orb["authority"] = get_orb_authority_view()
     orb["perception"] = get_orb_perception_view(include_frame_data=include_perception_frame)
     return orb
 
@@ -67,6 +69,7 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
         "posture": orb.get("posture"),
         "summary": orb.get("summary"),
         "detail": orb.get("detail"),
+        "authority": orb.get("authority"),
         "current_work": snapshot.get("current_work", {}),
         "objective": snapshot.get("objective", {}),
         "approvals": snapshot.get("approvals", {}),

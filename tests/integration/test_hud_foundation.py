@@ -316,6 +316,73 @@ def test_hud_orb_chat_route_returns_compact_reply(monkeypatch) -> None:
     assert body["perception"]["summary"] == "Desktop attached"
 
 
+def test_hud_orb_authority_routes_round_trip(monkeypatch) -> None:
+    monkeypatch.setattr(
+        hud_main,
+        "queue_orb_authority_command",
+        lambda **_: {
+            "status": "ok",
+            "command": {"id": "cmd-1", "kind": "mouse.move", "status": "queued"},
+            "authority": {"surface": "orb_authority", "pending_count": 1},
+        },
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "claim_next_orb_authority_command",
+        lambda **_: {
+            "status": "ok",
+            "command": {"id": "cmd-1", "kind": "mouse.move", "status": "claimed"},
+            "authority": {"surface": "orb_authority", "state": {"state": "francis_authority"}},
+        },
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "complete_orb_authority_command",
+        lambda **_: {
+            "status": "ok",
+            "command": {"id": "cmd-1", "kind": "mouse.move", "status": "completed"},
+            "authority": {"surface": "orb_authority", "pending_count": 0},
+        },
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "record_orb_authority_state",
+        lambda **_: {
+            "surface": "orb_authority",
+            "state": {"state": "idle_armed", "eligible": True, "live": False},
+            "pending_count": 0,
+        },
+    )
+
+    queue_response = client.post(
+        "/api/orb/authority/commands",
+        json={"kind": "mouse.move", "args": {"x": 100, "y": 200}},
+    )
+    assert queue_response.status_code == 200
+    assert queue_response.json()["command"]["status"] == "queued"
+
+    claim_response = client.post(
+        "/api/orb/authority/claim-next",
+        json={"authority_live": True, "idle_seconds": 30, "threshold_seconds": 30},
+    )
+    assert claim_response.status_code == 200
+    assert claim_response.json()["command"]["status"] == "claimed"
+
+    complete_response = client.post(
+        "/api/orb/authority/complete",
+        json={"command_id": "cmd-1", "status": "completed", "detail": "ok"},
+    )
+    assert complete_response.status_code == 200
+    assert complete_response.json()["command"]["status"] == "completed"
+
+    state_response = client.post(
+        "/api/orb/authority/state",
+        json={"state": "idle_armed", "eligible": True, "live": False, "idle_seconds": 12, "threshold_seconds": 30},
+    )
+    assert state_response.status_code == 200
+    assert state_response.json()["state"]["state"] == "idle_armed"
+
+
 def test_hud_serves_orb_bundle() -> None:
     response = client.get("/static/orb/francis-orb.js")
 

@@ -67,7 +67,14 @@ const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
 const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
+const {
+  canEngageOrbAuthority,
+  detectHumanCursorReturn,
+  detectHumanKeyboardReturn,
+  inferOrbAuthorityState,
+} = require("./orb-authority");
 const { getForegroundWindowInfo } = require("./foreground-window");
+const { executeWindowsInputCommand } = require("./windows-input");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -80,6 +87,7 @@ const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
+const ORB_AUTHORITY_SYNC_INTERVAL_MS = 350;
 const ORB_FOREGROUND_WINDOW_CACHE_MS = 2000;
 
 let mainWindow = null;
@@ -102,11 +110,27 @@ let hudRecoveryAttempts = 0;
 let orbPerceptionTimer = null;
 let orbPerceptionSyncPending = false;
 let orbPerceptionErrorLogged = false;
+let orbAuthorityTimer = null;
+let orbAuthorityCommandPending = false;
+let orbAuthorityPublishPending = false;
+let orbAuthorityLastPublishedKey = "";
 let orbForegroundWindow = {
   title: "",
   process: "",
   pid: null,
   updatedAt: 0,
+};
+let orbAuthorityState = {
+  state: "human_active",
+  eligible: false,
+  live: false,
+  idleSeconds: 0,
+  thresholdSeconds: 30,
+  claimedCommandId: "",
+  syntheticCursor: null,
+  lastSyntheticAtMs: 0,
+  lastReleaseReason: "",
+  lastHumanReturnReason: "",
 };
 let quitAfterHudShutdown = false;
 let overlayState = {
@@ -316,6 +340,19 @@ function getOverlayInputState() {
   };
 }
 
+function getOrbAuthoritySnapshot() {
+  return {
+    state: orbAuthorityState.state,
+    eligible: Boolean(orbAuthorityState.eligible),
+    live: Boolean(orbAuthorityState.live),
+    idleSeconds: Number(orbAuthorityState.idleSeconds || 0),
+    thresholdSeconds: Number(orbAuthorityState.thresholdSeconds || 30),
+    claimedCommandId: String(orbAuthorityState.claimedCommandId || ""),
+    lastReleaseReason: String(orbAuthorityState.lastReleaseReason || ""),
+    lastHumanReturnReason: String(orbAuthorityState.lastHumanReturnReason || ""),
+  };
+}
+
 async function capturePerceptionFrame() {
   const cursorPoint = screen.getCursorScreenPoint();
   const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
@@ -357,6 +394,316 @@ async function getCachedForegroundWindowInfo() {
     updatedAt: now,
   };
   return orbForegroundWindow;
+}
+
+async function publishOrbAuthorityState(reason = "") {
+  const publishPayload = {
+    state: orbAuthorityState.state,
+    eligible: Boolean(orbAuthorityState.eligible),
+    live: Boolean(orbAuthorityState.live),
+    idle_seconds: Number(orbAuthorityState.idleSeconds || 0),
+    threshold_seconds: Number(orbAuthorityState.thresholdSeconds || 30),
+    claimed_command_id: String(orbAuthorityState.claimedCommandId || ""),
+    reason: String(reason || orbAuthorityState.lastReleaseReason || ""),
+    actor: "electron.orb",
+  };
+  const nextKey = JSON.stringify(publishPayload);
+  if (nextKey === orbAuthorityLastPublishedKey) {
+    return null;
+  }
+  if (orbAuthorityPublishPending) {
+    return null;
+  }
+  const hudState = getHudState();
+  if (!hudState?.ready) {
+    return null;
+  }
+  orbAuthorityPublishPending = true;
+  try {
+    const payload = await fetchHudJson("/api/orb/authority/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(publishPayload),
+    });
+    orbAuthorityLastPublishedKey = nextKey;
+    return payload;
+  } catch (error) {
+    log("Orb authority state publish failed", error instanceof Error ? error.message : String(error));
+    return null;
+  } finally {
+    orbAuthorityPublishPending = false;
+  }
+}
+
+async function cancelOrbAuthorityQueue(reason) {
+  const hudState = getHudState();
+  if (!hudState?.ready) {
+    return null;
+  }
+  try {
+    return await fetchHudJson("/api/orb/authority/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reason: String(reason || "Orb authority queue canceled."),
+        actor: "electron.orb",
+      }),
+    });
+  } catch (error) {
+    log("Orb authority cancel failed", error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+async function completeOrbAuthorityCommand(commandId, status, detail, result = {}, { humanReturned = false } = {}) {
+  if (!commandId) {
+    return null;
+  }
+  try {
+    return await fetchHudJson("/api/orb/authority/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command_id: String(commandId),
+        status: String(status),
+        detail: String(detail || ""),
+        result,
+        actor: "electron.orb",
+        human_returned: Boolean(humanReturned),
+      }),
+    });
+  } catch (error) {
+    log("Orb authority completion failed", error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+async function releaseOrbAuthority(reason, { humanReturned = false } = {}) {
+  const detail = String(reason || "Orb authority released.").trim() || "Orb authority released.";
+  const claimedCommandId = String(orbAuthorityState.claimedCommandId || "");
+  if (claimedCommandId) {
+    await completeOrbAuthorityCommand(
+      claimedCommandId,
+      humanReturned ? "released" : "canceled",
+      detail,
+      {},
+      { humanReturned },
+    );
+  }
+  orbAuthorityState = {
+    ...orbAuthorityState,
+    state: humanReturned ? "handback" : "human_active",
+    live: false,
+    claimedCommandId: "",
+    lastReleaseReason: detail,
+    lastHumanReturnReason: humanReturned ? detail : orbAuthorityState.lastHumanReturnReason,
+  };
+  await publishOrbAuthorityState(detail);
+  notifyOverlayState(mainWindow);
+}
+
+async function executeOrbAuthorityCommand(command, inputState) {
+  const payload = command && typeof command === "object" ? command : {};
+  const commandId = String(payload.id || "").trim();
+  const kind = String(payload.kind || "").trim().toLowerCase();
+  const args = payload.args && typeof payload.args === "object" ? payload.args : {};
+  const cursorScreen = inputState?.cursorScreen && typeof inputState.cursorScreen === "object" ? inputState.cursorScreen : null;
+  const workArea = inputState?.workArea && typeof inputState.workArea === "object" ? inputState.workArea : { x: 0, y: 0 };
+  const coordinateSpace = String(args.coordinate_space || args.coordinateSpace || "screen").trim().toLowerCase();
+  const resolveScreenPoint = (x, y) => {
+    const pointX = Number.isFinite(Number(x)) ? Math.round(Number(x)) : Number(cursorScreen?.x || 0);
+    const pointY = Number.isFinite(Number(y)) ? Math.round(Number(y)) : Number(cursorScreen?.y || 0);
+    if (coordinateSpace === "display") {
+      return {
+        x: Number(workArea.x || 0) + pointX,
+        y: Number(workArea.y || 0) + pointY,
+      };
+    }
+    return { x: pointX, y: pointY };
+  };
+
+  try {
+    if (kind === "mouse.move") {
+      const targetPoint = resolveScreenPoint(args.x, args.y);
+      await executeWindowsInputCommand(
+        {
+          kind,
+          args: targetPoint,
+        },
+        { platform: process.platform },
+      );
+      orbAuthorityState.syntheticCursor = { x: targetPoint.x, y: targetPoint.y };
+      orbAuthorityState.lastSyntheticAtMs = Date.now();
+      await completeOrbAuthorityCommand(commandId, "completed", "Cursor movement executed through Orb authority.", {
+        cursor: { x: targetPoint.x, y: targetPoint.y },
+        coordinate_space: coordinateSpace,
+      });
+    } else if (kind === "mouse.click") {
+      const targetPoint =
+        Number.isFinite(Number(args.x)) && Number.isFinite(Number(args.y))
+          ? resolveScreenPoint(args.x, args.y)
+          : null;
+      if (targetPoint !== null) {
+        await executeWindowsInputCommand(
+          {
+            kind: "mouse.move",
+            args: targetPoint,
+          },
+          { platform: process.platform },
+        );
+        orbAuthorityState.syntheticCursor = { x: targetPoint.x, y: targetPoint.y };
+        orbAuthorityState.lastSyntheticAtMs = Date.now();
+      }
+      await executeWindowsInputCommand(
+        {
+          kind,
+          args,
+        },
+        { platform: process.platform },
+      );
+      orbAuthorityState.lastSyntheticAtMs = Date.now();
+      await completeOrbAuthorityCommand(commandId, "completed", "Mouse click executed through Orb authority.", {
+        button: String(args.button || "left"),
+        double: Boolean(args.double),
+        coordinate_space: coordinateSpace,
+      });
+    } else {
+      await executeWindowsInputCommand(
+        {
+          kind,
+          args,
+        },
+        { platform: process.platform },
+      );
+      orbAuthorityState.lastSyntheticAtMs = Date.now();
+      await completeOrbAuthorityCommand(commandId, "completed", `${kind} executed through Orb authority.`, {
+        kind,
+      });
+    }
+  } catch (error) {
+    await completeOrbAuthorityCommand(
+      commandId,
+      "failed",
+      `Orb authority command failed: ${error instanceof Error ? error.message : String(error)}`,
+      {},
+    );
+  } finally {
+    orbAuthorityState.claimedCommandId = "";
+  }
+}
+
+async function tickOrbAuthorityLoop() {
+  if (orbAuthorityCommandPending) {
+    return;
+  }
+  const hudState = getHudState();
+  if (!hudState?.ready || !orbWindow || orbWindow.isDestroyed()) {
+    return;
+  }
+
+  orbAuthorityCommandPending = true;
+  try {
+    const [inputState, orbSurface] = await Promise.all([
+      Promise.resolve(getOverlayInputState()),
+      fetchHudJson("/api/orb"),
+    ]);
+    const thresholdSeconds = Math.max(
+      1,
+      Number(orbSurface?.cursor_policy?.threshold_ms || 30000) / 1000,
+    );
+    const eligible = Boolean(orbSurface?.operator_cursor_eligible);
+    const now = Date.now();
+
+    orbAuthorityState.eligible = eligible;
+    orbAuthorityState.idleSeconds = Number(inputState?.idleSeconds || 0);
+    orbAuthorityState.thresholdSeconds = thresholdSeconds;
+
+    if (
+      detectHumanCursorReturn({
+        live: orbAuthorityState.live,
+        currentCursor: inputState?.cursorScreen,
+        syntheticCursor: orbAuthorityState.syntheticCursor,
+        lastSyntheticAtMs: orbAuthorityState.lastSyntheticAtMs,
+        nowMs: now,
+      }) ||
+      detectHumanKeyboardReturn({
+        live: orbAuthorityState.live,
+        idleSeconds: inputState?.idleSeconds,
+        lastSyntheticAtMs: orbAuthorityState.lastSyntheticAtMs,
+        nowMs: now,
+      })
+    ) {
+      await releaseOrbAuthority("Human input resumed. Francis handed control back immediately.", { humanReturned: true });
+      return;
+    }
+
+    const authorityLive = canEngageOrbAuthority({
+      eligible,
+      idleSeconds: inputState?.idleSeconds,
+      thresholdSeconds,
+    });
+    orbAuthorityState.live = authorityLive;
+    orbAuthorityState.state = inferOrbAuthorityState({
+      eligible,
+      live: authorityLive,
+      idleSeconds: inputState?.idleSeconds,
+      thresholdSeconds,
+    });
+    await publishOrbAuthorityState(
+      authorityLive
+        ? "Francis authority is live in Away mode."
+        : eligible
+          ? "Away authority is armed while the idle threshold accumulates."
+          : "Orb authority is not eligible in the current mode and run state.",
+    );
+    if (!authorityLive) {
+      notifyOverlayState(mainWindow);
+      return;
+    }
+
+    const claim = await fetchHudJson("/api/orb/authority/claim-next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        authority_live: true,
+        idle_seconds: Number(inputState?.idleSeconds || 0),
+        threshold_seconds: thresholdSeconds,
+        actor: "electron.orb",
+      }),
+    });
+    if (!claim?.command || typeof claim.command !== "object") {
+      notifyOverlayState(mainWindow);
+      return;
+    }
+    orbAuthorityState.claimedCommandId = String(claim.command.id || "");
+    orbAuthorityState.state = "francis_authority";
+    await publishOrbAuthorityState("Francis is executing a queued Orb authority command.");
+    await executeOrbAuthorityCommand(claim.command, inputState);
+    notifyOverlayState(mainWindow);
+  } catch (error) {
+    log("Orb authority loop failed", error instanceof Error ? error.message : String(error));
+  } finally {
+    orbAuthorityCommandPending = false;
+  }
+}
+
+function stopOrbAuthorityLoop() {
+  if (orbAuthorityTimer !== null) {
+    clearInterval(orbAuthorityTimer);
+    orbAuthorityTimer = null;
+  }
+  orbAuthorityCommandPending = false;
+  orbAuthorityLastPublishedKey = "";
+}
+
+function ensureOrbAuthorityLoop() {
+  if (orbAuthorityTimer !== null) {
+    return;
+  }
+  orbAuthorityTimer = setInterval(() => {
+    void tickOrbAuthorityLoop();
+  }, ORB_AUTHORITY_SYNC_INTERVAL_MS);
+  void tickOrbAuthorityLoop();
 }
 
 function getLifecycleState() {
@@ -580,6 +927,7 @@ function getOverlayState(win = mainWindow) {
         toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
       },
       input: getOverlayInputState(),
+      authority: getOrbAuthoritySnapshot(),
     };
   }
 
@@ -1930,6 +2278,7 @@ function createOrbWindow() {
     log("Unexpected orb HUD load error", error instanceof Error ? error.message : String(error));
   });
   ensureOrbPerceptionLoop();
+  ensureOrbAuthorityLoop();
 
   win.once("ready-to-show", () => {
     if (startupProfile.visible) {
@@ -1953,6 +2302,7 @@ function createOrbWindow() {
     if (orbWindow === win) {
       orbWindow = null;
       stopOrbPerceptionLoop();
+      stopOrbAuthorityLoop();
     }
   });
 
@@ -2168,8 +2518,8 @@ function registerIpc() {
   ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
   ipcMain.handle("overlay:open-path", (_event, target) => openLifecyclePath(target));
   ipcMain.handle("overlay:get-orb-surface", () => fetchHudJson("/api/orb"));
-  ipcMain.handle("overlay:panic-stop", () =>
-    fetchHudJson("/api/actions/execute", {
+  ipcMain.handle("overlay:panic-stop", async () => {
+    const response = await fetchHudJson("/api/actions/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2179,8 +2529,11 @@ function registerIpc() {
         role: "architect",
         user: "electron.orb",
       }),
-    }),
-  );
+    });
+    await cancelOrbAuthorityQueue("Panic stop canceled queued Orb authority commands.");
+    await releaseOrbAuthority("Panic stop released Orb authority immediately.");
+    return response;
+  });
   ipcMain.handle("overlay:show-lens", () => showLensWindow());
   ipcMain.handle("overlay:hide-lens", () => hideLensWindow());
 
@@ -2421,6 +2774,7 @@ app.on("will-quit", () => {
     hudRecoveryTimer = null;
   }
   stopOrbPerceptionLoop();
+  stopOrbAuthorityLoop();
   if (mainWindow && !mainWindow.isDestroyed()) {
     schedulePreferenceSave(mainWindow, { immediate: true });
   }

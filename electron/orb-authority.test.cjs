@@ -1,0 +1,50 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const {
+  canEngageOrbAuthority,
+  detectHumanCursorReturn,
+  detectHumanKeyboardReturn,
+  inferOrbAuthorityState,
+} = require("./orb-authority");
+
+test("canEngageOrbAuthority requires eligibility and idle threshold", () => {
+  assert.equal(canEngageOrbAuthority({ eligible: false, idleSeconds: 40, thresholdSeconds: 30 }), false);
+  assert.equal(canEngageOrbAuthority({ eligible: true, idleSeconds: 29, thresholdSeconds: 30 }), false);
+  assert.equal(canEngageOrbAuthority({ eligible: true, idleSeconds: 30, thresholdSeconds: 30 }), true);
+});
+
+test("inferOrbAuthorityState distinguishes human active idle armed authority and handback", () => {
+  assert.equal(inferOrbAuthorityState({ eligible: false, idleSeconds: 0 }), "human_active");
+  assert.equal(inferOrbAuthorityState({ eligible: true, idleSeconds: 8, thresholdSeconds: 30 }), "idle_armed");
+  assert.equal(inferOrbAuthorityState({ eligible: true, live: true, idleSeconds: 30, thresholdSeconds: 30 }), "francis_authority");
+  assert.equal(inferOrbAuthorityState({ handback: true }), "handback");
+});
+
+test("detectHumanCursorReturn ignores synthetic grace and catches cursor deviation", () => {
+  assert.equal(
+    detectHumanCursorReturn({
+      live: true,
+      currentCursor: { x: 200, y: 100 },
+      syntheticCursor: { x: 204, y: 104 },
+      lastSyntheticAtMs: 950,
+      nowMs: 1000,
+    }),
+    false,
+  );
+  assert.equal(
+    detectHumanCursorReturn({
+      live: true,
+      currentCursor: { x: 200, y: 100 },
+      syntheticCursor: { x: 240, y: 140 },
+      lastSyntheticAtMs: 500,
+      nowMs: 1000,
+    }),
+    true,
+  );
+});
+
+test("detectHumanKeyboardReturn waits out grace and idle reset", () => {
+  assert.equal(detectHumanKeyboardReturn({ live: true, idleSeconds: 0, lastSyntheticAtMs: 900, nowMs: 1000 }), false);
+  assert.equal(detectHumanKeyboardReturn({ live: true, idleSeconds: 0, lastSyntheticAtMs: 0, nowMs: 2500 }), true);
+});
