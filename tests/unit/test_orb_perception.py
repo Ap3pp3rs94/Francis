@@ -168,3 +168,51 @@ def test_orb_perception_downgrades_transient_francis_targets() -> None:
         assert perception["target"]["zone"]["kind"] == "francis_action_row"
     finally:
         orb_perception.record_orb_perception_view(previous)
+
+
+def test_orb_perception_infers_francis_navigation_open_affordance() -> None:
+    previous = orb_perception.get_orb_perception_view()
+    try:
+        captured_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        perception = orb_perception.record_orb_perception_view(
+            {
+                "captured_at": captured_at,
+                "display_id": 1,
+                "display": {"width": 1536, "height": 912},
+                "idle_seconds": 1,
+                "cursor": {"x": 220, "y": 420},
+                "target_stability": {
+                    "state": "settled",
+                    "dwell_ms": 212,
+                    "travel_px": 18,
+                    "sample_count": 6,
+                },
+                "window": {
+                    "title": "Francis Lens",
+                    "process": "electron.exe",
+                    "pid": 4242,
+                    "bounds": {"x": 100, "y": 80, "width": 1200, "height": 760},
+                },
+                "frame": {"width": 640, "height": 380, "data_url": "data:image/jpeg;base64,frame"},
+                "focus": {"width": 196, "height": 196, "data_url": "data:image/jpeg;base64,focus"},
+            }
+        )
+
+        assert perception["active_surface"]["kind"] == "francis"
+        assert perception["target"]["zone"]["kind"] == "francis_navigation"
+        assert any(
+            item["kind"] == "open_key"
+            for item in perception["target"]["affordances"]
+            if isinstance(item, dict)
+        )
+
+        target = orb_perception.resolve_orb_focus_target()
+        assert target is not None
+        assert target["zone"]["kind"] == "francis_navigation"
+        assert any(
+            item["kind"] == "open_key"
+            for item in target["affordances"]
+            if isinstance(item, dict)
+        )
+    finally:
+        orb_perception.record_orb_perception_view(previous)

@@ -185,6 +185,20 @@ def _compact_command(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _present_command(row: dict[str, Any]) -> dict[str, Any]:
+    compact = _compact_command(row)
+    status = str(compact.get("status", "queued")).strip().lower() or "queued"
+    actor = str(compact.get("claimed_by", "")).strip() or str(compact.get("actor", "")).strip()
+    return {
+        **compact,
+        **_command_receipt_summary(
+            row,
+            status=status,
+            actor=actor,
+            human_returned=bool(status == "released" and "human" in str(row.get("detail", "")).strip().lower()),
+        ),
+    }
+
 
 def _command_summary(row: dict[str, Any]) -> str:
     kind = str(row.get("kind", "command")).strip() or "command"
@@ -282,7 +296,7 @@ def get_orb_authority_view(*, recent_limit: int = 8) -> dict[str, Any]:
     state = _load_state()
     pending = [_compact_command(row) for row in rows if str(row.get("status", "")).strip().lower() == "queued"]
     claimed = [_compact_command(row) for row in rows if str(row.get("status", "")).strip().lower() == "claimed"]
-    recent = [_compact_command(row) for row in rows if str(row.get("status", "")).strip().lower() != "queued"]
+    recent = [_present_command(row) for row in rows if str(row.get("status", "")).strip().lower() != "queued"]
     recent = list(reversed(recent[-max(1, recent_limit) :]))
 
     if state["live"]:

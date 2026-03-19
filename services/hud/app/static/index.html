@@ -796,6 +796,51 @@
         gap: 10px;
       }
 
+      .overlay-dock-authority-recent {
+        display: grid;
+        gap: 8px;
+      }
+
+      .overlay-authority-recent-item {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(15, 23, 35, 0.08);
+        background: rgba(15, 23, 35, 0.04);
+      }
+
+      .overlay-authority-recent-item[data-highlight="concrete"] {
+        border-color: rgba(35, 104, 74, 0.22);
+        background:
+          linear-gradient(180deg, rgba(35, 104, 74, 0.06), rgba(255, 255, 255, 0.92));
+      }
+
+      .overlay-authority-recent-item[data-highlight="tracking"] {
+        border-color: rgba(182, 128, 37, 0.22);
+        background:
+          linear-gradient(180deg, rgba(182, 128, 37, 0.06), rgba(255, 255, 255, 0.92));
+      }
+
+      .overlay-authority-recent-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .overlay-authority-recent-head strong {
+        margin: 0;
+        color: var(--ink);
+      }
+
+      .overlay-authority-recent-head span {
+        color: var(--muted);
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
       .overlay-dock-operator {
         display: grid;
         gap: 10px;
@@ -2167,6 +2212,15 @@
           <div class="desktop-pill"><strong>State</strong><span>Human Active</span></div>
           <div class="desktop-pill"><strong>Queue</strong><span>0 pending</span></div>
         </div>
+        <div class="overlay-dock-authority-recent" id="overlay-authority-recent">
+          <div class="overlay-authority-recent-item" data-highlight="weak">
+            <div class="overlay-authority-recent-head">
+              <strong>Recent Authority</strong>
+              <span>Idle</span>
+            </div>
+            <span>Grounded authority receipts will appear here after Orb commands move through the governed queue.</span>
+          </div>
+        </div>
         <div class="overlay-dock-authority-actions">
           <button class="btn-secondary" type="button" id="overlay-queue-move" onclick="queueOrbMoveHere()">Queue Move Here</button>
           <button class="btn-secondary" type="button" id="overlay-queue-click" onclick="queueOrbClickHere()">Queue Click Here</button>
@@ -2721,6 +2775,7 @@
         const authorityMeta = document.getElementById("overlay-authority-meta");
         const authoritySummary = document.getElementById("overlay-authority-summary");
         const authorityCards = document.getElementById("overlay-authority-cards");
+        const authorityRecent = document.getElementById("overlay-authority-recent");
         const queueMove = document.getElementById("overlay-queue-move");
         const queueClick = document.getElementById("overlay-queue-click");
         const queueSave = document.getElementById("overlay-queue-save");
@@ -2759,6 +2814,7 @@
           !authorityMeta ||
           !authoritySummary ||
           !authorityCards ||
+          !authorityRecent ||
           !queueMove ||
           !queueClick ||
           !queueSave ||
@@ -3004,6 +3060,57 @@
               `<div class="desktop-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`,
           )
           .join("");
+        const recentAuthorityReceipts = Array.isArray(currentOrbAuthority?.recent)
+          ? currentOrbAuthority.recent.slice(0, 3)
+          : [];
+        authorityRecent.innerHTML = recentAuthorityReceipts.length > 0
+          ? recentAuthorityReceipts
+            .map((row) => {
+              const grounding = row?.grounding && typeof row.grounding === "object" ? row.grounding : {};
+              const highlight = String(row?.grounding_state || grounding.state || "weak").trim().toLowerCase() || "weak";
+              const kindLabel = titleCase(String(row?.kind || "authority receipt").replaceAll(".", " "));
+              const statusLabel = titleCase(String(row?.status || "recorded").replaceAll("_", " "));
+              const summary = String(
+                row?.summary_text
+                  || row?.grounding_summary
+                  || row?.detail
+                  || row?.reason
+                  || "Authority receipt recorded.",
+              ).trim();
+              const targetValue = String(
+                grounding.primary_action_label
+                  || grounding.zone_label
+                  || grounding.target_label
+                  || "",
+              ).trim();
+              const metaParts = [statusLabel];
+              if (targetValue) {
+                metaParts.push(targetValue);
+              }
+              if (row?.grounding_control_ready) {
+                metaParts.push("Control Ready");
+              }
+              return `
+                <div class="overlay-authority-recent-item" data-highlight="${escapeHtml(highlight)}">
+                  <div class="overlay-authority-recent-head">
+                    <strong>${escapeHtml(kindLabel)}</strong>
+                    <span>${escapeHtml(statusLabel)}</span>
+                  </div>
+                  <span>${escapeHtml(summary)}</span>
+                  <span class="meta tiny">${escapeHtml(metaParts.join(" | "))}</span>
+                </div>
+              `;
+            })
+            .join("")
+          : `
+              <div class="overlay-authority-recent-item" data-highlight="weak">
+                <div class="overlay-authority-recent-head">
+                  <strong>Recent Authority</strong>
+                  <span>Idle</span>
+                </div>
+                <span>Grounded authority receipts will appear here after Orb commands move through the governed queue.</span>
+              </div>
+            `;
         chatInput.disabled = orbQuickChat.pending;
         chatSend.disabled = orbQuickChat.pending;
         queueMove.disabled = false;

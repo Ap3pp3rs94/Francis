@@ -280,6 +280,10 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert '.overlay-perception-preview[data-stability="settled"]' in response.text
     assert '#orb-render-root[data-target-stability="settled"]:not(.orb-hold):not(.orb-handback) canvas' in response.text
     assert '#orb-overlay[data-target-stability="settled"] .orb-trail-node' in response.text
+    assert 'id="overlay-authority-recent"' in response.text
+    assert 'class="overlay-authority-recent-item"' in response.text
+    assert 'const authorityRecent = document.getElementById("overlay-authority-recent");' in response.text
+    assert "const recentAuthorityReceipts = Array.isArray(currentOrbAuthority?.recent)" in response.text
     assert 'function previewOrbFocusAction()' in response.text
     assert 'function runOrbFocusAction()' in response.text
     assert 'function showOrbLatestReceipt()' in response.text

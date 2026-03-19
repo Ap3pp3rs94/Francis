@@ -523,30 +523,84 @@ def _build_target_affordances(
             },
         )
     elif surface_kind == "francis":
-        affordances.append(
-            {
-                "kind": "confirm_key",
-                "label": "Confirm",
-                "summary": "Press Enter on the active Francis control surface.",
-                "command": {
-                    "kind": "keyboard.key",
-                    "args": {"key": "enter"},
-                    "reason": "Press Enter on the active Francis control surface during Orb authority.",
+        if zone_kind == "francis_navigation":
+            affordances.insert(
+                0,
+                {
+                    "kind": "open_key",
+                    "label": "Open",
+                    "summary": "Press Enter on the selected Francis navigation control.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "enter"},
+                        "reason": "Press Enter on the selected Francis navigation control during Orb authority.",
+                    },
                 },
-            }
-        )
-        affordances.append(
-            {
-                "kind": "cancel_key",
-                "label": "Cancel",
-                "summary": "Press Escape on the active Francis control surface.",
-                "command": {
-                    "kind": "keyboard.key",
-                    "args": {"key": "escape"},
-                    "reason": "Press Escape on the active Francis control surface during Orb authority.",
+            )
+            affordances.append(
+                {
+                    "kind": "cancel_key",
+                    "label": "Cancel",
+                    "summary": "Press Escape on the Francis navigation surface.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "escape"},
+                        "reason": "Press Escape on the Francis navigation surface during Orb authority.",
+                    },
                 },
-            }
-        )
+            )
+        elif zone_kind in {"francis_action_row", "francis_footer_actions"}:
+            zone_phrase = "primary Francis action controls" if zone_kind == "francis_action_row" else "Francis footer action controls"
+            affordances.insert(
+                0,
+                {
+                    "kind": "confirm_key",
+                    "label": "Confirm",
+                    "summary": f"Press Enter on the {zone_phrase}.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "enter"},
+                        "reason": f"Press Enter on the {zone_phrase} during Orb authority.",
+                    },
+                },
+            )
+            affordances.append(
+                {
+                    "kind": "cancel_key",
+                    "label": "Cancel",
+                    "summary": f"Press Escape on the {zone_phrase}.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "escape"},
+                        "reason": f"Press Escape on the {zone_phrase} during Orb authority.",
+                    },
+                },
+            )
+        elif zone_kind == "francis_workspace":
+            affordances.append(
+                {
+                    "kind": "confirm_key",
+                    "label": "Confirm",
+                    "summary": "Press Enter on the active Francis workspace control.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "enter"},
+                        "reason": "Press Enter on the active Francis workspace control during Orb authority.",
+                    },
+                },
+            )
+            affordances.append(
+                {
+                    "kind": "cancel_key",
+                    "label": "Cancel",
+                    "summary": "Press Escape on the active Francis workspace control.",
+                    "command": {
+                        "kind": "keyboard.key",
+                        "args": {"key": "escape"},
+                        "reason": "Press Escape on the active Francis workspace control during Orb authority.",
+                    },
+                },
+            )
     elif surface_kind == "browser" and zone_kind == "browser_content":
         affordances.append(
             {

@@ -101,6 +101,11 @@ def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None
     assert any(card["label"] == "Grounding" for card in queued_summary["presentation_cards"])
     assert claimed_summary["grounding_state"] == "concrete"
     assert completed_summary["grounding_state"] == "concrete"
+    authority_view = orb_authority.get_orb_authority_view()
+    assert authority_view["recent"]
+    assert authority_view["recent"][0]["summary_text"]
+    assert authority_view["recent"][0]["grounding_state"] == "concrete"
+    assert any(card["label"] == "Grounding" for card in authority_view["recent"][0]["presentation_cards"])
 
 
 def test_orb_authority_state_and_cancel(monkeypatch, tmp_path: Path) -> None:
