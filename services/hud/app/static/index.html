@@ -661,6 +661,54 @@
         flex: 1 1 140px;
       }
 
+      .overlay-dock-chat {
+        display: grid;
+        gap: 10px;
+        padding: 14px 16px;
+        border: 1px solid rgba(23, 32, 42, 0.12);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .overlay-dock-chat-head {
+        display: grid;
+        gap: 4px;
+      }
+
+      .overlay-dock-chat-head strong {
+        display: block;
+      }
+
+      .overlay-dock-chat-head span,
+      .overlay-dock-perception,
+      .overlay-dock-reply {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .overlay-dock-perception {
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(15, 23, 35, 0.04);
+        border: 1px solid rgba(15, 23, 35, 0.08);
+      }
+
+      .overlay-dock-reply {
+        min-height: 54px;
+      }
+
+      .overlay-dock-chat .input-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .overlay-dock-chat input {
+        min-width: 0;
+      }
+
       #orb-render-root {
         position: absolute;
         top: 0;
@@ -811,7 +859,7 @@
             </div>
             <div class="orb-stage" id="orb-stage" title="The Orb stays free-floating unless Away execution explicitly takes cursor authority.">
               <p class="orb-stage-copy" id="orb-stage-copy">
-                The Orb floats independently while you keep the mouse. Cursor authority is reserved for Away execution.
+                The Orb traces your cursor while you are active, then returns to free ambient motion the moment you stop driving it.
               </p>
               <div class="orb-stage-tags">
                 <div class="orb-tag"><strong>Anchor</strong><span id="orb-anchor">ambient</span></div>
@@ -829,7 +877,7 @@
               <div class="metric-pill"><strong>Pulse</strong><span>steady</span></div>
             </div>
             <p class="meta tiny orb-controls" id="orb-controls">
-              Right-click the Orb for controls. Hold it to panic stop when control exposes that path in scope.
+              Right-click the Orb for quick chat and controls. Hold it to panic stop when control exposes that path in scope.
             </p>
           </article>
           <div class="hero-copy-block">
@@ -839,7 +887,7 @@
             <p class="hero-copy">
               Francis Lens can stay out of the way until you open it. The Orb remains visible,
               calm, and governed while the deeper operator surfaces stay hidden unless you want
-              them. Away execution is the only path that should take cursor authority.
+              them. When you move, Francis moves with you. Away execution is the only path that should take cursor authority.
             </p>
             <div class="mode-row" id="mode-row"></div>
           </div>
@@ -1756,6 +1804,27 @@
         <strong>Francis</strong>
         <span id="overlay-dock-status">Ambient overlay ready. Open Lens when you want the full operator surface.</span>
       </div>
+      <div class="overlay-dock-chat">
+        <div class="overlay-dock-chat-head">
+          <strong>Quick Chat</strong>
+          <span id="overlay-chat-meta">Right-click the Orb to unfold a compact conversation surface.</span>
+        </div>
+        <div class="overlay-dock-perception" id="overlay-perception-summary">
+          Visible desktop context is not attached yet.
+        </div>
+        <div class="overlay-dock-reply" id="overlay-chat-reply">
+          Ask a short question or give a direct command without opening Lens.
+        </div>
+        <div class="input-row">
+          <input
+            id="overlay-chat-input"
+            type="text"
+            maxlength="800"
+            placeholder="Ask Francis from the Orb"
+          />
+          <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
+        </div>
+      </div>
       <div class="overlay-dock-actions" id="overlay-dock-actions">
         <button class="btn-primary" type="button" id="overlay-open-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
         <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="hideLensFromOrbSurface()">Hide Lens</button>
@@ -1798,6 +1867,12 @@
       let currentDashboard = {};
       let currentVoiceSurface = {};
       let currentOrbSurface = {};
+      let currentOrbPerception = {
+        state: "idle",
+        summary: "Live desktop perception is not attached yet.",
+        frame: { width: 0, height: 0, data_url: "" },
+        window: { title: "", process: "" },
+      };
       let currentShiftReport = {};
       let currentMissionsSurface = {};
       let currentIncidentsSurface = {};
@@ -1840,6 +1915,8 @@
       let orbAnimationFrame = null;
       let orbHoldTimer = null;
       let orbHoldTriggered = false;
+      let orbInputSyncTimer = null;
+      let orbPerceptionSyncTimer = null;
       let hudInteractionsBound = false;
       let orbSpeechBurstUntil = 0;
       let orbThinkingUntil = 0;
@@ -1872,7 +1949,22 @@
         x: 18,
         y: 18,
       };
+      let orbQuickChat = {
+        pending: false,
+        reply: "",
+        error: "",
+      };
+      let orbBridgeWarningEmitted = false;
+      let orbSystemInput = {
+        cursorScreen: { x: 0, y: 0 },
+        cursorDisplay: { x: window.innerWidth * 0.54, y: Math.max(96, window.innerHeight * 0.24) },
+        idleSeconds: 0,
+        idleThresholdSeconds: 30,
+        humanActive: true,
+      };
       let orbWindowInteractive = false;
+      const ORB_INPUT_SYNC_INTERVAL_MS = 16;
+      const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -2092,13 +2184,19 @@
 
       function openOrbCommandMenu(anchorX, anchorY) {
         const width = Math.min(360, Math.max(240, window.innerWidth - 36));
-        const height = 132;
+        const height = 312;
         orbCommandMenu.open = true;
         orbCommandMenu.x = Math.max(18, Math.min(window.innerWidth - width - 18, Number(anchorX) - width * 0.35));
         orbCommandMenu.y = Math.max(18, Math.min(window.innerHeight - height - 18, Number(anchorY) - 20));
         document.body.dataset.orbMenu = "open";
         renderOverlayDock();
         syncOrbWindowPassThrough(Number(anchorX), Number(anchorY)).catch(() => {});
+        window.setTimeout(() => {
+          const input = document.getElementById("overlay-chat-input");
+          if (input && input instanceof HTMLElement) {
+            input.focus();
+          }
+        }, 24);
       }
 
       async function openLensFromOrbSurface() {
@@ -2140,11 +2238,28 @@
       function renderOverlayDock() {
         const dock = document.getElementById("overlay-dock");
         const status = document.getElementById("overlay-dock-status");
+        const chatMeta = document.getElementById("overlay-chat-meta");
+        const chatReply = document.getElementById("overlay-chat-reply");
+        const chatInput = document.getElementById("overlay-chat-input");
+        const chatSend = document.getElementById("overlay-chat-send");
+        const perceptionSummary = document.getElementById("overlay-perception-summary");
         const openLens = document.getElementById("overlay-open-lens");
         const hideLens = document.getElementById("overlay-hide-lens");
         const hideOverlay = document.getElementById("overlay-hide-app");
         const exitOverlay = document.getElementById("overlay-exit-app");
-        if (!dock || !status || !openLens || !hideLens || !hideOverlay || !exitOverlay) {
+        if (
+          !dock ||
+          !status ||
+          !chatMeta ||
+          !chatReply ||
+          !chatInput ||
+          !chatSend ||
+          !perceptionSummary ||
+          !openLens ||
+          !hideLens ||
+          !hideOverlay ||
+          !exitOverlay
+        ) {
           return;
         }
         if (externalOrbMode) {
@@ -2160,6 +2275,7 @@
         const handbackActive = isOrbHandbackActive();
         const cursorAuthority = hasEffectiveOrbCursorAuthority();
         const cursorEligibility = isOrbCursorEligible();
+        const authorityState = resolveOrbAuthorityState();
         const posture = String(currentOrb?.posture || "resting");
         const mode = titleCase(String(currentOrb?.mode || "assist"));
 
@@ -2169,7 +2285,7 @@
         } else if (cursorAuthority) {
           statusText = `Away authority is live. The Orb currently owns cursor visibility in ${mode}.`;
         } else if (cursorEligibility) {
-          statusText = `Away authority is armed. Francis will only take cursor visibility after ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse inactivity.`;
+          statusText = `Away authority is armed. Francis will only take cursor visibility after ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity.`;
         } else if (posture === "acting") {
           statusText = `Francis is active in ${mode} while leaving your mouse under your control.`;
         } else if (desktopState.ignoreMouseEvents) {
@@ -2178,6 +2294,21 @@
           statusText = String(currentOrb.summary);
         }
         status.textContent = statusText;
+        chatMeta.textContent = orbQuickChat.pending
+          ? "Francis is responding through the Orb."
+          : authorityState === "francis-authority"
+            ? "Away authority is live. The quick chat surface remains available from the Orb."
+            : "Compact Orb conversation surface. Stay in flow without opening Lens.";
+        chatReply.textContent = orbQuickChat.error
+          ? orbQuickChat.error
+          : orbQuickChat.reply || "Ask a short question or give a direct command without opening Lens.";
+        perceptionSummary.textContent = String(
+          currentOrbPerception?.summary
+            || currentOrb?.perception?.summary
+            || "Visible desktop context is not attached yet.",
+        );
+        chatInput.disabled = orbQuickChat.pending;
+        chatSend.disabled = orbQuickChat.pending;
 
         openLens.disabled = lensViewMode === "lens";
         hideLens.disabled = lensViewMode === "orb_only";
@@ -2231,6 +2362,138 @@
           return;
         }
         await setOrbWindowInteractive(false);
+      }
+
+      async function syncOrbInputState() {
+        if (!orbWindowMode) {
+          return;
+        }
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.getInputState !== "function") {
+          if (!orbBridgeWarningEmitted) {
+            orbBridgeWarningEmitted = true;
+            console.warn("Francis Orb desktop bridge is unavailable in the orb-only window.");
+          }
+          return;
+        }
+        orbBridgeWarningEmitted = false;
+        try {
+          const payload = await bridge.getInputState();
+          const nextIdleSeconds = Math.max(0, Number(payload?.idleSeconds || 0));
+          const nextThresholdSeconds = Math.max(1, Number(payload?.idleThresholdSeconds || 30));
+          const cursorDisplay = payload?.cursorDisplay && typeof payload.cursorDisplay === "object"
+            ? payload.cursorDisplay
+            : { x: orbMotion.pointerX, y: orbMotion.pointerY };
+          const nextX = Number(cursorDisplay.x);
+          const nextY = Number(cursorDisplay.y);
+          const previousIdleSeconds = Number(orbSystemInput.idleSeconds || 0);
+          orbSystemInput = {
+            cursorScreen: payload?.cursorScreen && typeof payload.cursorScreen === "object"
+              ? payload.cursorScreen
+              : orbSystemInput.cursorScreen,
+            cursorDisplay: {
+              x: Number.isFinite(nextX) ? nextX : orbSystemInput.cursorDisplay.x,
+              y: Number.isFinite(nextY) ? nextY : orbSystemInput.cursorDisplay.y,
+            },
+            idleSeconds: nextIdleSeconds,
+            idleThresholdSeconds: nextThresholdSeconds,
+            humanActive: Boolean(payload?.humanActive ?? nextIdleSeconds < nextThresholdSeconds),
+          };
+          if (Number.isFinite(nextX) && Number.isFinite(nextY)) {
+            const shouldLearnFromTrace =
+              orbSystemInput.humanActive &&
+              !hasEffectiveOrbCursorAuthority(performance.now()) &&
+              !isOrbHandbackActive();
+            updateOrbPointer(nextX, nextY, performance.now(), shouldLearnFromTrace ? "human" : "system");
+          }
+          if (Math.floor(previousIdleSeconds) !== Math.floor(nextIdleSeconds)) {
+            renderOrbPresentation();
+          }
+        } catch (error) {
+          console.error("Francis Orb input sync failed", error);
+          currentOrbPerception = {
+            ...currentOrbPerception,
+            state: "error",
+            summary: `Orb input sync failed: ${error?.message || error}`,
+          };
+          renderOverlayDock();
+        }
+      }
+
+      async function syncOrbPerception() {
+        if (!orbWindowMode) {
+          return;
+        }
+        try {
+          const response = await fetch("/api/orb/perception");
+          const payload = await response.json();
+          if (response.ok && payload && typeof payload === "object") {
+            currentOrbPerception = payload;
+            renderOverlayDock();
+            return;
+          }
+          currentOrbPerception = {
+            ...currentOrbPerception,
+            state: "error",
+            summary: `Orb perception update failed: ${payload?.detail || "unknown error"}`,
+          };
+        } catch (error) {
+          console.error("Francis Orb perception sync failed", error);
+          currentOrbPerception = {
+            ...currentOrbPerception,
+            state: "error",
+            summary: `Orb perception update failed: ${error?.message || error}`,
+          };
+        }
+        renderOverlayDock();
+      }
+
+      async function sendOrbQuickChat() {
+        const input = document.getElementById("overlay-chat-input");
+        const message = String(input?.value || "").trim();
+        if (!message) {
+          orbQuickChat.error = "Type a short question or command first.";
+          orbQuickChat.reply = "";
+          renderOverlayDock();
+          return;
+        }
+        orbQuickChat.pending = true;
+        orbQuickChat.error = "";
+        orbQuickChat.reply = "";
+        orbThinkingUntil = performance.now() + 1400;
+        renderOverlayDock();
+        applyOrbSignals();
+        try {
+          const response = await fetch("/api/orb/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            orbQuickChat.error = `Orb chat failed: ${payload?.detail || "unknown error"}`;
+            return;
+          }
+          orbQuickChat.reply = String(payload?.reply || "Orb chat answered without reply text.");
+          orbQuickChat.error = "";
+          if (payload?.perception && typeof payload.perception === "object") {
+            currentOrbPerception = {
+              ...currentOrbPerception,
+              ...payload.perception,
+            };
+          }
+          if (input) {
+            input.value = "";
+          }
+          orbSpeechBurstUntil = performance.now() + 1800;
+        } catch (error) {
+          orbQuickChat.error = `Orb chat failed: ${error?.message || error}`;
+        } finally {
+          orbThinkingUntil = 0;
+          orbQuickChat.pending = false;
+          renderOverlayDock();
+          applyOrbSignals();
+        }
       }
 
       function getSystemReducedMotionPreference() {
@@ -3882,15 +4145,15 @@
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
         if (!panicChip) {
-          return "The Orb stays ambient and out of the way. It locally traces your mouse cadence so its motion can learn your human correction style over time.";
+          return "The Orb stays ambient and out of the way. While you are active it traces your cursor exactly, and it keeps its local motion-learning profile for autonomous movement only.";
         }
         if (hasEffectiveOrbCursorAuthority()) {
           return "Away cursor authority is live. Hold the Orb to panic stop or right-click it for controls.";
         }
         if (isOrbCursorEligible()) {
-          return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse inactivity. Mouse traces are still being learned locally.`;
+          return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Human cursor trace remains exact until then.`;
         }
-        return "The Orb stays ambient. Hold it to panic stop when that path is live, or right-click it for controls. Mouse traces are learned locally so motion keeps tightening toward your style.";
+        return "The Orb stays ambient. Hold it to panic stop when that path is live, or right-click it to chat, inspect, or open Lens. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
       }
 
       function getOrbCursorIdleThresholdMs() {
@@ -3905,6 +4168,10 @@
         if (!canUseOrbCursor() || !isOrbCursorEligible()) {
           return false;
         }
+        const idleSeconds = Number(orbSystemInput.idleSeconds);
+        if (Number.isFinite(idleSeconds) && idleSeconds >= 0) {
+          return idleSeconds * 1000 >= getOrbCursorIdleThresholdMs();
+        }
         const lastMouseActivityAt = Number(orbMotion.lastMouseActivityAt || 0);
         if (!Number.isFinite(lastMouseActivityAt) || lastMouseActivityAt <= 0) {
           return false;
@@ -3914,6 +4181,19 @@
 
       function markUserMouseActivity(timestamp = performance.now()) {
         orbMotion.lastMouseActivityAt = timestamp;
+      }
+
+      function resolveOrbAuthorityState(timestamp = performance.now()) {
+        if (isOrbHandbackActive()) {
+          return "handback";
+        }
+        if (hasEffectiveOrbCursorAuthority(timestamp)) {
+          return "francis-authority";
+        }
+        if (isOrbCursorEligible()) {
+          return orbSystemInput.humanActive ? "human-active" : "idle-armed";
+        }
+        return orbSystemInput.humanActive ? "human-active" : "ambient";
       }
 
       function clearOrbHandback() {
@@ -4087,12 +4367,13 @@
         const handbackActive = isOrbHandbackActive();
         const cursorAuthority = hasEffectiveOrbCursorAuthority();
         const cursorEligibility = isOrbCursorEligible();
+        const authorityState = resolveOrbAuthorityState();
         const idleThresholdSeconds = Math.round(getOrbCursorIdleThresholdMs() / 1000);
         document.getElementById("orb-title").textContent =
           `${titleCase(currentOrb.posture || "resting")} | ${titleCase(currentOrb.mode || "assist")}`;
         document.getElementById("orb-status").textContent = handbackActive
           ? `L${currentOrb.interjection_level || 0} | handback`
-          : `L${currentOrb.interjection_level || 0} | ${cursorAuthority ? "away authority" : cursorEligibility ? "away armed" : "ambient"}`;
+          : `L${currentOrb.interjection_level || 0} | ${cursorAuthority ? "away authority" : cursorEligibility ? "away armed" : authorityState}`;
         document.getElementById("orb-summary").textContent = handbackActive
           ? "Authority ended cleanly. The Orb is returning to ambient rest in view."
           : currentOrb.summary || "Ambient presence is standing by.";
@@ -4107,10 +4388,10 @@
           : cursorAuthority
             ? "Away execution is live. The Orb is carrying cursor authority visibly so delegated motion stays inspectable and bounded."
             : cursorEligibility
-              ? `Away execution is live, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse inactivity before taking cursor authority. Local mouse traces are shaping the Orb's motion style in the background.`
+              ? `Away execution is live, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse and keyboard inactivity before taking cursor authority. While you remain active, the Orb traces your live cursor exactly.`
               : currentOrb.posture === "acting"
-              ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away becomes idle-gated and takes authority after you step away. Local traces keep teaching the Orb how you move."
-              : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention. It continues learning your local mouse cadence so motion feels more human over time.";
+              ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away becomes idle-gated and takes authority after you step away. Local traces keep teaching the Orb how autonomous motion should feel."
+              : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention. When you move, Francis moves with you.";
         document.getElementById("orb-anchor").textContent = handbackActive
           ? "ambient return"
           : cursorAuthority
@@ -4129,12 +4410,12 @@
               : currentOrb.movement?.profile === "guard_orbit"
                 ? "guard orbit | stop ready"
                 : "ambient float | breathing";
-        const metrics = [
-          ["Posture", handbackActive ? "Handback" : titleCase(currentOrb.posture || "resting")],
-          ["Pulse", handbackActive ? "Return Arc" : titleCase(currentOrb.visual?.pulse_kind || "steady")],
-          ["Mouse", handbackActive ? "Returning" : cursorAuthority ? "Away Authority" : cursorEligibility ? `User Control | Arms In ${idleThresholdSeconds}s` : "User Control"],
-          ["Stop Path", currentOrb.panic_ready ? "Immediate" : "Unavailable"],
-        ];
+          const metrics = [
+            ["Posture", handbackActive ? "Handback" : titleCase(currentOrb.posture || "resting")],
+            ["Pulse", handbackActive ? "Return Arc" : titleCase(currentOrb.visual?.pulse_kind || "steady")],
+            ["Authority", handbackActive ? "Handback" : cursorAuthority ? "Away Authority" : cursorEligibility ? `User Control | Arms In ${idleThresholdSeconds}s` : "User Control"],
+            ["Stop Path", currentOrb.panic_ready ? "Immediate" : "Unavailable"],
+          ];
         document.getElementById("orb-metrics").innerHTML = metrics
           .map(
             ([label, value]) =>
@@ -4147,6 +4428,9 @@
       function renderOrb(orb) {
         const previousOrb = currentOrb;
         currentOrb = orb ? { ...orb, operator_cursor_live: false } : null;
+        if (currentOrb?.perception && typeof currentOrb.perception === "object") {
+          currentOrbPerception = currentOrb.perception;
+        }
         initHudInteractions();
         if (!currentOrb) {
           return;
@@ -4178,12 +4462,13 @@
         };
       }
 
-      function updateOrbPointer(clientX, clientY, timestamp = performance.now()) {
+      function updateOrbPointer(clientX, clientY, timestamp = performance.now(), source = "human") {
         const nextX = Number(clientX);
         const nextY = Number(clientY);
         if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
           return;
         }
+        const learnFromTrace = source === "human";
         const motionProfile = getOrbMotionProfile();
         const previousActivityAt = Number(orbMotion.lastMouseActivityAt || timestamp);
         let rawVx = 0;
@@ -4229,13 +4514,15 @@
         orbMotion.lastPointerX = nextX;
         orbMotion.lastPointerY = nextY;
         orbMotion.lastMoveAt = timestamp;
-        orbMotion.lastMouseActivityAt = timestamp;
-        recordOrbMouseTrace({
-          timestamp,
-          dt: Math.max(16, timestamp - previousActivityAt),
-          rawVx,
-          rawVy,
-        });
+        if (learnFromTrace) {
+          orbMotion.lastMouseActivityAt = timestamp;
+          recordOrbMouseTrace({
+            timestamp,
+            dt: Math.max(16, timestamp - previousActivityAt),
+            rawVx,
+            rawVy,
+          });
+        }
       }
 
       function normalizeAngleDelta(delta) {
@@ -4430,14 +4717,15 @@
             return bundle.elementToOrbTarget(document.activeElement) || actionTarget;
           }
         }
+        const pointerTarget = bundle.screenPointToOrbTarget(
+          orbMotion.pointerX || getOrbFallbackTarget().x,
+          orbMotion.pointerY || getOrbFallbackTarget().y,
+          window.innerWidth,
+          window.innerHeight,
+        );
         return (
           actionTarget ||
-          bundle.screenPointToOrbTarget(
-            hasEffectiveOrbCursorAuthority() ? (orbMotion.pointerX || window.innerWidth * 0.54) : getOrbFallbackTarget().x,
-            hasEffectiveOrbCursorAuthority() ? (orbMotion.pointerY || window.innerHeight * 0.24) : getOrbFallbackTarget().y,
-            window.innerWidth,
-            window.innerHeight,
-          )
+          pointerTarget
         );
       }
 
@@ -4506,6 +4794,9 @@
 
         const handbackState = resolveOrbHandbackTarget(timestamp);
         const handbackActive = Boolean(handbackState);
+        const exactHumanTrace = !handbackActive && !cursorAuthority && orbSystemInput.humanActive;
+        let positionX = 0;
+        let positionY = 0;
         if (handbackState) {
           orbMotion.targetX = handbackState.x;
           orbMotion.targetY = handbackState.y;
@@ -4517,6 +4808,16 @@
             clearOrbHandback();
             renderOrbPresentation();
           }
+        } else if (exactHumanTrace) {
+          orbMotion.targetX = orbMotion.pointerX;
+          orbMotion.targetY = orbMotion.pointerY;
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+          orbMotion.speed = 0;
+          orbMotion.correctionX = 0;
+          orbMotion.correctionY = 0;
+          orbMotion.x = orbMotion.pointerX;
+          orbMotion.y = orbMotion.pointerY;
         } else {
           const motionProfile = getOrbMotionProfile();
           const fallback = getOrbFallbackTarget();
@@ -4565,11 +4866,17 @@
           orbMotion.x += orbMotion.vx;
           orbMotion.y += orbMotion.vy;
         }
-        const positionX = Math.max(24, Math.min(window.innerWidth - size - 24, orbMotion.x - size / 2));
-        const positionY = Math.max(24, Math.min(window.innerHeight - size - 24, orbMotion.y - size / 2));
+        if (exactHumanTrace) {
+          positionX = orbMotion.x - size / 2;
+          positionY = orbMotion.y - size / 2;
+        } else {
+          positionX = Math.max(24, Math.min(window.innerWidth - size - 24, orbMotion.x - size / 2));
+          positionY = Math.max(24, Math.min(window.innerHeight - size - 24, orbMotion.y - size / 2));
+        }
         root.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0)`;
         root.classList.toggle("orb-handback", handbackActive);
         overlay.dataset.posture = handbackActive ? "handback" : String(currentOrb.posture || "resting");
+        document.body.dataset.orbAuthority = resolveOrbAuthorityState(timestamp);
         applyOrbSignals();
       }
 
@@ -4680,6 +4987,7 @@
           return;
         }
         root.dataset.bound = "true";
+        const chatInput = document.getElementById("overlay-chat-input");
         root.addEventListener("pointerdown", beginOrbHold);
         root.addEventListener("pointerup", endOrbHold);
         root.addEventListener("pointerleave", endOrbHold);
@@ -4738,6 +5046,14 @@
             setLensViewMode("orb_only");
           }
         });
+        if (chatInput && chatInput instanceof HTMLElement) {
+          chatInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              sendOrbQuickChat();
+            }
+          });
+        }
         if (orbWindowMode) {
           setOrbWindowInteractive(false).catch(() => {});
         }
@@ -9000,6 +9316,14 @@
       applyAccessibilityPosture();
       loadOrbHumanMotionProfile();
       window.addEventListener("beforeunload", () => {
+        if (orbInputSyncTimer !== null) {
+          window.clearInterval(orbInputSyncTimer);
+          orbInputSyncTimer = null;
+        }
+        if (orbPerceptionSyncTimer !== null) {
+          window.clearInterval(orbPerceptionSyncTimer);
+          orbPerceptionSyncTimer = null;
+        }
         persistOrbHumanMotionProfile(true);
       });
 
@@ -9014,6 +9338,16 @@
                 runFabricQuery();
               }
             });
+          }
+          if (orbWindowMode) {
+            syncOrbInputState().catch(() => {});
+            syncOrbPerception().catch(() => {});
+            orbInputSyncTimer = window.setInterval(() => {
+              syncOrbInputState().catch(() => {});
+            }, ORB_INPUT_SYNC_INTERVAL_MS);
+            orbPerceptionSyncTimer = window.setInterval(() => {
+              syncOrbPerception().catch(() => {});
+            }, ORB_PERCEPTION_SYNC_INTERVAL_MS);
           }
           openStream();
         })

@@ -10,7 +10,7 @@ The shell now splits into two surfaces:
 ## What It Does
 
 - creates a transparent, frameless, always-on-top desktop Orb window
-- lets the Orb move freely across the full target display work area instead of confining it to a small shell
+- lets the Orb move freely across the full virtual desktop workspace instead of confining it to a small shell or a single panel
 - keeps the full Lens HUD in a separate hidden window until explicitly opened
 - loads the existing localhost HUD instead of bundling a second renderer
 - loads the desktop Orb from the HUD's orb-only surface instead of a separate standalone renderer
@@ -124,6 +124,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - shell-state portability now carries compatibility metadata and blocks mismatched import channels instead of silently applying them
 - the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
 - the Orb now lives in its own desktop window while the Lens HUD opens separately in external-Orb mode, and the Orb window itself is backed by the HUD's orb-only surface so the renderer path stays canonical
+- the shell now attaches live Orb perception locally by sampling the current cursor display and the foreground window title/process into the Orb surface
 
 ## Next Extensions
 

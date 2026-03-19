@@ -13,9 +13,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from francis_presence.orb import build_orb_state
 from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
-from services.hud.app.orb import get_orb_view
+from services.hud.app.orb import build_orb_chat_reply, get_orb_view
+from services.hud.app.orb_perception import get_orb_perception_view, record_orb_perception_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
@@ -151,6 +151,23 @@ class HudApprenticeshipStepCreateRequest(BaseModel):
     outputs: dict[str, object] = Field(default_factory=dict)
 
 
+class HudOrbChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=800)
+
+
+class HudOrbPerceptionFrameRequest(BaseModel):
+    captured_at: str = ""
+    display_id: int | None = None
+    idle_seconds: int = 0
+    cursor_x: int | None = None
+    cursor_y: int | None = None
+    frame_width: int = 0
+    frame_height: int = 0
+    frame_data_url: str = ""
+    window_title: str = ""
+    process_name: str = ""
+
+
 def _build_hud_payload(
     *,
     snapshot: dict[str, object] | None = None,
@@ -182,11 +199,12 @@ def _build_hud_payload(
         "snapshot": snapshot_payload,
         "actions": actions_payload,
         "voice": voice,
-        "orb": build_orb_state(
-            mode=str(snapshot_payload.get("control", {}).get("mode", "assist")),
+        "orb": get_orb_view(
+            max_actions=max_actions,
             snapshot=snapshot_payload,
-            actions_payload=actions_payload,
+            actions=actions_payload,
             voice=voice,
+            include_perception_frame=False,
         ),
         "current_work": current_work,
         "shift_report": get_shift_report_view(
@@ -482,6 +500,37 @@ def _build_app() -> FastAPI:
     @app.get("/api/orb")
     def orb(max_actions: int = 8) -> dict[str, object]:
         return get_orb_view(max_actions=max_actions)
+
+    @app.get("/api/orb/perception")
+    def orb_perception() -> dict[str, object]:
+        return get_orb_perception_view()
+
+    @app.post("/api/orb/perception")
+    def orb_perception_update(payload: HudOrbPerceptionFrameRequest) -> dict[str, object]:
+        return record_orb_perception_view(
+            {
+                "captured_at": payload.captured_at,
+                "display_id": payload.display_id,
+                "idle_seconds": payload.idle_seconds,
+                "cursor": {"x": payload.cursor_x, "y": payload.cursor_y},
+                "window": {
+                    "title": payload.window_title,
+                    "process": payload.process_name,
+                },
+                "frame": {
+                    "width": payload.frame_width,
+                    "height": payload.frame_height,
+                    "data_url": payload.frame_data_url,
+                },
+            }
+        )
+
+    @app.post("/api/orb/chat")
+    def orb_chat(payload: HudOrbChatRequest) -> dict[str, object]:
+        try:
+            return build_orb_chat_reply(message=payload.message)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/fabric/query")
     def fabric_query(payload: HudFabricQueryRequest) -> dict[str, object]:

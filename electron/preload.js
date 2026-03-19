@@ -107,8 +107,14 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   getState() {
     return ipcRenderer.invoke("overlay:get-state");
   },
+  getInputState() {
+    return ipcRenderer.invoke("overlay:get-input-state");
+  },
   getDisplayInfo() {
     return ipcRenderer.invoke("overlay:get-display-info");
+  },
+  async capturePerceptionFrame() {
+    return ipcRenderer.invoke("overlay:capture-perception-frame");
   },
   minimize() {
     return ipcRenderer.invoke("overlay:minimize");

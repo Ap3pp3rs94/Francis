@@ -22,6 +22,7 @@ import services.hud.app.views.federation as federation_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.managed_copies as managed_copies_view
+import services.hud.app.orb_perception as orb_perception_view
 import services.hud.app.views.portability as portability_view
 import services.hud.app.views.missions as missions_view
 import services.hud.app.views.repo_drilldown as repo_drilldown_view
@@ -120,8 +121,8 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Restart HUD" in response.text
     assert "Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
-    assert "The Orb floats independently while you keep the mouse." in response.text
-    assert "Right-click the Orb for controls." in response.text
+    assert "When you move, Francis moves with you." in response.text
+    assert "Right-click the Orb for quick chat and controls." in response.text
     assert "Hold it to panic stop when control exposes that path in scope." in response.text
     assert "Open Lens" in response.text
     assert "Hide Lens" in response.text
@@ -249,10 +250,70 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'const orbWindowMode = orbSurfaceMode === "window";' in response.text
     assert 'target.searchParams.set("orb", "window");' not in response.text
     assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
+    assert 'function syncOrbInputState()' in response.text
+    assert 'function syncOrbPerception()' in response.text
+    assert 'function sendOrbQuickChat()' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
     assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
     assert 'window.localStorage?.setItem(' in response.text
+
+
+def test_hud_orb_perception_route_records_live_frame() -> None:
+    previous = orb_perception_view.get_orb_perception_view()
+    try:
+        response = client.post(
+            "/api/orb/perception",
+            json={
+                "captured_at": "2026-03-18T12:00:00Z",
+                "display_id": 1,
+                "idle_seconds": 12,
+                "cursor_x": 144,
+                "cursor_y": 288,
+                "frame_width": 720,
+                "frame_height": 405,
+                "frame_data_url": "data:image/jpeg;base64,abc123",
+                "window_title": "Francis Lens",
+                "process_name": "electron.exe",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["surface"] == "orb_perception"
+        assert body["state"] == "live"
+        assert body["display_id"] == 1
+        assert body["cursor"] == {"x": 144, "y": 288}
+        assert body["window"]["title"] == "Francis Lens"
+        assert body["frame"]["width"] == 720
+        assert "Live desktop context is attached" in body["summary"]
+
+        get_response = client.get("/api/orb/perception")
+        assert get_response.status_code == 200
+        assert get_response.json()["captured_at"] == "2026-03-18T12:00:00Z"
+    finally:
+        orb_perception_view.record_orb_perception_view(previous)
+
+
+def test_hud_orb_chat_route_returns_compact_reply(monkeypatch) -> None:
+    monkeypatch.setattr(
+        hud_main,
+        "build_orb_chat_reply",
+        lambda message: {
+            "status": "ok",
+            "reply": f"orb reply for {message}",
+            "orb": {"mode": "assist", "posture": "resting", "summary": "Ambient"},
+            "perception": {"state": "live", "summary": "Desktop attached"},
+        },
+    )
+
+    response = client.post("/api/orb/chat", json={"message": "status?"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["reply"] == "orb reply for status?"
+    assert body["perception"]["summary"] == "Desktop attached"
 
 
 def test_hud_serves_orb_bundle() -> None:
@@ -310,6 +371,7 @@ def test_hud_bootstrap_aggregates_core_surfaces() -> None:
     assert body["fabric"]["surface"] == "fabric"
     assert body["voice"]["surface"] == "voice"
     assert body["orb"]["surface"] == "orb"
+    assert body["orb"]["perception"]["surface"] == "orb_perception"
     assert set(body["surface_digests"].keys()) >= {
         "snapshot",
         "actions",
@@ -407,8 +469,14 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         hud_main,
-        "build_orb_state",
-        lambda **_: {"surface": "orb", "mode": "assist", "posture": "resting", "visual": {"ring_density": 6}},
+        "get_orb_view",
+        lambda **_: {
+            "surface": "orb",
+            "mode": "assist",
+            "posture": "resting",
+            "visual": {"ring_density": 6},
+            "perception": {"surface": "orb_perception", "state": "idle", "frame": {"has_image": False}},
+        },
     )
     monkeypatch.setattr(
         hud_main,

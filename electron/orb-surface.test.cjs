@@ -22,6 +22,34 @@ test("buildOrbWindowBounds spans the full target work area for free orb motion",
   });
 });
 
+test("buildOrbWindowBounds spans the full virtual workspace across displays", () => {
+  const bounds = buildOrbWindowBounds([
+    {
+      workArea: {
+        x: -1920,
+        y: 0,
+        width: 1920,
+        height: 1080,
+      },
+    },
+    {
+      workArea: {
+        x: 0,
+        y: 0,
+        width: 1600,
+        height: 900,
+      },
+    },
+  ]);
+
+  assert.deepEqual(bounds, {
+    x: -1920,
+    y: 0,
+    width: 3520,
+    height: 1080,
+  });
+});
+
 test("buildOrbWindowBounds clamps invalid work areas to safe fullscreen minimums", () => {
   const bounds = buildOrbWindowBounds({
     x: 0,

@@ -358,7 +358,7 @@ def build_orb_state(
         summary = "Kill switch is live. The Orb is the immediate stop surface without taking your cursor."
     elif posture == "acting" and cursor_authority_eligible:
         summary = (
-            "Francis is acting in away mode. Cursor authority stays idle-gated and will arm only after 30 seconds of mouse inactivity."
+            "Francis is acting in away mode. Cursor authority stays idle-gated and will arm only after 30 seconds of mouse and keyboard inactivity."
         )
     elif posture == "acting":
         summary = f"Francis is acting in {normalized_mode} mode while leaving your mouse under your control. The Orb stays free-floating and visible."
@@ -379,7 +379,7 @@ def build_orb_state(
     elif active_execution and cursor_authority_eligible:
         detail = (
             f"Active run phase is {run_phase}. Away execution is cursor-eligible, but live cursor authority waits for "
-            "30 seconds of local mouse inactivity so the user keeps immediate control until they step away."
+            "30 seconds of local mouse and keyboard inactivity so the user keeps immediate control until they step away."
         )
     elif active_execution:
         detail = f"Active run phase is {run_phase}. The Orb stays free-floating while you keep direct mouse control."
@@ -402,7 +402,7 @@ def build_orb_state(
             "activation": "mouse_idle",
             "threshold_ms": OPERATOR_CURSOR_IDLE_THRESHOLD_MS,
             "summary": (
-                "Away execution may take cursor authority only after 30 seconds of mouse inactivity."
+                "Away execution may take cursor authority only after 30 seconds of mouse and keyboard inactivity."
                 if cursor_authority_eligible
                 else "Cursor authority is not eligible in the current mode and run state."
             ),

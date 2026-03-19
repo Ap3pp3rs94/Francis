@@ -1,6 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
@@ -67,6 +67,7 @@ const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
 const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
+const { getForegroundWindowInfo } = require("./foreground-window");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -78,6 +79,8 @@ const {
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
+const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
+const ORB_FOREGROUND_WINDOW_CACHE_MS = 2000;
 
 let mainWindow = null;
 let orbWindow = null;
@@ -96,6 +99,15 @@ let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
 let hudRecoveryAttempts = 0;
+let orbPerceptionTimer = null;
+let orbPerceptionSyncPending = false;
+let orbPerceptionErrorLogged = false;
+let orbForegroundWindow = {
+  title: "",
+  process: "",
+  pid: null,
+  updatedAt: 0,
+};
 let quitAfterHudShutdown = false;
 let overlayState = {
   ignoreMouseEvents: false,
@@ -278,6 +290,73 @@ function getDisplayInfo(win = mainWindow) {
     activeDisplay,
     displays,
   };
+}
+
+function getOrbSurfaceBounds() {
+  return buildOrbWindowBounds(getSortedDisplays());
+}
+
+function getOverlayInputState() {
+  const cursorScreen = screen.getCursorScreenPoint();
+  const activeDisplay = screen.getDisplayNearestPoint(cursorScreen);
+  const workArea = getOrbSurfaceBounds();
+  const cursorDisplay = {
+    x: cursorScreen.x - Number(workArea.x || 0),
+    y: cursorScreen.y - Number(workArea.y || 0),
+  };
+  const idleSeconds = Number(powerMonitor?.getSystemIdleTime?.() || 0);
+  return {
+    displayId: activeDisplay.id,
+    cursorScreen,
+    cursorDisplay,
+    workArea,
+    idleSeconds,
+    idleThresholdSeconds: 30,
+    humanActive: idleSeconds < 30,
+  };
+}
+
+async function capturePerceptionFrame() {
+  const cursorPoint = screen.getCursorScreenPoint();
+  const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
+  const targetDisplayId = activeDisplay?.id ?? null;
+  if (!desktopCapturer || typeof desktopCapturer.getSources !== "function") {
+    throw new Error("desktopCapturer is unavailable in the main process");
+  }
+  const sources = await desktopCapturer.getSources({
+    types: ["screen"],
+    thumbnailSize: { width: 720, height: 405 },
+    fetchWindowIcons: false,
+  });
+  const selected =
+    sources.find((source) => String(source.display_id || "") === String(targetDisplayId || "")) ||
+    sources[0] ||
+    null;
+  if (!selected) {
+    throw new Error("No display capture source is available");
+  }
+  const size = selected.thumbnail.getSize();
+  return {
+    sourceId: selected.id,
+    displayId: Number(selected.display_id || targetDisplayId || 0),
+    width: Number(size.width || 0),
+    height: Number(size.height || 0),
+    capturedAt: new Date().toISOString(),
+    dataUrl: `data:image/jpeg;base64,${selected.thumbnail.toJPEG(78).toString("base64")}`,
+  };
+}
+
+async function getCachedForegroundWindowInfo() {
+  const now = Date.now();
+  if (now - Number(orbForegroundWindow.updatedAt || 0) < ORB_FOREGROUND_WINDOW_CACHE_MS) {
+    return orbForegroundWindow;
+  }
+  const nextInfo = await getForegroundWindowInfo();
+  orbForegroundWindow = {
+    ...nextInfo,
+    updatedAt: now,
+  };
+  return orbForegroundWindow;
 }
 
 function getLifecycleState() {
@@ -496,12 +575,13 @@ function getOverlayState(win = mainWindow) {
     recovery: overlayRecovery,
     hud: getHudState(),
     lifecycle,
-    shortcuts: {
-      toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
-      toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
-    },
-  };
-}
+      shortcuts: {
+        toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
+        toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
+      },
+      input: getOverlayInputState(),
+    };
+  }
 
 function setLaunchAtLoginEnabled(enabled) {
   const nextState = setLaunchAtLogin(app, enabled);
@@ -1319,7 +1399,7 @@ function resetOverlayPreferences(win = mainWindow) {
   overlayPreferences = buildDefaultPreferences(primaryDisplay);
   safeWindow.setBounds(overlayPreferences.windowBounds);
   if (orbWindow && !orbWindow.isDestroyed()) {
-    orbWindow.setBounds(buildOrbWindowBounds(primaryDisplay.workArea));
+    orbWindow.setBounds(getOrbSurfaceBounds());
   }
   applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
   applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
@@ -1340,7 +1420,7 @@ function moveOverlayToDisplay(displayId, win = mainWindow) {
 
   safeWindow.setBounds(nextBounds);
   if (orbWindow && !orbWindow.isDestroyed()) {
-    orbWindow.setBounds(buildOrbWindowBounds(targetDisplay.workArea));
+    orbWindow.setBounds(getOrbSurfaceBounds());
   }
   overlayPreferences = persistOverlayPreferences(safeWindow, {
     targetDisplayId: targetDisplay.id,
@@ -1375,9 +1455,8 @@ function reconcileDisplayTopology(reason) {
     if (safeWindow && !sameBounds(safeWindow.getBounds(), overlayPreferences.windowBounds)) {
       safeWindow.setBounds(overlayPreferences.windowBounds);
     }
-    const targetDisplay = getResolvedTargetDisplay(overlayPreferences.targetDisplayId);
     if (orbWindow && !orbWindow.isDestroyed()) {
-      const nextOrbBounds = buildOrbWindowBounds(targetDisplay.workArea);
+      const nextOrbBounds = getOrbSurfaceBounds();
       if (!sameBounds(orbWindow.getBounds(), nextOrbBounds)) {
         orbWindow.setBounds(nextOrbBounds);
       }
@@ -1565,6 +1644,72 @@ async function fetchHudJson(route, init = {}) {
   return payload;
 }
 
+async function pushOrbPerceptionFrame() {
+  if (orbPerceptionSyncPending) {
+    return null;
+  }
+  if (!orbWindow || orbWindow.isDestroyed()) {
+    return null;
+  }
+  const hudState = getHudState();
+  if (!hudState?.ready) {
+    return null;
+  }
+
+  orbPerceptionSyncPending = true;
+  try {
+    const [frame, input, foregroundWindow] = await Promise.all([
+      capturePerceptionFrame(),
+      Promise.resolve(getOverlayInputState()),
+      getCachedForegroundWindowInfo(),
+    ]);
+    const payload = await fetchHudJson("/api/orb/perception", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        captured_at: frame?.capturedAt || "",
+        display_id: frame?.displayId ?? null,
+        idle_seconds: Number(input?.idleSeconds || 0),
+        cursor_x: Number.isFinite(input?.cursorDisplay?.x) ? Math.round(input.cursorDisplay.x) : null,
+        cursor_y: Number.isFinite(input?.cursorDisplay?.y) ? Math.round(input.cursorDisplay.y) : null,
+        frame_width: Number(frame?.width || 0),
+        frame_height: Number(frame?.height || 0),
+        frame_data_url: String(frame?.dataUrl || ""),
+        window_title: String(foregroundWindow?.title || ""),
+        process_name: String(foregroundWindow?.process || ""),
+      }),
+    });
+    orbPerceptionErrorLogged = false;
+    return payload;
+  } catch (error) {
+    if (!orbPerceptionErrorLogged) {
+      orbPerceptionErrorLogged = true;
+      log("Orb perception sync failed", error instanceof Error ? error.message : String(error));
+    }
+    return null;
+  } finally {
+    orbPerceptionSyncPending = false;
+  }
+}
+
+function stopOrbPerceptionLoop() {
+  if (orbPerceptionTimer !== null) {
+    clearInterval(orbPerceptionTimer);
+    orbPerceptionTimer = null;
+  }
+  orbPerceptionSyncPending = false;
+}
+
+function ensureOrbPerceptionLoop() {
+  if (orbPerceptionTimer !== null) {
+    return;
+  }
+  orbPerceptionTimer = setInterval(() => {
+    void pushOrbPerceptionFrame();
+  }, ORB_PERCEPTION_SYNC_INTERVAL_MS);
+  void pushOrbPerceptionFrame();
+}
+
 function showLensWindow() {
   const win = requireWindow();
   if (win.isMinimized()) {
@@ -1718,7 +1863,7 @@ function createOrbWindow() {
   const preloadPath = path.join(__dirname, "preload.js");
   const targetDisplay = resolveTargetDisplay(displays, overlayPreferences.targetDisplayId, primaryDisplayId);
   const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
-  const orbBounds = buildOrbWindowBounds(targetDisplay.workArea);
+  const orbBounds = buildOrbWindowBounds(displays);
 
   log("Creating orb window", {
     targetDisplayId: targetDisplay.id,
@@ -1784,6 +1929,7 @@ function createOrbWindow() {
   win.loadURL(orbUrl).catch((error) => {
     log("Unexpected orb HUD load error", error instanceof Error ? error.message : String(error));
   });
+  ensureOrbPerceptionLoop();
 
   win.once("ready-to-show", () => {
     if (startupProfile.visible) {
@@ -1806,6 +1952,7 @@ function createOrbWindow() {
     log("Orb window closed");
     if (orbWindow === win) {
       orbWindow = null;
+      stopOrbPerceptionLoop();
     }
   });
 
@@ -2015,6 +2162,8 @@ function registerIpc() {
   ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
   ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
   ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
+  ipcMain.handle("overlay:get-input-state", () => getOverlayInputState());
+  ipcMain.handle("overlay:capture-perception-frame", () => capturePerceptionFrame());
   ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(requireWindow()));
   ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
   ipcMain.handle("overlay:open-path", (_event, target) => openLifecyclePath(target));
@@ -2271,6 +2420,7 @@ app.on("will-quit", () => {
     clearTimeout(hudRecoveryTimer);
     hudRecoveryTimer = null;
   }
+  stopOrbPerceptionLoop();
   if (mainWindow && !mainWindow.isDestroyed()) {
     schedulePreferenceSave(mainWindow, { immediate: true });
   }

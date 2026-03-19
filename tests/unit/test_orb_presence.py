@@ -83,7 +83,8 @@ def test_orb_state_marks_away_execution_as_idle_gated_cursor_authority() -> None
     assert orb["movement"]["cursor_lock"] is True
     assert orb["movement"]["lead_style"] == "predictive_commit"
     assert orb["movement"]["lock_radius"] < 1
-    assert "30 seconds of mouse inactivity" in orb["summary"]
+    assert "30 seconds of mouse and keyboard inactivity" in orb["summary"]
+    assert "mouse and keyboard inactivity" in orb["cursor_policy"]["summary"]
 
 
 def test_orb_state_enters_panic_when_kill_switch_is_live() -> None:
