@@ -2025,6 +2025,10 @@
         x: 18,
         y: 18,
       };
+      let orbHoverInteraction = {
+        inside: false,
+        enteredAt: 0,
+      };
       let orbQuickChat = {
         pending: false,
         reply: "",
@@ -2041,6 +2045,7 @@
       let orbWindowInteractive = false;
       const ORB_INPUT_SYNC_INTERVAL_MS = 16;
       const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
+      const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -2253,6 +2258,8 @@
 
       function closeOrbCommandMenu() {
         orbCommandMenu.open = false;
+        orbHoverInteraction.inside = false;
+        orbHoverInteraction.enteredAt = 0;
         document.body.dataset.orbMenu = "closed";
         renderOverlayDock();
         syncOrbWindowPassThrough().catch(() => {});
@@ -2510,13 +2517,30 @@
           return;
         }
         if (orbCommandMenu.open) {
+          orbHoverInteraction.inside = false;
+          orbHoverInteraction.enteredAt = 0;
           await setOrbWindowInteractive(true);
           return;
         }
-        if (Number.isFinite(clientX) && Number.isFinite(clientY) && isPointerInsideOrb(clientX, clientY)) {
-          await setOrbWindowInteractive(true);
+        const insideOrb =
+          Number.isFinite(clientX) &&
+          Number.isFinite(clientY) &&
+          isPointerInsideOrb(clientX, clientY);
+        if (insideOrb) {
+          const now = performance.now();
+          if (!orbHoverInteraction.inside) {
+            orbHoverInteraction.inside = true;
+            orbHoverInteraction.enteredAt = now;
+          }
+          if (now - orbHoverInteraction.enteredAt >= ORB_HOVER_INTERACTIVE_DELAY_MS) {
+            await setOrbWindowInteractive(true);
+            return;
+          }
+          await setOrbWindowInteractive(false);
           return;
         }
+        orbHoverInteraction.inside = false;
+        orbHoverInteraction.enteredAt = 0;
         await setOrbWindowInteractive(false);
       }
 

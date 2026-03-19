@@ -260,6 +260,7 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
     assert 'function syncOrbInputState()' in response.text
     assert 'function syncOrbPerception()' in response.text
+    assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
     assert 'function queueOrbAuthorityCommand(kind, args = {}, reason = "")' in response.text
     assert 'function parseOrbQuickCommand(message)' in response.text
     assert 'function sendOrbQuickChat()' in response.text
