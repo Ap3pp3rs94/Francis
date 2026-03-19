@@ -603,6 +603,75 @@ def test_control_takeover_activity_and_handback_package() -> None:
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
+def test_control_takeover_handback_package_carries_orb_authority_summary() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+
+        requested = c.post(
+            "/control/takeover/request",
+            json={"objective": f"Orb handback {uuid4()}", "reason": "orb handback package"},
+        )
+        assert requested.status_code == 200
+        session_id = str(requested.json()["takeover"].get("session_id", "")).strip()
+        assert session_id
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            json={"confirm": True, "reason": "orb handback confirm", "mode": "pilot"},
+        )
+        assert confirmed.status_code == 200
+
+        queued = c.post(
+            "/control/takeover/desktop/enqueue",
+            json={
+                "summary": "Queue one grounded desktop click",
+                "commands": [
+                    {
+                        "kind": "mouse.click",
+                        "args": {"x": 612, "y": 402, "button": "left", "coordinate_space": "display"},
+                        "reason": "Click the grounded Francis control.",
+                        "grounding": {
+                            "state": "concrete",
+                            "control_ready": True,
+                            "zone_label": "Francis workspace panel",
+                            "primary_action_label": "Focus Click",
+                            "summary": "Concrete Francis workspace panel target. Focus Click is grounded from the Orb.",
+                        },
+                    }
+                ],
+            },
+        )
+        assert queued.status_code == 200
+
+        handed_back = c.post(
+            "/control/takeover/handback",
+            json={"summary": "orb handback", "verification": {"tests": "pass"}, "pending_approvals": 0},
+        )
+        assert handed_back.status_code == 200
+
+        package = c.get("/control/takeover/handback/package", params={"session_id": session_id, "limit": 100})
+        assert package.status_code == 200
+        package_payload = package.json()
+        orb_authority = package_payload.get("summary", {}).get("orb_authority", {})
+        assert orb_authority.get("count", 0) >= 1
+        assert orb_authority.get("latest_grounding_state") == "concrete"
+        assert any(card.get("label") == "Grounding" for card in orb_authority.get("latest_cards", []))
+
+        session_detail = c.get(f"/control/takeover/sessions/{session_id}", params={"limit": 100})
+        assert session_detail.status_code == 200
+        session_payload = session_detail.json()
+        session_orb_authority = session_payload.get("session", {}).get("orb_authority", {})
+        assert session_orb_authority.get("count", 0) >= 1
+        assert session_orb_authority.get("latest_command_kind") == "mouse.click"
+        assert session_payload.get("receipt_counts", {}).get("orb_authority", 0) >= 1
+    finally:
+        _ensure_takeover_idle(c)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
 def test_control_remote_state_and_approval_decision_flow() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)

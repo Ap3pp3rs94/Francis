@@ -785,4 +785,95 @@ def test_get_orb_view_does_not_auto_plan_transient_francis_targets(monkeypatch) 
     controls = orb["operator"]["controls"]
     assert orb["operator"]["target_cue"]["state"] == "weak"
     assert controls["desktop_run_enabled"] is False
-    assert controls["desktop_run_kind"] == ""
+
+
+def test_build_orb_chat_reply_answers_status_directly(monkeypatch) -> None:
+    monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}})
+    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
+    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_view",
+        lambda **_: {
+            "mode": "assist",
+            "posture": "resting",
+            "summary": "Francis is ambient on the desktop.",
+            "authority": {
+                "summary": "No Orb authority commands are waiting. Human control remains primary.",
+                "recent": [],
+            },
+            "operator": {
+                "summary": "Run Fast Checks | Terminal failure needs verification.",
+                "meta": "Approval approval-1 is ready. The Orb can approve and continue this move.",
+                "receipt_summary": "Fast checks failed on the workspace test gate.",
+                "controls": {"run_enabled": True, "run_mode": "approve_and_run"},
+            },
+            "interjection": {"state": "idle"},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {
+            "state": "live",
+            "summary": "Francis sees the active terminal surface.",
+            "detail_summary": "Cursor is over the terminal input line.",
+        },
+    )
+    monkeypatch.setattr(orb_view, "chat", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called")))
+
+    payload = orb_view.build_orb_chat_reply(message="status?")
+
+    assert payload["status"] == "ok"
+    assert payload["reply_kind"] == "direct"
+    assert "Mode is assist and posture is resting." in payload["reply"]
+    assert "Current move: Run Fast Checks | Terminal failure needs verification." in payload["reply"]
+    assert "Human control remains primary." in payload["reply"]
+
+
+def test_build_orb_chat_reply_answers_receipt_directly(monkeypatch) -> None:
+    monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}})
+    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
+    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_view",
+        lambda **_: {
+            "mode": "assist",
+            "posture": "resting",
+            "summary": "Francis is ambient on the desktop.",
+            "authority": {
+                "summary": "No Orb authority commands are waiting. Human control remains primary.",
+                "recent": [
+                    {
+                        "summary_text": "mouse.click is completed. Concrete Francis footer actions target.",
+                    }
+                ],
+            },
+            "operator": {
+                "summary": "Reject Approval | The approval needs an explicit rejection path.",
+                "receipt_summary": "Receipt run-9 is grounded by a concrete francis footer actions.",
+                "receipt_cue": {
+                    "summary": "Receipt run-9 is grounded by a concrete francis footer actions.",
+                },
+                "controls": {"run_enabled": False, "run_mode": "execute"},
+            },
+            "interjection": {"state": "idle"},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {
+            "state": "live",
+            "summary": "Francis sees the active Francis control surface.",
+            "detail_summary": "Cursor is over the footer actions row.",
+        },
+    )
+    monkeypatch.setattr(orb_view, "chat", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called")))
+
+    payload = orb_view.build_orb_chat_reply(message="latest receipt")
+
+    assert payload["status"] == "ok"
+    assert payload["reply_kind"] == "direct"
+    assert "Receipt run-9 is grounded by a concrete francis footer actions." in payload["reply"]

@@ -811,6 +811,78 @@ def _collect_handback_receipts_for_session(session_id: str, limit: int) -> dict[
     }
 
 
+def _collect_orb_authority_receipts(receipts: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for key in ("ledger", "logs", "decisions"):
+        for row in receipts.get(key, []):
+            if not isinstance(row, dict):
+                continue
+            kind = str(row.get("kind", "")).strip()
+            if not kind.startswith("orb.authority.command."):
+                continue
+            summary = row.get("summary", {}) if isinstance(row.get("summary"), dict) else {}
+            command_id = str(summary.get("command_id", "")).strip()
+            status = str(summary.get("status", "")).strip().lower()
+            run_id = str(row.get("run_id", "")).strip()
+            ts = str(row.get("ts", "")).strip()
+            identity = (
+                kind,
+                run_id,
+                command_id or str(summary.get("command_kind", "")).strip(),
+                status or str(summary.get("summary_text", "")).strip(),
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            rows.append(
+                {
+                    "ts": ts,
+                    "kind": kind,
+                    "run_id": run_id,
+                    "trace_id": str(row.get("trace_id", "")).strip(),
+                    "command_id": command_id,
+                    "command_kind": str(summary.get("command_kind", "")).strip(),
+                    "status": status,
+                    "summary_text": str(summary.get("summary_text", "")).strip(),
+                    "grounding_state": str(summary.get("grounding_state", "")).strip().lower(),
+                    "grounding_control_ready": bool(summary.get("grounding_control_ready", False)),
+                    "presentation_cards": summary.get("presentation_cards", [])
+                    if isinstance(summary.get("presentation_cards"), list)
+                    else [],
+                }
+            )
+    rows.sort(key=lambda row: str(row.get("ts", "")))
+    return rows
+
+
+def _summarize_orb_authority_receipts(receipts: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | None:
+    rows = _collect_orb_authority_receipts(receipts)
+    if not rows:
+        return None
+    latest = rows[-1]
+    statuses = Counter(str(row.get("status", "")).strip().lower() or "queued" for row in rows)
+    grounded_count = sum(
+        1
+        for row in rows
+        if str(row.get("grounding_state", "")).strip().lower() in {"concrete", "tracking"}
+    )
+    control_ready_count = sum(1 for row in rows if bool(row.get("grounding_control_ready", False)))
+    return {
+        "count": len(rows),
+        "status_counts": dict(statuses),
+        "grounded_count": grounded_count,
+        "control_ready_count": control_ready_count,
+        "latest_kind": str(latest.get("kind", "")).strip() or None,
+        "latest_command_kind": str(latest.get("command_kind", "")).strip() or None,
+        "latest_summary": str(latest.get("summary_text", "")).strip() or None,
+        "latest_grounding_state": str(latest.get("grounding_state", "")).strip().lower() or None,
+        "latest_cards": latest.get("presentation_cards", [])[:4]
+        if isinstance(latest.get("presentation_cards"), list)
+        else [],
+    }
+
+
 def _safe_export_timestamp(ts: str) -> str:
     return str(ts).replace(":", "-")
 
@@ -830,6 +902,7 @@ def _build_takeover_session_summary(
     transitions: list[dict[str, Any]],
     activity: list[dict[str, Any]],
     exports: list[dict[str, Any]],
+    orb_authority: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ordered_transitions = sorted(transitions, key=_session_event_ts)
     ordered_activity = sorted(activity, key=_session_event_ts)
@@ -892,6 +965,7 @@ def _build_takeover_session_summary(
         "last_transition_kind": str(last_transition.get("kind", "")).strip() or None,
         "last_activity_kind": str(last_activity.get("kind", "")).strip() or None,
         "last_export_id": str(last_export.get("id", "")).strip() or None,
+        "orb_authority": orb_authority if isinstance(orb_authority, dict) else None,
     }
 
 
@@ -2446,14 +2520,15 @@ def control_takeover_session(session_id: str, limit: int = 200) -> dict:
     if not transitions and not activity and not exports and normalized_session_id not in {active_session_id, last_session_id}:
         raise HTTPException(status_code=404, detail=f"Takeover session not found: {normalized_session_id}")
 
+    receipts = _collect_handback_receipts_for_session(session_id=normalized_session_id, limit=limit)
     summary = _build_takeover_session_summary(
         session_id=normalized_session_id,
         state=state,
         transitions=transitions,
         activity=activity,
         exports=exports,
+        orb_authority=_summarize_orb_authority_receipts(receipts),
     )
-    receipts = _collect_handback_receipts_for_session(session_id=normalized_session_id, limit=limit)
     package_summary: dict[str, Any] | None = None
     try:
         package = control_takeover_handback_package(limit=limit, session_id=normalized_session_id)
@@ -2473,6 +2548,7 @@ def control_takeover_session(session_id: str, limit: int = 200) -> dict:
             "decisions": len(receipts.get("decisions", [])),
             "logs": len(receipts.get("logs", [])),
             "ledger": len(receipts.get("ledger", [])),
+            "orb_authority": int((summary.get("orb_authority", {}) if isinstance(summary.get("orb_authority"), dict) else {}).get("count", 0)),
         },
         "handback_package_summary": package_summary,
     }
@@ -2603,6 +2679,7 @@ def control_takeover_handback_package(limit: int = 200, session_id: str | None =
         raise HTTPException(status_code=404, detail="No takeover session available for handback package.")
 
     receipts = _collect_handback_receipts_for_session(session_id=resolved_session_id, limit=limit)
+    orb_authority = _summarize_orb_authority_receipts(receipts)
     latest_transition = receipts["transitions"][-1] if receipts["transitions"] else {}
     latest_activity = receipts["activity"][-1] if receipts["activity"] else {}
     handback_activity = next(
@@ -2669,7 +2746,9 @@ def control_takeover_handback_package(limit: int = 200, session_id: str | None =
                 "pending_approvals": handback_pending_approvals,
                 "verification": handback_verification,
                 "fabric_posture": fabric_posture,
+                "orb_authority": orb_authority,
             },
+            "orb_authority": orb_authority,
         },
         "handback_ritual": handback_ritual,
         "timeline": {

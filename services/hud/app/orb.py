@@ -780,6 +780,120 @@ def _build_orb_interjection_view(
     }
 
 
+def _normalize_orb_chat_message(value: object) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _orb_chat_status_reply(orb: dict[str, Any]) -> str:
+    authority = orb.get("authority", {}) if isinstance(orb.get("authority"), dict) else {}
+    operator = orb.get("operator", {}) if isinstance(orb.get("operator"), dict) else {}
+    parts = [
+        f"Mode is {str(orb.get('mode', 'assist')).strip() or 'assist'} and posture is {str(orb.get('posture', 'resting')).strip() or 'resting'}.",
+        str(orb.get("summary", "")).strip() or "Francis is ambient.",
+    ]
+    operator_summary = str(operator.get("summary", "")).strip()
+    if operator_summary:
+        parts.append(f"Current move: {operator_summary}.")
+    authority_summary = str(authority.get("summary", "")).strip()
+    if authority_summary:
+        parts.append(authority_summary)
+    return " ".join(part for part in parts if part)
+
+
+def _orb_chat_surface_reply(orb: dict[str, Any], perception: dict[str, Any]) -> str:
+    operator = orb.get("operator", {}) if isinstance(orb.get("operator"), dict) else {}
+    target_cue = operator.get("target_cue", {}) if isinstance(operator.get("target_cue"), dict) else {}
+    parts = [
+        str(perception.get("summary", "")).strip() or "Visible context is not attached yet.",
+        str(perception.get("detail_summary", "")).strip(),
+        str(target_cue.get("summary", "")).strip(),
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def _orb_chat_receipt_reply(orb: dict[str, Any]) -> str:
+    operator = orb.get("operator", {}) if isinstance(orb.get("operator"), dict) else {}
+    authority = orb.get("authority", {}) if isinstance(orb.get("authority"), dict) else {}
+    receipt_summary = str(operator.get("receipt_summary", "")).strip()
+    receipt_cue = operator.get("receipt_cue", {}) if isinstance(operator.get("receipt_cue"), dict) else {}
+    if receipt_summary:
+        parts = [receipt_summary, str(receipt_cue.get("summary", "")).strip()]
+        return " ".join(part for part in parts if part)
+    recent = authority.get("recent", []) if isinstance(authority.get("recent"), list) else []
+    latest = recent[0] if recent and isinstance(recent[0], dict) else {}
+    latest_summary = str(latest.get("summary_text", "")).strip()
+    if latest_summary:
+        return latest_summary
+    return "No receipt is anchoring the Orb right now."
+
+
+def _orb_chat_why_reply(orb: dict[str, Any]) -> str:
+    operator = orb.get("operator", {}) if isinstance(orb.get("operator"), dict) else {}
+    interjection = orb.get("interjection", {}) if isinstance(orb.get("interjection"), dict) else {}
+    target_cue = operator.get("target_cue", {}) if isinstance(operator.get("target_cue"), dict) else {}
+    if str(interjection.get("state", "idle")).strip().lower() != "idle":
+        parts = [
+            str(interjection.get("summary", "")).strip(),
+            str(interjection.get("detail", "")).strip(),
+            str(interjection.get("prompt", "")).strip(),
+        ]
+        if target_cue:
+            parts.append(str(target_cue.get("summary", "")).strip())
+        return " ".join(part for part in parts if part)
+    parts = [
+        str(operator.get("summary", "")).strip(),
+        str(operator.get("meta", "")).strip(),
+        str(target_cue.get("summary", "")).strip() if target_cue else "",
+    ]
+    return " ".join(part for part in parts if part) or "Francis is ambient and not asking for anything right now."
+
+
+def _orb_chat_run_reply(orb: dict[str, Any]) -> str:
+    operator = orb.get("operator", {}) if isinstance(orb.get("operator"), dict) else {}
+    controls = operator.get("controls", {}) if isinstance(operator.get("controls"), dict) else {}
+    if bool(controls.get("run_enabled")):
+        run_mode = str(controls.get("run_mode", "execute")).strip().lower() or "execute"
+        if run_mode == "approve_and_run":
+            return (
+                "The current move is ready to approve and run from the Orb. "
+                + (str(operator.get("summary", "")).strip() or "Francis has a grounded move ready.")
+            )
+        return (
+            "The current move is ready to run from the Orb. "
+            + (str(operator.get("summary", "")).strip() or "Francis has a grounded move ready.")
+        )
+    if bool(controls.get("preview_enabled")):
+        return (
+            "The current move is previewable, but it is not yet ready to run. "
+            + (str(operator.get("meta", "")).strip() or "Francis is holding on the current edge.")
+        )
+    return "No grounded move is ready to run from the Orb right now."
+
+
+def _build_orb_direct_chat_reply(
+    *,
+    message: str,
+    orb: dict[str, Any],
+    perception: dict[str, Any],
+) -> str | None:
+    normalized = _normalize_orb_chat_message(message)
+    if not normalized:
+        return None
+    if any(phrase in normalized for phrase in {"status", "state", "what are you doing", "who has control"}):
+        return _orb_chat_status_reply(orb)
+    if any(phrase in normalized for phrase in {"what do you see", "what are you seeing", "surface", "screen", "what am i looking at"}):
+        return _orb_chat_surface_reply(orb, perception)
+    if any(phrase in normalized for phrase in {"receipt", "latest receipt", "last receipt", "latest run"}):
+        return _orb_chat_receipt_reply(orb)
+    if normalized.startswith("why") or any(
+        phrase in normalized for phrase in {"what do you need", "why are you asking", "why this move"}
+    ):
+        return _orb_chat_why_reply(orb)
+    if any(phrase in normalized for phrase in {"can you run", "ready to run", "can you continue", "are you ready"}):
+        return _orb_chat_run_reply(orb)
+    return None
+
+
 def get_orb_view(
     *,
     max_actions: int = 8,
@@ -832,6 +946,29 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
     user_message = str(message or "").strip()
     if not user_message:
         raise ValueError("Orb chat message is required.")
+
+    direct_reply = _build_orb_direct_chat_reply(message=user_message, orb=orb, perception=perception)
+    if direct_reply:
+        return {
+            "status": "ok",
+            "reply": direct_reply,
+            "reply_kind": "direct",
+            "orb": {
+                "mode": orb.get("mode"),
+                "posture": orb.get("posture"),
+                "summary": orb.get("summary"),
+                "operator": orb.get("operator"),
+                "interjection": orb.get("interjection"),
+            },
+            "perception": {
+                "state": perception.get("state"),
+                "summary": perception.get("summary"),
+                "detail_summary": perception.get("detail_summary"),
+                "captured_at": perception.get("captured_at"),
+                "freshness": perception.get("freshness"),
+                "window": perception.get("window"),
+            },
+        }
 
     system_prompt = (
         "You are Francis speaking through the Orb. Respond briefly, concretely, and calmly. "
@@ -915,6 +1052,7 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
     return {
         "status": "ok",
         "reply": content or "Orb chat is live, but no response text was returned.",
+        "reply_kind": "model",
         "orb": {
             "mode": orb.get("mode"),
             "posture": orb.get("posture"),
