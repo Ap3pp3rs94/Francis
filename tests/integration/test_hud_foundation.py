@@ -127,6 +127,12 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Open Lens" in response.text
     assert "Hide Lens" in response.text
     assert "Exit Francis" in response.text
+    assert "Away Authority" in response.text
+    assert "Queue Move Here" in response.text
+    assert "Queue Click Here" in response.text
+    assert "Queue Save" in response.text
+    assert "Queue Typed Input" in response.text
+    assert "Clear Queue" in response.text
     assert "Shift Report" in response.text
     assert "Shift report will render from away continuity, handback, and mission state." in response.text
     assert "Return briefing cards will render from the backend contract." in response.text
@@ -252,6 +258,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
     assert 'function syncOrbInputState()' in response.text
     assert 'function syncOrbPerception()' in response.text
+    assert 'function queueOrbAuthorityCommand(kind, args = {}, reason = "")' in response.text
+    assert 'function parseOrbQuickCommand(message)' in response.text
     assert 'function sendOrbQuickChat()' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text

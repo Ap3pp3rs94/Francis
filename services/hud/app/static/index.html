@@ -709,6 +709,33 @@
         min-width: 0;
       }
 
+      .overlay-dock-authority {
+        display: grid;
+        gap: 10px;
+        padding: 14px 16px;
+        border: 1px solid rgba(23, 32, 42, 0.12);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .overlay-dock-authority-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .overlay-dock-authority-actions button {
+        flex: 1 1 140px;
+      }
+
+      .overlay-dock-authority-cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
       #orb-render-root {
         position: absolute;
         top: 0;
@@ -1825,6 +1852,26 @@
           <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
         </div>
       </div>
+      <div class="overlay-dock-authority">
+        <div class="overlay-dock-chat-head">
+          <strong>Away Authority</strong>
+          <span id="overlay-authority-meta">Orb authority stays governed and idle-gated until Away execution lawfully crosses the handoff threshold.</span>
+        </div>
+        <div class="overlay-dock-perception" id="overlay-authority-summary">
+          No Orb authority commands are waiting. Human control remains primary.
+        </div>
+        <div class="overlay-dock-authority-cards" id="overlay-authority-cards">
+          <div class="desktop-pill"><strong>State</strong><span>Human Active</span></div>
+          <div class="desktop-pill"><strong>Queue</strong><span>0 pending</span></div>
+        </div>
+        <div class="overlay-dock-authority-actions">
+          <button class="btn-secondary" type="button" id="overlay-queue-move" onclick="queueOrbMoveHere()">Queue Move Here</button>
+          <button class="btn-secondary" type="button" id="overlay-queue-click" onclick="queueOrbClickHere()">Queue Click Here</button>
+          <button class="btn-secondary" type="button" id="overlay-queue-save" onclick="queueOrbSaveShortcut()">Queue Save</button>
+          <button class="btn-secondary" type="button" id="overlay-queue-type" onclick="queueOrbTypeFromInput()">Queue Typed Input</button>
+          <button class="btn-danger" type="button" id="overlay-clear-authority" onclick="cancelOrbAuthorityQueue()">Clear Queue</button>
+        </div>
+      </div>
       <div class="overlay-dock-actions" id="overlay-dock-actions">
         <button class="btn-primary" type="button" id="overlay-open-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
         <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="hideLensFromOrbSurface()">Hide Lens</button>
@@ -1872,6 +1919,23 @@
         summary: "Live desktop perception is not attached yet.",
         frame: { width: 0, height: 0, data_url: "" },
         window: { title: "", process: "" },
+      };
+      let currentOrbAuthority = {
+        surface: "orb_authority",
+        summary: "No Orb authority commands are waiting. Human control remains primary.",
+        severity: "low",
+        pending_count: 0,
+        claimed_count: 0,
+        state: {
+          state: "human_active",
+          eligible: false,
+          live: false,
+          idle_seconds: 0,
+          idle_threshold_seconds: 30,
+        },
+        pending: [],
+        claimed: [],
+        recent: [],
       };
       let currentShiftReport = {};
       let currentMissionsSurface = {};
@@ -2243,6 +2307,14 @@
         const chatInput = document.getElementById("overlay-chat-input");
         const chatSend = document.getElementById("overlay-chat-send");
         const perceptionSummary = document.getElementById("overlay-perception-summary");
+        const authorityMeta = document.getElementById("overlay-authority-meta");
+        const authoritySummary = document.getElementById("overlay-authority-summary");
+        const authorityCards = document.getElementById("overlay-authority-cards");
+        const queueMove = document.getElementById("overlay-queue-move");
+        const queueClick = document.getElementById("overlay-queue-click");
+        const queueSave = document.getElementById("overlay-queue-save");
+        const queueType = document.getElementById("overlay-queue-type");
+        const clearAuthority = document.getElementById("overlay-clear-authority");
         const openLens = document.getElementById("overlay-open-lens");
         const hideLens = document.getElementById("overlay-hide-lens");
         const hideOverlay = document.getElementById("overlay-hide-app");
@@ -2255,6 +2327,14 @@
           !chatInput ||
           !chatSend ||
           !perceptionSummary ||
+          !authorityMeta ||
+          !authoritySummary ||
+          !authorityCards ||
+          !queueMove ||
+          !queueClick ||
+          !queueSave ||
+          !queueType ||
+          !clearAuthority ||
           !openLens ||
           !hideLens ||
           !hideOverlay ||
@@ -2275,11 +2355,25 @@
         const handbackActive = isOrbHandbackActive();
         const cursorAuthority = hasEffectiveOrbCursorAuthority();
         const cursorEligibility = isOrbCursorEligible();
-        const authorityState = resolveOrbAuthorityState();
+        const overlayAuthorityState = resolveOrbAuthorityState();
         const posture = String(currentOrb?.posture || "resting");
         const mode = titleCase(String(currentOrb?.mode || "assist"));
-        const authoritySummary = String(currentOrb?.authority?.summary || "").trim();
+        const authorityStateDetail = currentOrbAuthority?.state && typeof currentOrbAuthority.state === "object"
+          ? currentOrbAuthority.state
+          : {};
+        const orbAuthoritySummary = String(currentOrbAuthority?.summary || currentOrb?.authority?.summary || "").trim();
         const pendingAuthorityCount = Number(currentOrb?.authority?.pending_count || 0);
+        const claimedAuthorityCount = Number(currentOrbAuthority?.claimed_count || 0);
+        const authorityQueueCount = Number(currentOrbAuthority?.pending_count || pendingAuthorityCount || 0);
+        const authorityStateLabel = titleCase(String(authorityStateDetail.state || "human_active").replaceAll("_", " "));
+        const authorityIdleSeconds = Number(authorityStateDetail.idle_seconds || authorityStateDetail.idleSeconds || 0);
+        const authorityThresholdSeconds = Math.max(
+          1,
+          Number(authorityStateDetail.idle_threshold_seconds || authorityStateDetail.idleThresholdSeconds || 30),
+        );
+        const latestAuthorityReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length > 0
+          ? currentOrbAuthority.recent[0]
+          : null;
 
         let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
         if (handbackActive) {
@@ -2292,15 +2386,15 @@
           statusText = `Francis is active in ${mode} while leaving your mouse under your control.`;
         } else if (desktopState.ignoreMouseEvents) {
           statusText = `Overlay is click-through. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control.`;
-        } else if (authoritySummary) {
-          statusText = authoritySummary;
+        } else if (orbAuthoritySummary) {
+          statusText = orbAuthoritySummary;
         } else if (currentOrb?.summary) {
           statusText = String(currentOrb.summary);
         }
         status.textContent = statusText;
         chatMeta.textContent = orbQuickChat.pending
           ? "Francis is responding through the Orb."
-          : authorityState === "francis-authority"
+          : overlayAuthorityState === "francis-authority"
             ? "Away authority is live. The quick chat surface remains available from the Orb."
             : pendingAuthorityCount > 0
               ? `${pendingAuthorityCount} queued Orb authority command${pendingAuthorityCount === 1 ? "" : "s"} are waiting for lawful Away control.`
@@ -2313,8 +2407,35 @@
             || currentOrb?.perception?.summary
             || "Visible desktop context is not attached yet.",
         );
+        authorityMeta.textContent = currentOrbAuthority?.state?.live
+          ? "Away authority is live. Human return or panic stop will release immediately."
+          : authorityQueueCount > 0
+            ? `${authorityQueueCount} command${authorityQueueCount === 1 ? "" : "s"} are queued. They will execute only after Away is eligible and the full inactivity gate clears.`
+            : "Queue Orb-directed work here. Francis will not execute it until Away is lawful and the idle gate is satisfied.";
+        authoritySummary.textContent = String(
+          currentOrbAuthority?.summary
+            || "No Orb authority commands are waiting. Human control remains primary.",
+        );
+        authorityCards.innerHTML = [
+          ["State", authorityStateLabel],
+          ["Idle Gate", `${Math.max(0, authorityThresholdSeconds - authorityIdleSeconds).toFixed(1)}s left`],
+          ["Queue", `${authorityQueueCount} pending`],
+          ["Claimed", `${claimedAuthorityCount} live`],
+          ["Last", latestAuthorityReceipt?.kind ? titleCase(String(latestAuthorityReceipt.kind).replaceAll(".", " ")) : "No recent authority receipt"],
+          ["Cursor", cursorAuthority ? "Orb Owned" : "Human Owned"],
+        ]
+          .map(
+            ([label, value]) =>
+              `<div class="desktop-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`,
+          )
+          .join("");
         chatInput.disabled = orbQuickChat.pending;
         chatSend.disabled = orbQuickChat.pending;
+        queueMove.disabled = false;
+        queueClick.disabled = false;
+        queueSave.disabled = false;
+        queueType.disabled = orbQuickChat.pending;
+        clearAuthority.disabled = authorityQueueCount <= 0 && claimedAuthorityCount <= 0;
 
         openLens.disabled = lensViewMode === "lens";
         hideLens.disabled = lensViewMode === "orb_only";
@@ -2454,6 +2575,222 @@
         renderOverlayDock();
       }
 
+      function updateOrbAuthority(authority) {
+        if (!authority || typeof authority !== "object") {
+          return;
+        }
+        currentOrbAuthority = {
+          ...currentOrbAuthority,
+          ...authority,
+        };
+        if (currentOrb) {
+          currentOrb = {
+            ...currentOrb,
+            authority: currentOrbAuthority,
+          };
+          currentOrbSurface = {
+            ...currentOrbSurface,
+            authority: currentOrbAuthority,
+          };
+        }
+        renderOrbPresentation();
+      }
+
+      function getOrbDisplayPointer() {
+        const displayPoint = orbSystemInput?.cursorDisplay && typeof orbSystemInput.cursorDisplay === "object"
+          ? orbSystemInput.cursorDisplay
+          : { x: orbMotion.pointerX, y: orbMotion.pointerY };
+        const fallback = getOrbFallbackTarget();
+        const nextX = Number.isFinite(Number(displayPoint.x)) ? Math.round(Number(displayPoint.x)) : Math.round(fallback.x);
+        const nextY = Number.isFinite(Number(displayPoint.y)) ? Math.round(Number(displayPoint.y)) : Math.round(fallback.y);
+        return { x: nextX, y: nextY };
+      }
+
+      function formatOrbAuthorityCommandReply(command, authority) {
+        const queued = command && typeof command === "object" ? command : {};
+        const queuedKind = titleCase(String(queued.kind || "command").replaceAll(".", " "));
+        const pendingCount = Number(authority?.pending_count || 0);
+        return `${queuedKind} is queued through the Orb authority channel. ${pendingCount} command${pendingCount === 1 ? "" : "s"} are now waiting for lawful Away control.`;
+      }
+
+      async function queueOrbAuthorityCommand(kind, args = {}, reason = "") {
+        const response = await fetch("/api/orb/authority/commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind,
+            args,
+            reason,
+            actor: "hud.orb",
+            user: "hud.operator",
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.detail || "unknown authority error");
+        }
+        updateOrbAuthority(payload?.authority);
+        orbQuickChat.error = "";
+        orbQuickChat.reply = formatOrbAuthorityCommandReply(payload?.command, payload?.authority);
+        renderOverlayDock();
+        return payload;
+      }
+
+      async function cancelOrbAuthorityQueue() {
+        try {
+          const response = await fetch("/api/orb/authority/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reason: "Operator cleared queued Orb authority commands from the Orb surface.",
+              actor: "hud.orb",
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload?.detail || "unknown authority error");
+          }
+          updateOrbAuthority(payload?.authority);
+          orbQuickChat.error = "";
+          orbQuickChat.reply = "Queued Orb authority commands were cleared. Human control remains primary until Francis is lawfully armed again.";
+        } catch (error) {
+          orbQuickChat.error = `Authority clear failed: ${error?.message || error}`;
+        }
+        renderOverlayDock();
+      }
+
+      async function queueOrbMoveHere() {
+        const point = getOrbDisplayPointer();
+        try {
+          await queueOrbAuthorityCommand(
+            "mouse.move",
+            {
+              x: point.x,
+              y: point.y,
+              coordinate_space: "display",
+            },
+            `Move the Orb operator cursor to display point (${point.x}, ${point.y}) when Away authority becomes lawful.`,
+          );
+        } catch (error) {
+          orbQuickChat.error = `Move queue failed: ${error?.message || error}`;
+          renderOverlayDock();
+        }
+      }
+
+      async function queueOrbClickHere() {
+        const point = getOrbDisplayPointer();
+        try {
+          await queueOrbAuthorityCommand(
+            "mouse.click",
+            {
+              x: point.x,
+              y: point.y,
+              button: "left",
+              coordinate_space: "display",
+            },
+            `Left-click display point (${point.x}, ${point.y}) through the Orb authority channel when Away authority is live.`,
+          );
+        } catch (error) {
+          orbQuickChat.error = `Click queue failed: ${error?.message || error}`;
+          renderOverlayDock();
+        }
+      }
+
+      async function queueOrbSaveShortcut() {
+        try {
+          await queueOrbAuthorityCommand(
+            "keyboard.shortcut",
+            {
+              keys: ["ctrl", "s"],
+            },
+            "Queue a guarded save shortcut through the Orb authority channel.",
+          );
+        } catch (error) {
+          orbQuickChat.error = `Save queue failed: ${error?.message || error}`;
+          renderOverlayDock();
+        }
+      }
+
+      async function queueOrbTypeFromInput() {
+        const input = document.getElementById("overlay-chat-input");
+        const text = String(input?.value || "").trim();
+        if (!text) {
+          orbQuickChat.error = "Type text into the Orb input first if you want Francis to queue it for Away execution.";
+          renderOverlayDock();
+          return;
+        }
+        try {
+          await queueOrbAuthorityCommand(
+            "keyboard.type",
+            {
+              text,
+            },
+            "Queue typed input from the Orb quick-chat field for Away execution.",
+          );
+          if (input) {
+            input.value = "";
+          }
+        } catch (error) {
+          orbQuickChat.error = `Type queue failed: ${error?.message || error}`;
+        }
+        renderOverlayDock();
+      }
+
+      function parseOrbQuickCommand(message) {
+        const normalized = String(message || "").trim();
+        if (!normalized.startsWith("/")) {
+          return null;
+        }
+        const [command, ...rest] = normalized.split(/\s+/);
+        const body = rest.join(" ").trim();
+        const lowered = command.toLowerCase();
+        if (lowered === "/move") {
+          const point = getOrbDisplayPointer();
+          return {
+            kind: "mouse.move",
+            args: { x: point.x, y: point.y, coordinate_space: "display" },
+            reason: `Move to display point (${point.x}, ${point.y}) from the Orb quick-command surface.`,
+          };
+        }
+        if (lowered === "/click") {
+          const point = getOrbDisplayPointer();
+          return {
+            kind: "mouse.click",
+            args: { x: point.x, y: point.y, button: "left", coordinate_space: "display" },
+            reason: `Click display point (${point.x}, ${point.y}) from the Orb quick-command surface.`,
+          };
+        }
+        if (lowered === "/save") {
+          return {
+            kind: "keyboard.shortcut",
+            args: { keys: ["ctrl", "s"] },
+            reason: "Queue Ctrl+S from the Orb quick-command surface.",
+          };
+        }
+        if (lowered === "/enter") {
+          return {
+            kind: "keyboard.key",
+            args: { key: "enter" },
+            reason: "Queue Enter from the Orb quick-command surface.",
+          };
+        }
+        if (lowered === "/esc" || lowered === "/escape") {
+          return {
+            kind: "keyboard.key",
+            args: { key: "escape" },
+            reason: "Queue Escape from the Orb quick-command surface.",
+          };
+        }
+        if (lowered === "/type" && body) {
+          return {
+            kind: "keyboard.type",
+            args: { text: body },
+            reason: "Queue typed text from the Orb quick-command surface.",
+          };
+        }
+        return null;
+      }
+
       async function sendOrbQuickChat() {
         const input = document.getElementById("overlay-chat-input");
         const message = String(input?.value || "").trim();
@@ -2470,6 +2807,20 @@
         renderOverlayDock();
         applyOrbSignals();
         try {
+          const quickCommand = parseOrbQuickCommand(message);
+          if (quickCommand) {
+            const payload = await queueOrbAuthorityCommand(
+              quickCommand.kind,
+              quickCommand.args,
+              quickCommand.reason,
+            );
+            if (input) {
+              input.value = "";
+            }
+            orbSpeechBurstUntil = performance.now() + 1000;
+            orbQuickChat.reply = formatOrbAuthorityCommandReply(payload?.command, payload?.authority);
+            return;
+          }
           const response = await fetch("/api/orb/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -4434,6 +4785,9 @@
       function renderOrb(orb) {
         const previousOrb = currentOrb;
         currentOrb = orb ? { ...orb, operator_cursor_live: false } : null;
+        if (currentOrb?.authority && typeof currentOrb.authority === "object") {
+          currentOrbAuthority = currentOrb.authority;
+        }
         if (currentOrb?.perception && typeof currentOrb.perception === "object") {
           currentOrbPerception = currentOrb.perception;
         }
@@ -5084,6 +5438,10 @@
         currentDashboard = payload.dashboard || {};
         currentVoiceSurface = payload.voice || {};
         currentOrbSurface = payload.orb || {};
+        currentOrbAuthority =
+          currentOrbSurface?.authority && typeof currentOrbSurface.authority === "object"
+            ? currentOrbSurface.authority
+            : currentOrbAuthority;
         currentCurrentWork = payload.current_work || {};
         currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};
