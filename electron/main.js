@@ -1620,6 +1620,13 @@ function getLensHudUrl() {
   return target.toString();
 }
 
+function getOrbHudUrl() {
+  const target = new URL(HUD_URL);
+  target.searchParams.set("orb", "window");
+  target.searchParams.set("view", "orb_only");
+  return target.toString();
+}
+
 function clearHudRecovery() {
   if (hudRecoveryTimer) {
     clearTimeout(hudRecoveryTimer);
@@ -1752,28 +1759,30 @@ function createOrbWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL);
   win.webContents.once("did-finish-load", () => {
-    log("Orb shell loaded", win.webContents.getURL());
+    log("Orb HUD loaded", win.webContents.getURL());
   });
   win.webContents.once("did-fail-load", (_event, code, description, validatedUrl, isMainFrame) => {
     if (!isMainFrame) {
       return;
     }
-    log("Orb shell failed to load", {
+    log("Orb HUD failed to load", {
       code,
       description,
       validatedUrl,
     });
   });
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    log("Orb shell console", {
+    log("Orb HUD console", {
       level,
       message,
       line,
       sourceId,
     });
   });
-  win.loadFile(path.join(__dirname, "orb-shell.html")).catch((error) => {
-    log("Unexpected orb-shell load error", error instanceof Error ? error.message : String(error));
+  const orbUrl = getOrbHudUrl();
+  log("Loading orb HUD", orbUrl);
+  win.loadURL(orbUrl).catch((error) => {
+    log("Unexpected orb HUD load error", error instanceof Error ? error.message : String(error));
   });
 
   win.once("ready-to-show", () => {

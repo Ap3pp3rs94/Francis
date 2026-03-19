@@ -236,10 +236,21 @@ def test_hud_root_supports_external_orb_mode() -> None:
     response = client.get("/?orb=external")
 
     assert response.status_code == 200
-    assert 'new URL(window.location.href).searchParams.get("orb") === "external"' in response.text
+    assert 'const externalOrbMode = orbSurfaceMode === "external";' in response.text
     assert 'body[data-orb-surface="external"] .orb-chamber' in response.text
     assert 'body[data-orb-surface="external"] #orb-overlay' in response.text
     assert 'body[data-orb-surface="external"] #overlay-dock' in response.text
+
+
+def test_hud_root_supports_standalone_orb_window_mode() -> None:
+    response = client.get("/?orb=window&view=orb_only")
+
+    assert response.status_code == 200
+    assert 'const orbWindowMode = orbSurfaceMode === "window";' in response.text
+    assert 'target.searchParams.set("orb", "window");' not in response.text
+    assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
+    assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
+    assert 'openLensFromOrbSurface().catch(() => {});' in response.text
 
 
 def test_hud_serves_orb_bundle() -> None:

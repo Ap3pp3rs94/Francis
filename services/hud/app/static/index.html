@@ -46,9 +46,17 @@
         background: transparent;
       }
 
+      body[data-orb-surface="window"] {
+        background: transparent;
+      }
+
       body[data-orb-surface="external"] .orb-chamber,
       body[data-orb-surface="external"] #orb-overlay,
       body[data-orb-surface="external"] #overlay-dock {
+        display: none !important;
+      }
+
+      body[data-orb-surface="window"] .shell {
         display: none !important;
       }
 
@@ -1749,8 +1757,8 @@
         <span id="overlay-dock-status">Ambient overlay ready. Open Lens when you want the full operator surface.</span>
       </div>
       <div class="overlay-dock-actions" id="overlay-dock-actions">
-        <button class="btn-primary" type="button" id="overlay-open-lens" onclick="setLensViewMode('lens'); closeOrbCommandMenu()">Open Lens</button>
-        <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="setLensViewMode('orb_only'); closeOrbCommandMenu()">Hide Lens</button>
+        <button class="btn-primary" type="button" id="overlay-open-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
+        <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="hideLensFromOrbSurface()">Hide Lens</button>
         <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="closeOrbCommandMenu(); hideDesktopOverlay()">Hide Overlay</button>
         <button class="btn-danger" type="button" id="overlay-exit-app" onclick="quitDesktopOverlay()">Exit Francis</button>
       </div>
@@ -1762,8 +1770,12 @@
 
     <script src="/static/orb/francis-orb.js"></script>
     <script>
-      const externalOrbMode = new URL(window.location.href).searchParams.get("orb") === "external";
-      document.body.dataset.orbSurface = externalOrbMode ? "external" : "embedded";
+      const pageUrl = new URL(window.location.href);
+      const orbSurfaceMode = String(pageUrl.searchParams.get("orb") || "").trim().toLowerCase();
+      const externalOrbMode = orbSurfaceMode === "external";
+      const orbWindowMode = orbSurfaceMode === "window";
+      const requestedViewMode = String(pageUrl.searchParams.get("view") || "").trim().toLowerCase();
+      document.body.dataset.orbSurface = orbSurfaceMode || "embedded";
       let currentActions = { action_chips: [], blocked_actions: [] };
       let currentSnapshot = null;
       let currentFabricResults = [];
@@ -1860,6 +1872,7 @@
         x: 18,
         y: 18,
       };
+      let orbWindowInteractive = false;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -1986,6 +1999,9 @@
         if (externalOrbMode) {
           return "lens";
         }
+        if (orbWindowMode) {
+          return "orb_only";
+        }
         return String(mode || "").trim().toLowerCase() === "orb_only" ? "orb_only" : "lens";
       }
 
@@ -2003,6 +2019,7 @@
         orbCommandMenu.open = false;
         document.body.dataset.orbMenu = "closed";
         renderOverlayDock();
+        syncOrbWindowPassThrough().catch(() => {});
       }
 
       function openOrbCommandMenu(anchorX, anchorY) {
@@ -2013,6 +2030,43 @@
         orbCommandMenu.y = Math.max(18, Math.min(window.innerHeight - height - 18, Number(anchorY) - 20));
         document.body.dataset.orbMenu = "open";
         renderOverlayDock();
+        syncOrbWindowPassThrough(Number(anchorX), Number(anchorY)).catch(() => {});
+      }
+
+      async function openLensFromOrbSurface() {
+        closeOrbCommandMenu();
+        if (orbWindowMode) {
+          const bridge = getDesktopBridge();
+          if (bridge && typeof bridge.showLens === "function") {
+            try {
+              await bridge.showLens();
+              desktopNotice = "Lens opened from the Orb surface.";
+            } catch (error) {
+              desktopNotice = `Open Lens failed: ${error?.message || error}`;
+            }
+            renderDesktopShell();
+            return;
+          }
+        }
+        setLensViewMode("lens");
+      }
+
+      async function hideLensFromOrbSurface() {
+        closeOrbCommandMenu();
+        if (orbWindowMode) {
+          const bridge = getDesktopBridge();
+          if (bridge && typeof bridge.hideLens === "function") {
+            try {
+              await bridge.hideLens();
+              desktopNotice = "Lens hidden.";
+            } catch (error) {
+              desktopNotice = `Hide Lens failed: ${error?.message || error}`;
+            }
+            renderDesktopShell();
+            return;
+          }
+        }
+        setLensViewMode("orb_only");
       }
 
       function renderOverlayDock() {
@@ -2058,6 +2112,54 @@
         hideLens.disabled = lensViewMode === "orb_only";
         hideOverlay.disabled = !hasBridge;
         exitOverlay.disabled = !hasBridge;
+      }
+
+      function isPointerInsideOrb(clientX, clientY) {
+        const root = document.getElementById("orb-render-root");
+        if (!root) {
+          return false;
+        }
+        const rect = root.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+          return false;
+        }
+        const radius = Math.min(rect.width, rect.height) * 0.5;
+        const centerX = rect.left + rect.width * 0.5;
+        const centerY = rect.top + rect.height * 0.5;
+        return Math.hypot(clientX - centerX, clientY - centerY) <= radius;
+      }
+
+      async function setOrbWindowInteractive(interactive) {
+        const nextInteractive = Boolean(interactive);
+        if (!orbWindowMode) {
+          orbWindowInteractive = nextInteractive;
+          return;
+        }
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.setOrbIgnoreMouseEvents !== "function") {
+          orbWindowInteractive = nextInteractive;
+          return;
+        }
+        if (orbWindowInteractive === nextInteractive) {
+          return;
+        }
+        orbWindowInteractive = nextInteractive;
+        await bridge.setOrbIgnoreMouseEvents(!nextInteractive);
+      }
+
+      async function syncOrbWindowPassThrough(clientX = null, clientY = null) {
+        if (!orbWindowMode) {
+          return;
+        }
+        if (orbCommandMenu.open) {
+          await setOrbWindowInteractive(true);
+          return;
+        }
+        if (Number.isFinite(clientX) && Number.isFinite(clientY) && isPointerInsideOrb(clientX, clientY)) {
+          await setOrbWindowInteractive(true);
+          return;
+        }
+        await setOrbWindowInteractive(false);
       }
 
       function getSystemReducedMotionPreference() {
@@ -3164,7 +3266,12 @@
         });
         applyAccessibilityPosture();
         if (!lensViewInitialized) {
-          setLensViewMode(desktopState.available && !externalOrbMode ? "orb_only" : "lens");
+          const initialLensMode = orbWindowMode || requestedViewMode === "orb_only"
+            ? "orb_only"
+            : desktopState.available && !externalOrbMode
+              ? "orb_only"
+              : "lens";
+          setLensViewMode(initialLensMode);
           lensViewInitialized = true;
         } else {
           renderOverlayDock();
@@ -4361,11 +4468,16 @@
           openOrbCommandMenu(event.clientX, event.clientY);
         });
         root.addEventListener("dblclick", () => {
+          if (orbWindowMode) {
+            openLensFromOrbSurface().catch(() => {});
+            return;
+          }
           setLensViewMode("lens");
         });
 
         window.addEventListener("pointermove", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
+          syncOrbWindowPassThrough(event.clientX, event.clientY).catch(() => {});
         });
         window.addEventListener("pointerdown", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
@@ -4377,6 +4489,7 @@
           if (orbCommandMenu.open && !inOrb && !inMenu) {
             closeOrbCommandMenu();
           }
+          syncOrbWindowPassThrough(event.clientX, event.clientY).catch(() => {});
         });
         window.addEventListener("resize", () => {
           if (!orbMotion.lastMoveAt) {
@@ -4389,6 +4502,7 @@
           if (orbCommandMenu.open) {
             openOrbCommandMenu(orbCommandMenu.x, orbCommandMenu.y);
           }
+          syncOrbWindowPassThrough().catch(() => {});
         });
         window.addEventListener("keydown", (event) => {
           if (event.key !== "Escape") {
@@ -4398,10 +4512,13 @@
             closeOrbCommandMenu();
             return;
           }
-          if (lensViewMode === "lens" && desktopState.available) {
+          if (!orbWindowMode && lensViewMode === "lens" && desktopState.available) {
             setLensViewMode("orb_only");
           }
         });
+        if (orbWindowMode) {
+          setOrbWindowInteractive(false).catch(() => {});
+        }
       }
 
       function renderBootstrap(payload) {
