@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   setIgnoreMouseEvents(ignore) {
     return ipcRenderer.invoke("overlay:set-ignore-mouse-events", assertBoolean("ignore", ignore));
   },
+  setOrbIgnoreMouseEvents(ignore) {
+    return ipcRenderer.invoke("overlay:set-orb-ignore-mouse-events", assertBoolean("ignore", ignore));
+  },
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", assertBoolean("value", value));
   },
@@ -85,6 +88,18 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   },
   restartHud() {
     return ipcRenderer.invoke("overlay:restart-hud");
+  },
+  getOrbSurface() {
+    return ipcRenderer.invoke("overlay:get-orb-surface");
+  },
+  panicStop() {
+    return ipcRenderer.invoke("overlay:panic-stop");
+  },
+  showLens() {
+    return ipcRenderer.invoke("overlay:show-lens");
+  },
+  hideLens() {
+    return ipcRenderer.invoke("overlay:hide-lens");
   },
   resetLayout() {
     return ipcRenderer.invoke("overlay:reset-layout");

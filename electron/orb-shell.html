@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Francis Orb</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --menu-bg: rgba(7, 16, 28, 0.92);
+        --menu-border: rgba(190, 215, 255, 0.18);
+        --menu-text: rgba(233, 240, 250, 0.92);
+        --menu-muted: rgba(233, 240, 250, 0.68);
+        --danger: #b4472d;
+      }
+
+      * {
+        box-sizing: border-box;
+        user-select: none;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        font-family: "Segoe UI Variable", "Aptos", sans-serif;
+      }
+
+      body {
+        position: relative;
+      }
+
+      #orb-root {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+
+      #orb-render-root {
+        width: 196px;
+        height: 196px;
+        border-radius: 999px;
+        pointer-events: auto;
+        touch-action: none;
+      }
+
+      #orb-render-root canvas {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+        filter:
+          drop-shadow(0 22px 36px rgba(0, 0, 0, 0.32))
+          contrast(1.04)
+          saturate(0.92);
+      }
+
+      #orb-render-root.orb-hold canvas {
+        filter:
+          drop-shadow(0 0 18px rgba(214, 93, 54, 0.44))
+          drop-shadow(0 22px 36px rgba(0, 0, 0, 0.36))
+          brightness(1.06);
+      }
+
+      #orb-menu {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        display: none;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid var(--menu-border);
+        border-radius: 18px;
+        background: var(--menu-bg);
+        color: var(--menu-text);
+        backdrop-filter: blur(18px);
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.32);
+      }
+
+      body[data-menu-open="true"] #orb-menu {
+        display: grid;
+      }
+
+      .menu-title {
+        font-size: 0.78rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--menu-muted);
+      }
+
+      .menu-summary {
+        margin: 0;
+        line-height: 1.45;
+        color: var(--menu-text);
+      }
+
+      .menu-actions {
+        display: grid;
+        gap: 8px;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 10px 12px;
+        font: inherit;
+        color: var(--menu-text);
+        background: rgba(255, 255, 255, 0.08);
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .danger {
+        background: rgba(180, 71, 45, 0.18);
+        border-color: rgba(180, 71, 45, 0.3);
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body data-menu-open="false">
+    <div id="orb-root">
+      <div id="orb-render-root" aria-label="Francis Orb"></div>
+    </div>
+    <aside id="orb-menu" aria-live="polite">
+      <div class="menu-title">Francis Orb</div>
+      <p class="menu-summary" id="menu-summary">Ambient presence is live.</p>
+      <div class="menu-actions">
+        <button type="button" id="open-lens">Open Lens</button>
+        <button type="button" id="hide-lens">Hide Lens</button>
+        <button type="button" id="hide-francis">Hide Francis</button>
+        <button type="button" class="danger" id="exit-francis">Exit Francis</button>
+      </div>
+      <div class="sr-only" id="menu-detail">Right-click the Orb to open controls. Double-click to open Lens.</div>
+    </aside>
+    <script>
+      let bridge = null;
+      let orbBundle = null;
+      let orbApi = null;
+      let currentOrb = null;
+      let currentState = null;
+      let pollTimer = null;
+      let holdTimer = null;
+      let holdTriggered = false;
+      let orbInteractive = false;
+
+      function setMenuOpen(open) {
+        document.body.dataset.menuOpen = open ? "true" : "false";
+      }
+
+      function closeMenu() {
+        setMenuOpen(false);
+        syncOrbPassThrough();
+      }
+
+      function updateMenu() {
+        const summary = document.getElementById("menu-summary");
+        const openLens = document.getElementById("open-lens");
+        const hideLens = document.getElementById("hide-lens");
+        const hideFrancis = document.getElementById("hide-francis");
+        const exitFrancis = document.getElementById("exit-francis");
+        if (!summary || !openLens || !hideLens || !hideFrancis || !exitFrancis) {
+          return;
+        }
+
+        const lensVisible = Boolean(currentState?.lensVisible);
+        openLens.disabled = !bridge || lensVisible;
+        hideLens.disabled = !bridge || !lensVisible;
+        hideFrancis.disabled = !bridge;
+        exitFrancis.disabled = !bridge;
+
+        if (currentOrb?.operator_cursor) {
+          summary.textContent = "Away authority is live. Hold the Orb to panic stop or double-click to inspect Lens.";
+          return;
+        }
+        if (currentOrb?.panic_ready) {
+          summary.textContent = "The Orb stays ambient. Hold it to panic stop, or double-click to open Lens.";
+          return;
+        }
+        summary.textContent = currentOrb?.summary || "Ambient presence is live. Double-click to open Lens.";
+      }
+
+      function isPointerInsideOrb(clientX, clientY) {
+        const root = document.getElementById("orb-render-root");
+        if (!root) {
+          return false;
+        }
+        const rect = root.getBoundingClientRect();
+        const radius = Math.min(rect.width, rect.height) * 0.5;
+        const centerX = rect.left + rect.width * 0.5;
+        const centerY = rect.top + rect.height * 0.5;
+        return Math.hypot(clientX - centerX, clientY - centerY) <= radius;
+      }
+
+      async function setOrbInteractive(interactive) {
+        const nextInteractive = Boolean(interactive);
+        if (orbInteractive === nextInteractive || !bridge || typeof bridge.setOrbIgnoreMouseEvents !== "function") {
+          orbInteractive = nextInteractive;
+          return;
+        }
+        orbInteractive = nextInteractive;
+        await bridge.setOrbIgnoreMouseEvents(!nextInteractive);
+      }
+
+      function syncOrbPassThrough(clientX = null, clientY = null) {
+        const menuOpen = document.body.dataset.menuOpen === "true";
+        if (menuOpen) {
+          setOrbInteractive(true).catch(() => {});
+          return;
+        }
+        if (Number.isFinite(clientX) && Number.isFinite(clientY) && isPointerInsideOrb(clientX, clientY)) {
+          setOrbInteractive(true).catch(() => {});
+          return;
+        }
+        setOrbInteractive(false).catch(() => {});
+      }
+
+      function endHold() {
+        const root = document.getElementById("orb-render-root");
+        if (holdTimer !== null) {
+          window.clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+        if (root) {
+          root.classList.remove("orb-hold");
+        }
+        holdTriggered = false;
+      }
+
+      async function beginHold(event) {
+        if (event.button !== 0) {
+          return;
+        }
+        event.preventDefault();
+        closeMenu();
+        if (!currentOrb?.panic_ready || !bridge || typeof bridge.panicStop !== "function") {
+          return;
+        }
+        const root = document.getElementById("orb-render-root");
+        if (!root || holdTimer !== null) {
+          return;
+        }
+        holdTriggered = false;
+        root.classList.add("orb-hold");
+        holdTimer = window.setTimeout(async () => {
+          holdTriggered = true;
+          try {
+            await bridge.panicStop();
+            await syncOrb();
+          } finally {
+            endHold();
+          }
+        }, 900);
+      }
+
+      async function syncOrb() {
+        if (!bridge) {
+          return;
+        }
+        const [state, orb] = await Promise.all([
+          bridge.getState(),
+          bridge.getOrbSurface(),
+        ]);
+        currentState = state || {};
+        currentOrb = orb || null;
+        updateMenu();
+        applyOrbSignals();
+      }
+
+      function applyOrbSignals() {
+        if (!orbBundle || !orbApi || !currentOrb) {
+          return;
+        }
+        orbApi.orb.setSignals(
+          orbBundle.mapHudOrbPayloadToSignals(currentOrb, {
+            speakingAmplitude: Number(currentOrb?.visual?.voice_resonance || 0),
+            attentionTarget: null,
+            actionTarget: null,
+            actionStrength: currentOrb?.operator_cursor
+              ? Math.max(0.45, Number(currentOrb?.visual?.core_brightness || 0.7))
+              : 0,
+          }),
+        );
+      }
+
+      function loadScript(source) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = source;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error(`Failed to load ${source}`));
+          document.head.appendChild(script);
+        });
+      }
+
+      async function mountOrb() {
+        const root = document.getElementById("orb-render-root");
+        if (!root || orbApi) {
+          return;
+        }
+        const state = await bridge.getState();
+        const bundleUrl = `${String(state?.hudUrl || "http://127.0.0.1:8767").replace(/\\/$/, "")}/static/orb/francis-orb.js`;
+        await loadScript(bundleUrl);
+        orbBundle = window.FrancisOrb;
+        if (!orbBundle || typeof orbBundle.createFrancisOrb !== "function") {
+          throw new Error("Francis Orb bundle did not load");
+        }
+        orbApi = orbBundle.createFrancisOrb(root, {
+          transparentBackground: true,
+          background: 0x000000,
+          usePostFX: false,
+          enableBeam: false,
+        });
+      }
+
+      async function initialize() {
+        bridge = window.FrancisDesktop;
+        if (!bridge || typeof bridge.getOrbSurface !== "function") {
+          throw new Error("FrancisDesktop bridge is unavailable");
+        }
+
+        await mountOrb();
+        await setOrbInteractive(false);
+        await syncOrb();
+        pollTimer = window.setInterval(() => {
+          syncOrb().catch(() => {});
+        }, 1200);
+
+        document.getElementById("orb-render-root").addEventListener("pointerdown", beginHold);
+        document.getElementById("orb-render-root").addEventListener("pointerup", endHold);
+        document.getElementById("orb-render-root").addEventListener("pointercancel", endHold);
+        document.getElementById("orb-render-root").addEventListener("pointerleave", endHold);
+        document.getElementById("orb-render-root").addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          endHold();
+          setMenuOpen(document.body.dataset.menuOpen !== "true");
+          syncOrbPassThrough(event.clientX, event.clientY);
+        });
+        document.getElementById("orb-render-root").addEventListener("dblclick", async () => {
+          if (bridge && typeof bridge.showLens === "function") {
+            await bridge.showLens();
+            await syncOrb();
+          }
+        });
+
+        document.getElementById("open-lens").addEventListener("click", async () => {
+          await bridge.showLens();
+          closeMenu();
+          await syncOrb();
+        });
+        document.getElementById("hide-lens").addEventListener("click", async () => {
+          await bridge.hideLens();
+          closeMenu();
+          await syncOrb();
+        });
+        document.getElementById("hide-francis").addEventListener("click", async () => {
+          closeMenu();
+          await bridge.hide();
+        });
+        document.getElementById("exit-francis").addEventListener("click", async () => {
+          closeMenu();
+          await bridge.quit();
+        });
+
+        window.addEventListener("pointerdown", (event) => {
+          syncOrbPassThrough(event.clientX, event.clientY);
+          const root = document.getElementById("orb-render-root");
+          const menu = document.getElementById("orb-menu");
+          const target = event.target;
+          const inOrb = Boolean(root && target instanceof Node && root.contains(target));
+          const inMenu = Boolean(menu && target instanceof Node && menu.contains(target));
+          if (document.body.dataset.menuOpen === "true" && !inOrb && !inMenu) {
+            closeMenu();
+          }
+        });
+        window.addEventListener("pointermove", (event) => {
+          syncOrbPassThrough(event.clientX, event.clientY);
+        });
+        window.addEventListener("pointerleave", () => {
+          syncOrbPassThrough();
+        });
+        window.addEventListener("keydown", async (event) => {
+          if (event.key !== "Escape") {
+            return;
+          }
+          if (document.body.dataset.menuOpen === "true") {
+            closeMenu();
+            return;
+          }
+          if (currentState?.lensVisible && bridge && typeof bridge.hideLens === "function") {
+            await bridge.hideLens();
+            await syncOrb();
+          }
+        });
+
+        if (typeof bridge.onStateChanged === "function") {
+          bridge.onStateChanged((state) => {
+            currentState = state || {};
+            updateMenu();
+          });
+        }
+      }
+
+      initialize().catch((error) => {
+        document.body.innerHTML = `<div style="padding:16px;color:#fff;background:rgba(10,16,24,0.92);font:14px 'Segoe UI Variable',sans-serif;">Orb shell failed: ${String(error?.message || error)}</div>`;
+      });
+    </script>
+  </body>
+</html>

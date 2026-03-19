@@ -66,6 +66,7 @@ const { buildDegradedModePosture } = require("./degraded-mode");
 const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
+const { buildOrbWindowBounds } = require("./orb-surface");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -79,6 +80,7 @@ const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 
 let mainWindow = null;
+let orbWindow = null;
 let tray = null;
 let ipcRegistered = false;
 let overlayPreferences = null;
@@ -98,6 +100,9 @@ let quitAfterHudShutdown = false;
 let overlayState = {
   ignoreMouseEvents: false,
   alwaysOnTop: true,
+};
+let orbInputState = {
+  ignoreMouseEvents: true,
 };
 let overlayRecovery = {
   needed: false,
@@ -195,6 +200,10 @@ function markSessionExit(reason, { clean = true } = {}) {
 
 function getHudState() {
   return hudRuntime ? hudRuntime.getPublicState() : null;
+}
+
+function getShellWindows() {
+  return [mainWindow, orbWindow].filter((win) => win && !win.isDestroyed());
 }
 
 function getSortedDisplays() {
@@ -468,11 +477,16 @@ function getOverlayState(win = mainWindow) {
   const bounds = getWindowOrPreferenceBounds(safeWindow);
   const displayInfo = app.isReady() ? getDisplayInfo(safeWindow) : null;
   const lifecycle = getLifecycleState();
+  const lensVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+  const orbVisible = Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible());
 
   return {
     ignoreMouseEvents: overlayState.ignoreMouseEvents,
+    orbIgnoreMouseEvents: orbInputState.ignoreMouseEvents,
     alwaysOnTop: safeWindow ? safeWindow.isAlwaysOnTop() : overlayState.alwaysOnTop,
-    visible: safeWindow ? safeWindow.isVisible() : false,
+    visible: lensVisible || orbVisible,
+    lensVisible,
+    orbVisible,
     hudUrl: HUD_URL,
     bounds,
     targetDisplayId: displayInfo?.targetDisplayId ?? overlayPreferences?.targetDisplayId ?? null,
@@ -1000,9 +1014,9 @@ async function exportSupportBundle(win = mainWindow) {
 }
 
 function notifyOverlayState(win = mainWindow) {
-  const safeWindow = win && !win.isDestroyed() ? win : null;
-  if (safeWindow) {
-    safeWindow.webContents.send("overlay:state-changed", getOverlayState(safeWindow));
+  const payload = getOverlayState(win);
+  for (const shellWindow of getShellWindows()) {
+    shellWindow.webContents.send("overlay:state-changed", payload);
   }
   updateTray();
 }
@@ -1022,7 +1036,10 @@ function updateTray() {
   if (!tray) {
     return;
   }
-  const visible = mainWindow && !mainWindow.isDestroyed() ? mainWindow.isVisible() : false;
+  const visible = Boolean(
+    (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) ||
+    (orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
+  );
   const overlaySnapshot = getOverlayState(mainWindow);
   const loginState = overlaySnapshot.lifecycle?.launchAtLogin || getLaunchAtLoginState(app);
   tray.setToolTip(trayLabelForState());
@@ -1301,6 +1318,9 @@ function resetOverlayPreferences(win = mainWindow) {
   const primaryDisplay = getResolvedTargetDisplay(screen.getPrimaryDisplay().id);
   overlayPreferences = buildDefaultPreferences(primaryDisplay);
   safeWindow.setBounds(overlayPreferences.windowBounds);
+  if (orbWindow && !orbWindow.isDestroyed()) {
+    orbWindow.setBounds(buildOrbWindowBounds(primaryDisplay.workArea));
+  }
   applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
   applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
   overlayPreferences = persistOverlayPreferences(safeWindow, overlayPreferences);
@@ -1319,6 +1339,9 @@ function moveOverlayToDisplay(displayId, win = mainWindow) {
   const nextBounds = buildCenteredBoundsForDisplay(getWindowOrPreferenceBounds(safeWindow), targetDisplay);
 
   safeWindow.setBounds(nextBounds);
+  if (orbWindow && !orbWindow.isDestroyed()) {
+    orbWindow.setBounds(buildOrbWindowBounds(targetDisplay.workArea));
+  }
   overlayPreferences = persistOverlayPreferences(safeWindow, {
     targetDisplayId: targetDisplay.id,
     windowBounds: nextBounds,
@@ -1351,6 +1374,13 @@ function reconcileDisplayTopology(reason) {
 
     if (safeWindow && !sameBounds(safeWindow.getBounds(), overlayPreferences.windowBounds)) {
       safeWindow.setBounds(overlayPreferences.windowBounds);
+    }
+    const targetDisplay = getResolvedTargetDisplay(overlayPreferences.targetDisplayId);
+    if (orbWindow && !orbWindow.isDestroyed()) {
+      const nextOrbBounds = buildOrbWindowBounds(targetDisplay.workArea);
+      if (!sameBounds(orbWindow.getBounds(), nextOrbBounds)) {
+        orbWindow.setBounds(nextOrbBounds);
+      }
     }
 
     log("Reconciled display topology", {
@@ -1483,12 +1513,15 @@ function fallbackUrl(errorText) {
 }
 
 function applyAlwaysOnTop(win, enabled) {
-  if (!win || win.isDestroyed()) {
+  const safeWindows = getShellWindows();
+  if (!safeWindows.length && (!win || win.isDestroyed())) {
     return overlayState.alwaysOnTop;
   }
   // Use a high always-on-top level so the overlay behaves like an operator layer, not a normal app window.
-  win.setAlwaysOnTop(Boolean(enabled), enabled ? "screen-saver" : "normal");
-  overlayState.alwaysOnTop = win.isAlwaysOnTop();
+  for (const shellWindow of safeWindows) {
+    shellWindow.setAlwaysOnTop(Boolean(enabled), enabled ? "screen-saver" : "normal");
+  }
+  overlayState.alwaysOnTop = Boolean(enabled);
   schedulePreferenceSave(win);
   notifyOverlayState(win);
   return overlayState.alwaysOnTop;
@@ -1506,12 +1539,82 @@ function applyIgnoreMouseEvents(win, ignore) {
   return overlayState.ignoreMouseEvents;
 }
 
+function applyOrbIgnoreMouseEvents(ignore) {
+  orbInputState.ignoreMouseEvents = Boolean(ignore);
+  if (!orbWindow || orbWindow.isDestroyed()) {
+    return orbInputState.ignoreMouseEvents;
+  }
+  orbWindow.setIgnoreMouseEvents(
+    orbInputState.ignoreMouseEvents,
+    orbInputState.ignoreMouseEvents ? { forward: true } : undefined,
+  );
+  notifyOverlayState(mainWindow);
+  return orbInputState.ignoreMouseEvents;
+}
+
+async function fetchHudJson(route, init = {}) {
+  const target = new URL(String(route || "/"), HUD_URL).toString();
+  const response = await fetch(target, init);
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(String(payload?.detail || payload?.error || `${response.status} ${response.statusText}`));
+  }
+  return payload;
+}
+
+function showLensWindow() {
+  const win = requireWindow();
+  if (win.isMinimized()) {
+    win.restore();
+  }
+  win.showInactive();
+  notifyOverlayState(win);
+  return getOverlayState(win);
+}
+
+function hideLensWindow() {
+  const win = requireWindow();
+  win.hide();
+  notifyOverlayState(win);
+  return getOverlayState(win);
+}
+
+function showOrbWindow() {
+  if (!orbWindow || orbWindow.isDestroyed()) {
+    orbWindow = createOrbWindow();
+    return getOverlayState(mainWindow);
+  }
+  if (orbWindow.isMinimized()) {
+    orbWindow.restore();
+  }
+  orbWindow.showInactive();
+  notifyOverlayState(mainWindow);
+  return getOverlayState(mainWindow);
+}
+
+function hideAllWindows() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+  if (orbWindow && !orbWindow.isDestroyed()) {
+    orbWindow.hide();
+  }
+  notifyOverlayState(mainWindow);
+  return true;
+}
+
 async function showFallbackPage(win, errorText) {
   if (!win || win.isDestroyed()) {
     return;
   }
   log("Loading fallback error page", errorText);
   await win.loadURL(fallbackUrl(errorText));
+}
+
+function getLensHudUrl() {
+  const target = new URL(HUD_URL);
+  target.searchParams.set("orb", "external");
+  return target.toString();
 }
 
 function clearHudRecovery() {
@@ -1588,14 +1691,92 @@ async function loadHud(win) {
   });
 
   try {
-    log("Loading HUD", HUD_URL);
-    await win.loadURL(HUD_URL);
+    const lensUrl = getLensHudUrl();
+    log("Loading HUD", lensUrl);
+    await win.loadURL(lensUrl);
   } catch (error) {
     if (!handledFailure) {
       handledFailure = true;
       await showFallbackPage(win, error instanceof Error ? error.message : String(error));
     }
   }
+}
+
+function createOrbWindow() {
+  const { displays, primaryDisplayId } = getDisplayContext();
+  overlayPreferences = loadPreferences(app.getPath("userData"), displays, primaryDisplayId);
+  const preloadPath = path.join(__dirname, "preload.js");
+  const targetDisplay = resolveTargetDisplay(displays, overlayPreferences.targetDisplayId, primaryDisplayId);
+  const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
+  const orbBounds = buildOrbWindowBounds(targetDisplay.workArea);
+
+  log("Creating orb window", {
+    targetDisplayId: targetDisplay.id,
+    bounds: orbBounds,
+  });
+
+  const win = new BrowserWindow({
+    x: orbBounds.x,
+    y: orbBounds.y,
+    width: orbBounds.width,
+    height: orbBounds.height,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    alwaysOnTop: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    autoHideMenuBar: true,
+    title: "Francis Orb",
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: false,
+    },
+  });
+
+  win.setMenuBarVisibility(false);
+  applyAlwaysOnTop(win, overlayPreferences.alwaysOnTop);
+  orbInputState.ignoreMouseEvents = true;
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.removeMenu();
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setAlwaysOnTop(overlayPreferences.alwaysOnTop, "screen-saver");
+  win.loadFile(path.join(__dirname, "orb-shell.html")).catch((error) => {
+    log("Unexpected orb-shell load error", error instanceof Error ? error.message : String(error));
+  });
+
+  win.once("ready-to-show", () => {
+    if (startupProfile.visible) {
+      log("Orb ready; showing window", {
+        startupProfile: startupProfile.effective,
+      });
+      win.showInactive();
+      notifyOverlayState(mainWindow);
+      return;
+    }
+    log("Orb ready; startup profile keeps the shell hidden until summoned", {
+      startupProfile: startupProfile.effective,
+    });
+    notifyOverlayState(mainWindow);
+  });
+
+  win.on("show", () => notifyOverlayState(mainWindow));
+  win.on("hide", () => notifyOverlayState(mainWindow));
+  win.on("closed", () => {
+    log("Orb window closed");
+    if (orbWindow === win) {
+      orbWindow = null;
+    }
+  });
+
+  return win;
 }
 
 function createMainWindow() {
@@ -1675,14 +1856,7 @@ function createMainWindow() {
   });
 
   win.once("ready-to-show", () => {
-    if (startupProfile.visible) {
-      log("Overlay ready; showing window", {
-        startupProfile: startupProfile.effective,
-      });
-      win.showInactive();
-      return;
-    }
-    log("Overlay ready; startup profile keeps the window hidden until summoned", {
+    log("Lens ready; keeping the HUD hidden until the Orb opens it", {
       startupProfile: startupProfile.effective,
     });
     notifyOverlayState(win);
@@ -1778,6 +1952,11 @@ function registerIpc() {
     log("Updated click-through state", value);
     return value;
   });
+  ipcMain.handle("overlay:set-orb-ignore-mouse-events", (_event, ignore) => {
+    const value = applyOrbIgnoreMouseEvents(ignore);
+    log("Updated orb pass-through state", value);
+    return value;
+  });
 
   ipcMain.handle("overlay:set-always-on-top", (_event, enabled) => {
     const win = requireWindow();
@@ -1806,6 +1985,22 @@ function registerIpc() {
   ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(requireWindow()));
   ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
   ipcMain.handle("overlay:open-path", (_event, target) => openLifecyclePath(target));
+  ipcMain.handle("overlay:get-orb-surface", () => fetchHudJson("/api/orb"));
+  ipcMain.handle("overlay:panic-stop", () =>
+    fetchHudJson("/api/actions/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "control.panic",
+        args: {},
+        dry_run: false,
+        role: "architect",
+        user: "electron.orb",
+      }),
+    }),
+  );
+  ipcMain.handle("overlay:show-lens", () => showLensWindow());
+  ipcMain.handle("overlay:hide-lens", () => hideLensWindow());
 
   ipcMain.handle("overlay:minimize", () => {
     const win = requireWindow();
@@ -1815,19 +2010,12 @@ function registerIpc() {
   });
 
   ipcMain.handle("overlay:hide", () => {
-    const win = requireWindow();
-    win.hide();
-    notifyOverlayState(win);
+    hideAllWindows();
     return true;
   });
 
   ipcMain.handle("overlay:show", () => {
-    const win = requireWindow();
-    if (win.isMinimized()) {
-      win.restore();
-    }
-    win.showInactive();
-    notifyOverlayState(win);
+    showOrbWindow();
     return true;
   });
 
@@ -1849,21 +2037,20 @@ function registerIpc() {
 }
 
 function toggleOverlayVisibility() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
+  if ((!mainWindow || mainWindow.isDestroyed()) && (!orbWindow || orbWindow.isDestroyed())) {
     return;
   }
-  if (mainWindow.isVisible()) {
+  const visible = Boolean(
+    (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) ||
+    (orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
+  );
+  if (visible) {
     log("Hiding overlay via global shortcut");
-    mainWindow.hide();
-    notifyOverlayState(mainWindow);
+    hideAllWindows();
     return;
   }
   log("Showing overlay via global shortcut");
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-  mainWindow.showInactive();
-  notifyOverlayState(mainWindow);
+  showOrbWindow();
 }
 
 function toggleClickThrough() {
@@ -1988,6 +2175,7 @@ if (!app.requestSingleInstanceLock()) {
     registerDisplayListeners();
     await initializeHudRuntime();
     mainWindow = createMainWindow();
+    orbWindow = createOrbWindow();
     createTray();
     registerShortcuts();
   });
@@ -1995,7 +2183,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
       mainWindow = createMainWindow();
-      return;
+    }
+    if (!orbWindow || orbWindow.isDestroyed()) {
+      orbWindow = createOrbWindow();
     }
     toggleOverlayVisibility();
   });
@@ -2004,10 +2194,12 @@ if (!app.requestSingleInstanceLock()) {
 app.on("activate", () => {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = createMainWindow();
-    return;
   }
-  if (!mainWindow.isVisible()) {
-    mainWindow.showInactive();
+  if (!orbWindow || orbWindow.isDestroyed()) {
+    orbWindow = createOrbWindow();
+  }
+  if (!orbWindow.isVisible()) {
+    orbWindow.showInactive();
   }
 });
 

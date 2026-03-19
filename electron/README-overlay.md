@@ -1,10 +1,16 @@
 # Francis Desktop Overlay Shell
 
-This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in Electron so it can run as a transparent Windows desktop overlay.
+This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in Electron so Francis can run as a desktop presence layer on Windows.
+
+The shell now splits into two surfaces:
+
+- a dedicated Orb window that lives on the desktop outside the HUD
+- a separate Lens window that stays hidden until the Orb opens it
 
 ## What It Does
 
-- creates a transparent, frameless, always-on-top overlay window
+- creates a transparent, frameless, always-on-top desktop Orb window
+- keeps the full Lens HUD in a separate hidden window until explicitly opened
 - loads the existing localhost HUD instead of bundling a second renderer
 - exposes a small preload bridge at `window.FrancisDesktop`
 - supports toggling click-through, always-on-top, Start At Login, display targeting, devtools, hide/show, and minimize
@@ -13,6 +19,7 @@ This shell wraps the existing Francis HUD served from `http://127.0.0.1:8767` in
 - registers `Ctrl+Shift+Alt+F` as a global show/hide shortcut
 - registers `Ctrl+Shift+Alt+C` as a global click-through toggle so pointer control is recoverable
 - lets the live HUD consume those shell controls directly when running inside Electron
+- keeps the Orb outside the HUD so normal desktop presence does not require the full operator surface to stay visible
 - creates a tray control surface for show/hide, click-through, topmost, HUD restart, and quit
 - persists overlay bounds, target display, always-on-top, and click-through state in the Electron user-data directory
 - reflects the current launch-at-login state in the desktop shell lifecycle surface
@@ -73,8 +80,8 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 
 ## Current Limitations
 
-- Click-through is a whole-window toggle, not pixel-perfect hit testing.
-- Click-through should be treated as an operator mode change: once enabled, use the global shortcut to recover pointer control.
+- Lens click-through is still a whole-window toggle, not pixel-perfect hit testing.
+- The Orb window now defaults to pass-through and only becomes interactive over the Orb/menu region, but it still relies on Electron window-level mouse-event toggling rather than true pixel hit testing.
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
 - The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
 - The shell also stores a small `overlay-session.json` continuity record so crash recovery can be surfaced on the next launch.
@@ -114,6 +121,7 @@ Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / 
 - the HUD now surfaces build provenance for package inputs, package targets, and bundled runtime posture
 - shell-state portability now carries compatibility metadata and blocks mismatched import channels instead of silently applying them
 - the shell can now be packaged as both a portable artifact and an NSIS installer with the Orb icon and current shell controls intact
+- the Orb now lives in its own desktop window while the Lens HUD opens separately in external-Orb mode so the Orb is not duplicated inside the HUD
 
 ## Next Extensions
 

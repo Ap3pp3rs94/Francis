@@ -232,6 +232,16 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "/static/orb/francis-orb.js" in response.text
 
 
+def test_hud_root_supports_external_orb_mode() -> None:
+    response = client.get("/?orb=external")
+
+    assert response.status_code == 200
+    assert 'new URL(window.location.href).searchParams.get("orb") === "external"' in response.text
+    assert 'body[data-orb-surface="external"] .orb-chamber' in response.text
+    assert 'body[data-orb-surface="external"] #orb-overlay' in response.text
+    assert 'body[data-orb-surface="external"] #overlay-dock' in response.text
+
+
 def test_hud_serves_orb_bundle() -> None:
     response = client.get("/static/orb/francis-orb.js")
 

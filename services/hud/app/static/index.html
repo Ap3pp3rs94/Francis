@@ -46,6 +46,16 @@
         background: transparent;
       }
 
+      body[data-orb-surface="external"] .orb-chamber,
+      body[data-orb-surface="external"] #orb-overlay,
+      body[data-orb-surface="external"] #overlay-dock {
+        display: none !important;
+      }
+
+      body[data-orb-surface="external"] .hero-grid {
+        grid-template-columns: 1fr;
+      }
+
       :focus-visible {
         outline: 3px solid rgba(180, 71, 45, 0.6);
         outline-offset: 3px;
@@ -1752,6 +1762,8 @@
 
     <script src="/static/orb/francis-orb.js"></script>
     <script>
+      const externalOrbMode = new URL(window.location.href).searchParams.get("orb") === "external";
+      document.body.dataset.orbSurface = externalOrbMode ? "external" : "embedded";
       let currentActions = { action_chips: [], blocked_actions: [] };
       let currentSnapshot = null;
       let currentFabricResults = [];
@@ -1816,6 +1828,7 @@
       let orbAnimationFrame = null;
       let orbHoldTimer = null;
       let orbHoldTriggered = false;
+      let hudInteractionsBound = false;
       let orbSpeechBurstUntil = 0;
       let orbThinkingUntil = 0;
       let orbListeningActive = false;
@@ -1970,6 +1983,9 @@
       }
 
       function normalizeLensViewMode(mode) {
+        if (externalOrbMode) {
+          return "lens";
+        }
         return String(mode || "").trim().toLowerCase() === "orb_only" ? "orb_only" : "lens";
       }
 
@@ -2007,6 +2023,10 @@
         const hideOverlay = document.getElementById("overlay-hide-app");
         const exitOverlay = document.getElementById("overlay-exit-app");
         if (!dock || !status || !openLens || !hideLens || !hideOverlay || !exitOverlay) {
+          return;
+        }
+        if (externalOrbMode) {
+          document.body.dataset.orbMenu = "closed";
           return;
         }
 
@@ -3144,7 +3164,7 @@
         });
         applyAccessibilityPosture();
         if (!lensViewInitialized) {
-          setLensViewMode(desktopState.available ? "orb_only" : "lens");
+          setLensViewMode(desktopState.available && !externalOrbMode ? "orb_only" : "lens");
           lensViewInitialized = true;
         } else {
           renderOverlayDock();
@@ -3893,7 +3913,12 @@
       function renderOrb(orb) {
         const previousOrb = currentOrb;
         currentOrb = orb || null;
+        initHudInteractions();
         if (!currentOrb) {
+          return;
+        }
+        if (externalOrbMode) {
+          document.body.classList.remove("orb-cursor-active");
           return;
         }
         maybeStartOrbHandback(previousOrb, currentOrb);
@@ -4098,6 +4123,9 @@
       }
 
       function applyOrbSignals() {
+        if (externalOrbMode) {
+          return;
+        }
         const bundle = getOrbBundle();
         const api = mountOrbEngine();
         const root = document.getElementById("orb-render-root");
@@ -4123,6 +4151,10 @@
       }
 
       function animateOrbOverlay(timestamp) {
+        if (externalOrbMode) {
+          orbAnimationFrame = null;
+          return;
+        }
         orbAnimationFrame = window.requestAnimationFrame(animateOrbOverlay);
         const root = document.getElementById("orb-render-root");
         const overlay = document.getElementById("orb-overlay");
@@ -4257,9 +4289,65 @@
         orbHoldTriggered = false;
       }
 
+      function initHudInteractions() {
+        if (hudInteractionsBound) {
+          return;
+        }
+        hudInteractionsBound = true;
+
+        const voiceCommand = document.getElementById("voice-command");
+        if (voiceCommand && voiceCommand instanceof HTMLElement) {
+          voiceCommand.addEventListener("focus", () => {
+            orbListeningActive = true;
+            applyOrbSignals();
+          });
+          voiceCommand.addEventListener("blur", () => {
+            orbListeningActive = false;
+            applyOrbSignals();
+          });
+        }
+
+        const focusPreview = document.getElementById("work-action-preview");
+        if (focusPreview && focusPreview instanceof HTMLElement) {
+          focusPreview.addEventListener("click", () => {
+            previewFocusAction();
+          });
+        }
+        const focusExecute = document.getElementById("work-action-execute");
+        if (focusExecute && focusExecute instanceof HTMLElement) {
+          focusExecute.addEventListener("click", () => {
+            runFocusAction();
+          });
+        }
+        const repoStatus = document.getElementById("repo-action-status");
+        if (repoStatus && repoStatus instanceof HTMLElement) {
+          repoStatus.addEventListener("click", () => {
+            runRepoControl("status");
+          });
+        }
+        const repoDiff = document.getElementById("repo-action-diff");
+        if (repoDiff && repoDiff instanceof HTMLElement) {
+          repoDiff.addEventListener("click", () => {
+            runRepoControl("diff");
+          });
+        }
+        const repoLint = document.getElementById("repo-action-lint");
+        if (repoLint && repoLint instanceof HTMLElement) {
+          repoLint.addEventListener("click", () => {
+            runRepoControl("lint");
+          });
+        }
+        const repoTests = document.getElementById("repo-action-tests");
+        if (repoTests && repoTests instanceof HTMLElement) {
+          repoTests.addEventListener("click", () => {
+            runRepoTestsAction();
+          });
+        }
+      }
+
       function initOrbInteractions() {
         const root = document.getElementById("orb-render-root");
-        if (!root || root.dataset.bound === "true") {
+        if (!root || root.dataset.bound === "true" || externalOrbMode) {
           return;
         }
         root.dataset.bound = "true";
@@ -4314,55 +4402,6 @@
             setLensViewMode("orb_only");
           }
         });
-
-        const voiceCommand = document.getElementById("voice-command");
-        if (voiceCommand && voiceCommand instanceof HTMLElement) {
-          voiceCommand.addEventListener("focus", () => {
-            orbListeningActive = true;
-            applyOrbSignals();
-          });
-          voiceCommand.addEventListener("blur", () => {
-            orbListeningActive = false;
-            applyOrbSignals();
-          });
-        }
-
-        const focusPreview = document.getElementById("work-action-preview");
-        if (focusPreview && focusPreview instanceof HTMLElement) {
-          focusPreview.addEventListener("click", () => {
-            previewFocusAction();
-          });
-        }
-        const focusExecute = document.getElementById("work-action-execute");
-        if (focusExecute && focusExecute instanceof HTMLElement) {
-          focusExecute.addEventListener("click", () => {
-            runFocusAction();
-          });
-        }
-        const repoStatus = document.getElementById("repo-action-status");
-        if (repoStatus && repoStatus instanceof HTMLElement) {
-          repoStatus.addEventListener("click", () => {
-            runRepoControl("status");
-          });
-        }
-        const repoDiff = document.getElementById("repo-action-diff");
-        if (repoDiff && repoDiff instanceof HTMLElement) {
-          repoDiff.addEventListener("click", () => {
-            runRepoControl("diff");
-          });
-        }
-        const repoLint = document.getElementById("repo-action-lint");
-        if (repoLint && repoLint instanceof HTMLElement) {
-          repoLint.addEventListener("click", () => {
-            runRepoControl("lint");
-          });
-        }
-        const repoTests = document.getElementById("repo-action-tests");
-        if (repoTests && repoTests instanceof HTMLElement) {
-          repoTests.addEventListener("click", () => {
-            runRepoTestsAction();
-          });
-        }
       }
 
       function renderBootstrap(payload) {
@@ -8623,6 +8662,7 @@
 
       loadSurface()
         .then(() => {
+          initHudInteractions();
           initDesktopShell();
           const queryNode = document.getElementById("fabric-query");
           if (queryNode) {
