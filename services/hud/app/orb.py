@@ -113,6 +113,7 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
         )
 
     return {
+        "title": "",
         "state": state,
         "control_ready": control_ready,
         "surface_kind": surface_kind,
@@ -126,6 +127,74 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
         "primary_action_label": primary_label,
         "summary": summary,
         "detail": detail,
+    }
+
+
+def _build_orb_receipt_cue(
+    *,
+    related_receipt: dict[str, Any] | None,
+    focus_kind: str,
+    target_cue: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(related_receipt, dict):
+        return None
+
+    receipt_run_id = str(related_receipt.get("run_id", "")).strip()
+    receipt_action_kind = _normalize_usage_action_kind(related_receipt.get("action_kind"))
+    normalized_focus_kind = _normalize_usage_action_kind(focus_kind)
+    aligned = bool(
+        receipt_action_kind
+        and normalized_focus_kind
+        and receipt_action_kind == normalized_focus_kind
+    )
+    cue = target_cue if isinstance(target_cue, dict) else {}
+    cue_state = str(cue.get("state", "weak")).strip().lower() or "weak"
+    zone_label = str(cue.get("zone_label", "active control region")).strip() or "active control region"
+    surface_label = str(cue.get("surface_label", "foreground surface")).strip() or "foreground surface"
+    target_label = str(cue.get("target_label", "active focus point")).strip() or "active focus point"
+    primary_label = str(cue.get("primary_action_label", "")).strip()
+    action_label = primary_label or target_label
+    receipt_label = f"Receipt {receipt_run_id}" if receipt_run_id else "Latest receipt"
+
+    if aligned and cue_state == "concrete":
+        state = "concrete"
+        summary = f"{receipt_label} is grounded by a concrete {zone_label.lower()}."
+        detail = (
+            f"{action_label} was lawful because {target_label} was inside the foreground "
+            f"{surface_label.lower()} and stable enough for precise handoff."
+        )
+    elif aligned and cue_state == "tracking":
+        state = "tracking"
+        summary = f"{receipt_label} is attached, but the target was still tracking."
+        detail = (
+            f"{target_label} stayed inside the foreground {surface_label.lower()}, "
+            "but Francis held it below concrete control readiness."
+        )
+    else:
+        state = "weak"
+        summary = f"{receipt_label} is attached, but no concrete target cue is grounded now."
+        detail = (
+            "The receipt remains visible, but the Orb is holding off on claiming a precise control target "
+            "until the active surface becomes concrete again."
+        )
+
+    return {
+        "title": "Receipt Grounding",
+        "state": state,
+        "control_ready": bool(aligned and cue_state == "concrete"),
+        "surface_kind": str(cue.get("surface_kind", "")).strip(),
+        "surface_label": surface_label,
+        "zone_kind": str(cue.get("zone_kind", "")).strip(),
+        "zone_label": zone_label,
+        "target_label": target_label,
+        "confidence": str(cue.get("confidence", "low")).strip().lower() or "low",
+        "stability": str(cue.get("stability", "idle")).strip().lower() or "idle",
+        "window_match": str(cue.get("window_match", "weak")).strip().lower() or "weak",
+        "primary_action_label": primary_label,
+        "summary": summary,
+        "detail": detail,
+        "receipt_run_id": receipt_run_id,
+        "receipt_action_kind": receipt_action_kind,
     }
 
 
@@ -431,6 +500,11 @@ def _build_orb_operator_view(
         and str(related_approval.get("id", "")).strip()
     )
     target_cue = _build_orb_target_cue()
+    receipt_cue = _build_orb_receipt_cue(
+        related_receipt=related_receipt if isinstance(related_receipt, dict) else None,
+        focus_kind=focus_kind,
+        target_cue=target_cue if isinstance(target_cue, dict) else None,
+    )
     takeover_desktop_run = _build_takeover_desktop_run_contract(focus_action=focus_action, takeover=takeover)
     surface_action = _build_surface_action_contract()
     preview_enabled = bool(focus_action.get("enabled"))
@@ -474,6 +548,7 @@ def _build_orb_operator_view(
         "approval": related_approval if isinstance(related_approval, dict) else None,
         "latest_receipt": related_receipt if isinstance(related_receipt, dict) else None,
         "target_cue": target_cue if isinstance(target_cue, dict) else None,
+        "receipt_cue": receipt_cue if isinstance(receipt_cue, dict) else None,
         "receipt_summary": receipt_summary,
         "controls": {
             "preview_enabled": preview_enabled,

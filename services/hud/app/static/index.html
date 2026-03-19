@@ -843,6 +843,74 @@
         transition: filter 140ms ease, border-color 140ms ease, opacity 140ms ease;
       }
 
+      .overlay-perception-frame {
+        position: relative;
+        overflow: hidden;
+        border-radius: 12px;
+      }
+
+      .overlay-perception-highlight {
+        position: absolute;
+        border: 1px solid rgba(35, 104, 74, 0.32);
+        border-radius: 14px;
+        background: rgba(35, 104, 74, 0.08);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+          0 0 0 1px rgba(35, 104, 74, 0.08);
+        pointer-events: none;
+      }
+
+      .overlay-perception-highlight-label {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(35, 104, 74, 0.78);
+        color: #edf3ff;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .overlay-perception-highlight[data-zone="francis_header"] {
+        top: 6%;
+        left: 8%;
+        width: 84%;
+        height: 12%;
+      }
+
+      .overlay-perception-highlight[data-zone="francis_action_row"] {
+        top: 18%;
+        left: 12%;
+        width: 76%;
+        height: 18%;
+      }
+
+      .overlay-perception-highlight[data-zone="francis_navigation"] {
+        top: 14%;
+        left: 6%;
+        width: 24%;
+        height: 70%;
+      }
+
+      .overlay-perception-highlight[data-zone="francis_workspace"] {
+        top: 28%;
+        left: 24%;
+        width: 64%;
+        height: 46%;
+      }
+
+      .overlay-perception-highlight[data-zone="francis_footer_actions"] {
+        left: 22%;
+        bottom: 10%;
+        width: 66%;
+        height: 16%;
+      }
+
       .overlay-perception-preview[data-stability="settled"] {
         border-color: rgba(35, 104, 74, 0.24);
         background:
@@ -2077,6 +2145,10 @@
         <div class="overlay-dock-reply" id="overlay-receipt-summary">
           No latest receipt is anchoring the Orb surface yet.
         </div>
+        <div class="overlay-target-cue" id="overlay-receipt-target">
+          <strong>Receipt Grounding</strong>
+          <span>Receipt target grounding will surface here when a latest receipt is attached to the Orb.</span>
+        </div>
         <div class="overlay-dock-operator-actions">
           <button class="btn-secondary" type="button" id="overlay-focus-preview" onclick="previewOrbFocusAction()">Preview</button>
           <button class="btn-primary" type="button" id="overlay-focus-run" onclick="runOrbFocusAction()">Run</button>
@@ -2591,17 +2663,33 @@
         }
         const targetCue = cue && typeof cue === "object" ? cue : {};
         const highlight = String(targetCue.state || "unavailable").trim().toLowerCase() || "unavailable";
-        const title = highlight === "concrete"
+        const title = String(targetCue.title || "").trim() || (highlight === "concrete"
           ? "Concrete Target"
           : highlight === "tracking"
             ? "Tracking Target"
-            : "Weak Target";
+            : "Weak Target");
         const summary = String(targetCue.summary || fallbackText || "Orb target quality is not attached yet.").trim();
         const detail = String(targetCue.detail || "").trim();
         node.dataset.highlight = highlight;
         node.innerHTML = detail
           ? `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(summary)}</span><span class="meta tiny">${escapeHtml(detail)}</span>`
           : `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(summary)}</span>`;
+      }
+
+      function buildOrbPreviewHighlightMarkup(cue, targetContract) {
+        const targetCue = cue && typeof cue === "object" ? cue : {};
+        const target = targetContract && typeof targetContract === "object" ? targetContract : {};
+        const zone = target.zone && typeof target.zone === "object" ? target.zone : {};
+        const cueState = String(targetCue.state || "").trim().toLowerCase();
+        const surfaceKind = String(targetCue.surface_kind || "").trim().toLowerCase();
+        const zoneKind = String(targetCue.zone_kind || zone.kind || "").trim().toLowerCase();
+        if (cueState !== "concrete" || surfaceKind !== "francis" || !zoneKind.startsWith("francis_")) {
+          return "";
+        }
+        const zoneLabel = String(targetCue.zone_label || zone.label || "Francis control").trim() || "Francis control";
+        const actionLabel = String(targetCue.primary_action_label || "").trim();
+        const badge = actionLabel ? `${zoneLabel} | ${actionLabel}` : zoneLabel;
+        return `<div class="overlay-perception-highlight" data-zone="${escapeHtml(zoneKind)}"><span class="overlay-perception-highlight-label">${escapeHtml(badge)}</span></div>`;
       }
 
       function renderOverlayDock() {
@@ -2623,6 +2711,7 @@
         const focusSummary = document.getElementById("overlay-focus-summary");
         const focusTarget = document.getElementById("overlay-focus-target");
         const receiptSummary = document.getElementById("overlay-receipt-summary");
+        const receiptTarget = document.getElementById("overlay-receipt-target");
         const focusPreview = document.getElementById("overlay-focus-preview");
         const focusRun = document.getElementById("overlay-focus-run");
         const focusReceipt = document.getElementById("overlay-focus-receipt");
@@ -2660,6 +2749,7 @@
           !focusSummary ||
           !focusTarget ||
           !receiptSummary ||
+          !receiptTarget ||
           !focusPreview ||
           !focusRun ||
           !focusReceipt ||
@@ -2772,6 +2862,9 @@
         const interjectionTargetCue = currentOrbInterjection?.target_cue && typeof currentOrbInterjection.target_cue === "object"
           ? currentOrbInterjection.target_cue
           : operatorTargetCue;
+        const operatorReceiptCue = currentOrbOperator?.receipt_cue && typeof currentOrbOperator.receipt_cue === "object"
+          ? currentOrbOperator.receipt_cue
+          : null;
         const primaryLabel = String(interjectionControls.primary_label || "").trim();
         const primaryAction = String(interjectionControls.primary_action || "").trim();
         const secondaryLabel = String(interjectionControls.secondary_label || "").trim();
@@ -2798,6 +2891,12 @@
         );
         receiptSummary.textContent = String(
           focusContext.receiptSummary || "No latest receipt is anchoring the Orb surface yet.",
+        );
+        receiptTarget.hidden = !focusContext.hasReceipt && !operatorReceiptCue;
+        renderOrbTargetCue(
+          receiptTarget,
+          operatorReceiptCue,
+          "Receipt target grounding will surface here when a latest receipt is attached to the Orb.",
         );
         focusPreview.disabled = !focusContext.canPreview;
         focusRun.disabled = !focusContext.canRun;
@@ -2866,6 +2965,7 @@
         );
         const focusPreviewStatus = escapeHtml(previewStatusParts.join(" | "));
         const focusPreviewActionHint = escapeHtml(previewActionHint);
+        const focusPreviewHighlight = buildOrbPreviewHighlightMarkup(operatorTargetCue, targetContract);
         perceptionPreview.dataset.stability = targetStabilityState;
         perceptionPreview.dataset.confidence = targetConfidenceState;
         perceptionPreview.dataset.windowMatch = targetWindowMatchState;
@@ -2880,7 +2980,7 @@
           orbOverlay.dataset.windowMatch = targetWindowMatchState;
         }
         perceptionPreview.innerHTML = focusDataUrl
-          ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`
+          ? `<strong>Focus Preview</strong><div class="overlay-perception-frame"><img src="${focusDataUrl}" alt="Orb active-surface focus preview" />${focusPreviewHighlight}</div><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`
           : `<strong>Focus Preview</strong><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`;
         authorityMeta.textContent = currentOrbAuthority?.state?.live
           ? "Away authority is live. Human return or panic stop will release immediately."
@@ -3138,6 +3238,9 @@
         const surfaceActionReason = String(operatorControls.surface_action_reason || "").trim();
         const approvalId = String(operatorControls.approval_id || operator?.approval?.id || "").trim();
         const runMode = String(operatorControls.run_mode || "").trim() || (approvalId ? "approve_and_run" : "execute");
+        const receiptCue = operator.receipt_cue && typeof operator.receipt_cue === "object"
+          ? operator.receipt_cue
+          : null;
         const hasOperatorContract =
           Boolean(String(operator.summary || "").trim())
           || Boolean(String(operator.meta || "").trim())
@@ -3160,6 +3263,7 @@
             receiptSummary: String(
               operator.receipt_summary || "No latest receipt is anchoring the Orb surface yet.",
             ).trim(),
+            receiptCue,
             previewKind,
             previewArgs,
             runMode,
@@ -3214,6 +3318,7 @@
           receiptSummary: relatedReceipt
             ? summarizeReceiptDetail(relatedReceipt)
             : "No latest receipt is anchoring the Orb surface yet.",
+          receiptCue: null,
           previewKind: String(currentFocusActionChip?.kind || "").trim(),
           previewArgs: currentFocusActionChip?.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
           runMode: relatedApproval?.can_execute_after_approval && relatedApproval?.id ? "approve_and_run" : "execute",
@@ -3356,10 +3461,17 @@
           return;
         }
         orbQuickChat.error = "";
-        orbQuickChat.reply = String(
+        const receiptCue = context.receiptCue && typeof context.receiptCue === "object"
+          ? context.receiptCue
+          : null;
+        const baseReceipt = String(
           context.receiptSummary
             || (context.relatedReceipt ? summarizeReceiptDetail(context.relatedReceipt) : "No latest receipt is attached to the current Orb move."),
         );
+        const receiptGrounding = receiptCue
+          ? `${String(receiptCue.summary || "").trim()} ${String(receiptCue.detail || "").trim()}`.trim()
+          : "";
+        orbQuickChat.reply = receiptGrounding ? `${baseReceipt} ${receiptGrounding}`.trim() : baseReceipt;
         renderOverlayDock();
       }
 

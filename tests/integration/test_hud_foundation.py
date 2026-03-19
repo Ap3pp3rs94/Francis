@@ -288,10 +288,13 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function queueOrbSurfaceAction(preferredKinds = [])' in response.text
     assert 'function parseOrbQuickCommand(message)' in response.text
     assert 'function renderOrbTargetCue(node, cue, fallbackText)' in response.text
+    assert 'function buildOrbPreviewHighlightMarkup(cue, targetContract)' in response.text
     assert '"/surface"' in response.text
     assert '"/submit"' in response.text
     assert 'function sendOrbQuickChat()' in response.text
     assert 'id="overlay-focus-target"' in response.text
+    assert 'id="overlay-receipt-target"' in response.text
+    assert 'class="overlay-perception-highlight"' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
     assert "const ORB_HUMAN_TRACE_LAG_MS = 156;" in response.text

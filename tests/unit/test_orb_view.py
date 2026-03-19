@@ -116,6 +116,9 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert operator["controls"]["takeover_active"] is True
     assert operator["controls"]["takeover_session_id"] == "session-1"
     assert operator["target_cue"] is None
+    assert operator["receipt_cue"]["state"] == "weak"
+    assert operator["receipt_cue"]["title"] == "Receipt Grounding"
+    assert "no concrete target cue is grounded now" in operator["receipt_cue"]["summary"].lower()
 
     interjection = orb["interjection"]
     assert interjection["surface"] == "orb_interjection"
@@ -338,6 +341,8 @@ def test_get_orb_view_carries_concrete_target_cue_into_interjection(monkeypatch)
     orb = orb_view.get_orb_view(snapshot=snapshot, actions=actions, voice={"surface": "voice"})
 
     assert orb["operator"]["target_cue"]["state"] == "concrete"
+    assert orb["operator"]["receipt_cue"]["state"] == "concrete"
+    assert orb["operator"]["receipt_cue"]["control_ready"] is True
     assert orb["interjection"]["target_cue"]["state"] == "concrete"
     assert orb["interjection"]["target_cue"]["control_ready"] is True
 
