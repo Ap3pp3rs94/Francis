@@ -3020,43 +3020,49 @@
       }
 
       async function queueOrbAuthorityCommand(kind, args = {}, reason = "") {
-        const response = await fetch("/api/orb/authority/commands", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kind,
-            args,
-            reason,
-            actor: "hud.orb",
-            user: "hud.operator",
-          }),
-        });
-        const payload = await response.json();
-        if (!response.ok) {
+        let actionKind = "";
+        if (String(kind || "").trim().toLowerCase() === "mouse.move") {
+          actionKind = "orb.authority.queue_move";
+        } else if (String(kind || "").trim().toLowerCase() === "mouse.click") {
+          actionKind = "orb.authority.queue_click";
+        } else if (String(kind || "").trim().toLowerCase() === "keyboard.shortcut") {
+          actionKind = "orb.authority.queue_save";
+        } else if (String(kind || "").trim().toLowerCase() === "keyboard.type") {
+          actionKind = "orb.authority.queue_type";
+        } else {
+          throw new Error(`unsupported orb authority command: ${kind}`);
+        }
+        const payload = await executeActionWithArgs(
+          actionKind,
+          { ...(args && typeof args === "object" ? args : {}), reason },
+          false,
+        );
+        if (!payload || String(payload?.status || "").trim().toLowerCase() !== "ok") {
           throw new Error(payload?.detail || "unknown authority error");
         }
-        updateOrbAuthority(payload?.authority);
+        updateOrbAuthority(payload?.execution?.result?.authority || payload?.authority);
         orbQuickChat.error = "";
-        orbQuickChat.reply = formatOrbAuthorityCommandReply(payload?.command, payload?.authority);
+        orbQuickChat.reply = formatOrbAuthorityCommandReply(
+          payload?.execution?.result?.command || payload?.command,
+          payload?.execution?.result?.authority || payload?.authority,
+        );
         renderOverlayDock();
         return payload;
       }
 
       async function cancelOrbAuthorityQueue() {
         try {
-          const response = await fetch("/api/orb/authority/cancel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          const payload = await executeActionWithArgs(
+            "orb.authority.clear_queue",
+            {
               reason: "Operator cleared queued Orb authority commands from the Orb surface.",
-              actor: "hud.orb",
-            }),
-          });
-          const payload = await response.json();
-          if (!response.ok) {
+            },
+            false,
+          );
+          if (!payload || String(payload?.status || "").trim().toLowerCase() !== "ok") {
             throw new Error(payload?.detail || "unknown authority error");
           }
-          updateOrbAuthority(payload?.authority);
+          updateOrbAuthority(payload?.execution?.result?.authority || payload?.authority);
           orbQuickChat.error = "";
           orbQuickChat.reply = "Queued Orb authority commands were cleared. Human control remains primary until Francis is lawfully armed again.";
         } catch (error) {

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
 from services.hud.app.orb import build_orb_chat_reply, get_orb_view
-from services.hud.app.orb_authority import (
+from services.orchestrator.app.orb_authority import (
     cancel_orb_authority_queue,
     claim_next_orb_authority_command,
     complete_orb_authority_command,

@@ -46,6 +46,10 @@ from services.orchestrator.app.control_state import (
     load_or_init_control_state,
     set_mode,
 )
+from services.orchestrator.app.orb_authority import (
+    cancel_orb_authority_queue,
+    queue_orb_authority_command,
+)
 from services.orchestrator.app.lens_snapshot import build_lens_snapshot
 from services.orchestrator.app.routes.control import (
     ControlRemoteApprovalDecisionRequest,
@@ -164,6 +168,33 @@ def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
 
 def _role_from_request(request: Request) -> str:
     return request.headers.get("x-francis-role", "architect").strip().lower()
+
+
+def _require_orb_authority_coordinate(args: dict[str, Any], name: str, *, action_kind: str) -> int:
+    raw = args.get(name)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raise HTTPException(status_code=400, detail=f"{name} is required for {action_kind}")
+    try:
+        return int(round(float(raw)))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{name} must be numeric for {action_kind}") from exc
+
+
+def _normalize_orb_authority_coordinate_space(args: dict[str, Any], *, action_kind: str) -> str:
+    coordinate_space = str(args.get("coordinate_space", "display")).strip().lower() or "display"
+    if coordinate_space not in {"display", "screen"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"coordinate_space must be display or screen for {action_kind}",
+        )
+    return coordinate_space
+
+
+def _normalize_orb_authority_button(args: dict[str, Any], *, action_kind: str) -> str:
+    button = str(args.get("button", "left")).strip().lower() or "left"
+    if button not in {"left", "right"}:
+        raise HTTPException(status_code=400, detail=f"button must be left or right for {action_kind}")
+    return button
 
 
 def _enforce_action_scope(*, app: str, action: str, mutating: bool = True) -> None:
@@ -356,6 +387,79 @@ def _meaningful_lines(*values: object, max_lines: int = 6) -> list[str]:
             if len(rows) >= max_lines:
                 return rows
     return rows
+
+
+def _build_orb_authority_presentation(
+    *,
+    summary: str,
+    queue_summary: str,
+    state: dict[str, Any],
+    command: dict[str, Any] | None = None,
+    canceled_count: int | None = None,
+) -> dict[str, Any]:
+    live = bool(state.get("live", False))
+    eligible = bool(state.get("eligible", False))
+    severity = "high" if live else "medium" if eligible else "low"
+    cards = [
+        {
+            "label": "Authority",
+            "value": str(state.get("state", "human_active")).strip().replace("_", " ") or "human active",
+            "tone": severity,
+        },
+        {
+            "label": "Idle Gate",
+            "value": f"{float(state.get('idle_seconds', 0.0) or 0.0):.1f}s / {float(state.get('idle_threshold_seconds', 30.0) or 30.0):.1f}s",
+            "tone": "medium" if eligible else "low",
+        },
+    ]
+    evidence: list[dict[str, str]] = [
+        {
+            "kind": "authority_queue",
+            "severity": severity,
+            "detail": queue_summary,
+        }
+    ]
+    detail: dict[str, Any] = {"authority_state": state}
+    if isinstance(command, dict):
+        cards.append(
+            {
+                "label": "Command",
+                "value": str(command.get("kind", "unknown")).strip() or "unknown",
+                "tone": "medium",
+            }
+        )
+        evidence.append(
+            {
+                "kind": "queued_command",
+                "severity": "medium",
+                "detail": str(command.get("reason", "")).strip()
+                or f"{str(command.get('kind', 'command')).strip() or 'command'} was queued for lawful Away execution.",
+            }
+        )
+        detail["command"] = command
+    if canceled_count is not None:
+        cards.append(
+            {
+                "label": "Cleared",
+                "value": str(int(canceled_count)),
+                "tone": "medium" if int(canceled_count) > 0 else "low",
+            }
+        )
+        evidence.append(
+            {
+                "kind": "queue_clear",
+                "severity": "medium" if int(canceled_count) > 0 else "low",
+                "detail": f"{int(canceled_count)} queued Orb authority command(s) were cleared.",
+            }
+        )
+        detail["canceled_count"] = int(canceled_count)
+    return {
+        "summary": summary,
+        "severity": severity,
+        "cards": cards[:4],
+        "evidence": evidence[:4],
+        "detail": detail,
+    }
 
 
 def _build_repo_presentation(
@@ -850,6 +954,131 @@ def _execute_lens_action(
             "before": {"mode": before.get("mode"), "kill_switch": before.get("kill_switch")},
             "after": {"mode": after.get("mode"), "kill_switch": after.get("kill_switch")},
             "reason": reason,
+        }
+
+    if normalized_kind in {
+        "orb.authority.queue_move",
+        "orb.authority.queue_click",
+        "orb.authority.queue_save",
+        "orb.authority.queue_type",
+        "orb.authority.clear_queue",
+    }:
+        _enforce_rbac(role, "tools.run")
+        _enforce_action_scope(app="presence", action="presence.orb.authority", mutating=False)
+        actor = f"lens:{role}"
+
+        if normalized_kind == "orb.authority.clear_queue":
+            reason = (
+                str(args.get("reason", "")).strip()
+                or "Lens cleared queued Orb authority commands."
+            )
+            execution_args = {"reason": reason}
+            if dry_run:
+                return {
+                    "status": "dry_run",
+                    "kind": normalized_kind,
+                    "execution_args": execution_args,
+                    "summary": "Dry run: queued Orb authority commands would be cleared.",
+                }
+            cleared = cancel_orb_authority_queue(
+                reason=reason,
+                actor=actor,
+                run_id=run_id,
+                trace_id=trace_id,
+            )
+            authority = cleared.get("authority", {}) if isinstance(cleared.get("authority"), dict) else {}
+            state = authority.get("state", {}) if isinstance(authority.get("state"), dict) else {}
+            summary = "Queued Orb authority commands were cleared."
+            presentation = _build_orb_authority_presentation(
+                summary=summary,
+                queue_summary=str(authority.get("summary", "")).strip() or summary,
+                state=state,
+                canceled_count=int(cleared.get("canceled_count", 0) or 0),
+            )
+            return {
+                "status": "ok",
+                "kind": normalized_kind,
+                "tool": {"skill": "orb.authority", "command_kind": "queue.clear"},
+                "execution_args": execution_args,
+                "summary": summary,
+                "presentation": presentation,
+                "authority": authority,
+                "canceled_count": int(cleared.get("canceled_count", 0) or 0),
+                "receipt_id": str(cleared.get("receipt_id", "")).strip(),
+            }
+
+        command_kind = ""
+        command_args: dict[str, Any] = {}
+        reason = str(args.get("reason", "")).strip()
+        if normalized_kind == "orb.authority.queue_move":
+            x = _require_orb_authority_coordinate(args, "x", action_kind=normalized_kind)
+            y = _require_orb_authority_coordinate(args, "y", action_kind=normalized_kind)
+            coordinate_space = _normalize_orb_authority_coordinate_space(args, action_kind=normalized_kind)
+            command_kind = "mouse.move"
+            command_args = {"x": x, "y": y, "coordinate_space": coordinate_space}
+            reason = reason or f"Move to display point ({x}, {y}) when Away authority becomes lawful."
+        elif normalized_kind == "orb.authority.queue_click":
+            x = _require_orb_authority_coordinate(args, "x", action_kind=normalized_kind)
+            y = _require_orb_authority_coordinate(args, "y", action_kind=normalized_kind)
+            button = _normalize_orb_authority_button(args, action_kind=normalized_kind)
+            coordinate_space = _normalize_orb_authority_coordinate_space(args, action_kind=normalized_kind)
+            command_kind = "mouse.click"
+            command_args = {"x": x, "y": y, "button": button, "coordinate_space": coordinate_space}
+            reason = reason or f"{button.title()} click at display point ({x}, {y}) when Away authority is live."
+        elif normalized_kind == "orb.authority.queue_save":
+            command_kind = "keyboard.shortcut"
+            command_args = {"keys": ["ctrl", "s"]}
+            reason = reason or "Queue a guarded save shortcut through the Orb authority channel."
+        elif normalized_kind == "orb.authority.queue_type":
+            text = str(args.get("text", "")).strip()
+            if not text:
+                raise HTTPException(status_code=400, detail="text is required for orb.authority.queue_type")
+            command_kind = "keyboard.type"
+            command_args = {"text": text}
+            reason = reason or "Queue typed input for lawful Away execution through the Orb."
+
+        execution_args = {
+            **command_args,
+            "reason": reason,
+        }
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "kind": normalized_kind,
+                "execution_args": execution_args,
+                "summary": f"Dry run: {command_kind or 'Orb command'} would be queued for Away execution.",
+            }
+        queued = queue_orb_authority_command(
+            kind=command_kind,
+            args=command_args,
+            reason=reason,
+            actor=actor,
+            user=role,
+            run_id=run_id,
+            trace_id=trace_id,
+        )
+        authority = queued.get("authority", {}) if isinstance(queued.get("authority"), dict) else {}
+        state = authority.get("state", {}) if isinstance(authority.get("state"), dict) else {}
+        command = queued.get("command", {}) if isinstance(queued.get("command"), dict) else {}
+        summary = (
+            f"Queued {str(command.get('kind', command_kind)).strip() or command_kind} through the Orb authority channel."
+        )
+        presentation = _build_orb_authority_presentation(
+            summary=summary,
+            queue_summary=str(authority.get("summary", "")).strip() or summary,
+            state=state,
+            command=command,
+        )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "tool": {"skill": "orb.authority", "command_kind": command_kind},
+            "execution_args": execution_args,
+            "summary": summary,
+            "presentation": presentation,
+            "authority": authority,
+            "command": command,
+            "receipt_id": str(queued.get("receipt_id", "")).strip(),
         }
 
     if normalized_kind == "control.takeover.request":

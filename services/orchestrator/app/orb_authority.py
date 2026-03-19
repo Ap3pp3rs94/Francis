@@ -230,17 +230,26 @@ def get_orb_authority_view(*, recent_limit: int = 8) -> dict[str, Any]:
 
 
 
-def queue_orb_authority_command(*, kind: str, args: dict[str, Any] | None = None, reason: str = "", actor: str = "hud.orb", user: str = "hud.operator", trace_id: str | None = None) -> dict[str, Any]:
+def queue_orb_authority_command(
+    *,
+    kind: str,
+    args: dict[str, Any] | None = None,
+    reason: str = "",
+    actor: str = "hud.orb",
+    user: str = "hud.operator",
+    run_id: str | None = None,
+    trace_id: str | None = None,
+) -> dict[str, Any]:
     normalized_kind = str(kind or "").strip().lower()
     if normalized_kind not in SUPPORTED_COMMAND_KINDS:
         raise ValueError(f"Unsupported Orb authority command: {kind}")
     normalized_args = args if isinstance(args, dict) else {}
-    run_id = f"orb-authority:{uuid4()}"
-    effective_trace_id = str(trace_id or run_id).strip() or run_id
+    effective_run_id = str(run_id or f"orb-authority:{uuid4()}").strip() or f"orb-authority:{uuid4()}"
+    effective_trace_id = str(trace_id or effective_run_id).strip() or effective_run_id
     row = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
-        "run_id": run_id,
+        "run_id": effective_run_id,
         "trace_id": effective_trace_id,
         "kind": normalized_kind,
         "args": normalized_args,
@@ -270,7 +279,7 @@ def queue_orb_authority_command(*, kind: str, args: dict[str, Any] | None = None
     )
     return {
         "status": "ok",
-        "run_id": run_id,
+        "run_id": effective_run_id,
         "trace_id": effective_trace_id,
         "receipt_id": receipt["id"],
         "command": _compact_command(row),
@@ -442,7 +451,13 @@ def complete_orb_authority_command(*, command_id: str, status: str, detail: str 
 
 
 
-def cancel_orb_authority_queue(*, reason: str, actor: str = "electron.orb") -> dict[str, Any]:
+def cancel_orb_authority_queue(
+    *,
+    reason: str,
+    actor: str = "electron.orb",
+    run_id: str | None = None,
+    trace_id: str | None = None,
+) -> dict[str, Any]:
     rows = _read_jsonl(QUEUE_PATH)
     changed = 0
     now = utc_now_iso()
@@ -474,11 +489,11 @@ def cancel_orb_authority_queue(*, reason: str, actor: str = "electron.orb") -> d
             "actor": actor,
         }
     )
-    run_id = f"orb-authority:{uuid4()}"
-    trace_id = run_id
+    effective_run_id = str(run_id or f"orb-authority:{uuid4()}").strip() or f"orb-authority:{uuid4()}"
+    effective_trace_id = str(trace_id or effective_run_id).strip() or effective_run_id
     receipt = _record_receipt(
-        run_id=run_id,
-        trace_id=trace_id,
+        run_id=effective_run_id,
+        trace_id=effective_trace_id,
         kind="orb.authority.queue.canceled",
         summary={"canceled_count": changed, "actor": actor},
         detail=str(reason or "Orb authority queue was canceled.").strip() or "Orb authority queue was canceled.",
@@ -486,6 +501,8 @@ def cancel_orb_authority_queue(*, reason: str, actor: str = "electron.orb") -> d
     )
     return {
         "status": "ok",
+        "run_id": effective_run_id,
+        "trace_id": effective_trace_id,
         "receipt_id": receipt["id"],
         "canceled_count": changed,
         "authority": get_orb_authority_view() | {"state": saved},

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from francis_brain.ledger import RunLedger
 from francis_core.workspace_fs import WorkspaceFS
-import services.hud.app.orb_authority as orb_authority
+import services.orchestrator.app.orb_authority as orb_authority
 
 
 def _bind_temp_authority_store(monkeypatch, tmp_path: Path) -> Path:

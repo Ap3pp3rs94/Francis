@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+import services.orchestrator.app.routes.lens as lens_routes
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -80,6 +81,99 @@ def _restore_text(path: Path, content: str, existed: bool) -> None:
         path.write_text(content, encoding="utf-8")
     elif path.exists():
         path.unlink()
+
+
+def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
+    monkeypatch.setattr(
+        lens_routes,
+        "queue_orb_authority_command",
+        lambda **kwargs: {
+            "status": "ok",
+            "receipt_id": "receipt-orb-1",
+            "command": {
+                "id": "cmd-orb-1",
+                "kind": kwargs.get("kind"),
+                "reason": kwargs.get("reason"),
+                "status": "queued",
+            },
+            "authority": {
+                "surface": "orb_authority",
+                "summary": "1 queued Orb authority command(s) are waiting for lawful Away control.",
+                "state": {
+                    "state": "human_active",
+                    "eligible": False,
+                    "live": False,
+                    "idle_seconds": 0.0,
+                    "idle_threshold_seconds": 30.0,
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(
+        lens_routes,
+        "cancel_orb_authority_queue",
+        lambda **kwargs: {
+            "status": "ok",
+            "receipt_id": "receipt-orb-2",
+            "canceled_count": 1,
+            "authority": {
+                "surface": "orb_authority",
+                "summary": "No Orb authority commands are waiting. Human control remains primary.",
+                "state": {
+                    "state": "human_active",
+                    "eligible": False,
+                    "live": False,
+                    "idle_seconds": 0.0,
+                    "idle_threshold_seconds": 30.0,
+                },
+            },
+        },
+    )
+
+    with TestClient(app) as client:
+        move_response = client.post(
+            "/lens/actions/execute",
+            json={
+                "kind": "orb.authority.queue_move",
+                "args": {"x": 320, "y": 240, "coordinate_space": "display"},
+                "dry_run": False,
+            },
+        )
+        assert move_response.status_code == 200
+        move_payload = move_response.json()
+        assert move_payload["status"] == "ok"
+        assert move_payload["result"]["command"]["kind"] == "mouse.move"
+        assert move_payload["result"]["tool"]["skill"] == "orb.authority"
+        assert move_payload["result"]["presentation"]["cards"][0]["label"] == "Authority"
+        assert move_payload["result"]["receipt_id"] == "receipt-orb-1"
+
+        clear_response = client.post(
+            "/lens/actions/execute",
+            json={
+                "kind": "orb.authority.clear_queue",
+                "args": {"reason": "Operator cleared the queue."},
+                "dry_run": False,
+            },
+        )
+        assert clear_response.status_code == 200
+        clear_payload = clear_response.json()
+        assert clear_payload["status"] == "ok"
+        assert clear_payload["result"]["canceled_count"] == 1
+        assert clear_payload["result"]["presentation"]["cards"][-1]["label"] == "Cleared"
+
+
+def test_lens_execute_rejects_invalid_orb_authority_coordinates() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/lens/actions/execute",
+            json={
+                "kind": "orb.authority.queue_move",
+                "args": {"x": "left-edge", "y": 240, "coordinate_space": "display"},
+                "dry_run": False,
+            },
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "x must be numeric for orb.authority.queue_move"
 
 
 def test_lens_state_surfaces_current_work_and_next_best_action() -> None:

@@ -4,7 +4,6 @@ from typing import Any
 
 from francis_llm import chat
 from francis_presence.orb import build_orb_state
-from services.hud.app.orb_authority import get_orb_authority_view
 from services.hud.app.orb_perception import get_orb_perception_view
 from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
@@ -13,6 +12,7 @@ from services.hud.app.views.blocked_actions import get_blocked_actions_view
 from services.hud.app.views.current_work import get_current_work_view
 from services.hud.app.views.execution_journal import get_execution_journal_view
 from services.hud.app.views.incidents import get_incidents_view
+from services.orchestrator.app.orb_authority import get_orb_authority_view
 from services.voice.app.operator import build_operator_presence
 
 
