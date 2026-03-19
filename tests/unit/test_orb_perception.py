@@ -36,12 +36,22 @@ def test_orb_perception_builds_fresh_active_surface_contract() -> None:
         assert perception["window"]["pid"] == 7788
         assert perception["focus"]["width"] == 196
         assert perception["sensing"]["scope"] == "active_display_only"
+        assert perception["active_surface"]["kind"] == "editor"
+        assert perception["active_surface"]["intent"] == "code_editing"
+        assert perception["target"]["kind"] == "cursor_focus"
+        assert perception["target"]["actionable"] is True
         assert perception["cards"][0]["label"] == "Display"
+        assert any(card["label"] == "Surface" for card in perception["cards"])
+        assert any(card["label"] == "Target" for card in perception["cards"])
         assert "Francis sees Display 2" in perception["summary"]
 
         compact = orb_perception.get_orb_perception_view(include_frame_data=False)
         assert compact["frame"]["has_image"] is True
         assert compact["focus"]["has_image"] is True
         assert "foreground-window metadata" in compact["detail_summary"]
+        target = orb_perception.resolve_orb_focus_target()
+        assert target is not None
+        assert target["surface"]["kind"] == "editor"
+        assert target["target"]["label"] == "Editor focus point"
     finally:
         orb_perception.record_orb_perception_view(previous)

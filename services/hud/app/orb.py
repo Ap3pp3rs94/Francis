@@ -78,6 +78,9 @@ def _build_takeover_desktop_run_contract(
         focus_target = resolve_orb_focus_target()
         if not isinstance(focus_target, dict):
             return None
+        target_label = str(
+            (focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}).get("label", "live focus point")
+        ).strip() or "live focus point"
         command = {
             "kind": "mouse.move",
             "args": {
@@ -86,15 +89,18 @@ def _build_takeover_desktop_run_contract(
                 "coordinate_space": "display",
             },
             "reason": (
-                f"Move the Francis Orb operator cursor to the live focus point "
+                f"Move the Francis Orb operator cursor to the {target_label.lower()} "
                 f"({int(focus_target['x'])}, {int(focus_target['y'])}) during takeover."
             ),
         }
-        summary = "Queue the current focus point into the active Francis takeover session."
+        summary = f"Queue the current {target_label.lower()} into the active Francis takeover session."
     elif focus_kind == "orb.authority.queue_focus_click":
         focus_target = resolve_orb_focus_target()
         if not isinstance(focus_target, dict):
             return None
+        target_label = str(
+            (focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}).get("label", "live focus point")
+        ).strip() or "live focus point"
         button = str(focus_args.get("button", "left")).strip().lower() or "left"
         command = {
             "kind": "mouse.click",
@@ -105,11 +111,11 @@ def _build_takeover_desktop_run_contract(
                 "coordinate_space": "display",
             },
             "reason": (
-                f"{button.title()} click the live focus point "
+                f"{button.title()} click the {target_label.lower()} "
                 f"({int(focus_target['x'])}, {int(focus_target['y'])}) during takeover."
             ),
         }
-        summary = "Queue a click at the current focus point into the active Francis takeover session."
+        summary = f"Queue a click at the current {target_label.lower()} into the active Francis takeover session."
     elif focus_kind == "orb.authority.queue_move":
         x = _coerce_orb_coordinate(focus_args.get("x"))
         y = _coerce_orb_coordinate(focus_args.get("y"))

@@ -155,17 +155,94 @@ def _format_window_label(window: dict[str, Any]) -> str:
     return " | ".join(parts) if parts else "No foreground window metadata"
 
 
-def _build_cards(payload: dict[str, Any], freshness: dict[str, Any]) -> list[dict[str, str]]:
+def _infer_surface_contract(payload: dict[str, Any]) -> dict[str, str]:
+    window = payload.get("window", {}) if isinstance(payload.get("window"), dict) else {}
+    process_name = str(window.get("process", "")).strip().lower()
+    title = str(window.get("title", "")).strip()
+    lowered_title = title.lower()
+
+    if process_name in {"code.exe", "cursor.exe", "devenv.exe", "pycharm64.exe", "idea64.exe"}:
+        return {
+            "kind": "editor",
+            "intent": "code_editing",
+            "label": "Editor surface",
+            "summary": f"Foreground work looks like a code editor: {title or process_name}.",
+            "confidence": "likely",
+        }
+    if process_name in {"windows terminal.exe", "wt.exe", "powershell.exe", "cmd.exe", "bash.exe"}:
+        return {
+            "kind": "terminal",
+            "intent": "command_entry",
+            "label": "Terminal surface",
+            "summary": f"Foreground work looks like a terminal session: {title or process_name}.",
+            "confidence": "likely",
+        }
+    if process_name in {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe"}:
+        return {
+            "kind": "browser",
+            "intent": "web_navigation",
+            "label": "Browser surface",
+            "summary": f"Foreground work looks like a browser tab: {title or process_name}.",
+            "confidence": "likely",
+        }
+    if process_name in {"explorer.exe"}:
+        return {
+            "kind": "files",
+            "intent": "file_navigation",
+            "label": "File surface",
+            "summary": f"Foreground work looks like file navigation: {title or process_name}.",
+            "confidence": "likely",
+        }
+    if "francis" in lowered_title or process_name in {"electron.exe"}:
+        return {
+            "kind": "francis",
+            "intent": "operator_control",
+            "label": "Francis surface",
+            "summary": f"Foreground work appears to be a Francis control surface: {title or process_name}.",
+            "confidence": "medium",
+        }
+    return {
+        "kind": "application",
+        "intent": "visible_work",
+        "label": "Application surface",
+        "summary": f"Foreground work is visible through {title or process_name or 'the active application'}.",
+        "confidence": "medium" if title or process_name else "low",
+    }
+
+
+def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], surface: dict[str, str]) -> dict[str, Any]:
+    cursor = payload.get("cursor", {}) if isinstance(payload.get("cursor"), dict) else {}
+    focus = payload.get("focus", {}) if isinstance(payload.get("focus"), dict) else {}
+    x = _normalize_optional_int(cursor.get("x"))
+    y = _normalize_optional_int(cursor.get("y"))
+    focus_attached = bool(str(focus.get("data_url", "")).strip())
+    freshness_state = str(freshness.get("state", "idle")).strip().lower() or "idle"
+    actionable = x is not None and y is not None and freshness_state in {"fresh", "cooling"}
+    label_map = {
+        "editor": "Editor focus point",
+        "terminal": "Terminal focus point",
+        "browser": "Browser focus point",
+        "files": "File focus point",
+        "francis": "Francis focus point",
+        "application": "Active focus point",
+    }
+    label = label_map.get(str(surface.get("kind", "")).strip().lower(), "Active focus point")
+    coordinate_summary = f"({x}, {y})" if x is not None and y is not None else "unresolved coordinates"
+    crop_summary = "Local focus crop is attached." if focus_attached else "No local focus crop is attached."
+    return {
+        "kind": "cursor_focus",
+        "label": label,
+        "summary": f"{label} at {coordinate_summary}. {crop_summary}",
+        "actionable": actionable,
+        "confidence": "likely" if actionable and focus_attached else "medium" if actionable else "low",
+    }
+
+
+def _build_cards(payload: dict[str, Any], freshness: dict[str, Any], surface: dict[str, str], target: dict[str, Any]) -> list[dict[str, str]]:
     display = payload.get("display", {}) if isinstance(payload.get("display"), dict) else {}
     window = payload.get("window", {}) if isinstance(payload.get("window"), dict) else {}
     cursor = payload.get("cursor", {}) if isinstance(payload.get("cursor"), dict) else {}
-    frame = payload.get("frame", {}) if isinstance(payload.get("frame"), dict) else {}
     focus = payload.get("focus", {}) if isinstance(payload.get("focus"), dict) else {}
-    frame_label = (
-        f"{_normalize_dimension(frame.get('width'))}x{_normalize_dimension(frame.get('height'))}"
-        if _normalize_dimension(frame.get("width")) > 0 and _normalize_dimension(frame.get("height")) > 0
-        else "No frame"
-    )
     focus_label = (
         f"{_normalize_dimension(focus.get('width'))}x{_normalize_dimension(focus.get('height'))} local crop"
         if str(focus.get("data_url", "")).strip()
@@ -184,8 +261,10 @@ def _build_cards(payload: dict[str, Any], freshness: dict[str, Any]) -> list[dic
     return [
         {"label": "Display", "value": _format_display_label(payload.get("display_id"), display), "tone": "low"},
         {"label": "Window", "value": _format_window_label(window), "tone": "medium" if window.get("title") else "low"},
+        {"label": "Surface", "value": str(surface.get("label", "Application surface")).strip(), "tone": "medium"},
+        {"label": "Intent", "value": str(surface.get("intent", "visible_work")).strip().replace("_", " "), "tone": "low"},
         {"label": "Cursor", "value": cursor_label, "tone": "low"},
-        {"label": "Frame", "value": frame_label, "tone": "low"},
+        {"label": "Target", "value": str(target.get("label", "Active focus point")).strip(), "tone": "medium" if target.get("actionable") else "low"},
         {"label": "Focus", "value": focus_label, "tone": "medium" if str(focus.get("data_url", "")).strip() else "low"},
         {
             "label": "Retention",
@@ -198,6 +277,8 @@ def _build_cards(payload: dict[str, Any], freshness: dict[str, Any]) -> list[dic
 def _build_view(payload: dict[str, Any], *, include_frame_data: bool) -> dict[str, Any]:
     normalized = _normalize_payload(payload)
     freshness = _build_freshness(normalized.get("captured_at"))
+    surface = _infer_surface_contract(normalized)
+    target = _build_target_contract(normalized, freshness, surface)
     state = "live" if normalized.get("captured_at") else "idle"
     window_label = _format_window_label(normalized["window"])
     display_label = _format_display_label(normalized.get("display_id"), normalized["display"])
@@ -215,11 +296,12 @@ def _build_view(payload: dict[str, Any], *, include_frame_data: bool) -> dict[st
     )
     if state == "live":
         summary = (
-            f"Francis sees {display_label}. Foreground window: {window_label}. "
-            f"{cursor_label}. {freshness['summary']}"
+            f"Francis sees {display_label}. {surface['summary']} "
+            f"Foreground window: {window_label}. {cursor_label}. {freshness['summary']}"
         )
         detail_summary = (
             "Active-display thumbnail and foreground-window metadata are attached for in-place relevance. "
+            f"{target['summary']} "
             + ("A focused local crop around the cursor is attached. " if focus_attached else "No focused local crop is attached yet. ")
             + "Retention remains latest-frame only unless a governed receipt stores evidence."
         )
@@ -236,15 +318,20 @@ def _build_view(payload: dict[str, Any], *, include_frame_data: bool) -> dict[st
         "idle_seconds": normalized.get("idle_seconds", 0),
         "window": deepcopy(normalized["window"]),
         "freshness": freshness,
+        "active_surface": surface,
+        "target": target,
         "sensing": {
             "kind": "active_display_thumbnail",
             "scope": "active_display_only",
             "retention": "latest_frame_only",
-            "summary": "Francis is using the active display thumbnail plus foreground-window metadata only.",
+            "summary": (
+                "Francis is using the active display thumbnail plus foreground-window metadata only, "
+                f"classified locally as {surface['label'].lower()}."
+            ),
         },
         "frame": deepcopy(normalized["frame"]),
         "focus": deepcopy(normalized["focus"]),
-        "cards": _build_cards(normalized, freshness),
+        "cards": _build_cards(normalized, freshness, surface, target),
     }
     if not include_frame_data:
         view["frame"] = {
@@ -282,6 +369,8 @@ def resolve_orb_focus_target(*, max_age_ms: int = 2500) -> dict[str, Any] | None
         "y": y,
         "display_id": _normalize_optional_int(view.get("display_id")),
         "captured_at": str(view.get("captured_at", "")).strip() or None,
+        "surface": view.get("active_surface", {}) if isinstance(view.get("active_surface"), dict) else {},
+        "target": view.get("target", {}) if isinstance(view.get("target"), dict) else {},
         "freshness": {
             "state": str(freshness.get("state", "")).strip() or "idle",
             "age_ms": age_ms,
