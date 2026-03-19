@@ -50,15 +50,18 @@ from services.orchestrator.app.orb_authority import (
     cancel_orb_authority_queue,
     queue_orb_authority_command,
 )
+from services.orchestrator.app.orb_perception import resolve_orb_focus_target
 from services.orchestrator.app.lens_snapshot import build_lens_snapshot
 from services.orchestrator.app.routes.control import (
     ControlRemoteApprovalDecisionRequest,
     ControlRemotePanicRequest,
     ControlRemoteResumeRequest,
+    ControlRemoteTakeoverDesktopEnqueueRequest,
     ControlRemoteTakeoverConfirmRequest,
     ControlRemoteTakeoverHandbackRequest,
     ControlRemoteTakeoverRequest,
     ControlTakeoverConfirmRequest,
+    ControlTakeoverDesktopEnqueueRequest,
     ControlTakeoverHandbackExportRequest,
     ControlTakeoverHandbackRequest,
     ControlTakeoverRequest,
@@ -71,10 +74,12 @@ from services.orchestrator.app.routes.control import (
     control_remote_resume,
     control_remote_state,
     control_remote_takeover_confirm,
+    control_remote_takeover_desktop_enqueue,
     control_remote_takeover_handback,
     control_remote_takeover_request,
     control_takeover_activity,
     control_takeover_confirm,
+    control_takeover_desktop_enqueue,
     control_takeover_handback_export,
     control_takeover_handback,
     control_takeover_handback_package,
@@ -195,6 +200,28 @@ def _normalize_orb_authority_button(args: dict[str, Any], *, action_kind: str) -
     if button not in {"left", "right"}:
         raise HTTPException(status_code=400, detail=f"button must be left or right for {action_kind}")
     return button
+
+
+def _require_orb_authority_key(args: dict[str, Any], *, action_kind: str) -> str:
+    key = str(args.get("key", "")).strip().lower()
+    if not key:
+        raise HTTPException(status_code=400, detail=f"key is required for {action_kind}")
+    if key not in {"enter", "escape", "esc", "tab"}:
+        raise HTTPException(status_code=400, detail=f"key must be enter, escape, esc, or tab for {action_kind}")
+    return "escape" if key == "esc" else key
+
+
+def _require_orb_focus_target(*, action_kind: str, max_age_ms: int = 2500) -> dict[str, Any]:
+    focus_target = resolve_orb_focus_target(max_age_ms=max_age_ms)
+    if not isinstance(focus_target, dict):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Active Orb focus target is unavailable for {action_kind}. "
+                "Let desktop perception refresh and try again."
+            ),
+        )
+    return focus_target
 
 
 def _enforce_action_scope(*, app: str, action: str, mutating: bool = True) -> None:
@@ -959,8 +986,11 @@ def _execute_lens_action(
     if normalized_kind in {
         "orb.authority.queue_move",
         "orb.authority.queue_click",
+        "orb.authority.queue_focus_move",
+        "orb.authority.queue_focus_click",
         "orb.authority.queue_save",
         "orb.authority.queue_type",
+        "orb.authority.queue_key",
         "orb.authority.clear_queue",
     }:
         _enforce_rbac(role, "tools.run")
@@ -1010,6 +1040,7 @@ def _execute_lens_action(
         command_kind = ""
         command_args: dict[str, Any] = {}
         reason = str(args.get("reason", "")).strip()
+        focus_target: dict[str, Any] | None = None
         if normalized_kind == "orb.authority.queue_move":
             x = _require_orb_authority_coordinate(args, "x", action_kind=normalized_kind)
             y = _require_orb_authority_coordinate(args, "y", action_kind=normalized_kind)
@@ -1025,6 +1056,21 @@ def _execute_lens_action(
             command_kind = "mouse.click"
             command_args = {"x": x, "y": y, "button": button, "coordinate_space": coordinate_space}
             reason = reason or f"{button.title()} click at display point ({x}, {y}) when Away authority is live."
+        elif normalized_kind == "orb.authority.queue_focus_move":
+            focus_target = _require_orb_focus_target(action_kind=normalized_kind)
+            x = int(focus_target["x"])
+            y = int(focus_target["y"])
+            command_kind = "mouse.move"
+            command_args = {"x": x, "y": y, "coordinate_space": "display"}
+            reason = reason or f"Move to the live Orb focus point ({x}, {y}) from active desktop perception."
+        elif normalized_kind == "orb.authority.queue_focus_click":
+            focus_target = _require_orb_focus_target(action_kind=normalized_kind)
+            x = int(focus_target["x"])
+            y = int(focus_target["y"])
+            button = _normalize_orb_authority_button(args, action_kind=normalized_kind)
+            command_kind = "mouse.click"
+            command_args = {"x": x, "y": y, "button": button, "coordinate_space": "display"}
+            reason = reason or f"{button.title()} click the live Orb focus point ({x}, {y}) from active desktop perception."
         elif normalized_kind == "orb.authority.queue_save":
             command_kind = "keyboard.shortcut"
             command_args = {"keys": ["ctrl", "s"]}
@@ -1036,6 +1082,11 @@ def _execute_lens_action(
             command_kind = "keyboard.type"
             command_args = {"text": text}
             reason = reason or "Queue typed input for lawful Away execution through the Orb."
+        elif normalized_kind == "orb.authority.queue_key":
+            key = _require_orb_authority_key(args, action_kind=normalized_kind)
+            command_kind = "keyboard.key"
+            command_args = {"key": key}
+            reason = reason or f"Queue {key} through the Orb authority channel."
 
         execution_args = {
             **command_args,
@@ -1047,6 +1098,47 @@ def _execute_lens_action(
                 "kind": normalized_kind,
                 "execution_args": execution_args,
                 "summary": f"Dry run: {command_kind or 'Orb command'} would be queued for Away execution.",
+            }
+        takeover_state = control_takeover_state().get("takeover", {})
+        takeover_session_id = ""
+        if isinstance(takeover_state, dict):
+            takeover_status = str(takeover_state.get("status", "")).strip().lower()
+            if takeover_status == "active":
+                takeover_session_id = str(takeover_state.get("session_id") or "").strip()
+        if takeover_session_id:
+            takeover_summary = control_takeover_desktop_enqueue(
+                request,
+                payload=ControlTakeoverDesktopEnqueueRequest(
+                    commands=[{"kind": command_kind, "args": command_args, "reason": reason}],
+                    summary=reason,
+                ),
+            )
+            authority = takeover_summary.get("authority", {}) if isinstance(takeover_summary.get("authority"), dict) else {}
+            state = authority.get("state", {}) if isinstance(authority.get("state"), dict) else {}
+            commands_rows = takeover_summary.get("commands", []) if isinstance(takeover_summary.get("commands"), list) else []
+            command = commands_rows[0] if commands_rows and isinstance(commands_rows[0], dict) else {}
+            summary = str(takeover_summary.get("summary", "")).strip() or (
+                f"Queued {str(command.get('kind', command_kind)).strip() or command_kind} into the active Francis takeover session."
+            )
+            presentation = _build_orb_authority_presentation(
+                summary=summary,
+                queue_summary=str(authority.get("summary", "")).strip() or summary,
+                state=state,
+                command=command,
+            )
+            return {
+                "status": "ok",
+                "kind": normalized_kind,
+                "tool": {"skill": "control.takeover.desktop", "command_kind": command_kind},
+                "execution_args": execution_args,
+                "summary": summary,
+                "presentation": presentation,
+                "authority": authority,
+                "command": command,
+                "commands": commands_rows,
+                "focus_target": focus_target,
+                "session_id": takeover_session_id,
+                "receipt_id": str(takeover_summary.get("receipt_id", "")).strip(),
             }
         queued = queue_orb_authority_command(
             kind=command_kind,
@@ -1078,6 +1170,7 @@ def _execute_lens_action(
             "presentation": presentation,
             "authority": authority,
             "command": command,
+            "focus_target": focus_target,
             "receipt_id": str(queued.get("receipt_id", "")).strip(),
         }
 
@@ -1134,6 +1227,54 @@ def _execute_lens_action(
             ),
         )
         return {"status": "ok", "kind": normalized_kind, "summary": summary}
+
+    if normalized_kind == "control.takeover.desktop.enqueue":
+        _enforce_action_scope(app="control", action="control.mode", mutating=False)
+        commands = args.get("commands", [])
+        if not isinstance(commands, list) or not commands:
+            raise HTTPException(status_code=400, detail="commands are required for control.takeover.desktop.enqueue")
+        summary_text = str(args.get("summary", "")).strip()
+        execution_args = {
+            "summary": summary_text,
+            "commands": commands,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_takeover_desktop_enqueue(
+            request,
+            payload=ControlTakeoverDesktopEnqueueRequest(
+                commands=commands,
+                summary=summary_text,
+            ),
+        )
+        authority = summary.get("authority", {}) if isinstance(summary.get("authority"), dict) else {}
+        state = authority.get("state", {}) if isinstance(authority.get("state"), dict) else {}
+        commands_rows = summary.get("commands", []) if isinstance(summary.get("commands"), list) else []
+        first_command = commands_rows[0] if commands_rows and isinstance(commands_rows[0], dict) else None
+        presentation = _build_orb_authority_presentation(
+            summary=str(summary.get("summary", "")).strip() or "Desktop commands were queued into the Orb authority channel.",
+            queue_summary=str(authority.get("summary", "")).strip()
+            or str(summary.get("summary", "")).strip()
+            or "Desktop commands are waiting in the Orb authority queue.",
+            state=state,
+            command=first_command,
+        )
+        if len(commands_rows) > 1:
+            presentation.setdefault("cards", []).append(
+                {"label": "Queued", "value": str(len(commands_rows)), "tone": "medium"}
+            )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "summary": str(summary.get("summary", "")).strip() or "Desktop commands were queued into takeover authority.",
+            "execution_args": execution_args,
+            "tool": {"skill": "control.takeover.desktop", "command_count": len(commands_rows)},
+            "session_id": str(summary.get("session_id", "")).strip(),
+            "commands": commands_rows,
+            "authority": authority,
+            "presentation": presentation,
+            "receipt_id": str(summary.get("receipt_id", "")).strip(),
+        }
 
     if normalized_kind == "control.takeover.handback":
         _enforce_action_scope(app="control", action="control.mode", mutating=False)
@@ -1375,6 +1516,58 @@ def _execute_lens_action(
             ),
         )
         return {"status": "ok", "kind": normalized_kind, "execution_args": execution_args, "summary": summary}
+
+    if normalized_kind == "control.remote.takeover.desktop.enqueue":
+        _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
+        _enforce_rbac(role, "control.remote.write")
+        commands = args.get("commands", [])
+        if not isinstance(commands, list) or not commands:
+            raise HTTPException(status_code=400, detail="commands are required for control.remote.takeover.desktop.enqueue")
+        summary_text = str(args.get("summary", "")).strip()
+        session_id = str(args.get("session_id", "")).strip() or None
+        execution_args = {
+            "summary": summary_text,
+            "session_id": session_id,
+            "commands": commands,
+        }
+        if dry_run:
+            return {"status": "dry_run", "kind": normalized_kind, "execution_args": execution_args}
+        summary = control_remote_takeover_desktop_enqueue(
+            request,
+            payload=ControlRemoteTakeoverDesktopEnqueueRequest(
+                commands=commands,
+                summary=summary_text,
+                session_id=session_id,
+            ),
+        )
+        authority = summary.get("authority", {}) if isinstance(summary.get("authority"), dict) else {}
+        state = authority.get("state", {}) if isinstance(authority.get("state"), dict) else {}
+        commands_rows = summary.get("commands", []) if isinstance(summary.get("commands"), list) else []
+        first_command = commands_rows[0] if commands_rows and isinstance(commands_rows[0], dict) else None
+        presentation = _build_orb_authority_presentation(
+            summary=str(summary.get("summary", "")).strip() or "Remote desktop commands were queued into the Orb authority channel.",
+            queue_summary=str(authority.get("summary", "")).strip()
+            or str(summary.get("summary", "")).strip()
+            or "Remote desktop commands are waiting in the Orb authority queue.",
+            state=state,
+            command=first_command,
+        )
+        if len(commands_rows) > 1:
+            presentation.setdefault("cards", []).append(
+                {"label": "Queued", "value": str(len(commands_rows)), "tone": "medium"}
+            )
+        return {
+            "status": "ok",
+            "kind": normalized_kind,
+            "summary": str(summary.get("summary", "")).strip() or "Remote desktop commands were queued into takeover authority.",
+            "execution_args": execution_args,
+            "tool": {"skill": "control.remote.desktop", "command_count": len(commands_rows)},
+            "session_id": str(summary.get("session_id", "")).strip(),
+            "commands": commands_rows,
+            "authority": authority,
+            "presentation": presentation,
+            "receipt_id": str(summary.get("receipt_id", "")).strip(),
+        }
 
     if normalized_kind == "control.remote.takeover.handback":
         _enforce_action_scope(app="control", action="control.remote.write", mutating=False)
@@ -2319,6 +2512,13 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"objective": "<required>", "reason": ""}
     elif kind == "control.takeover.confirm":
         hinted["execute_via"]["payload"]["args"] = {"confirm": True, "mode": "pilot", "reason": ""}
+    elif kind == "control.takeover.desktop.enqueue":
+        hinted["execute_via"]["payload"]["args"] = {
+            "summary": "",
+            "commands": [
+                {"kind": "mouse.move", "args": {"x": "<required>", "y": "<required>", "coordinate_space": "display"}}
+            ],
+        }
     elif kind == "control.takeover.handback":
         hinted["execute_via"]["payload"]["args"] = {
             "summary": "",
@@ -2359,6 +2559,14 @@ def _with_execute_hint(chip: dict[str, Any]) -> dict[str, Any]:
         hinted["execute_via"]["payload"]["args"] = {"objective": "<required>", "reason": ""}
     elif kind == "control.remote.takeover.confirm":
         hinted["execute_via"]["payload"]["args"] = {"confirm": True, "mode": "pilot", "reason": "", "session_id": ""}
+    elif kind == "control.remote.takeover.desktop.enqueue":
+        hinted["execute_via"]["payload"]["args"] = {
+            "summary": "",
+            "session_id": "",
+            "commands": [
+                {"kind": "mouse.move", "args": {"x": "<required>", "y": "<required>", "coordinate_space": "display"}}
+            ],
+        }
     elif kind == "control.remote.takeover.handback":
         hinted["execute_via"]["payload"]["args"] = {
             "summary": "",

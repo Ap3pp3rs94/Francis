@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+import services.orchestrator.app.routes.control as control_routes
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -1127,6 +1128,85 @@ def test_control_remote_command_wrappers_panic_resume_and_takeover_flow() -> Non
             str(row.get("kind", "")).startswith("control.remote.takeover.")
             for row in remote_feed_prefix_payload.get("feed", [])
         )
+    finally:
+        _ensure_takeover_idle(c)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_takeover_desktop_enqueue_routes_session_scoped_commands(monkeypatch) -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    try:
+        _set_mode(c, "assist", kill_switch=False)
+        _ensure_takeover_idle(c)
+        monkeypatch.setattr(
+            control_routes,
+            "queue_orb_authority_command",
+            lambda **kwargs: {
+                "status": "ok",
+                "receipt_id": "orb-queue-receipt-1",
+                "command": {
+                    "id": "cmd-desktop-1",
+                    "kind": kwargs.get("kind"),
+                    "reason": kwargs.get("reason"),
+                    "status": "queued",
+                    "args": kwargs.get("args", {}),
+                },
+                "authority": {
+                    "surface": "orb_authority",
+                    "summary": "1 queued Orb authority command(s) are waiting for lawful Away control.",
+                    "pending_count": 1,
+                    "state": {
+                        "state": "human_active",
+                        "eligible": False,
+                        "live": False,
+                        "idle_seconds": 0.0,
+                        "idle_threshold_seconds": 30.0,
+                    },
+                },
+            },
+        )
+
+        requested = c.post(
+            "/control/takeover/request",
+            json={"objective": f"Desktop enqueue {uuid4()}", "reason": "desktop request"},
+        )
+        assert requested.status_code == 200
+        session_id = str(requested.json()["takeover"].get("session_id", "")).strip()
+        assert session_id
+
+        confirmed = c.post(
+            "/control/takeover/confirm",
+            json={"confirm": True, "reason": "desktop confirm", "mode": "pilot"},
+        )
+        assert confirmed.status_code == 200
+
+        queued = c.post(
+            "/control/takeover/desktop/enqueue",
+            json={
+                "summary": "Queue one desktop move",
+                "commands": [
+                    {
+                        "kind": "mouse.move",
+                        "args": {"x": 320, "y": 240, "coordinate_space": "display"},
+                        "reason": "Move into the target work region.",
+                    }
+                ],
+            },
+        )
+        assert queued.status_code == 200
+        queued_payload = queued.json()
+        assert queued_payload.get("status") == "ok"
+        assert queued_payload.get("command") == "control.takeover.desktop.enqueue"
+        assert queued_payload.get("session_id") == session_id
+        assert queued_payload.get("commands", [])[0].get("kind") == "mouse.move"
+        assert queued_payload.get("receipt_id")
+
+        activity = c.get("/control/takeover/activity", params={"session_id": session_id, "limit": 100})
+        assert activity.status_code == 200
+        kinds = [str(row.get("kind", "")) for row in activity.json().get("activity", [])]
+        assert "control.takeover.desktop.command.queued" in kinds
+        assert "control.takeover.desktop.enqueue" in kinds
     finally:
         _ensure_takeover_idle(c)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))

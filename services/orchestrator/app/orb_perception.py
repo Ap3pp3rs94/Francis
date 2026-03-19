@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
@@ -264,6 +263,31 @@ def _build_view(payload: dict[str, Any], *, include_frame_data: bool) -> dict[st
 def get_orb_perception_view(*, include_frame_data: bool = True) -> dict[str, Any]:
     return _build_view(_latest_perception, include_frame_data=include_frame_data)
 
+
+def resolve_orb_focus_target(*, max_age_ms: int = 2500) -> dict[str, Any] | None:
+    view = get_orb_perception_view(include_frame_data=False)
+    if str(view.get("state", "idle")).strip().lower() != "live":
+        return None
+    freshness = view.get("freshness", {}) if isinstance(view.get("freshness"), dict) else {}
+    age_ms = freshness.get("age_ms")
+    if not isinstance(age_ms, int) or age_ms > max(250, int(max_age_ms)):
+        return None
+    cursor = view.get("cursor", {}) if isinstance(view.get("cursor"), dict) else {}
+    x = _normalize_optional_int(cursor.get("x"))
+    y = _normalize_optional_int(cursor.get("y"))
+    if x is None or y is None:
+        return None
+    return {
+        "x": x,
+        "y": y,
+        "display_id": _normalize_optional_int(view.get("display_id")),
+        "captured_at": str(view.get("captured_at", "")).strip() or None,
+        "freshness": {
+            "state": str(freshness.get("state", "")).strip() or "idle",
+            "age_ms": age_ms,
+            "summary": str(freshness.get("summary", "")).strip(),
+        },
+    }
 
 def record_orb_perception_view(payload: dict[str, Any]) -> dict[str, Any]:
     global _latest_perception

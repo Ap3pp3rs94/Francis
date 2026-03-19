@@ -23,7 +23,7 @@ import services.hud.app.views.federation as federation_view
 import services.hud.app.views.inbox as inbox_view
 import services.hud.app.views.incidents as incidents_view
 import services.hud.app.views.managed_copies as managed_copies_view
-import services.hud.app.orb_perception as orb_perception_view
+import services.orchestrator.app.orb_perception as orb_perception_view
 import services.hud.app.views.portability as portability_view
 import services.hud.app.views.missions as missions_view
 import services.hud.app.views.repo_drilldown as repo_drilldown_view
@@ -122,7 +122,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Restart HUD" in response.text
     assert "Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
-    assert "When you move, Francis moves with you." in response.text
+    assert "When you move, Francis follows your path with a short visible delay." in response.text
     assert "Right-click the Orb for quick chat and controls." in response.text
     assert "Hold it to panic stop when control exposes that path in scope." in response.text
     assert "Open Lens" in response.text
@@ -273,6 +273,7 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'id="overlay-interjection-primary"' in response.text
     assert '"orb.authority.queue_move"' in response.text
     assert '"orb.authority.clear_queue"' in response.text
+    assert '"control.takeover.desktop.enqueue"' in response.text
     assert 'id="overlay-perception-preview"' in response.text
     assert 'function previewOrbFocusAction()' in response.text
     assert 'function runOrbFocusAction()' in response.text
@@ -282,6 +283,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function sendOrbQuickChat()' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
+    assert "const ORB_HUMAN_TRACE_LAG_MS = 132;" in response.text
+    assert "function resolveOrbHumanTraceTarget(timestamp = performance.now())" in response.text
     assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
     assert 'window.localStorage?.setItem(' in response.text
 

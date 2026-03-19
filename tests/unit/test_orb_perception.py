@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import services.hud.app.orb_perception as orb_perception
+import services.orchestrator.app.orb_perception as orb_perception
 
 
 def test_orb_perception_builds_fresh_active_surface_contract() -> None:

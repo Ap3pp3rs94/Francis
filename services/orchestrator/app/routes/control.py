@@ -24,6 +24,7 @@ from francis_presence.rituals import build_handback_ritual
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.orchestrator.app.approvals_store import add_decision, get_request, list_requests, pending_count
 from services.orchestrator.app.federation_store import get_paired_node, node_has_app_scope
+from services.orchestrator.app.orb_authority import queue_orb_authority_command
 
 from services.orchestrator.app.control_state import (
     VALID_MODES,
@@ -122,6 +123,21 @@ class ControlRemoteTakeoverConfirmRequest(ControlTakeoverConfirmRequest):
 
 
 class ControlRemoteTakeoverHandbackRequest(ControlTakeoverHandbackRequest):
+    session_id: str | None = None
+
+
+class ControlTakeoverDesktopCommand(BaseModel):
+    kind: str = Field(min_length=1)
+    args: dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
+
+
+class ControlTakeoverDesktopEnqueueRequest(BaseModel):
+    commands: list[ControlTakeoverDesktopCommand] = Field(min_length=1, max_length=24)
+    summary: str = ""
+
+
+class ControlRemoteTakeoverDesktopEnqueueRequest(ControlTakeoverDesktopEnqueueRequest):
     session_id: str | None = None
 
 
@@ -311,6 +327,89 @@ def _path_in_allowed_roots(path_value: str, allowed_roots: list[str]) -> bool:
     return False
 
 
+def _require_desktop_coordinate(value: Any, *, field: str, command_kind: str) -> int:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise HTTPException(status_code=400, detail=f"{field} is required for {command_kind}")
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{field} must be numeric for {command_kind}") from exc
+
+
+def _normalize_desktop_coordinate_space(value: Any, *, command_kind: str) -> str:
+    normalized = str(value or "display").strip().lower() or "display"
+    if normalized not in {"display", "screen"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"coordinate_space must be display or screen for {command_kind}",
+        )
+    return normalized
+
+
+def _normalize_takeover_desktop_command(command: ControlTakeoverDesktopCommand) -> dict[str, Any]:
+    normalized_kind = str(command.kind).strip().lower()
+    args = command.args if isinstance(command.args, dict) else {}
+    reason = str(command.reason or "").strip()
+    normalized_args: dict[str, Any]
+    if normalized_kind == "mouse.move":
+        normalized_args = {
+            "x": _require_desktop_coordinate(args.get("x"), field="x", command_kind=normalized_kind),
+            "y": _require_desktop_coordinate(args.get("y"), field="y", command_kind=normalized_kind),
+            "coordinate_space": _normalize_desktop_coordinate_space(
+                args.get("coordinate_space", "display"),
+                command_kind=normalized_kind,
+            ),
+        }
+        reason = reason or (
+            f"Move the Francis Orb operator cursor to ({normalized_args['x']}, {normalized_args['y']}) "
+            "when delegated authority becomes lawful."
+        )
+    elif normalized_kind == "mouse.click":
+        button = str(args.get("button", "left")).strip().lower() or "left"
+        if button not in {"left", "right"}:
+            raise HTTPException(status_code=400, detail=f"button must be left or right for {normalized_kind}")
+        normalized_args = {
+            "x": _require_desktop_coordinate(args.get("x"), field="x", command_kind=normalized_kind),
+            "y": _require_desktop_coordinate(args.get("y"), field="y", command_kind=normalized_kind),
+            "button": button,
+            "coordinate_space": _normalize_desktop_coordinate_space(
+                args.get("coordinate_space", "display"),
+                command_kind=normalized_kind,
+            ),
+        }
+        reason = reason or (
+            f"{button.title()} click through delegated Orb authority at "
+            f"({normalized_args['x']}, {normalized_args['y']})."
+        )
+    elif normalized_kind == "keyboard.shortcut":
+        keys = args.get("keys")
+        if isinstance(keys, str):
+            normalized_keys = [keys.strip()] if keys.strip() else []
+        elif isinstance(keys, list):
+            normalized_keys = [str(item).strip() for item in keys if str(item).strip()]
+        else:
+            normalized_keys = []
+        if not normalized_keys:
+            raise HTTPException(status_code=400, detail="keys are required for keyboard.shortcut")
+        normalized_args = {"keys": normalized_keys}
+        reason = reason or f"Press {'+'.join(normalized_keys)} through delegated Orb authority."
+    elif normalized_kind == "keyboard.type":
+        text = str(args.get("text", "")).strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text is required for keyboard.type")
+        normalized_args = {"text": text}
+        reason = reason or "Type delegated text through the Francis Orb authority channel."
+    elif normalized_kind == "keyboard.key":
+        key = str(args.get("key", "")).strip()
+        if not key:
+            raise HTTPException(status_code=400, detail="key is required for keyboard.key")
+        normalized_args = {"key": key}
+        reason = reason or f"Press {key} through delegated Orb authority."
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported desktop command kind: {normalized_kind}")
+    return {"kind": normalized_kind, "args": normalized_args, "reason": reason}
+
+
 def _load_or_init_takeover_state() -> dict[str, Any]:
     baseline = _default_takeover_state()
     try:
@@ -333,6 +432,25 @@ def _load_or_init_takeover_state() -> dict[str, Any]:
         pass
     _fs.write_text(_takeover_state_path, json.dumps(baseline, ensure_ascii=False, indent=2))
     return baseline
+
+
+def _resolve_active_takeover_session(session_id: str | None = None) -> tuple[dict[str, Any], str]:
+    takeover_state = _load_or_init_takeover_state()
+    normalized_session_id = str(session_id or takeover_state.get("session_id") or "").strip()
+    if str(takeover_state.get("status", "idle")).strip().lower() != "active":
+        raise HTTPException(status_code=409, detail="Desktop enqueue requires an active takeover session.")
+    if not normalized_session_id:
+        raise HTTPException(status_code=409, detail="Desktop enqueue requires an active takeover session id.")
+    active_session_id = str(takeover_state.get("session_id") or "").strip()
+    if active_session_id and normalized_session_id != active_session_id:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Desktop enqueue session mismatch: active session is {active_session_id}",
+        )
+    control_state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    if bool(control_state.get("kill_switch", False)):
+        raise HTTPException(status_code=409, detail="Desktop enqueue is blocked while the kill switch is active.")
+    return takeover_state, normalized_session_id
 
 
 def _save_takeover_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -593,6 +711,55 @@ def append_takeover_activity(
     }
     _append_jsonl(_takeover_activity_path, row)
     return row
+
+
+def _enqueue_takeover_desktop_commands(
+    *,
+    run_id: str,
+    trace_id: str,
+    actor: str,
+    takeover_state: dict[str, Any],
+    session_id: str,
+    commands: list[dict[str, Any]],
+    activity_kind_prefix: str,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
+    queued_commands: list[dict[str, Any]] = []
+    queued_receipt_ids: list[str] = []
+    authority: dict[str, Any] = {}
+    for command in commands:
+        queued = queue_orb_authority_command(
+            kind=str(command.get("kind", "")).strip(),
+            args=command.get("args", {}) if isinstance(command.get("args"), dict) else {},
+            reason=str(command.get("reason", "")).strip(),
+            actor=activity_kind_prefix,
+            user=actor,
+            run_id=run_id,
+            trace_id=trace_id,
+        )
+        queued_command = queued.get("command", {}) if isinstance(queued.get("command"), dict) else {}
+        authority = queued.get("authority", {}) if isinstance(queued.get("authority"), dict) else authority
+        queued_commands.append(queued_command)
+        queued_receipt_id = str(queued.get("receipt_id", "")).strip()
+        if queued_receipt_id:
+            queued_receipt_ids.append(queued_receipt_id)
+        append_takeover_activity(
+            run_id=run_id,
+            trace_id=trace_id,
+            actor=actor,
+            kind=f"{activity_kind_prefix}.command.queued",
+            detail={
+                "command_id": queued_command.get("id"),
+                "command_kind": queued_command.get("kind"),
+                "reason": queued_command.get("reason"),
+                "status": queued_command.get("status"),
+                "args": queued_command.get("args", {}),
+            },
+            ok=True,
+            session_id=session_id,
+            allow_inactive=False,
+            takeover_state=takeover_state,
+        )
+    return queued_commands, queued_receipt_ids, authority
 
 
 def _collect_handback_receipts_for_session(session_id: str, limit: int) -> dict[str, list[dict[str, Any]]]:
@@ -1931,6 +2098,85 @@ def control_remote_takeover_confirm(
     }
 
 
+@router.post("/control/remote/takeover/desktop/enqueue")
+def control_remote_takeover_desktop_enqueue(
+    request: Request,
+    payload: ControlRemoteTakeoverDesktopEnqueueRequest,
+) -> dict:
+    _enforce_remote_control("control.remote.write")
+    role = _enforce_remote_rbac(request, "control.remote.write")
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
+    takeover_state, session_id = _resolve_active_takeover_session(payload.session_id)
+    normalized_commands = [_normalize_takeover_desktop_command(command) for command in payload.commands]
+    queued_commands, queued_receipt_ids, authority = _enqueue_takeover_desktop_commands(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=role,
+        takeover_state=takeover_state,
+        session_id=session_id,
+        commands=normalized_commands,
+        activity_kind_prefix="control.remote.desktop",
+    )
+    summary_text = str(payload.summary).strip() or (
+        f"Queued {len(queued_commands)} desktop command(s) through the remote takeover plane for session {session_id}."
+    )
+    receipt = _record_control_receipt(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="control.remote.desktop.enqueue",
+        reason=summary_text,
+        before={
+            "status": takeover_state.get("status"),
+            "objective": takeover_state.get("objective"),
+            "session_id": session_id,
+            "queued_commands": max(0, int(authority.get("pending_count", 0)) - len(queued_commands)),
+        },
+        after={
+            "status": takeover_state.get("status"),
+            "objective": takeover_state.get("objective"),
+            "session_id": session_id,
+            "queued_commands": int(authority.get("pending_count", 0)),
+        },
+        session_id=session_id,
+        metadata={
+            "remote_command": "control.takeover.desktop.enqueue",
+            "command_count": len(queued_commands),
+            "command_kinds": [str(row.get("kind", "")).strip() for row in queued_commands],
+            "orb_queue_receipt_ids": queued_receipt_ids,
+        },
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=role,
+        kind="control.remote.desktop.enqueue",
+        detail={
+            "remote_command": "control.takeover.desktop.enqueue",
+            "command_count": len(queued_commands),
+            "command_ids": [str(row.get("id", "")).strip() for row in queued_commands],
+            "command_kinds": [str(row.get("kind", "")).strip() for row in queued_commands],
+            "summary": summary_text,
+        },
+        ok=True,
+        session_id=session_id,
+        allow_inactive=True,
+        takeover_state=takeover_state,
+    )
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "command": "control.takeover.desktop.enqueue",
+        "session_id": session_id,
+        "summary": summary_text,
+        "commands": queued_commands,
+        "authority": authority,
+        "receipt_id": receipt.get("id"),
+        "orb_receipt_ids": queued_receipt_ids,
+    }
+
+
 @router.post("/control/remote/takeover/handback")
 def control_remote_takeover_handback(
     request: Request,
@@ -2802,6 +3048,82 @@ def control_takeover_confirm(request: Request, payload: ControlTakeoverConfirmRe
         "kill_switch": control_after.get("kill_switch"),
         "takeover": takeover_after,
         "receipt_id": receipt.get("id"),
+    }
+
+
+@router.post("/control/takeover/desktop/enqueue")
+def control_takeover_desktop_enqueue(
+    request: Request,
+    payload: ControlTakeoverDesktopEnqueueRequest,
+) -> dict:
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
+    takeover_state, session_id = _resolve_active_takeover_session()
+    actor = _role_from_request(request)
+    normalized_commands = [_normalize_takeover_desktop_command(command) for command in payload.commands]
+    queued_commands, queued_receipt_ids, authority = _enqueue_takeover_desktop_commands(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=actor,
+        takeover_state=takeover_state,
+        session_id=session_id,
+        commands=normalized_commands,
+        activity_kind_prefix="control.takeover.desktop",
+    )
+    summary_text = str(payload.summary).strip() or (
+        f"Queued {len(queued_commands)} desktop command(s) into the Francis Orb authority channel for session {session_id}."
+    )
+    receipt = _record_control_receipt(
+        run_id=run_id,
+        trace_id=trace_id,
+        kind="control.takeover.desktop.enqueue",
+        reason=summary_text,
+        before={
+            "status": takeover_state.get("status"),
+            "objective": takeover_state.get("objective"),
+            "session_id": session_id,
+            "queued_commands": max(0, int(authority.get("pending_count", 0)) - len(queued_commands)),
+        },
+        after={
+            "status": takeover_state.get("status"),
+            "objective": takeover_state.get("objective"),
+            "session_id": session_id,
+            "queued_commands": int(authority.get("pending_count", 0)),
+        },
+        session_id=session_id,
+        metadata={
+            "command_count": len(queued_commands),
+            "command_kinds": [str(row.get("kind", "")).strip() for row in queued_commands],
+            "orb_queue_receipt_ids": queued_receipt_ids,
+        },
+    )
+    append_takeover_activity(
+        run_id=run_id,
+        trace_id=trace_id,
+        actor=actor,
+        kind="control.takeover.desktop.enqueue",
+        detail={
+            "command_count": len(queued_commands),
+            "command_ids": [str(row.get("id", "")).strip() for row in queued_commands],
+            "command_kinds": [str(row.get("kind", "")).strip() for row in queued_commands],
+            "summary": summary_text,
+        },
+        ok=True,
+        session_id=session_id,
+        allow_inactive=False,
+        takeover_state=takeover_state,
+    )
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "command": "control.takeover.desktop.enqueue",
+        "session_id": session_id,
+        "summary": summary_text,
+        "commands": queued_commands,
+        "authority": authority,
+        "receipt_id": receipt.get("id"),
+        "orb_receipt_ids": queued_receipt_ids,
     }
 
 

@@ -10,6 +10,7 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
         "objective": {},
         "approvals": {},
         "runs": {},
+        "takeover": {"active": True, "session_id": "session-1"},
     }
     actions = {"action_chips": [], "blocked_actions": []}
 
@@ -111,6 +112,8 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert operator["controls"]["run_kind"] == "repo.tests"
     assert operator["controls"]["approval_id"] == "approval-1"
     assert operator["controls"]["receipt_available"] is True
+    assert operator["controls"]["takeover_active"] is True
+    assert operator["controls"]["takeover_session_id"] == "session-1"
 
     interjection = orb["interjection"]
     assert interjection["surface"] == "orb_interjection"

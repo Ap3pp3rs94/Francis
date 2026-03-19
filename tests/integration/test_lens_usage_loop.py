@@ -86,6 +86,11 @@ def _restore_text(path: Path, content: str, existed: bool) -> None:
 def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
     monkeypatch.setattr(
         lens_routes,
+        "check_action_allowed",
+        lambda *args, **kwargs: (True, "allowed", {}),
+    )
+    monkeypatch.setattr(
+        lens_routes,
         "queue_orb_authority_command",
         lambda **kwargs: {
             "status": "ok",
@@ -162,7 +167,12 @@ def test_lens_execute_routes_orb_authority_commands(monkeypatch) -> None:
         assert clear_payload["result"]["presentation"]["cards"][-1]["label"] == "Cleared"
 
 
-def test_lens_execute_rejects_invalid_orb_authority_coordinates() -> None:
+def test_lens_execute_rejects_invalid_orb_authority_coordinates(monkeypatch) -> None:
+    monkeypatch.setattr(
+        lens_routes,
+        "check_action_allowed",
+        lambda *args, **kwargs: (True, "allowed", {}),
+    )
     with TestClient(app) as client:
         response = client.post(
             "/lens/actions/execute",
@@ -174,6 +184,66 @@ def test_lens_execute_rejects_invalid_orb_authority_coordinates() -> None:
         )
     assert response.status_code == 400
     assert response.json()["detail"] == "x must be numeric for orb.authority.queue_move"
+
+
+def test_lens_execute_routes_takeover_desktop_enqueue(monkeypatch) -> None:
+    monkeypatch.setattr(
+        lens_routes,
+        "check_action_allowed",
+        lambda *args, **kwargs: (True, "allowed", {}),
+    )
+    monkeypatch.setattr(
+        lens_routes,
+        "control_takeover_desktop_enqueue",
+        lambda request, payload: {
+            "status": "ok",
+            "session_id": "takeover-session-1",
+            "summary": "Queued 1 desktop command into the takeover session.",
+            "receipt_id": "receipt-desktop-1",
+            "commands": [
+                {
+                    "id": "cmd-desktop-1",
+                    "kind": "mouse.move",
+                    "reason": "Move into place.",
+                    "status": "queued",
+                }
+            ],
+            "authority": {
+                "surface": "orb_authority",
+                "summary": "1 queued Orb authority command(s) are waiting for lawful Away control.",
+                "state": {
+                    "state": "human_active",
+                    "eligible": False,
+                    "live": False,
+                    "idle_seconds": 0.0,
+                    "idle_threshold_seconds": 30.0,
+                },
+            },
+        },
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/lens/actions/execute",
+            json={
+                "kind": "control.takeover.desktop.enqueue",
+                "args": {
+                    "summary": "Queue desktop move",
+                    "commands": [
+                        {"kind": "mouse.move", "args": {"x": 320, "y": 240, "coordinate_space": "display"}}
+                    ],
+                },
+                "dry_run": False,
+            },
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["result"]["session_id"] == "takeover-session-1"
+    assert payload["result"]["commands"][0]["kind"] == "mouse.move"
+    assert payload["result"]["tool"]["skill"] == "control.takeover.desktop"
+    assert payload["result"]["presentation"]["cards"][0]["label"] == "Authority"
+    assert payload["result"]["receipt_id"] == "receipt-desktop-1"
 
 
 def test_lens_state_surfaces_current_work_and_next_best_action() -> None:

@@ -23,7 +23,7 @@ from services.orchestrator.app.orb_authority import (
     queue_orb_authority_command,
     record_orb_authority_state,
 )
-from services.hud.app.orb_perception import get_orb_perception_view, record_orb_perception_view
+from services.orchestrator.app.orb_perception import get_orb_perception_view, record_orb_perception_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view

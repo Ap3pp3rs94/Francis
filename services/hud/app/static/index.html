@@ -932,7 +932,7 @@
             </div>
             <div class="orb-stage" id="orb-stage" title="The Orb stays free-floating unless Away execution explicitly takes cursor authority.">
               <p class="orb-stage-copy" id="orb-stage-copy">
-                The Orb traces your cursor while you are active, then returns to free ambient motion the moment you stop driving it.
+                The Orb trails your cursor on a short, path-faithful delay while you are active, then returns to free ambient motion the moment you stop driving it.
               </p>
               <div class="orb-stage-tags">
                 <div class="orb-tag"><strong>Anchor</strong><span id="orb-anchor">ambient</span></div>
@@ -960,7 +960,7 @@
             <p class="hero-copy">
               Francis Lens can stay out of the way until you open it. The Orb remains visible,
               calm, and governed while the deeper operator surfaces stay hidden unless you want
-              them. When you move, Francis moves with you. Away execution is the only path that should take cursor authority.
+              them. When you move, Francis follows your path with a short visible delay. Away execution is the only path that should take cursor authority.
             </p>
             <div class="mode-row" id="mode-row"></div>
           </div>
@@ -2151,6 +2151,8 @@
       const ORB_INPUT_SYNC_INTERVAL_MS = 16;
       const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
       const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;
+      const ORB_HUMAN_TRACE_LAG_MS = 132;
+      const ORB_HUMAN_TRACE_REDUCED_LAG_MS = 72;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -2169,6 +2171,7 @@
         lastPointerY: null,
         lastMoveAt: 0,
         lastMouseActivityAt: performance.now(),
+        pointerTrace: [],
         seedA: Math.random() * Math.PI * 2,
         seedB: Math.random() * Math.PI * 2,
         seedC: Math.random() * Math.PI * 2,
@@ -3019,7 +3022,38 @@
         }
       }
 
+      async function queueOrbAuthorityAction(actionKind, args = {}) {
+        const payload = await executeActionWithArgs(
+          actionKind,
+          args && typeof args === "object" ? args : {},
+          false,
+        );
+        if (!payload || String(payload?.status || "").trim().toLowerCase() !== "ok") {
+          throw new Error(payload?.detail || "unknown authority error");
+        }
+        const executionResult = payload?.execution?.result && typeof payload.execution.result === "object"
+          ? payload.execution.result
+          : {};
+        updateOrbAuthority(executionResult.authority || payload?.authority);
+        const authorityCommand = executionResult.command
+          || (Array.isArray(executionResult.commands) && executionResult.commands.length > 0 ? executionResult.commands[0] : null)
+          || payload?.command;
+        orbQuickChat.error = "";
+        orbQuickChat.reply = formatOrbAuthorityCommandReply(
+          authorityCommand,
+          executionResult.authority || payload?.authority,
+        );
+        renderOverlayDock();
+        return payload;
+      }
+
       async function queueOrbAuthorityCommand(kind, args = {}, reason = "") {
+        const takeoverControls =
+          currentOrbOperator && typeof currentOrbOperator === "object" && currentOrbOperator.controls
+            ? currentOrbOperator.controls
+            : {};
+        const takeoverActive = Boolean(takeoverControls?.takeover_active);
+        const takeoverSessionId = String(takeoverControls?.takeover_session_id || "").trim();
         let actionKind = "";
         if (String(kind || "").trim().toLowerCase() === "mouse.move") {
           actionKind = "orb.authority.queue_move";
@@ -3029,25 +3063,34 @@
           actionKind = "orb.authority.queue_save";
         } else if (String(kind || "").trim().toLowerCase() === "keyboard.type") {
           actionKind = "orb.authority.queue_type";
+        } else if (String(kind || "").trim().toLowerCase() === "keyboard.key") {
+          actionKind = "orb.authority.queue_key";
         } else {
           throw new Error(`unsupported orb authority command: ${kind}`);
         }
-        const payload = await executeActionWithArgs(
+        if (takeoverActive && takeoverSessionId) {
+          const normalizedArgs = args && typeof args === "object" ? { ...args } : {};
+          const commandReason =
+            String(reason || "").trim()
+            || `Queue ${String(kind || "desktop command").trim() || "desktop command"} into the active Francis takeover session.`;
+          return queueOrbAuthorityAction(
+            "control.takeover.desktop.enqueue",
+            {
+              summary: commandReason,
+              commands: [
+                {
+                  kind,
+                  args: normalizedArgs,
+                  reason: commandReason,
+                },
+              ],
+            },
+          );
+        }
+        return queueOrbAuthorityAction(
           actionKind,
           { ...(args && typeof args === "object" ? args : {}), reason },
-          false,
         );
-        if (!payload || String(payload?.status || "").trim().toLowerCase() !== "ok") {
-          throw new Error(payload?.detail || "unknown authority error");
-        }
-        updateOrbAuthority(payload?.execution?.result?.authority || payload?.authority);
-        orbQuickChat.error = "";
-        orbQuickChat.reply = formatOrbAuthorityCommandReply(
-          payload?.execution?.result?.command || payload?.command,
-          payload?.execution?.result?.authority || payload?.authority,
-        );
-        renderOverlayDock();
-        return payload;
       }
 
       async function cancelOrbAuthorityQueue() {
@@ -3072,16 +3115,12 @@
       }
 
       async function queueOrbMoveHere() {
-        const point = getOrbDisplayPointer();
         try {
-          await queueOrbAuthorityCommand(
-            "mouse.move",
+          await queueOrbAuthorityAction(
+            "orb.authority.queue_focus_move",
             {
-              x: point.x,
-              y: point.y,
-              coordinate_space: "display",
+              reason: "Move the Orb operator cursor to the live active-surface focus point when Away authority becomes lawful.",
             },
-            `Move the Orb operator cursor to display point (${point.x}, ${point.y}) when Away authority becomes lawful.`,
           );
         } catch (error) {
           orbQuickChat.error = `Move queue failed: ${error?.message || error}`;
@@ -3090,17 +3129,13 @@
       }
 
       async function queueOrbClickHere() {
-        const point = getOrbDisplayPointer();
         try {
-          await queueOrbAuthorityCommand(
-            "mouse.click",
+          await queueOrbAuthorityAction(
+            "orb.authority.queue_focus_click",
             {
-              x: point.x,
-              y: point.y,
               button: "left",
-              coordinate_space: "display",
+              reason: "Left-click the live active-surface focus point through the Orb authority channel when Away authority is live.",
             },
-            `Left-click display point (${point.x}, ${point.y}) through the Orb authority channel when Away authority is live.`,
           );
         } catch (error) {
           orbQuickChat.error = `Click queue failed: ${error?.message || error}`;
@@ -3110,12 +3145,11 @@
 
       async function queueOrbSaveShortcut() {
         try {
-          await queueOrbAuthorityCommand(
-            "keyboard.shortcut",
+          await queueOrbAuthorityAction(
+            "orb.authority.queue_save",
             {
-              keys: ["ctrl", "s"],
+              reason: "Queue a guarded save shortcut through the Orb authority channel.",
             },
-            "Queue a guarded save shortcut through the Orb authority channel.",
           );
         } catch (error) {
           orbQuickChat.error = `Save queue failed: ${error?.message || error}`;
@@ -3132,12 +3166,12 @@
           return;
         }
         try {
-          await queueOrbAuthorityCommand(
-            "keyboard.type",
+          await queueOrbAuthorityAction(
+            "orb.authority.queue_type",
             {
               text,
+              reason: "Queue typed input from the Orb quick-chat field for Away execution.",
             },
-            "Queue typed input from the Orb quick-chat field for Away execution.",
           );
           if (input) {
             input.value = "";
@@ -3157,45 +3191,43 @@
         const body = rest.join(" ").trim();
         const lowered = command.toLowerCase();
         if (lowered === "/move") {
-          const point = getOrbDisplayPointer();
           return {
-            kind: "mouse.move",
-            args: { x: point.x, y: point.y, coordinate_space: "display" },
-            reason: `Move to display point (${point.x}, ${point.y}) from the Orb quick-command surface.`,
+            actionKind: "orb.authority.queue_focus_move",
+            args: {},
+            reason: "Move to the live active-surface focus point from the Orb quick-command surface.",
           };
         }
         if (lowered === "/click") {
-          const point = getOrbDisplayPointer();
           return {
-            kind: "mouse.click",
-            args: { x: point.x, y: point.y, button: "left", coordinate_space: "display" },
-            reason: `Click display point (${point.x}, ${point.y}) from the Orb quick-command surface.`,
+            actionKind: "orb.authority.queue_focus_click",
+            args: { button: "left" },
+            reason: "Click the live active-surface focus point from the Orb quick-command surface.",
           };
         }
         if (lowered === "/save") {
           return {
-            kind: "keyboard.shortcut",
-            args: { keys: ["ctrl", "s"] },
+            actionKind: "orb.authority.queue_save",
+            args: {},
             reason: "Queue Ctrl+S from the Orb quick-command surface.",
           };
         }
         if (lowered === "/enter") {
           return {
-            kind: "keyboard.key",
+            actionKind: "orb.authority.queue_key",
             args: { key: "enter" },
             reason: "Queue Enter from the Orb quick-command surface.",
           };
         }
         if (lowered === "/esc" || lowered === "/escape") {
           return {
-            kind: "keyboard.key",
+            actionKind: "orb.authority.queue_key",
             args: { key: "escape" },
             reason: "Queue Escape from the Orb quick-command surface.",
           };
         }
         if (lowered === "/type" && body) {
           return {
-            kind: "keyboard.type",
+            actionKind: "orb.authority.queue_type",
             args: { text: body },
             reason: "Queue typed text from the Orb quick-command surface.",
           };
@@ -3251,11 +3283,19 @@
               showOrbLatestReceipt();
               return;
             }
-            const payload = await queueOrbAuthorityCommand(
-              quickCommand.kind,
-              quickCommand.args,
-              quickCommand.reason,
-            );
+            const payload = quickCommand.actionKind
+              ? await queueOrbAuthorityAction(
+                quickCommand.actionKind,
+                {
+                  ...(quickCommand.args && typeof quickCommand.args === "object" ? quickCommand.args : {}),
+                  reason: quickCommand.reason,
+                },
+              )
+              : await queueOrbAuthorityCommand(
+                quickCommand.kind,
+                quickCommand.args,
+                quickCommand.reason,
+              );
             if (input) {
               input.value = "";
             }
@@ -4944,13 +4984,13 @@
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
         if (!panicChip) {
-          return "The Orb stays ambient and out of the way. While you are active it traces your cursor exactly, and it keeps its local motion-learning profile for autonomous movement only.";
+          return "The Orb stays ambient and out of the way. While you are active it traces the path of your cursor with a short visual lag, and it keeps its local motion-learning profile for autonomous movement only.";
         }
         if (hasEffectiveOrbCursorAuthority()) {
           return "Away cursor authority is live. Hold the Orb to panic stop or right-click it for controls.";
         }
         if (isOrbCursorEligible()) {
-          return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Human cursor trace remains exact until then.`;
+          return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Human cursor trace stays path-faithful until then, with only a slight visual lag.`;
         }
         return "The Orb stays ambient. Hold it to panic stop when that path is live, or right-click it to chat, inspect, or open Lens. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
       }
@@ -5187,10 +5227,10 @@
           : cursorAuthority
             ? "Away execution is live. The Orb is carrying cursor authority visibly so delegated motion stays inspectable and bounded."
             : cursorEligibility
-              ? `Away execution is live, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse and keyboard inactivity before taking cursor authority. While you remain active, the Orb traces your live cursor exactly.`
+              ? `Away execution is live, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse and keyboard inactivity before taking cursor authority. While you remain active, the Orb traces your live cursor path with a slight visual lag.`
               : currentOrb.posture === "acting"
               ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away becomes idle-gated and takes authority after you step away. Local traces keep teaching the Orb how autonomous motion should feel."
-              : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention. When you move, Francis moves with you.";
+              : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention. When you move, Francis follows your path with a short visible delay.";
         document.getElementById("orb-anchor").textContent = handbackActive
           ? "ambient return"
           : cursorAuthority
@@ -5322,6 +5362,11 @@
         orbMotion.lastPointerX = nextX;
         orbMotion.lastPointerY = nextY;
         orbMotion.lastMoveAt = timestamp;
+        orbMotion.pointerTrace.push({ x: nextX, y: nextY, timestamp });
+        const traceCutoff = timestamp - Math.max(900, getOrbHumanTraceLagMs() * 8);
+        orbMotion.pointerTrace = orbMotion.pointerTrace.filter(
+          (point) => point && Number(point.timestamp || 0) >= traceCutoff,
+        );
         if (learnFromTrace) {
           orbMotion.lastMouseActivityAt = timestamp;
           recordOrbMouseTrace({
@@ -5331,6 +5376,47 @@
             rawVy,
           });
         }
+      }
+
+      function getOrbHumanTraceLagMs() {
+        const configuredLag = Number(currentOrb?.movement?.human_follow_delay_ms ?? ORB_HUMAN_TRACE_LAG_MS);
+        const configuredReducedLag = Number(
+          currentOrb?.movement?.human_follow_delay_reduced_ms ?? ORB_HUMAN_TRACE_REDUCED_LAG_MS,
+        );
+        return isReducedMotionEnabled()
+          ? clamp(configuredReducedLag, 24, 160)
+          : clamp(configuredLag, 40, 220);
+      }
+
+      function resolveOrbHumanTraceTarget(timestamp = performance.now()) {
+        const trace = Array.isArray(orbMotion.pointerTrace) ? orbMotion.pointerTrace : [];
+        if (!trace.length) {
+          return { x: orbMotion.pointerX, y: orbMotion.pointerY };
+        }
+        const targetTimestamp = timestamp - getOrbHumanTraceLagMs();
+        const first = trace[0];
+        const last = trace[trace.length - 1];
+        if (targetTimestamp <= Number(first?.timestamp || 0)) {
+          return { x: Number(first?.x || orbMotion.pointerX), y: Number(first?.y || orbMotion.pointerY) };
+        }
+        if (targetTimestamp >= Number(last?.timestamp || 0)) {
+          return { x: Number(last?.x || orbMotion.pointerX), y: Number(last?.y || orbMotion.pointerY) };
+        }
+        for (let index = 1; index < trace.length; index += 1) {
+          const previous = trace[index - 1];
+          const current = trace[index];
+          const previousTs = Number(previous?.timestamp || 0);
+          const currentTs = Number(current?.timestamp || 0);
+          if (targetTimestamp > currentTs || currentTs <= previousTs) {
+            continue;
+          }
+          const t = clamp((targetTimestamp - previousTs) / Math.max(1, currentTs - previousTs), 0, 1);
+          return {
+            x: Number(previous.x) + (Number(current.x) - Number(previous.x)) * t,
+            y: Number(previous.y) + (Number(current.y) - Number(previous.y)) * t,
+          };
+        }
+        return { x: orbMotion.pointerX, y: orbMotion.pointerY };
       }
 
       function normalizeAngleDelta(delta) {
@@ -5617,15 +5703,16 @@
             renderOrbPresentation();
           }
         } else if (exactHumanTrace) {
-          orbMotion.targetX = orbMotion.pointerX;
-          orbMotion.targetY = orbMotion.pointerY;
+          const traceTarget = resolveOrbHumanTraceTarget(timestamp);
+          orbMotion.targetX = traceTarget.x;
+          orbMotion.targetY = traceTarget.y;
           orbMotion.vx = 0;
           orbMotion.vy = 0;
           orbMotion.speed = 0;
           orbMotion.correctionX = 0;
           orbMotion.correctionY = 0;
-          orbMotion.x = orbMotion.pointerX;
-          orbMotion.y = orbMotion.pointerY;
+          orbMotion.x = traceTarget.x;
+          orbMotion.y = traceTarget.y;
         } else {
           const motionProfile = getOrbMotionProfile();
           const fallback = getOrbFallbackTarget();

@@ -4,7 +4,7 @@ from typing import Any
 
 from francis_llm import chat
 from francis_presence.orb import build_orb_state
-from services.hud.app.orb_perception import get_orb_perception_view
+from services.orchestrator.app.orb_perception import get_orb_perception_view
 from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
@@ -56,6 +56,7 @@ def _build_orb_operator_view(
     current_work = get_current_work_view(snapshot=snapshot, actions=actions)
     approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
     journal = get_execution_journal_view(snapshot=snapshot)
+    takeover = snapshot.get("takeover", {}) if isinstance(snapshot.get("takeover"), dict) else {}
 
     focus_action = current_work.get("focus_action", {}) if isinstance(current_work.get("focus_action"), dict) else {}
     next_action = current_work.get("next_action", {}) if isinstance(current_work.get("next_action"), dict) else {}
@@ -171,6 +172,8 @@ def _build_orb_operator_view(
             "run_args": focus_action.get("args", {}) if isinstance(focus_action.get("args"), dict) else {},
             "approval_id": str(related_approval.get("id", "")).strip() if isinstance(related_approval, dict) else "",
             "receipt_available": isinstance(related_receipt, dict),
+            "takeover_active": bool(takeover.get("active", False)),
+            "takeover_session_id": str(takeover.get("session_id", "")).strip(),
         },
     }
 
