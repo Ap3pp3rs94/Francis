@@ -251,6 +251,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
+    assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
+    assert 'window.localStorage?.setItem(' in response.text
 
 
 def test_hud_serves_orb_bundle() -> None:
@@ -2857,7 +2859,11 @@ def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> 
     assert body["surface"] == "orb"
     assert body["mode"] == "away"
     assert body["posture"] == "acting"
-    assert body["operator_cursor"] is True
+    assert body["operator_cursor"] is False
+    assert body["operator_cursor_eligible"] is True
+    assert body["cursor_policy"]["eligible"] is True
+    assert body["cursor_policy"]["activation"] == "mouse_idle"
+    assert body["cursor_policy"]["threshold_ms"] == 30_000
     assert body["movement"]["anchor"] == "cursor"
     assert body["movement"]["profile"] == "cursor_ride"
     assert body["movement"]["cursor_lock"] is True

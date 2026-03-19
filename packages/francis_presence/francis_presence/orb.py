@@ -23,6 +23,7 @@ ACTIVE_EXECUTION_PHASES = {
     "pilot",
     "takeover",
 }
+OPERATOR_CURSOR_IDLE_THRESHOLD_MS = 30_000
 MODE_COLORWAYS = {
     "observe": {
         "core": "#dce6f4",
@@ -83,7 +84,7 @@ def _is_active_execution(mode: str, snapshot: Mapping[str, Any]) -> bool:
     return mode in {"pilot", "away"} and phase in ACTIVE_EXECUTION_PHASES
 
 
-def _cursor_authority(mode: str, active_execution: bool) -> bool:
+def _cursor_authority_eligible(mode: str, active_execution: bool) -> bool:
     return mode == "away" and active_execution
 
 
@@ -141,9 +142,9 @@ def _movement_profile(
     active_execution: bool,
     interjection_level: int,
     panic_ready: bool,
-    cursor_authority: bool,
+    cursor_authority_eligible: bool,
 ) -> dict[str, Any]:
-    if cursor_authority:
+    if cursor_authority_eligible:
         return {
             "anchor": "cursor",
             "profile": "cursor_ride",
@@ -283,7 +284,7 @@ def build_orb_state(
         for chip in action_chips
     )
     active_execution = _is_active_execution(normalized_mode, snapshot)
-    cursor_authority = _cursor_authority(normalized_mode, active_execution)
+    cursor_authority_eligible = _cursor_authority_eligible(normalized_mode, active_execution)
     interjection_level = _interjection_level(
         kill_switch=kill_switch,
         incident_score=incident_score,
@@ -355,8 +356,10 @@ def build_orb_state(
 
     if posture == "panic":
         summary = "Kill switch is live. The Orb is the immediate stop surface without taking your cursor."
-    elif posture == "acting" and cursor_authority:
-        summary = "Francis is acting in away mode. Cursor authority is live and stays visible where the work is landing."
+    elif posture == "acting" and cursor_authority_eligible:
+        summary = (
+            "Francis is acting in away mode. Cursor authority stays idle-gated and will arm only after 30 seconds of mouse inactivity."
+        )
     elif posture == "acting":
         summary = f"Francis is acting in {normalized_mode} mode while leaving your mouse under your control. The Orb stays free-floating and visible."
     elif interjection_level >= 2:
@@ -373,8 +376,11 @@ def build_orb_state(
         )
     elif pending_approvals > 0:
         detail = f"{pending_approvals} approval(s) are waiting before the next authority edge."
-    elif active_execution and cursor_authority:
-        detail = f"Active run phase is {run_phase}. Away execution owns cursor authority and handback should remain spatial and visible."
+    elif active_execution and cursor_authority_eligible:
+        detail = (
+            f"Active run phase is {run_phase}. Away execution is cursor-eligible, but live cursor authority waits for "
+            "30 seconds of local mouse inactivity so the user keeps immediate control until they step away."
+        )
     elif active_execution:
         detail = f"Active run phase is {run_phase}. The Orb stays free-floating while you keep direct mouse control."
     else:
@@ -389,7 +395,18 @@ def build_orb_state(
         "detail": detail,
         "conversation_ready": True,
         "panic_ready": panic_ready,
-        "operator_cursor": cursor_authority,
+        "operator_cursor": False,
+        "operator_cursor_eligible": cursor_authority_eligible,
+        "cursor_policy": {
+            "eligible": cursor_authority_eligible,
+            "activation": "mouse_idle",
+            "threshold_ms": OPERATOR_CURSOR_IDLE_THRESHOLD_MS,
+            "summary": (
+                "Away execution may take cursor authority only after 30 seconds of mouse inactivity."
+                if cursor_authority_eligible
+                else "Cursor authority is not eligible in the current mode and run state."
+            ),
+        },
         "voice_channel": pulse_kind in {"voice_ready", "interjection", "execution"},
         "handback_visible": normalized_mode in {"pilot", "away"} or active_execution,
         "handback": _handback_profile(
@@ -401,7 +418,7 @@ def build_orb_state(
             active_execution=active_execution,
             interjection_level=interjection_level,
             panic_ready=panic_ready,
-            cursor_authority=cursor_authority,
+            cursor_authority_eligible=cursor_authority_eligible,
         ),
         "visual": {
             "core_brightness": round(core_brightness, 3),

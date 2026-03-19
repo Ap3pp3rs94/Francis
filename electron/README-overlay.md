@@ -10,6 +10,7 @@ The shell now splits into two surfaces:
 ## What It Does
 
 - creates a transparent, frameless, always-on-top desktop Orb window
+- lets the Orb move freely across the full target display work area instead of confining it to a small shell
 - keeps the full Lens HUD in a separate hidden window until explicitly opened
 - loads the existing localhost HUD instead of bundling a second renderer
 - loads the desktop Orb from the HUD's orb-only surface instead of a separate standalone renderer

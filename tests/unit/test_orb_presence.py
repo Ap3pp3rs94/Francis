@@ -57,7 +57,7 @@ def test_orb_state_keeps_user_cursor_during_pilot_execution() -> None:
     assert "leaving your mouse under your control" in orb["summary"]
 
 
-def test_orb_state_becomes_operator_cursor_during_away_execution() -> None:
+def test_orb_state_marks_away_execution_as_idle_gated_cursor_authority() -> None:
     snapshot = {
         "control": {"mode": "away", "kill_switch": False},
         "objective": {"label": "Ship task"},
@@ -73,13 +73,17 @@ def test_orb_state_becomes_operator_cursor_during_away_execution() -> None:
     orb = build_orb_state(mode="away", snapshot=snapshot, actions_payload=actions, voice={})
 
     assert orb["posture"] == "acting"
-    assert orb["operator_cursor"] is True
+    assert orb["operator_cursor"] is False
+    assert orb["operator_cursor_eligible"] is True
+    assert orb["cursor_policy"]["eligible"] is True
+    assert orb["cursor_policy"]["activation"] == "mouse_idle"
+    assert orb["cursor_policy"]["threshold_ms"] == 30_000
     assert orb["movement"]["anchor"] == "cursor"
     assert orb["movement"]["profile"] == "cursor_ride"
     assert orb["movement"]["cursor_lock"] is True
     assert orb["movement"]["lead_style"] == "predictive_commit"
     assert orb["movement"]["lock_radius"] < 1
-    assert "Cursor authority is live" in orb["summary"]
+    assert "30 seconds of mouse inactivity" in orb["summary"]
 
 
 def test_orb_state_enters_panic_when_kill_switch_is_live() -> None:
