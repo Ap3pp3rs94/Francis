@@ -144,6 +144,14 @@ def _movement_profile(
     panic_ready: bool,
     cursor_authority_eligible: bool,
 ) -> dict[str, Any]:
+    trace_profile = {
+        "human_follow_delay_ms": 156,
+        "human_follow_delay_reduced_ms": 88,
+        "human_follow_trail_nodes": 10,
+        "human_follow_trail_spacing_ms": 18,
+        "human_follow_trail_opacity": 0.24,
+        "human_follow_trail_decay": 0.86,
+    }
     if cursor_authority_eligible:
         return {
             "anchor": "cursor",
@@ -164,6 +172,7 @@ def _movement_profile(
             "lock_radius": 0.72,
             "orbit_bias": 0.06,
             "interjection_bias": round(0.04 * interjection_level, 3),
+            **trace_profile,
         }
     if active_execution:
         return {
@@ -185,6 +194,7 @@ def _movement_profile(
             "lock_radius": 1.0,
             "orbit_bias": 0.18,
             "interjection_bias": round(0.04 * interjection_level, 3),
+            **trace_profile,
         }
     if panic_ready:
         return {
@@ -206,6 +216,7 @@ def _movement_profile(
             "lock_radius": 1.0,
             "orbit_bias": 0.12,
             "interjection_bias": round(0.05 * interjection_level, 3),
+            **trace_profile,
         }
     return {
         "anchor": "ambient",
@@ -226,6 +237,7 @@ def _movement_profile(
         "lock_radius": 1.4,
         "orbit_bias": 0.22,
         "interjection_bias": round(0.08 * interjection_level, 3),
+        **trace_profile,
     }
 
 

@@ -614,6 +614,28 @@
         overflow: hidden;
       }
 
+      #orb-trail {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .orb-trail-node {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 72px;
+        height: 72px;
+        border-radius: 999px;
+        opacity: 0;
+        transform: translate3d(-999px, -999px, 0) scale(0.82);
+        background:
+          radial-gradient(circle at center, rgba(255, 246, 226, 0.2) 0%, rgba(255, 192, 120, 0.18) 28%, rgba(90, 180, 255, 0.12) 56%, rgba(90, 180, 255, 0) 78%);
+        filter: blur(1.4px) saturate(0.96);
+        will-change: transform, opacity;
+      }
+
       #overlay-dock {
         position: fixed;
         top: 18px;
@@ -1965,6 +1987,7 @@
     </div>
 
     <div id="orb-overlay" aria-hidden="true">
+      <div id="orb-trail"></div>
       <div id="orb-render-root" aria-label="Francis Orb renderer"></div>
     </div>
 
@@ -2151,8 +2174,11 @@
       const ORB_INPUT_SYNC_INTERVAL_MS = 16;
       const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
       const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;
-      const ORB_HUMAN_TRACE_LAG_MS = 132;
-      const ORB_HUMAN_TRACE_REDUCED_LAG_MS = 72;
+      const ORB_HUMAN_TRACE_LAG_MS = 156;
+      const ORB_HUMAN_TRACE_REDUCED_LAG_MS = 88;
+      const ORB_HUMAN_TRACE_TRAIL_NODES = 10;
+      const ORB_HUMAN_TRACE_TRAIL_SPACING_MS = 18;
+      const ORB_HUMAN_TRACE_TRAIL_REDUCED_SPACING_MS = 24;
       let orbMotion = {
         x: window.innerWidth * 0.54,
         y: Math.max(96, window.innerHeight * 0.24),
@@ -2177,6 +2203,7 @@
         seedC: Math.random() * Math.PI * 2,
         seedD: Math.random() * Math.PI * 2,
       };
+      const orbTrailNodes = [];
       let orbHandback = {
         active: false,
         startAt: 0,
@@ -2864,6 +2891,10 @@
         const runArgs = operatorControls.run_args && typeof operatorControls.run_args === "object"
           ? operatorControls.run_args
           : previewArgs;
+        const desktopRunKind = String(operatorControls.desktop_run_kind || "").trim();
+        const desktopRunArgs = operatorControls.desktop_run_args && typeof operatorControls.desktop_run_args === "object"
+          ? operatorControls.desktop_run_args
+          : {};
         const approvalId = String(operatorControls.approval_id || operator?.approval?.id || "").trim();
         const runMode = String(operatorControls.run_mode || "").trim() || (approvalId ? "approve_and_run" : "execute");
         const hasOperatorContract =
@@ -2893,6 +2924,8 @@
             runMode,
             runKind,
             runArgs,
+            desktopRunKind,
+            desktopRunArgs,
             approvalId,
             hasReceipt: Boolean(operatorControls.receipt_available || operator?.latest_receipt),
           };
@@ -2938,6 +2971,8 @@
           runMode: relatedApproval?.can_execute_after_approval && relatedApproval?.id ? "approve_and_run" : "execute",
           runKind: String(currentFocusActionChip?.kind || "").trim(),
           runArgs: currentFocusActionChip?.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
+          desktopRunKind: "",
+          desktopRunArgs: {},
           approvalId: String(relatedApproval?.id || "").trim(),
           hasReceipt: Boolean(relatedReceipt),
         };
@@ -2970,6 +3005,10 @@
         renderOverlayDock();
         if (context.runMode === "approve_and_run" && context.approvalId) {
           await approveAndRunQueueItem(context.approvalId);
+          return;
+        }
+        if (context.desktopRunKind) {
+          await executeActionWithArgs(context.desktopRunKind, context.desktopRunArgs || {}, false);
           return;
         }
         if (!context.runKind) {
@@ -5285,6 +5324,7 @@
         }
         if (externalOrbMode) {
           document.body.classList.remove("orb-cursor-active");
+          renderOrbTraceTrail(performance.now(), 0, false);
           return;
         }
         currentOrb.operator_cursor_live = hasEffectiveOrbCursorAuthority();
@@ -5388,12 +5428,11 @@
           : clamp(configuredLag, 40, 220);
       }
 
-      function resolveOrbHumanTraceTarget(timestamp = performance.now()) {
+      function resolveOrbTraceTargetAt(targetTimestamp) {
         const trace = Array.isArray(orbMotion.pointerTrace) ? orbMotion.pointerTrace : [];
         if (!trace.length) {
           return { x: orbMotion.pointerX, y: orbMotion.pointerY };
         }
-        const targetTimestamp = timestamp - getOrbHumanTraceLagMs();
         const first = trace[0];
         const last = trace[trace.length - 1];
         if (targetTimestamp <= Number(first?.timestamp || 0)) {
@@ -5417,6 +5456,73 @@
           };
         }
         return { x: orbMotion.pointerX, y: orbMotion.pointerY };
+      }
+
+      function resolveOrbHumanTraceTarget(timestamp = performance.now()) {
+        return resolveOrbTraceTargetAt(timestamp - getOrbHumanTraceLagMs());
+      }
+
+      function getOrbHumanTraceTrailConfig() {
+        const configuredNodes = Number(currentOrb?.movement?.human_follow_trail_nodes ?? ORB_HUMAN_TRACE_TRAIL_NODES);
+        const configuredSpacing = Number(
+          currentOrb?.movement?.human_follow_trail_spacing_ms
+            ?? (isReducedMotionEnabled() ? ORB_HUMAN_TRACE_TRAIL_REDUCED_SPACING_MS : ORB_HUMAN_TRACE_TRAIL_SPACING_MS),
+        );
+        const configuredOpacity = Number(currentOrb?.movement?.human_follow_trail_opacity ?? 0.24);
+        const configuredDecay = Number(currentOrb?.movement?.human_follow_trail_decay ?? 0.86);
+        return {
+          nodeCount: Math.max(0, Math.min(14, Math.round(configuredNodes))),
+          spacingMs: clamp(configuredSpacing, 8, 36),
+          baseOpacity: clamp(configuredOpacity, 0.08, 0.34),
+          decay: clamp(configuredDecay, 0.68, 0.94),
+        };
+      }
+
+      function ensureOrbTrailNodes() {
+        const trailRoot = document.getElementById("orb-trail");
+        if (!trailRoot) {
+          return [];
+        }
+        const config = getOrbHumanTraceTrailConfig();
+        while (orbTrailNodes.length < config.nodeCount) {
+          const node = document.createElement("div");
+          node.className = "orb-trail-node";
+          trailRoot.appendChild(node);
+          orbTrailNodes.push(node);
+        }
+        while (orbTrailNodes.length > config.nodeCount) {
+          const node = orbTrailNodes.pop();
+          node?.remove();
+        }
+        return orbTrailNodes;
+      }
+
+      function renderOrbTraceTrail(timestamp, size, visible) {
+        const nodes = ensureOrbTrailNodes();
+        if (!nodes.length) {
+          return;
+        }
+        if (!visible) {
+          nodes.forEach((node) => {
+            node.style.opacity = "0";
+          });
+          return;
+        }
+        const config = getOrbHumanTraceTrailConfig();
+        const baseLag = getOrbHumanTraceLagMs();
+        nodes.forEach((node, index) => {
+          const trailTimestamp = timestamp - baseLag - config.spacingMs * (index + 1);
+          const target = resolveOrbTraceTargetAt(trailTimestamp);
+          const scale = Math.max(0.38, 0.88 - index * 0.055);
+          const nodeSize = Math.max(20, size * scale);
+          const x = target.x - nodeSize / 2;
+          const y = target.y - nodeSize / 2;
+          const opacity = Math.max(0, config.baseOpacity * Math.pow(config.decay, index));
+          node.style.width = `${nodeSize.toFixed(1)}px`;
+          node.style.height = `${nodeSize.toFixed(1)}px`;
+          node.style.opacity = opacity.toFixed(3);
+          node.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`;
+        });
       }
 
       function normalizeAngleDelta(delta) {
@@ -5661,6 +5767,7 @@
 
       function animateOrbOverlay(timestamp) {
         if (externalOrbMode) {
+          renderOrbTraceTrail(timestamp, 0, false);
           orbAnimationFrame = null;
           return;
         }
@@ -5668,6 +5775,7 @@
         const root = document.getElementById("orb-render-root");
         const overlay = document.getElementById("orb-overlay");
         if (!root || !overlay || !currentOrb) {
+          renderOrbTraceTrail(timestamp, 0, false);
           return;
         }
         const cursorAuthority = reconcileOrbCursorAuthority(timestamp);
@@ -5769,6 +5877,7 @@
           positionY = Math.max(24, Math.min(window.innerHeight - size - 24, orbMotion.y - size / 2));
         }
         root.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0)`;
+        renderOrbTraceTrail(timestamp, size, exactHumanTrace);
         root.classList.toggle("orb-handback", handbackActive);
         overlay.dataset.posture = handbackActive ? "handback" : String(currentOrb.posture || "resting");
         document.body.dataset.orbAuthority = resolveOrbAuthorityState(timestamp);

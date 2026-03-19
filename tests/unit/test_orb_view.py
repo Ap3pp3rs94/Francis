@@ -125,3 +125,67 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert interjection["controls"]["primary_action"] == "run"
     assert interjection["controls"]["primary_label"] == "Approve + Run"
     assert interjection["controls"]["secondary_action"] == "preview"
+
+
+def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "away"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": True, "session_id": "session-2"},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "away", "posture": "acting", "summary": "Active"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 1},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "resolve_orb_focus_target",
+        lambda: {"x": 420, "y": 260, "display_id": 1, "freshness": {"state": "fresh", "age_ms": 120}},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "orb.authority.queue_focus_click",
+                "execute_kind": "orb.authority.queue_focus_click",
+                "args": {"button": "left"},
+                "enabled": True,
+                "label": "Click Focus Point",
+                "reason": "Desktop focus needs a click.",
+                "risk_tier": "medium",
+                "state": "ready",
+            },
+            "next_action": {"kind": "orb.authority.queue_focus_click", "label": "Click Focus Point"},
+            "next_action_resume": {},
+            "operator_link": {"action_kind": "orb.authority.queue_focus_click"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_approval_queue_view", lambda **_: {"surface": "approval_queue", "items": []})
+    monkeypatch.setattr(orb_view, "get_execution_journal_view", lambda **_: {"surface": "execution_journal", "items": []})
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
+
+    controls = orb["operator"]["controls"]
+    assert controls["desktop_run_enabled"] is True
+    assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
+    assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
+    assert controls["desktop_run_args"]["commands"][0]["args"]["x"] == 420
+    assert controls["desktop_run_args"]["commands"][0]["args"]["y"] == 260
+    assert controls["desktop_run_args"]["commands"][0]["args"]["button"] == "left"

@@ -274,6 +274,7 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert '"orb.authority.queue_move"' in response.text
     assert '"orb.authority.clear_queue"' in response.text
     assert '"control.takeover.desktop.enqueue"' in response.text
+    assert 'id="orb-trail"' in response.text
     assert 'id="overlay-perception-preview"' in response.text
     assert 'function previewOrbFocusAction()' in response.text
     assert 'function runOrbFocusAction()' in response.text
@@ -283,8 +284,10 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function sendOrbQuickChat()' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
-    assert "const ORB_HUMAN_TRACE_LAG_MS = 132;" in response.text
+    assert "const ORB_HUMAN_TRACE_LAG_MS = 156;" in response.text
+    assert "const ORB_HUMAN_TRACE_TRAIL_NODES = 10;" in response.text
     assert "function resolveOrbHumanTraceTarget(timestamp = performance.now())" in response.text
+    assert "function renderOrbTraceTrail(timestamp, size, visible)" in response.text
     assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
     assert 'window.localStorage?.setItem(' in response.text
 

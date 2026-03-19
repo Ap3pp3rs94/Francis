@@ -4,7 +4,7 @@ from typing import Any
 
 from francis_llm import chat
 from francis_presence.orb import build_orb_state
-from services.orchestrator.app.orb_perception import get_orb_perception_view
+from services.orchestrator.app.orb_perception import get_orb_perception_view, resolve_orb_focus_target
 from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
@@ -46,6 +46,138 @@ def _incident_rank(value: object) -> int:
     if normalized in {"low", "nominal"}:
         return 1
     return 0
+
+
+def _coerce_orb_coordinate(value: object) -> int | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_takeover_desktop_run_contract(
+    *,
+    focus_action: dict[str, Any],
+    takeover: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not isinstance(focus_action, dict) or not isinstance(takeover, dict):
+        return None
+    if not bool(takeover.get("active", False)):
+        return None
+    if not str(takeover.get("session_id", "")).strip():
+        return None
+
+    focus_kind = str(focus_action.get("execute_kind") or focus_action.get("kind") or "").strip().lower()
+    focus_args = focus_action.get("args", {}) if isinstance(focus_action.get("args"), dict) else {}
+    command: dict[str, Any] | None = None
+    summary = ""
+
+    if focus_kind == "orb.authority.queue_focus_move":
+        focus_target = resolve_orb_focus_target()
+        if not isinstance(focus_target, dict):
+            return None
+        command = {
+            "kind": "mouse.move",
+            "args": {
+                "x": int(focus_target["x"]),
+                "y": int(focus_target["y"]),
+                "coordinate_space": "display",
+            },
+            "reason": (
+                f"Move the Francis Orb operator cursor to the live focus point "
+                f"({int(focus_target['x'])}, {int(focus_target['y'])}) during takeover."
+            ),
+        }
+        summary = "Queue the current focus point into the active Francis takeover session."
+    elif focus_kind == "orb.authority.queue_focus_click":
+        focus_target = resolve_orb_focus_target()
+        if not isinstance(focus_target, dict):
+            return None
+        button = str(focus_args.get("button", "left")).strip().lower() or "left"
+        command = {
+            "kind": "mouse.click",
+            "args": {
+                "x": int(focus_target["x"]),
+                "y": int(focus_target["y"]),
+                "button": button,
+                "coordinate_space": "display",
+            },
+            "reason": (
+                f"{button.title()} click the live focus point "
+                f"({int(focus_target['x'])}, {int(focus_target['y'])}) during takeover."
+            ),
+        }
+        summary = "Queue a click at the current focus point into the active Francis takeover session."
+    elif focus_kind == "orb.authority.queue_move":
+        x = _coerce_orb_coordinate(focus_args.get("x"))
+        y = _coerce_orb_coordinate(focus_args.get("y"))
+        if x is None or y is None:
+            return None
+        command = {
+            "kind": "mouse.move",
+            "args": {
+                "x": x,
+                "y": y,
+                "coordinate_space": str(focus_args.get("coordinate_space", "display")).strip().lower() or "display",
+            },
+            "reason": f"Move the Francis Orb operator cursor to ({x}, {y}) during takeover.",
+        }
+        summary = "Queue the current move target into the active Francis takeover session."
+    elif focus_kind == "orb.authority.queue_click":
+        x = _coerce_orb_coordinate(focus_args.get("x"))
+        y = _coerce_orb_coordinate(focus_args.get("y"))
+        if x is None or y is None:
+            return None
+        button = str(focus_args.get("button", "left")).strip().lower() or "left"
+        command = {
+            "kind": "mouse.click",
+            "args": {
+                "x": x,
+                "y": y,
+                "button": button,
+                "coordinate_space": str(focus_args.get("coordinate_space", "display")).strip().lower() or "display",
+            },
+            "reason": f"{button.title()} click ({x}, {y}) during takeover.",
+        }
+        summary = "Queue the current click target into the active Francis takeover session."
+    elif focus_kind == "orb.authority.queue_save":
+        command = {
+            "kind": "keyboard.shortcut",
+            "args": {"keys": ["ctrl", "s"]},
+            "reason": "Press Ctrl+S through the active Francis takeover session.",
+        }
+        summary = "Queue save into the active Francis takeover session."
+    elif focus_kind == "orb.authority.queue_type":
+        text = str(focus_args.get("text", "")).strip()
+        if not text:
+            return None
+        command = {
+            "kind": "keyboard.type",
+            "args": {"text": text},
+            "reason": "Type queued text through the active Francis takeover session.",
+        }
+        summary = "Queue typed input into the active Francis takeover session."
+    elif focus_kind == "orb.authority.queue_key":
+        key = str(focus_args.get("key", "")).strip().lower()
+        if not key:
+            return None
+        command = {
+            "kind": "keyboard.key",
+            "args": {"key": key},
+            "reason": f"Press {key} through the active Francis takeover session.",
+        }
+        summary = f"Queue {key} into the active Francis takeover session."
+
+    if not isinstance(command, dict):
+        return None
+    return {
+        "enabled": True,
+        "kind": "control.takeover.desktop.enqueue",
+        "args": {"summary": summary, "commands": [command]},
+        "summary": summary,
+    }
 
 
 def _build_orb_operator_view(
@@ -123,8 +255,11 @@ def _build_orb_operator_view(
         and related_approval.get("can_execute_after_approval")
         and str(related_approval.get("id", "")).strip()
     )
+    takeover_desktop_run = _build_takeover_desktop_run_contract(focus_action=focus_action, takeover=takeover)
     preview_enabled = bool(focus_action.get("enabled"))
-    run_enabled = can_approve_and_run or preview_enabled
+    run_enabled = can_approve_and_run or preview_enabled or bool(
+        isinstance(takeover_desktop_run, dict) and takeover_desktop_run.get("enabled")
+    )
     receipt_summary = (
         _receipt_summary(related_receipt)
         if isinstance(related_receipt, dict)
@@ -174,6 +309,15 @@ def _build_orb_operator_view(
             "receipt_available": isinstance(related_receipt, dict),
             "takeover_active": bool(takeover.get("active", False)),
             "takeover_session_id": str(takeover.get("session_id", "")).strip(),
+            "desktop_run_enabled": bool(
+                isinstance(takeover_desktop_run, dict) and takeover_desktop_run.get("enabled")
+            ),
+            "desktop_run_kind": str(takeover_desktop_run.get("kind", "")).strip()
+            if isinstance(takeover_desktop_run, dict)
+            else "",
+            "desktop_run_args": takeover_desktop_run.get("args", {})
+            if isinstance(takeover_desktop_run, dict)
+            else {},
         },
     }
 
