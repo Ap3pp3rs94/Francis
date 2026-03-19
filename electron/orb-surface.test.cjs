@@ -1,7 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { ORB_WINDOW_MARGIN, ORB_WINDOW_SIZE, buildOrbWindowBounds } = require("./orb-surface");
+const {
+  ORB_WINDOW_MARGIN,
+  ORB_WINDOW_SIZE,
+  ORB_WINDOW_TOPMOST_LEVEL,
+  buildOrbWindowBounds,
+} = require("./orb-surface");
 
 test("buildOrbWindowBounds anchors the orb window to the top-right work area", () => {
   const bounds = buildOrbWindowBounds({
@@ -32,4 +37,8 @@ test("buildOrbWindowBounds clamps undersized inputs to safe minimums", () => {
   assert.equal(bounds.height, 160);
   assert.equal(bounds.x, 128);
   assert.equal(bounds.y, 12);
+});
+
+test("orb window topmost level stays pinned to the desktop-presence layer", () => {
+  assert.equal(ORB_WINDOW_TOPMOST_LEVEL, "screen-saver");
 });

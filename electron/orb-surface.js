@@ -1,5 +1,6 @@
 const ORB_WINDOW_SIZE = 220;
 const ORB_WINDOW_MARGIN = 28;
+const ORB_WINDOW_TOPMOST_LEVEL = "screen-saver";
 
 function buildOrbWindowBounds(workArea, { size = ORB_WINDOW_SIZE, margin = ORB_WINDOW_MARGIN } = {}) {
   const safeWidth = Number(workArea?.width) || 1280;
@@ -20,5 +21,6 @@ function buildOrbWindowBounds(workArea, { size = ORB_WINDOW_SIZE, margin = ORB_W
 module.exports = {
   ORB_WINDOW_MARGIN,
   ORB_WINDOW_SIZE,
+  ORB_WINDOW_TOPMOST_LEVEL,
   buildOrbWindowBounds,
 };

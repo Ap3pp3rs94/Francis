@@ -66,7 +66,7 @@ const { buildDegradedModePosture } = require("./degraded-mode");
 const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
-const { buildOrbWindowBounds } = require("./orb-surface");
+const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -1517,9 +1517,12 @@ function applyAlwaysOnTop(win, enabled) {
   if (!safeWindows.length && (!win || win.isDestroyed())) {
     return overlayState.alwaysOnTop;
   }
-  // Use a high always-on-top level so the overlay behaves like an operator layer, not a normal app window.
+  // The Lens shell follows the operator topmost preference, but the Orb stays pinned as a desktop presence object.
   for (const shellWindow of safeWindows) {
-    shellWindow.setAlwaysOnTop(Boolean(enabled), enabled ? "screen-saver" : "normal");
+    const isOrbShell = shellWindow === orbWindow;
+    const nextEnabled = isOrbShell ? true : Boolean(enabled);
+    const nextLevel = nextEnabled ? ORB_WINDOW_TOPMOST_LEVEL : "normal";
+    shellWindow.setAlwaysOnTop(nextEnabled, nextLevel);
   }
   overlayState.alwaysOnTop = Boolean(enabled);
   schedulePreferenceSave(win);
@@ -1747,7 +1750,28 @@ function createOrbWindow() {
   win.setIgnoreMouseEvents(true, { forward: true });
   win.removeMenu();
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.setAlwaysOnTop(overlayPreferences.alwaysOnTop, "screen-saver");
+  win.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL);
+  win.webContents.once("did-finish-load", () => {
+    log("Orb shell loaded", win.webContents.getURL());
+  });
+  win.webContents.once("did-fail-load", (_event, code, description, validatedUrl, isMainFrame) => {
+    if (!isMainFrame) {
+      return;
+    }
+    log("Orb shell failed to load", {
+      code,
+      description,
+      validatedUrl,
+    });
+  });
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    log("Orb shell console", {
+      level,
+      message,
+      line,
+      sourceId,
+    });
+  });
   win.loadFile(path.join(__dirname, "orb-shell.html")).catch((error) => {
     log("Unexpected orb-shell load error", error instanceof Error ? error.message : String(error));
   });

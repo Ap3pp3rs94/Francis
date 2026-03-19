@@ -40,10 +40,29 @@
         place-items: center;
       }
 
+      #orb-frame {
+        position: relative;
+        width: 196px;
+        height: 196px;
+      }
+
+      #orb-fallback,
       #orb-render-root {
+        position: absolute;
+        inset: 0;
         width: 196px;
         height: 196px;
         border-radius: 999px;
+      }
+
+      #orb-fallback {
+        pointer-events: none;
+        filter:
+          drop-shadow(0 18px 30px rgba(0, 0, 0, 0.28))
+          saturate(0.94);
+      }
+
+      #orb-render-root {
         pointer-events: auto;
         touch-action: none;
       }
@@ -56,6 +75,58 @@
           drop-shadow(0 22px 36px rgba(0, 0, 0, 0.32))
           contrast(1.04)
           saturate(0.92);
+      }
+
+      .orb-core {
+        position: absolute;
+        inset: 31%;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 35% 32%, rgba(255, 255, 255, 0.96), rgba(230, 240, 255, 0.9) 34%, rgba(178, 211, 255, 0.44) 62%, rgba(0, 0, 0, 0) 100%);
+        box-shadow:
+          0 0 34px rgba(210, 231, 255, 0.62),
+          0 0 76px rgba(150, 196, 255, 0.34);
+        transform: scale(var(--orb-core-scale, 1));
+        opacity: var(--orb-core-opacity, 0.94);
+      }
+
+      .orb-ring {
+        position: absolute;
+        inset: 14%;
+        border-radius: 50%;
+        border: 1px solid rgba(216, 234, 255, 0.44);
+        opacity: var(--orb-ring-opacity, 0.72);
+        animation: orb-orbit-a var(--orb-ring-speed-a, 12s) linear infinite;
+      }
+
+      .orb-ring.ring-b {
+        inset: 10%;
+        transform: rotate(58deg) scaleX(0.82) scaleY(1.2);
+        animation-name: orb-orbit-b;
+        animation-duration: var(--orb-ring-speed-b, 15s);
+      }
+
+      .orb-ring.ring-c {
+        inset: 18%;
+        transform: rotate(118deg) scaleX(1.14) scaleY(0.74);
+        animation-duration: var(--orb-ring-speed-c, 10s);
+      }
+
+      .orb-ring.ring-d {
+        inset: 8%;
+        transform: rotate(20deg) scaleX(0.7) scaleY(1.08);
+        animation-name: orb-orbit-b;
+        animation-duration: var(--orb-ring-speed-d, 18s);
+      }
+
+      @keyframes orb-orbit-a {
+        from { transform: rotate(0deg) scaleX(1.08) scaleY(0.78); }
+        to { transform: rotate(360deg) scaleX(1.08) scaleY(0.78); }
+      }
+
+      @keyframes orb-orbit-b {
+        from { transform: rotate(0deg) scaleX(0.82) scaleY(1.2); }
+        to { transform: rotate(-360deg) scaleX(0.82) scaleY(1.2); }
       }
 
       #orb-render-root.orb-hold canvas {
@@ -143,7 +214,16 @@
   </head>
   <body data-menu-open="false">
     <div id="orb-root">
-      <div id="orb-render-root" aria-label="Francis Orb"></div>
+      <div id="orb-frame">
+        <div id="orb-fallback" aria-hidden="true">
+          <div class="orb-ring ring-a"></div>
+          <div class="orb-ring ring-b"></div>
+          <div class="orb-ring ring-c"></div>
+          <div class="orb-ring ring-d"></div>
+          <div class="orb-core"></div>
+        </div>
+        <div id="orb-render-root" aria-label="Francis Orb"></div>
+      </div>
     </div>
     <aside id="orb-menu" aria-live="polite">
       <div class="menu-title">Francis Orb</div>
@@ -166,9 +246,67 @@
       let holdTimer = null;
       let holdTriggered = false;
       let orbInteractive = false;
+      const ORB_SYNC_TIMEOUT_MS = 1500;
 
       function setMenuOpen(open) {
         document.body.dataset.menuOpen = open ? "true" : "false";
+      }
+
+      function buildFallbackOrbState() {
+        return {
+          mode: "assist",
+          posture: "resting",
+          summary: "Ambient presence is live. Double-click to open Lens.",
+          detail: "The Orb is running from its local fallback posture while live state catches up.",
+          panic_ready: false,
+          operator_cursor: false,
+          visual: {
+            voice_resonance: 0,
+            core_brightness: 0.46,
+            orbit_speed: 0.34,
+            ring_tightness: 0.38,
+            ring_density: 6,
+            pulse_kind: "steady",
+          },
+          movement: {
+            anchor: "ambient",
+            profile: "ambient_float",
+            cursor_lock: false,
+          },
+        };
+      }
+
+      function normalizeOrbState(next) {
+        const fallback = buildFallbackOrbState();
+        const candidate = next && typeof next === "object" ? next : {};
+        return {
+          ...fallback,
+          ...candidate,
+          visual: {
+            ...fallback.visual,
+            ...(candidate.visual && typeof candidate.visual === "object" ? candidate.visual : {}),
+          },
+          movement: {
+            ...fallback.movement,
+            ...(candidate.movement && typeof candidate.movement === "object" ? candidate.movement : {}),
+          },
+        };
+      }
+
+      async function withTimeout(promise, timeoutMs) {
+        let timer = null;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise((resolve) => {
+              timer = window.setTimeout(() => resolve(null), timeoutMs);
+            }),
+          ]);
+        } finally {
+          if (timer !== null) {
+            window.clearTimeout(timer);
+          }
+        }
       }
 
       function closeMenu() {
@@ -201,6 +339,30 @@
           return;
         }
         summary.textContent = currentOrb?.summary || "Ambient presence is live. Double-click to open Lens.";
+      }
+
+      function applyFallbackVisuals() {
+        const fallback = document.getElementById("orb-fallback");
+        if (!fallback || !currentOrb) {
+          return;
+        }
+        const level = Number(currentOrb?.interjection_level || 0);
+        const brightness = Math.max(0.24, Math.min(1, Number(currentOrb?.visual?.core_brightness || 0.46)));
+        const resonance = Math.max(0, Math.min(1, Number(currentOrb?.visual?.voice_resonance || 0)));
+        const ringDensity = Math.max(4, Math.min(12, Number(currentOrb?.visual?.ring_density || 6)));
+        const speed = Math.max(0.2, Math.min(1, Number(currentOrb?.visual?.orbit_speed || 0.34)));
+        const coreScale = 0.96 + brightness * 0.18 + resonance * 0.06;
+        const ringOpacity = Math.max(0.34, Math.min(0.88, 0.48 + brightness * 0.18 + level * 0.06));
+        fallback.style.setProperty("--orb-core-scale", coreScale.toFixed(3));
+        fallback.style.setProperty("--orb-core-opacity", Math.max(0.68, Math.min(0.98, 0.72 + brightness * 0.22)).toFixed(3));
+        fallback.style.setProperty("--orb-ring-opacity", ringOpacity.toFixed(3));
+        fallback.style.setProperty("--orb-ring-speed-a", `${(14 - speed * 5).toFixed(2)}s`);
+        fallback.style.setProperty("--orb-ring-speed-b", `${(18 - speed * 6).toFixed(2)}s`);
+        fallback.style.setProperty("--orb-ring-speed-c", `${(11 - speed * 4).toFixed(2)}s`);
+        fallback.style.setProperty("--orb-ring-speed-d", `${(21 - speed * 7).toFixed(2)}s`);
+        fallback.querySelectorAll(".orb-ring").forEach((ring, index) => {
+          ring.style.opacity = `${Math.max(0.24, Math.min(0.9, ringOpacity - index * 0.08 + ringDensity * 0.01))}`;
+        });
       }
 
       function isPointerInsideOrb(clientX, clientY) {
@@ -281,12 +443,15 @@
           return;
         }
         const [state, orb] = await Promise.all([
-          bridge.getState(),
-          bridge.getOrbSurface(),
+          withTimeout(bridge.getState(), 1000),
+          withTimeout(bridge.getOrbSurface(), ORB_SYNC_TIMEOUT_MS),
         ]);
-        currentState = state || {};
-        currentOrb = orb || null;
+        if (state && typeof state === "object") {
+          currentState = state;
+        }
+        currentOrb = normalizeOrbState(orb || currentOrb || buildFallbackOrbState());
         updateMenu();
+        applyFallbackVisuals();
         applyOrbSignals();
       }
 
@@ -322,7 +487,7 @@
           return;
         }
         const state = await bridge.getState();
-        const bundleUrl = `${String(state?.hudUrl || "http://127.0.0.1:8767").replace(/\\/$/, "")}/static/orb/francis-orb.js`;
+        const bundleUrl = `${String(state?.hudUrl || "http://127.0.0.1:8767").replace(/\/$/, "")}/static/orb/francis-orb.js`;
         await loadScript(bundleUrl);
         orbBundle = window.FrancisOrb;
         if (!orbBundle || typeof orbBundle.createFrancisOrb !== "function") {
@@ -334,6 +499,9 @@
           usePostFX: false,
           enableBeam: false,
         });
+        currentOrb = normalizeOrbState(currentOrb || buildFallbackOrbState());
+        applyFallbackVisuals();
+        applyOrbSignals();
       }
 
       async function initialize() {
@@ -343,8 +511,13 @@
         }
 
         await mountOrb();
+        currentState = (await withTimeout(bridge.getState(), 1000)) || {};
+        currentOrb = normalizeOrbState(currentOrb || buildFallbackOrbState());
+        updateMenu();
+        applyFallbackVisuals();
+        applyOrbSignals();
         await setOrbInteractive(false);
-        await syncOrb();
+        syncOrb().catch(() => {});
         pollTimer = window.setInterval(() => {
           syncOrb().catch(() => {});
         }, 1200);
