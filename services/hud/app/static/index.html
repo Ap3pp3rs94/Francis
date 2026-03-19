@@ -736,6 +736,27 @@
         gap: 10px;
       }
 
+      .overlay-dock-operator {
+        display: grid;
+        gap: 10px;
+        padding: 14px 16px;
+        border: 1px solid rgba(23, 32, 42, 0.12);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .overlay-dock-operator-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .overlay-dock-operator-actions button {
+        flex: 1 1 120px;
+      }
+
       .overlay-dock-perception-cards {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1886,6 +1907,23 @@
           <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
         </div>
       </div>
+      <div class="overlay-dock-operator">
+        <div class="overlay-dock-chat-head">
+          <strong>Current Move</strong>
+          <span id="overlay-focus-meta">No current move is surfaced yet.</span>
+        </div>
+        <div class="overlay-dock-perception" id="overlay-focus-summary">
+          Francis will surface the current move here once the live workspace loop is attached.
+        </div>
+        <div class="overlay-dock-reply" id="overlay-receipt-summary">
+          No latest receipt is anchoring the Orb surface yet.
+        </div>
+        <div class="overlay-dock-operator-actions">
+          <button class="btn-secondary" type="button" id="overlay-focus-preview" onclick="previewOrbFocusAction()">Preview</button>
+          <button class="btn-primary" type="button" id="overlay-focus-run" onclick="runOrbFocusAction()">Run</button>
+          <button class="btn-secondary" type="button" id="overlay-focus-receipt" onclick="showOrbLatestReceipt()">Latest Receipt</button>
+        </div>
+      </div>
       <div class="overlay-dock-authority">
         <div class="overlay-dock-chat-head">
           <strong>Away Authority</strong>
@@ -2347,6 +2385,12 @@
         const chatReply = document.getElementById("overlay-chat-reply");
         const chatInput = document.getElementById("overlay-chat-input");
         const chatSend = document.getElementById("overlay-chat-send");
+        const focusMeta = document.getElementById("overlay-focus-meta");
+        const focusSummary = document.getElementById("overlay-focus-summary");
+        const receiptSummary = document.getElementById("overlay-receipt-summary");
+        const focusPreview = document.getElementById("overlay-focus-preview");
+        const focusRun = document.getElementById("overlay-focus-run");
+        const focusReceipt = document.getElementById("overlay-focus-receipt");
         const perceptionSummary = document.getElementById("overlay-perception-summary");
         const perceptionCards = document.getElementById("overlay-perception-cards");
         const perceptionPreview = document.getElementById("overlay-perception-preview");
@@ -2369,6 +2413,12 @@
           !chatReply ||
           !chatInput ||
           !chatSend ||
+          !focusMeta ||
+          !focusSummary ||
+          !receiptSummary ||
+          !focusPreview ||
+          !focusRun ||
+          !focusReceipt ||
           !perceptionSummary ||
           !perceptionCards ||
           !perceptionPreview ||
@@ -2419,6 +2469,35 @@
         const latestAuthorityReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length > 0
           ? currentOrbAuthority.recent[0]
           : null;
+        const focusAction = currentCurrentWork?.focus_action && typeof currentCurrentWork.focus_action === "object"
+          ? currentCurrentWork.focus_action
+          : {};
+        const nextResume = currentCurrentWork?.next_action_resume && typeof currentCurrentWork.next_action_resume === "object"
+          ? currentCurrentWork.next_action_resume
+          : {};
+        const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
+        const relatedApprovalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
+        const relatedApproval =
+          relatedApprovalIndex >= 0 && Array.isArray(currentApprovalQueue?.items)
+            ? currentApprovalQueue.items[relatedApprovalIndex]
+            : null;
+        const relatedReceiptIndex = findRelatedJournalIndex(focusKind, currentExecutionJournal, lastOperatorLink);
+        const relatedReceipt =
+          relatedReceiptIndex >= 0 && Array.isArray(currentExecutionJournal?.items)
+            ? currentExecutionJournal.items[relatedReceiptIndex]
+            : null;
+        const focusLabel = String(currentFocusActionChip?.label || focusAction.label || currentCurrentWork?.next_action?.label || "No current move selected.").trim();
+        const focusReason = String(
+          currentFocusActionChip?.policy_reason ||
+            currentFocusActionChip?.reason ||
+            focusAction.reason ||
+            currentCurrentWork?.next_action?.reason ||
+            "Francis is waiting for the next grounded move.",
+        ).trim();
+        const focusState = String(focusAction.state || "").trim().toLowerCase();
+        const canApproveAndRun = Boolean(relatedApproval?.can_execute_after_approval && relatedApproval?.id);
+        const canPreviewFocus = Boolean(currentFocusActionChip?.enabled);
+        const canRunFocus = canApproveAndRun || Boolean(currentFocusActionChip?.enabled);
 
         let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
         if (handbackActive) {
@@ -2447,6 +2526,19 @@
         chatReply.textContent = orbQuickChat.error
           ? orbQuickChat.error
           : orbQuickChat.reply || "Ask a short question or give a direct command without opening Lens.";
+        focusMeta.textContent = canApproveAndRun
+          ? `Approval ${String(relatedApproval.id || "pending")} is ready. The Orb can approve and continue this move.`
+          : currentFocusActionChip
+            ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${focusState || (currentFocusActionChip.enabled ? "ready" : "blocked")}`
+            : "No current move is surfaced yet.";
+        focusSummary.textContent = `${focusLabel} | ${focusReason}`;
+        receiptSummary.textContent = relatedReceipt
+          ? summarizeReceiptDetail(relatedReceipt)
+          : "No latest receipt is anchoring the Orb surface yet.";
+        focusPreview.disabled = !canPreviewFocus;
+        focusRun.disabled = !canRunFocus;
+        focusRun.textContent = canApproveAndRun ? "Approve + Run" : "Run";
+        focusReceipt.disabled = !Boolean(relatedReceipt);
         perceptionSummary.textContent = String(
           currentOrbPerception?.summary
             || currentOrb?.perception?.summary
@@ -2701,6 +2793,73 @@
         return `${queuedKind} is queued through the Orb authority channel. ${pendingCount} command${pendingCount === 1 ? "" : "s"} are now waiting for lawful Away control.`;
       }
 
+      function getOrbFocusContext() {
+        const focusAction = currentCurrentWork?.focus_action && typeof currentCurrentWork.focus_action === "object"
+          ? currentCurrentWork.focus_action
+          : {};
+        const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
+        const relatedApprovalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
+        const relatedApproval =
+          relatedApprovalIndex >= 0 && Array.isArray(currentApprovalQueue?.items)
+            ? currentApprovalQueue.items[relatedApprovalIndex]
+            : null;
+        const relatedReceiptIndex = findRelatedJournalIndex(focusKind, currentExecutionJournal, lastOperatorLink);
+        const relatedReceipt =
+          relatedReceiptIndex >= 0 && Array.isArray(currentExecutionJournal?.items)
+            ? currentExecutionJournal.items[relatedReceiptIndex]
+            : null;
+        return {
+          focusKind,
+          focusAction,
+          relatedApproval,
+          relatedReceipt,
+          canApproveAndRun: Boolean(relatedApproval?.can_execute_after_approval && relatedApproval?.id),
+          canPreview: Boolean(currentFocusActionChip?.enabled),
+          canRun: Boolean((relatedApproval?.can_execute_after_approval && relatedApproval?.id) || currentFocusActionChip?.enabled),
+          focusLabel: String(currentFocusActionChip?.label || focusAction.label || currentCurrentWork?.next_action?.label || "No current move selected.").trim(),
+        };
+      }
+
+      async function previewOrbFocusAction() {
+        const context = getOrbFocusContext();
+        if (!context.canPreview) {
+          orbQuickChat.error = "No current move is ready for preview from the Orb surface.";
+          renderOverlayDock();
+          return;
+        }
+        orbQuickChat.error = "";
+        orbQuickChat.reply = `Previewing ${context.focusLabel || context.focusKind || "the current move"} from the Orb surface.`;
+        renderOverlayDock();
+        await previewFocusAction();
+      }
+
+      async function runOrbFocusAction() {
+        const context = getOrbFocusContext();
+        if (!context.canRun) {
+          orbQuickChat.error = "No current move is ready to run from the Orb surface.";
+          renderOverlayDock();
+          return;
+        }
+        orbQuickChat.error = "";
+        orbQuickChat.reply = context.canApproveAndRun
+          ? `Approving and continuing ${context.focusLabel || context.focusKind || "the current move"} from the Orb surface.`
+          : `Running ${context.focusLabel || context.focusKind || "the current move"} from the Orb surface.`;
+        renderOverlayDock();
+        await runFocusAction();
+      }
+
+      function showOrbLatestReceipt() {
+        const context = getOrbFocusContext();
+        if (!context.relatedReceipt) {
+          orbQuickChat.error = "No latest receipt is attached to the current Orb move.";
+          renderOverlayDock();
+          return;
+        }
+        orbQuickChat.error = "";
+        orbQuickChat.reply = summarizeReceiptDetail(context.relatedReceipt);
+        renderOverlayDock();
+      }
+
       async function queueOrbAuthorityCommand(kind, args = {}, reason = "") {
         const response = await fetch("/api/orb/authority/commands", {
           method: "POST",
@@ -2876,6 +3035,15 @@
             reason: "Queue typed text from the Orb quick-command surface.",
           };
         }
+        if (lowered === "/preview") {
+          return { orbAction: "preview" };
+        }
+        if (lowered === "/run") {
+          return { orbAction: "run" };
+        }
+        if (lowered === "/receipt") {
+          return { orbAction: "receipt" };
+        }
         return null;
       }
 
@@ -2897,6 +3065,27 @@
         try {
           const quickCommand = parseOrbQuickCommand(message);
           if (quickCommand) {
+            if (quickCommand.orbAction === "preview") {
+              if (input) {
+                input.value = "";
+              }
+              await previewOrbFocusAction();
+              return;
+            }
+            if (quickCommand.orbAction === "run") {
+              if (input) {
+                input.value = "";
+              }
+              await runOrbFocusAction();
+              return;
+            }
+            if (quickCommand.orbAction === "receipt") {
+              if (input) {
+                input.value = "";
+              }
+              showOrbLatestReceipt();
+              return;
+            }
             const payload = await queueOrbAuthorityCommand(
               quickCommand.kind,
               quickCommand.args,

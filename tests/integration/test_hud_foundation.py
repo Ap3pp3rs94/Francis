@@ -134,6 +134,9 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Queue Save" in response.text
     assert "Queue Typed Input" in response.text
     assert "Clear Queue" in response.text
+    assert "Current Move" in response.text
+    assert "Preview" in response.text
+    assert "Latest Receipt" in response.text
     assert "Focused local crop state will appear here." in response.text
     assert "A cursor-local active-surface crop will appear here when Orb perception is live." in response.text
     assert "Shift Report" in response.text
@@ -263,6 +266,9 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function syncOrbPerception()' in response.text
     assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
     assert 'id="overlay-perception-preview"' in response.text
+    assert 'function previewOrbFocusAction()' in response.text
+    assert 'function runOrbFocusAction()' in response.text
+    assert 'function showOrbLatestReceipt()' in response.text
     assert 'function queueOrbAuthorityCommand(kind, args = {}, reason = "")' in response.text
     assert 'function parseOrbQuickCommand(message)' in response.text
     assert 'function sendOrbQuickChat()' in response.text
