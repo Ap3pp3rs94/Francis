@@ -175,16 +175,31 @@ def _build_takeover_desktop_run_contract(
             "reason": f"Press {key} through the active Francis takeover session.",
         }
         summary = f"Queue {key} into the active Francis takeover session."
-    elif focus_kind in {"apprenticeship.skillize", "forge.promote", "forge.revoke", "forge.quarantine"}:
+    elif focus_kind in {
+        "apprenticeship.skillize",
+        "forge.promote",
+        "forge.promote.request_approval",
+        "forge.revoke",
+        "forge.quarantine",
+        "repo.tests",
+        "repo.tests.request_approval",
+        "control.takeover.confirm",
+    }:
         focus_target = resolve_orb_focus_target()
         if not isinstance(focus_target, dict):
             return None
         surface = focus_target.get("surface", {}) if isinstance(focus_target.get("surface"), dict) else {}
         zone = focus_target.get("zone", {}) if isinstance(focus_target.get("zone"), dict) else {}
+        target = focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}
         affordances = focus_target.get("affordances", []) if isinstance(focus_target.get("affordances"), list) else []
         if str(surface.get("kind", "")).strip().lower() != "francis":
             return None
         if not str(zone.get("kind", "")).strip().lower().startswith("francis_"):
+            return None
+        if str(target.get("confidence", "")).strip().lower() not in {"likely", "medium"}:
+            return None
+        target_window = target.get("window", {}) if isinstance(target.get("window"), dict) else {}
+        if not bool(target_window.get("in_bounds")):
             return None
         preferred = next(
             (

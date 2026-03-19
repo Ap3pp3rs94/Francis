@@ -2663,12 +2663,41 @@
             || currentOrbPerception?.frame?.data_url
             || "",
         ).trim();
+        const targetContract =
+          currentOrbPerception?.target && typeof currentOrbPerception.target === "object"
+            ? currentOrbPerception.target
+            : {};
+        const surfaceContract =
+          currentOrbPerception?.active_surface && typeof currentOrbPerception.active_surface === "object"
+            ? currentOrbPerception.active_surface
+            : {};
+        const zoneContract =
+          targetContract.zone && typeof targetContract.zone === "object"
+            ? targetContract.zone
+            : {};
+        const affordancePreview = Array.isArray(targetContract.affordances)
+          ? targetContract.affordances
+            .filter((item) => item && typeof item === "object" && String(item.label || "").trim())
+            .slice(0, 2)
+            .map((item) => String(item.label || "").trim())
+          : [];
+        const previewStatusParts = [
+          String(surfaceContract.label || "Application surface").trim(),
+          String(zoneContract.label || "Active zone").trim(),
+          titleCase(String(targetContract.confidence || "low")),
+          targetContract.window?.in_bounds ? "Inside foreground window" : "Weak window match",
+        ].filter(Boolean);
+        const previewActionHint = affordancePreview.length
+          ? `Suggested: ${affordancePreview.join(", ")}.`
+          : "No grounded surface actions are available yet.";
         const focusPreviewSummary = escapeHtml(
           String(currentOrbPerception?.detail_summary || "A cursor-local active-surface crop will appear here when Orb perception is live."),
         );
+        const focusPreviewStatus = escapeHtml(previewStatusParts.join(" | "));
+        const focusPreviewActionHint = escapeHtml(previewActionHint);
         perceptionPreview.innerHTML = focusDataUrl
-          ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusPreviewSummary}</span>`
-          : `<strong>Focus Preview</strong><span class="meta tiny">${focusPreviewSummary}</span>`;
+          ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`
+          : `<strong>Focus Preview</strong><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`;
         authorityMeta.textContent = currentOrbAuthority?.state?.live
           ? "Away authority is live. Human return or panic stop will release immediately."
           : authorityQueueCount > 0
