@@ -280,7 +280,11 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function runOrbFocusAction()' in response.text
     assert 'function showOrbLatestReceipt()' in response.text
     assert 'function queueOrbAuthorityCommand(kind, args = {}, reason = "")' in response.text
+    assert 'function getOrbSurfaceActionContext(preferredKinds = [])' in response.text
+    assert 'function queueOrbSurfaceAction(preferredKinds = [])' in response.text
     assert 'function parseOrbQuickCommand(message)' in response.text
+    assert '"/surface"' in response.text
+    assert '"/submit"' in response.text
     assert 'function sendOrbQuickChat()' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text

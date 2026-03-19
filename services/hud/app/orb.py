@@ -186,6 +186,53 @@ def _build_takeover_desktop_run_contract(
     }
 
 
+def _build_surface_action_contract() -> dict[str, Any] | None:
+    focus_target = resolve_orb_focus_target()
+    if not isinstance(focus_target, dict):
+        return None
+    target = focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}
+    affordances = target.get("affordances", []) if isinstance(target.get("affordances"), list) else []
+    if not affordances:
+        return None
+    preferred_order = {
+        "submit_key": 0,
+        "open_key": 1,
+        "save_shortcut": 2,
+        "confirm_key": 3,
+        "cancel_key": 4,
+        "focus_click": 5,
+    }
+    affordance = min(
+        (
+            row
+            for row in affordances
+            if isinstance(row, dict)
+            and isinstance(row.get("command"), dict)
+            and str(row.get("label", "")).strip()
+        ),
+        key=lambda row: preferred_order.get(str(row.get("kind", "")).strip().lower(), 99),
+        default=None,
+    )
+    if not isinstance(affordance, dict):
+        return None
+    command = affordance.get("command", {}) if isinstance(affordance.get("command"), dict) else {}
+    command_kind = str(command.get("kind", "")).strip().lower()
+    command_args = command.get("args", {}) if isinstance(command.get("args"), dict) else {}
+    if not command_kind:
+        return None
+    return {
+        "enabled": True,
+        "kind": str(affordance.get("kind", "")).strip().lower(),
+        "label": str(affordance.get("label", "")).strip() or "Surface Action",
+        "summary": str(affordance.get("summary", "")).strip() or "Queue the current surface action through the Orb authority channel.",
+        "command_kind": command_kind,
+        "command_args": command_args,
+        "reason": str(command.get("reason", "")).strip()
+        or str(affordance.get("summary", "")).strip()
+        or "Queue the current surface action through the Orb authority channel.",
+    }
+
+
 def _build_orb_operator_view(
     *,
     snapshot: dict[str, Any],
@@ -262,6 +309,7 @@ def _build_orb_operator_view(
         and str(related_approval.get("id", "")).strip()
     )
     takeover_desktop_run = _build_takeover_desktop_run_contract(focus_action=focus_action, takeover=takeover)
+    surface_action = _build_surface_action_contract()
     preview_enabled = bool(focus_action.get("enabled"))
     run_enabled = can_approve_and_run or preview_enabled or bool(
         isinstance(takeover_desktop_run, dict) and takeover_desktop_run.get("enabled")
@@ -324,6 +372,17 @@ def _build_orb_operator_view(
             "desktop_run_args": takeover_desktop_run.get("args", {})
             if isinstance(takeover_desktop_run, dict)
             else {},
+            "surface_action_enabled": bool(isinstance(surface_action, dict) and surface_action.get("enabled")),
+            "surface_action_kind": str(surface_action.get("kind", "")).strip() if isinstance(surface_action, dict) else "",
+            "surface_action_label": str(surface_action.get("label", "")).strip() if isinstance(surface_action, dict) else "",
+            "surface_action_summary": str(surface_action.get("summary", "")).strip() if isinstance(surface_action, dict) else "",
+            "surface_action_command_kind": str(surface_action.get("command_kind", "")).strip()
+            if isinstance(surface_action, dict)
+            else "",
+            "surface_action_command_args": surface_action.get("command_args", {})
+            if isinstance(surface_action, dict)
+            else {},
+            "surface_action_reason": str(surface_action.get("reason", "")).strip() if isinstance(surface_action, dict) else "",
         },
     }
 

@@ -2061,6 +2061,13 @@
           run_args: {},
           approval_id: "",
           receipt_available: false,
+          surface_action_enabled: false,
+          surface_action_kind: "",
+          surface_action_label: "",
+          surface_action_summary: "",
+          surface_action_command_kind: "",
+          surface_action_command_args: {},
+          surface_action_reason: "",
         },
       };
       let currentOrbInterjection = {
@@ -2559,6 +2566,14 @@
           ? currentOrbAuthority.recent[0]
           : null;
         const focusContext = getOrbFocusContext();
+        const surfaceAction = getOrbSurfaceActionContext([
+          "submit_key",
+          "open_key",
+          "save_shortcut",
+          "confirm_key",
+          "cancel_key",
+          "focus_click",
+        ]);
 
         let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
         if (handbackActive) {
@@ -2681,6 +2696,10 @@
         queueMove.disabled = false;
         queueClick.disabled = false;
         queueSave.disabled = false;
+        queueSave.textContent = surfaceAction?.label ? `Queue ${surfaceAction.label}` : "Queue Save";
+        queueSave.title = surfaceAction?.summary
+          ? String(surfaceAction.summary)
+          : "Queue Ctrl+S through the Orb authority channel.";
         queueType.disabled = orbQuickChat.pending;
         clearAuthority.disabled = authorityQueueCount <= 0 && claimedAuthorityCount <= 0;
 
@@ -2895,6 +2914,15 @@
         const desktopRunArgs = operatorControls.desktop_run_args && typeof operatorControls.desktop_run_args === "object"
           ? operatorControls.desktop_run_args
           : {};
+        const surfaceActionKind = String(operatorControls.surface_action_kind || "").trim();
+        const surfaceActionLabel = String(operatorControls.surface_action_label || "").trim();
+        const surfaceActionSummary = String(operatorControls.surface_action_summary || "").trim();
+        const surfaceActionCommandKind = String(operatorControls.surface_action_command_kind || "").trim();
+        const surfaceActionCommandArgs =
+          operatorControls.surface_action_command_args && typeof operatorControls.surface_action_command_args === "object"
+            ? operatorControls.surface_action_command_args
+            : {};
+        const surfaceActionReason = String(operatorControls.surface_action_reason || "").trim();
         const approvalId = String(operatorControls.approval_id || operator?.approval?.id || "").trim();
         const runMode = String(operatorControls.run_mode || "").trim() || (approvalId ? "approve_and_run" : "execute");
         const hasOperatorContract =
@@ -2926,6 +2954,13 @@
             runArgs,
             desktopRunKind,
             desktopRunArgs,
+            surfaceActionEnabled: Boolean(operatorControls.surface_action_enabled && surfaceActionCommandKind),
+            surfaceActionKind,
+            surfaceActionLabel,
+            surfaceActionSummary,
+            surfaceActionCommandKind,
+            surfaceActionCommandArgs,
+            surfaceActionReason,
             approvalId,
             hasReceipt: Boolean(operatorControls.receipt_available || operator?.latest_receipt),
           };
@@ -2973,9 +3008,90 @@
           runArgs: currentFocusActionChip?.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
           desktopRunKind: "",
           desktopRunArgs: {},
+          surfaceActionEnabled: false,
+          surfaceActionKind: "",
+          surfaceActionLabel: "",
+          surfaceActionSummary: "",
+          surfaceActionCommandKind: "",
+          surfaceActionCommandArgs: {},
+          surfaceActionReason: "",
           approvalId: String(relatedApproval?.id || "").trim(),
           hasReceipt: Boolean(relatedReceipt),
         };
+      }
+
+      function getOrbTargetAffordances() {
+        const target =
+          currentOrbPerception?.target && typeof currentOrbPerception.target === "object"
+            ? currentOrbPerception.target
+            : {};
+        return Array.isArray(target.affordances)
+          ? target.affordances.filter((item) => item && typeof item === "object")
+          : [];
+      }
+
+      function findOrbTargetAffordance(preferredKinds = []) {
+        const affordances = getOrbTargetAffordances();
+        const preferred = Array.isArray(preferredKinds)
+          ? preferredKinds.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
+          : [];
+        if (!preferred.length) {
+          return affordances[0] || null;
+        }
+        return affordances.find((item) => preferred.includes(String(item.kind || "").trim().toLowerCase())) || null;
+      }
+
+      function getOrbSurfaceActionContext(preferredKinds = []) {
+        const context = getOrbFocusContext();
+        const preferred = Array.isArray(preferredKinds)
+          ? preferredKinds.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
+          : [];
+        if (
+          context.surfaceActionEnabled &&
+          context.surfaceActionCommandKind &&
+          (!preferred.length || preferred.includes(String(context.surfaceActionKind || "").trim().toLowerCase()))
+        ) {
+          return {
+            kind: String(context.surfaceActionKind || "").trim(),
+            label: String(context.surfaceActionLabel || "Surface Action").trim(),
+            summary: String(context.surfaceActionSummary || "").trim(),
+            commandKind: String(context.surfaceActionCommandKind || "").trim(),
+            commandArgs:
+              context.surfaceActionCommandArgs && typeof context.surfaceActionCommandArgs === "object"
+                ? context.surfaceActionCommandArgs
+                : {},
+            reason: String(context.surfaceActionReason || context.surfaceActionSummary || "").trim(),
+          };
+        }
+        const affordance = findOrbTargetAffordance(preferred);
+        if (!affordance || !affordance.command || typeof affordance.command !== "object") {
+          return null;
+        }
+        return {
+          kind: String(affordance.kind || "").trim(),
+          label: String(affordance.label || "Surface Action").trim(),
+          summary: String(affordance.summary || "").trim(),
+          commandKind: String(affordance.command.kind || "").trim(),
+          commandArgs:
+            affordance.command.args && typeof affordance.command.args === "object"
+              ? affordance.command.args
+              : {},
+          reason: String(affordance.command.reason || affordance.summary || "").trim(),
+        };
+      }
+
+      async function queueOrbSurfaceAction(preferredKinds = []) {
+        const surfaceAction = getOrbSurfaceActionContext(preferredKinds);
+        if (!surfaceAction || !surfaceAction.commandKind) {
+          orbQuickChat.error = "No current surface action is grounded enough to queue from the Orb.";
+          renderOverlayDock();
+          return null;
+        }
+        return queueOrbAuthorityCommand(
+          surfaceAction.commandKind,
+          surfaceAction.commandArgs,
+          surfaceAction.reason || surfaceAction.summary || "Queue the current surface action through the Orb authority channel.",
+        );
       }
 
       async function previewOrbFocusAction() {
@@ -3184,12 +3300,19 @@
 
       async function queueOrbSaveShortcut() {
         try {
-          await queueOrbAuthorityAction(
-            "orb.authority.queue_save",
-            {
-              reason: "Queue a guarded save shortcut through the Orb authority channel.",
-            },
-          );
+          const payload = await queueOrbSurfaceAction([
+            "submit_key",
+            "open_key",
+            "save_shortcut",
+            "confirm_key",
+            "cancel_key",
+          ]);
+          if (payload) {
+            return;
+          }
+          await queueOrbAuthorityAction("orb.authority.queue_save", {
+            reason: "Queue a guarded save shortcut through the Orb authority channel.",
+          });
         } catch (error) {
           orbQuickChat.error = `Save queue failed: ${error?.message || error}`;
           renderOverlayDock();
@@ -3249,6 +3372,21 @@
             args: {},
             reason: "Queue Ctrl+S from the Orb quick-command surface.",
           };
+        }
+        if (lowered === "/surface") {
+          return { surfaceAffordanceKinds: [] };
+        }
+        if (lowered === "/submit") {
+          return { surfaceAffordanceKinds: ["submit_key"] };
+        }
+        if (lowered === "/open") {
+          return { surfaceAffordanceKinds: ["open_key"] };
+        }
+        if (lowered === "/confirm") {
+          return { surfaceAffordanceKinds: ["confirm_key"] };
+        }
+        if (lowered === "/cancel") {
+          return { surfaceAffordanceKinds: ["cancel_key"] };
         }
         if (lowered === "/enter") {
           return {
@@ -3320,6 +3458,16 @@
                 input.value = "";
               }
               showOrbLatestReceipt();
+              return;
+            }
+            if (Array.isArray(quickCommand.surfaceAffordanceKinds)) {
+              if (input) {
+                input.value = "";
+              }
+              const payload = await queueOrbSurfaceAction(quickCommand.surfaceAffordanceKinds);
+              if (payload) {
+                orbSpeechBurstUntil = performance.now() + 1000;
+              }
               return;
             }
             const payload = quickCommand.actionKind

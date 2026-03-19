@@ -155,7 +155,27 @@ def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None
     monkeypatch.setattr(
         orb_view,
         "resolve_orb_focus_target",
-        lambda: {"x": 420, "y": 260, "display_id": 1, "freshness": {"state": "fresh", "age_ms": 120}},
+        lambda: {
+            "x": 420,
+            "y": 260,
+            "display_id": 1,
+            "target": {
+                "label": "Editor focus point",
+                "affordances": [
+                    {
+                        "kind": "save_shortcut",
+                        "label": "Save",
+                        "summary": "Press Ctrl+S on the active editor surface.",
+                        "command": {
+                            "kind": "keyboard.shortcut",
+                            "args": {"keys": ["ctrl", "s"]},
+                            "reason": "Press Ctrl+S on the active editor surface during Orb authority.",
+                        },
+                    }
+                ],
+            },
+            "freshness": {"state": "fresh", "age_ms": 120},
+        },
     )
     monkeypatch.setattr(
         orb_view,
@@ -189,3 +209,8 @@ def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None
     assert controls["desktop_run_args"]["commands"][0]["args"]["x"] == 420
     assert controls["desktop_run_args"]["commands"][0]["args"]["y"] == 260
     assert controls["desktop_run_args"]["commands"][0]["args"]["button"] == "left"
+    assert controls["surface_action_enabled"] is True
+    assert controls["surface_action_kind"] == "save_shortcut"
+    assert controls["surface_action_label"] == "Save"
+    assert controls["surface_action_command_kind"] == "keyboard.shortcut"
+    assert controls["surface_action_command_args"]["keys"] == ["ctrl", "s"]

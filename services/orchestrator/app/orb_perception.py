@@ -229,13 +229,226 @@ def _build_target_contract(payload: dict[str, Any], freshness: dict[str, Any], s
     label = label_map.get(str(surface.get("kind", "")).strip().lower(), "Active focus point")
     coordinate_summary = f"({x}, {y})" if x is not None and y is not None else "unresolved coordinates"
     crop_summary = "Local focus crop is attached." if focus_attached else "No local focus crop is attached."
-    return {
+    target = {
         "kind": "cursor_focus",
         "label": label,
         "summary": f"{label} at {coordinate_summary}. {crop_summary}",
         "actionable": actionable,
         "confidence": "likely" if actionable and focus_attached else "medium" if actionable else "low",
     }
+    zone = _infer_target_zone(payload, surface, target)
+    affordances = _build_target_affordances(surface=surface, target=target, zone=zone, x=x, y=y)
+    affordance_summary = (
+        f" Suggested actions: {', '.join(str(item.get('label', '')).strip() for item in affordances if isinstance(item, dict) and str(item.get('label', '')).strip())}."
+        if affordances
+        else ""
+    )
+    target["summary"] = f"{target['summary']} {zone['summary']}{affordance_summary}".strip()
+    target["zone"] = zone
+    target["affordances"] = affordances
+    return target
+
+
+def _infer_target_zone(payload: dict[str, Any], surface: dict[str, str], target: dict[str, Any]) -> dict[str, Any]:
+    cursor = payload.get("cursor", {}) if isinstance(payload.get("cursor"), dict) else {}
+    display = payload.get("display", {}) if isinstance(payload.get("display"), dict) else {}
+    width = max(1, _normalize_dimension(display.get("width")))
+    height = max(1, _normalize_dimension(display.get("height")))
+    x = _normalize_optional_int(cursor.get("x"))
+    y = _normalize_optional_int(cursor.get("y"))
+    x_ratio = (x / width) if x is not None else 0.5
+    y_ratio = (y / height) if y is not None else 0.5
+    surface_kind = str(surface.get("kind", "")).strip().lower() or "application"
+
+    zone_kind = "application_content"
+    zone_label = "Application content"
+    zone_summary = "The cursor is inside the active application content region."
+
+    if surface_kind == "editor":
+        if y_ratio <= 0.1:
+            zone_kind = "editor_tabstrip"
+            zone_label = "Editor tab strip"
+            zone_summary = "The cursor is near the editor tab strip and top-level editor controls."
+        elif x_ratio <= 0.12:
+            zone_kind = "editor_gutter"
+            zone_label = "Editor gutter"
+            zone_summary = "The cursor is near the editor gutter where line-focused actions usually land."
+        else:
+            zone_kind = "editor_body"
+            zone_label = "Editor body"
+            zone_summary = "The cursor is over the main editor body where code editing happens."
+    elif surface_kind == "terminal":
+        if y_ratio >= 0.72:
+            zone_kind = "terminal_input"
+            zone_label = "Terminal input line"
+            zone_summary = "The cursor is near the terminal input line where command submission is most likely."
+        else:
+            zone_kind = "terminal_transcript"
+            zone_label = "Terminal transcript"
+            zone_summary = "The cursor is over terminal output history rather than the live input edge."
+    elif surface_kind == "browser":
+        if y_ratio <= 0.14:
+            zone_kind = "browser_chrome"
+            zone_label = "Browser chrome"
+            zone_summary = "The cursor is near the browser chrome where navigation controls usually live."
+        else:
+            zone_kind = "browser_content"
+            zone_label = "Browser content"
+            zone_summary = "The cursor is over the main browser content area."
+    elif surface_kind == "files":
+        if x_ratio <= 0.22:
+            zone_kind = "file_sidebar"
+            zone_label = "File sidebar"
+            zone_summary = "The cursor is near the file-navigation sidebar."
+        else:
+            zone_kind = "file_list"
+            zone_label = "File list"
+            zone_summary = "The cursor is over the primary file list where open/select actions usually land."
+    elif surface_kind == "francis":
+        if y_ratio <= 0.18:
+            zone_kind = "francis_header"
+            zone_label = "Francis header"
+            zone_summary = "The cursor is near the Francis control header."
+        else:
+            zone_kind = "francis_panel"
+            zone_label = "Francis control panel"
+            zone_summary = "The cursor is over a Francis control panel."
+    else:
+        if y_ratio <= 0.15:
+            zone_kind = "application_header"
+            zone_label = "Application header"
+            zone_summary = "The cursor is near the active application header."
+
+    return {
+        "kind": zone_kind,
+        "label": zone_label,
+        "summary": zone_summary,
+        "confidence": str(target.get("confidence", "medium")).strip() or "medium",
+    }
+
+
+def _build_target_affordances(
+    *,
+    surface: dict[str, str],
+    target: dict[str, Any],
+    zone: dict[str, Any],
+    x: int | None,
+    y: int | None,
+) -> list[dict[str, Any]]:
+    actionable = bool(target.get("actionable"))
+    if not actionable or x is None or y is None:
+        return []
+
+    surface_kind = str(surface.get("kind", "")).strip().lower() or "application"
+    zone_kind = str(zone.get("kind", "")).strip().lower() or "application_content"
+    target_label = str(target.get("label", "active focus point")).strip() or "active focus point"
+    zone_label = str(zone.get("label", "active zone")).strip() or "active zone"
+    affordances: list[dict[str, Any]] = [
+        {
+            "kind": "focus_click",
+            "label": "Focus Click",
+            "summary": f"Left-click the {target_label.lower()} inside the {zone_label.lower()}.",
+            "command": {
+                "kind": "mouse.click",
+                "args": {"x": x, "y": y, "button": "left", "coordinate_space": "display"},
+                "reason": f"Left-click the {target_label.lower()} inside the {zone_label.lower()} during Orb authority.",
+            },
+        }
+    ]
+
+    if surface_kind == "editor":
+        affordances.append(
+            {
+                "kind": "save_shortcut",
+                "label": "Save",
+                "summary": "Press Ctrl+S on the active editor surface.",
+                "command": {
+                    "kind": "keyboard.shortcut",
+                    "args": {"keys": ["ctrl", "s"]},
+                    "reason": "Press Ctrl+S on the active editor surface during Orb authority.",
+                },
+            }
+        )
+    elif surface_kind == "terminal" and zone_kind == "terminal_input":
+        affordances.insert(
+            0,
+            {
+                "kind": "submit_key",
+                "label": "Submit",
+                "summary": "Press Enter on the live terminal input line.",
+                "command": {
+                    "kind": "keyboard.key",
+                    "args": {"key": "enter"},
+                    "reason": "Press Enter on the live terminal input line during Orb authority.",
+                },
+            },
+        )
+        affordances.append(
+            {
+                "kind": "cancel_key",
+                "label": "Cancel",
+                "summary": "Press Escape on the active terminal surface.",
+                "command": {
+                    "kind": "keyboard.key",
+                    "args": {"key": "escape"},
+                    "reason": "Press Escape on the active terminal surface during Orb authority.",
+                },
+            }
+        )
+    elif surface_kind == "files" and zone_kind == "file_list":
+        affordances.insert(
+            0,
+            {
+                "kind": "open_key",
+                "label": "Open",
+                "summary": "Press Enter on the selected file item.",
+                "command": {
+                    "kind": "keyboard.key",
+                    "args": {"key": "enter"},
+                    "reason": "Press Enter on the selected file item during Orb authority.",
+                },
+            },
+        )
+    elif surface_kind == "francis":
+        affordances.append(
+            {
+                "kind": "confirm_key",
+                "label": "Confirm",
+                "summary": "Press Enter on the active Francis control surface.",
+                "command": {
+                    "kind": "keyboard.key",
+                    "args": {"key": "enter"},
+                    "reason": "Press Enter on the active Francis control surface during Orb authority.",
+                },
+            }
+        )
+        affordances.append(
+            {
+                "kind": "cancel_key",
+                "label": "Cancel",
+                "summary": "Press Escape on the active Francis control surface.",
+                "command": {
+                    "kind": "keyboard.key",
+                    "args": {"key": "escape"},
+                    "reason": "Press Escape on the active Francis control surface during Orb authority.",
+                },
+            }
+        )
+    elif surface_kind == "browser" and zone_kind == "browser_content":
+        affordances.append(
+            {
+                "kind": "cancel_key",
+                "label": "Escape",
+                "summary": "Press Escape on the active browser surface.",
+                "command": {
+                    "kind": "keyboard.key",
+                    "args": {"key": "escape"},
+                    "reason": "Press Escape on the active browser surface during Orb authority.",
+                },
+            }
+        )
+
+    return affordances[:4]
 
 
 def _build_cards(payload: dict[str, Any], freshness: dict[str, Any], surface: dict[str, str], target: dict[str, Any]) -> list[dict[str, str]]:
@@ -255,6 +468,13 @@ def _build_cards(payload: dict[str, Any], freshness: dict[str, Any], surface: di
         if cursor_x is not None and cursor_y is not None
         else "Cursor unavailable"
     )
+    zone = target.get("zone", {}) if isinstance(target.get("zone"), dict) else {}
+    affordances = target.get("affordances", []) if isinstance(target.get("affordances"), list) else []
+    affordance_label = ", ".join(
+        str(item.get("label", "")).strip()
+        for item in affordances[:2]
+        if isinstance(item, dict) and str(item.get("label", "")).strip()
+    ) or "No suggested surface actions"
     freshness_state = str(freshness.get("state", "idle"))
     freshness_tone = "high" if freshness_state == "stale" else "medium" if freshness_state == "cooling" else "low"
 
@@ -265,6 +485,8 @@ def _build_cards(payload: dict[str, Any], freshness: dict[str, Any], surface: di
         {"label": "Intent", "value": str(surface.get("intent", "visible_work")).strip().replace("_", " "), "tone": "low"},
         {"label": "Cursor", "value": cursor_label, "tone": "low"},
         {"label": "Target", "value": str(target.get("label", "Active focus point")).strip(), "tone": "medium" if target.get("actionable") else "low"},
+        {"label": "Zone", "value": str(zone.get("label", "Active zone")).strip(), "tone": "low"},
+        {"label": "Action", "value": affordance_label, "tone": "medium" if affordances else "low"},
         {"label": "Focus", "value": focus_label, "tone": "medium" if str(focus.get("data_url", "")).strip() else "low"},
         {
             "label": "Retention",
@@ -371,6 +593,16 @@ def resolve_orb_focus_target(*, max_age_ms: int = 2500) -> dict[str, Any] | None
         "captured_at": str(view.get("captured_at", "")).strip() or None,
         "surface": view.get("active_surface", {}) if isinstance(view.get("active_surface"), dict) else {},
         "target": view.get("target", {}) if isinstance(view.get("target"), dict) else {},
+        "zone": (
+            view.get("target", {}).get("zone", {})
+            if isinstance(view.get("target"), dict) and isinstance(view.get("target", {}).get("zone"), dict)
+            else {}
+        ),
+        "affordances": (
+            view.get("target", {}).get("affordances", [])
+            if isinstance(view.get("target"), dict) and isinstance(view.get("target", {}).get("affordances"), list)
+            else []
+        ),
         "freshness": {
             "state": str(freshness.get("state", "")).strip() or "idle",
             "age_ms": age_ms,
