@@ -276,6 +276,9 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert '"control.takeover.desktop.enqueue"' in response.text
     assert 'id="orb-trail"' in response.text
     assert 'id="overlay-perception-preview"' in response.text
+    assert '.overlay-perception-preview[data-stability="settled"]' in response.text
+    assert '#orb-render-root[data-target-stability="settled"]:not(.orb-hold):not(.orb-handback) canvas' in response.text
+    assert '#orb-overlay[data-target-stability="settled"] .orb-trail-node' in response.text
     assert 'function previewOrbFocusAction()' in response.text
     assert 'function runOrbFocusAction()' in response.text
     assert 'function showOrbLatestReceipt()' in response.text
@@ -294,6 +297,9 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert "function renderOrbTraceTrail(timestamp, size, visible)" in response.text
     assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
     assert 'window.localStorage?.setItem(' in response.text
+    assert 'perceptionPreview.dataset.stability = targetStabilityState;' in response.text
+    assert 'orbRoot.dataset.targetStability = targetStabilityState;' in response.text
+    assert 'orbOverlay.dataset.targetStability = targetStabilityState;' in response.text
 
 
 def test_hud_orb_perception_route_records_live_frame() -> None:

@@ -793,6 +793,7 @@
         border: 1px solid rgba(23, 32, 42, 0.1);
         border-radius: 16px;
         background: rgba(246, 249, 252, 0.92);
+        transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
       }
 
       .overlay-perception-preview img {
@@ -802,6 +803,46 @@
         border-radius: 12px;
         border: 1px solid rgba(23, 32, 42, 0.12);
         background: rgba(10, 18, 28, 0.08);
+        transition: filter 140ms ease, border-color 140ms ease, opacity 140ms ease;
+      }
+
+      .overlay-perception-preview[data-stability="settled"] {
+        border-color: rgba(35, 104, 74, 0.24);
+        background:
+          linear-gradient(180deg, rgba(35, 104, 74, 0.06), rgba(246, 249, 252, 0.94));
+        box-shadow: inset 0 0 0 1px rgba(35, 104, 74, 0.08);
+      }
+
+      .overlay-perception-preview[data-stability="tracking"] {
+        border-color: rgba(182, 128, 37, 0.24);
+        background:
+          linear-gradient(180deg, rgba(182, 128, 37, 0.06), rgba(246, 249, 252, 0.94));
+        box-shadow: inset 0 0 0 1px rgba(182, 128, 37, 0.08);
+      }
+
+      .overlay-perception-preview[data-stability="transient"],
+      .overlay-perception-preview[data-window-match="weak"] {
+        border-color: rgba(23, 32, 42, 0.16);
+        background:
+          linear-gradient(180deg, rgba(23, 32, 42, 0.035), rgba(246, 249, 252, 0.9));
+      }
+
+      .overlay-perception-preview[data-stability="settled"] img {
+        border-color: rgba(35, 104, 74, 0.18);
+        filter: saturate(1.06) contrast(1.08) brightness(1.02);
+      }
+
+      .overlay-perception-preview[data-stability="tracking"] img {
+        border-color: rgba(182, 128, 37, 0.18);
+        filter: saturate(0.94) contrast(1.02) brightness(0.985);
+      }
+
+      .overlay-perception-preview[data-stability="transient"] img,
+      .overlay-perception-preview[data-window-match="weak"] img,
+      .overlay-perception-preview[data-confidence="low"] img {
+        border-color: rgba(23, 32, 42, 0.12);
+        filter: saturate(0.82) contrast(0.96) brightness(0.94);
+        opacity: 0.94;
       }
 
       #orb-render-root {
@@ -839,6 +880,45 @@
           drop-shadow(0 22px 34px rgba(0, 0, 0, 0.3))
           contrast(1.08)
           saturate(0.9);
+      }
+
+      #orb-render-root[data-target-stability="settled"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 24px 36px rgba(0, 0, 0, 0.32))
+          contrast(1.12)
+          saturate(0.96)
+          brightness(1.03);
+      }
+
+      #orb-render-root[data-target-stability="tracking"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 22px 34px rgba(0, 0, 0, 0.3))
+          contrast(1.06)
+          saturate(0.88)
+          brightness(0.985);
+      }
+
+      #orb-render-root[data-target-stability="transient"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-window-match="weak"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-target-confidence="low"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.24))
+          contrast(1.01)
+          saturate(0.8)
+          brightness(0.95);
+      }
+
+      #orb-overlay[data-target-stability="settled"] .orb-trail-node {
+        filter: blur(1.2px) saturate(1.02);
+      }
+
+      #orb-overlay[data-target-stability="tracking"] .orb-trail-node {
+        filter: blur(1.4px) saturate(0.94);
+      }
+
+      #orb-overlay[data-target-stability="transient"] .orb-trail-node,
+      #orb-overlay[data-window-match="weak"] .orb-trail-node {
+        filter: blur(1.8px) saturate(0.78);
       }
 
       body[data-boot="ready"] #orb-render-root {
@@ -2667,6 +2747,8 @@
           currentOrbPerception?.target && typeof currentOrbPerception.target === "object"
             ? currentOrbPerception.target
             : {};
+        const orbRoot = document.getElementById("orb-render-root");
+        const orbOverlay = document.getElementById("orb-overlay");
         const surfaceContract =
           currentOrbPerception?.active_surface && typeof currentOrbPerception.active_surface === "object"
             ? currentOrbPerception.active_surface
@@ -2675,6 +2757,9 @@
           targetContract.zone && typeof targetContract.zone === "object"
             ? targetContract.zone
             : {};
+        const targetStabilityState = String(targetContract.stability?.state || "idle").trim().toLowerCase() || "idle";
+        const targetConfidenceState = String(targetContract.confidence || "low").trim().toLowerCase() || "low";
+        const targetWindowMatchState = targetContract.window?.in_bounds ? "in_bounds" : "weak";
         const affordancePreview = Array.isArray(targetContract.affordances)
           ? targetContract.affordances
             .filter((item) => item && typeof item === "object" && String(item.label || "").trim())
@@ -2696,6 +2781,19 @@
         );
         const focusPreviewStatus = escapeHtml(previewStatusParts.join(" | "));
         const focusPreviewActionHint = escapeHtml(previewActionHint);
+        perceptionPreview.dataset.stability = targetStabilityState;
+        perceptionPreview.dataset.confidence = targetConfidenceState;
+        perceptionPreview.dataset.windowMatch = targetWindowMatchState;
+        if (orbRoot) {
+          orbRoot.dataset.targetStability = targetStabilityState;
+          orbRoot.dataset.targetConfidence = targetConfidenceState;
+          orbRoot.dataset.windowMatch = targetWindowMatchState;
+        }
+        if (orbOverlay) {
+          orbOverlay.dataset.targetStability = targetStabilityState;
+          orbOverlay.dataset.targetConfidence = targetConfidenceState;
+          orbOverlay.dataset.windowMatch = targetWindowMatchState;
+        }
         perceptionPreview.innerHTML = focusDataUrl
           ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`
           : `<strong>Focus Preview</strong><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`;
