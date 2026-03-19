@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Francis Lens HUD</title>
+    <link rel="icon" href="data:," />
     <style>
       :root {
         --ink: #17202a;
@@ -1907,6 +1908,13 @@
           <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
         </div>
       </div>
+      <div class="overlay-dock-card" id="overlay-interjection" hidden>
+        <strong id="overlay-interjection-summary">Francis is not interrupting the work.</strong>
+        <div class="overlay-dock-reply" id="overlay-interjection-detail">
+          Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.
+        </div>
+        <div class="meta tiny" id="overlay-interjection-prompt"></div>
+      </div>
       <div class="overlay-dock-operator">
         <div class="overlay-dock-chat-head">
           <strong>Current Move</strong>
@@ -2008,6 +2016,33 @@
         pending: [],
         claimed: [],
         recent: [],
+      };
+      let currentOrbOperator = {
+        surface: "orb_operator",
+        state: "idle",
+        focus_kind: "",
+        summary: "No current move is surfaced yet.",
+        meta: "No current move is surfaced yet.",
+        receipt_summary: "No latest receipt is anchoring the Orb surface yet.",
+        controls: {
+          preview_enabled: false,
+          preview_kind: "",
+          preview_args: {},
+          run_enabled: false,
+          run_mode: "execute",
+          run_kind: "",
+          run_args: {},
+          approval_id: "",
+          receipt_available: false,
+        },
+      };
+      let currentOrbInterjection = {
+        surface: "orb_interjection",
+        state: "idle",
+        level: 0,
+        summary: "Francis is not interrupting the work.",
+        detail: "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
+        prompt: "",
       };
       let currentShiftReport = {};
       let currentMissionsSurface = {};
@@ -2385,6 +2420,10 @@
         const chatReply = document.getElementById("overlay-chat-reply");
         const chatInput = document.getElementById("overlay-chat-input");
         const chatSend = document.getElementById("overlay-chat-send");
+        const interjectionCard = document.getElementById("overlay-interjection");
+        const interjectionSummary = document.getElementById("overlay-interjection-summary");
+        const interjectionDetail = document.getElementById("overlay-interjection-detail");
+        const interjectionPrompt = document.getElementById("overlay-interjection-prompt");
         const focusMeta = document.getElementById("overlay-focus-meta");
         const focusSummary = document.getElementById("overlay-focus-summary");
         const receiptSummary = document.getElementById("overlay-receipt-summary");
@@ -2413,6 +2452,10 @@
           !chatReply ||
           !chatInput ||
           !chatSend ||
+          !interjectionCard ||
+          !interjectionSummary ||
+          !interjectionDetail ||
+          !interjectionPrompt ||
           !focusMeta ||
           !focusSummary ||
           !receiptSummary ||
@@ -2469,35 +2512,7 @@
         const latestAuthorityReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length > 0
           ? currentOrbAuthority.recent[0]
           : null;
-        const focusAction = currentCurrentWork?.focus_action && typeof currentCurrentWork.focus_action === "object"
-          ? currentCurrentWork.focus_action
-          : {};
-        const nextResume = currentCurrentWork?.next_action_resume && typeof currentCurrentWork.next_action_resume === "object"
-          ? currentCurrentWork.next_action_resume
-          : {};
-        const focusKind = resolveUsageFocusActionKind(currentSnapshot, currentActions);
-        const relatedApprovalIndex = findRelatedApprovalIndex(focusKind, currentApprovalQueue);
-        const relatedApproval =
-          relatedApprovalIndex >= 0 && Array.isArray(currentApprovalQueue?.items)
-            ? currentApprovalQueue.items[relatedApprovalIndex]
-            : null;
-        const relatedReceiptIndex = findRelatedJournalIndex(focusKind, currentExecutionJournal, lastOperatorLink);
-        const relatedReceipt =
-          relatedReceiptIndex >= 0 && Array.isArray(currentExecutionJournal?.items)
-            ? currentExecutionJournal.items[relatedReceiptIndex]
-            : null;
-        const focusLabel = String(currentFocusActionChip?.label || focusAction.label || currentCurrentWork?.next_action?.label || "No current move selected.").trim();
-        const focusReason = String(
-          currentFocusActionChip?.policy_reason ||
-            currentFocusActionChip?.reason ||
-            focusAction.reason ||
-            currentCurrentWork?.next_action?.reason ||
-            "Francis is waiting for the next grounded move.",
-        ).trim();
-        const focusState = String(focusAction.state || "").trim().toLowerCase();
-        const canApproveAndRun = Boolean(relatedApproval?.can_execute_after_approval && relatedApproval?.id);
-        const canPreviewFocus = Boolean(currentFocusActionChip?.enabled);
-        const canRunFocus = canApproveAndRun || Boolean(currentFocusActionChip?.enabled);
+        const focusContext = getOrbFocusContext();
 
         let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
         if (handbackActive) {
@@ -2526,19 +2541,28 @@
         chatReply.textContent = orbQuickChat.error
           ? orbQuickChat.error
           : orbQuickChat.reply || "Ask a short question or give a direct command without opening Lens.";
-        focusMeta.textContent = canApproveAndRun
-          ? `Approval ${String(relatedApproval.id || "pending")} is ready. The Orb can approve and continue this move.`
-          : currentFocusActionChip
-            ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${focusState || (currentFocusActionChip.enabled ? "ready" : "blocked")}`
-            : "No current move is surfaced yet.";
-        focusSummary.textContent = `${focusLabel} | ${focusReason}`;
-        receiptSummary.textContent = relatedReceipt
-          ? summarizeReceiptDetail(relatedReceipt)
-          : "No latest receipt is anchoring the Orb surface yet.";
-        focusPreview.disabled = !canPreviewFocus;
-        focusRun.disabled = !canRunFocus;
-        focusRun.textContent = canApproveAndRun ? "Approve + Run" : "Run";
-        focusReceipt.disabled = !Boolean(relatedReceipt);
+        const interjectionLevel = Number(currentOrbInterjection?.level || 0);
+        const interjectionState = String(currentOrbInterjection?.state || "idle").trim().toLowerCase();
+        const interjectionActive = interjectionLevel > 0 && interjectionState !== "idle";
+        interjectionCard.hidden = !interjectionActive;
+        interjectionCard.dataset.level = String(interjectionLevel || 0);
+        interjectionSummary.textContent = String(
+          currentOrbInterjection?.summary || "Francis is not interrupting the work.",
+        );
+        interjectionDetail.textContent = String(
+          currentOrbInterjection?.detail
+            || "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
+        );
+        interjectionPrompt.textContent = String(currentOrbInterjection?.prompt || "");
+        focusMeta.textContent = String(focusContext.meta || "No current move is surfaced yet.");
+        focusSummary.textContent = String(focusContext.summary || "Francis is waiting for the next grounded move.");
+        receiptSummary.textContent = String(
+          focusContext.receiptSummary || "No latest receipt is anchoring the Orb surface yet.",
+        );
+        focusPreview.disabled = !focusContext.canPreview;
+        focusRun.disabled = !focusContext.canRun;
+        focusRun.textContent = focusContext.runMode === "approve_and_run" ? "Approve + Run" : "Run";
+        focusReceipt.disabled = !focusContext.hasReceipt;
         perceptionSummary.textContent = String(
           currentOrbPerception?.summary
             || currentOrb?.perception?.summary
@@ -2564,12 +2588,12 @@
             || currentOrbPerception?.frame?.data_url
             || "",
         ).trim();
-        const focusSummary = escapeHtml(
+        const focusPreviewSummary = escapeHtml(
           String(currentOrbPerception?.detail_summary || "A cursor-local active-surface crop will appear here when Orb perception is live."),
         );
         perceptionPreview.innerHTML = focusDataUrl
-          ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusSummary}</span>`
-          : `<strong>Focus Preview</strong><span class="meta tiny">${focusSummary}</span>`;
+          ? `<strong>Focus Preview</strong><img src="${focusDataUrl}" alt="Orb active-surface focus preview" /><span class="meta tiny">${focusPreviewSummary}</span>`
+          : `<strong>Focus Preview</strong><span class="meta tiny">${focusPreviewSummary}</span>`;
         authorityMeta.textContent = currentOrbAuthority?.state?.live
           ? "Away authority is live. Human return or panic stop will release immediately."
           : authorityQueueCount > 0
@@ -2679,7 +2703,6 @@
         if (!bridge || typeof bridge.getInputState !== "function") {
           if (!orbBridgeWarningEmitted) {
             orbBridgeWarningEmitted = true;
-            console.warn("Francis Orb desktop bridge is unavailable in the orb-only window.");
           }
           return;
         }
@@ -2794,6 +2817,53 @@
       }
 
       function getOrbFocusContext() {
+        const operator = currentOrbOperator && typeof currentOrbOperator === "object"
+          ? currentOrbOperator
+          : {};
+        const operatorControls = operator.controls && typeof operator.controls === "object"
+          ? operator.controls
+          : {};
+        const previewKind = String(operatorControls.preview_kind || "").trim();
+        const previewArgs = operatorControls.preview_args && typeof operatorControls.preview_args === "object"
+          ? operatorControls.preview_args
+          : {};
+        const runKind = String(operatorControls.run_kind || previewKind || "").trim();
+        const runArgs = operatorControls.run_args && typeof operatorControls.run_args === "object"
+          ? operatorControls.run_args
+          : previewArgs;
+        const approvalId = String(operatorControls.approval_id || operator?.approval?.id || "").trim();
+        const runMode = String(operatorControls.run_mode || "").trim() || (approvalId ? "approve_and_run" : "execute");
+        const hasOperatorContract =
+          Boolean(String(operator.summary || "").trim())
+          || Boolean(String(operator.meta || "").trim())
+          || Boolean(previewKind)
+          || Boolean(runKind)
+          || Boolean(approvalId)
+          || Boolean(operator?.latest_receipt);
+        if (hasOperatorContract) {
+          return {
+            focusKind: String(operator.focus_kind || runKind || previewKind).trim(),
+            focusAction: operator.focus_action && typeof operator.focus_action === "object" ? operator.focus_action : {},
+            relatedApproval: operator.approval && typeof operator.approval === "object" ? operator.approval : null,
+            relatedReceipt: operator.latest_receipt && typeof operator.latest_receipt === "object" ? operator.latest_receipt : null,
+            canApproveAndRun: runMode === "approve_and_run" && Boolean(approvalId),
+            canPreview: Boolean(operatorControls.preview_enabled && previewKind),
+            canRun: Boolean(operatorControls.run_enabled && (approvalId || runKind)),
+            focusLabel: String(operator.summary || "No current move selected.").trim(),
+            summary: String(operator.summary || "No current move is surfaced yet.").trim(),
+            meta: String(operator.meta || "No current move is surfaced yet.").trim(),
+            receiptSummary: String(
+              operator.receipt_summary || "No latest receipt is anchoring the Orb surface yet.",
+            ).trim(),
+            previewKind,
+            previewArgs,
+            runMode,
+            runKind,
+            runArgs,
+            approvalId,
+            hasReceipt: Boolean(operatorControls.receipt_available || operator?.latest_receipt),
+          };
+        }
         const focusAction = currentCurrentWork?.focus_action && typeof currentCurrentWork.focus_action === "object"
           ? currentCurrentWork.focus_action
           : {};
@@ -2817,12 +2887,32 @@
           canPreview: Boolean(currentFocusActionChip?.enabled),
           canRun: Boolean((relatedApproval?.can_execute_after_approval && relatedApproval?.id) || currentFocusActionChip?.enabled),
           focusLabel: String(currentFocusActionChip?.label || focusAction.label || currentCurrentWork?.next_action?.label || "No current move selected.").trim(),
+          summary: `${String(currentFocusActionChip?.label || focusAction.label || currentCurrentWork?.next_action?.label || "No current move selected.").trim()} | ${String(
+            currentFocusActionChip?.policy_reason ||
+              currentFocusActionChip?.reason ||
+              focusAction.reason ||
+              currentCurrentWork?.next_action?.reason ||
+              "Francis is waiting for the next grounded move.",
+          ).trim()}`,
+          meta: currentFocusActionChip
+            ? `${String(currentFocusActionChip.kind || "unknown")} | risk ${String(currentFocusActionChip.risk_tier || "low")} | ${String(focusAction.state || "").trim().toLowerCase() || (currentFocusActionChip.enabled ? "ready" : "blocked")}`
+            : "No current move is surfaced yet.",
+          receiptSummary: relatedReceipt
+            ? summarizeReceiptDetail(relatedReceipt)
+            : "No latest receipt is anchoring the Orb surface yet.",
+          previewKind: String(currentFocusActionChip?.kind || "").trim(),
+          previewArgs: currentFocusActionChip?.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
+          runMode: relatedApproval?.can_execute_after_approval && relatedApproval?.id ? "approve_and_run" : "execute",
+          runKind: String(currentFocusActionChip?.kind || "").trim(),
+          runArgs: currentFocusActionChip?.args && typeof currentFocusActionChip.args === "object" ? currentFocusActionChip.args : {},
+          approvalId: String(relatedApproval?.id || "").trim(),
+          hasReceipt: Boolean(relatedReceipt),
         };
       }
 
       async function previewOrbFocusAction() {
         const context = getOrbFocusContext();
-        if (!context.canPreview) {
+        if (!context.canPreview || !context.previewKind) {
           orbQuickChat.error = "No current move is ready for preview from the Orb surface.";
           renderOverlayDock();
           return;
@@ -2830,7 +2920,7 @@
         orbQuickChat.error = "";
         orbQuickChat.reply = `Previewing ${context.focusLabel || context.focusKind || "the current move"} from the Orb surface.`;
         renderOverlayDock();
-        await previewFocusAction();
+        await executeActionWithArgs(context.previewKind, context.previewArgs || {}, true);
       }
 
       async function runOrbFocusAction() {
@@ -2845,18 +2935,30 @@
           ? `Approving and continuing ${context.focusLabel || context.focusKind || "the current move"} from the Orb surface.`
           : `Running ${context.focusLabel || context.focusKind || "the current move"} from the Orb surface.`;
         renderOverlayDock();
-        await runFocusAction();
+        if (context.runMode === "approve_and_run" && context.approvalId) {
+          await approveAndRunQueueItem(context.approvalId);
+          return;
+        }
+        if (!context.runKind) {
+          orbQuickChat.error = "No current move is ready to run from the Orb surface.";
+          renderOverlayDock();
+          return;
+        }
+        await executeActionWithArgs(context.runKind, context.runArgs || {}, false);
       }
 
       function showOrbLatestReceipt() {
         const context = getOrbFocusContext();
-        if (!context.relatedReceipt) {
+        if (!context.hasReceipt) {
           orbQuickChat.error = "No latest receipt is attached to the current Orb move.";
           renderOverlayDock();
           return;
         }
         orbQuickChat.error = "";
-        orbQuickChat.reply = summarizeReceiptDetail(context.relatedReceipt);
+        orbQuickChat.reply = String(
+          context.receiptSummary
+            || (context.relatedReceipt ? summarizeReceiptDetail(context.relatedReceipt) : "No latest receipt is attached to the current Orb move."),
+        );
         renderOverlayDock();
       }
 
@@ -5065,6 +5167,12 @@
         if (currentOrb?.authority && typeof currentOrb.authority === "object") {
           currentOrbAuthority = currentOrb.authority;
         }
+        if (currentOrb?.operator && typeof currentOrb.operator === "object") {
+          currentOrbOperator = currentOrb.operator;
+        }
+        if (currentOrb?.interjection && typeof currentOrb.interjection === "object") {
+          currentOrbInterjection = currentOrb.interjection;
+        }
         if (currentOrb?.perception && typeof currentOrb.perception === "object") {
           currentOrbPerception = currentOrb.perception;
         }
@@ -5719,6 +5827,14 @@
           currentOrbSurface?.authority && typeof currentOrbSurface.authority === "object"
             ? currentOrbSurface.authority
             : currentOrbAuthority;
+        currentOrbOperator =
+          currentOrbSurface?.operator && typeof currentOrbSurface.operator === "object"
+            ? currentOrbSurface.operator
+            : currentOrbOperator;
+        currentOrbInterjection =
+          currentOrbSurface?.interjection && typeof currentOrbSurface.interjection === "object"
+            ? currentOrbSurface.interjection
+            : currentOrbInterjection;
         currentCurrentWork = payload.current_work || {};
         currentShiftReport = payload.shift_report || {};
         currentRepoDrilldown = payload.repo_drilldown || {};

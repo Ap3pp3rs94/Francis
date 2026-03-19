@@ -137,6 +137,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Current Move" in response.text
     assert "Preview" in response.text
     assert "Latest Receipt" in response.text
+    assert "Interjections stay earned and grounded." in response.text
     assert "Focused local crop state will appear here." in response.text
     assert "A cursor-local active-surface crop will appear here when Orb perception is live." in response.text
     assert "Shift Report" in response.text
@@ -260,11 +261,14 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
 
     assert response.status_code == 200
     assert 'const orbWindowMode = orbSurfaceMode === "window";' in response.text
+    assert 'let currentOrbOperator = {' in response.text
     assert 'target.searchParams.set("orb", "window");' not in response.text
     assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
     assert 'function syncOrbInputState()' in response.text
     assert 'function syncOrbPerception()' in response.text
     assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
+    assert 'const operator = currentOrbOperator && typeof currentOrbOperator === "object"' in response.text
+    assert 'id="overlay-interjection"' in response.text
     assert 'id="overlay-perception-preview"' in response.text
     assert 'function previewOrbFocusAction()' in response.text
     assert 'function runOrbFocusAction()' in response.text
