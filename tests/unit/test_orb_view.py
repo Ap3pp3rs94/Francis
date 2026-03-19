@@ -38,6 +38,7 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
             "summary": "Active desktop attached.",
         },
     )
+    monkeypatch.setattr(orb_view, "resolve_orb_focus_target", lambda: None)
     monkeypatch.setattr(
         orb_view,
         "get_current_work_view",
@@ -114,6 +115,7 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert operator["controls"]["receipt_available"] is True
     assert operator["controls"]["takeover_active"] is True
     assert operator["controls"]["takeover_session_id"] == "session-1"
+    assert operator["target_cue"] is None
 
     interjection = orb["interjection"]
     assert interjection["surface"] == "orb_interjection"
@@ -122,6 +124,7 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert interjection["reason_kind"] == "approval_ready"
     assert interjection["can_defer"] is False
     assert "Approval approval-1 is ready." in interjection["prompt"]
+    assert interjection["target_cue"] is None
     assert interjection["controls"]["primary_action"] == "run"
     assert interjection["controls"]["primary_label"] == "Approve + Run"
     assert interjection["controls"]["secondary_action"] == "preview"
@@ -203,6 +206,7 @@ def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None
     orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
 
     controls = orb["operator"]["controls"]
+    assert orb["operator"]["target_cue"]["state"] == "weak"
     assert controls["desktop_run_enabled"] is True
     assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
     assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
@@ -214,6 +218,128 @@ def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None
     assert controls["surface_action_label"] == "Save"
     assert controls["surface_action_command_kind"] == "keyboard.shortcut"
     assert controls["surface_action_command_args"]["keys"] == ["ctrl", "s"]
+
+
+def test_get_orb_view_carries_concrete_target_cue_into_interjection(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "assist"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": False, "session_id": ""},
+    }
+    actions = {"action_chips": [], "blocked_actions": []}
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "assist", "posture": "resting", "summary": "Ambient"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 0},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "resolve_orb_focus_target",
+        lambda: {
+            "x": 612,
+            "y": 402,
+            "display_id": 1,
+            "surface": {"kind": "francis", "label": "Francis surface"},
+            "zone": {"kind": "francis_workspace", "label": "Francis workspace panel"},
+            "affordances": [
+                {
+                    "kind": "focus_click",
+                    "label": "Focus Click",
+                    "summary": "Click the focused Francis control.",
+                    "command": {
+                        "kind": "mouse.click",
+                        "args": {"x": 612, "y": 402, "button": "left", "coordinate_space": "display"},
+                        "reason": "Click the focused Francis control during Orb authority.",
+                    },
+                }
+            ],
+            "target": {
+                "label": "Francis focus point",
+                "confidence": "likely",
+                "stability": {"state": "settled"},
+                "window": {"in_bounds": True},
+            },
+            "freshness": {"state": "fresh", "age_ms": 120},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "repo.tests.request_approval",
+                "execute_kind": "repo.tests",
+                "args": {"lane": "fast"},
+                "enabled": True,
+                "label": "Run Fast Checks",
+                "reason": "Terminal failure needs verification.",
+                "risk_tier": "medium",
+                "state": "ready",
+            },
+            "next_action": {
+                "kind": "repo.tests.request_approval",
+                "label": "Request Fast Checks Approval",
+                "reason": "Tests need operator approval.",
+            },
+            "next_action_resume": {
+                "summary": "Approval is ready to resume the fast-check run.",
+            },
+            "operator_link": {
+                "action_kind": "repo.tests",
+                "approval_id": "approval-1",
+                "run_id": "run-1",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_approval_queue_view",
+        lambda **_: {
+            "surface": "approval_queue",
+            "items": [
+                {
+                    "id": "approval-1",
+                    "requested_action_kind": "repo.tests",
+                    "can_execute_after_approval": True,
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_execution_journal_view",
+        lambda **_: {
+            "surface": "execution_journal",
+            "items": [
+                {
+                    "run_id": "run-1",
+                    "action_kind": "repo.tests",
+                    "detail_summary": "Fast checks failed on the workspace test gate.",
+                }
+            ],
+        },
+    )
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions=actions, voice={"surface": "voice"})
+
+    assert orb["operator"]["target_cue"]["state"] == "concrete"
+    assert orb["interjection"]["target_cue"]["state"] == "concrete"
+    assert orb["interjection"]["target_cue"]["control_ready"] is True
 
 
 def test_get_orb_view_auto_plans_francis_surface_actions_for_takeover(monkeypatch) -> None:
@@ -297,6 +423,8 @@ def test_get_orb_view_auto_plans_francis_surface_actions_for_takeover(monkeypatc
     orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
 
     controls = orb["operator"]["controls"]
+    assert orb["operator"]["target_cue"]["state"] == "concrete"
+    assert orb["operator"]["target_cue"]["control_ready"] is True
     assert controls["desktop_run_enabled"] is True
     assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
     assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
@@ -385,6 +513,7 @@ def test_get_orb_view_auto_plans_repo_tests_request_on_francis_surface(monkeypat
     orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
 
     controls = orb["operator"]["controls"]
+    assert orb["operator"]["target_cue"]["state"] == "concrete"
     assert controls["desktop_run_enabled"] is True
     assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
     assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
@@ -473,5 +602,6 @@ def test_get_orb_view_does_not_auto_plan_transient_francis_targets(monkeypatch) 
     orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
 
     controls = orb["operator"]["controls"]
+    assert orb["operator"]["target_cue"]["state"] == "weak"
     assert controls["desktop_run_enabled"] is False
     assert controls["desktop_run_kind"] == ""

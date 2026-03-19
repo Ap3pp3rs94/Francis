@@ -722,6 +722,43 @@
         min-height: 54px;
       }
 
+      .overlay-target-cue {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(15, 23, 35, 0.08);
+        background: rgba(15, 23, 35, 0.04);
+        color: var(--muted);
+      }
+
+      .overlay-target-cue strong {
+        display: block;
+        color: var(--ink);
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .overlay-target-cue[data-highlight="concrete"] {
+        border-color: rgba(35, 104, 74, 0.22);
+        background:
+          linear-gradient(180deg, rgba(35, 104, 74, 0.065), rgba(255, 255, 255, 0.9));
+      }
+
+      .overlay-target-cue[data-highlight="tracking"] {
+        border-color: rgba(182, 128, 37, 0.22);
+        background:
+          linear-gradient(180deg, rgba(182, 128, 37, 0.065), rgba(255, 255, 255, 0.9));
+      }
+
+      .overlay-target-cue[data-highlight="weak"],
+      .overlay-target-cue[data-highlight="unavailable"] {
+        border-color: rgba(15, 23, 35, 0.1);
+        background:
+          linear-gradient(180deg, rgba(15, 23, 35, 0.035), rgba(255, 255, 255, 0.9));
+      }
+
       .overlay-dock-chat .input-row {
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 10px;
@@ -2015,6 +2052,10 @@
         <div class="overlay-dock-reply" id="overlay-interjection-detail">
           Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.
         </div>
+        <div class="overlay-target-cue" id="overlay-interjection-target">
+          <strong>Target Cue</strong>
+          <span>Interjection target quality will surface here when Francis has a grounded control target.</span>
+        </div>
         <div class="meta tiny" id="overlay-interjection-prompt"></div>
         <div class="overlay-dock-operator-actions" id="overlay-interjection-actions">
           <button class="btn-primary" type="button" id="overlay-interjection-primary" hidden onclick="executeOrbInterjectionAction('primary')">Open Lens</button>
@@ -2028,6 +2069,10 @@
         </div>
         <div class="overlay-dock-perception" id="overlay-focus-summary">
           Francis will surface the current move here once the live workspace loop is attached.
+        </div>
+        <div class="overlay-target-cue" id="overlay-focus-target">
+          <strong>Target Cue</strong>
+          <span>Current target quality will surface here when the Orb has a grounded move target.</span>
         </div>
         <div class="overlay-dock-reply" id="overlay-receipt-summary">
           No latest receipt is anchoring the Orb surface yet.
@@ -2540,6 +2585,25 @@
         setLensViewMode("orb_only");
       }
 
+      function renderOrbTargetCue(node, cue, fallbackText) {
+        if (!node) {
+          return;
+        }
+        const targetCue = cue && typeof cue === "object" ? cue : {};
+        const highlight = String(targetCue.state || "unavailable").trim().toLowerCase() || "unavailable";
+        const title = highlight === "concrete"
+          ? "Concrete Target"
+          : highlight === "tracking"
+            ? "Tracking Target"
+            : "Weak Target";
+        const summary = String(targetCue.summary || fallbackText || "Orb target quality is not attached yet.").trim();
+        const detail = String(targetCue.detail || "").trim();
+        node.dataset.highlight = highlight;
+        node.innerHTML = detail
+          ? `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(summary)}</span><span class="meta tiny">${escapeHtml(detail)}</span>`
+          : `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(summary)}</span>`;
+      }
+
       function renderOverlayDock() {
         const dock = document.getElementById("overlay-dock");
         const status = document.getElementById("overlay-dock-status");
@@ -2550,12 +2614,14 @@
         const interjectionCard = document.getElementById("overlay-interjection");
         const interjectionSummary = document.getElementById("overlay-interjection-summary");
         const interjectionDetail = document.getElementById("overlay-interjection-detail");
+        const interjectionTarget = document.getElementById("overlay-interjection-target");
         const interjectionPrompt = document.getElementById("overlay-interjection-prompt");
         const interjectionActions = document.getElementById("overlay-interjection-actions");
         const interjectionPrimary = document.getElementById("overlay-interjection-primary");
         const interjectionSecondary = document.getElementById("overlay-interjection-secondary");
         const focusMeta = document.getElementById("overlay-focus-meta");
         const focusSummary = document.getElementById("overlay-focus-summary");
+        const focusTarget = document.getElementById("overlay-focus-target");
         const receiptSummary = document.getElementById("overlay-receipt-summary");
         const focusPreview = document.getElementById("overlay-focus-preview");
         const focusRun = document.getElementById("overlay-focus-run");
@@ -2585,12 +2651,14 @@
           !interjectionCard ||
           !interjectionSummary ||
           !interjectionDetail ||
+          !interjectionTarget ||
           !interjectionPrompt ||
           !interjectionActions ||
           !interjectionPrimary ||
           !interjectionSecondary ||
           !focusMeta ||
           !focusSummary ||
+          !focusTarget ||
           !receiptSummary ||
           !focusPreview ||
           !focusRun ||
@@ -2698,6 +2766,12 @@
         const interjectionControls = currentOrbInterjection?.controls && typeof currentOrbInterjection.controls === "object"
           ? currentOrbInterjection.controls
           : {};
+        const operatorTargetCue = currentOrbOperator?.target_cue && typeof currentOrbOperator.target_cue === "object"
+          ? currentOrbOperator.target_cue
+          : null;
+        const interjectionTargetCue = currentOrbInterjection?.target_cue && typeof currentOrbInterjection.target_cue === "object"
+          ? currentOrbInterjection.target_cue
+          : operatorTargetCue;
         const primaryLabel = String(interjectionControls.primary_label || "").trim();
         const primaryAction = String(interjectionControls.primary_action || "").trim();
         const secondaryLabel = String(interjectionControls.secondary_label || "").trim();
@@ -2709,8 +2783,19 @@
         interjectionSecondary.hidden = !interjectionActive || !secondaryAction || !secondaryLabel;
         interjectionSecondary.textContent = secondaryLabel || "Preview";
         interjectionSecondary.dataset.action = secondaryAction;
+        interjectionTarget.hidden = !interjectionActive && !interjectionTargetCue;
+        renderOrbTargetCue(
+          interjectionTarget,
+          interjectionTargetCue,
+          "Interjection target quality will surface here when Francis has a grounded control target.",
+        );
         focusMeta.textContent = String(focusContext.meta || "No current move is surfaced yet.");
         focusSummary.textContent = String(focusContext.summary || "Francis is waiting for the next grounded move.");
+        renderOrbTargetCue(
+          focusTarget,
+          operatorTargetCue,
+          "Current target quality will surface here when the Orb has a grounded move target.",
+        );
         receiptSummary.textContent = String(
           focusContext.receiptSummary || "No latest receipt is anchoring the Orb surface yet.",
         );

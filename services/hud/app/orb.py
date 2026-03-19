@@ -57,6 +57,78 @@ def _coerce_orb_coordinate(value: object) -> int | None:
         return None
 
 
+def _build_orb_target_cue() -> dict[str, Any] | None:
+    focus_target = resolve_orb_focus_target()
+    if not isinstance(focus_target, dict):
+        return None
+
+    surface = focus_target.get("surface", {}) if isinstance(focus_target.get("surface"), dict) else {}
+    zone = focus_target.get("zone", {}) if isinstance(focus_target.get("zone"), dict) else {}
+    target = focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}
+    affordances = focus_target.get("affordances", []) if isinstance(focus_target.get("affordances"), list) else []
+    target_window = target.get("window", {}) if isinstance(target.get("window"), dict) else {}
+    target_stability = target.get("stability", {}) if isinstance(target.get("stability"), dict) else {}
+
+    surface_kind = str(surface.get("kind", "")).strip().lower() or "application"
+    surface_label = str(surface.get("label", "Application surface")).strip() or "Application surface"
+    zone_kind = str(zone.get("kind", "")).strip().lower() or "application_content"
+    zone_label = str(zone.get("label", "Active zone")).strip() or "Active zone"
+    target_label = str(target.get("label", "Active focus point")).strip() or "Active focus point"
+    confidence = str(target.get("confidence", "low")).strip().lower() or "low"
+    stability = str(target_stability.get("state", "idle")).strip().lower() or "idle"
+    in_bounds = bool(target_window.get("in_bounds"))
+
+    primary_affordance = next(
+        (
+            row
+            for row in affordances
+            if isinstance(row, dict) and str(row.get("label", "")).strip()
+        ),
+        None,
+    )
+    primary_label = str(primary_affordance.get("label", "")).strip() if isinstance(primary_affordance, dict) else ""
+    control_ready = bool(
+        surface_kind == "francis"
+        and zone_kind.startswith("francis_")
+        and stability == "settled"
+        and confidence in {"likely", "medium"}
+        and in_bounds
+        and primary_label
+    )
+
+    if control_ready:
+        state = "concrete"
+        summary = f"Concrete {zone_label.lower()} target. {primary_label} is grounded from the Orb."
+        detail = f"{target_label} is inside the foreground Francis surface and stable enough for precise handoff."
+    elif stability == "tracking" and in_bounds:
+        state = "tracking"
+        summary = f"Tracking {zone_label.lower()} target. Let it settle before Francis acts."
+        detail = f"{target_label} is inside {surface_label.lower()}, but the cursor is still moving."
+    else:
+        state = "weak"
+        summary = f"Weak {zone_label.lower()} target. Francis is holding off until the control becomes concrete."
+        detail = (
+            f"{target_label} is not grounded enough yet"
+            + (" because it is outside the foreground window." if not in_bounds else ".")
+        )
+
+    return {
+        "state": state,
+        "control_ready": control_ready,
+        "surface_kind": surface_kind,
+        "surface_label": surface_label,
+        "zone_kind": zone_kind,
+        "zone_label": zone_label,
+        "target_label": target_label,
+        "confidence": confidence,
+        "stability": stability,
+        "window_match": "inside_foreground_window" if in_bounds else "weak",
+        "primary_action_label": primary_label,
+        "summary": summary,
+        "detail": detail,
+    }
+
+
 def _build_takeover_desktop_run_contract(
     *,
     focus_action: dict[str, Any],
@@ -358,6 +430,7 @@ def _build_orb_operator_view(
         and related_approval.get("can_execute_after_approval")
         and str(related_approval.get("id", "")).strip()
     )
+    target_cue = _build_orb_target_cue()
     takeover_desktop_run = _build_takeover_desktop_run_contract(focus_action=focus_action, takeover=takeover)
     surface_action = _build_surface_action_contract()
     preview_enabled = bool(focus_action.get("enabled"))
@@ -400,6 +473,7 @@ def _build_orb_operator_view(
         "next_action_resume": next_action_resume,
         "approval": related_approval if isinstance(related_approval, dict) else None,
         "latest_receipt": related_receipt if isinstance(related_receipt, dict) else None,
+        "target_cue": target_cue if isinstance(target_cue, dict) else None,
         "receipt_summary": receipt_summary,
         "controls": {
             "preview_enabled": preview_enabled,
@@ -465,6 +539,7 @@ def _build_orb_interjection_view(
     top_blocked = blocked_items[0] if blocked_items and isinstance(blocked_items[0], dict) else None
     operator_controls = operator.get("controls", {}) if isinstance(operator.get("controls"), dict) else {}
     operator_approval = operator.get("approval", {}) if isinstance(operator.get("approval"), dict) else {}
+    target_cue = operator.get("target_cue", {}) if isinstance(operator.get("target_cue"), dict) else {}
     focus_action = operator.get("focus_action", {}) if isinstance(operator.get("focus_action"), dict) else {}
     next_action_resume = (
         operator.get("next_action_resume", {})
@@ -490,6 +565,7 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": False,
+            "target_cue": target_cue if target_cue else None,
             "controls": {
                 "primary_action": "open_lens",
                 "primary_label": "Open Lens",
@@ -522,6 +598,7 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": False,
+            "target_cue": target_cue if target_cue else None,
             "controls": {
                 "primary_action": "run",
                 "primary_label": "Approve + Run",
@@ -552,6 +629,7 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": False,
+            "target_cue": target_cue if target_cue else None,
             "controls": {
                 "primary_action": "open_lens",
                 "primary_label": "Open Lens",
@@ -582,6 +660,7 @@ def _build_orb_interjection_view(
             "detail": detail,
             "prompt": prompt,
             "can_defer": True,
+            "target_cue": target_cue if target_cue else None,
             "controls": {
                 "primary_action": "preview"
                 if bool(operator_controls.get("preview_enabled"))
@@ -607,6 +686,7 @@ def _build_orb_interjection_view(
         "detail": "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
         "prompt": "",
         "can_defer": True,
+        "target_cue": target_cue if target_cue else None,
         "controls": {
             "primary_action": "",
             "primary_label": "",

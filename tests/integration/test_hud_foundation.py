@@ -269,6 +269,7 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
     assert 'const operator = currentOrbOperator && typeof currentOrbOperator === "object"' in response.text
     assert 'id="overlay-interjection"' in response.text
+    assert 'id="overlay-interjection-target"' in response.text
     assert 'function executeOrbInterjectionAction(slot)' in response.text
     assert 'id="overlay-interjection-primary"' in response.text
     assert '"orb.authority.queue_move"' in response.text
@@ -286,9 +287,11 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function getOrbSurfaceActionContext(preferredKinds = [])' in response.text
     assert 'function queueOrbSurfaceAction(preferredKinds = [])' in response.text
     assert 'function parseOrbQuickCommand(message)' in response.text
+    assert 'function renderOrbTargetCue(node, cue, fallbackText)' in response.text
     assert '"/surface"' in response.text
     assert '"/submit"' in response.text
     assert 'function sendOrbQuickChat()' in response.text
+    assert 'id="overlay-focus-target"' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
     assert "const ORB_HUMAN_TRACE_LAG_MS = 156;" in response.text
