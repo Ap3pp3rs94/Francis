@@ -50,6 +50,9 @@ def test_orb_state_keeps_user_cursor_during_pilot_execution() -> None:
     assert orb["movement"]["orbit_bias"] > 0.1
     assert orb["movement"]["human_follow_delay_ms"] == 156
     assert orb["movement"]["human_follow_trail_nodes"] == 10
+    assert orb["movement"]["autonomous_replay_enabled"] is True
+    assert orb["movement"]["autonomous_replay_window_ms"] == 880
+    assert orb["movement"]["autonomous_replay_max_snippets"] == 18
     assert orb["panic_ready"] is False
     assert orb["visual"]["pulse_kind"] == "execution"
     assert orb["handback_visible"] is True
@@ -87,6 +90,7 @@ def test_orb_state_marks_away_execution_as_idle_gated_cursor_authority() -> None
     assert orb["movement"]["lock_radius"] < 1
     assert orb["movement"]["human_follow_delay_reduced_ms"] == 88
     assert orb["movement"]["human_follow_trail_spacing_ms"] == 18
+    assert orb["movement"]["autonomous_replay_bias"] > 0.7
     assert "30 seconds of mouse and keyboard inactivity" in orb["summary"]
     assert "mouse and keyboard inactivity" in orb["cursor_policy"]["summary"]
 
@@ -130,6 +134,8 @@ def test_orb_state_exposes_handback_profile_for_ambient_modes() -> None:
     assert orb["operator_cursor"] is False
     assert orb["movement"]["anchor"] == "ambient"
     assert orb["movement"]["profile"] == "ambient_float"
+    assert orb["movement"]["autonomous_replay_wander_px"] == 64
+    assert orb["movement"]["autonomous_replay_pause_max_ms"] == 820
     assert orb["handback"]["ritual"] == "return_to_ambient"
     assert orb["handback"]["anchor"] == "ambient_rest"
     assert orb["handback"]["return_profile"] == "release_arc"

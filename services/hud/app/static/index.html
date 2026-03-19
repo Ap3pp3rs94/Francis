@@ -2479,6 +2479,19 @@
         releaseX: 0,
         releaseY: 0,
       };
+      let orbAutonomousReplay = {
+        active: false,
+        nextStartAt: 0,
+        startAt: 0,
+        durationMs: 0,
+        snippet: null,
+        scale: 1,
+        rotation: 0,
+        mirrorX: 1,
+        mirrorY: 1,
+        offsetX: 0,
+        offsetY: 0,
+      };
       const ORB_HUMAN_PROFILE_STORAGE_KEY = "francis.orb.humanMotion.v1";
       let orbHumanMotionProfile = {
         avgSpeed: 4.4,
@@ -2490,6 +2503,8 @@
         lastPersistedAt: 0,
         lastAngle: null,
         lastSpeed: 0,
+        snippetLibrary: [],
+        capture: { points: [], startedAt: 0, lastTimestamp: 0 },
       };
 
       function escapeHtml(value) {
@@ -2530,6 +2545,26 @@
             lastPersistedAt: 0,
             lastAngle: null,
             lastSpeed: clamp(Number(parsed.lastSpeed || orbHumanMotionProfile.lastSpeed), 0, 18),
+            snippetLibrary: Array.isArray(parsed.snippetLibrary)
+              ? parsed.snippetLibrary
+                .filter((snippet) => snippet && typeof snippet === "object" && Array.isArray(snippet.points))
+                .slice(-24)
+                .map((snippet) => ({
+                  durationMs: clamp(Number(snippet.durationMs || 0), 120, 2000),
+                  totalDistance: clamp(Number(snippet.totalDistance || 0), 8, 1200),
+                  extent: clamp(Number(snippet.extent || 0), 4, 420),
+                  points: snippet.points
+                    .filter((point) => point && typeof point === "object")
+                    .slice(0, 24)
+                    .map((point) => ({
+                      t: clamp(Number(point.t || 0), 0, 1),
+                      dx: clamp(Number(point.dx || 0), -420, 420),
+                      dy: clamp(Number(point.dy || 0), -420, 420),
+                    })),
+                }))
+                .filter((snippet) => snippet.points.length >= 4)
+              : [],
+            capture: { points: [], startedAt: 0, lastTimestamp: 0 },
           };
         } catch {
           // Keep the built-in defaults if local profile restore fails.
@@ -2553,11 +2588,257 @@
               avgJerk: Number(orbHumanMotionProfile.avgJerk.toFixed(4)),
               sampleCount: Math.round(orbHumanMotionProfile.sampleCount),
               lastSpeed: Number(orbHumanMotionProfile.lastSpeed.toFixed(4)),
+              snippetLibrary: orbHumanMotionProfile.snippetLibrary.slice(-24).map((snippet) => ({
+                durationMs: Math.round(Number(snippet.durationMs || 0)),
+                totalDistance: Number(Number(snippet.totalDistance || 0).toFixed(3)),
+                extent: Number(Number(snippet.extent || 0).toFixed(3)),
+                points: Array.isArray(snippet.points)
+                  ? snippet.points.slice(0, 24).map((point) => ({
+                    t: Number(clamp(Number(point.t || 0), 0, 1).toFixed(4)),
+                    dx: Number(Number(point.dx || 0).toFixed(3)),
+                    dy: Number(Number(point.dy || 0).toFixed(3)),
+                  }))
+                  : [],
+              })),
             }),
           );
         } catch {
           // Local persistence is opportunistic; ignore storage failures.
         }
+      }
+
+      function getOrbAutonomousReplayConfig() {
+        const movement = currentOrb?.movement || {};
+        return {
+          enabled: Boolean(movement.autonomous_replay_enabled ?? true),
+          windowMs: clamp(Number(movement.autonomous_replay_window_ms ?? 880), 280, 1800),
+          maxSnippets: Math.max(6, Math.min(24, Math.round(Number(movement.autonomous_replay_max_snippets ?? 18)))),
+          minPoints: Math.max(4, Math.min(12, Math.round(Number(movement.autonomous_replay_min_points ?? 5)))),
+          scaleMin: clamp(Number(movement.autonomous_replay_scale_min ?? 0.62), 0.3, 1.2),
+          scaleMax: clamp(Number(movement.autonomous_replay_scale_max ?? 1.18), 0.5, 1.8),
+          wanderPx: clamp(Number(movement.autonomous_replay_wander_px ?? 64), 12, 180),
+          pauseMinMs: clamp(Number(movement.autonomous_replay_pause_min_ms ?? 180), 60, 2000),
+          pauseMaxMs: clamp(Number(movement.autonomous_replay_pause_max_ms ?? 820), 120, 3200),
+          bias: clamp(Number(movement.autonomous_replay_bias ?? 0.72), 0.18, 0.92),
+        };
+      }
+
+      function resetOrbHumanSnippetCapture() {
+        orbHumanMotionProfile.capture = { points: [], startedAt: 0, lastTimestamp: 0 };
+      }
+
+      function finalizeOrbHumanSnippetCapture(force = false) {
+        const capture = orbHumanMotionProfile.capture && typeof orbHumanMotionProfile.capture === "object"
+          ? orbHumanMotionProfile.capture
+          : { points: [], startedAt: 0, lastTimestamp: 0 };
+        const points = Array.isArray(capture.points) ? capture.points : [];
+        const config = getOrbAutonomousReplayConfig();
+        if (points.length < config.minPoints) {
+          resetOrbHumanSnippetCapture();
+          return;
+        }
+        const first = points[0];
+        const last = points[points.length - 1];
+        const durationMs = Math.max(120, Number(last?.timestamp || 0) - Number(first?.timestamp || 0));
+        if (!force && durationMs < 140) {
+          return;
+        }
+        let minX = Number(first?.x || 0);
+        let maxX = minX;
+        let minY = Number(first?.y || 0);
+        let maxY = minY;
+        let totalDistance = 0;
+        let centroidX = 0;
+        let centroidY = 0;
+        for (let index = 0; index < points.length; index += 1) {
+          const point = points[index];
+          const x = Number(point?.x || 0);
+          const y = Number(point?.y || 0);
+          centroidX += x;
+          centroidY += y;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+          if (index > 0) {
+            const previous = points[index - 1];
+            totalDistance += Math.hypot(x - Number(previous?.x || 0), y - Number(previous?.y || 0));
+          }
+        }
+        const pointCount = Math.max(1, points.length);
+        centroidX /= pointCount;
+        centroidY /= pointCount;
+        const extent = Math.max(maxX - minX, maxY - minY, totalDistance * 0.24);
+        if (extent < 18 || totalDistance < 24) {
+          resetOrbHumanSnippetCapture();
+          return;
+        }
+        const normalizedPoints = points
+          .slice(0, 24)
+          .map((point) => ({
+            t: clamp((Number(point?.timestamp || 0) - Number(first?.timestamp || 0)) / durationMs, 0, 1),
+            dx: Number((Number(point?.x || 0) - centroidX).toFixed(3)),
+            dy: Number((Number(point?.y || 0) - centroidY).toFixed(3)),
+          }));
+        if (normalizedPoints.length < config.minPoints) {
+          resetOrbHumanSnippetCapture();
+          return;
+        }
+        const snippet = {
+          durationMs: Math.round(durationMs),
+          totalDistance: Number(totalDistance.toFixed(3)),
+          extent: Number(extent.toFixed(3)),
+          points: normalizedPoints,
+        };
+        orbHumanMotionProfile.snippetLibrary.push(snippet);
+        if (orbHumanMotionProfile.snippetLibrary.length > config.maxSnippets) {
+          orbHumanMotionProfile.snippetLibrary = orbHumanMotionProfile.snippetLibrary.slice(-config.maxSnippets);
+        }
+        resetOrbHumanSnippetCapture();
+        persistOrbHumanMotionProfile();
+      }
+
+      function recordOrbHumanTracePoint({ x, y, timestamp }) {
+        const nextX = Number(x);
+        const nextY = Number(y);
+        const nextTimestamp = Number(timestamp);
+        if (!Number.isFinite(nextX) || !Number.isFinite(nextY) || !Number.isFinite(nextTimestamp)) {
+          return;
+        }
+        const config = getOrbAutonomousReplayConfig();
+        const capture = orbHumanMotionProfile.capture && typeof orbHumanMotionProfile.capture === "object"
+          ? orbHumanMotionProfile.capture
+          : { points: [], startedAt: 0, lastTimestamp: 0 };
+        const points = Array.isArray(capture.points) ? capture.points : [];
+        const gapMs = points.length > 0 ? nextTimestamp - Number(capture.lastTimestamp || nextTimestamp) : 0;
+        if (points.length > 0 && gapMs > Math.max(220, orbHumanMotionProfile.avgPauseMs * 0.9)) {
+          finalizeOrbHumanSnippetCapture(true);
+        }
+        if (!Array.isArray(orbHumanMotionProfile.capture.points)) {
+          resetOrbHumanSnippetCapture();
+        }
+        if (orbHumanMotionProfile.capture.points.length === 0) {
+          orbHumanMotionProfile.capture.startedAt = nextTimestamp;
+        }
+        const previousPoint = orbHumanMotionProfile.capture.points[orbHumanMotionProfile.capture.points.length - 1];
+        const drift = previousPoint
+          ? Math.hypot(nextX - Number(previousPoint.x || 0), nextY - Number(previousPoint.y || 0))
+          : 0;
+        if (!previousPoint || drift >= 2.5 || gapMs >= 28) {
+          orbHumanMotionProfile.capture.points.push({ x: nextX, y: nextY, timestamp: nextTimestamp });
+          if (orbHumanMotionProfile.capture.points.length > 36) {
+            orbHumanMotionProfile.capture.points = orbHumanMotionProfile.capture.points.slice(-36);
+          }
+        }
+        orbHumanMotionProfile.capture.lastTimestamp = nextTimestamp;
+        const captureDuration = nextTimestamp - Number(orbHumanMotionProfile.capture.startedAt || nextTimestamp);
+        if (captureDuration >= config.windowMs) {
+          finalizeOrbHumanSnippetCapture(true);
+          orbHumanMotionProfile.capture.points = [{ x: nextX, y: nextY, timestamp: nextTimestamp }];
+          orbHumanMotionProfile.capture.startedAt = nextTimestamp;
+          orbHumanMotionProfile.capture.lastTimestamp = nextTimestamp;
+        }
+      }
+
+      function sampleOrbSnippetPoint(snippet, progress) {
+        const points = Array.isArray(snippet?.points) ? snippet.points : [];
+        if (!points.length) {
+          return { dx: 0, dy: 0 };
+        }
+        if (points.length === 1) {
+          return { dx: Number(points[0].dx || 0), dy: Number(points[0].dy || 0) };
+        }
+        const target = clamp(progress, 0, 1);
+        if (target <= Number(points[0].t || 0)) {
+          return { dx: Number(points[0].dx || 0), dy: Number(points[0].dy || 0) };
+        }
+        for (let index = 1; index < points.length; index += 1) {
+          const previous = points[index - 1];
+          const current = points[index];
+          const previousT = Number(previous?.t || 0);
+          const currentT = Number(current?.t || 0);
+          if (target > currentT || currentT <= previousT) {
+            continue;
+          }
+          const t = clamp((target - previousT) / Math.max(0.0001, currentT - previousT), 0, 1);
+          return {
+            dx: Number(previous.dx || 0) + (Number(current.dx || 0) - Number(previous.dx || 0)) * t,
+            dy: Number(previous.dy || 0) + (Number(current.dy || 0) - Number(previous.dy || 0)) * t,
+          };
+        }
+        const last = points[points.length - 1];
+        return { dx: Number(last?.dx || 0), dy: Number(last?.dy || 0) };
+      }
+
+      function resolveOrbAutonomousReplayOffset(timestamp, motionProfile) {
+        const config = getOrbAutonomousReplayConfig();
+        if (!config.enabled || motionProfile.cursorLock) {
+          orbAutonomousReplay.active = false;
+          return null;
+        }
+        const snippets = Array.isArray(orbHumanMotionProfile.snippetLibrary)
+          ? orbHumanMotionProfile.snippetLibrary.filter((snippet) => snippet && typeof snippet === "object" && Array.isArray(snippet.points) && snippet.points.length >= config.minPoints)
+          : [];
+        if (snippets.length < 1 || orbHumanMotionProfile.sampleCount < 12) {
+          orbAutonomousReplay.active = false;
+          return null;
+        }
+        if (!orbAutonomousReplay.active) {
+          if (!orbAutonomousReplay.nextStartAt) {
+            orbAutonomousReplay.nextStartAt = timestamp + config.pauseMinMs;
+          }
+          if (timestamp < orbAutonomousReplay.nextStartAt) {
+            return null;
+          }
+          const snippet = snippets[Math.floor(Math.random() * snippets.length)] || null;
+          if (!snippet) {
+            return null;
+          }
+          const reduced = isReducedMotionEnabled();
+          const pauseRange = Math.max(config.pauseMinMs, config.pauseMaxMs) - config.pauseMinMs;
+          orbAutonomousReplay = {
+            active: true,
+            nextStartAt: timestamp + config.pauseMinMs,
+            startAt: timestamp,
+            durationMs: Math.max(
+              220,
+              Math.min(
+                reduced ? 820 : 1400,
+                Number(snippet.durationMs || config.windowMs) * (reduced ? 0.78 : 1),
+              ),
+            ),
+            snippet,
+            scale: clamp(
+              config.scaleMin + Math.random() * Math.max(0.02, config.scaleMax - config.scaleMin),
+              reduced ? 0.38 : config.scaleMin,
+              reduced ? 0.82 : config.scaleMax,
+            ),
+            rotation: (Math.random() - 0.5) * Math.PI * (reduced ? 0.36 : 0.92),
+            mirrorX: Math.random() > 0.5 ? 1 : -1,
+            mirrorY: Math.random() > 0.62 ? -1 : 1,
+            offsetX: (Math.random() - 0.5) * config.wanderPx,
+            offsetY: (Math.random() - 0.5) * config.wanderPx * 0.68,
+          };
+        }
+        const replayDuration = Math.max(220, Number(orbAutonomousReplay.durationMs || 0));
+        const progress = clamp((timestamp - orbAutonomousReplay.startAt) / replayDuration, 0, 1);
+        if (progress >= 1) {
+          const pauseRange = Math.max(0, config.pauseMaxMs - config.pauseMinMs);
+          orbAutonomousReplay.active = false;
+          orbAutonomousReplay.nextStartAt = timestamp + config.pauseMinMs + Math.random() * pauseRange;
+          return null;
+        }
+        const point = sampleOrbSnippetPoint(orbAutonomousReplay.snippet, progress);
+        const envelope = Math.sin(progress * Math.PI);
+        const cos = Math.cos(orbAutonomousReplay.rotation || 0);
+        const sin = Math.sin(orbAutonomousReplay.rotation || 0);
+        const localX = Number(point.dx || 0) * orbAutonomousReplay.scale * orbAutonomousReplay.mirrorX;
+        const localY = Number(point.dy || 0) * orbAutonomousReplay.scale * orbAutonomousReplay.mirrorY;
+        return {
+          x: ((localX * cos - localY * sin) + Number(orbAutonomousReplay.offsetX || 0)) * envelope,
+          y: ((localX * sin + localY * cos) + Number(orbAutonomousReplay.offsetY || 0)) * envelope,
+          bias: isReducedMotionEnabled() ? config.bias * 0.44 : config.bias,
+        };
       }
 
       function titleCase(value) {
@@ -5989,6 +6270,7 @@
         );
         if (learnFromTrace) {
           orbMotion.lastMouseActivityAt = timestamp;
+          recordOrbHumanTracePoint({ x: nextX, y: nextY, timestamp });
           recordOrbMouseTrace({
             timestamp,
             dt: Math.max(16, timestamp - previousActivityAt),
@@ -6411,7 +6693,17 @@
           const anchorX = useCursorAnchor && pointerFresh ? orbMotion.pointerX : fallback.x;
           const anchorY = useCursorAnchor && pointerFresh ? orbMotion.pointerY : fallback.y;
           const speedFactor = useCursorAnchor ? Math.min(1, orbMotion.speed / 18) : 0;
-          const humanOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
+          const ambientOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
+          const autonomousReplay = !useCursorAnchor && !orbSystemInput.humanActive
+            ? resolveOrbAutonomousReplayOffset(timestamp, motionProfile)
+            : null;
+          const replayBias = clamp(Number(autonomousReplay?.bias || 0), 0, 1);
+          const humanOffset = autonomousReplay
+            ? {
+              x: ambientOffset.x * (1 - replayBias) + Number(autonomousReplay.x || 0) * replayBias,
+              y: ambientOffset.y * (1 - replayBias) + Number(autonomousReplay.y || 0) * replayBias,
+            }
+            : ambientOffset;
           const leadStrength = useCursorAnchor ? motionProfile.leadStrength * (0.6 + speedFactor * 0.4) : 0;
           const leadX = useCursorAnchor
             ? Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVx * leadStrength))
@@ -10920,6 +11212,7 @@
           window.clearInterval(orbPerceptionSyncTimer);
           orbPerceptionSyncTimer = null;
         }
+        finalizeOrbHumanSnippetCapture(true);
         persistOrbHumanMotionProfile(true);
       });
 

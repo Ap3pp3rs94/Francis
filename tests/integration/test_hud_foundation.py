@@ -3177,6 +3177,9 @@ def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> 
     assert body["movement"]["profile"] == "cursor_ride"
     assert body["movement"]["cursor_lock"] is True
     assert body["movement"]["lead_style"] == "predictive_commit"
+    assert body["movement"]["autonomous_replay_enabled"] is True
+    assert body["movement"]["autonomous_replay_window_ms"] == 880
+    assert body["movement"]["autonomous_replay_max_snippets"] == 18
     assert body["handback"]["ritual"] == "return_to_ambient"
     assert body["handback"]["return_profile"] == "release_arc"
     assert body["handback"]["duration_ms"] == 1480

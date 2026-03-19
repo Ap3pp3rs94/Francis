@@ -151,6 +151,16 @@ def _movement_profile(
         "human_follow_trail_spacing_ms": 18,
         "human_follow_trail_opacity": 0.24,
         "human_follow_trail_decay": 0.86,
+        "autonomous_replay_enabled": True,
+        "autonomous_replay_window_ms": 880,
+        "autonomous_replay_max_snippets": 18,
+        "autonomous_replay_min_points": 5,
+        "autonomous_replay_scale_min": 0.62,
+        "autonomous_replay_scale_max": 1.18,
+        "autonomous_replay_wander_px": 64,
+        "autonomous_replay_pause_min_ms": 180,
+        "autonomous_replay_pause_max_ms": 820,
+        "autonomous_replay_bias": 0.72,
     }
     if cursor_authority_eligible:
         return {
