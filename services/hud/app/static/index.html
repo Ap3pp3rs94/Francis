@@ -7527,25 +7527,40 @@
             humanOffset.y +
             orbMotion.correctionY -
             (freeRoamMotion ? 0 : motionProfile.interjectionBias * size * 0.12);
-          const rideProfile = motionProfile.profile === "cursor_ride";
-          const stiffness = Math.min(
-            rideProfile ? 0.72 : 0.58,
-            motionProfile.settleStrength + speedFactor * (rideProfile ? 0.09 : 0.06),
-          );
-          const damping = Math.max(rideProfile ? 0.52 : 0.58, motionProfile.damping - speedFactor * 0.04);
-          orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
-          orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
-          orbMotion.vx *= damping;
-          orbMotion.vy *= damping;
-          if (motionProfile.cursorLock) {
-            const lockDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
-            if (lockDistance < size * motionProfile.lockRadius * 0.08) {
-              orbMotion.vx *= 0.86;
-              orbMotion.vy *= 0.86;
+          if (freeRoamMotion) {
+            const freeRoamDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
+            const freeRoamGlide = clamp(
+              0.032 + Math.min(0.052, freeRoamDistance / 2200),
+              0.032,
+              0.084,
+            );
+            const nextX = orbMotion.x + (orbMotion.targetX - orbMotion.x) * freeRoamGlide;
+            const nextY = orbMotion.y + (orbMotion.targetY - orbMotion.y) * freeRoamGlide;
+            orbMotion.vx = (nextX - orbMotion.x) * 0.72;
+            orbMotion.vy = (nextY - orbMotion.y) * 0.72;
+            orbMotion.x = nextX;
+            orbMotion.y = nextY;
+          } else {
+            const rideProfile = motionProfile.profile === "cursor_ride";
+            const stiffness = Math.min(
+              rideProfile ? 0.72 : 0.58,
+              motionProfile.settleStrength + speedFactor * (rideProfile ? 0.09 : 0.06),
+            );
+            const damping = Math.max(rideProfile ? 0.52 : 0.58, motionProfile.damping - speedFactor * 0.04);
+            orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
+            orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
+            orbMotion.vx *= damping;
+            orbMotion.vy *= damping;
+            if (motionProfile.cursorLock) {
+              const lockDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
+              if (lockDistance < size * motionProfile.lockRadius * 0.08) {
+                orbMotion.vx *= 0.86;
+                orbMotion.vy *= 0.86;
+              }
             }
+            orbMotion.x += orbMotion.vx;
+            orbMotion.y += orbMotion.vy;
           }
-          orbMotion.x += orbMotion.vx;
-          orbMotion.y += orbMotion.vy;
           const clampedPoint = clampOrbRoamPoint(orbMotion.x, orbMotion.y, size);
           orbMotion.x = clampedPoint.x;
           orbMotion.y = clampedPoint.y;
