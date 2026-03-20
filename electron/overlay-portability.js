@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { normalizeStartupProfile } = require("./startup-profile");
+const { normalizeOrbBehaviorMode } = require("./orb-behavior");
 const {
   normalizeContrastMode,
   normalizeDensityMode,
@@ -159,6 +160,7 @@ function buildOverlayExportPayload({
     }),
     shell: {
       startupProfile: normalizeStartupProfile(preferences.startupProfile),
+      orbBehaviorMode: normalizeOrbBehaviorMode(preferences.orbBehaviorMode),
       motionMode: normalizeMotionMode(preferences.motionMode),
       contrastMode: normalizeContrastMode(preferences.contrastMode),
       densityMode: normalizeDensityMode(preferences.densityMode),
@@ -197,6 +199,7 @@ function extractPortablePreferences(raw, options = {}) {
 
   return {
     startupProfile: normalizeStartupProfile(raw.shell.startupProfile),
+    orbBehaviorMode: normalizeOrbBehaviorMode(raw.shell.orbBehaviorMode),
     motionMode: normalizeMotionMode(raw.shell.motionMode),
     contrastMode: normalizeContrastMode(raw.shell.contrastMode),
     densityMode: normalizeDensityMode(raw.shell.densityMode),

@@ -45,6 +45,24 @@ function detectHumanKeyboardReturn({ live = false, idleSeconds = 0, lastSyntheti
   return Number(idleSeconds || 0) === 0;
 }
 
+function detectHumanIdleRegression({
+  live = false,
+  idleSeconds = 0,
+  lastObservedIdleSeconds = 0,
+  lastSyntheticAtMs = 0,
+  nowMs = Date.now(),
+  syntheticGraceMs = 1500,
+  minimumDropSeconds = 1,
+} = {}) {
+  if (!live) {
+    return false;
+  }
+  if (Number(nowMs || 0) - Number(lastSyntheticAtMs || 0) <= Number(syntheticGraceMs || 1500)) {
+    return false;
+  }
+  return Number(lastObservedIdleSeconds || 0) - Number(idleSeconds || 0) >= Number(minimumDropSeconds || 1);
+}
+
 function detectHumanActivitySignal({
   live = false,
   lastHumanActivitySignalAtMs = 0,
@@ -69,6 +87,7 @@ module.exports = {
   canEngageOrbAuthority,
   detectHumanActivitySignal,
   detectHumanCursorReturn,
+  detectHumanIdleRegression,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
 };

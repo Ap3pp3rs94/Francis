@@ -5,6 +5,7 @@ const {
   canEngageOrbAuthority,
   detectHumanActivitySignal,
   detectHumanCursorReturn,
+  detectHumanIdleRegression,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
 } = require("./orb-authority");
@@ -48,6 +49,29 @@ test("detectHumanCursorReturn ignores synthetic grace and catches cursor deviati
 test("detectHumanKeyboardReturn waits out grace and idle reset", () => {
   assert.equal(detectHumanKeyboardReturn({ live: true, idleSeconds: 0, lastSyntheticAtMs: 900, nowMs: 1000 }), false);
   assert.equal(detectHumanKeyboardReturn({ live: true, idleSeconds: 0, lastSyntheticAtMs: 0, nowMs: 2500 }), true);
+});
+
+test("detectHumanIdleRegression catches real idle drops after synthetic grace", () => {
+  assert.equal(
+    detectHumanIdleRegression({
+      live: true,
+      idleSeconds: 5,
+      lastObservedIdleSeconds: 21,
+      lastSyntheticAtMs: 0,
+      nowMs: 2500,
+    }),
+    true,
+  );
+  assert.equal(
+    detectHumanIdleRegression({
+      live: true,
+      idleSeconds: 5,
+      lastObservedIdleSeconds: 21,
+      lastSyntheticAtMs: 2200,
+      nowMs: 2500,
+    }),
+    false,
+  );
 });
 
 test("detectHumanActivitySignal respects real activity after synthetic input", () => {

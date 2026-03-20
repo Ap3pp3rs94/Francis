@@ -3,11 +3,23 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from francis_brain.ledger import RunLedger
+from francis_core.workspace_fs import WorkspaceFS
+from francis_skills.executor import SkillExecutor
+from services.orchestrator.app.control_state import (
+    DEFAULT_ALLOWED_APPS,
+    set_mode as set_control_mode,
+    set_scope as set_control_scope,
+)
+import services.orchestrator.app.routes.control as control_routes
+import services.orchestrator.app.routes.lens as lens_routes
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -54,6 +66,19 @@ def _ensure_takeover_idle(client: TestClient) -> None:
         )
 
 
+def _wait_for_pilot_indicator(client: TestClient, expected_status: str, *, attempts: int = 20, delay_seconds: float = 0.1) -> dict:
+    normalized_expected = str(expected_status).strip().lower()
+    latest: dict = {}
+    for _ in range(max(1, attempts)):
+        response = client.get("/lens/state")
+        assert response.status_code == 200
+        latest = response.json().get("control_surface", {}).get("pilot_indicator", {})
+        if str(latest.get("status", "")).strip().lower() == normalized_expected:
+            return latest
+        time.sleep(max(0.0, delay_seconds))
+    return latest
+
+
 def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
     apps = [str(item) for item in scope.get("apps", []) if isinstance(item, str)]
     lowered = [item.lower() for item in apps]
@@ -61,120 +86,227 @@ def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
         if app_name.lower() not in lowered:
             apps.append(app_name)
             lowered.append(app_name.lower())
+    repo_root = str(Path(__file__).resolve().parents[2])
+    workspace_root = str((Path(__file__).resolve().parents[2] / "workspace").resolve())
     return {
-        "repos": scope.get("repos", []),
-        "workspaces": scope.get("workspaces", []),
+        "repos": [repo_root],
+        "workspaces": [workspace_root],
         "apps": apps,
     }
 
 
-def test_receipts_and_run_lookup() -> None:
-    c = TestClient(app)
-
-    mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
-    assert mode.status_code == 200
-
-    create = c.post(
-        "/missions",
-        json={"title": f"Receipt-{uuid4()}", "objective": "Receipts", "steps": ["s1"]},
+def _bind_live_lens_routes() -> tuple[Path, Path, WorkspaceFS, RunLedger, SkillExecutor, str]:
+    workspace_root = (Path(__file__).resolve().parents[2] / "workspace").resolve()
+    repo_root = workspace_root.parent.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
     )
-    assert create.status_code == 200
-    run_id = create.json()["run_id"]
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
+    skill_executor = SkillExecutor.with_defaults(fs=fs, repo_root=repo_root)
+    previous = (
+        lens_routes._workspace_root,
+        lens_routes._repo_root,
+        lens_routes._fs,
+        lens_routes._ledger,
+        lens_routes._skill_executor,
+        lens_routes._repo_drilldown_state_path,
+    )
+    lens_routes._workspace_root = workspace_root
+    lens_routes._repo_root = repo_root
+    lens_routes._fs = fs
+    lens_routes._ledger = ledger
+    lens_routes._skill_executor = skill_executor
+    lens_routes._repo_drilldown_state_path = "lens/repo_drilldown.json"
+    return previous
 
-    latest = c.get("/receipts/latest")
-    assert latest.status_code == 200
-    latest_payload = latest.json()
-    assert latest_payload["status"] == "ok"
-    summary = latest_payload["summary"]
-    assert summary["evidence_scope"] == "workspace"
-    assert "fabric" in summary
-    assert "trust" in summary["fabric"]
-    receipts = latest_payload["receipts"]
-    assert "ledger" in receipts
-    assert "decisions" in receipts
-    assert "logs" in receipts
 
-    run = c.get(f"/runs/{run_id}")
-    assert run.status_code == 200
-    run_payload = run.json()
-    assert run_payload["status"] == "ok"
-    assert run_payload["run_id"] == run_id
-    assert run_payload["count"] >= 1
-    run_summary = run_payload["summary"]
-    assert run_summary["evidence_scope"] == "run"
-    assert "fabric" in run_summary
-    assert "trust" in run_summary["fabric"]
+def _restore_lens_routes(previous: tuple[Path, Path, WorkspaceFS, RunLedger, SkillExecutor, str]) -> None:
+    (
+        lens_routes._workspace_root,
+        lens_routes._repo_root,
+        lens_routes._fs,
+        lens_routes._ledger,
+        lens_routes._skill_executor,
+        lens_routes._repo_drilldown_state_path,
+    ) = previous
+
+
+def _bind_live_control_routes() -> tuple[Path, Path, WorkspaceFS, RunLedger]:
+    workspace_root = (Path(__file__).resolve().parents[2] / "workspace").resolve()
+    repo_root = workspace_root.parent.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
+    previous = (
+        control_routes._workspace_root,
+        control_routes._repo_root,
+        control_routes._fs,
+        control_routes._ledger,
+    )
+    control_routes._workspace_root = workspace_root
+    control_routes._repo_root = repo_root
+    control_routes._fs = fs
+    control_routes._ledger = ledger
+    return previous
+
+
+def _restore_control_routes(previous: tuple[Path, Path, WorkspaceFS, RunLedger]) -> None:
+    (
+        control_routes._workspace_root,
+        control_routes._repo_root,
+        control_routes._fs,
+        control_routes._ledger,
+    ) = previous
+
+
+@pytest.fixture(autouse=True)
+def _live_lens_routes() -> None:
+    lens_previous = _bind_live_lens_routes()
+    control_previous = _bind_live_control_routes()
+    try:
+        set_control_mode(
+            control_routes._fs,
+            repo_root=control_routes._repo_root,
+            workspace_root=control_routes._workspace_root,
+            mode="pilot",
+            kill_switch=False,
+        )
+        set_control_scope(
+            control_routes._fs,
+            repo_root=control_routes._repo_root,
+            workspace_root=control_routes._workspace_root,
+            repos=[str(control_routes._repo_root.resolve())],
+            workspaces=[str(control_routes._workspace_root.resolve())],
+            apps=list(DEFAULT_ALLOWED_APPS),
+        )
+        control_routes._save_takeover_state(control_routes._default_takeover_state())
+        with TestClient(app) as baseline_client:
+            _ensure_takeover_idle(baseline_client)
+        yield
+    finally:
+        _restore_lens_routes(lens_previous)
+        _restore_control_routes(control_previous)
+
+
+def test_receipts_and_run_lookup() -> None:
+    with TestClient(app) as c:
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
+        try:
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["missions", "receipts", "lens"]))
+
+            create = c.post(
+                "/missions",
+                json={"title": f"Receipt-{uuid4()}", "objective": "Receipts", "steps": ["s1"]},
+            )
+            assert create.status_code == 200
+            run_id = create.json()["run_id"]
+
+            latest = c.get("/receipts/latest")
+            assert latest.status_code == 200
+            latest_payload = latest.json()
+            assert latest_payload["status"] == "ok"
+            summary = latest_payload["summary"]
+            assert summary["evidence_scope"] == "workspace"
+            assert "fabric" in summary
+            assert "trust" in summary["fabric"]
+            receipts = latest_payload["receipts"]
+            assert "ledger" in receipts
+            assert "decisions" in receipts
+            assert "logs" in receipts
+
+            run = c.get(f"/runs/{run_id}")
+            assert run.status_code == 200
+            run_payload = run.json()
+            assert run_payload["status"] == "ok"
+            assert run_payload["run_id"] == run_id
+            assert run_payload["count"] >= 1
+            run_summary = run_payload["summary"]
+            assert run_summary["evidence_scope"] == "run"
+            assert "fabric" in run_summary
+            assert "trust" in run_summary["fabric"]
+        finally:
+            _set_scope(c, original_scope)
+            _set_mode(
+                c,
+                str(original_mode.get("mode", "pilot")),
+                kill_switch=bool(original_mode.get("kill_switch", False)),
+            )
 
 
 def test_receipts_and_trace_surfaces_expose_handback_summary() -> None:
-    c = TestClient(app)
-    original_mode = _get_mode(c)
-    original_scope = _get_scope(c)
-    try:
-        _ensure_takeover_idle(c)
-        _set_mode(c, "assist", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["control", "receipts", "missions", "approvals", "forge", "lens"]))
+    with TestClient(app) as c:
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
+        try:
+            _ensure_takeover_idle(c)
+            _set_mode(c, "assist", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["control", "receipts", "missions", "approvals", "forge", "lens"]))
 
-        requested = c.post(
-            "/control/takeover/request",
-            json={"objective": f"Receipt handback {uuid4()}", "reason": "receipt handback test"},
-        )
-        assert requested.status_code == 200
+            requested = c.post(
+                "/control/takeover/request",
+                json={"objective": f"Receipt handback {uuid4()}", "reason": "receipt handback test"},
+            )
+            assert requested.status_code == 200
 
-        confirmed = c.post(
-            "/control/takeover/confirm",
-            json={"confirm": True, "mode": "pilot", "reason": "receipt confirm"},
-        )
-        assert confirmed.status_code == 200
+            confirmed = c.post(
+                "/control/takeover/confirm",
+                json={"confirm": True, "mode": "pilot", "reason": "receipt confirm"},
+            )
+            assert confirmed.status_code == 200
 
-        handed_back = c.post(
-            "/control/takeover/handback",
-            json={
-                "summary": "Returned authority after verification.",
-                "verification": {"pytest": "pass"},
-                "pending_approvals": 1,
-                "mode": "assist",
-            },
-        )
-        assert handed_back.status_code == 200
-        takeover = handed_back.json()["takeover"]
-        handback_run_id = str(takeover.get("handback_run_id", "")).strip()
-        handback_trace_id = str(takeover.get("handback_trace_id", "")).strip()
-        assert handback_run_id
-        assert handback_trace_id
+            handed_back = c.post(
+                "/control/takeover/handback",
+                json={
+                    "summary": "Returned authority after verification.",
+                    "verification": {"pytest": "pass"},
+                    "pending_approvals": 1,
+                    "mode": "assist",
+                },
+            )
+            assert handed_back.status_code == 200
+            takeover = handed_back.json()["takeover"]
+            handback_run_id = str(takeover.get("handback_run_id", "")).strip()
+            handback_trace_id = str(takeover.get("handback_trace_id", "")).strip()
+            assert handback_run_id
+            assert handback_trace_id
 
-        latest = c.get("/receipts/latest")
-        assert latest.status_code == 200
-        latest_summary = latest.json()["summary"]["handback"]
-        assert latest_summary["available"] is True
-        assert latest_summary["scope_match"] is True
-        assert latest_summary["summary"] == "Returned authority after verification."
-        assert latest_summary["run_id"] == handback_run_id
-        assert latest_summary["pending_approvals"] == 1
+            latest = c.get("/receipts/latest")
+            assert latest.status_code == 200
+            latest_summary = latest.json()["summary"]["handback"]
+            assert latest_summary["available"] is True
+            assert latest_summary["scope_match"] is True
+            assert latest_summary["summary"] == "Returned authority after verification."
+            assert latest_summary["run_id"] == handback_run_id
+            assert latest_summary["pending_approvals"] == 1
 
-        run = c.get(f"/runs/{handback_run_id}")
-        assert run.status_code == 200
-        run_summary = run.json()["summary"]["handback"]
-        assert run_summary["available"] is True
-        assert run_summary["scope_match"] is True
-        assert run_summary["summary"] == "Returned authority after verification."
-        assert run_summary["run_id"] == handback_run_id
+            run = c.get(f"/runs/{handback_run_id}")
+            assert run.status_code == 200
+            run_summary = run.json()["summary"]["handback"]
+            assert run_summary["available"] is True
+            assert run_summary["scope_match"] is True
+            assert run_summary["summary"] == "Returned authority after verification."
+            assert run_summary["run_id"] == handback_run_id
 
-        trace = c.get(f"/runs/trace/{handback_trace_id}", params={"limit": 100})
-        assert trace.status_code == 200
-        trace_summary = trace.json()["summary"]["handback"]
-        assert trace_summary["available"] is True
-        assert trace_summary["scope_match"] is True
-        assert trace_summary["trace_id"] == handback_trace_id
-        assert trace_summary["trust"] in {"Confirmed", "Likely", "Uncertain"}
-    finally:
-        _ensure_takeover_idle(c)
-        _set_scope(c, original_scope)
-        _set_mode(
-            c,
-            str(original_mode.get("mode", "pilot")),
-            kill_switch=bool(original_mode.get("kill_switch", False)),
-        )
+            trace = c.get(f"/runs/trace/{handback_trace_id}", params={"limit": 100})
+            assert trace.status_code == 200
+            trace_summary = trace.json()["summary"]["handback"]
+            assert trace_summary["available"] is True
+            assert trace_summary["scope_match"] is True
+            assert trace_summary["trace_id"] == handback_trace_id
+            assert trace_summary["trust"] in {"Confirmed", "Likely", "Uncertain"}
+        finally:
+            _ensure_takeover_idle(c)
+            _set_scope(c, original_scope)
+            _set_mode(
+                c,
+                str(original_mode.get("mode", "pilot")),
+                kill_switch=bool(original_mode.get("kill_switch", False)),
+            )
 
 
 def test_receipts_trust_latest_endpoint_available() -> None:
@@ -221,57 +353,53 @@ def test_lens_state_and_actions() -> None:
 
 
 def test_lens_execute_control_panic_resume_and_indicator() -> None:
-    c = TestClient(app)
-    original_mode = _get_mode(c)
-    original_scope = _get_scope(c)
-    try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["lens", "control", "missions", "receipts"]))
+    with TestClient(app) as c:
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
+        try:
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["lens", "control", "missions", "receipts"]))
 
-        dry_run = c.post(
-            "/lens/actions/execute",
-            json={"kind": "control.panic", "dry_run": True, "args": {"reason": "dry run"}},
-        )
-        assert dry_run.status_code == 200
-        assert dry_run.json()["status"] == "dry_run"
-        assert _get_mode(c).get("kill_switch") is False
+            dry_run = c.post(
+                "/lens/actions/execute",
+                json={"kind": "control.panic", "dry_run": True, "args": {"reason": "dry run"}},
+            )
+            assert dry_run.status_code == 200
+            assert dry_run.json()["status"] == "dry_run"
+            assert _get_mode(c).get("kill_switch") is False
 
-        panic = c.post(
-            "/lens/actions/execute",
-            json={"kind": "control.panic", "args": {"reason": "lens panic"}},
-        )
-        assert panic.status_code == 200
-        panic_payload = panic.json()
-        assert panic_payload["status"] == "ok"
-        assert panic_payload["result"]["after"]["kill_switch"] is True
+            panic = c.post(
+                "/lens/actions/execute",
+                json={"kind": "control.panic", "args": {"reason": "lens panic"}},
+            )
+            assert panic.status_code == 200
+            panic_payload = panic.json()
+            assert panic_payload["status"] == "ok"
+            assert panic_payload["result"]["after"]["kill_switch"] is True
 
-        state_after_panic = c.get("/lens/state")
-        assert state_after_panic.status_code == 200
-        indicator = state_after_panic.json().get("control_surface", {}).get("pilot_indicator", {})
-        assert indicator.get("status") == "paused"
+            indicator = _wait_for_pilot_indicator(c, "paused")
+            assert indicator.get("status") == "paused"
 
-        blocked = c.post(
-            "/missions",
-            json={"title": f"LensPanic-{uuid4()}", "objective": "blocked", "steps": ["s1"]},
-        )
-        assert blocked.status_code == 403
+            blocked = c.post(
+                "/missions",
+                json={"title": f"LensPanic-{uuid4()}", "objective": "blocked", "steps": ["s1"]},
+            )
+            assert blocked.status_code == 403
 
-        resume = c.post(
-            "/lens/actions/execute",
-            json={"kind": "control.resume", "args": {"mode": "pilot", "reason": "lens resume"}},
-        )
-        assert resume.status_code == 200
-        resume_payload = resume.json()
-        assert resume_payload["status"] == "ok"
-        assert resume_payload["result"]["after"]["kill_switch"] is False
+            resume = c.post(
+                "/lens/actions/execute",
+                json={"kind": "control.resume", "args": {"mode": "pilot", "reason": "lens resume"}},
+            )
+            assert resume.status_code == 200
+            resume_payload = resume.json()
+            assert resume_payload["status"] == "ok"
+            assert resume_payload["result"]["after"]["kill_switch"] is False
 
-        state_after_resume = c.get("/lens/state")
-        assert state_after_resume.status_code == 200
-        indicator_after_resume = state_after_resume.json().get("control_surface", {}).get("pilot_indicator", {})
-        assert indicator_after_resume.get("status") == "on"
-    finally:
-        _set_scope(c, original_scope)
-        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+            indicator_after_resume = _wait_for_pilot_indicator(c, "on")
+            assert indicator_after_resume.get("status") == "on"
+        finally:
+            _set_scope(c, original_scope)
+            _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
 def test_lens_execute_worker_cycle_dry_run_records_trace_receipt() -> None:

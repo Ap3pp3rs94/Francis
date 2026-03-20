@@ -6,6 +6,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from francis_brain.ledger import RunLedger
+from francis_core.workspace_fs import WorkspaceFS
+import services.orchestrator.app.routes.dependencies as dependency_routes
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -40,9 +43,11 @@ def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
         if app_name.lower() not in lowered:
             apps.append(app_name)
             lowered.append(app_name.lower())
+    repo_root = str(Path(__file__).resolve().parents[2])
+    workspace_root = str((Path(__file__).resolve().parents[2] / "workspace").resolve())
     return {
-        "repos": scope.get("repos", []),
-        "workspaces": scope.get("workspaces", []),
+        "repos": [repo_root],
+        "workspaces": [workspace_root],
         "apps": apps,
     }
 
@@ -57,7 +62,10 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
         stripped = line.strip()
         if not stripped:
             continue
-        payload = json.loads(stripped)
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
         if isinstance(payload, dict):
             rows.append(payload)
     return rows
@@ -98,6 +106,7 @@ def test_dependency_library_route_returns_structured_surface() -> None:
 
 def test_dependency_quarantine_and_revoke_workflow() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
+    repo_root = workspace.parent.resolve()
     registry_path = workspace / "dependencies" / "registry.json"
     approvals_path = workspace / "approvals" / "requests.jsonl"
     decisions_path = workspace / "journals" / "decisions.jsonl"
@@ -110,8 +119,21 @@ def test_dependency_quarantine_and_revoke_workflow() -> None:
     decisions_before = _read_text(decisions_path)
     run_ledger_before_exists = run_ledger_path.exists()
     run_ledger_before = _read_text(run_ledger_path)
+    route_workspace_before = dependency_routes._workspace_root
+    route_repo_before = dependency_routes._repo_root
+    route_fs_before = dependency_routes._fs
+    route_ledger_before = dependency_routes._ledger
+    fs = WorkspaceFS(
+        roots=[workspace.resolve()],
+        journal_path=(workspace / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
 
     try:
+        dependency_routes._workspace_root = workspace.resolve()
+        dependency_routes._repo_root = repo_root
+        dependency_routes._fs = fs
+        dependency_routes._ledger = ledger
         approvals_path.parent.mkdir(parents=True, exist_ok=True)
         approvals_path.write_text("", encoding="utf-8")
         decisions_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,6 +208,10 @@ def test_dependency_quarantine_and_revoke_workflow() -> None:
         assert quarantine_summary["dependency_id"] == "python:francis:fastapi"
         assert quarantine_summary["status"] == "quarantined"
     finally:
+        dependency_routes._workspace_root = route_workspace_before
+        dependency_routes._repo_root = route_repo_before
+        dependency_routes._fs = route_fs_before
+        dependency_routes._ledger = route_ledger_before
         _restore_text(registry_path, registry_before, registry_before_exists)
         _restore_text(approvals_path, approvals_before, approvals_before_exists)
         _restore_text(decisions_path, decisions_before, decisions_before_exists)

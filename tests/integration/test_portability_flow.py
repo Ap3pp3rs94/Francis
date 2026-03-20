@@ -27,7 +27,10 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
         stripped = line.strip()
         if not stripped:
             continue
-        parsed = json.loads(stripped)
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
         if isinstance(parsed, dict):
             rows.append(parsed)
     return rows
@@ -73,9 +76,11 @@ def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
         if app_name.lower() not in lowered:
             apps.append(app_name)
             lowered.append(app_name.lower())
+    repo_root = str(Path(__file__).resolve().parents[2])
+    workspace_root = str((Path(__file__).resolve().parents[2] / "workspace").resolve())
     return {
-        "repos": scope.get("repos", []),
-        "workspaces": scope.get("workspaces", []),
+        "repos": [repo_root],
+        "workspaces": [workspace_root],
         "apps": apps,
     }
 

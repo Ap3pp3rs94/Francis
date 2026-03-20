@@ -26,6 +26,7 @@ const {
 } = require("./session-state");
 const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
 const { normalizeStartupProfile, resolveStartupProfile } = require("./startup-profile");
+const { normalizeOrbBehaviorMode, resolveOrbBehaviorMode } = require("./orb-behavior");
 const { resolveBuildIdentity } = require("./build-info");
 const {
   buildDefaultUpdateState,
@@ -72,6 +73,7 @@ const {
   canEngageOrbAuthority,
   detectHumanActivitySignal,
   detectHumanCursorReturn,
+  detectHumanIdleRegression,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
 } = require("./orb-authority");
@@ -128,6 +130,7 @@ let orbAuthorityState = {
   eligible: false,
   live: false,
   idleSeconds: 0,
+  lastObservedIdleSeconds: 0,
   thresholdSeconds: 30,
   claimedCommandId: "",
   syntheticCursor: null,
@@ -384,6 +387,7 @@ function getOrbAuthoritySnapshot() {
     eligible: Boolean(orbAuthorityState.eligible),
     live: Boolean(orbAuthorityState.live),
     idleSeconds: Number(orbAuthorityState.idleSeconds || 0),
+    lastObservedIdleSeconds: Number(orbAuthorityState.lastObservedIdleSeconds || 0),
     thresholdSeconds: Number(orbAuthorityState.thresholdSeconds || 30),
     claimedCommandId: String(orbAuthorityState.claimedCommandId || ""),
     lastHumanActivitySignalAtMs: Number(orbAuthorityState.lastHumanActivitySignalAtMs || 0),
@@ -666,6 +670,7 @@ async function tickOrbAuthorityLoop() {
   if (orbAuthorityCommandPending) {
     return;
   }
+  let observedIdleSeconds = Number(orbAuthorityState.lastObservedIdleSeconds || 0);
   const hudState = getHudState();
   if (!hudState?.ready || !orbWindow || orbWindow.isDestroyed()) {
     return;
@@ -683,9 +688,10 @@ async function tickOrbAuthorityLoop() {
     );
     const eligible = Boolean(orbSurface?.operator_cursor_eligible);
     const now = Date.now();
+    observedIdleSeconds = Number(inputState?.idleSeconds || 0);
 
     orbAuthorityState.eligible = eligible;
-    orbAuthorityState.idleSeconds = Number(inputState?.idleSeconds || 0);
+    orbAuthorityState.idleSeconds = observedIdleSeconds;
     orbAuthorityState.thresholdSeconds = thresholdSeconds;
 
     if (
@@ -705,6 +711,13 @@ async function tickOrbAuthorityLoop() {
       detectHumanKeyboardReturn({
         live: orbAuthorityState.live,
         idleSeconds: inputState?.idleSeconds,
+        lastSyntheticAtMs: orbAuthorityState.lastSyntheticAtMs,
+        nowMs: now,
+      }) ||
+      detectHumanIdleRegression({
+        live: orbAuthorityState.live,
+        idleSeconds: observedIdleSeconds,
+        lastObservedIdleSeconds: orbAuthorityState.lastObservedIdleSeconds,
         lastSyntheticAtMs: orbAuthorityState.lastSyntheticAtMs,
         nowMs: now,
       })
@@ -759,6 +772,7 @@ async function tickOrbAuthorityLoop() {
   } catch (error) {
     log("Orb authority loop failed", error instanceof Error ? error.message : String(error));
   } finally {
+    orbAuthorityState.lastObservedIdleSeconds = observedIdleSeconds;
     orbAuthorityCommandPending = false;
   }
 }
@@ -782,11 +796,20 @@ function ensureOrbAuthorityLoop() {
   void tickOrbAuthorityLoop();
 }
 
-function getLifecycleState() {
+function getOrbBehaviorState(inputState = null) {
+  return resolveOrbBehaviorMode(overlayPreferences?.orbBehaviorMode, {
+    humanActive: Boolean(inputState?.humanActive),
+    authorityLive: Boolean(orbAuthorityState.live),
+    handback: orbAuthorityState.state === "handback",
+  });
+}
+
+function getLifecycleState(inputState = null) {
   const currentBuild = buildInfo || resolveBuildIdentity(app, __dirname);
   const login = getLaunchAtLoginState(app);
   const hudState = getHudState();
   const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
+  const orbBehavior = getOrbBehaviorState(inputState);
   const accessibility = buildAccessibilityState({
     motionMode: overlayPreferences?.motionMode,
     systemReducedMotion: readSystemReducedMotionPreference(),
@@ -941,6 +964,7 @@ function getLifecycleState() {
     buildIdentity: currentBuild.identity,
     launchAtLogin: login,
     startupProfile,
+    orbBehavior,
     accessibility,
     update,
     delivery,
@@ -978,7 +1002,8 @@ function getOverlayState(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
   const bounds = getWindowOrPreferenceBounds(safeWindow);
   const displayInfo = app.isReady() ? getDisplayInfo(safeWindow) : null;
-  const lifecycle = getLifecycleState();
+  const input = app.isReady() ? getOverlayInputState() : null;
+  const lifecycle = getLifecycleState(input);
   const lensVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
   const orbVisible = Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible());
 
@@ -993,6 +1018,7 @@ function getOverlayState(win = mainWindow) {
     bounds,
     targetDisplayId: displayInfo?.targetDisplayId ?? overlayPreferences?.targetDisplayId ?? null,
     activeDisplayId: displayInfo?.activeDisplayId ?? null,
+    orbBehavior: lifecycle.orbBehavior,
     preferencesPath: lifecycle.preferencesPath,
     launchOnStartup: lifecycle.launchAtLogin.enabled,
     recovery: overlayRecovery,
@@ -1002,7 +1028,7 @@ function getOverlayState(win = mainWindow) {
         toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
         toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
       },
-      input: getOverlayInputState(),
+      input,
       authority: getOrbAuthoritySnapshot(),
     };
   }
@@ -1046,6 +1072,30 @@ function setStartupProfile(profileId) {
     {
       tone: "low",
       detail: { requested: profileId, startupProfile: normalized },
+    },
+  );
+  notifyOverlayState(safeWindow);
+  return getOverlayState(safeWindow);
+}
+
+function setOrbBehaviorMode(modeId) {
+  const normalized = normalizeOrbBehaviorMode(modeId);
+  const safeWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (app.isReady()) {
+    overlayPreferences = persistOverlayPreferences(safeWindow, {
+      orbBehaviorMode: normalized,
+    });
+  }
+  log("Updated orb behavior mode", {
+    requested: modeId,
+    orbBehaviorMode: normalized,
+  });
+  recordLifecycleHistory(
+    "shell.orb_behavior",
+    `Orb behavior mode set to ${normalized}.`,
+    {
+      tone: normalized === "trace" ? "medium" : "low",
+      detail: { requested: modeId, orbBehaviorMode: normalized },
     },
   );
   notifyOverlayState(safeWindow);
@@ -1776,6 +1826,7 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
       ignoreMouseEvents: overrides.ignoreMouseEvents ?? overlayState.ignoreMouseEvents,
       launchOnStartup: overrides.launchOnStartup ?? launchAtLogin.enabled,
       startupProfile: overrides.startupProfile ?? overlayPreferences?.startupProfile,
+      orbBehaviorMode: overrides.orbBehaviorMode ?? overlayPreferences?.orbBehaviorMode,
       windowBounds: bounds,
     },
     displays,
@@ -2588,6 +2639,7 @@ function registerIpc() {
   ipcMain.handle("overlay:set-launch-at-login", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
+  ipcMain.handle("overlay:set-orb-behavior-mode", (_event, modeId) => setOrbBehaviorMode(modeId));
   ipcMain.handle("overlay:set-motion-mode", (_event, modeId) => setMotionMode(modeId));
   ipcMain.handle("overlay:set-contrast-mode", (_event, modeId) => setContrastMode(modeId));
   ipcMain.handle("overlay:set-density-mode", (_event, modeId) => setDensityMode(modeId));
@@ -2721,6 +2773,12 @@ function registerPowerMonitorListeners() {
   }
   powerMonitor.on("user-did-become-active", () => {
     signalOrbHumanActivity("power_monitor");
+  });
+  powerMonitor.on("unlock-screen", () => {
+    signalOrbHumanActivity("unlock_screen");
+  });
+  powerMonitor.on("resume", () => {
+    signalOrbHumanActivity("system_resume");
   });
 }
 

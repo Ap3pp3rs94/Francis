@@ -26,6 +26,7 @@ test("overlay portability export includes safe shell preferences and import limi
     exportedAt: "2026-03-12T12:00:00Z",
     preferences: {
       startupProfile: "quiet",
+      orbBehaviorMode: "trace",
       motionMode: "reduce",
       contrastMode: "high",
       densityMode: "compact",
@@ -40,6 +41,7 @@ test("overlay portability export includes safe shell preferences and import limi
   assert.equal(payload.version, PORTABILITY_EXPORT_VERSION);
   assert.equal(payload.compatibility.channel, "0.1");
   assert.equal(payload.shell.startupProfile, "quiet");
+  assert.equal(payload.shell.orbBehaviorMode, "trace");
   assert.equal(payload.shell.motionMode, "reduce");
   assert.equal(payload.shell.contrastMode, "high");
   assert.equal(payload.shell.densityMode, "compact");
@@ -58,6 +60,7 @@ test("overlay portability import only extracts safe portable preferences", () =>
     },
     shell: {
       startupProfile: "core_only",
+      orbBehaviorMode: "explore",
       motionMode: "full",
       contrastMode: "standard",
       densityMode: "comfortable",
@@ -72,6 +75,7 @@ test("overlay portability import only extracts safe portable preferences", () =>
   });
 
   assert.equal(preferences.startupProfile, "core_only");
+  assert.equal(preferences.orbBehaviorMode, "explore");
   assert.equal(preferences.motionMode, "full");
   assert.equal(preferences.contrastMode, "standard");
   assert.equal(preferences.densityMode, "comfortable");

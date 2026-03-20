@@ -9,6 +9,7 @@ from francis_forge.catalog import list_entries
 from francis_forge.library import build_capability_library, build_capability_provenance, build_promotion_rules, build_quality_standard
 from francis_skills.toolbelt.git import repo_status
 from services.orchestrator.app.approvals_store import list_requests
+from services.orchestrator.app.control_state import AWAY_MUTATING_ACTIONS
 
 SEVERITY_ORDER = {
     "critical": 4,
@@ -22,6 +23,20 @@ SEVERITY_ORDER = {
     "debug": 0,
     "nominal": 0,
 }
+
+
+def _mode_allows_mutating_action(mode: str, action: str) -> tuple[bool, str]:
+    normalized_mode = str(mode or "").strip().lower() or "assist"
+    normalized_action = str(action or "").strip().lower()
+    away_action = {
+        "mission.tick": "missions.tick",
+        "worker.recover_leases": "worker.recover",
+    }.get(normalized_action, normalized_action)
+    if normalized_mode == "pilot":
+        return (True, "")
+    if normalized_mode == "away" and away_action in AWAY_MUTATING_ACTIONS:
+        return (True, "")
+    return (False, f"mutating action {normalized_action} not allowed in {normalized_mode} mode")
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -651,6 +666,21 @@ def build_next_best_action(
     observer_allowed = not allowed_apps or "observer" in allowed_apps
     apprenticeship_allowed = not allowed_apps or "apprenticeship" in allowed_apps
     forge_allowed = not allowed_apps or "forge" in allowed_apps
+    generalize_mode_allowed, generalize_mode_reason = _mode_allows_mutating_action(
+        mode,
+        "apprenticeship.generalize",
+    )
+    skillize_mode_allowed, skillize_mode_reason = _mode_allows_mutating_action(
+        mode,
+        "apprenticeship.skillize",
+    )
+    mission_tick_mode_allowed, mission_tick_mode_reason = _mode_allows_mutating_action(mode, "mission.tick")
+    forge_promote_mode_allowed, forge_promote_mode_reason = _mode_allows_mutating_action(mode, "forge.promote")
+    forge_quarantine_mode_allowed, forge_quarantine_mode_reason = _mode_allows_mutating_action(
+        mode,
+        "forge.quarantine",
+    )
+    forge_revoke_mode_allowed, forge_revoke_mode_reason = _mode_allows_mutating_action(mode, "forge.revoke")
     repo = current_work.get("repo", {}) if isinstance(current_work.get("repo"), dict) else {}
     telemetry = current_work.get("telemetry", {}) if isinstance(current_work.get("telemetry"), dict) else {}
     mission = current_work.get("mission") if isinstance(current_work.get("mission"), dict) else None
@@ -723,13 +753,15 @@ def build_next_best_action(
             "risk_tier": "low",
             "trust_badge": "Likely",
             "args": {"session_id": session_id} if session_id else {},
-            "enabled": bool(session_id) and apprenticeship_allowed,
+            "enabled": bool(session_id) and apprenticeship_allowed and generalize_mode_allowed,
             "policy_reason": (
                 ""
-                if session_id and apprenticeship_allowed
+                if session_id and apprenticeship_allowed and generalize_mode_allowed
                 else "Teaching session id is missing."
                 if not session_id
                 else "app apprenticeship not in allowed scope"
+                if not apprenticeship_allowed
+                else generalize_mode_reason
             ),
         }
 
@@ -741,13 +773,15 @@ def build_next_best_action(
             "risk_tier": "medium",
             "trust_badge": "Likely",
             "args": {"session_id": session_id} if session_id else {},
-            "enabled": bool(session_id) and apprenticeship_allowed,
+            "enabled": bool(session_id) and apprenticeship_allowed and skillize_mode_allowed,
             "policy_reason": (
                 ""
-                if session_id and apprenticeship_allowed
+                if session_id and apprenticeship_allowed and skillize_mode_allowed
                 else "Teaching session id is missing."
                 if not session_id
                 else "app apprenticeship not in allowed scope"
+                if not apprenticeship_allowed
+                else skillize_mode_reason
             ),
         }
 
@@ -770,9 +804,15 @@ def build_next_best_action(
                 "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
                 "trust_badge": "Confirmed",
                 "args": {"stage_id": stage_id, "approval_id": approval_id} if stage_id else {},
-                "enabled": bool(stage_id) and forge_allowed,
+                "enabled": bool(stage_id) and forge_allowed and forge_promote_mode_allowed,
                 "policy_reason": (
-                    "" if stage_id and forge_allowed else "Stage id is missing." if not stage_id else "app forge not in allowed scope"
+                    ""
+                    if stage_id and forge_allowed and forge_promote_mode_allowed
+                    else "Stage id is missing."
+                    if not stage_id
+                    else "app forge not in allowed scope"
+                    if not forge_allowed
+                    else forge_promote_mode_reason
                 ),
             }
         pending_reason = (
@@ -805,9 +845,15 @@ def build_next_best_action(
             "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
             "trust_badge": "Likely",
             "args": {"entry_id": stage_id} if stage_id else {},
-            "enabled": bool(stage_id) and forge_allowed,
+            "enabled": bool(stage_id) and forge_allowed and forge_quarantine_mode_allowed,
             "policy_reason": (
-                "" if stage_id and forge_allowed else "Capability id is missing." if not stage_id else "app forge not in allowed scope"
+                ""
+                if stage_id and forge_allowed and forge_quarantine_mode_allowed
+                else "Capability id is missing."
+                if not stage_id
+                else "app forge not in allowed scope"
+                if not forge_allowed
+                else forge_quarantine_mode_reason
             ),
         }
 
@@ -821,9 +867,15 @@ def build_next_best_action(
                 "risk_tier": str(focus_capability.get("risk_tier", "medium")).strip().lower() or "medium",
                 "trust_badge": "Confirmed",
                 "args": {"entry_id": stage_id, "approval_id": approval_id} if stage_id else {},
-                "enabled": bool(stage_id) and forge_allowed,
+                "enabled": bool(stage_id) and forge_allowed and forge_revoke_mode_allowed,
                 "policy_reason": (
-                    "" if stage_id and forge_allowed else "Capability id is missing." if not stage_id else "app forge not in allowed scope"
+                    ""
+                    if stage_id and forge_allowed and forge_revoke_mode_allowed
+                    else "Capability id is missing."
+                    if not stage_id
+                    else "app forge not in allowed scope"
+                    if not forge_allowed
+                    else forge_revoke_mode_reason
                 ),
             }
         revoke_reason = (
@@ -869,13 +921,15 @@ def build_next_best_action(
             "risk_tier": "medium",
             "trust_badge": "Likely",
             "args": {"mission_id": mission_id} if mission_id else {},
-            "enabled": bool(mission_id) and missions_allowed,
+            "enabled": bool(mission_id) and missions_allowed and mission_tick_mode_allowed,
             "policy_reason": (
                 ""
-                if mission_id and missions_allowed
+                if mission_id and missions_allowed and mission_tick_mode_allowed
                 else "Active mission id is missing."
                 if not mission_id
                 else "app missions not in allowed scope"
+                if not missions_allowed
+                else mission_tick_mode_reason
             ),
         }
 

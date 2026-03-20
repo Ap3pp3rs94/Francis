@@ -44,9 +44,11 @@ def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
         if app_name.lower() not in lowered:
             apps.append(app_name)
             lowered.append(app_name.lower())
+    repo_root = str(Path(__file__).resolve().parents[2])
+    workspace_root = str((Path(__file__).resolve().parents[2] / "workspace").resolve())
     return {
-        "repos": scope.get("repos", []),
-        "workspaces": scope.get("workspaces", []),
+        "repos": [repo_root],
+        "workspaces": [workspace_root],
         "apps": apps,
     }
 
@@ -62,7 +64,10 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
         stripped = line.strip()
         if not stripped:
             continue
-        parsed = json.loads(stripped)
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
         if isinstance(parsed, dict):
             rows.append(parsed)
     return rows
@@ -88,6 +93,7 @@ def _restore_text(path: Path, content: str, existed: bool) -> None:
 
 def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
     workspace = Path(__file__).resolve().parents[2] / "workspace"
+    repo_root = workspace.parent.resolve()
     registry_path = workspace / "managed_copies" / "registry.json"
     deltas_path = workspace / "managed_copies" / "deltas.jsonl"
     run_ledger_path = workspace / "runs" / "run_ledger.jsonl"
@@ -104,8 +110,21 @@ def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
     decisions_before_exists = decisions_path.exists()
     decisions_before = _read_text(decisions_path)
     runtime_roots: list[Path] = []
+    route_workspace_before = managed_copies_routes._workspace_root
+    route_repo_before = managed_copies_routes._repo_root
+    route_fs_before = managed_copies_routes._fs
+    route_ledger_before = managed_copies_routes._ledger
+    fs = WorkspaceFS(
+        roots=[workspace.resolve()],
+        journal_path=(workspace / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
 
     try:
+        managed_copies_routes._workspace_root = workspace.resolve()
+        managed_copies_routes._repo_root = repo_root
+        managed_copies_routes._fs = fs
+        managed_copies_routes._ledger = ledger
         with TestClient(app) as client:
             original_mode = _get_mode(client)
             original_scope = _get_scope(client)
@@ -197,6 +216,10 @@ def test_managed_copy_create_delta_quarantine_and_replace_flow() -> None:
         assert "managed.copy.quarantined" in kinds
         assert "managed.copy.replaced" in kinds
     finally:
+        managed_copies_routes._workspace_root = route_workspace_before
+        managed_copies_routes._repo_root = route_repo_before
+        managed_copies_routes._fs = route_fs_before
+        managed_copies_routes._ledger = route_ledger_before
         _restore_text(registry_path, registry_before, registry_before_exists)
         _restore_text(deltas_path, deltas_before, deltas_before_exists)
         _restore_text(run_ledger_path, run_ledger_before, run_ledger_before_exists)

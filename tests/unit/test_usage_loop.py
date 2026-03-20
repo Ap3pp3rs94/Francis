@@ -124,7 +124,8 @@ def test_usage_loop_prioritizes_apprenticeship_generalization_when_steps_are_rec
     assert current_work["attention"]["kind"] == "teaching_capture"
     assert current_work["apprenticeship"]["focus_session"]["id"] == "teach-generalize"
     assert next_action["kind"] == "apprenticeship.generalize"
-    assert next_action["enabled"] is True
+    assert next_action["enabled"] is False
+    assert "assist mode" in next_action["policy_reason"].lower()
     assert next_action["args"]["session_id"] == "teach-generalize"
 
 
@@ -180,5 +181,46 @@ def test_usage_loop_prioritizes_apprenticeship_skillize_when_review_ready(tmp_pa
     assert current_work["attention"]["kind"] == "teaching_review"
     assert current_work["apprenticeship"]["focus_session"]["id"] == "teach-skillize"
     assert next_action["kind"] == "apprenticeship.skillize"
-    assert next_action["enabled"] is True
+    assert next_action["enabled"] is False
+    assert "assist mode" in next_action["policy_reason"].lower()
     assert next_action["args"]["session_id"] == "teach-skillize"
+
+
+def test_usage_loop_blocks_capability_promotion_in_assist_until_pilot(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _git(repo_root, "init")
+    assist_current_work = {
+        "repo": build_repo_focus(repo_root),
+        "telemetry": {},
+        "mission": None,
+        "apprenticeship": {"focus_session": None},
+        "capabilities": {
+            "focus_entry": {
+                "id": "cap-promote",
+                "approval_id": "approval-cap-promote",
+                "approval_status": "approved",
+                "recommended_action": "forge.promote",
+                "risk_tier": "medium",
+                "summary": "Capability Promote 0.4.0 is staged and already approved for promotion.",
+                "promotion_rules": {"ready": True, "rules": []},
+            }
+        },
+        "attention": {},
+    }
+    assist_action = build_next_best_action(
+        current_work=assist_current_work,
+        control={"mode": "assist", "kill_switch": False, "scopes": {"apps": ["forge", "observer"]}},
+    )
+    pilot_action = build_next_best_action(
+        current_work=assist_current_work,
+        control={"mode": "pilot", "kill_switch": False, "scopes": {"apps": ["forge", "observer"]}},
+    )
+
+    assert assist_action["kind"] == "forge.promote"
+    assert assist_action["enabled"] is False
+    assert "assist mode" in assist_action["policy_reason"].lower()
+    assert pilot_action["kind"] == "forge.promote"
+    assert pilot_action["enabled"] is True
+    assert pilot_action["args"]["stage_id"] == "cap-promote"
+    assert pilot_action["args"]["approval_id"] == "approval-cap-promote"

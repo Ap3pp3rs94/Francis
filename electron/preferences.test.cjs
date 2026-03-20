@@ -54,6 +54,7 @@ test("savePreferences persists normalized bounds and booleans on the target disp
       alwaysOnTop: false,
       ignoreMouseEvents: true,
       startupProfile: "quiet",
+      orbBehaviorMode: "trace",
       motionMode: "reduce",
       contrastMode: "high",
       densityMode: "compact",
@@ -69,6 +70,7 @@ test("savePreferences persists normalized bounds and booleans on the target disp
   assert.equal(saved.alwaysOnTop, false);
   assert.equal(saved.ignoreMouseEvents, true);
   assert.equal(saved.startupProfile, "quiet");
+  assert.equal(saved.orbBehaviorMode, "trace");
   assert.equal(saved.motionMode, "reduce");
   assert.equal(saved.contrastMode, "high");
   assert.equal(saved.densityMode, "compact");
@@ -109,6 +111,7 @@ test("preferences normalize unknown startup profiles back to operator", () => {
     {
       targetDisplayId: 101,
       startupProfile: "bad-profile",
+      orbBehaviorMode: "bad-mode",
       motionMode: "not-real",
       contrastMode: "not-real",
       densityMode: "not-real",
@@ -119,6 +122,7 @@ test("preferences normalize unknown startup profiles back to operator", () => {
   );
 
   assert.equal(saved.startupProfile, "operator");
+  assert.equal(saved.orbBehaviorMode, "autonomous");
   assert.equal(saved.motionMode, "system");
   assert.equal(saved.contrastMode, "system");
   assert.equal(saved.densityMode, "comfortable");

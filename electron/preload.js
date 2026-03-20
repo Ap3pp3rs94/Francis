@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   setStartupProfile(profileId) {
     return ipcRenderer.invoke("overlay:set-startup-profile", assertString("profileId", profileId));
   },
+  setOrbBehaviorMode(modeId) {
+    return ipcRenderer.invoke("overlay:set-orb-behavior-mode", assertString("modeId", modeId));
+  },
   setMotionMode(modeId) {
     return ipcRenderer.invoke("overlay:set-motion-mode", assertString("modeId", modeId));
   },

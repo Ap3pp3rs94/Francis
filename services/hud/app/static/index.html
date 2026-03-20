@@ -2512,7 +2512,6 @@
         offsetX: 0,
         offsetY: 0,
       };
-      const ORB_BEHAVIOR_MODE_STORAGE_KEY = "francis.orb.behaviorMode.v1";
       const ORB_HUMAN_PROFILE_STORAGE_KEY = "francis.orb.humanMotion.v1";
       let orbBehaviorMode = "autonomous";
       let orbHumanMotionProfile = {
@@ -2601,31 +2600,44 @@
       }
 
       function loadOrbBehaviorMode() {
-        try {
-          const raw = window.localStorage?.getItem(ORB_BEHAVIOR_MODE_STORAGE_KEY);
-          orbBehaviorMode = normalizeOrbBehaviorMode(raw);
-        } catch {
-          orbBehaviorMode = "autonomous";
-        }
+        orbBehaviorMode = "autonomous";
       }
 
-      function persistOrbBehaviorMode() {
-        try {
-          window.localStorage?.setItem(ORB_BEHAVIOR_MODE_STORAGE_KEY, normalizeOrbBehaviorMode(orbBehaviorMode));
-        } catch {
-          // Local persistence is opportunistic; ignore storage failures.
-        }
+      function getDesktopOrbBehavior() {
+        const behavior = desktopState.lifecycle?.orbBehavior;
+        return behavior && typeof behavior === "object" ? behavior : null;
       }
 
       function getOrbBehaviorMode() {
+        const desktopBehavior = getDesktopOrbBehavior();
+        if (desktopBehavior) {
+          return normalizeOrbBehaviorMode(desktopBehavior.requested);
+        }
         return normalizeOrbBehaviorMode(orbBehaviorMode);
       }
 
-      function setOrbBehaviorMode(mode) {
-        orbBehaviorMode = normalizeOrbBehaviorMode(mode);
+      async function setOrbBehaviorMode(mode) {
+        const normalized = normalizeOrbBehaviorMode(mode);
+        const bridge = getDesktopBridge();
+        orbBehaviorMode = normalized;
         orbAutonomousReplay.active = false;
         orbAutonomousReplay.nextStartAt = 0;
-        persistOrbBehaviorMode();
+        if (bridge && typeof bridge.setOrbBehaviorMode === "function") {
+          try {
+            const [nextState, nextDisplayInfo] = await Promise.all([
+              bridge.setOrbBehaviorMode(normalized),
+              bridge.getDisplayInfo().catch(() => desktopState.displayInfo),
+            ]);
+            desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+            desktopNotice = `Orb behavior saved: ${titleCase(getOrbBehaviorMode())}.`;
+          } catch (error) {
+            desktopNotice = `Orb behavior update failed: ${error?.message || error}`;
+          }
+          renderDesktopShell();
+          renderOverlayDock();
+          renderOrbPresentation();
+          return;
+        }
         renderOverlayDock();
         renderOrbPresentation();
       }
@@ -2905,6 +2917,15 @@
         cursorAuthority = false,
         humanActive = false,
       } = {}) {
+        const desktopBehavior = getDesktopOrbBehavior();
+        if (desktopBehavior) {
+          return {
+            selectedMode: normalizeOrbBehaviorMode(desktopBehavior.requested),
+            effectiveMode: String(desktopBehavior.effective || desktopBehavior.requested || "autonomous"),
+            trace: Boolean(desktopBehavior.trace),
+            explore: Boolean(desktopBehavior.explore),
+          };
+        }
         const selectedMode = getOrbBehaviorMode();
         if (handbackActive) {
           return {
@@ -3365,12 +3386,15 @@
         const replayInfluence = orbAutonomousReplay.active
           ? Math.round(clamp(getOrbAutonomousReplayConfig().bias, 0, 1) * 100)
           : 0;
+        const desktopBehaviorSummary = getDesktopOrbBehaviorSummary();
         motionMeta.textContent = `Selected ${selectedBehaviorLabel} | Effective ${effectiveBehaviorLabel}`;
-        motionSummary.textContent = motionControl.selectedMode === "trace"
-          ? "Trace is active. The Orb follows your cursor path while the mouse remains fully yours."
-          : motionControl.selectedMode === "explore"
-            ? "Explore is active. The Orb moves on its own while still learning your motion locally."
-            : "Autonomous is active. The Orb traces you while active, then explores with learned human motion on its own.";
+        motionSummary.textContent = desktopBehaviorSummary || (
+          motionControl.selectedMode === "trace"
+            ? "Trace is active. The Orb follows your cursor path while the mouse remains fully yours."
+            : motionControl.selectedMode === "explore"
+              ? "Explore is active. The Orb moves on its own while still learning your motion locally."
+              : "Autonomous is active. The Orb traces you while active, then explores with learned human motion on its own."
+        );
         motionCards.innerHTML = [
           ["Mode", selectedBehaviorLabel],
           ["Effective", effectiveBehaviorLabel],
@@ -4397,6 +4421,11 @@
       function getDesktopAccessibility() {
         const accessibility = desktopState.lifecycle?.accessibility;
         return accessibility && typeof accessibility === "object" ? accessibility : null;
+      }
+
+      function getDesktopOrbBehaviorSummary() {
+        const behavior = getDesktopOrbBehavior();
+        return behavior && typeof behavior.summary === "string" ? behavior.summary.trim() : "";
       }
 
       function getEffectiveMotionMode() {

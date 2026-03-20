@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Iterable
 
@@ -27,6 +28,11 @@ class WorkspaceFS:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         self._journal("write_text", rel_path, len(content))
+
+    def append_jsonl(self, rel_path: str, payload: dict) -> None:
+        path = self._resolve(rel_path)
+        append_jsonl(path, payload)
+        self._journal("append_jsonl", rel_path, len(json.dumps(payload, ensure_ascii=False)) + 1)
 
     def _resolve(self, rel_path: str) -> Path:
         p = (self.roots[0] / rel_path).resolve()

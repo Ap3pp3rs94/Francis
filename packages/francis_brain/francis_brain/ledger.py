@@ -23,14 +23,7 @@ class RunLedger:
 
     def append(self, *, run_id: str, kind: str, summary: dict[str, Any]) -> LedgerEvent:
         event = LedgerEvent(ts=utc_now_iso(), kind=kind, run_id=run_id, summary=summary)
-        try:
-            existing = self.fs.read_text(self.rel_path)
-        except Exception:
-            existing = ""
-        if existing and not existing.endswith("\n"):
-            existing += "\n"
-        payload = existing + json.dumps(event.__dict__, ensure_ascii=False) + "\n"
-        self.fs.write_text(self.rel_path, payload)
+        self.fs.append_jsonl(self.rel_path, event.__dict__)
         return event
 
     def tail(self, n: int = 10) -> list[dict[str, Any]]:

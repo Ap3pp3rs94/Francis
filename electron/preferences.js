@@ -2,10 +2,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const PREFERENCES_FILE = "overlay-preferences.json";
-const PREFERENCES_VERSION = 5;
+const PREFERENCES_VERSION = 6;
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 360;
 const { DEFAULT_STARTUP_PROFILE, normalizeStartupProfile } = require("./startup-profile");
+const { DEFAULT_ORB_BEHAVIOR_MODE, normalizeOrbBehaviorMode } = require("./orb-behavior");
 const {
   DEFAULT_CONTRAST_MODE,
   DEFAULT_DENSITY_MODE,
@@ -86,6 +87,7 @@ function buildDefaultPreferences(display) {
     alwaysOnTop: true,
     ignoreMouseEvents: false,
     startupProfile: DEFAULT_STARTUP_PROFILE,
+    orbBehaviorMode: DEFAULT_ORB_BEHAVIOR_MODE,
     motionMode: DEFAULT_MOTION_MODE,
     contrastMode: DEFAULT_CONTRAST_MODE,
     densityMode: DEFAULT_DENSITY_MODE,
@@ -106,6 +108,7 @@ function normalizePreferences(raw, displays, primaryDisplayId = null) {
     alwaysOnTop: raw.alwaysOnTop !== false,
     ignoreMouseEvents: Boolean(raw.ignoreMouseEvents),
     startupProfile: normalizeStartupProfile(raw.startupProfile),
+    orbBehaviorMode: normalizeOrbBehaviorMode(raw.orbBehaviorMode),
     motionMode: normalizeMotionMode(raw.motionMode),
     contrastMode: normalizeContrastMode(raw.contrastMode),
     densityMode: normalizeDensityMode(raw.densityMode),

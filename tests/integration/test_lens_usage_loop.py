@@ -3,9 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from francis_brain.ledger import RunLedger
+from francis_core.workspace_fs import WorkspaceFS
+from francis_skills.executor import SkillExecutor
+import services.orchestrator.app.routes.control as control_routes
 import services.orchestrator.app.routes.lens as lens_routes
 
 
@@ -41,11 +46,91 @@ def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
         if app_name.lower() not in lowered:
             apps.append(app_name)
             lowered.append(app_name.lower())
+    repo_root = str(Path(__file__).resolve().parents[2])
+    workspace_root = str((Path(__file__).resolve().parents[2] / "workspace").resolve())
     return {
-        "repos": scope.get("repos", []),
-        "workspaces": scope.get("workspaces", []),
+        "repos": [repo_root],
+        "workspaces": [workspace_root],
         "apps": apps,
     }
+
+
+def _bind_live_lens_routes() -> tuple[Path, Path, WorkspaceFS, RunLedger, SkillExecutor, str]:
+    workspace_root = (Path(__file__).resolve().parents[2] / "workspace").resolve()
+    repo_root = workspace_root.parent.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
+    skill_executor = SkillExecutor.with_defaults(fs=fs, repo_root=repo_root)
+    previous = (
+        lens_routes._workspace_root,
+        lens_routes._repo_root,
+        lens_routes._fs,
+        lens_routes._ledger,
+        lens_routes._skill_executor,
+        lens_routes._repo_drilldown_state_path,
+    )
+    lens_routes._workspace_root = workspace_root
+    lens_routes._repo_root = repo_root
+    lens_routes._fs = fs
+    lens_routes._ledger = ledger
+    lens_routes._skill_executor = skill_executor
+    lens_routes._repo_drilldown_state_path = "lens/repo_drilldown.json"
+    return previous
+
+
+def _restore_lens_routes(previous: tuple[Path, Path, WorkspaceFS, RunLedger, SkillExecutor, str]) -> None:
+    (
+        lens_routes._workspace_root,
+        lens_routes._repo_root,
+        lens_routes._fs,
+        lens_routes._ledger,
+        lens_routes._skill_executor,
+        lens_routes._repo_drilldown_state_path,
+    ) = previous
+
+
+def _bind_live_control_routes() -> tuple[Path, Path, WorkspaceFS, RunLedger]:
+    workspace_root = (Path(__file__).resolve().parents[2] / "workspace").resolve()
+    repo_root = workspace_root.parent.resolve()
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
+    previous = (
+        control_routes._workspace_root,
+        control_routes._repo_root,
+        control_routes._fs,
+        control_routes._ledger,
+    )
+    control_routes._workspace_root = workspace_root
+    control_routes._repo_root = repo_root
+    control_routes._fs = fs
+    control_routes._ledger = ledger
+    return previous
+
+
+def _restore_control_routes(previous: tuple[Path, Path, WorkspaceFS, RunLedger]) -> None:
+    (
+        control_routes._workspace_root,
+        control_routes._repo_root,
+        control_routes._fs,
+        control_routes._ledger,
+    ) = previous
+
+
+@pytest.fixture(autouse=True)
+def _live_lens_routes() -> None:
+    lens_previous = _bind_live_lens_routes()
+    control_previous = _bind_live_control_routes()
+    try:
+        yield
+    finally:
+        _restore_lens_routes(lens_previous)
+        _restore_control_routes(control_previous)
 
 
 def _read_text(path: Path) -> str:
@@ -69,7 +154,10 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
         stripped = line.strip()
         if not stripped:
             continue
-        parsed = json.loads(stripped)
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
         if isinstance(parsed, dict):
             rows.append(parsed)
     return rows

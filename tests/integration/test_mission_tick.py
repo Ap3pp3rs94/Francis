@@ -29,7 +29,10 @@ def _read_jsonl(path: Path) -> list[dict]:
         if not line:
             continue
         try:
-            rows.append(json.loads(line))
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
         except Exception:
             continue
     return rows
