@@ -111,8 +111,7 @@ function buildHudLaunchCandidates({
     command: candidate.command,
     args: [
       "-m",
-      "uvicorn",
-      "services.hud.app.main:app",
+      "services.hud.app.run_hud",
       "--host",
       host,
       "--port",

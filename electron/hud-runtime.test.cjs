@@ -62,8 +62,7 @@ test("buildHudLaunchCandidates wires host, port, source root, and workspace root
   assert.equal(candidates[0].runtimeKind, "external");
   assert.deepEqual(candidates[0].args, [
     "-m",
-    "uvicorn",
-    "services.hud.app.main:app",
+    "services.hud.app.run_hud",
     "--host",
     "127.0.0.1",
     "--port",
