@@ -324,6 +324,9 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
     assert "const ORB_HUMAN_TRACE_LAG_MS = 156;" in response.text
     assert "const ORB_HUMAN_TRACE_TRAIL_NODES = 10;" in response.text
+    assert 'roamX: window.innerWidth * 0.54' in response.text
+    assert "function resolveOrbFreeRoamAnchor(timestamp, motionProfile, size = 0)" in response.text
+    assert "function chooseOrbRoamTarget(timestamp, motionProfile, size = 0)" in response.text
     assert "function resolveOrbHumanTraceTarget(timestamp = performance.now())" in response.text
     assert "function renderOrbTraceTrail(timestamp, size, visible)" in response.text
     assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
