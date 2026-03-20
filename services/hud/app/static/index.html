@@ -2821,7 +2821,7 @@
         roamY: Math.max(96, window.innerHeight * 0.24),
         roamTargetX: window.innerWidth * 0.54,
         roamTargetY: Math.max(96, window.innerHeight * 0.24),
-        roamNextRetargetAt: 0,
+        roamPauseUntil: 0,
         lastPointerX: null,
         lastPointerY: null,
         lastMoveAt: 0,
@@ -6908,7 +6908,7 @@
         orbMotion.roamY = nextPoint.y;
         orbMotion.roamTargetX = nextPoint.x;
         orbMotion.roamTargetY = nextPoint.y;
-        orbMotion.roamNextRetargetAt = 0;
+        orbMotion.roamPauseUntil = 0;
       }
 
       function chooseOrbRoamTarget(timestamp, motionProfile, size = 0) {
@@ -6955,22 +6955,29 @@
         }
         orbMotion.roamTargetX = bestCandidate.x;
         orbMotion.roamTargetY = bestCandidate.y;
-        orbMotion.roamNextRetargetAt =
-          timestamp
-          + 820
-          + Math.random() * 1640
-          + Math.max(0, motionProfile.hesitationMs * 1.15)
-          + bestDistance * 0.45;
+        orbMotion.roamPauseUntil = 0;
       }
 
       function resolveOrbFreeRoamAnchor(timestamp, motionProfile, size = 0) {
         resetOrbRoamState(false, size);
+        if (!Number.isFinite(orbMotion.roamTargetX) || !Number.isFinite(orbMotion.roamTargetY)) {
+          chooseOrbRoamTarget(timestamp, motionProfile, size);
+        }
         const distanceToTarget = Math.hypot(
           Number(orbMotion.roamTargetX || 0) - Number(orbMotion.roamX || 0),
           Number(orbMotion.roamTargetY || 0) - Number(orbMotion.roamY || 0),
         );
-        if (!orbMotion.roamNextRetargetAt || timestamp >= orbMotion.roamNextRetargetAt || distanceToTarget < Math.max(18, size * 0.08)) {
-          chooseOrbRoamTarget(timestamp, motionProfile, size);
+        const arrivalRadius = Math.max(18, size * 0.08);
+        if (distanceToTarget < arrivalRadius) {
+          if (!orbMotion.roamPauseUntil) {
+            orbMotion.roamPauseUntil =
+              timestamp + clamp(180 + motionProfile.hesitationMs * 0.55, 160, 420);
+          }
+          if (timestamp >= orbMotion.roamPauseUntil) {
+            chooseOrbRoamTarget(timestamp, motionProfile, size);
+          }
+        } else if (orbMotion.roamPauseUntil) {
+          orbMotion.roamPauseUntil = 0;
         }
         const drag = clamp(
           0.018
@@ -7454,7 +7461,7 @@
           orbMotion.roamY = handbackState.y;
           orbMotion.roamTargetX = handbackState.x;
           orbMotion.roamTargetY = handbackState.y;
-          orbMotion.roamNextRetargetAt = 0;
+          orbMotion.roamPauseUntil = 0;
           if (handbackState.complete) {
             clearOrbHandback();
             renderOrbPresentation();
@@ -7474,7 +7481,7 @@
           orbMotion.roamY = traceTarget.y;
           orbMotion.roamTargetX = traceTarget.x;
           orbMotion.roamTargetY = traceTarget.y;
-          orbMotion.roamNextRetargetAt = timestamp + 420;
+          orbMotion.roamPauseUntil = timestamp + 420;
         } else {
           const motionProfile = getOrbMotionProfile();
           const fallback = getOrbFallbackTarget();

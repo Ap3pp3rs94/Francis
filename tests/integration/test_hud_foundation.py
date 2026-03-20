@@ -330,6 +330,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert "const freeRoamMotion = Boolean(freeRoamAnchor);" in response.text
     assert "const ambientOffset = freeRoamMotion" in response.text
     assert "const freeRoamGlide = clamp(" in response.text
+    assert "roamPauseUntil: 0," in response.text
+    assert "const arrivalRadius = Math.max(18, size * 0.08);" in response.text
     assert "function resolveOrbHumanTraceTarget(timestamp = performance.now())" in response.text
     assert "function renderOrbTraceTrail(timestamp, size, visible)" in response.text
     assert 'function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy })' in response.text
