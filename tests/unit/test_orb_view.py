@@ -993,6 +993,8 @@ def test_build_orb_chat_reply_returns_planner_payload_with_memory(monkeypatch) -
     assert payload["status"] == "ok"
     assert payload["reply_kind"] == "planner"
     assert payload["plan"]["title"] == "Open Notepad"
+    assert payload["intent"]["kind"] == "desktop.action"
+    assert payload["intent"]["should_execute"] is False
     assert payload["execution"]["auto_execute"] is False
     assert payload["planner"]["provider"] == "ollama"
     assert payload["memory"]["conversation_id"] == "desk-1"
@@ -1002,3 +1004,148 @@ def test_build_orb_chat_reply_returns_planner_payload_with_memory(monkeypatch) -
     assert captured["long_term_memory"] == conversation["long_term_memory"]
     assert captured["orb_context"]["run_state"]["run_id"] == "run-42"
     assert len(appended) == 2
+
+
+def test_build_orb_chat_reply_keeps_conversation_turns_in_answer_mode(monkeypatch) -> None:
+    conversation = {
+        "conversation_id": "desk-2",
+        "recent_turns": [{"role": "user", "content": "What is Pilot mode?", "kind": "chat"}],
+        "messages": [{"role": "user", "content": "What is Pilot mode?", "kind": "chat"}],
+        "short_term_memory": {"message_count": 1, "window_count": 1},
+        "long_term_memory": {"summary": "The user values governed execution."},
+    }
+    appended: list[dict[str, object]] = []
+
+    monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}, "runs": {}})
+    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
+    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="desk-2": conversation)
+    monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: appended.append(kwargs) or conversation)
+    monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_view",
+        lambda **_: {
+            "mode": "assist",
+            "posture": "resting",
+            "summary": "Francis is ambient on the desktop.",
+            "detail": "Operator loop is waiting for a user turn.",
+            "authority": {"summary": "Human control remains primary.", "recent": []},
+            "operator": {"summary": "No current move.", "controls": {"run_enabled": False, "run_mode": "execute"}},
+            "interjection": {"state": "idle"},
+            "thought": {"visible": False},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {
+            "state": "live",
+            "summary": "Francis sees the desktop.",
+            "detail_summary": "Cursor is over the editor.",
+            "window": {"title": "Editor"},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_chat_plan",
+        lambda **kwargs: {
+            "reply": "Pilot mode is takeover-on-command inside explicit scope. Francis acts, but you keep revocation and receipts.",
+            "thought": "Answering the control-mode question directly.",
+            "planner": "ollama",
+            "intent": {"kind": "conversation.answer", "confidence": "likely"},
+            "should_execute": False,
+            "plan": None,
+        },
+    )
+
+    payload = orb_view.build_orb_chat_reply(message="What is Pilot mode?", conversation_id="desk-2")
+
+    assert payload["status"] == "ok"
+    assert payload["intent"]["kind"] == "conversation.answer"
+    assert payload["intent"]["should_execute"] is False
+    assert payload["plan"] is None
+    assert payload["execution"]["ready"] is False
+    assert payload["execution"]["auto_execute"] is False
+    assert payload["thought"] is None
+    assert "takeover-on-command" in payload["reply"]
+    assert len(appended) == 2
+
+
+def test_build_orb_chat_reply_auto_executes_only_for_explicit_action_turns(monkeypatch) -> None:
+    conversation = {
+        "conversation_id": "desk-3",
+        "recent_turns": [],
+        "messages": [],
+        "short_term_memory": {"message_count": 0, "window_count": 0},
+        "long_term_memory": {"summary": "Visible desktop paths are preferred."},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_lens_snapshot",
+        lambda: {
+            "control": {"mode": "pilot"},
+            "runs": {"last_run": {"run_id": "run-84"}},
+            "current_work": {"surface": "current_work"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
+    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="desk-3": conversation)
+    monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: conversation)
+    monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_view",
+        lambda **_: {
+            "mode": "pilot",
+            "posture": "executing",
+            "summary": "Francis is in Pilot on the desktop.",
+            "detail": "Operator loop is ready for bounded execution.",
+            "authority": {"summary": "Pilot scope is active.", "recent": []},
+            "operator": {"summary": "No current move.", "controls": {"run_enabled": False, "run_mode": "execute"}},
+            "interjection": {"state": "idle"},
+            "thought": {"visible": False},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {
+            "state": "live",
+            "summary": "Francis sees the desktop.",
+            "detail_summary": "Start menu is visible.",
+            "window": {"title": "Desktop"},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_chat_plan",
+        lambda **kwargs: {
+            "reply": "I am opening Notepad through Start search now.",
+            "thought": "Opening Notepad through the visible Windows path.",
+            "planner": "ollama",
+            "intent": {"kind": "desktop.action", "confidence": "likely"},
+            "should_execute": True,
+            "plan": {
+                "title": "Open Notepad",
+                "summary": "Open Notepad through Start search.",
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "reasoning": ["Use the visible Windows path."],
+                "steps": [
+                    {"kind": "keyboard.shortcut", "args": {"keys": ["ctrl", "esc"]}, "reason": "Open Start.", "delay_ms": 180},
+                ],
+            },
+        },
+    )
+
+    payload = orb_view.build_orb_chat_reply(message="open notepad", conversation_id="desk-3")
+
+    assert payload["status"] == "ok"
+    assert payload["intent"]["kind"] == "desktop.action"
+    assert payload["intent"]["should_execute"] is True
+    assert payload["execution"]["ready"] is True
+    assert payload["execution"]["auto_execute"] is True
+    assert payload["plan"]["auto_execute"] is True

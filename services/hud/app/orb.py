@@ -1437,10 +1437,12 @@ def build_orb_chat_reply(
     )
     content = str(planned.get("reply", "")).strip() or "Orb chat is live, but no response text was returned."
     plan = planned.get("plan") if isinstance(planned.get("plan"), dict) else None
+    intent = planned.get("intent") if isinstance(planned.get("intent"), dict) else {}
+    intent_kind = str(intent.get("kind", "")).strip().lower() or ("desktop.action" if isinstance(plan, dict) else "conversation.answer")
     thought_text = str(planned.get("thought", "")).strip()
     thought_summary = thought_text or (str(plan.get("summary", "")).strip() if isinstance(plan, dict) else "")
     thought_payload = None
-    if thought_summary:
+    if thought_summary and intent_kind != "conversation.answer":
         thought_payload = {
             "id": _hash_orb_thought_id(normalized_conversation_id, user_message, thought_summary),
             "source": "orb.chat",
@@ -1466,6 +1468,8 @@ def build_orb_chat_reply(
             "reply_kind": "planner",
             "planner": str(planned.get("planner", "ollama")).strip() or "ollama",
             "plan_ready": bool(plan),
+            "intent_kind": intent_kind,
+            "should_execute": bool(planned.get("should_execute", False)),
             "mode_requirement": str(plan.get("mode_requirement", "pilot")).strip() if isinstance(plan, dict) else "",
         },
     )
@@ -1481,6 +1485,12 @@ def build_orb_chat_reply(
         and str(plan.get("mode_requirement", "pilot")).strip().lower() in {"pilot", "away"}
         and str(orb.get("mode", "assist")).strip().lower() in {"pilot", "away"}
     )
+    auto_execute = bool(
+        execution_ready
+        and isinstance(plan, dict)
+        and bool(plan.get("auto_execute"))
+        and bool(planned.get("should_execute", False))
+    )
     return {
         "status": "ok",
         "reply": content,
@@ -1491,11 +1501,16 @@ def build_orb_chat_reply(
             "short_term": refreshed_history.get("short_term_memory", {}),
             "long_term": refreshed_history.get("long_term_memory", {}),
         },
+        "intent": {
+            "kind": intent_kind,
+            "confidence": str(intent.get("confidence", "uncertain")).strip().lower() or "uncertain",
+            "should_execute": bool(planned.get("should_execute", False)),
+        },
         "plan": plan,
         "execution": {
             "ready": execution_ready,
             "mode_requirement": str(plan.get("mode_requirement", "pilot")).strip() if isinstance(plan, dict) else "pilot",
-            "auto_execute": False,
+            "auto_execute": auto_execute,
             "executor": "shell",
         },
         "thought": thought_payload,

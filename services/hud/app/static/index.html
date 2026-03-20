@@ -4848,7 +4848,7 @@
           const bridge = getDesktopBridge();
           const autoExecuteReady = Boolean(
             orbQuickChat.latestPlan
-            && (payload?.execution?.auto_execute || payload?.execution?.ready)
+            && payload?.execution?.auto_execute
             && bridge
             && typeof bridge.executeOrbDesktopPlan === "function"
           );

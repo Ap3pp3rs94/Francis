@@ -319,6 +319,7 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'user_message: orbQuickChat.lastUserMessage || ""' in response.text
     assert 'typeof getDesktopBridge().executeOrbDesktopPlan !== "function"' in response.text
     assert 'await bridge.executeOrbDesktopPlan(normalizedPlan);' in response.text
+    assert '&& payload?.execution?.auto_execute' in response.text
     assert 'class="overlay-perception-highlight"' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text

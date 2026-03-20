@@ -13,6 +13,22 @@ _ALLOWED_STEP_KINDS = {
     "keyboard.key",
     "keyboard.shortcut",
 }
+_ACTION_VERB_PATTERN = re.compile(
+    r"^(?:please\s+)?(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
+    re.IGNORECASE,
+)
+_POLITE_ACTION_PATTERN = re.compile(
+    r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
+    re.IGNORECASE,
+)
+_DIRECTIVE_ACTION_PATTERN = re.compile(
+    r"^(?:i\s+want\s+you\s+to|go\s+ahead\s+and|please\s+go\s+ahead\s+and|do\s+this:)\s+(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
+    re.IGNORECASE,
+)
+_CONVERSATION_PREFIX_PATTERN = re.compile(
+    r"^(?:what|why|how|when|where|who|which|explain|describe|summarize|tell me|help me understand|walk me through)\b",
+    re.IGNORECASE,
+)
 
 
 def _extract_json_object(raw: str) -> dict[str, Any]:
@@ -112,6 +128,85 @@ def _normalize_plan(payload: Any) -> dict[str, Any] | None:
     }
 
 
+def _normalize_turn_text(message: str) -> str:
+    return " ".join(str(message or "").strip().split())
+
+
+def _is_explicit_action_request(message: str) -> bool:
+    normalized = _normalize_turn_text(message)
+    if not normalized:
+        return False
+    return bool(
+        _ACTION_VERB_PATTERN.match(normalized)
+        or _POLITE_ACTION_PATTERN.match(normalized)
+        or _DIRECTIVE_ACTION_PATTERN.match(normalized)
+    )
+
+
+def _is_conversation_request(message: str) -> bool:
+    normalized = _normalize_turn_text(message)
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    if _is_explicit_action_request(normalized):
+        return False
+    if lowered.endswith("?"):
+        return True
+    return bool(_CONVERSATION_PREFIX_PATTERN.match(normalized))
+
+
+def _normalize_intent_kind(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"conversation.answer", "conversation", "chat.answer", "answer"}:
+        return "conversation.answer"
+    if normalized in {"desktop.action", "action", "desktop", "execute"}:
+        return "desktop.action"
+    return ""
+
+
+def _infer_turn_intent(
+    *,
+    user_message: str,
+    parsed: dict[str, Any] | None,
+    plan: dict[str, Any] | None,
+) -> dict[str, Any]:
+    parsed_intent = parsed.get("intent") if isinstance(parsed, dict) and isinstance(parsed.get("intent"), dict) else {}
+    parsed_kind = _normalize_intent_kind(parsed_intent.get("kind") if isinstance(parsed_intent, dict) else "")
+    explicit_action = _is_explicit_action_request(user_message)
+    conversational = _is_conversation_request(user_message)
+
+    if parsed_kind == "desktop.action":
+        kind = "desktop.action"
+    elif parsed_kind == "conversation.answer":
+        kind = "conversation.answer"
+    elif explicit_action and plan:
+        kind = "desktop.action"
+    elif conversational:
+        kind = "conversation.answer"
+    elif plan:
+        kind = "desktop.action"
+    else:
+        kind = "conversation.answer"
+
+    if kind != "desktop.action":
+        return {
+            "kind": "conversation.answer",
+            "confidence": "likely" if conversational or parsed_kind == "conversation.answer" else "uncertain",
+            "should_execute": False,
+        }
+
+    should_execute = bool(
+        (isinstance(parsed, dict) and parsed.get("should_execute") is True)
+        or (isinstance(plan, dict) and plan.get("auto_execute") is True)
+        or explicit_action
+    )
+    return {
+        "kind": "desktop.action",
+        "confidence": "likely" if explicit_action or parsed_kind == "desktop.action" else "uncertain",
+        "should_execute": should_execute,
+    }
+
+
 def _heuristic_plan(message: str) -> dict[str, Any] | None:
     normalized = " ".join(str(message or "").strip().lower().split())
     launch_match = re.match(r"^(?:open|launch|start|run)\s+(.+)$", normalized)
@@ -124,13 +219,13 @@ def _heuristic_plan(message: str) -> dict[str, Any] | None:
                 "plan": {
                     "title": f"Open {target.title()}",
                     "summary": f"Open {target} through the Windows Start search path instead of a direct process launch.",
-                    "reasoning": [
-                        "This is a visible desktop navigation task, so Francis should use the same Windows path the user would use rather than a hidden direct launch.",
-                        "Keyboard navigation is the most reliable path here, so left versus right click is not needed for this task.",
-                    ],
-                    "mode_requirement": "pilot",
-                    "auto_execute": False,
-                    "steps": [
+                "reasoning": [
+                    "This is a visible desktop navigation task, so Francis should use the same Windows path the user would use rather than a hidden direct launch.",
+                    "Keyboard navigation is the most reliable path here, so left versus right click is not needed for this task.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
                         {
                             "kind": "keyboard.shortcut",
                             "args": {"keys": ["ctrl", "esc"]},
@@ -167,7 +262,7 @@ def _heuristic_plan(message: str) -> dict[str, Any] | None:
                     "The click choice is visible in the plan so the interaction stays governed.",
                 ],
                 "mode_requirement": "pilot",
-                "auto_execute": False,
+                "auto_execute": True,
                 "steps": [
                     {
                         "kind": "mouse.click",
@@ -200,7 +295,11 @@ def build_orb_chat_plan(
         "The user is sovereign, Francis is the operator. "
         "Every turn is grounded in explicit mode, posture, run state, visible desktop context, and receipts. "
         "Planning and execution are separate. You decide the plan; the shell executes later. "
-        "Return JSON only with keys reply, thought, and plan. "
+        "Return JSON only with keys reply, thought, intent, should_execute, and plan. "
+        "If the user is asking a question, discussing options, asking how or why, or otherwise talking with Francis, "
+        "set intent.kind to conversation.answer, set should_execute to false, and set plan to null. "
+        "If the user is explicitly telling Francis to carry out a desktop action now, set intent.kind to desktop.action. "
+        "Set should_execute to true only when the user is explicitly asking Francis to perform the action on this turn. "
         "If desktop action is required, plan visible user-like steps only. "
         "Choose left versus right click deliberately and explain the interaction choice in the reasoning and step reason. "
         "Do not directly launch processes when a visible Windows navigation path is better. "
@@ -236,6 +335,11 @@ def build_orb_chat_plan(
         "output_contract": {
             "reply": "string",
             "thought": "string",
+            "intent": {
+                "kind": "conversation.answer | desktop.action",
+                "confidence": "likely | uncertain",
+            },
+            "should_execute": False,
             "plan": {
                 "title": "string",
                 "summary": "string",
@@ -279,6 +383,11 @@ def build_orb_chat_plan(
     plan = _normalize_plan(extracted.get("plan")) if extracted else None
     if plan is None and heuristic:
         plan = _normalize_plan(heuristic.get("plan"))
+    intent = _infer_turn_intent(user_message=user_message, parsed=extracted, plan=plan)
+    if intent["kind"] != "desktop.action":
+        plan = None
+    elif isinstance(plan, dict):
+        plan["auto_execute"] = bool(intent["should_execute"])
     reply = str(extracted.get("reply", "")).strip() if extracted else ""
     if not reply and heuristic:
         reply = str(heuristic.get("reply", "")).strip()
@@ -294,6 +403,8 @@ def build_orb_chat_plan(
         "reply": reply,
         "thought": thought,
         "plan": plan,
+        "intent": intent,
+        "should_execute": bool(intent["should_execute"]),
         "raw_response": response_text,
         "planner": "ollama",
     }
