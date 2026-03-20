@@ -1901,6 +1901,7 @@ function moveOverlayToDisplay(displayId, win = mainWindow) {
   safeWindow.setBounds(nextBounds);
   if (orbWindow && !orbWindow.isDestroyed()) {
     orbWindow.setBounds(getOrbSurfaceBounds());
+    reinforceOrbWindowPresence(orbWindow);
   }
   overlayPreferences = persistOverlayPreferences(safeWindow, {
     targetDisplayId: targetDisplay.id,
@@ -1940,6 +1941,7 @@ function reconcileDisplayTopology(reason) {
       if (!sameBounds(orbWindow.getBounds(), nextOrbBounds)) {
         orbWindow.setBounds(nextOrbBounds);
       }
+      reinforceOrbWindowPresence(orbWindow);
     }
 
     log("Reconciled display topology", {
@@ -2089,6 +2091,20 @@ function applyAlwaysOnTop(win, enabled) {
   return overlayState.alwaysOnTop;
 }
 
+function reinforceOrbWindowPresence(targetWindow = orbWindow) {
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    return;
+  }
+  targetWindow.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL);
+  if (typeof targetWindow.moveTop === "function") {
+    try {
+      targetWindow.moveTop();
+    } catch {
+      // Older Electron/Windows builds may not expose moveTop reliably.
+    }
+  }
+}
+
 function applyIgnoreMouseEvents(win, ignore) {
   if (!win || win.isDestroyed()) {
     return overlayState.ignoreMouseEvents;
@@ -2106,10 +2122,17 @@ function applyOrbIgnoreMouseEvents(ignore) {
   if (!orbWindow || orbWindow.isDestroyed()) {
     return orbInputState.ignoreMouseEvents;
   }
+  if (typeof orbWindow.setFocusable === "function") {
+    orbWindow.setFocusable(!orbInputState.ignoreMouseEvents);
+  }
   orbWindow.setIgnoreMouseEvents(
     orbInputState.ignoreMouseEvents,
     orbInputState.ignoreMouseEvents ? { forward: true } : undefined,
   );
+  reinforceOrbWindowPresence(orbWindow);
+  if (orbInputState.ignoreMouseEvents && typeof orbWindow.blur === "function") {
+    orbWindow.blur();
+  }
   notifyOverlayState(mainWindow);
   return orbInputState.ignoreMouseEvents;
 }
@@ -2230,6 +2253,7 @@ function showOrbWindow() {
     orbWindow.restore();
   }
   orbWindow.showInactive();
+  reinforceOrbWindowPresence(orbWindow);
   notifyOverlayState(mainWindow);
   return getOverlayState(mainWindow);
 }
@@ -2445,6 +2469,7 @@ function createOrbWindow() {
     fullscreenable: false,
     skipTaskbar: true,
     hasShadow: false,
+    focusable: false,
     autoHideMenuBar: true,
     title: "Francis Orb",
     webPreferences: {
@@ -2456,12 +2481,15 @@ function createOrbWindow() {
   });
 
   win.setMenuBarVisibility(false);
+  if (typeof win.setFocusable === "function") {
+    win.setFocusable(false);
+  }
   applyAlwaysOnTop(win, overlayPreferences.alwaysOnTop);
   orbInputState.ignoreMouseEvents = true;
   win.setIgnoreMouseEvents(true, { forward: true });
   win.removeMenu();
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL);
+  reinforceOrbWindowPresence(win);
   win.webContents.once("did-finish-load", () => {
     log("Orb HUD loaded", win.webContents.getURL());
   });
@@ -2497,6 +2525,7 @@ function createOrbWindow() {
         startupProfile: startupProfile.effective,
       });
       win.showInactive();
+      reinforceOrbWindowPresence(win);
       notifyOverlayState(mainWindow);
       return;
     }
@@ -2506,7 +2535,10 @@ function createOrbWindow() {
     notifyOverlayState(mainWindow);
   });
 
-  win.on("show", () => notifyOverlayState(mainWindow));
+  win.on("show", () => {
+    reinforceOrbWindowPresence(win);
+    notifyOverlayState(mainWindow);
+  });
   win.on("hide", () => notifyOverlayState(mainWindow));
   win.on("closed", () => {
     log("Orb window closed");
