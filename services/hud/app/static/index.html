@@ -4831,18 +4831,7 @@
         renderOverlayDock();
         applyOrbSignals();
         try {
-          const response = await fetch("/api/orb/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              conversation_id: orbQuickChat.conversationId,
-              message,
-            }),
-          });
-          const payload = await response.json();
-          if (!response.ok) {
-            throw new Error(payload?.detail || "unknown error");
-          }
+          const payload = await postOrbQuickChatMessage(message);
           if (payload?.conversation && typeof payload.conversation === "object") {
             updateOrbQuickChatConversation(payload.conversation);
           }
@@ -4889,6 +4878,61 @@
           orbQuickChat.pending = false;
           renderOverlayDock();
           applyOrbSignals();
+        }
+      }
+
+      function isOrbChatTransportFailure(error) {
+        const message = String(error?.message || error || "").trim().toLowerCase();
+        return (
+          message.includes("failed to fetch")
+          || message.includes("networkerror")
+          || message.includes("network request failed")
+          || message.includes("load failed")
+        );
+      }
+
+      async function postOrbQuickChatMessage(message, { allowRecovery = true } = {}) {
+        try {
+          const response = await fetch("/api/orb/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              conversation_id: orbQuickChat.conversationId,
+              message,
+            }),
+          });
+          const responseText = await response.text();
+          let payload = {};
+          if (responseText) {
+            try {
+              payload = JSON.parse(responseText);
+            } catch {
+              payload = {};
+            }
+          }
+          if (!response.ok) {
+            throw new Error(
+              String(payload?.detail || payload?.message || responseText || "unknown error"),
+            );
+          }
+          return payload;
+        } catch (error) {
+          const bridge = getDesktopBridge();
+          const canRecover = Boolean(
+            allowRecovery
+            && isOrbChatTransportFailure(error)
+            && bridge
+            && typeof bridge.restartHud === "function"
+          );
+          if (!canRecover) {
+            throw error;
+          }
+          orbQuickChat.status = "Francis lost the local HUD. Restarting the runtime and retrying chat.";
+          orbQuickChat.error = "";
+          renderOverlayDock();
+          applyOrbSignals();
+          await bridge.restartHud();
+          return postOrbQuickChatMessage(message, { allowRecovery: false });
         }
       }
 

@@ -164,6 +164,76 @@ def _normalize_intent_kind(value: Any) -> str:
     return ""
 
 
+def _describe_control_mode(mode: str) -> str:
+    normalized = str(mode or "").strip().lower()
+    if normalized == "observe":
+        return "Observe is read-only. Francis gathers context and suggests, but does not mutate or execute."
+    if normalized == "assist":
+        return "Assist prepares plans, drafts, and guidance, but the user still decides what executes."
+    if normalized == "pilot":
+        return "Pilot is takeover-on-command inside explicit scope. Francis can act, but the work stays visible, revocable, and receipted."
+    if normalized == "away":
+        return "Away is bounded continuity for approved work while the user is absent. Scope, policy, and receipts still govern every step."
+    return ""
+
+
+def _build_conversation_fallback(
+    *,
+    user_message: str,
+    orb_context: dict[str, Any],
+    perception: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> str:
+    normalized = _normalize_turn_text(user_message).lower()
+    if not normalized:
+        return ""
+
+    if "pilot" in normalized and "mode" in normalized:
+        return _describe_control_mode("pilot")
+    if "assist" in normalized and "mode" in normalized:
+        return _describe_control_mode("assist")
+    if "observe" in normalized and "mode" in normalized:
+        return _describe_control_mode("observe")
+    if "away" in normalized and "mode" in normalized:
+        return _describe_control_mode("away")
+
+    if any(
+        phrase in normalized
+        for phrase in (
+            "what do you see",
+            "what are you seeing",
+            "what can you see",
+            "what do you have in view",
+            "what is on screen",
+            "what's on screen",
+        )
+    ):
+        perception_summary = str(perception.get("summary", "")).strip()
+        if perception_summary:
+            return perception_summary
+        return "I do not have a live perception frame attached right now."
+
+    if any(
+        phrase in normalized
+        for phrase in (
+            "what are you doing",
+            "what is your state",
+            "what's your state",
+            "what are you focused on",
+        )
+    ):
+        orb_summary = str(orb_context.get("summary", "")).strip()
+        if orb_summary:
+            return orb_summary
+
+    current_mode = str(snapshot.get("control", {}).get("mode", "")).strip().lower()
+    current_mode_summary = _describe_control_mode(current_mode)
+    if current_mode_summary and normalized.endswith("?"):
+        return f"Francis is currently in {current_mode.title()}. {current_mode_summary}"
+
+    return ""
+
+
 def _infer_turn_intent(
     *,
     user_message: str,
@@ -391,6 +461,13 @@ def build_orb_chat_plan(
     reply = str(extracted.get("reply", "")).strip() if extracted else ""
     if not reply and heuristic:
         reply = str(heuristic.get("reply", "")).strip()
+    if not reply and intent["kind"] != "desktop.action":
+        reply = _build_conversation_fallback(
+            user_message=user_message,
+            orb_context=orb_context,
+            perception=perception,
+            snapshot=snapshot,
+        )
     if not reply:
         reply = response_text or "I am holding the request in view, but I do not have a grounded plan yet."
     thought = str(extracted.get("thought", "")).strip() if extracted else ""

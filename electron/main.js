@@ -1,7 +1,7 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
-const { createHudRuntimeManager } = require("./hud-runtime");
+const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
 const {
   buildDefaultPreferences,
   PREFERENCES_VERSION,
@@ -91,6 +91,8 @@ const {
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
+const HUD_HEALTH_RECONCILE_INTERVAL_MS = 4000;
+const HUD_MAX_RECOVERY_ATTEMPTS = 3;
 const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
 const ORB_AUTHORITY_SYNC_INTERVAL_MS = 350;
 const ORB_FOREGROUND_WINDOW_CACHE_MS = 2000;
@@ -112,6 +114,8 @@ let preferenceSaveTimer = null;
 let hudRuntime = null;
 let hudRecoveryTimer = null;
 let hudRecoveryAttempts = 0;
+let hudHealthTimer = null;
+let hudHealthCheckPending = false;
 let orbPerceptionTimer = null;
 let orbPerceptionSyncPending = false;
 let orbPerceptionErrorLogged = false;
@@ -2275,10 +2279,15 @@ function scheduleHudRecovery(reason) {
   if (!hudRuntime || quitAfterHudShutdown) {
     return;
   }
-  if (hudRecoveryTimer || hudRecoveryAttempts >= 1) {
+  if (hudRecoveryTimer || hudRecoveryAttempts >= HUD_MAX_RECOVERY_ATTEMPTS) {
     return;
   }
   hudRecoveryAttempts += 1;
+  log("Scheduling managed HUD recovery", {
+    reason,
+    attempt: hudRecoveryAttempts,
+    maxAttempts: HUD_MAX_RECOVERY_ATTEMPTS,
+  });
   setOverlayRecovery({
     needed: true,
     status: "recovering",
@@ -2293,6 +2302,7 @@ function scheduleHudRecovery(reason) {
       clearHudRecovery();
       notifyOverlayState(mainWindow);
     } catch (error) {
+      log("Managed HUD recovery failed", error instanceof Error ? error.message : String(error));
       setOverlayRecovery({
         needed: true,
         status: "failed",
@@ -2302,6 +2312,65 @@ function scheduleHudRecovery(reason) {
       notifyOverlayState(mainWindow);
     }
   }, 1500);
+}
+
+async function reconcileHudHealth() {
+  if (hudHealthCheckPending || !hudRuntime || quitAfterHudShutdown) {
+    return;
+  }
+
+  const hudState = getHudState();
+  if (!hudState?.ready) {
+    return;
+  }
+
+  hudHealthCheckPending = true;
+  try {
+    const reachable = await isHudReachable(HUD_URL, 1500);
+    if (reachable) {
+      return;
+    }
+
+    log("HUD runtime became unreachable while the shell still considered it ready", {
+      managed: Boolean(hudState?.managed),
+      mode: hudState?.mode || null,
+      pid: hudState?.pid || null,
+      healthUrl: hudState?.healthUrl || null,
+    });
+
+    if (hudState?.managed) {
+      scheduleHudRecovery("hud-unreachable");
+      return;
+    }
+
+    setOverlayRecovery({
+      needed: true,
+      status: "failed",
+      message: "The HUD is unreachable. Restart the local runtime or bring the external HUD back online.",
+      lastExitReason: "hud-unreachable",
+    });
+    notifyOverlayState(mainWindow);
+  } finally {
+    hudHealthCheckPending = false;
+  }
+}
+
+function ensureHudHealthMonitor() {
+  if (hudHealthTimer !== null) {
+    return;
+  }
+  hudHealthTimer = setInterval(() => {
+    void reconcileHudHealth();
+  }, HUD_HEALTH_RECONCILE_INTERVAL_MS);
+  void reconcileHudHealth();
+}
+
+function stopHudHealthMonitor() {
+  if (hudHealthTimer !== null) {
+    clearInterval(hudHealthTimer);
+    hudHealthTimer = null;
+  }
+  hudHealthCheckPending = false;
 }
 
 async function loadHud(win) {
@@ -2898,6 +2967,7 @@ if (!app.requestSingleInstanceLock()) {
     registerDisplayListeners();
     registerPowerMonitorListeners();
     await initializeHudRuntime();
+    ensureHudHealthMonitor();
     mainWindow = createMainWindow();
     orbWindow = createOrbWindow();
     createTray();
@@ -2962,6 +3032,7 @@ app.on("will-quit", () => {
     clearTimeout(hudRecoveryTimer);
     hudRecoveryTimer = null;
   }
+  stopHudHealthMonitor();
   stopOrbPerceptionLoop();
   stopOrbAuthorityLoop();
   if (mainWindow && !mainWindow.isDestroyed()) {

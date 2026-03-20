@@ -322,6 +322,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'typeof getDesktopBridge().executeOrbDesktopPlan !== "function"' in response.text
     assert 'await bridge.executeOrbDesktopPlan(normalizedPlan);' in response.text
     assert '&& payload?.execution?.auto_execute' in response.text
+    assert 'function postOrbQuickChatMessage(message, { allowRecovery = true } = {})' in response.text
+    assert 'Francis lost the local HUD. Restarting the runtime and retrying chat.' in response.text
     assert 'class="overlay-perception-highlight"' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
