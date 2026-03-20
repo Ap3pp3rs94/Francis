@@ -6914,52 +6914,53 @@
       function chooseOrbRoamTarget(timestamp, motionProfile, size = 0) {
         resetOrbRoamState(false, size);
         const bounds = getOrbRoamBounds(size);
-        const spanX = Math.max(96, bounds.maxX - bounds.minX);
-        const spanY = Math.max(96, bounds.maxY - bounds.minY);
-        const maxSpan = Math.max(140, Math.min(spanX, spanY) * 0.42);
-        const minSpan = Math.min(maxSpan * 0.6, Math.max(88, size * 0.7));
-        const roamRadius = clamp(
-          Math.max(
-            minSpan,
-            110 + motionProfile.driftStrength * 34 + motionProfile.microStrength * 18 + motionProfile.orbitBias * 80,
-          ),
-          minSpan,
-          maxSpan,
-        );
         const baseX = Number.isFinite(orbMotion.roamX) ? orbMotion.roamX : getOrbFallbackTarget().x;
         const baseY = Number.isFinite(orbMotion.roamY) ? orbMotion.roamY : getOrbFallbackTarget().y;
-        let angle = Math.random() * Math.PI * 2;
-        let radius = roamRadius * (0.58 + Math.random() * 0.72);
-        let candidate = clampOrbRoamPoint(
-          baseX + Math.cos(angle) * radius,
-          baseY + Math.sin(angle) * radius,
-          size,
+        const spanX = Math.max(96, bounds.maxX - bounds.minX);
+        const spanY = Math.max(96, bounds.maxY - bounds.minY);
+        const minTravel = clamp(
+          Math.max(
+            size * 1.8,
+            Math.min(spanX, spanY) * 0.28,
+            180 + motionProfile.driftStrength * 42,
+          ),
+          160,
+          Math.max(260, Math.min(spanX, spanY) * 0.72),
         );
-        let distance = Math.hypot(candidate.x - baseX, candidate.y - baseY);
-        if (distance < Math.max(52, size * 0.4)) {
-          angle += Math.PI * (0.45 + Math.random() * 0.2);
-          radius = Math.min(maxSpan, radius + minSpan * 0.55);
-          candidate = clampOrbRoamPoint(
-            baseX + Math.cos(angle) * radius,
-            baseY + Math.sin(angle) * radius,
-            size,
-          );
-          distance = Math.hypot(candidate.x - baseX, candidate.y - baseY);
+        let bestCandidate = clampOrbRoamPoint(baseX, baseY, size);
+        let bestDistance = 0;
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          const edgeBias = Math.random() < 0.35;
+          const candidateX = edgeBias
+            ? (Math.random() < 0.5
+              ? bounds.minX + Math.random() * Math.max(32, spanX * 0.18)
+              : bounds.maxX - Math.random() * Math.max(32, spanX * 0.18))
+            : bounds.minX + Math.random() * Math.max(12, spanX);
+          const candidateY = edgeBias
+            ? (Math.random() < 0.5
+              ? bounds.minY + Math.random() * Math.max(32, spanY * 0.18)
+              : bounds.maxY - Math.random() * Math.max(32, spanY * 0.18))
+            : bounds.minY + Math.random() * Math.max(12, spanY);
+          const candidate = clampOrbRoamPoint(candidateX, candidateY, size);
+          const distance = Math.hypot(candidate.x - baseX, candidate.y - baseY);
+          if (distance > bestDistance) {
+            bestCandidate = candidate;
+            bestDistance = distance;
+          }
+          if (distance >= minTravel) {
+            bestCandidate = candidate;
+            bestDistance = distance;
+            break;
+          }
         }
-        if (distance < 36) {
-          candidate = clampOrbRoamPoint(
-            bounds.minX + Math.random() * Math.max(12, bounds.maxX - bounds.minX),
-            bounds.minY + Math.random() * Math.max(12, bounds.maxY - bounds.minY),
-            size,
-          );
-        }
-        orbMotion.roamTargetX = candidate.x;
-        orbMotion.roamTargetY = candidate.y;
+        orbMotion.roamTargetX = bestCandidate.x;
+        orbMotion.roamTargetY = bestCandidate.y;
         orbMotion.roamNextRetargetAt =
           timestamp
-          + 620
-          + Math.random() * 1180
-          + Math.max(0, motionProfile.hesitationMs * 0.9);
+          + 820
+          + Math.random() * 1640
+          + Math.max(0, motionProfile.hesitationMs * 1.15)
+          + bestDistance * 0.45;
       }
 
       function resolveOrbFreeRoamAnchor(timestamp, motionProfile, size = 0) {
@@ -6972,9 +6973,12 @@
           chooseOrbRoamTarget(timestamp, motionProfile, size);
         }
         const drag = clamp(
-          0.014 + motionProfile.driftStrength * 0.006 + motionProfile.microStrength * 0.0025,
-          0.014,
-          0.042,
+          0.018
+            + motionProfile.driftStrength * 0.004
+            + motionProfile.microStrength * 0.0018
+            + Math.min(0.04, distanceToTarget / 1800),
+          0.018,
+          0.068,
         );
         orbMotion.roamX += (Number(orbMotion.roamTargetX || orbMotion.roamX) - Number(orbMotion.roamX || 0)) * drag;
         orbMotion.roamY += (Number(orbMotion.roamTargetY || orbMotion.roamY) - Number(orbMotion.roamY || 0)) * drag;
@@ -7481,19 +7485,22 @@
           const freeRoamAnchor = !useCursorAnchor && motionControl.explore
             ? resolveOrbFreeRoamAnchor(timestamp, motionProfile, size)
             : null;
+          const freeRoamMotion = Boolean(freeRoamAnchor);
           const anchorX = useCursorAnchor && pointerFresh
             ? orbMotion.pointerX
-            : freeRoamAnchor
+            : freeRoamMotion
               ? freeRoamAnchor.x
               : fallback.x;
           const anchorY = useCursorAnchor && pointerFresh
             ? orbMotion.pointerY
-            : freeRoamAnchor
+            : freeRoamMotion
               ? freeRoamAnchor.y
               : fallback.y;
           const speedFactor = useCursorAnchor ? Math.min(1, orbMotion.speed / 18) : 0;
-          const ambientOffset = resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
-          const autonomousReplay = !useCursorAnchor && motionControl.explore
+          const ambientOffset = freeRoamMotion
+            ? { x: 0, y: 0 }
+            : resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
+          const autonomousReplay = !useCursorAnchor && motionControl.explore && !freeRoamMotion
             ? resolveOrbAutonomousReplayOffset(timestamp, motionProfile)
             : null;
           const replayBias = clamp(Number(autonomousReplay?.bias || 0), 0, 1);
@@ -7510,16 +7517,16 @@
           const leadY = useCursorAnchor
             ? Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVy * leadStrength))
             : 0;
-          orbMotion.correctionX *= useCursorAnchor && pointerFresh ? 0.82 : 0.68;
-          orbMotion.correctionY *= useCursorAnchor && pointerFresh ? 0.82 : 0.68;
+          orbMotion.correctionX *= useCursorAnchor && pointerFresh ? 0.82 : freeRoamMotion ? 0.42 : 0.68;
+          orbMotion.correctionY *= useCursorAnchor && pointerFresh ? 0.82 : freeRoamMotion ? 0.42 : 0.68;
           orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
           orbMotion.targetY =
             anchorY +
-            size * motionProfile.verticalBias +
+            (freeRoamMotion ? 0 : size * motionProfile.verticalBias) +
             leadY +
             humanOffset.y +
             orbMotion.correctionY -
-            motionProfile.interjectionBias * size * 0.12;
+            (freeRoamMotion ? 0 : motionProfile.interjectionBias * size * 0.12);
           const rideProfile = motionProfile.profile === "cursor_ride";
           const stiffness = Math.min(
             rideProfile ? 0.72 : 0.58,
