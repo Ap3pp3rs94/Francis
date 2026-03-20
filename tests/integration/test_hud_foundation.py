@@ -304,8 +304,21 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert '"/surface"' in response.text
     assert '"/submit"' in response.text
     assert 'function sendOrbQuickChat()' in response.text
-    assert 'id="overlay-focus-target"' in response.text
-    assert 'id="overlay-receipt-target"' in response.text
+    assert 'id="overlay-thought-bubble"' in response.text
+    assert 'function openOrbChatFromThoughtBubble()' in response.text
+    assert 'id="orb-chat-memory"' in response.text
+    assert 'id="orb-chat-thread"' in response.text
+    assert 'id="orb-chat-plan"' in response.text
+    assert 'id="orb-chat-plan-run"' in response.text
+    assert 'id="overlay-chat-input"' in response.text
+    assert 'id="overlay-chat-send"' in response.text
+    assert "Short-term and long-term conversation continuity will appear here once the Orb chat history loads." in response.text
+    assert "Francis will show the current action plan here before the shell executes anything." in response.text
+    assert "Tell Francis what you want done" in response.text
+    assert "const ORB_CHAT_AUTO_EXECUTE_DELAY_MS = 180;" in response.text
+    assert 'user_message: orbQuickChat.lastUserMessage || ""' in response.text
+    assert 'typeof getDesktopBridge().executeOrbDesktopPlan !== "function"' in response.text
+    assert 'await bridge.executeOrbDesktopPlan(normalizedPlan);' in response.text
     assert 'class="overlay-perception-highlight"' in response.text
     assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
     assert 'openLensFromOrbSurface().catch(() => {});' in response.text
@@ -391,21 +404,133 @@ def test_hud_orb_chat_route_returns_compact_reply(monkeypatch) -> None:
     monkeypatch.setattr(
         hud_main,
         "build_orb_chat_reply",
-        lambda message: {
+        lambda message, conversation_id="default": {
             "status": "ok",
             "reply": f"orb reply for {message}",
+            "conversation": {"conversation_id": conversation_id},
             "orb": {"mode": "assist", "posture": "resting", "summary": "Ambient"},
             "perception": {"state": "live", "summary": "Desktop attached"},
         },
     )
 
-    response = client.post("/api/orb/chat", json={"message": "status?"})
+    response = client.post("/api/orb/chat", json={"message": "status?", "conversation_id": "desk-1"})
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
     assert body["reply"] == "orb reply for status?"
+    assert body["conversation"]["conversation_id"] == "desk-1"
     assert body["perception"]["summary"] == "Desktop attached"
+
+
+def test_hud_orb_chat_history_route_returns_conversation(monkeypatch) -> None:
+    monkeypatch.setattr(
+        hud_main,
+        "build_orb_chat_history",
+        lambda conversation_id="default": {
+            "conversation_id": conversation_id,
+            "messages": [{"role": "assistant", "content": "Ready.", "kind": "chat"}],
+            "recent_turns": [{"role": "assistant", "content": "Ready.", "kind": "chat"}],
+            "short_term_memory": {"message_count": 1, "window_count": 1},
+            "long_term_memory": {"summary": "Keep replies calm."},
+        },
+    )
+
+    response = client.get("/api/orb/chat/history", params={"conversation_id": "desk-2"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["conversation"]["conversation_id"] == "desk-2"
+    assert body["conversation"]["long_term_memory"]["summary"] == "Keep replies calm."
+
+
+def test_hud_orb_chat_thought_route_remembers_continuity(monkeypatch) -> None:
+    remembered: dict[str, object] = {}
+    monkeypatch.setattr(
+        hud_main,
+        "remember_orb_thought",
+        lambda **kwargs: remembered.update(kwargs) or {"status": "ok"},
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "build_orb_chat_history",
+        lambda conversation_id="default": {"conversation_id": conversation_id, "messages": [], "recent_turns": []},
+    )
+
+    response = client.post(
+        "/api/orb/chat/thought",
+        json={"conversation_id": "desk-3", "thought_id": "thought-1", "content": "Need approval", "source": "orb.thought_bubble"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["conversation"]["conversation_id"] == "desk-3"
+    assert remembered["thought_id"] == "thought-1"
+
+
+def test_hud_orb_chat_receipt_route_returns_receipt_and_refresh(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        hud_main,
+        "record_orb_chat_execution_receipt",
+        lambda **kwargs: captured.update(kwargs) or {
+            "status": "ok",
+            "run_id": "run-orb-1",
+            "trace_id": "trace-orb-1",
+            "receipt": {"kind": "orb.chat.execution.completed", "summary": {"summary_text": "Open Notepad completed through the Orb shell."}},
+            "history": {"conversation_id": "desk-4", "messages": [], "recent_turns": []},
+        },
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "_build_hud_payload",
+        lambda: {
+            "status": "ok",
+            "service": "hud",
+            "version": hud_main.SERVICE_VERSION,
+            "snapshot": {"control": {"mode": "pilot"}},
+            "actions": {"status": "ok"},
+            "voice": {"surface": "voice"},
+            "orb": {"surface": "orb"},
+            "current_work": {"surface": "current_work"},
+            "shift_report": {"surface": "shift_report"},
+            "repo_drilldown": {"surface": "repo_drilldown"},
+            "approval_queue": {"surface": "approval_queue"},
+            "blocked_actions": {"surface": "blocked_actions"},
+            "action_deck": {"surface": "action_deck"},
+            "apprenticeship_surface": {"surface": "apprenticeship_surface"},
+            "execution_journal": {"surface": "execution_journal"},
+            "execution_feed": {"surface": "execution_feed"},
+            "dashboard": {"surface": "dashboard"},
+            "missions": {"surface": "missions"},
+            "incidents": {"surface": "incidents"},
+            "inbox": {"surface": "inbox"},
+            "runs": {"surface": "runs"},
+            "fabric": {"surface": "fabric"},
+            "surface_digests": {"orb": "digest-1"},
+        },
+    )
+
+    response = client.post(
+        "/api/orb/chat/receipt",
+        json={
+            "conversation_id": "desk-4",
+            "user_message": "open notepad",
+            "plan": {"title": "Open Notepad", "steps": [{"kind": "keyboard.shortcut"}]},
+            "execution": {"status": "completed", "run_id": "run-orb-1", "trace_id": "trace-orb-1"},
+            "assistant_reply": "I can open Notepad through Start search in Pilot mode.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run_id"] == "run-orb-1"
+    assert body["trace_id"] == "trace-orb-1"
+    assert body["conversation"]["conversation_id"] == "desk-4"
+    assert body["orb"]["surface"] == "orb"
+    assert captured["user_message"] == "open notepad"
 
 
 def test_hud_orb_authority_routes_round_trip(monkeypatch) -> None:

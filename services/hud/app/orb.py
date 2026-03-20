@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from typing import Any
 
 from francis_llm import chat
 from francis_presence.orb import build_orb_state
+from services.hud.app.orb_memory import (
+    DEFAULT_ORB_CONVERSATION_ID,
+    append_orb_turn,
+    build_orb_chat_history,
+    refresh_orb_long_term_memory,
+)
+from services.hud.app.orb_planner import build_orb_chat_plan
 from services.orchestrator.app.orb_perception import get_orb_perception_view, resolve_orb_focus_target
 from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
@@ -894,6 +904,401 @@ def _build_orb_direct_chat_reply(
     return None
 
 
+def _hash_orb_thought_id(*parts: object) -> str:
+    digest = hashlib.sha1()
+    for part in parts:
+        digest.update(str(part or "").encode("utf-8"))
+        digest.update(b"|")
+    return digest.hexdigest()[:16]
+
+
+def _build_orb_thought_view(
+    *,
+    operator: dict[str, Any],
+    interjection: dict[str, Any],
+) -> dict[str, Any]:
+    interjection_state = str(interjection.get("state", "idle")).strip().lower() or "idle"
+    interjection_summary = str(interjection.get("summary", "")).strip()
+    interjection_prompt = str(interjection.get("prompt", "")).strip()
+    interjection_detail = str(interjection.get("detail", "")).strip()
+    receipt_summary = str(operator.get("receipt_summary", "")).strip()
+    target_cue = operator.get("target_cue", {}) if isinstance(operator.get("target_cue"), dict) else {}
+
+    if interjection_state != "idle" and interjection_summary:
+        detail = interjection_prompt or interjection_detail
+        return {
+            "visible": True,
+            "id": _hash_orb_thought_id(interjection_state, interjection_summary, detail),
+            "source": "interjection",
+            "summary": interjection_summary,
+            "detail": detail,
+            "target_cue": target_cue if target_cue else None,
+        }
+    if receipt_summary and receipt_summary != "No latest receipt is anchoring the Orb surface yet.":
+        return {
+            "visible": True,
+            "id": _hash_orb_thought_id("receipt", receipt_summary),
+            "source": "receipt",
+            "summary": receipt_summary,
+            "detail": str(operator.get("meta", "")).strip(),
+            "target_cue": target_cue if target_cue else None,
+        }
+    return {
+        "visible": False,
+        "id": "",
+        "source": "",
+        "summary": "",
+        "detail": "",
+        "target_cue": None,
+    }
+
+
+def _extract_json_object(raw: str) -> dict[str, Any] | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    candidates = [text]
+    fence_match = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text, re.IGNORECASE)
+    if fence_match:
+        candidates.insert(0, fence_match.group(1).strip())
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        candidates.append(text[start : end + 1])
+    for candidate in candidates:
+        try:
+            payload = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _coerce_plan_step(row: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(row, dict):
+        return None
+    kind = str(row.get("kind", "")).strip().lower()
+    if kind not in {"keyboard.shortcut", "keyboard.type", "keyboard.key", "mouse.move", "mouse.click"}:
+        return None
+    args = row.get("args", {}) if isinstance(row.get("args"), dict) else {}
+    reason = str(row.get("reason", "")).strip() or str(row.get("why", "")).strip()
+    if kind == "mouse.click":
+        button = str(args.get("button", "")).strip().lower()
+        if button not in {"left", "right"}:
+            return None
+    if kind == "keyboard.type" and not str(args.get("text", "")).strip():
+        return None
+    if kind == "keyboard.key" and not str(args.get("key", "")).strip():
+        return None
+    if kind == "keyboard.shortcut":
+        keys = args.get("keys")
+        if not isinstance(keys, list) or not keys:
+            return None
+    if kind in {"mouse.move", "mouse.click"}:
+        try:
+            float(args.get("x"))
+            float(args.get("y"))
+        except Exception:
+            return None
+    return {
+        "kind": kind,
+        "args": args,
+        "reason": reason or f"Carry out {kind} through the Orb shell execution layer.",
+        "pause_ms": max(0, min(1200, int(row.get("pause_ms", 80) or 80))),
+    }
+
+
+def _normalize_orb_desktop_plan(plan: dict[str, Any] | None, *, mode: str) -> dict[str, Any] | None:
+    if not isinstance(plan, dict):
+        return None
+    steps = []
+    for row in plan.get("steps", []) if isinstance(plan.get("steps"), list) else []:
+        normalized = _coerce_plan_step(row)
+        if normalized:
+            steps.append(normalized)
+    if not steps:
+        return None
+    mode_requirement = str(plan.get("mode_requirement", "")).strip().lower() or "pilot"
+    title = str(plan.get("title", "")).strip() or "Orb desktop action"
+    summary = str(plan.get("summary", "")).strip() or title
+    reasoning = [
+        str(row).strip()
+        for row in (plan.get("reasoning", []) if isinstance(plan.get("reasoning"), list) else [])
+        if str(row).strip()
+    ][:4]
+    ready = bool(mode in {"pilot", "away"} and mode_requirement in {"pilot", "away"})
+    if mode == "away" and mode_requirement == "pilot":
+        ready = False
+    return {
+        "id": _hash_orb_thought_id(title, summary, json.dumps(steps, sort_keys=True)),
+        "title": title,
+        "summary": summary,
+        "reasoning": reasoning,
+        "mode_requirement": mode_requirement,
+        "ready": ready,
+        "steps": steps,
+    }
+
+
+def _heuristic_orb_desktop_plan(message: str, *, mode: str) -> dict[str, Any] | None:
+    lowered = str(message or "").strip().lower()
+    launch_match = re.match(r"^(?:open|launch|start|run)\s+(.+)$", lowered)
+    if launch_match:
+        target = launch_match.group(1).strip(" .")
+        if target:
+            return _normalize_orb_desktop_plan(
+                {
+                    "title": f"Open {target.title()}",
+                    "summary": f"Open {target} through Windows Start search the way the user would.",
+                    "mode_requirement": "pilot",
+                    "reasoning": [
+                        "Open Start instead of launching a process directly so the action follows the visible desktop path.",
+                        f"Type {target} into Windows search, then confirm the highlighted result with the equivalent of a left-navigation open.",
+                    ],
+                    "steps": [
+                        {
+                            "kind": "keyboard.shortcut",
+                            "args": {"keys": ["ctrl", "esc"]},
+                            "reason": "Open the Windows Start surface for direct keyboard navigation.",
+                            "pause_ms": 180,
+                        },
+                        {
+                            "kind": "keyboard.type",
+                            "args": {"text": target},
+                            "reason": f"Search for {target} from Start so Francis follows the same visible path as the user.",
+                            "pause_ms": 220,
+                        },
+                        {
+                            "kind": "keyboard.key",
+                            "args": {"key": "enter"},
+                            "reason": f"Open the highlighted {target} result with the normal left-navigation equivalent.",
+                            "pause_ms": 260,
+                        },
+                    ],
+                },
+                mode=mode,
+            )
+    type_match = re.match(r"^(?:type|enter text)\s+(.+)$", str(message or "").strip(), re.IGNORECASE)
+    if type_match:
+        text = type_match.group(1).strip()
+        if text:
+            return _normalize_orb_desktop_plan(
+                {
+                    "title": "Type Text",
+                    "summary": "Type the requested text through the Orb shell execution layer.",
+                    "mode_requirement": "pilot",
+                    "reasoning": [
+                        "Typing is a direct desktop action and should use the shell executor, not the planner.",
+                    ],
+                    "steps": [
+                        {
+                            "kind": "keyboard.type",
+                            "args": {"text": text},
+                            "reason": "Type the exact requested text into the active surface.",
+                            "pause_ms": 120,
+                        }
+                    ],
+                },
+                mode=mode,
+            )
+    if lowered in {"save", "save this", "save it"}:
+        return _normalize_orb_desktop_plan(
+            {
+                "title": "Save Active Surface",
+                "summary": "Save through the standard desktop shortcut.",
+                "mode_requirement": "pilot",
+                "reasoning": [
+                    "Use the standard save shortcut because it is the most direct visible save path across Windows applications.",
+                ],
+                "steps": [
+                    {
+                        "kind": "keyboard.shortcut",
+                        "args": {"keys": ["ctrl", "s"]},
+                        "reason": "Use the standard save shortcut.",
+                        "pause_ms": 120,
+                    }
+                ],
+            },
+            mode=mode,
+        )
+    return None
+
+
+def _assistant_reply_from_plan(plan: dict[str, Any], *, mode: str) -> str:
+    if not isinstance(plan, dict):
+        return ""
+    summary = str(plan.get("summary", "")).strip() or "Francis prepared a desktop action."
+    reasoning = plan.get("reasoning", []) if isinstance(plan.get("reasoning"), list) else []
+    primary_reason = str(reasoning[0]).strip() if reasoning else ""
+    if bool(plan.get("ready")):
+        return f"{summary} {primary_reason}".strip()
+    requirement = str(plan.get("mode_requirement", "pilot")).strip().lower() or "pilot"
+    if requirement == "pilot" and mode != "pilot":
+        return (
+            f"{summary} Francis has the plan, but execution stays gated until you put Francis in Pilot. "
+            f"{primary_reason}"
+        ).strip()
+    return f"{summary} {primary_reason}".strip()
+
+
+def _build_orb_planner_messages(
+    *,
+    user_message: str,
+    context_block: dict[str, Any],
+    history: dict[str, Any],
+) -> list[dict[str, str]]:
+    recent_turns = history.get("recent_turns", []) if isinstance(history.get("recent_turns"), list) else []
+    short_term = [
+        {
+            "role": str(turn.get("role", "assistant")).strip().lower() or "assistant",
+            "content": str(turn.get("content", "")).strip(),
+        }
+        for turn in recent_turns[-10:]
+        if isinstance(turn, dict) and str(turn.get("content", "")).strip()
+    ]
+    long_term = history.get("long_term_memory", {}) if isinstance(history.get("long_term_memory"), dict) else {}
+    system_prompt = (
+        "You are Francis speaking through the Orb. "
+        "Francis is a governed autonomous operator, not a generic assistant. "
+        "Every turn must stay grounded in explicit mode, posture, visible context, and receipts. "
+        "You may prepare a desktop action plan, but you do not execute it. The shell executes the plan later. "
+        "Return strict JSON with keys reply, thought, should_execute, mode_requirement, and plan. "
+        "If planning a desktop action, plan only with these command kinds: keyboard.shortcut, keyboard.type, keyboard.key, mouse.move, mouse.click. "
+        "Every step must include a reason explaining why that interaction is the right human-like path, including left versus right click reasoning when relevant. "
+        "For opening Windows applications, do not launch processes directly; navigate through Start/search/open. "
+        "Keep reply text calm, specific, and short enough for an Orb chat window."
+    )
+    return [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": (
+                f"Long-term memory:\n{json.dumps(long_term, ensure_ascii=False)}\n\n"
+                f"Recent conversation:\n{json.dumps(short_term, ensure_ascii=False)}\n\n"
+                f"Live Francis state:\n{json.dumps(context_block, ensure_ascii=False)}\n\n"
+                f"User turn:\n{user_message}"
+            ),
+        },
+    ]
+
+
+def _call_orb_planner(
+    *,
+    user_message: str,
+    context_block: dict[str, Any],
+    history: dict[str, Any],
+    mode: str,
+) -> dict[str, Any]:
+    parsed: dict[str, Any] | None = None
+    raw_content = ""
+    try:
+        response = chat(
+            "orb.desktop_analysis.operator_loop",
+            _build_orb_planner_messages(
+                user_message=user_message,
+                context_block=context_block,
+                history=history,
+            ),
+            timeout=60.0,
+            options={"temperature": 0.15},
+        )
+        if isinstance(response, dict):
+            message_payload = response.get("message", {})
+            if isinstance(message_payload, dict):
+                raw_content = str(message_payload.get("content", "")).strip()
+            elif response.get("response"):
+                raw_content = str(response.get("response", "")).strip()
+        parsed = _extract_json_object(raw_content)
+    except Exception:
+        parsed = None
+
+    if not isinstance(parsed, dict):
+        plan = _heuristic_orb_desktop_plan(user_message, mode=mode)
+        return {
+            "reply": _assistant_reply_from_plan(plan, mode=mode) if plan else "Francis can continue in chat, but this turn did not produce a grounded desktop plan.",
+            "thought": "",
+            "plan": plan,
+            "reply_kind": "planner_fallback" if plan else "planner_error",
+        }
+
+    plan = _normalize_orb_desktop_plan(parsed.get("plan"), mode=mode)
+    reply = str(parsed.get("reply", "")).strip() or _assistant_reply_from_plan(plan, mode=mode)
+    thought = str(parsed.get("thought", "")).strip()
+    return {
+        "reply": reply or "Francis answered without reply text.",
+        "thought": thought,
+        "plan": plan,
+        "reply_kind": "planner",
+    }
+
+
+def _summarize_long_term_memory(
+    *,
+    history: dict[str, Any],
+    user_message: str,
+    assistant_reply: str,
+) -> dict[str, Any] | None:
+    long_term = history.get("long_term_memory", {}) if isinstance(history.get("long_term_memory"), dict) else {}
+    recent_turns = history.get("recent_turns", []) if isinstance(history.get("recent_turns"), list) else []
+    if long_term.get("summary") and len(recent_turns) % 4 != 0:
+        return None
+    try:
+        response = chat(
+            "orb.long_term_memory.synthesis",
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Summarize Orb conversation continuity into strict JSON with keys "
+                        "summary, preferences, operator_context, and open_loops. "
+                        "Keep only durable information worth remembering across restarts."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "existing_memory": long_term,
+                            "recent_turns": recent_turns[-12:],
+                            "latest_user_turn": user_message,
+                            "latest_assistant_turn": assistant_reply,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            timeout=45.0,
+            options={"temperature": 0.1},
+        )
+        raw = ""
+        if isinstance(response, dict):
+            message_payload = response.get("message", {})
+            if isinstance(message_payload, dict):
+                raw = str(message_payload.get("content", "")).strip()
+            elif response.get("response"):
+                raw = str(response.get("response", "")).strip()
+        parsed = _extract_json_object(raw)
+        if not isinstance(parsed, dict):
+            return None
+        return {
+            "summary": str(parsed.get("summary", "")).strip(),
+            "preferences": parsed.get("preferences", []),
+            "operator_context": parsed.get("operator_context", []),
+            "open_loops": parsed.get("open_loops", []),
+            "conversation_count": int(long_term.get("conversation_count", 0) or 0) + 1,
+        }
+    except Exception:
+        fallback_summary = str(long_term.get("summary", "")).strip()
+        if not fallback_summary:
+            fallback_summary = assistant_reply
+        return {
+            **long_term,
+            "summary": fallback_summary[:1000],
+            "conversation_count": int(long_term.get("conversation_count", 0) or 0) + 1,
+        }
+
+
 def get_orb_view(
     *,
     max_actions: int = 8,
@@ -924,10 +1329,19 @@ def get_orb_view(
         actions=actions,
         operator=orb["operator"],
     )
+    orb["thought"] = _build_orb_thought_view(
+        operator=orb["operator"],
+        interjection=orb["interjection"],
+    )
     return orb
 
 
-def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any]:
+def build_orb_chat_reply(
+    *,
+    message: str,
+    conversation_id: str = DEFAULT_ORB_CONVERSATION_ID,
+    max_actions: int = 4,
+) -> dict[str, Any]:
     snapshot = build_lens_snapshot()
     actions = get_lens_actions(max_actions=max_actions)
     voice = build_operator_presence(
@@ -946,19 +1360,53 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
     user_message = str(message or "").strip()
     if not user_message:
         raise ValueError("Orb chat message is required.")
+    normalized_conversation_id = (
+        DEFAULT_ORB_CONVERSATION_ID if not conversation_id else str(conversation_id).strip() or DEFAULT_ORB_CONVERSATION_ID
+    )
+    history = build_orb_chat_history(normalized_conversation_id)
 
     direct_reply = _build_orb_direct_chat_reply(message=user_message, orb=orb, perception=perception)
     if direct_reply:
+        append_orb_turn(
+            conversation_id=normalized_conversation_id,
+            role="user",
+            content=user_message,
+            kind="chat",
+            source="orb.chat",
+        )
+        append_orb_turn(
+            conversation_id=normalized_conversation_id,
+            role="assistant",
+            content=direct_reply,
+            kind="chat",
+            source="orb.chat.direct",
+            metadata={"reply_kind": "direct"},
+        )
+        refreshed_history = build_orb_chat_history(normalized_conversation_id)
         return {
             "status": "ok",
             "reply": direct_reply,
             "reply_kind": "direct",
+            "conversation": refreshed_history,
+            "memory": {
+                "conversation_id": refreshed_history.get("conversation_id", normalized_conversation_id),
+                "short_term": refreshed_history.get("short_term_memory", {}),
+                "long_term": refreshed_history.get("long_term_memory", {}),
+            },
+            "plan": None,
+            "execution": {
+                "ready": False,
+                "mode_requirement": "pilot",
+                "auto_execute": False,
+            },
+            "thought": None,
             "orb": {
                 "mode": orb.get("mode"),
                 "posture": orb.get("posture"),
                 "summary": orb.get("summary"),
                 "operator": orb.get("operator"),
                 "interjection": orb.get("interjection"),
+                "thought": orb.get("thought"),
             },
             "perception": {
                 "state": perception.get("state"),
@@ -970,95 +1418,94 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
             },
         }
 
-    system_prompt = (
-        "You are Francis speaking through the Orb. Respond briefly, concretely, and calmly. "
-        "Stay grounded in the supplied Francis state. Do not invent visual facts that are not present. "
-        "If perception is present, use it carefully as the current visible context. "
-        "Keep responses short enough for a compact Orb chat surface."
-    )
-    context_block = {
-        "mode": orb.get("mode"),
-        "posture": orb.get("posture"),
-        "summary": orb.get("summary"),
-        "detail": orb.get("detail"),
-        "authority": orb.get("authority"),
-        "operator": orb.get("operator"),
-        "interjection": orb.get("interjection"),
-        "current_work": snapshot.get("current_work", {}),
-        "objective": snapshot.get("objective", {}),
-        "approvals": snapshot.get("approvals", {}),
-        "runs": snapshot.get("runs", {}),
-        "perception": {
-            "state": perception.get("state"),
-            "summary": perception.get("summary"),
-            "detail_summary": perception.get("detail_summary"),
-            "captured_at": perception.get("captured_at"),
-            "display_id": perception.get("display_id"),
-            "display": perception.get("display"),
-            "cursor": perception.get("cursor"),
-            "window": perception.get("window"),
-            "freshness": perception.get("freshness"),
-            "sensing": perception.get("sensing"),
-            "cards": perception.get("cards"),
-            "focus": {
-                "width": perception.get("focus", {}).get("width"),
-                "height": perception.get("focus", {}).get("height"),
-                "has_image": bool(
-                    perception.get("focus", {}).get("has_image")
-                    or perception.get("focus", {}).get("data_url")
-                ),
-            },
-            "frame": {
-                "width": perception.get("frame", {}).get("width"),
-                "height": perception.get("frame", {}).get("height"),
-                "has_image": bool(
-                    perception.get("frame", {}).get("has_image")
-                    or perception.get("frame", {}).get("data_url")
-                ),
-            },
+    planned = build_orb_chat_plan(
+        message=user_message,
+        orb_context={
+            "mode": orb.get("mode"),
+            "posture": orb.get("posture"),
+            "summary": orb.get("summary"),
+            "detail": orb.get("detail"),
+            "operator": orb.get("operator"),
+            "interjection": orb.get("interjection"),
+            "authority": orb.get("authority"),
+            "run_state": snapshot.get("runs", {}).get("last_run", {}),
         },
-    }
+        perception=perception,
+        snapshot=snapshot,
+        short_term_messages=history.get("recent_turns", []),
+        long_term_memory=history.get("long_term_memory", {}),
+    )
+    content = str(planned.get("reply", "")).strip() or "Orb chat is live, but no response text was returned."
+    plan = planned.get("plan") if isinstance(planned.get("plan"), dict) else None
+    thought_text = str(planned.get("thought", "")).strip()
+    thought_summary = thought_text or (str(plan.get("summary", "")).strip() if isinstance(plan, dict) else "")
+    thought_payload = None
+    if thought_summary:
+        thought_payload = {
+            "id": _hash_orb_thought_id(normalized_conversation_id, user_message, thought_summary),
+            "source": "orb.chat",
+            "summary": thought_summary,
+            "detail": content,
+            "visible": True,
+        }
 
-    content = ""
-    try:
-        response = chat(
-            "orb.quick_chat.operator_loop",
-            [
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Orb context:\n{context_block}\n\n"
-                        f"User message:\n{user_message}"
-                    ),
-                },
-            ],
-            timeout=45.0,
-            options={"temperature": 0.2},
-        )
-        if isinstance(response, dict):
-            message_payload = response.get("message", {})
-            if isinstance(message_payload, dict):
-                content = str(message_payload.get("content", "")).strip()
-            elif response.get("response"):
-                content = str(response.get("response", "")).strip()
-    except Exception as exc:  # pragma: no cover - fallback is verified at the route layer
-        content = (
-            "Orb chat stayed local, but the model route did not answer cleanly. "
-            f"Current mode is {orb.get('mode')}, posture is {orb.get('posture')}, and the visible context summary is: "
-            f"{perception.get('summary') or orb.get('summary')}. Error: {exc}"
-        )
+    append_orb_turn(
+        conversation_id=normalized_conversation_id,
+        role="user",
+        content=user_message,
+        kind="chat",
+        source="orb.chat",
+    )
+    append_orb_turn(
+        conversation_id=normalized_conversation_id,
+        role="assistant",
+        content=content,
+        kind="chat",
+        source="orb.chat.planner",
+        metadata={
+            "reply_kind": "planner",
+            "planner": str(planned.get("planner", "ollama")).strip() or "ollama",
+            "plan_ready": bool(plan),
+            "mode_requirement": str(plan.get("mode_requirement", "pilot")).strip() if isinstance(plan, dict) else "",
+        },
+    )
+    refresh_orb_long_term_memory(
+        conversation_id=normalized_conversation_id,
+        snapshot=snapshot,
+        perception=perception,
+    )
+    refreshed_history = build_orb_chat_history(normalized_conversation_id)
 
+    execution_ready = bool(
+        isinstance(plan, dict)
+        and str(plan.get("mode_requirement", "pilot")).strip().lower() in {"pilot", "away"}
+        and str(orb.get("mode", "assist")).strip().lower() in {"pilot", "away"}
+    )
     return {
         "status": "ok",
-        "reply": content or "Orb chat is live, but no response text was returned.",
-        "reply_kind": "model",
+        "reply": content,
+        "reply_kind": "planner",
+        "conversation": refreshed_history,
+        "memory": {
+            "conversation_id": refreshed_history.get("conversation_id", normalized_conversation_id),
+            "short_term": refreshed_history.get("short_term_memory", {}),
+            "long_term": refreshed_history.get("long_term_memory", {}),
+        },
+        "plan": plan,
+        "execution": {
+            "ready": execution_ready,
+            "mode_requirement": str(plan.get("mode_requirement", "pilot")).strip() if isinstance(plan, dict) else "pilot",
+            "auto_execute": False,
+            "executor": "shell",
+        },
+        "thought": thought_payload,
         "orb": {
             "mode": orb.get("mode"),
             "posture": orb.get("posture"),
             "summary": orb.get("summary"),
             "operator": orb.get("operator"),
             "interjection": orb.get("interjection"),
+            "thought": orb.get("thought"),
         },
         "perception": {
             "state": perception.get("state"),
@@ -1067,5 +1514,9 @@ def build_orb_chat_reply(*, message: str, max_actions: int = 4) -> dict[str, Any
             "captured_at": perception.get("captured_at"),
             "freshness": perception.get("freshness"),
             "window": perception.get("window"),
+        },
+        "planner": {
+            "provider": str(planned.get("planner", "ollama")).strip() or "ollama",
+            "planning_only": True,
         },
     }

@@ -79,6 +79,7 @@ const {
 } = require("./orb-authority");
 const { getForegroundWindowInfo } = require("./foreground-window");
 const { executeWindowsInputCommand } = require("./windows-input");
+const { executeOrbDesktopPlan } = require("./orb-plan");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -2660,6 +2661,36 @@ function registerIpc() {
   ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
   ipcMain.handle("overlay:open-path", (_event, target) => openLifecyclePath(target));
   ipcMain.handle("overlay:get-orb-surface", () => fetchHudJson("/api/orb"));
+  ipcMain.handle("overlay:execute-orb-desktop-plan", async (_event, plan) => {
+    const result = await executeOrbDesktopPlan(plan, {
+      inputState: getOverlayInputState(),
+      executeCommand: (command) => executeWindowsInputCommand(command, { platform: process.platform }),
+      onSyntheticCursor: (point) => {
+        if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+          return;
+        }
+        orbAuthorityState.syntheticCursor = {
+          x: Math.round(Number(point.x)),
+          y: Math.round(Number(point.y)),
+        };
+        orbAuthorityState.lastSyntheticAtMs = Date.now();
+      },
+      onSyntheticInput: () => {
+        orbAuthorityState.lastSyntheticAtMs = Date.now();
+      },
+    });
+    recordLifecycleHistory(
+      "orb.desktop_plan",
+      String(result?.status || "").trim().toLowerCase() === "failed"
+        ? `Orb desktop plan failed: ${String(result.title || "Orb desktop plan")}.`
+        : `Orb desktop plan executed: ${String(result.title || "Orb desktop plan")}.`,
+      {
+        tone: String(result?.status || "").trim().toLowerCase() === "failed" ? "high" : "medium",
+        detail: result && typeof result === "object" ? result : {},
+      },
+    );
+    return result;
+  });
   ipcMain.handle("overlay:panic-stop", async () => {
     const response = await fetchHudJson("/api/actions/execute", {
       method: "POST",

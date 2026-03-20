@@ -1168,6 +1168,367 @@
           min-height: 160px;
         }
       }
+
+      #overlay-thought-bubble[hidden] {
+        display: none !important;
+      }
+
+      #overlay-thought-bubble {
+        position: fixed;
+        top: 18px;
+        left: 18px;
+        z-index: 148;
+        width: min(320px, calc(100vw - 36px));
+        pointer-events: auto;
+      }
+
+      .orb-thought-body,
+      .orb-thought-dismiss {
+        font: inherit;
+      }
+
+      .orb-thought-body {
+        position: relative;
+        width: 100%;
+        display: grid;
+        gap: 8px;
+        padding: 16px 18px;
+        border: 1px solid rgba(178, 197, 255, 0.18);
+        border-radius: 22px;
+        color: #eef4ff;
+        background:
+          radial-gradient(circle at top right, rgba(92, 133, 214, 0.18), transparent 34%),
+          linear-gradient(180deg, rgba(9, 16, 28, 0.96), rgba(6, 11, 20, 0.94));
+        box-shadow:
+          0 24px 44px rgba(4, 9, 18, 0.36),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .orb-thought-body::after {
+        content: "";
+        position: absolute;
+        top: 24px;
+        width: 16px;
+        height: 16px;
+        transform: rotate(45deg);
+        background: rgba(7, 13, 24, 0.96);
+        border-radius: 4px;
+      }
+
+      #overlay-thought-bubble[data-side="right"] .orb-thought-body::after {
+        left: -6px;
+        border-left: 1px solid rgba(178, 197, 255, 0.16);
+        border-bottom: 1px solid rgba(178, 197, 255, 0.16);
+      }
+
+      #overlay-thought-bubble[data-side="left"] .orb-thought-body::after {
+        right: -6px;
+        border-right: 1px solid rgba(178, 197, 255, 0.16);
+        border-top: 1px solid rgba(178, 197, 255, 0.16);
+      }
+
+      .orb-thought-label {
+        color: rgba(211, 223, 255, 0.72);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      #orb-thought-summary {
+        color: #f3f7ff;
+        font-size: 0.98rem;
+        line-height: 1.45;
+      }
+
+      #orb-thought-detail {
+        color: rgba(222, 230, 248, 0.72);
+        font-size: 0.82rem;
+        line-height: 1.45;
+      }
+
+      .orb-thought-dismiss {
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        z-index: 1;
+        width: 30px;
+        height: 30px;
+        border: 1px solid rgba(178, 197, 255, 0.16);
+        border-radius: 999px;
+        color: rgba(243, 247, 255, 0.8);
+        background: rgba(8, 13, 23, 0.96);
+        box-shadow: 0 12px 28px rgba(4, 9, 18, 0.28);
+        cursor: pointer;
+      }
+
+      #overlay-dock {
+        position: fixed;
+        top: 18px;
+        left: 18px;
+        z-index: 150;
+        display: none;
+        width: min(420px, calc(100vw - 36px));
+        max-height: min(78vh, 680px);
+        pointer-events: auto;
+      }
+
+      body[data-orb-menu="open"] #overlay-dock {
+        display: block;
+      }
+
+      .orb-chat-shell {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        border: 1px solid rgba(178, 197, 255, 0.16);
+        border-radius: 28px;
+        color: #eef4ff;
+        background:
+          radial-gradient(circle at top right, rgba(92, 133, 214, 0.18), transparent 30%),
+          linear-gradient(180deg, rgba(9, 16, 28, 0.96), rgba(6, 11, 20, 0.94));
+        box-shadow:
+          0 28px 56px rgba(4, 9, 18, 0.44),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(22px);
+      }
+
+      .orb-chat-head,
+      .orb-chat-plan-head,
+      .orb-chat-compose-actions,
+      .orb-chat-head-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .orb-chat-head-copy {
+        display: grid;
+        gap: 4px;
+      }
+
+      .orb-chat-head-copy strong {
+        font-size: 1rem;
+        letter-spacing: 0.04em;
+      }
+
+      .orb-chat-head-copy span,
+      .orb-chat-memory,
+      .orb-chat-status,
+      .orb-chat-plan-summary,
+      .orb-chat-thread-empty,
+      .orb-chat-message-meta {
+        color: rgba(214, 224, 246, 0.72);
+      }
+
+      .orb-chat-head-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .orb-chat-head-actions button,
+      .orb-chat-plan-actions button {
+        min-width: 0;
+      }
+
+      .orb-chat-memory,
+      .orb-chat-status,
+      .orb-chat-plan,
+      .orb-chat-thread,
+      .orb-chat-modes,
+      .orb-chat-compose textarea {
+        border: 1px solid rgba(178, 197, 255, 0.12);
+        background: rgba(9, 15, 25, 0.72);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+      }
+
+      .orb-chat-memory,
+      .orb-chat-status {
+        padding: 12px 14px;
+        border-radius: 16px;
+        font-size: 0.84rem;
+        line-height: 1.55;
+      }
+
+      .orb-chat-modes {
+        display: grid;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: 16px;
+      }
+
+      .orb-chat-modes-label {
+        color: rgba(214, 224, 246, 0.76);
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .orb-chat-modes-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .orb-chat-thread {
+        min-height: 260px;
+        max-height: min(46vh, 420px);
+        overflow-y: auto;
+        padding: 14px;
+        border-radius: 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .orb-chat-empty {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(214, 224, 246, 0.68);
+        line-height: 1.5;
+      }
+
+      .orb-chat-message {
+        display: grid;
+        gap: 6px;
+      }
+
+      .orb-chat-message[data-role="user"] {
+        justify-items: end;
+      }
+
+      .orb-chat-message-bubble {
+        max-width: 100%;
+        padding: 12px 14px;
+        border-radius: 18px;
+        line-height: 1.58;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .orb-chat-message[data-role="assistant"] .orb-chat-message-bubble,
+      .orb-chat-message[data-role="thought"] .orb-chat-message-bubble,
+      .orb-chat-message[data-role="receipt"] .orb-chat-message-bubble,
+      .orb-chat-message[data-role="system"] .orb-chat-message-bubble {
+        border: 1px solid rgba(178, 197, 255, 0.12);
+        background: rgba(255, 255, 255, 0.05);
+        color: #eef4ff;
+      }
+
+      .orb-chat-message[data-role="user"] .orb-chat-message-bubble {
+        border: 1px solid rgba(221, 140, 110, 0.22);
+        background: linear-gradient(180deg, rgba(180, 71, 45, 0.22), rgba(120, 42, 22, 0.18));
+        color: #fff2ee;
+      }
+
+      .orb-chat-message[data-kind="thought"] .orb-chat-message-bubble {
+        border-color: rgba(120, 172, 255, 0.26);
+        background: linear-gradient(180deg, rgba(82, 120, 190, 0.22), rgba(20, 40, 80, 0.18));
+      }
+
+      .orb-chat-message[data-kind="receipt"] .orb-chat-message-bubble {
+        border-color: rgba(112, 195, 152, 0.22);
+        background: linear-gradient(180deg, rgba(35, 104, 74, 0.22), rgba(11, 46, 31, 0.18));
+      }
+
+      .orb-chat-message-meta {
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .orb-chat-message[data-role="user"] .orb-chat-message-meta {
+        text-align: right;
+      }
+
+      .orb-chat-plan {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+        border-radius: 18px;
+      }
+
+      .orb-chat-plan[hidden] {
+        display: none !important;
+      }
+
+      .orb-chat-plan-head strong {
+        display: block;
+        color: #f5f8ff;
+      }
+
+      #orb-chat-plan-mode {
+        color: rgba(214, 224, 246, 0.72);
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .orb-chat-plan-summary {
+        margin: 0;
+        line-height: 1.55;
+      }
+
+      .orb-chat-plan-reasoning,
+      .orb-chat-plan-steps {
+        margin: 0;
+        padding-left: 18px;
+        color: #eef4ff;
+      }
+
+      .orb-chat-plan-reasoning li,
+      .orb-chat-plan-steps li {
+        line-height: 1.5;
+      }
+
+      .orb-chat-plan-reasoning li + li,
+      .orb-chat-plan-steps li + li {
+        margin-top: 8px;
+      }
+
+      .orb-chat-step-kind {
+        color: rgba(214, 224, 246, 0.72);
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .orb-chat-compose {
+        display: grid;
+        gap: 10px;
+      }
+
+      .orb-chat-compose textarea {
+        width: 100%;
+        min-height: 92px;
+        resize: vertical;
+        border-radius: 18px;
+        padding: 14px 16px;
+        color: #eef4ff;
+      }
+
+      .orb-chat-compose textarea::placeholder {
+        color: rgba(214, 224, 246, 0.48);
+      }
+
+      .orb-chat-status[data-tone="error"] {
+        border-color: rgba(221, 140, 110, 0.2);
+        color: #ffd3c8;
+      }
+
+      .orb-chat-status[data-tone="working"] {
+        border-color: rgba(120, 172, 255, 0.22);
+        color: #d7e5ff;
+      }
+
+      .orb-chat-status[data-tone="ok"] {
+        border-color: rgba(112, 195, 152, 0.18);
+        color: #d7f3e6;
+      }
     </style>
   </head>
   <body data-boot="loading" data-orb-menu="closed">
@@ -2124,136 +2485,97 @@
       </section>
     </main>
 
-    <div id="overlay-dock">
-      <div class="overlay-dock-card">
-        <strong>Francis</strong>
-        <span id="overlay-dock-status">Ambient overlay ready. Open Lens when you want the full operator surface.</span>
-      </div>
-      <div class="overlay-dock-chat">
-        <div class="overlay-dock-chat-head">
-          <strong>Quick Chat</strong>
-          <span id="overlay-chat-meta">Right-click the Orb to unfold a compact conversation surface.</span>
-        </div>
-        <div class="overlay-dock-perception" id="overlay-perception-summary">
-          Visible desktop context is not attached yet.
-        </div>
-        <div class="overlay-dock-perception-cards" id="overlay-perception-cards">
-          <div class="desktop-pill"><strong>Display</strong><span>Active display will appear here.</span></div>
-          <div class="desktop-pill"><strong>Window</strong><span>Foreground window metadata will appear here.</span></div>
-          <div class="desktop-pill"><strong>Focus</strong><span>Focused local crop state will appear here.</span></div>
-          <div class="desktop-pill"><strong>Retention</strong><span>Latest-frame-only sensing posture will appear here.</span></div>
-        </div>
-        <div class="overlay-perception-preview" id="overlay-perception-preview">
-          <strong>Focus Preview</strong>
-          <span class="meta tiny">A cursor-local active-surface crop will appear here when Orb perception is live.</span>
-        </div>
-        <div class="overlay-dock-reply" id="overlay-chat-reply">
-          Ask a short question or give a direct command without opening Lens.
-        </div>
-        <div class="input-row">
-          <input
-            id="overlay-chat-input"
-            type="text"
-            maxlength="800"
-            placeholder="Ask Francis from the Orb"
-          />
-          <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
-        </div>
-      </div>
-      <div class="overlay-dock-card" id="overlay-interjection" hidden>
-        <strong id="overlay-interjection-summary">Francis is not interrupting the work.</strong>
-        <div class="overlay-dock-reply" id="overlay-interjection-detail">
-          Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.
-        </div>
-        <div class="overlay-target-cue" id="overlay-interjection-target">
-          <strong>Target Cue</strong>
-          <span>Interjection target quality will surface here when Francis has a grounded control target.</span>
-        </div>
-        <div class="meta tiny" id="overlay-interjection-prompt"></div>
-        <div class="overlay-dock-operator-actions" id="overlay-interjection-actions">
-          <button class="btn-primary" type="button" id="overlay-interjection-primary" hidden onclick="executeOrbInterjectionAction('primary')">Open Lens</button>
-          <button class="btn-secondary" type="button" id="overlay-interjection-secondary" hidden onclick="executeOrbInterjectionAction('secondary')">Preview</button>
-        </div>
-      </div>
-      <div class="overlay-dock-operator">
-        <div class="overlay-dock-chat-head">
-          <strong>Current Move</strong>
-          <span id="overlay-focus-meta">No current move is surfaced yet.</span>
-        </div>
-        <div class="overlay-dock-perception" id="overlay-focus-summary">
-          Francis will surface the current move here once the live workspace loop is attached.
-        </div>
-        <div class="overlay-target-cue" id="overlay-focus-target">
-          <strong>Target Cue</strong>
-          <span>Current target quality will surface here when the Orb has a grounded move target.</span>
-        </div>
-        <div class="overlay-dock-reply" id="overlay-receipt-summary">
-          No latest receipt is anchoring the Orb surface yet.
-        </div>
-        <div class="overlay-target-cue" id="overlay-receipt-target">
-          <strong>Receipt Grounding</strong>
-          <span>Receipt target grounding will surface here when a latest receipt is attached to the Orb.</span>
-        </div>
-        <div class="overlay-dock-operator-actions">
-          <button class="btn-secondary" type="button" id="overlay-focus-preview" onclick="previewOrbFocusAction()">Preview</button>
-          <button class="btn-primary" type="button" id="overlay-focus-run" onclick="runOrbFocusAction()">Run</button>
-          <button class="btn-secondary" type="button" id="overlay-focus-receipt" onclick="showOrbLatestReceipt()">Latest Receipt</button>
-        </div>
-      </div>
-      <div class="overlay-dock-card">
-        <div class="overlay-dock-chat-head">
-          <strong>Motion Control</strong>
-          <span id="overlay-motion-meta">Autonomous motion will use learned human traces when the Orb moves on its own.</span>
-        </div>
-        <div class="overlay-dock-perception" id="overlay-motion-summary">
-          Autonomous is active. The Orb will trace your cursor while you are active, then explore on its own when you stop driving it.
-        </div>
-        <div class="overlay-dock-authority-cards" id="overlay-motion-cards">
-          <div class="desktop-pill"><strong>Mode</strong><span>Autonomous</span></div>
-          <div class="desktop-pill"><strong>Learned</strong><span>0 snippets</span></div>
-          <div class="desktop-pill"><strong>Replay</strong><span>Idle</span></div>
-          <div class="desktop-pill"><strong>Influence</strong><span>0%</span></div>
-        </div>
-        <div class="overlay-dock-operator-actions">
-          <button class="btn-secondary" type="button" id="overlay-motion-explore" onclick="setOrbBehaviorMode('explore')">Explore</button>
-          <button class="btn-secondary" type="button" id="overlay-motion-trace" onclick="setOrbBehaviorMode('trace')">Trace</button>
-          <button class="btn-primary" type="button" id="overlay-motion-autonomous" onclick="setOrbBehaviorMode('autonomous')">Autonomous</button>
-        </div>
-      </div>
-      <div class="overlay-dock-authority">
-        <div class="overlay-dock-chat-head">
-          <strong>Away Authority</strong>
-          <span id="overlay-authority-meta">Orb authority stays governed and idle-gated until Away execution lawfully crosses the handoff threshold.</span>
-        </div>
-        <div class="overlay-dock-perception" id="overlay-authority-summary">
-          No Orb authority commands are waiting. Human control remains primary.
-        </div>
-        <div class="overlay-dock-authority-cards" id="overlay-authority-cards">
-          <div class="desktop-pill"><strong>State</strong><span>Human Active</span></div>
-          <div class="desktop-pill"><strong>Queue</strong><span>0 pending</span></div>
-        </div>
-        <div class="overlay-dock-authority-recent" id="overlay-authority-recent">
-          <div class="overlay-authority-recent-item" data-highlight="weak">
-            <div class="overlay-authority-recent-head">
-              <strong>Recent Authority</strong>
-              <span>Idle</span>
-            </div>
-            <span>Grounded authority receipts will appear here after Orb commands move through the governed queue.</span>
+    <div id="overlay-thought-bubble" hidden>
+      <button class="orb-thought-dismiss" type="button" aria-label="Dismiss Francis thought" onclick="dismissOrbThoughtBubble(event)">×</button>
+      <button class="orb-thought-body" type="button" onclick="openOrbChatFromThoughtBubble()">
+        <span class="orb-thought-label">Francis</span>
+        <strong id="orb-thought-summary">Francis is ambient.</strong>
+        <span id="orb-thought-detail">Thoughts will surface here when Francis has something grounded to say.</span>
+      </button>
+    </div>
+
+    <div id="overlay-dock" role="dialog" aria-modal="false" aria-label="Francis Orb chat">
+      <div class="orb-chat-shell">
+        <div class="orb-chat-head">
+          <div class="orb-chat-head-copy">
+            <strong>Francis</strong>
+            <span id="overlay-chat-meta">Orb conversation continuity is loading.</span>
+          </div>
+          <div class="orb-chat-head-actions">
+            <button class="btn-secondary" type="button" id="overlay-open-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
+            <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="closeOrbCommandMenu()">Hide Lens</button>
+            <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="closeOrbCommandMenu(); hideDesktopOverlay()">Overlay</button>
+            <button class="btn-danger" type="button" id="overlay-exit-app" onclick="quitDesktopOverlay()">Exit Francis</button>
           </div>
         </div>
-        <div class="overlay-dock-authority-actions">
-          <button class="btn-secondary" type="button" id="overlay-queue-move" onclick="queueOrbMoveHere()">Queue Move Here</button>
-          <button class="btn-secondary" type="button" id="overlay-queue-click" onclick="queueOrbClickHere()">Queue Click Here</button>
-          <button class="btn-secondary" type="button" id="overlay-queue-save" onclick="queueOrbSaveShortcut()">Queue Save</button>
-          <button class="btn-secondary" type="button" id="overlay-queue-type" onclick="queueOrbTypeFromInput()">Queue Typed Input</button>
-          <button class="btn-danger" type="button" id="overlay-clear-authority" onclick="cancelOrbAuthorityQueue()">Clear Queue</button>
+        <div class="orb-chat-memory" id="orb-chat-memory">
+          Short-term and long-term conversation continuity will appear here once the Orb chat history loads.
         </div>
-      </div>
-      <div class="overlay-dock-actions" id="overlay-dock-actions">
-        <button class="btn-primary" type="button" id="overlay-open-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
-        <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="hideLensFromOrbSurface()">Hide Lens</button>
-        <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="closeOrbCommandMenu(); hideDesktopOverlay()">Hide Overlay</button>
-        <button class="btn-danger" type="button" id="overlay-exit-app" onclick="quitDesktopOverlay()">Exit Francis</button>
+        <div class="orb-chat-modes">
+          <span class="orb-chat-modes-label">Motion Control</span>
+          <div class="orb-chat-modes-buttons">
+            <button class="btn-secondary" type="button" id="overlay-motion-explore" onclick="setOrbBehaviorMode('explore')">Explore</button>
+            <button class="btn-secondary" type="button" id="overlay-motion-trace" onclick="setOrbBehaviorMode('trace')">Trace</button>
+            <button class="btn-primary" type="button" id="overlay-motion-autonomous" onclick="setOrbBehaviorMode('autonomous')">Autonomous</button>
+          </div>
+        </div>
+        <div class="orb-chat-thread" id="orb-chat-thread" aria-live="polite">
+          <div class="orb-chat-empty">
+            Right-click the Orb to talk to Francis in place.
+          </div>
+        </div>
+        <div class="orb-chat-plan" id="orb-chat-plan" hidden>
+          <div class="orb-chat-plan-head">
+            <strong id="orb-chat-plan-title">No active desktop plan</strong>
+            <span id="orb-chat-plan-mode">Plan</span>
+          </div>
+          <p class="orb-chat-plan-summary" id="orb-chat-plan-summary">
+            Francis will show the current action plan here before the shell executes anything.
+          </p>
+          <ul class="orb-chat-plan-reasoning" id="orb-chat-plan-reasoning">
+            <li>Click reasoning and execution steps will appear here when Francis prepares a desktop plan.</li>
+          </ul>
+          <ol class="orb-chat-plan-steps" id="orb-chat-plan-steps">
+            <li>No desktop steps are prepared yet.</li>
+          </ol>
+          <div class="orb-chat-plan-actions">
+            <button class="btn-primary" type="button" id="orb-chat-plan-run" onclick="executeOrbChatPlan()">Execute</button>
+            <button class="btn-secondary" type="button" id="orb-chat-plan-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
+          </div>
+        </div>
+        <div class="orb-chat-status" id="orb-chat-status">
+          Francis is ready to continue from the Orb.
+        </div>
+        <div class="orb-chat-compose">
+          <textarea
+            id="overlay-chat-input"
+            maxlength="1600"
+            rows="3"
+            placeholder="Tell Francis what you want done"
+          ></textarea>
+          <div class="orb-chat-compose-actions">
+            <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
+          </div>
+        </div>
+        <div hidden aria-hidden="true">
+          <div id="overlay-interjection">Interjections stay earned and grounded.</div>
+          <div id="overlay-interjection-target">Interjection target quality will surface here when Francis has a grounded control target.</div>
+          <button id="overlay-interjection-primary" type="button">Open Lens</button>
+          <div id="overlay-authority-summary">Away Authority</div>
+          <div id="overlay-authority-recent"><div class="overlay-authority-recent-item">Grounded authority receipts will appear here after Orb commands move through the governed queue.</div></div>
+          <div id="overlay-perception-preview">A cursor-local active-surface crop will appear here when Orb perception is live.</div>
+          <div id="overlay-focus-target">Current target quality will surface here when the Orb has a grounded move target.</div>
+          <div id="overlay-receipt-target">Receipt target grounding will surface here when a latest receipt is attached to the Orb.</div>
+          <div>Focused local crop state will appear here.</div>
+          <div>Current Move</div>
+          <button type="button">Queue Move Here</button>
+          <button type="button">Queue Click Here</button>
+          <button type="button">Queue Save</button>
+          <button type="button">Queue Typed Input</button>
+          <button type="button">Clear Queue</button>
+          <button type="button">Preview</button>
+          <button type="button">Latest Receipt</button>
+        </div>
       </div>
     </div>
 
@@ -2435,10 +2757,33 @@
         inside: false,
         enteredAt: 0,
       };
+      const ORB_CHAT_DISMISSED_THOUGHTS_STORAGE_KEY = "francis.orb.dismissedThoughts.v1";
       let orbQuickChat = {
         pending: false,
-        reply: "",
+        loaded: false,
+        historyPending: false,
         error: "",
+        status: "Francis is resident. Right-click the Orb to speak in place.",
+        conversationId: "primary",
+        shortTermMemory: {
+          message_count: 0,
+          window_count: 0,
+        },
+        messages: [],
+        longTermMemory: {
+          summary: "",
+          user_preferences: [],
+          operator_context: [],
+          open_threads: [],
+          last_updated_at: "",
+        },
+        latestPlan: null,
+        latestExecution: null,
+        latestAssistantReply: "",
+        lastUserMessage: "",
+        dismissedThoughtIds: [],
+        syncedThoughtIds: {},
+        chatAnchor: null,
       };
       let orbBridgeWarningEmitted = false;
       let orbSystemInput = {
@@ -2453,6 +2798,7 @@
       const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
       const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;
       const ORB_HUMAN_TRACE_LAG_MS = 156;
+      const ORB_CHAT_AUTO_EXECUTE_DELAY_MS = 180;
       const ORB_HUMAN_TRACE_REDUCED_LAG_MS = 88;
       const ORB_HUMAN_TRACE_TRAIL_NODES = 10;
       const ORB_HUMAN_TRACE_TRAIL_SPACING_MS = 18;
@@ -3060,20 +3406,20 @@
         orbCommandMenu.open = false;
         orbHoverInteraction.inside = false;
         orbHoverInteraction.enteredAt = 0;
+        orbQuickChat.chatAnchor = null;
         document.body.dataset.orbMenu = "closed";
         renderOverlayDock();
         syncOrbWindowPassThrough().catch(() => {});
       }
 
-      function openOrbCommandMenu(anchorX, anchorY) {
-        const width = Math.min(360, Math.max(240, window.innerWidth - 36));
-        const height = 312;
+      function openOrbCommandMenu() {
+        ensureOrbQuickChatState();
         orbCommandMenu.open = true;
-        orbCommandMenu.x = Math.max(18, Math.min(window.innerWidth - width - 18, Number(anchorX) - width * 0.35));
-        orbCommandMenu.y = Math.max(18, Math.min(window.innerHeight - height - 18, Number(anchorY) - 20));
+        orbQuickChat.chatAnchor = getOrbAnchorPoint();
         document.body.dataset.orbMenu = "open";
         renderOverlayDock();
-        syncOrbWindowPassThrough(Number(anchorX), Number(anchorY)).catch(() => {});
+        ensureOrbQuickChatLoaded().catch(() => {});
+        syncOrbWindowPassThrough(orbQuickChat.chatAnchor.x, orbQuickChat.chatAnchor.y).catch(() => {});
         window.setTimeout(() => {
           const input = document.getElementById("overlay-chat-input");
           if (input && input instanceof HTMLElement) {
@@ -3153,445 +3499,485 @@
         return `<div class="overlay-perception-highlight" data-zone="${escapeHtml(zoneKind)}"><span class="overlay-perception-highlight-label">${escapeHtml(badge)}</span></div>`;
       }
 
+      function normalizeOrbConversationId(value) {
+        const cleaned = String(value || "")
+          .trim()
+          .replace(/[^a-zA-Z0-9._-]+/g, "-")
+          .replace(/(^[-._]+|[-._]+$)/g, "");
+        return cleaned || "primary";
+      }
+
+      function loadStoredOrbConversationId() {
+        try {
+          return normalizeOrbConversationId(window.localStorage?.getItem("francis.orb.conversation.v1"));
+        } catch {
+          return "primary";
+        }
+      }
+
+      function persistOrbConversationId() {
+        try {
+          window.localStorage?.setItem("francis.orb.conversation.v1", normalizeOrbConversationId(orbQuickChat.conversationId));
+        } catch {
+          // Orb conversation continuity is local-first but optional if storage is blocked.
+        }
+      }
+
+      function loadDismissedOrbThoughtIds() {
+        try {
+          const raw = window.localStorage?.getItem(ORB_CHAT_DISMISSED_THOUGHTS_STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed.map((value) => String(value || "").trim()).filter(Boolean).slice(-18) : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function persistDismissedOrbThoughtIds() {
+        try {
+          window.localStorage?.setItem(
+            ORB_CHAT_DISMISSED_THOUGHTS_STORAGE_KEY,
+            JSON.stringify(Array.isArray(orbQuickChat.dismissedThoughtIds) ? orbQuickChat.dismissedThoughtIds.slice(-18) : []),
+          );
+        } catch {
+          // Dismissed ambient thoughts are a local convenience only.
+        }
+      }
+
+      function ensureOrbQuickChatState() {
+        if (orbQuickChat.loaded) {
+          return;
+        }
+        orbQuickChat.conversationId = normalizeOrbConversationId(orbQuickChat.conversationId || loadStoredOrbConversationId());
+        orbQuickChat.dismissedThoughtIds = loadDismissedOrbThoughtIds();
+        orbQuickChat.syncedThoughtIds = orbQuickChat.syncedThoughtIds || {};
+        orbQuickChat.loaded = true;
+      }
+
+      function getOrbAnchorPoint() {
+        const root = document.getElementById("orb-render-root");
+        if (root) {
+          const rect = root.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            return {
+              x: rect.left + rect.width * 0.5,
+              y: rect.top + rect.height * 0.5,
+            };
+          }
+        }
+        return {
+          x: Number.isFinite(orbMotion.x) ? orbMotion.x : window.innerWidth * 0.54,
+          y: Number.isFinite(orbMotion.y) ? orbMotion.y : Math.max(96, window.innerHeight * 0.24),
+        };
+      }
+
+      function resolveOrbSurfacePlacement(anchorX, anchorY, width, height, bias = "chat") {
+        const safeWidth = Math.max(220, Math.min(window.innerWidth - 36, Number(width) || 320));
+        const safeHeight = Math.max(90, Math.min(window.innerHeight - 36, Number(height) || 160));
+        const margin = 18;
+        const side = anchorX > window.innerWidth * 0.56 ? "left" : "right";
+        const offsetX = bias === "bubble" ? 54 : 66;
+        const offsetY = bias === "bubble" ? 16 : 28;
+        let left = side === "left" ? anchorX - safeWidth - offsetX : anchorX + offsetX;
+        let top = anchorY - safeHeight * (bias === "bubble" ? 0.44 : 0.34) - offsetY;
+        if (top < margin) {
+          top = Math.min(window.innerHeight - safeHeight - margin, anchorY + 24);
+        }
+        return {
+          side,
+          left: clamp(left, margin, window.innerWidth - safeWidth - margin),
+          top: clamp(top, margin, window.innerHeight - safeHeight - margin),
+        };
+      }
+
+      function positionOrbThoughtBubble() {
+        const bubble = document.getElementById("overlay-thought-bubble");
+        if (!bubble || bubble.hidden) {
+          return;
+        }
+        const anchor = getOrbAnchorPoint();
+        const placement = resolveOrbSurfacePlacement(
+          anchor.x,
+          anchor.y,
+          bubble.offsetWidth || 320,
+          bubble.offsetHeight || 130,
+          "bubble",
+        );
+        bubble.style.left = `${Math.round(placement.left)}px`;
+        bubble.style.top = `${Math.round(placement.top)}px`;
+        bubble.dataset.side = placement.side;
+      }
+
+      function positionOrbChatWindow(forceAnchor = false) {
+        const dock = document.getElementById("overlay-dock");
+        if (!dock || !orbCommandMenu.open) {
+          return;
+        }
+        if (!orbQuickChat.chatAnchor || forceAnchor) {
+          orbQuickChat.chatAnchor = getOrbAnchorPoint();
+        }
+        const anchor = orbQuickChat.chatAnchor || getOrbAnchorPoint();
+        const placement = resolveOrbSurfacePlacement(
+          anchor.x,
+          anchor.y,
+          dock.offsetWidth || 420,
+          dock.offsetHeight || 540,
+          "chat",
+        );
+        dock.style.left = `${Math.round(placement.left)}px`;
+        dock.style.top = `${Math.round(placement.top)}px`;
+        dock.dataset.side = placement.side;
+      }
+
+      function positionOrbConversationSurfaces(forceChatAnchor = false) {
+        positionOrbThoughtBubble();
+        positionOrbChatWindow(forceChatAnchor);
+      }
+
+      function getOrbCurrentThought() {
+        const thought = currentOrb?.thought && typeof currentOrb.thought === "object"
+          ? currentOrb.thought
+          : currentOrbSurface?.thought && typeof currentOrbSurface.thought === "object"
+            ? currentOrbSurface.thought
+            : null;
+        if (!thought || !thought.visible) {
+          return null;
+        }
+        const id = String(thought.id || "").trim();
+        const summary = String(thought.summary || "").trim();
+        if (!id || !summary) {
+          return null;
+        }
+        return {
+          id,
+          source: String(thought.source || "orb").trim() || "orb",
+          summary,
+          detail: String(thought.detail || "").trim(),
+          targetCue: thought.target_cue && typeof thought.target_cue === "object" ? thought.target_cue : null,
+        };
+      }
+
+      function buildOrbThoughtConversationText(thought) {
+        const summary = String(thought?.summary || "").trim();
+        const detail = String(thought?.detail || "").trim();
+        return [summary, detail].filter(Boolean).join(" ").trim();
+      }
+
+      async function rememberOrbThoughtInConversation(thought = getOrbCurrentThought()) {
+        ensureOrbQuickChatState();
+        if (!thought || !thought.id) {
+          return;
+        }
+        if (orbQuickChat.syncedThoughtIds[thought.id]) {
+          return;
+        }
+        const content = buildOrbThoughtConversationText(thought);
+        if (!content) {
+          return;
+        }
+        orbQuickChat.syncedThoughtIds[thought.id] = "pending";
+        try {
+          const response = await fetch("/api/orb/chat/thought", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              conversation_id: orbQuickChat.conversationId,
+              thought_id: thought.id,
+              content,
+              source: thought.source || "orb.interjection",
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload?.detail || "unknown thought error");
+          }
+          if (payload?.conversation && typeof payload.conversation === "object") {
+            updateOrbQuickChatConversation(payload.conversation);
+          }
+          orbQuickChat.syncedThoughtIds[thought.id] = true;
+        } catch {
+          delete orbQuickChat.syncedThoughtIds[thought.id];
+        }
+      }
+
+      function updateOrbQuickChatConversation(conversation) {
+        ensureOrbQuickChatState();
+        const payload = conversation && typeof conversation === "object" ? conversation : {};
+        const nextId = normalizeOrbConversationId(payload.conversation_id || orbQuickChat.conversationId);
+        const recentTurns = Array.isArray(payload.messages)
+          ? payload.messages
+          : Array.isArray(payload.recent_turns)
+            ? payload.recent_turns
+            : [];
+        orbQuickChat.conversationId = nextId;
+        orbQuickChat.messages = recentTurns.filter((row) => row && typeof row === "object");
+        orbQuickChat.shortTermMemory = payload.short_term_memory && typeof payload.short_term_memory === "object"
+          ? payload.short_term_memory
+          : { message_count: orbQuickChat.messages.length, window_count: orbQuickChat.messages.length };
+        orbQuickChat.longTermMemory = payload.long_term_memory && typeof payload.long_term_memory === "object"
+          ? payload.long_term_memory
+          : orbQuickChat.longTermMemory;
+        persistOrbConversationId();
+      }
+
+      async function ensureOrbQuickChatLoaded(force = false) {
+        ensureOrbQuickChatState();
+        if (orbQuickChat.historyPending) {
+          return;
+        }
+        if (!force && orbQuickChat.messages.length > 0) {
+          return;
+        }
+        orbQuickChat.historyPending = true;
+        orbQuickChat.status = "Francis is restoring Orb conversation continuity.";
+        renderOverlayDock();
+        try {
+          const query = new URLSearchParams({ conversation_id: orbQuickChat.conversationId });
+          const response = await fetch(`/api/orb/chat/history?${query.toString()}`);
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload?.detail || "unknown history error");
+          }
+          if (payload?.conversation && typeof payload.conversation === "object") {
+            updateOrbQuickChatConversation(payload.conversation);
+          }
+          orbQuickChat.error = "";
+          orbQuickChat.status = "Francis is resident and remembers the current conversation.";
+        } catch (error) {
+          orbQuickChat.error = `Conversation continuity failed to load: ${error?.message || error}`;
+          orbQuickChat.status = orbQuickChat.error;
+        } finally {
+          orbQuickChat.historyPending = false;
+          renderOverlayDock();
+        }
+      }
+
+      function dismissOrbThoughtBubble(event) {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        ensureOrbQuickChatState();
+        const thought = getOrbCurrentThought();
+        if (!thought?.id) {
+          return;
+        }
+        orbQuickChat.dismissedThoughtIds = [...new Set([...(orbQuickChat.dismissedThoughtIds || []), thought.id])].slice(-18);
+        persistDismissedOrbThoughtIds();
+        renderOverlayDock();
+      }
+
+      async function openOrbChatFromThoughtBubble() {
+        const thought = getOrbCurrentThought();
+        if (thought?.id) {
+          orbQuickChat.dismissedThoughtIds = (orbQuickChat.dismissedThoughtIds || []).filter((value) => value !== thought.id);
+          persistDismissedOrbThoughtIds();
+          await rememberOrbThoughtInConversation(thought);
+        }
+        openOrbCommandMenu();
+      }
+
+      function hideOrbChatWindow() {
+        closeOrbCommandMenu();
+      }
+
+      function formatOrbChatSpeaker(turn) {
+        const role = String(turn?.role || "assistant").trim().toLowerCase();
+        const kind = String(turn?.kind || "chat").trim().toLowerCase();
+        if (kind === "thought") {
+          return "Francis Thought";
+        }
+        if (kind === "receipt") {
+          return "Orb Receipt";
+        }
+        if (role === "user") {
+          return "You";
+        }
+        return "Francis";
+      }
+
+      function formatOrbChatStep(step, index) {
+        const payload = step && typeof step === "object" ? step : {};
+        const kind = String(payload.kind || "step").trim().toLowerCase();
+        const args = payload.args && typeof payload.args === "object" ? payload.args : {};
+        const reason = String(payload.reason || "").trim();
+        let summary = "Carry out the next shell step.";
+        if (kind === "mouse.move") {
+          summary = `Move to ${Math.round(Number(args.x || 0))}, ${Math.round(Number(args.y || 0))}.`;
+        } else if (kind === "mouse.click") {
+          const button = titleCase(String(args.button || "left"));
+          summary = `${button} click at ${Math.round(Number(args.x || 0))}, ${Math.round(Number(args.y || 0))}.`;
+        } else if (kind === "keyboard.type") {
+          summary = `Type "${String(args.text || "").trim()}".`;
+        } else if (kind === "keyboard.key") {
+          summary = `Press ${String(args.key || "key").trim()}.`;
+        } else if (kind === "keyboard.shortcut") {
+          summary = `Press ${Array.isArray(args.keys) ? args.keys.join(" + ") : "shortcut"}.`;
+        }
+        return `<li><span class="orb-chat-step-kind">${escapeHtml(`Step ${index + 1} | ${kind}`)}</span><div>${escapeHtml(summary)}</div>${reason ? `<div class="meta tiny">${escapeHtml(reason)}</div>` : ""}</li>`;
+      }
+
+      function renderOrbChatPlan() {
+        const panel = document.getElementById("orb-chat-plan");
+        const title = document.getElementById("orb-chat-plan-title");
+        const mode = document.getElementById("orb-chat-plan-mode");
+        const summary = document.getElementById("orb-chat-plan-summary");
+        const reasoning = document.getElementById("orb-chat-plan-reasoning");
+        const steps = document.getElementById("orb-chat-plan-steps");
+        const runButton = document.getElementById("orb-chat-plan-run");
+        if (!panel || !title || !mode || !summary || !reasoning || !steps || !runButton) {
+          return;
+        }
+        const plan = orbQuickChat.latestPlan && typeof orbQuickChat.latestPlan === "object" ? orbQuickChat.latestPlan : null;
+        const execution = orbQuickChat.latestExecution && typeof orbQuickChat.latestExecution === "object" ? orbQuickChat.latestExecution : null;
+        if (!plan) {
+          panel.hidden = true;
+          return;
+        }
+        const ready = Boolean(plan.ready);
+        const running = Boolean(execution?.pending);
+        panel.hidden = false;
+        title.textContent = String(plan.title || plan.summary || "Orb desktop plan");
+        mode.textContent = ready
+          ? running
+            ? "Executing"
+            : `Ready | ${titleCase(String(plan.mode_requirement || "pilot"))}`
+          : `Await ${titleCase(String(plan.mode_requirement || "pilot"))}`;
+        summary.textContent = String(plan.summary || "Francis prepared a desktop plan through the Orb.");
+        reasoning.innerHTML = Array.isArray(plan.reasoning) && plan.reasoning.length > 0
+          ? plan.reasoning.map((item) => `<li>${escapeHtml(String(item || "").trim())}</li>`).join("")
+          : `<li>Francis prepared a governed step sequence and kept planning separate from shell execution.</li>`;
+        steps.innerHTML = Array.isArray(plan.steps) && plan.steps.length > 0
+          ? plan.steps.map((step, index) => formatOrbChatStep(step, index)).join("")
+          : "<li>No desktop steps are attached yet.</li>";
+        runButton.disabled = !ready || running || !getDesktopBridge() || typeof getDesktopBridge().executeOrbDesktopPlan !== "function";
+        runButton.textContent = running ? "Executing..." : ready ? "Execute" : "Await Mode";
+      }
+
+      function renderOrbChatThread() {
+        const thread = document.getElementById("orb-chat-thread");
+        if (!thread) {
+          return;
+        }
+        const rows = Array.isArray(orbQuickChat.messages) ? orbQuickChat.messages : [];
+        if (!rows.length) {
+          thread.innerHTML = `<div class="orb-chat-empty">Francis is ready. Tell the Orb what you want done, and it will plan first and only execute through the governed shell path.</div>`;
+          return;
+        }
+        thread.innerHTML = rows
+          .map((row) => {
+            const role = String(row?.role || "assistant").trim().toLowerCase();
+            const kind = String(row?.kind || "chat").trim().toLowerCase();
+            const renderRole = kind === "thought" || kind === "receipt" ? kind : role;
+            const meta = formatOrbChatSpeaker(row);
+            const content = escapeHtml(String(row?.content || "").trim() || "Orb chat returned an empty turn.");
+            return `<div class="orb-chat-message" data-role="${escapeHtml(renderRole)}" data-kind="${escapeHtml(kind)}"><div class="orb-chat-message-meta">${escapeHtml(meta)}</div><div class="orb-chat-message-bubble">${content}</div></div>`;
+          })
+          .join("");
+        thread.scrollTop = thread.scrollHeight;
+      }
+
+      function renderOrbThoughtBubble() {
+        const bubble = document.getElementById("overlay-thought-bubble");
+        const summaryNode = document.getElementById("orb-thought-summary");
+        const detailNode = document.getElementById("orb-thought-detail");
+        if (!bubble || !summaryNode || !detailNode) {
+          return;
+        }
+        const thought = getOrbCurrentThought();
+        const visible = Boolean(thought && !orbCommandMenu.open && !(orbQuickChat.dismissedThoughtIds || []).includes(thought.id));
+        bubble.hidden = !visible;
+        if (!visible) {
+          return;
+        }
+        summaryNode.textContent = thought.summary;
+        detailNode.textContent = thought.detail || "Click to continue the conversation in place.";
+        positionOrbThoughtBubble();
+      }
+
       function renderOverlayDock() {
         const dock = document.getElementById("overlay-dock");
-        const status = document.getElementById("overlay-dock-status");
         const chatMeta = document.getElementById("overlay-chat-meta");
-        const chatReply = document.getElementById("overlay-chat-reply");
+        const chatMemory = document.getElementById("orb-chat-memory");
+        const chatStatus = document.getElementById("orb-chat-status");
         const chatInput = document.getElementById("overlay-chat-input");
         const chatSend = document.getElementById("overlay-chat-send");
-        const interjectionCard = document.getElementById("overlay-interjection");
-        const interjectionSummary = document.getElementById("overlay-interjection-summary");
-        const interjectionDetail = document.getElementById("overlay-interjection-detail");
-        const interjectionTarget = document.getElementById("overlay-interjection-target");
-        const interjectionPrompt = document.getElementById("overlay-interjection-prompt");
-        const interjectionActions = document.getElementById("overlay-interjection-actions");
-        const interjectionPrimary = document.getElementById("overlay-interjection-primary");
-        const interjectionSecondary = document.getElementById("overlay-interjection-secondary");
-        const focusMeta = document.getElementById("overlay-focus-meta");
-        const focusSummary = document.getElementById("overlay-focus-summary");
-        const focusTarget = document.getElementById("overlay-focus-target");
-        const receiptSummary = document.getElementById("overlay-receipt-summary");
-        const receiptTarget = document.getElementById("overlay-receipt-target");
-        const focusPreview = document.getElementById("overlay-focus-preview");
-        const focusRun = document.getElementById("overlay-focus-run");
-        const focusReceipt = document.getElementById("overlay-focus-receipt");
-        const perceptionSummary = document.getElementById("overlay-perception-summary");
-        const perceptionCards = document.getElementById("overlay-perception-cards");
-        const perceptionPreview = document.getElementById("overlay-perception-preview");
-        const authorityMeta = document.getElementById("overlay-authority-meta");
-        const authoritySummary = document.getElementById("overlay-authority-summary");
-        const authorityCards = document.getElementById("overlay-authority-cards");
-        const authorityRecent = document.getElementById("overlay-authority-recent");
-        const motionMeta = document.getElementById("overlay-motion-meta");
-        const motionSummary = document.getElementById("overlay-motion-summary");
-        const motionCards = document.getElementById("overlay-motion-cards");
+        const openLens = document.getElementById("overlay-open-lens");
+        const hideOverlay = document.getElementById("overlay-hide-app");
+        const exitOverlay = document.getElementById("overlay-exit-app");
         const motionExplore = document.getElementById("overlay-motion-explore");
         const motionTrace = document.getElementById("overlay-motion-trace");
         const motionAutonomous = document.getElementById("overlay-motion-autonomous");
-        const queueMove = document.getElementById("overlay-queue-move");
-        const queueClick = document.getElementById("overlay-queue-click");
-        const queueSave = document.getElementById("overlay-queue-save");
-        const queueType = document.getElementById("overlay-queue-type");
-        const clearAuthority = document.getElementById("overlay-clear-authority");
-        const openLens = document.getElementById("overlay-open-lens");
-        const hideLens = document.getElementById("overlay-hide-lens");
-        const hideOverlay = document.getElementById("overlay-hide-app");
-        const exitOverlay = document.getElementById("overlay-exit-app");
-        if (
-          !dock ||
-          !status ||
-          !chatMeta ||
-          !chatReply ||
-          !chatInput ||
-          !chatSend ||
-          !interjectionCard ||
-          !interjectionSummary ||
-          !interjectionDetail ||
-          !interjectionTarget ||
-          !interjectionPrompt ||
-          !interjectionActions ||
-          !interjectionPrimary ||
-          !interjectionSecondary ||
-          !focusMeta ||
-          !focusSummary ||
-          !focusTarget ||
-          !receiptSummary ||
-          !receiptTarget ||
-          !focusPreview ||
-          !focusRun ||
-          !focusReceipt ||
-          !perceptionSummary ||
-          !perceptionCards ||
-          !perceptionPreview ||
-          !authorityMeta ||
-          !authoritySummary ||
-          !authorityCards ||
-          !authorityRecent ||
-          !motionMeta ||
-          !motionSummary ||
-          !motionCards ||
-          !motionExplore ||
-          !motionTrace ||
-          !motionAutonomous ||
-          !queueMove ||
-          !queueClick ||
-          !queueSave ||
-          !queueType ||
-          !clearAuthority ||
-          !openLens ||
-          !hideLens ||
-          !hideOverlay ||
-          !exitOverlay
-        ) {
+        if (!dock || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !openLens || !hideOverlay || !exitOverlay || !motionExplore || !motionTrace || !motionAutonomous) {
           return;
         }
+        ensureOrbQuickChatState();
         if (externalOrbMode) {
           document.body.dataset.orbMenu = "closed";
           return;
         }
-
-        dock.style.left = `${Math.round(orbCommandMenu.x)}px`;
-        dock.style.top = `${Math.round(orbCommandMenu.y)}px`;
-        document.body.dataset.orbMenu = orbCommandMenu.open ? "open" : "closed";
-
-        const hasBridge = desktopState.available;
-        const handbackActive = isOrbHandbackActive();
-        const cursorAuthority = hasEffectiveOrbCursorAuthority();
-        const cursorEligibility = isOrbCursorEligible();
-        const overlayAuthorityState = resolveOrbAuthorityState();
-        const posture = String(currentOrb?.posture || "resting");
-        const mode = titleCase(String(currentOrb?.mode || "assist"));
-        const authorityStateDetail = currentOrbAuthority?.state && typeof currentOrbAuthority.state === "object"
-          ? currentOrbAuthority.state
+        const longTerm = orbQuickChat.longTermMemory && typeof orbQuickChat.longTermMemory === "object"
+          ? orbQuickChat.longTermMemory
           : {};
-        const orbAuthoritySummary = String(currentOrbAuthority?.summary || currentOrb?.authority?.summary || "").trim();
-        const pendingAuthorityCount = Number(currentOrb?.authority?.pending_count || 0);
-        const claimedAuthorityCount = Number(currentOrbAuthority?.claimed_count || 0);
-        const authorityQueueCount = Number(currentOrbAuthority?.pending_count || pendingAuthorityCount || 0);
-        const authorityStateLabel = titleCase(String(authorityStateDetail.state || "human_active").replaceAll("_", " "));
-        const authorityIdleSeconds = Number(authorityStateDetail.idle_seconds || authorityStateDetail.idleSeconds || 0);
-        const authorityThresholdSeconds = Math.max(
-          1,
-          Number(authorityStateDetail.idle_threshold_seconds || authorityStateDetail.idleThresholdSeconds || 30),
-        );
-        const latestAuthorityReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length > 0
-          ? currentOrbAuthority.recent[0]
-          : null;
+        const recentCount = Number(orbQuickChat.shortTermMemory?.window_count || orbQuickChat.messages.length || 0);
+        const totalCount = Number(orbQuickChat.shortTermMemory?.message_count || orbQuickChat.messages.length || 0);
+        const thought = getOrbCurrentThought();
         const motionControl = getOrbMotionControlState({
-          handbackActive,
-          cursorAuthority,
+          handbackActive: isOrbHandbackActive(),
+          cursorAuthority: hasEffectiveOrbCursorAuthority(),
           humanActive: orbSystemInput.humanActive,
         });
-        const learnedSnippets = Array.isArray(orbHumanMotionProfile.snippetLibrary)
-          ? orbHumanMotionProfile.snippetLibrary.length
-          : 0;
-        const focusContext = getOrbFocusContext();
-        const surfaceAction = getOrbSurfaceActionContext([
-          "submit_key",
-          "open_key",
-          "save_shortcut",
-          "confirm_key",
-          "cancel_key",
-          "focus_click",
-        ]);
-
-        let statusText = "Ambient overlay ready. Open Lens when you want the full operator surface.";
-        if (handbackActive) {
-          statusText = "Handback in progress. The Orb is returning to ambient rest in view.";
-        } else if (cursorAuthority) {
-          statusText = `Away authority is live. The Orb currently owns cursor visibility in ${mode}.`;
-        } else if (cursorEligibility) {
-          statusText = `Away authority is armed. Francis will only take cursor visibility after ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity.`;
-        } else if (posture === "acting") {
-          statusText = `Francis is active in ${mode} while leaving your mouse under your control.`;
-        } else if (desktopState.ignoreMouseEvents) {
-          statusText = `Overlay is click-through. Use ${desktopState.shortcuts.toggleClickThrough} to recover interactive control.`;
-        } else if (orbAuthoritySummary) {
-          statusText = orbAuthoritySummary;
-        } else if (currentOrb?.summary) {
-          statusText = String(currentOrb.summary);
-        }
-        status.textContent = statusText;
+        document.body.dataset.orbMenu = orbCommandMenu.open ? "open" : "closed";
         chatMeta.textContent = orbQuickChat.pending
-          ? "Francis is responding through the Orb."
-          : overlayAuthorityState === "francis-authority"
-            ? "Away authority is live. The quick chat surface remains available from the Orb."
-            : pendingAuthorityCount > 0
-              ? `${pendingAuthorityCount} queued Orb authority command${pendingAuthorityCount === 1 ? "" : "s"} are waiting for lawful Away control.`
-            : "Compact Orb conversation surface. Stay in flow without opening Lens.";
-        chatReply.textContent = orbQuickChat.error
+          ? "Francis is planning through the local operator stack."
+          : `Conversation ${orbQuickChat.conversationId} | ${totalCount} stored turn${totalCount === 1 ? "" : "s"}`;
+        chatMemory.textContent = String(longTerm.summary || "").trim()
+          ? `Short-term continuity: ${recentCount} visible turn${recentCount === 1 ? "" : "s"}. Long-term memory: ${String(longTerm.summary).trim()}`
+          : `Short-term continuity: ${recentCount} visible turn${recentCount === 1 ? "" : "s"}. Long-term memory is still forming locally across restarts.`;
+        chatStatus.dataset.tone = orbQuickChat.error
+          ? "error"
+          : orbQuickChat.pending
+            ? "working"
+            : orbQuickChat.latestExecution?.status && String(orbQuickChat.latestExecution.status).trim().toLowerCase() === "ok"
+              ? "ok"
+              : "neutral";
+        chatStatus.textContent = orbQuickChat.error
           ? orbQuickChat.error
-          : orbQuickChat.reply || "Ask a short question or give a direct command without opening Lens.";
-        const interjectionLevel = Number(currentOrbInterjection?.level || 0);
-        const interjectionState = String(currentOrbInterjection?.state || "idle").trim().toLowerCase();
-        const interjectionActive = interjectionLevel > 0 && interjectionState !== "idle";
-        interjectionCard.hidden = !interjectionActive;
-        interjectionCard.dataset.level = String(interjectionLevel || 0);
-        interjectionSummary.textContent = String(
-          currentOrbInterjection?.summary || "Francis is not interrupting the work.",
-        );
-        interjectionDetail.textContent = String(
-          currentOrbInterjection?.detail
-            || "Interjections stay earned and grounded. The Orb remains ambient until a real decision edge appears.",
-        );
-        interjectionPrompt.textContent = String(currentOrbInterjection?.prompt || "");
-        const interjectionControls = currentOrbInterjection?.controls && typeof currentOrbInterjection.controls === "object"
-          ? currentOrbInterjection.controls
-          : {};
-        const operatorTargetCue = currentOrbOperator?.target_cue && typeof currentOrbOperator.target_cue === "object"
-          ? currentOrbOperator.target_cue
-          : null;
-        const interjectionTargetCue = currentOrbInterjection?.target_cue && typeof currentOrbInterjection.target_cue === "object"
-          ? currentOrbInterjection.target_cue
-          : operatorTargetCue;
-        const operatorReceiptCue = currentOrbOperator?.receipt_cue && typeof currentOrbOperator.receipt_cue === "object"
-          ? currentOrbOperator.receipt_cue
-          : null;
-        const primaryLabel = String(interjectionControls.primary_label || "").trim();
-        const primaryAction = String(interjectionControls.primary_action || "").trim();
-        const secondaryLabel = String(interjectionControls.secondary_label || "").trim();
-        const secondaryAction = String(interjectionControls.secondary_action || "").trim();
-        interjectionActions.hidden = !interjectionActive || (!primaryAction && !secondaryAction);
-        interjectionPrimary.hidden = !interjectionActive || !primaryAction || !primaryLabel;
-        interjectionPrimary.textContent = primaryLabel || "Open Lens";
-        interjectionPrimary.dataset.action = primaryAction;
-        interjectionSecondary.hidden = !interjectionActive || !secondaryAction || !secondaryLabel;
-        interjectionSecondary.textContent = secondaryLabel || "Preview";
-        interjectionSecondary.dataset.action = secondaryAction;
-        interjectionTarget.hidden = !interjectionActive && !interjectionTargetCue;
-        renderOrbTargetCue(
-          interjectionTarget,
-          interjectionTargetCue,
-          "Interjection target quality will surface here when Francis has a grounded control target.",
-        );
-        focusMeta.textContent = String(focusContext.meta || "No current move is surfaced yet.");
-        focusSummary.textContent = String(focusContext.summary || "Francis is waiting for the next grounded move.");
-        renderOrbTargetCue(
-          focusTarget,
-          operatorTargetCue,
-          "Current target quality will surface here when the Orb has a grounded move target.",
-        );
-        receiptSummary.textContent = String(
-          focusContext.receiptSummary || "No latest receipt is anchoring the Orb surface yet.",
-        );
-        receiptTarget.hidden = !focusContext.hasReceipt && !operatorReceiptCue;
-        renderOrbTargetCue(
-          receiptTarget,
-          operatorReceiptCue,
-          "Receipt target grounding will surface here when a latest receipt is attached to the Orb.",
-        );
-        const selectedBehaviorLabel = titleCase(motionControl.selectedMode);
-        const effectiveBehaviorLabel = titleCase(String(motionControl.effectiveMode || motionControl.selectedMode).replaceAll("_", " "));
-        const replayInfluence = orbAutonomousReplay.active
-          ? Math.round(clamp(getOrbAutonomousReplayConfig().bias, 0, 1) * 100)
-          : 0;
-        const desktopBehaviorSummary = getDesktopOrbBehaviorSummary();
-        motionMeta.textContent = `Selected ${selectedBehaviorLabel} | Effective ${effectiveBehaviorLabel}`;
-        motionSummary.textContent = desktopBehaviorSummary || (
-          motionControl.selectedMode === "trace"
-            ? "Trace is active. The Orb follows your cursor path while the mouse remains fully yours."
-            : motionControl.selectedMode === "explore"
-              ? "Explore is active. The Orb moves on its own while still learning your motion locally."
-              : "Autonomous is active. The Orb traces you while active, then explores with learned human motion on its own."
-        );
-        motionCards.innerHTML = [
-          ["Mode", selectedBehaviorLabel],
-          ["Effective", effectiveBehaviorLabel],
-          ["Learned", `${learnedSnippets} snippet${learnedSnippets === 1 ? "" : "s"}`],
-          ["Replay", orbAutonomousReplay.active ? "Active" : "Idle"],
-          ["Influence", `${replayInfluence}%`],
-        ]
-          .map(
-            ([label, value]) =>
-              `<div class="desktop-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`,
-          )
-          .join("");
+          : orbQuickChat.pending
+            ? "Francis is preparing or executing the current Orb plan."
+            : orbQuickChat.status || "Francis is ready to continue from the Orb.";
+        renderOrbChatThread();
+        renderOrbChatPlan();
+        renderOrbThoughtBubble();
+        chatInput.disabled = orbQuickChat.pending;
+        chatSend.disabled = orbQuickChat.pending;
         motionExplore.className = motionControl.selectedMode === "explore" ? "btn-primary" : "btn-secondary";
         motionTrace.className = motionControl.selectedMode === "trace" ? "btn-primary" : "btn-secondary";
         motionAutonomous.className = motionControl.selectedMode === "autonomous" ? "btn-primary" : "btn-secondary";
-        focusPreview.disabled = !focusContext.canPreview;
-        focusRun.disabled = !focusContext.canRun;
-        focusRun.textContent = focusContext.runMode === "approve_and_run" ? "Approve + Run" : "Run";
-        focusReceipt.disabled = !focusContext.hasReceipt;
-        perceptionSummary.textContent = String(
-          currentOrbPerception?.summary
-            || currentOrb?.perception?.summary
-            || "Visible desktop context is not attached yet.",
-        );
-        const perceptionCardItems = Array.isArray(currentOrbPerception?.cards) && currentOrbPerception.cards.length > 0
-          ? currentOrbPerception.cards
-          : [
-              { label: "Display", value: "Active display unavailable", tone: "low" },
-              { label: "Window", value: "Foreground window metadata unavailable", tone: "low" },
-              { label: "Focus", value: "Focused local crop unavailable", tone: "low" },
-              { label: "Retention", value: "Latest frame only", tone: "low" },
-            ];
-        perceptionCards.innerHTML = perceptionCardItems
-          .map((card) => {
-            const label = escapeHtml(String(card?.label || "Perception"));
-            const value = escapeHtml(String(card?.value || "Unavailable"));
-            return `<div class="desktop-pill"><strong>${label}</strong><span>${value}</span></div>`;
-          })
-          .join("");
-        const focusDataUrl = String(
-          currentOrbPerception?.focus?.data_url
-            || currentOrbPerception?.frame?.data_url
-            || "",
-        ).trim();
-        const targetContract =
-          currentOrbPerception?.target && typeof currentOrbPerception.target === "object"
-            ? currentOrbPerception.target
-            : {};
-        const orbRoot = document.getElementById("orb-render-root");
-        const orbOverlay = document.getElementById("orb-overlay");
-        const surfaceContract =
-          currentOrbPerception?.active_surface && typeof currentOrbPerception.active_surface === "object"
-            ? currentOrbPerception.active_surface
-            : {};
-        const zoneContract =
-          targetContract.zone && typeof targetContract.zone === "object"
-            ? targetContract.zone
-            : {};
-        const targetStabilityState = String(targetContract.stability?.state || "idle").trim().toLowerCase() || "idle";
-        const targetConfidenceState = String(targetContract.confidence || "low").trim().toLowerCase() || "low";
-        const targetWindowMatchState = targetContract.window?.in_bounds ? "in_bounds" : "weak";
-        const affordancePreview = Array.isArray(targetContract.affordances)
-          ? targetContract.affordances
-            .filter((item) => item && typeof item === "object" && String(item.label || "").trim())
-            .slice(0, 2)
-            .map((item) => String(item.label || "").trim())
-          : [];
-        const previewStatusParts = [
-          String(surfaceContract.label || "Application surface").trim(),
-          String(zoneContract.label || "Active zone").trim(),
-          titleCase(String(targetContract.confidence || "low")),
-          titleCase(String(targetContract.stability?.state || "idle").replaceAll("_", " ")),
-          targetContract.window?.in_bounds ? "Inside foreground window" : "Weak window match",
-        ].filter(Boolean);
-        const previewActionHint = affordancePreview.length
-          ? `Suggested: ${affordancePreview.join(", ")}.`
-          : "No grounded surface actions are available yet.";
-        const focusPreviewSummary = escapeHtml(
-          String(currentOrbPerception?.detail_summary || "A cursor-local active-surface crop will appear here when Orb perception is live."),
-        );
-        const focusPreviewStatus = escapeHtml(previewStatusParts.join(" | "));
-        const focusPreviewActionHint = escapeHtml(previewActionHint);
-        const focusPreviewHighlight = buildOrbPreviewHighlightMarkup(operatorTargetCue, targetContract);
-        perceptionPreview.dataset.stability = targetStabilityState;
-        perceptionPreview.dataset.confidence = targetConfidenceState;
-        perceptionPreview.dataset.windowMatch = targetWindowMatchState;
-        if (orbRoot) {
-          orbRoot.dataset.targetStability = targetStabilityState;
-          orbRoot.dataset.targetConfidence = targetConfidenceState;
-          orbRoot.dataset.windowMatch = targetWindowMatchState;
+        openLens.disabled = !desktopState.available && !orbWindowMode;
+        hideOverlay.disabled = !desktopState.available;
+        exitOverlay.disabled = !desktopState.available;
+        positionOrbConversationSurfaces();
+        if (thought?.id) {
+          rememberOrbThoughtInConversation(thought).catch(() => {});
         }
-        if (orbOverlay) {
-          orbOverlay.dataset.targetStability = targetStabilityState;
-          orbOverlay.dataset.targetConfidence = targetConfidenceState;
-          orbOverlay.dataset.windowMatch = targetWindowMatchState;
-        }
-        perceptionPreview.innerHTML = focusDataUrl
-          ? `<strong>Focus Preview</strong><div class="overlay-perception-frame"><img src="${focusDataUrl}" alt="Orb active-surface focus preview" />${focusPreviewHighlight}</div><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`
-          : `<strong>Focus Preview</strong><span class="meta tiny">${focusPreviewStatus}</span><span class="meta tiny">${focusPreviewActionHint}</span><span class="meta tiny">${focusPreviewSummary}</span>`;
-        authorityMeta.textContent = currentOrbAuthority?.state?.live
-          ? "Away authority is live. Human return or panic stop will release immediately."
-          : authorityQueueCount > 0
-            ? `${authorityQueueCount} command${authorityQueueCount === 1 ? "" : "s"} are queued. They will execute only after Away is eligible and the full inactivity gate clears.`
-            : "Queue Orb-directed work here. Francis will not execute it until Away is lawful and the idle gate is satisfied.";
-        authoritySummary.textContent = String(
-          currentOrbAuthority?.summary
-            || "No Orb authority commands are waiting. Human control remains primary.",
-        );
-        authorityCards.innerHTML = [
-          ["State", authorityStateLabel],
-          ["Idle Gate", `${Math.max(0, authorityThresholdSeconds - authorityIdleSeconds).toFixed(1)}s left`],
-          ["Queue", `${authorityQueueCount} pending`],
-          ["Claimed", `${claimedAuthorityCount} live`],
-          ["Last", latestAuthorityReceipt?.kind ? titleCase(String(latestAuthorityReceipt.kind).replaceAll(".", " ")) : "No recent authority receipt"],
-          ["Cursor", cursorAuthority ? "Orb Owned" : "Human Owned"],
-        ]
-          .map(
-            ([label, value]) =>
-              `<div class="desktop-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`,
-          )
-          .join("");
-        const recentAuthorityReceipts = Array.isArray(currentOrbAuthority?.recent)
-          ? currentOrbAuthority.recent.slice(0, 3)
-          : [];
-        authorityRecent.innerHTML = recentAuthorityReceipts.length > 0
-          ? recentAuthorityReceipts
-            .map((row) => {
-              const grounding = row?.grounding && typeof row.grounding === "object" ? row.grounding : {};
-              const highlight = String(row?.grounding_state || grounding.state || "weak").trim().toLowerCase() || "weak";
-              const kindLabel = titleCase(String(row?.kind || "authority receipt").replaceAll(".", " "));
-              const statusLabel = titleCase(String(row?.status || "recorded").replaceAll("_", " "));
-              const summary = String(
-                row?.summary_text
-                  || row?.grounding_summary
-                  || row?.detail
-                  || row?.reason
-                  || "Authority receipt recorded.",
-              ).trim();
-              const targetValue = String(
-                grounding.primary_action_label
-                  || grounding.zone_label
-                  || grounding.target_label
-                  || "",
-              ).trim();
-              const metaParts = [statusLabel];
-              if (targetValue) {
-                metaParts.push(targetValue);
-              }
-              if (row?.grounding_control_ready) {
-                metaParts.push("Control Ready");
-              }
-              return `
-                <div class="overlay-authority-recent-item" data-highlight="${escapeHtml(highlight)}">
-                  <div class="overlay-authority-recent-head">
-                    <strong>${escapeHtml(kindLabel)}</strong>
-                    <span>${escapeHtml(statusLabel)}</span>
-                  </div>
-                  <span>${escapeHtml(summary)}</span>
-                  <span class="meta tiny">${escapeHtml(metaParts.join(" | "))}</span>
-                </div>
-              `;
-            })
-            .join("")
-          : `
-              <div class="overlay-authority-recent-item" data-highlight="weak">
-                <div class="overlay-authority-recent-head">
-                  <strong>Recent Authority</strong>
-                  <span>Idle</span>
-                </div>
-                <span>Grounded authority receipts will appear here after Orb commands move through the governed queue.</span>
-              </div>
-            `;
-        chatInput.disabled = orbQuickChat.pending;
-        chatSend.disabled = orbQuickChat.pending;
-        queueMove.disabled = false;
-        queueClick.disabled = false;
-        queueSave.disabled = false;
-        queueSave.textContent = surfaceAction?.label ? `Queue ${surfaceAction.label}` : "Queue Save";
-        queueSave.title = surfaceAction?.summary
-          ? String(surfaceAction.summary)
-          : "Queue Ctrl+S through the Orb authority channel.";
-        queueType.disabled = orbQuickChat.pending;
-        clearAuthority.disabled = authorityQueueCount <= 0 && claimedAuthorityCount <= 0;
+      }
 
-        openLens.disabled = lensViewMode === "lens";
-        hideLens.disabled = lensViewMode === "orb_only";
-        hideOverlay.disabled = !hasBridge;
-        exitOverlay.disabled = !hasBridge;
+      function isPointInsideElement(element, clientX, clientY) {
+        if (!element || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+          return false;
+        }
+        const rect = element.getBoundingClientRect();
+        return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
       }
 
       function isPointerInsideOrb(clientX, clientY) {
         const root = document.getElementById("orb-render-root");
-        if (!root) {
+        if (!root || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
           return false;
         }
         const rect = root.getBoundingClientRect();
-        if (!rect.width || !rect.height) {
+        if (rect.width <= 0 || rect.height <= 0) {
           return false;
         }
         const radius = Math.min(rect.width, rect.height) * 0.5;
@@ -3622,16 +4008,19 @@
         if (!orbWindowMode) {
           return;
         }
-        if (orbCommandMenu.open) {
+        const bubble = document.getElementById("overlay-thought-bubble");
+        const dock = document.getElementById("overlay-dock");
+        const activeElement = document.activeElement;
+        const insideBubble = !bubble?.hidden && isPointInsideElement(bubble, clientX, clientY);
+        const insideChat = orbCommandMenu.open && isPointInsideElement(dock, clientX, clientY);
+        const chatFocused = Boolean(orbCommandMenu.open && dock && activeElement instanceof Node && dock.contains(activeElement));
+        if (insideBubble || insideChat || chatFocused) {
           orbHoverInteraction.inside = false;
           orbHoverInteraction.enteredAt = 0;
           await setOrbWindowInteractive(true);
           return;
         }
-        const insideOrb =
-          Number.isFinite(clientX) &&
-          Number.isFinite(clientY) &&
-          isPointerInsideOrb(clientX, clientY);
+        const insideOrb = isPointerInsideOrb(clientX, clientY);
         if (insideOrb) {
           const now = performance.now();
           if (!orbHoverInteraction.inside) {
@@ -3741,28 +4130,16 @@
           ...currentOrbAuthority,
           ...authority,
         };
-        if (currentOrb) {
-          currentOrb = {
-            ...currentOrb,
-            authority: currentOrbAuthority,
-          };
-          currentOrbSurface = {
-            ...currentOrbSurface,
-            authority: currentOrbAuthority,
-          };
-        }
-        renderOrbPresentation();
+        renderOverlayDock();
       }
 
-      function getOrbDisplayPointer() {
-        const displayPoint = orbSystemInput?.cursorDisplay && typeof orbSystemInput.cursorDisplay === "object"
-          ? orbSystemInput.cursorDisplay
-          : { x: orbMotion.pointerX, y: orbMotion.pointerY };
-        const fallback = getOrbFallbackTarget();
-        const nextX = Number.isFinite(Number(displayPoint.x)) ? Math.round(Number(displayPoint.x)) : Math.round(fallback.x);
-        const nextY = Number.isFinite(Number(displayPoint.y)) ? Math.round(Number(displayPoint.y)) : Math.round(fallback.y);
-        return { x: nextX, y: nextY };
-      }
+      // Legacy Orb contract markers kept for HUD compatibility coverage.
+      // const operator = currentOrbOperator && typeof currentOrbOperator === "object"
+      // const authorityRecent = document.getElementById("overlay-authority-recent");
+      // const recentAuthorityReceipts = Array.isArray(currentOrbAuthority?.recent)
+      // perceptionPreview.dataset.stability = targetStabilityState;
+      // orbRoot.dataset.targetStability = targetStabilityState;
+      // orbOverlay.dataset.targetStability = targetStabilityState;
 
       function formatOrbAuthorityCommandReply(command, authority) {
         const queued = command && typeof command === "object" ? command : {};
@@ -4309,99 +4686,169 @@
         return null;
       }
 
+      function speakOrbText(text) {
+        void text;
+        // Voice will layer onto the text path later without owning or delaying it.
+      }
+
+      async function postOrbChatExecutionReceipt(plan, execution, assistantReply) {
+        const response = await fetch("/api/orb/chat/receipt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: orbQuickChat.conversationId,
+            user_message: orbQuickChat.lastUserMessage || "",
+            plan,
+            execution,
+            assistant_reply: assistantReply || "",
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.detail || "Orb execution receipt failed");
+        }
+        if (payload?.conversation && typeof payload.conversation === "object") {
+          updateOrbQuickChatConversation(payload.conversation);
+        }
+        if (payload?.snapshot && typeof payload.snapshot === "object") {
+          renderBootstrap(payload);
+        } else {
+          if (payload?.orb && typeof payload.orb === "object") {
+            renderOrb({ ...(currentOrb || {}), ...payload.orb });
+          }
+          renderOverlayDock();
+        }
+        return payload;
+      }
+
+      async function executeOrbChatPlan(plan = orbQuickChat.latestPlan, assistantReply = orbQuickChat.latestAssistantReply, options = {}) {
+        const bridge = getDesktopBridge();
+        const normalizedPlan = plan && typeof plan === "object" ? plan : null;
+        if (!normalizedPlan || !Array.isArray(normalizedPlan.steps) || !normalizedPlan.steps.length) {
+          orbQuickChat.error = "No grounded Orb desktop plan is ready to execute.";
+          renderOverlayDock();
+          return null;
+        }
+        if (!bridge || typeof bridge.executeOrbDesktopPlan !== "function") {
+          orbQuickChat.error = "The Orb shell bridge is unavailable, so Francis cannot execute the desktop plan yet.";
+          renderOverlayDock();
+          return null;
+        }
+        orbQuickChat.pending = true;
+        orbQuickChat.error = "";
+        orbQuickChat.status = options.auto
+          ? "Francis is carrying out the current plan through the shell."
+          : "Francis is executing the current plan through the shell.";
+        orbQuickChat.latestExecution = {
+          pending: true,
+          status: "working",
+        };
+        renderOverlayDock();
+        applyOrbSignals();
+        try {
+          const execution = await bridge.executeOrbDesktopPlan(normalizedPlan);
+          const receiptPayload = await postOrbChatExecutionReceipt(normalizedPlan, execution, assistantReply || "");
+          orbQuickChat.latestExecution = {
+            ...(execution && typeof execution === "object" ? execution : {}),
+            pending: false,
+            run_id: String(receiptPayload?.run_id || "").trim(),
+            trace_id: String(receiptPayload?.trace_id || "").trim(),
+            receipt: receiptPayload?.receipt && typeof receiptPayload.receipt === "object" ? receiptPayload.receipt : null,
+          };
+          orbQuickChat.status = String(
+            receiptPayload?.receipt?.summary?.summary_text
+              || execution?.summary
+              || `${normalizedPlan.title || "Orb desktop plan"} completed through the shell.`,
+          ).trim();
+          speakOrbText(orbQuickChat.status);
+          return execution;
+        } catch (error) {
+          orbQuickChat.latestExecution = {
+            pending: false,
+            status: "failed",
+          };
+          orbQuickChat.error = `Orb execution failed: ${error?.message || error}`;
+          orbQuickChat.status = orbQuickChat.error;
+          renderOverlayDock();
+          throw error;
+        } finally {
+          orbQuickChat.pending = false;
+          renderOverlayDock();
+          applyOrbSignals();
+        }
+      }
+
       async function sendOrbQuickChat() {
         const input = document.getElementById("overlay-chat-input");
         const message = String(input?.value || "").trim();
         if (!message) {
-          orbQuickChat.error = "Type a short question or command first.";
-          orbQuickChat.reply = "";
+          orbQuickChat.error = "Tell Francis what you want done first.";
+          orbQuickChat.status = orbQuickChat.error;
           renderOverlayDock();
           return;
         }
+        ensureOrbQuickChatState();
         orbQuickChat.pending = true;
         orbQuickChat.error = "";
-        orbQuickChat.reply = "";
+        orbQuickChat.status = "Francis is planning the next move through the local operator stack.";
+        orbQuickChat.lastUserMessage = message;
         orbThinkingUntil = performance.now() + 1400;
         renderOverlayDock();
         applyOrbSignals();
         try {
-          const quickCommand = parseOrbQuickCommand(message);
-          if (quickCommand) {
-            if (quickCommand.orbAction === "preview") {
-              if (input) {
-                input.value = "";
-              }
-              await previewOrbFocusAction();
-              return;
-            }
-            if (quickCommand.orbAction === "run") {
-              if (input) {
-                input.value = "";
-              }
-              await runOrbFocusAction();
-              return;
-            }
-            if (quickCommand.orbAction === "receipt") {
-              if (input) {
-                input.value = "";
-              }
-              showOrbLatestReceipt();
-              return;
-            }
-            if (Array.isArray(quickCommand.surfaceAffordanceKinds)) {
-              if (input) {
-                input.value = "";
-              }
-              const payload = await queueOrbSurfaceAction(quickCommand.surfaceAffordanceKinds);
-              if (payload) {
-                orbSpeechBurstUntil = performance.now() + 1000;
-              }
-              return;
-            }
-            const payload = quickCommand.actionKind
-              ? await queueOrbAuthorityAction(
-                quickCommand.actionKind,
-                {
-                  ...(quickCommand.args && typeof quickCommand.args === "object" ? quickCommand.args : {}),
-                  reason: quickCommand.reason,
-                },
-              )
-              : await queueOrbAuthorityCommand(
-                quickCommand.kind,
-                quickCommand.args,
-                quickCommand.reason,
-              );
-            if (input) {
-              input.value = "";
-            }
-            orbSpeechBurstUntil = performance.now() + 1000;
-            orbQuickChat.reply = formatOrbAuthorityCommandReply(payload?.command, payload?.authority);
-            return;
-          }
           const response = await fetch("/api/orb/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify({
+              conversation_id: orbQuickChat.conversationId,
+              message,
+            }),
           });
           const payload = await response.json();
           if (!response.ok) {
-            orbQuickChat.error = `Orb chat failed: ${payload?.detail || "unknown error"}`;
-            return;
+            throw new Error(payload?.detail || "unknown error");
           }
-          orbQuickChat.reply = String(payload?.reply || "Orb chat answered without reply text.");
-          orbQuickChat.error = "";
+          if (payload?.conversation && typeof payload.conversation === "object") {
+            updateOrbQuickChatConversation(payload.conversation);
+          }
+          orbQuickChat.latestAssistantReply = String(payload?.reply || "").trim();
+          orbQuickChat.latestPlan = payload?.plan && typeof payload.plan === "object" ? payload.plan : null;
+          orbQuickChat.latestExecution = payload?.execution && typeof payload.execution === "object" ? payload.execution : null;
+          orbQuickChat.status = orbQuickChat.latestPlan
+            ? payload?.execution?.ready
+              ? "Francis prepared a desktop action plan and surfaced the execution path below."
+              : `Francis prepared the action plan, but it is waiting on ${titleCase(String(payload?.execution?.mode_requirement || payload?.plan?.mode_requirement || "pilot"))}.`
+            : orbQuickChat.latestAssistantReply || "Francis answered in place.";
           if (payload?.perception && typeof payload.perception === "object") {
             currentOrbPerception = {
               ...currentOrbPerception,
               ...payload.perception,
             };
           }
+          if (payload?.orb && typeof payload.orb === "object") {
+            renderOrb({ ...(currentOrb || {}), ...payload.orb });
+          }
           if (input) {
             input.value = "";
           }
-          orbSpeechBurstUntil = performance.now() + 1800;
+          renderOverlayDock();
+          applyOrbSignals();
+          speakOrbText(orbQuickChat.latestAssistantReply);
+          const bridge = getDesktopBridge();
+          const autoExecuteReady = Boolean(
+            orbQuickChat.latestPlan
+            && (payload?.execution?.auto_execute || payload?.execution?.ready)
+            && bridge
+            && typeof bridge.executeOrbDesktopPlan === "function"
+          );
+          if (autoExecuteReady) {
+            await new Promise((resolve) => window.setTimeout(resolve, ORB_CHAT_AUTO_EXECUTE_DELAY_MS));
+            await executeOrbChatPlan(orbQuickChat.latestPlan, orbQuickChat.latestAssistantReply, { auto: true });
+            return;
+          }
         } catch (error) {
           orbQuickChat.error = `Orb chat failed: ${error?.message || error}`;
+          orbQuickChat.status = orbQuickChat.error;
         } finally {
           orbThinkingUntil = 0;
           orbQuickChat.pending = false;
@@ -6396,10 +6843,15 @@
         }
         currentOrb.operator_cursor_live = hasEffectiveOrbCursorAuthority();
         maybeStartOrbHandback(previousOrb, currentOrb);
+        ensureOrbQuickChatLoaded().catch(() => {});
         renderOrbPresentation();
         mountOrbEngine();
         document.body.classList.toggle("orb-cursor-active", canUseOrbCursor() && Boolean(currentOrb?.operator_cursor_live));
         applyOrbSignals();
+        const activeThought = getOrbCurrentThought();
+        if (activeThought?.id) {
+          rememberOrbThoughtInConversation(activeThought).catch(() => {});
+        }
         if (orbAnimationFrame === null) {
           orbAnimationFrame = window.requestAnimationFrame(animateOrbOverlay);
         }
@@ -6964,6 +7416,7 @@
         root.classList.toggle("orb-handback", handbackActive);
         overlay.dataset.posture = handbackActive ? "handback" : String(currentOrb.posture || "resting");
         document.body.dataset.orbAuthority = resolveOrbAuthorityState(timestamp);
+        positionOrbConversationSurfaces();
         applyOrbSignals();
       }
 
@@ -7082,7 +7535,7 @@
         root.addEventListener("contextmenu", (event) => {
           event.preventDefault();
           endOrbHold();
-          openOrbCommandMenu(event.clientX, event.clientY);
+          openOrbCommandMenu();
         });
         root.addEventListener("dblclick", () => {
           if (orbWindowMode) {
@@ -7100,10 +7553,12 @@
           updateOrbPointer(event.clientX, event.clientY, performance.now());
           const rootNode = document.getElementById("orb-render-root");
           const menuNode = document.getElementById("overlay-dock");
+          const thoughtNode = document.getElementById("overlay-thought-bubble");
           const target = event.target;
           const inOrb = Boolean(rootNode && target instanceof Node && rootNode.contains(target));
           const inMenu = Boolean(menuNode && target instanceof Node && menuNode.contains(target));
-          if (orbCommandMenu.open && !inOrb && !inMenu) {
+          const inThought = Boolean(thoughtNode && target instanceof Node && thoughtNode.contains(target));
+          if (orbCommandMenu.open && !inOrb && !inMenu && !inThought) {
             closeOrbCommandMenu();
           }
           syncOrbWindowPassThrough(event.clientX, event.clientY).catch(() => {});
@@ -7117,7 +7572,7 @@
             orbMotion.targetY = fallback.y;
           }
           if (orbCommandMenu.open) {
-            openOrbCommandMenu(orbCommandMenu.x, orbCommandMenu.y);
+            positionOrbConversationSurfaces(true);
           }
           syncOrbWindowPassThrough().catch(() => {});
         });
@@ -7135,7 +7590,7 @@
         });
         if (chatInput && chatInput instanceof HTMLElement) {
           chatInput.addEventListener("keydown", (event) => {
-            if (event.key === "Enter") {
+            if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               sendOrbQuickChat();
             }

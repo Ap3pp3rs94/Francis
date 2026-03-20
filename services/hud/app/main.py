@@ -15,6 +15,12 @@ from pydantic import BaseModel, Field
 
 from services.hud.app.fabric import get_fabric_surface, query_fabric_surface
 from services.hud.app.orb import build_orb_chat_reply, get_orb_view
+from services.hud.app.orb_memory import (
+    DEFAULT_ORB_CONVERSATION_ID,
+    build_orb_chat_history,
+    record_orb_chat_execution_receipt,
+    remember_orb_thought,
+)
 from services.orchestrator.app.orb_authority import (
     cancel_orb_authority_queue,
     claim_next_orb_authority_command,
@@ -161,6 +167,23 @@ class HudApprenticeshipStepCreateRequest(BaseModel):
 
 class HudOrbChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=800)
+    conversation_id: str = Field(default=DEFAULT_ORB_CONVERSATION_ID, min_length=1, max_length=120)
+
+
+class HudOrbThoughtRequest(BaseModel):
+    conversation_id: str = Field(default=DEFAULT_ORB_CONVERSATION_ID, min_length=1, max_length=120)
+    thought_id: str = Field(min_length=1, max_length=120)
+    content: str = Field(min_length=1, max_length=800)
+    detail: str = Field(default="", max_length=1200)
+    source: str = Field(default="orb.thought_bubble", max_length=120)
+
+
+class HudOrbChatReceiptRequest(BaseModel):
+    conversation_id: str = Field(default=DEFAULT_ORB_CONVERSATION_ID, min_length=1, max_length=120)
+    user_message: str = ""
+    plan: dict[str, object] = Field(default_factory=dict)
+    execution: dict[str, object] = Field(default_factory=dict)
+    assistant_reply: str = ""
 
 
 class HudOrbPerceptionFrameRequest(BaseModel):
@@ -613,7 +636,56 @@ def _build_app() -> FastAPI:
     @app.post("/api/orb/chat")
     def orb_chat(payload: HudOrbChatRequest) -> dict[str, object]:
         try:
-            return build_orb_chat_reply(message=payload.message)
+            return build_orb_chat_reply(
+                message=payload.message,
+                conversation_id=payload.conversation_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/orb/chat/history")
+    def orb_chat_history(conversation_id: str = DEFAULT_ORB_CONVERSATION_ID) -> dict[str, object]:
+        return {
+            "status": "ok",
+            "conversation": build_orb_chat_history(conversation_id),
+        }
+
+    @app.post("/api/orb/chat/thought")
+    def orb_chat_thought(payload: HudOrbThoughtRequest) -> dict[str, object]:
+        try:
+            remember_orb_thought(
+                conversation_id=payload.conversation_id,
+                thought_id=payload.thought_id,
+                content=payload.content,
+                detail=payload.detail,
+                source=payload.source,
+            )
+            return {
+                "status": "ok",
+                "conversation": build_orb_chat_history(payload.conversation_id),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/orb/chat/receipt")
+    def orb_chat_receipt(payload: HudOrbChatReceiptRequest) -> dict[str, object]:
+        try:
+            receipt = record_orb_chat_execution_receipt(
+                conversation_id=payload.conversation_id,
+                user_message=payload.user_message,
+                plan=payload.plan,
+                execution=payload.execution,
+                assistant_reply=payload.assistant_reply,
+            )
+            refreshed = _build_hud_payload()
+            return {
+                **refreshed,
+                "status": "ok",
+                "conversation": receipt["history"],
+                "run_id": receipt["run_id"],
+                "trace_id": receipt["trace_id"],
+                "receipt": receipt["receipt"],
+            }
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

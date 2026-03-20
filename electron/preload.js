@@ -95,6 +95,12 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   getOrbSurface() {
     return ipcRenderer.invoke("overlay:get-orb-surface");
   },
+  executeOrbDesktopPlan(plan) {
+    if (!plan || typeof plan !== "object") {
+      throw new TypeError("plan must be an object");
+    }
+    return ipcRenderer.invoke("overlay:execute-orb-desktop-plan", plan);
+  },
   panicStop() {
     return ipcRenderer.invoke("overlay:panic-stop");
   },

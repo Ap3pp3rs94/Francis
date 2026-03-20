@@ -788,9 +788,20 @@ def test_get_orb_view_does_not_auto_plan_transient_francis_targets(monkeypatch) 
 
 
 def test_build_orb_chat_reply_answers_status_directly(monkeypatch) -> None:
+    conversation = {
+        "conversation_id": "default",
+        "recent_turns": [],
+        "messages": [],
+        "short_term_memory": {"message_count": 0, "window_count": 0},
+        "long_term_memory": {"summary": ""},
+    }
+
     monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}})
     monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
     monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="default": conversation)
+    monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: conversation)
+    monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
     monkeypatch.setattr(
         orb_view,
         "get_orb_view",
@@ -809,6 +820,7 @@ def test_build_orb_chat_reply_answers_status_directly(monkeypatch) -> None:
                 "controls": {"run_enabled": True, "run_mode": "approve_and_run"},
             },
             "interjection": {"state": "idle"},
+            "thought": {"visible": False},
         },
     )
     monkeypatch.setattr(
@@ -826,15 +838,28 @@ def test_build_orb_chat_reply_answers_status_directly(monkeypatch) -> None:
 
     assert payload["status"] == "ok"
     assert payload["reply_kind"] == "direct"
+    assert payload["plan"] is None
+    assert payload["memory"]["conversation_id"] == "default"
     assert "Mode is assist and posture is resting." in payload["reply"]
     assert "Current move: Run Fast Checks | Terminal failure needs verification." in payload["reply"]
     assert "Human control remains primary." in payload["reply"]
 
 
 def test_build_orb_chat_reply_answers_receipt_directly(monkeypatch) -> None:
+    conversation = {
+        "conversation_id": "default",
+        "recent_turns": [],
+        "messages": [],
+        "short_term_memory": {"message_count": 0, "window_count": 0},
+        "long_term_memory": {"summary": ""},
+    }
+
     monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}})
     monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
     monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="default": conversation)
+    monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: conversation)
+    monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
     monkeypatch.setattr(
         orb_view,
         "get_orb_view",
@@ -859,6 +884,7 @@ def test_build_orb_chat_reply_answers_receipt_directly(monkeypatch) -> None:
                 "controls": {"run_enabled": False, "run_mode": "execute"},
             },
             "interjection": {"state": "idle"},
+            "thought": {"visible": False},
         },
     )
     monkeypatch.setattr(
@@ -877,3 +903,102 @@ def test_build_orb_chat_reply_answers_receipt_directly(monkeypatch) -> None:
     assert payload["status"] == "ok"
     assert payload["reply_kind"] == "direct"
     assert "Receipt run-9 is grounded by a concrete francis footer actions." in payload["reply"]
+
+
+def test_build_orb_chat_reply_returns_planner_payload_with_memory(monkeypatch) -> None:
+    conversation = {
+        "conversation_id": "desk-1",
+        "recent_turns": [{"role": "assistant", "content": "Previous Francis reply.", "kind": "chat"}],
+        "messages": [{"role": "assistant", "content": "Previous Francis reply.", "kind": "chat"}],
+        "short_term_memory": {"message_count": 1, "window_count": 1},
+        "long_term_memory": {
+            "summary": "The user likes visible desktop actions.",
+            "user_preferences": ["Keep the Orb concise."],
+            "operator_context": ["Focus on governed execution."],
+            "open_threads": ["Launch tools through visible Windows paths."],
+        },
+    }
+    captured: dict[str, object] = {}
+    appended: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_lens_snapshot",
+        lambda: {
+            "control": {"mode": "assist"},
+            "runs": {"last_run": {"run_id": "run-42", "summary": "waiting"}},
+            "current_work": {"surface": "current_work"},
+            "objective": {"label": "Desk help"},
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
+    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="desk-1": conversation)
+    monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: appended.append(kwargs) or conversation)
+    monkeypatch.setattr(
+        orb_view,
+        "refresh_orb_long_term_memory",
+        lambda **kwargs: conversation["long_term_memory"],
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_view",
+        lambda **_: {
+            "mode": "assist",
+            "posture": "resting",
+            "summary": "Francis is ambient on the desktop.",
+            "detail": "Operator loop is waiting for a desktop instruction.",
+            "authority": {"summary": "Human control remains primary.", "recent": []},
+            "operator": {"summary": "No current move.", "controls": {"run_enabled": False, "run_mode": "execute"}},
+            "interjection": {"state": "idle"},
+            "thought": {"visible": False},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {
+            "state": "live",
+            "summary": "Francis sees the desktop.",
+            "detail_summary": "Cursor is over the editor.",
+            "window": {"title": "Editor"},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_chat_plan",
+        lambda **kwargs: captured.update(kwargs) or {
+            "reply": "I can open Notepad through Start search in Pilot mode.",
+            "thought": "Ready to open Notepad through Start search.",
+            "planner": "ollama",
+            "plan": {
+                "title": "Open Notepad",
+                "summary": "Open Notepad through the Windows Start search path.",
+                "mode_requirement": "pilot",
+                "reasoning": [
+                    "Use Start search so the action stays visible.",
+                    "Keyboard navigation is sufficient here.",
+                ],
+                "steps": [
+                    {"kind": "keyboard.shortcut", "args": {"keys": ["ctrl", "esc"]}, "reason": "Open Start.", "delay_ms": 180},
+                    {"kind": "keyboard.type", "args": {"text": "notepad"}, "reason": "Search for Notepad.", "delay_ms": 180},
+                    {"kind": "keyboard.key", "args": {"key": "enter"}, "reason": "Open Notepad.", "delay_ms": 220},
+                ],
+            },
+        },
+    )
+
+    payload = orb_view.build_orb_chat_reply(message="open notepad", conversation_id="desk-1")
+
+    assert payload["status"] == "ok"
+    assert payload["reply_kind"] == "planner"
+    assert payload["plan"]["title"] == "Open Notepad"
+    assert payload["execution"]["auto_execute"] is False
+    assert payload["planner"]["provider"] == "ollama"
+    assert payload["memory"]["conversation_id"] == "desk-1"
+    assert payload["memory"]["long_term"]["summary"] == "The user likes visible desktop actions."
+    assert payload["thought"]["summary"] == "Ready to open Notepad through Start search."
+    assert captured["short_term_messages"] == conversation["recent_turns"]
+    assert captured["long_term_memory"] == conversation["long_term_memory"]
+    assert captured["orb_context"]["run_state"]["run_id"] == "run-42"
+    assert len(appended) == 2
