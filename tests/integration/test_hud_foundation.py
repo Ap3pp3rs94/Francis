@@ -312,6 +312,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'id="orb-chat-plan-run"' in response.text
     assert 'id="overlay-chat-input"' in response.text
     assert 'id="overlay-chat-send"' in response.text
+    assert "width: min(760px, calc(100vw - 36px));" in response.text
+    assert "scrollbar-gutter: stable both-edges;" in response.text
     assert "Short-term and long-term conversation continuity will appear here once the Orb chat history loads." in response.text
     assert "Francis will show the current action plan here before the shell executes anything." in response.text
     assert "Tell Francis what you want done" in response.text
