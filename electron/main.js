@@ -1,5 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
+const os = require("node:os");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
 const { getScheduledHudRecoveryReason } = require("./hud-recovery");
@@ -91,7 +92,6 @@ const {
 } = require("./lifecycle-history");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
-const MAIN_LOG_PATH = path.resolve(__dirname, "..", "artifacts", "logs", "electron-main.log");
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 const HUD_HEALTH_RECONCILE_INTERVAL_MS = 4000;
@@ -175,15 +175,27 @@ function log(message, extra) {
 
 function appendMainLogLine(message, extra) {
   try {
-    fs.mkdirSync(path.dirname(MAIN_LOG_PATH), { recursive: true });
+    const logPath = resolveMainLogPath();
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const suffix =
       extra === undefined
         ? ""
         : ` ${typeof extra === "string" ? extra : JSON.stringify(extra)}`;
-    fs.appendFileSync(MAIN_LOG_PATH, `${new Date().toISOString()} ${message}${suffix}\n`, "utf8");
+    fs.appendFileSync(logPath, `${new Date().toISOString()} ${message}${suffix}\n`, "utf8");
   } catch {
     // Logging must never crash the main process.
   }
+}
+
+function resolveMainLogPath() {
+  if (app?.isReady()) {
+    try {
+      return path.join(app.getPath("userData"), "logs", "electron-main.log");
+    } catch {
+      // Fall back to a temp path when userData is unavailable.
+    }
+  }
+  return path.join(os.tmpdir(), "francis-electron-main.log");
 }
 
 function readSystemReducedMotionPreference() {
