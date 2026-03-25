@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
 const { getScheduledHudRecoveryReason } = require("./hud-recovery");
+const { writeConsole } = require("./safe-log");
 const {
   buildDefaultPreferences,
   PREFERENCES_VERSION,
@@ -90,6 +91,7 @@ const {
 } = require("./lifecycle-history");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
+const MAIN_LOG_PATH = path.resolve(__dirname, "..", "artifacts", "logs", "electron-main.log");
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 const HUD_HEALTH_RECONCILE_INTERVAL_MS = 4000;
@@ -162,11 +164,26 @@ let overlayRecovery = {
 };
 
 function log(message, extra) {
+  const prefix = `[francis-overlay] ${message}`;
+  appendMainLogLine(prefix, extra);
   if (extra === undefined) {
-    console.log(`[francis-overlay] ${message}`);
+    writeConsole(console.log, prefix);
     return;
   }
-  console.log(`[francis-overlay] ${message}`, extra);
+  writeConsole(console.log, prefix, extra);
+}
+
+function appendMainLogLine(message, extra) {
+  try {
+    fs.mkdirSync(path.dirname(MAIN_LOG_PATH), { recursive: true });
+    const suffix =
+      extra === undefined
+        ? ""
+        : ` ${typeof extra === "string" ? extra : JSON.stringify(extra)}`;
+    fs.appendFileSync(MAIN_LOG_PATH, `${new Date().toISOString()} ${message}${suffix}\n`, "utf8");
+  } catch {
+    // Logging must never crash the main process.
+  }
 }
 
 function readSystemReducedMotionPreference() {
