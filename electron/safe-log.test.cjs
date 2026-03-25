@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { isDetachedConsoleError, writeConsole } = require("./safe-log");
+const { isDetachedConsoleError, patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
 
 test("detects detached console errors", () => {
   assert.equal(isDetachedConsoleError({ code: "EPIPE" }), true);
@@ -32,4 +32,27 @@ test("writeConsole suppresses broken pipe errors and preserves other failures", 
       }, "hello"),
     /other failure/,
   );
+});
+
+test("patchConsoleForDetachedPipes wraps console methods only once", () => {
+  const calls = [];
+  const fakeConsole = {
+    log: (...args) => calls.push(["log", ...args]),
+    warn: (...args) => calls.push(["warn", ...args]),
+    error: (...args) => calls.push(["error", ...args]),
+  };
+
+  patchConsoleForDetachedPipes(fakeConsole);
+  patchConsoleForDetachedPipes(fakeConsole);
+
+  fakeConsole.log("hello");
+  fakeConsole.warn("warn");
+  fakeConsole.error("error");
+
+  assert.deepEqual(calls, [
+    ["log", "hello"],
+    ["warn", "warn"],
+    ["error", "error"],
+  ]);
+  assert.equal(fakeConsole.__francisDetachedPipeSafe, true);
 });

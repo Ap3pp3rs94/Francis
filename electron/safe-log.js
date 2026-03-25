@@ -19,7 +19,35 @@ function writeConsole(writer, ...args) {
   }
 }
 
+function patchConsoleForDetachedPipes(consoleObject = console) {
+  if (!consoleObject || consoleObject.__francisDetachedPipeSafe) {
+    return consoleObject;
+  }
+  const originalLog = typeof consoleObject.log === "function" ? consoleObject.log.bind(consoleObject) : null;
+  const originalWarn = typeof consoleObject.warn === "function" ? consoleObject.warn.bind(consoleObject) : null;
+  const originalError = typeof consoleObject.error === "function" ? consoleObject.error.bind(consoleObject) : null;
+
+  if (originalLog) {
+    consoleObject.log = (...args) => writeConsole(originalLog, ...args);
+  }
+  if (originalWarn) {
+    consoleObject.warn = (...args) => writeConsole(originalWarn, ...args);
+  }
+  if (originalError) {
+    consoleObject.error = (...args) => writeConsole(originalError, ...args);
+  }
+
+  Object.defineProperty(consoleObject, "__francisDetachedPipeSafe", {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return consoleObject;
+}
+
 module.exports = {
   isDetachedConsoleError,
+  patchConsoleForDetachedPipes,
   writeConsole,
 };
