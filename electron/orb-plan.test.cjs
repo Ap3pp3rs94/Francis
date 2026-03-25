@@ -61,6 +61,15 @@ test("resolveScreenPoint accepts named desktop anchors", () => {
   assert.deepEqual(point, { x: 58, y: 1056 });
 });
 
+test("resolveDesktopAnchor infers the show-desktop button from taskbar bounds", () => {
+  const point = resolveDesktopAnchor("show_desktop_button", {
+    displayBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    displayWorkArea: { x: 0, y: 0, width: 1920, height: 1032 },
+  });
+
+  assert.deepEqual(point, { x: 1906, y: 1056 });
+});
+
 test("executeOrbDesktopPlan moves before a positioned click and returns a shell summary", async () => {
   const commands = [];
   const sleeps = [];

@@ -82,3 +82,48 @@ def test_build_orb_chat_plan_heuristically_maps_save_to_ctrl_s(monkeypatch) -> N
             "delay_ms": 180,
         }
     ]
+
+
+def test_build_orb_chat_plan_switches_apps_through_start_when_taskbar_target_is_not_grounded(monkeypatch) -> None:
+    monkeypatch.setattr(orb_planner, "chat", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+
+    payload = orb_planner.build_orb_chat_plan(
+        message="switch to chrome",
+        orb_context={"summary": "Francis is resident on the desktop."},
+        perception={"summary": "Francis sees the browser and taskbar."},
+        snapshot={"control": {"mode": "pilot"}},
+        short_term_messages=[],
+        long_term_memory={},
+    )
+
+    assert payload["intent"]["kind"] == "desktop.action"
+    assert payload["should_execute"] is True
+    assert payload["plan"] is not None
+    assert payload["plan"]["steps"][0]["args"]["anchor"] == "start_button"
+    assert payload["plan"]["steps"][1]["args"]["text"] == "chrome"
+    assert "not assuming a taskbar icon target" in payload["reply"].lower()
+
+
+def test_build_orb_chat_plan_uses_show_desktop_taskbar_button(monkeypatch) -> None:
+    monkeypatch.setattr(orb_planner, "chat", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+
+    payload = orb_planner.build_orb_chat_plan(
+        message="show desktop",
+        orb_context={"summary": "Francis is resident on the desktop."},
+        perception={"summary": "Francis sees the active display."},
+        snapshot={"control": {"mode": "pilot"}},
+        short_term_messages=[],
+        long_term_memory={},
+    )
+
+    assert payload["intent"]["kind"] == "desktop.action"
+    assert payload["plan"] is not None
+    assert payload["plan"]["steps"] == [
+        {
+            "kind": "mouse.click",
+            "args": {"button": "left", "anchor": "show_desktop_button"},
+            "reason": "Left click the taskbar show-desktop button to clear the current windows.",
+            "interaction": "left_click",
+            "delay_ms": 180,
+        }
+    ]

@@ -9,6 +9,7 @@ const ALLOWED_STEP_KINDS = new Set([
 ]);
 const ALLOWED_DESKTOP_ANCHORS = new Set([
   "start_button",
+  "show_desktop_button",
   "current_cursor",
 ]);
 
@@ -51,6 +52,9 @@ function normalizeDesktopAnchor(value) {
   }
   if (normalized === "start" || normalized === "start_menu" || normalized === "start-menu") {
     return "start_button";
+  }
+  if (normalized === "show_desktop" || normalized === "desktop_button" || normalized === "show-desktop") {
+    return "show_desktop_button";
   }
   return ALLOWED_DESKTOP_ANCHORS.has(normalized) ? normalized : "";
 }
@@ -238,6 +242,37 @@ function resolveDesktopAnchor(anchor, inputState = {}) {
     }
     return {
       x: Math.round(boundsX + Math.min(64, Math.max(38, thickness * 1.2))),
+      y: Math.round(boundsY + boundsHeight - thickness * 0.5),
+    };
+  }
+  if (normalized === "show_desktop_button") {
+    const placement = inferTaskbarPlacement(displayBounds, displayWorkArea);
+    const boundsX = Number(displayBounds.x || 0);
+    const boundsY = Number(displayBounds.y || 0);
+    const boundsWidth = Number(displayBounds.width || 0);
+    const boundsHeight = Number(displayBounds.height || 0);
+    const thickness = Math.max(24, Number(placement.thickness || 48));
+    const sliver = Math.max(8, Math.min(18, Math.round(thickness * 0.3)));
+    if (placement.edge === "left") {
+      return {
+        x: Math.round(boundsX + sliver * 0.5),
+        y: Math.round(boundsY + boundsHeight - Math.min(56, Math.max(36, thickness * 1.2))),
+      };
+    }
+    if (placement.edge === "right") {
+      return {
+        x: Math.round(boundsX + boundsWidth - sliver * 0.5),
+        y: Math.round(boundsY + boundsHeight - Math.min(56, Math.max(36, thickness * 1.2))),
+      };
+    }
+    if (placement.edge === "top") {
+      return {
+        x: Math.round(boundsX + boundsWidth - Math.max(6, sliver)),
+        y: Math.round(boundsY + thickness * 0.5),
+      };
+    }
+    return {
+      x: Math.round(boundsX + boundsWidth - Math.max(6, sliver)),
       y: Math.round(boundsY + boundsHeight - thickness * 0.5),
     };
   }

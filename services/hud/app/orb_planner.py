@@ -15,18 +15,19 @@ _ALLOWED_STEP_KINDS = {
 }
 _ALLOWED_DESKTOP_ANCHORS = {
     "start_button",
+    "show_desktop_button",
     "current_cursor",
 }
 _ACTION_VERB_PATTERN = re.compile(
-    r"^(?:please\s+)?(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
+    r"^(?:please\s+)?(?:open|launch|start|run|switch to|go to|focus|bring up|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
     re.IGNORECASE,
 )
 _POLITE_ACTION_PATTERN = re.compile(
-    r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
+    r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:open|launch|start|run|switch to|go to|focus|bring up|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
     re.IGNORECASE,
 )
 _DIRECTIVE_ACTION_PATTERN = re.compile(
-    r"^(?:i\s+want\s+you\s+to|go\s+ahead\s+and|please\s+go\s+ahead\s+and|do\s+this:)\s+(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
+    r"^(?:i\s+want\s+you\s+to|go\s+ahead\s+and|please\s+go\s+ahead\s+and|do\s+this:)\s+(?:open|launch|start|run|switch to|go to|focus|bring up|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
     re.IGNORECASE,
 )
 _CONVERSATION_PREFIX_PATTERN = re.compile(
@@ -59,6 +60,8 @@ def _normalize_desktop_anchor(value: Any) -> str:
         return "current_cursor"
     if normalized in {"start", "start_menu", "start-menu"}:
         return "start_button"
+    if normalized in {"show_desktop", "desktop_button", "show-desktop"}:
+        return "show_desktop_button"
     return normalized if normalized in _ALLOWED_DESKTOP_ANCHORS else ""
 
 
@@ -358,6 +361,51 @@ def _launch_visible_target_plan(target: str) -> dict[str, Any]:
     }
 
 
+def _switch_visible_target_plan(target: str) -> dict[str, Any]:
+    visible_label = _display_label(target)
+    return {
+        "reply": (
+            f"I can bring {visible_label} forward through the visible Start path in Pilot mode. "
+            "I am not assuming a taskbar icon target unless that target is grounded."
+        ),
+        "thought": f"Ready to bring {visible_label} forward through the Start path.",
+        "plan": {
+            "title": f"Bring {visible_label} Forward",
+            "summary": f"Bring {visible_label} forward by left-clicking Start, typing the search, and opening the highlighted result.",
+            "reasoning": [
+                "Switching applications through the taskbar requires a grounded icon target. That target is not yet lawful to assume from text alone.",
+                "The visible Start path is still human-like and keeps the interaction inspectable instead of inventing a taskbar slot.",
+                "A left click is the correct interaction for opening Start; a right click would open the administrative quick-link menu instead.",
+            ],
+            "mode_requirement": "pilot",
+            "auto_execute": True,
+            "steps": [
+                {
+                    "kind": "mouse.click",
+                    "args": {"button": "left", "anchor": "start_button"},
+                    "reason": "Left click the Start button to open the Windows launcher.",
+                    "interaction": "left_click",
+                    "delay_ms": 220,
+                },
+                {
+                    "kind": "keyboard.type",
+                    "args": {"text": target},
+                    "reason": f"Type {visible_label} into Start search to bring it forward visibly.",
+                    "interaction": "keyboard_navigation",
+                    "delay_ms": 180,
+                },
+                {
+                    "kind": "keyboard.key",
+                    "args": {"key": "enter"},
+                    "reason": f"Open the highlighted {visible_label} result from Start search.",
+                    "interaction": "keyboard_navigation",
+                    "delay_ms": 220,
+                },
+            ],
+        },
+    }
+
+
 def _heuristic_plan(message: str) -> dict[str, Any] | None:
     normalized = _strip_action_prefix(message)
     launch_match = re.match(r"^(?:open|launch|start|run)\s+(.+)$", normalized)
@@ -365,6 +413,11 @@ def _heuristic_plan(message: str) -> dict[str, Any] | None:
         target = launch_match.group(1).strip(" .")
         if target:
             return _launch_visible_target_plan(target)
+    switch_match = re.match(r"^(?:switch to|go to|focus|bring up)\s+(.+)$", normalized)
+    if switch_match:
+        target = switch_match.group(1).strip(" .")
+        if target:
+            return _switch_visible_target_plan(target)
     if re.match(r"^(?:click|left click)\s+(?:the\s+)?start(?:\s+button)?$", normalized):
         return {
             "reply": "I can open the Start menu with a left click in Pilot mode.",
@@ -385,6 +438,30 @@ def _heuristic_plan(message: str) -> dict[str, Any] | None:
                         "reason": "Left click the Start button to open the Windows launcher.",
                         "interaction": "left_click",
                         "delay_ms": 220,
+                    }
+                ],
+            },
+        }
+    if normalized in {"show desktop", "show the desktop", "minimize all", "minimize all windows"}:
+        return {
+            "reply": "I can show the desktop through the taskbar in Pilot mode.",
+            "thought": "Show-desktop taskbar path is ready.",
+            "plan": {
+                "title": "Show Desktop",
+                "summary": "Use the taskbar show-desktop button to clear the current windows.",
+                "reasoning": [
+                    "Showing the desktop is a stable taskbar interaction, so Francis should use the taskbar edge instead of inventing per-window close or minimize clicks.",
+                    "A left click is correct here because the task is to toggle the desktop view, not open a context menu.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
+                    {
+                        "kind": "mouse.click",
+                        "args": {"button": "left", "anchor": "show_desktop_button"},
+                        "reason": "Left click the taskbar show-desktop button to clear the current windows.",
+                        "interaction": "left_click",
+                        "delay_ms": 180,
                     }
                 ],
             },
