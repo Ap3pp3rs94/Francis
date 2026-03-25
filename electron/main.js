@@ -376,6 +376,8 @@ function getOverlayInputState() {
   const targetStability = getOrbTargetStability(cursorScreen);
   return {
     displayId: activeDisplay.id,
+    displayBounds: activeDisplay?.bounds || null,
+    displayWorkArea: activeDisplay?.workArea || null,
     cursorScreen,
     cursorDisplay,
     workArea,

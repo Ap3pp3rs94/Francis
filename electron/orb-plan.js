@@ -7,6 +7,10 @@ const ALLOWED_STEP_KINDS = new Set([
   "keyboard.key",
   "keyboard.shortcut",
 ]);
+const ALLOWED_DESKTOP_ANCHORS = new Set([
+  "start_button",
+  "current_cursor",
+]);
 
 function clampNumber(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -37,6 +41,20 @@ function normalizePoint(value, fallback = null) {
   return Math.round(numeric);
 }
 
+function normalizeDesktopAnchor(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "cursor") {
+    return "current_cursor";
+  }
+  if (normalized === "start" || normalized === "start_menu" || normalized === "start-menu") {
+    return "start_button";
+  }
+  return ALLOWED_DESKTOP_ANCHORS.has(normalized) ? normalized : "";
+}
+
 function normalizeOrbPlanStep(row, index = 0) {
   if (!row || typeof row !== "object" || Array.isArray(row)) {
     throw new TypeError(`Orb plan step ${index + 1} must be an object.`);
@@ -62,27 +80,35 @@ function normalizeOrbPlanStep(row, index = 0) {
   };
 
   if (kind === "mouse.move") {
+    const anchor = normalizeDesktopAnchor(args.anchor || args.target || args.named_target);
     const x = normalizePoint(args.x);
     const y = normalizePoint(args.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      throw new Error(`Orb plan step ${index + 1} requires numeric x and y coordinates.`);
+    if (!anchor && (!Number.isFinite(x) || !Number.isFinite(y))) {
+      throw new Error(`Orb plan step ${index + 1} requires numeric x/y coordinates or a named desktop anchor.`);
     }
     normalized.args = {
-      x,
-      y,
       coordinate_space: normalizeCoordinateSpace(args.coordinate_space || args.coordinateSpace),
     };
+    if (anchor) {
+      normalized.args.anchor = anchor;
+    } else {
+      normalized.args.x = x;
+      normalized.args.y = y;
+    }
     return normalized;
   }
 
   if (kind === "mouse.click") {
+    const anchor = normalizeDesktopAnchor(args.anchor || args.target || args.named_target);
     const x = normalizePoint(args.x);
     const y = normalizePoint(args.y);
     const normalizedArgs = {
       button: String(args.button || "left").trim().toLowerCase() === "right" ? "right" : "left",
       double: Boolean(args.double),
     };
-    if (Number.isFinite(x) && Number.isFinite(y)) {
+    if (anchor) {
+      normalizedArgs.anchor = anchor;
+    } else if (Number.isFinite(x) && Number.isFinite(y)) {
       normalizedArgs.x = x;
       normalizedArgs.y = y;
       normalizedArgs.coordinate_space = normalizeCoordinateSpace(args.coordinate_space || args.coordinateSpace);
@@ -142,7 +168,90 @@ function normalizeOrbDesktopPlan(plan) {
   };
 }
 
+function inferTaskbarPlacement(bounds, workArea) {
+  const safeBounds = bounds && typeof bounds === "object" ? bounds : { x: 0, y: 0, width: 0, height: 0 };
+  const safeWorkArea = workArea && typeof workArea === "object" ? workArea : safeBounds;
+  const leftInset = Number(safeWorkArea.x || 0) - Number(safeBounds.x || 0);
+  const topInset = Number(safeWorkArea.y || 0) - Number(safeBounds.y || 0);
+  const rightInset = (Number(safeBounds.x || 0) + Number(safeBounds.width || 0))
+    - (Number(safeWorkArea.x || 0) + Number(safeWorkArea.width || 0));
+  const bottomInset = (Number(safeBounds.y || 0) + Number(safeBounds.height || 0))
+    - (Number(safeWorkArea.y || 0) + Number(safeWorkArea.height || 0));
+
+  if (leftInset > 0 && leftInset >= rightInset) {
+    return { edge: "left", thickness: leftInset };
+  }
+  if (rightInset > 0) {
+    return { edge: "right", thickness: rightInset };
+  }
+  if (topInset > 0 && topInset >= bottomInset) {
+    return { edge: "top", thickness: topInset };
+  }
+  if (bottomInset > 0) {
+    return { edge: "bottom", thickness: bottomInset };
+  }
+  return { edge: "bottom", thickness: Math.max(48, Math.round((Number(safeBounds.height || 0) || 1080) * 0.045)) };
+}
+
+function resolveDesktopAnchor(anchor, inputState = {}) {
+  const normalized = normalizeDesktopAnchor(anchor);
+  const cursorScreen = inputState.cursorScreen && typeof inputState.cursorScreen === "object" ? inputState.cursorScreen : null;
+  if (normalized === "current_cursor") {
+    return {
+      x: normalizePoint(cursorScreen?.x, 0),
+      y: normalizePoint(cursorScreen?.y, 0),
+    };
+  }
+  const displayBounds = inputState.displayBounds && typeof inputState.displayBounds === "object"
+    ? inputState.displayBounds
+    : inputState.workArea && typeof inputState.workArea === "object"
+      ? inputState.workArea
+      : { x: 0, y: 0, width: 1920, height: 1080 };
+  const displayWorkArea = inputState.displayWorkArea && typeof inputState.displayWorkArea === "object"
+    ? inputState.displayWorkArea
+    : displayBounds;
+
+  if (normalized === "start_button") {
+    const placement = inferTaskbarPlacement(displayBounds, displayWorkArea);
+    const boundsX = Number(displayBounds.x || 0);
+    const boundsY = Number(displayBounds.y || 0);
+    const boundsWidth = Number(displayBounds.width || 0);
+    const boundsHeight = Number(displayBounds.height || 0);
+    const thickness = Math.max(36, Number(placement.thickness || 48));
+    if (placement.edge === "left") {
+      return {
+        x: Math.round(boundsX + thickness * 0.5),
+        y: Math.round(boundsY + Math.min(56, Math.max(36, thickness * 1.15))),
+      };
+    }
+    if (placement.edge === "right") {
+      return {
+        x: Math.round(boundsX + boundsWidth - thickness * 0.5),
+        y: Math.round(boundsY + Math.min(56, Math.max(36, thickness * 1.15))),
+      };
+    }
+    if (placement.edge === "top") {
+      return {
+        x: Math.round(boundsX + Math.min(64, Math.max(38, thickness * 1.2))),
+        y: Math.round(boundsY + thickness * 0.5),
+      };
+    }
+    return {
+      x: Math.round(boundsX + Math.min(64, Math.max(38, thickness * 1.2))),
+      y: Math.round(boundsY + boundsHeight - thickness * 0.5),
+    };
+  }
+  return {
+    x: normalizePoint(cursorScreen?.x, 0),
+    y: normalizePoint(cursorScreen?.y, 0),
+  };
+}
+
 function resolveScreenPoint(args, inputState = {}) {
+  const anchor = normalizeDesktopAnchor(args.anchor || args.target || args.named_target);
+  if (anchor) {
+    return resolveDesktopAnchor(anchor, inputState);
+  }
   const cursorScreen = inputState.cursorScreen && typeof inputState.cursorScreen === "object" ? inputState.cursorScreen : null;
   const workArea = inputState.workArea && typeof inputState.workArea === "object" ? inputState.workArea : { x: 0, y: 0 };
   const coordinateSpace = normalizeCoordinateSpace(args.coordinate_space || args.coordinateSpace);
@@ -204,7 +313,10 @@ async function executeOrbDesktopPlan(plan, options = {}) {
         });
       } else if (step.kind === "mouse.click") {
         let targetPoint = null;
-        if (Number.isFinite(Number(step.args.x)) && Number.isFinite(Number(step.args.y))) {
+        if (
+          step.args.anchor
+          || (Number.isFinite(Number(step.args.x)) && Number.isFinite(Number(step.args.y)))
+        ) {
           targetPoint = resolveScreenPoint(step.args, inputState);
           await executeCommand({
             kind: "mouse.move",
@@ -300,7 +412,10 @@ module.exports = {
   ALLOWED_STEP_KINDS,
   DEFAULT_PLAN_STEP_DELAY_MS,
   executeOrbDesktopPlan,
+  inferTaskbarPlacement,
+  normalizeDesktopAnchor,
   normalizeOrbDesktopPlan,
   normalizeOrbPlanStep,
+  resolveDesktopAnchor,
   resolveScreenPoint,
 };

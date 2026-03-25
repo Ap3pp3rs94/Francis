@@ -3,7 +3,9 @@ const assert = require("node:assert/strict");
 
 const {
   executeOrbDesktopPlan,
+  inferTaskbarPlacement,
   normalizeOrbDesktopPlan,
+  resolveDesktopAnchor,
   resolveScreenPoint,
 } = require("./orb-plan");
 
@@ -30,6 +32,33 @@ test("resolveScreenPoint translates display-relative coordinates through the wor
   );
 
   assert.deepEqual(point, { x: 240, y: 128 });
+});
+
+test("resolveDesktopAnchor infers the Start button from display bounds and work area", () => {
+  const placement = inferTaskbarPlacement(
+    { x: 0, y: 0, width: 1920, height: 1080 },
+    { x: 0, y: 0, width: 1920, height: 1032 },
+  );
+  assert.deepEqual(placement, { edge: "bottom", thickness: 48 });
+
+  const point = resolveDesktopAnchor("start_button", {
+    displayBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    displayWorkArea: { x: 0, y: 0, width: 1920, height: 1032 },
+  });
+  assert.deepEqual(point, { x: 58, y: 1056 });
+});
+
+test("resolveScreenPoint accepts named desktop anchors", () => {
+  const point = resolveScreenPoint(
+    { anchor: "start_button" },
+    {
+      displayBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      displayWorkArea: { x: 0, y: 0, width: 1920, height: 1032 },
+      cursorScreen: { x: 480, y: 720 },
+    },
+  );
+
+  assert.deepEqual(point, { x: 58, y: 1056 });
 });
 
 test("executeOrbDesktopPlan moves before a positioned click and returns a shell summary", async () => {
@@ -91,4 +120,38 @@ test("executeOrbDesktopPlan returns a failed result instead of throwing when com
   assert.equal(result.status, "failed");
   assert.match(result.error, /SendKeys failed/);
   assert.equal(result.completed_steps, 0);
+});
+
+test("executeOrbDesktopPlan moves to named anchors before clicking", async () => {
+  const commands = [];
+  const result = await executeOrbDesktopPlan(
+    {
+      title: "Open Start",
+      steps: [
+        {
+          kind: "mouse.click",
+          args: { button: "left", anchor: "start_button" },
+          reason: "Open Start with a left click.",
+          delay_ms: 120,
+        },
+      ],
+    },
+    {
+      inputState: {
+        displayBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+        displayWorkArea: { x: 0, y: 0, width: 1920, height: 1032 },
+      },
+      executeCommand: async (command) => {
+        commands.push(command);
+        return { status: "ok" };
+      },
+      sleep: async () => {},
+    },
+  );
+
+  assert.equal(result.status, "ok");
+  assert.deepEqual(commands, [
+    { kind: "mouse.move", args: { x: 58, y: 1056 } },
+    { kind: "mouse.click", args: { button: "left", double: false } },
+  ]);
 });

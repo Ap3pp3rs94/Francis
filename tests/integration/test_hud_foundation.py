@@ -123,11 +123,10 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
     assert "When you move, Francis follows your path with a short visible delay." in response.text
-    assert "Right-click the Orb for quick chat and controls." in response.text
+    assert "Right-click the Orb to talk and act in place." in response.text
     assert "Hold it to panic stop when control exposes that path in scope." in response.text
-    assert "Open Lens" in response.text
-    assert "Hide Lens" in response.text
-    assert "Exit Francis" in response.text
+    assert ">Stop<" in response.text
+    assert ">Close<" in response.text
     assert "Away Authority" in response.text
     assert "Queue Move Here" in response.text
     assert "Queue Click Here" in response.text

@@ -13,6 +13,10 @@ _ALLOWED_STEP_KINDS = {
     "keyboard.key",
     "keyboard.shortcut",
 }
+_ALLOWED_DESKTOP_ANCHORS = {
+    "start_button",
+    "current_cursor",
+}
 _ACTION_VERB_PATTERN = re.compile(
     r"^(?:please\s+)?(?:open|launch|start|run|click|right click|left click|type|enter|press|save|close|minimize|maximize|scroll|select)\b",
     re.IGNORECASE,
@@ -49,6 +53,15 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _normalize_desktop_anchor(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized == "cursor":
+        return "current_cursor"
+    if normalized in {"start", "start_menu", "start-menu"}:
+        return "start_button"
+    return normalized if normalized in _ALLOWED_DESKTOP_ANCHORS else ""
+
+
 def _normalize_step(row: Any) -> dict[str, Any] | None:
     if not isinstance(row, dict):
         return None
@@ -58,15 +71,24 @@ def _normalize_step(row: Any) -> dict[str, Any] | None:
     args = row.get("args", {}) if isinstance(row.get("args"), dict) else {}
     normalized_args: dict[str, Any] = {}
     if kind == "mouse.move":
+        anchor = _normalize_desktop_anchor(args.get("anchor") or args.get("target") or args.get("named_target"))
+        if anchor:
+            normalized_args["anchor"] = anchor
         for key in ("x", "y"):
             value = args.get(key)
             if value is None:
+                if anchor:
+                    continue
                 return None
             normalized_args[key] = int(round(float(value)))
-        normalized_args["coordinate_space"] = str(args.get("coordinate_space", "display")).strip().lower() or "display"
+        if "x" in normalized_args and "y" in normalized_args:
+            normalized_args["coordinate_space"] = str(args.get("coordinate_space", "display")).strip().lower() or "display"
     elif kind == "mouse.click":
+        anchor = _normalize_desktop_anchor(args.get("anchor") or args.get("target") or args.get("named_target"))
         button = str(args.get("button", "left")).strip().lower() or "left"
         normalized_args["button"] = "right" if button == "right" else "left"
+        if anchor:
+            normalized_args["anchor"] = anchor
         if "double" in args:
             normalized_args["double"] = bool(args.get("double"))
         if "x" in args and args.get("x") is not None:
@@ -277,49 +299,96 @@ def _infer_turn_intent(
     }
 
 
+def _strip_action_prefix(message: str) -> str:
+    normalized = _normalize_turn_text(message).lower()
+    if not normalized:
+        return ""
+    normalized = re.sub(r"^(?:please\s+)?(?:can|could|would|will)\s+you\s+(?:please\s+)?", "", normalized)
+    normalized = re.sub(r"^(?:i\s+want\s+you\s+to|please\s+go\s+ahead\s+and|go\s+ahead\s+and|do\s+this:\s*)", "", normalized)
+    normalized = re.sub(r"^(?:please\s+)", "", normalized)
+    return normalized.strip()
+
+
+def _display_label(target: str) -> str:
+    tokens = [token for token in re.split(r"[\s_-]+", str(target or "").strip()) if token]
+    if not tokens:
+        return "the requested item"
+    return " ".join(token.capitalize() if len(token) > 2 else token.upper() for token in tokens)
+
+
+def _launch_visible_target_plan(target: str) -> dict[str, Any]:
+    visible_label = _display_label(target)
+    return {
+        "reply": f"I can open {visible_label} through the visible Start path in Pilot mode.",
+        "thought": f"Ready to open {visible_label} through the Start button path.",
+        "plan": {
+            "title": f"Open {visible_label}",
+            "summary": f"Open {visible_label} by left-clicking Start, typing the search, and launching the highlighted result.",
+            "reasoning": [
+                "Opening an application is a visible desktop task, so Francis should use the Start path instead of a hidden direct launch.",
+                "A left click is the correct interaction for opening the Start button; a right click would open the administrative menu instead of the launcher.",
+                "Once Start is open, typing the search and pressing Enter is the most reliable visible completion path.",
+            ],
+            "mode_requirement": "pilot",
+            "auto_execute": True,
+            "steps": [
+                {
+                    "kind": "mouse.click",
+                    "args": {"button": "left", "anchor": "start_button"},
+                    "reason": "Left click the Start button to open the Windows launcher.",
+                    "interaction": "left_click",
+                    "delay_ms": 220,
+                },
+                {
+                    "kind": "keyboard.type",
+                    "args": {"text": target},
+                    "reason": f"Type {visible_label} into Start search.",
+                    "interaction": "keyboard_navigation",
+                    "delay_ms": 180,
+                },
+                {
+                    "kind": "keyboard.key",
+                    "args": {"key": "enter"},
+                    "reason": f"Open the highlighted {visible_label} result from Start search.",
+                    "interaction": "keyboard_navigation",
+                    "delay_ms": 220,
+                },
+            ],
+        },
+    }
+
+
 def _heuristic_plan(message: str) -> dict[str, Any] | None:
-    normalized = " ".join(str(message or "").strip().lower().split())
+    normalized = _strip_action_prefix(message)
     launch_match = re.match(r"^(?:open|launch|start|run)\s+(.+)$", normalized)
     if launch_match:
         target = launch_match.group(1).strip(" .")
         if target:
-            return {
-                "reply": f"I can open {target} through Start search in Pilot mode.",
-                "thought": f"Ready to open {target} through Start search.",
-                "plan": {
-                    "title": f"Open {target.title()}",
-                    "summary": f"Open {target} through the Windows Start search path instead of a direct process launch.",
+            return _launch_visible_target_plan(target)
+    if re.match(r"^(?:click|left click)\s+(?:the\s+)?start(?:\s+button)?$", normalized):
+        return {
+            "reply": "I can open the Start menu with a left click in Pilot mode.",
+            "thought": "Start button path is ready.",
+            "plan": {
+                "title": "Open Start Menu",
+                "summary": "Open the Windows Start menu with a left click on the Start button.",
                 "reasoning": [
-                    "This is a visible desktop navigation task, so Francis should use the same Windows path the user would use rather than a hidden direct launch.",
-                    "Keyboard navigation is the most reliable path here, so left versus right click is not needed for this task.",
+                    "Opening the Start menu is a launcher interaction, so left click is correct.",
+                    "A right click would open the administrative quick-link menu instead of the normal launcher.",
                 ],
                 "mode_requirement": "pilot",
                 "auto_execute": True,
                 "steps": [
-                        {
-                            "kind": "keyboard.shortcut",
-                            "args": {"keys": ["ctrl", "esc"]},
-                            "reason": "Open the Start menu so Francis can search like the user.",
-                            "interaction": "keyboard_navigation",
-                            "delay_ms": 180,
-                        },
-                        {
-                            "kind": "keyboard.type",
-                            "args": {"text": target},
-                            "reason": f"Type {target} into Start search.",
-                            "interaction": "keyboard_navigation",
-                            "delay_ms": 180,
-                        },
-                        {
-                            "kind": "keyboard.key",
-                            "args": {"key": "enter"},
-                            "reason": f"Open the highlighted {target} result from Start search.",
-                            "interaction": "keyboard_navigation",
-                            "delay_ms": 220,
-                        },
-                    ],
-                },
-            }
+                    {
+                        "kind": "mouse.click",
+                        "args": {"button": "left", "anchor": "start_button"},
+                        "reason": "Left click the Start button to open the Windows launcher.",
+                        "interaction": "left_click",
+                        "delay_ms": 220,
+                    }
+                ],
+            },
+        }
     if "right click" in normalized or "context menu" in normalized:
         return {
             "reply": "I can open the context menu from the current cursor target in Pilot mode.",
@@ -339,6 +408,190 @@ def _heuristic_plan(message: str) -> dict[str, Any] | None:
                         "args": {"button": "right"},
                         "reason": "Right click the current cursor target to open its context menu.",
                         "interaction": "right_click",
+                        "delay_ms": 180,
+                    }
+                ],
+            },
+        }
+    if normalized in {"save", "save this", "save file", "save it"}:
+        return {
+            "reply": "I can save the current work in Pilot mode.",
+            "thought": "Save shortcut is ready.",
+            "plan": {
+                "title": "Save Current Work",
+                "summary": "Use the standard save shortcut for the active surface.",
+                "reasoning": [
+                    "Saving is usually a keyboard shortcut task, so Ctrl+S is the fastest visible user-like path.",
+                    "No mouse click is needed unless the active surface requires a custom control path.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
+                    {
+                        "kind": "keyboard.shortcut",
+                        "args": {"keys": ["ctrl", "s"]},
+                        "reason": "Use the standard save shortcut on the active surface.",
+                        "interaction": "keyboard_navigation",
+                        "delay_ms": 180,
+                    }
+                ],
+            },
+        }
+    if normalized in {"close", "close this", "close window", "close app"}:
+        return {
+            "reply": "I can close the current window in Pilot mode.",
+            "thought": "Close-window path is ready.",
+            "plan": {
+                "title": "Close Current Window",
+                "summary": "Close the focused window through the standard Windows shortcut.",
+                "reasoning": [
+                    "Closing the active window is a standard keyboard task, so Alt+F4 is the clearest visible path.",
+                    "A mouse click would depend on the target app's chrome and is less reliable than the global close shortcut.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
+                    {
+                        "kind": "keyboard.shortcut",
+                        "args": {"keys": ["alt", "f4"]},
+                        "reason": "Close the focused window through the Windows close shortcut.",
+                        "interaction": "keyboard_navigation",
+                        "delay_ms": 180,
+                    }
+                ],
+            },
+        }
+    if normalized in {"minimize", "minimize window", "minimize this"}:
+        return {
+            "reply": "I can minimize the current window in Pilot mode.",
+            "thought": "Minimize path is ready.",
+            "plan": {
+                "title": "Minimize Current Window",
+                "summary": "Minimize the focused window through the standard Windows shortcut.",
+                "reasoning": [
+                    "Minimizing is more reliable through the Windows shortcut than by chasing the title-bar control visually.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
+                    {
+                        "kind": "keyboard.shortcut",
+                        "args": {"keys": ["win", "down"]},
+                        "reason": "Minimize the focused window through the Windows shortcut.",
+                        "interaction": "keyboard_navigation",
+                        "delay_ms": 180,
+                    }
+                ],
+            },
+        }
+    if normalized in {"maximize", "maximize window", "maximize this"}:
+        return {
+            "reply": "I can maximize the current window in Pilot mode.",
+            "thought": "Maximize path is ready.",
+            "plan": {
+                "title": "Maximize Current Window",
+                "summary": "Maximize the focused window through the standard Windows shortcut.",
+                "reasoning": [
+                    "Maximizing is more reliable through the Windows shortcut than by chasing the title-bar control visually.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
+                    {
+                        "kind": "keyboard.shortcut",
+                        "args": {"keys": ["win", "up"]},
+                        "reason": "Maximize the focused window through the Windows shortcut.",
+                        "interaction": "keyboard_navigation",
+                        "delay_ms": 180,
+                    }
+                ],
+            },
+        }
+    type_match = re.match(r"^(?:type|enter)\s+(.+)$", normalized)
+    if type_match:
+        text = type_match.group(1).strip().strip("\"'")
+        if text:
+            return {
+                "reply": f"I can type {text!r} in Pilot mode.",
+                "thought": "Typing path is ready.",
+                "plan": {
+                    "title": "Type Text",
+                    "summary": "Type the requested text into the active field.",
+                    "reasoning": [
+                        "Typing is a direct desktop action, so the shell should send the requested text visibly into the active field.",
+                    ],
+                    "mode_requirement": "pilot",
+                    "auto_execute": True,
+                    "steps": [
+                        {
+                            "kind": "keyboard.type",
+                            "args": {"text": text},
+                            "reason": "Type the requested text into the active field.",
+                            "interaction": "keyboard_navigation",
+                            "delay_ms": 120,
+                        }
+                    ],
+                },
+            }
+    press_match = re.match(r"^(?:press|hit)\s+(.+)$", normalized)
+    if press_match:
+        key_label = press_match.group(1).strip(" .")
+        key_map = {
+            "enter": "enter",
+            "return": "enter",
+            "escape": "escape",
+            "esc": "escape",
+            "tab": "tab",
+            "space": "space",
+            "up": "up",
+            "down": "down",
+            "left": "left",
+            "right": "right",
+            "delete": "delete",
+            "backspace": "backspace",
+        }
+        resolved_key = key_map.get(key_label)
+        if resolved_key:
+            return {
+                "reply": f"I can press {resolved_key} in Pilot mode.",
+                "thought": f"{resolved_key.title()} key path is ready.",
+                "plan": {
+                    "title": f"Press {resolved_key.title()}",
+                    "summary": f"Send the {resolved_key} key to the active surface.",
+                    "reasoning": [
+                        "This is a direct keypress task, so Francis should use the matching keyboard key rather than infer a click path.",
+                    ],
+                    "mode_requirement": "pilot",
+                    "auto_execute": True,
+                    "steps": [
+                        {
+                            "kind": "keyboard.key",
+                            "args": {"key": resolved_key},
+                            "reason": f"Send the {resolved_key} key to the active surface.",
+                            "interaction": "keyboard_navigation",
+                            "delay_ms": 120,
+                        }
+                    ],
+                },
+            }
+    if normalized in {"click", "left click", "click here", "left click here"}:
+        return {
+            "reply": "I can left click the current cursor target in Pilot mode.",
+            "thought": "Left-click path is ready.",
+            "plan": {
+                "title": "Left Click Current Target",
+                "summary": "Use a left click at the current cursor target.",
+                "reasoning": [
+                    "A normal activation path should use a left click unless the task specifically requires a context menu.",
+                ],
+                "mode_requirement": "pilot",
+                "auto_execute": True,
+                "steps": [
+                    {
+                        "kind": "mouse.click",
+                        "args": {"button": "left"},
+                        "reason": "Left click the current cursor target to activate it.",
+                        "interaction": "left_click",
                         "delay_ms": 180,
                     }
                 ],
@@ -372,6 +625,7 @@ def build_orb_chat_plan(
         "Set should_execute to true only when the user is explicitly asking Francis to perform the action on this turn. "
         "If desktop action is required, plan visible user-like steps only. "
         "Choose left versus right click deliberately and explain the interaction choice in the reasoning and step reason. "
+        "You may use stable desktop anchors like start_button when a named desktop target is more truthful than guessed coordinates. "
         "Do not directly launch processes when a visible Windows navigation path is better. "
         "If no desktop action is needed, set plan to null and reply as Francis in a calm operator voice."
     )
@@ -401,6 +655,7 @@ def build_orb_chat_plan(
         "short_term_memory": short_term_messages[-10:],
         "long_term_memory": long_term_memory,
         "allowed_step_kinds": sorted(_ALLOWED_STEP_KINDS),
+        "allowed_desktop_anchors": sorted(_ALLOWED_DESKTOP_ANCHORS),
         "user_message": user_message,
         "output_contract": {
             "reply": "string",

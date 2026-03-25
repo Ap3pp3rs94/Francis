@@ -1587,7 +1587,7 @@
               <div class="metric-pill"><strong>Pulse</strong><span>steady</span></div>
             </div>
             <p class="meta tiny orb-controls" id="orb-controls">
-              Right-click the Orb for quick chat and controls. Hold it to panic stop when control exposes that path in scope.
+              Right-click the Orb to talk and act in place. Hold it to panic stop when control exposes that path in scope.
             </p>
           </article>
           <div class="hero-copy-block">
@@ -2526,10 +2526,8 @@
             <span id="overlay-chat-meta">Orb conversation continuity is loading.</span>
           </div>
           <div class="orb-chat-head-actions">
-            <button class="btn-secondary" type="button" id="overlay-open-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
-            <button class="btn-secondary" type="button" id="overlay-hide-lens" onclick="closeOrbCommandMenu()">Hide Lens</button>
-            <button class="btn-secondary" type="button" id="overlay-hide-app" onclick="closeOrbCommandMenu(); hideDesktopOverlay()">Overlay</button>
-            <button class="btn-danger" type="button" id="overlay-exit-app" onclick="quitDesktopOverlay()">Exit Francis</button>
+            <button class="btn-danger" type="button" id="overlay-panic-stop" onclick="panicStopFromOrbSurface()">Stop</button>
+            <button class="btn-secondary" type="button" id="overlay-close-chat" onclick="closeOrbCommandMenu()">Close</button>
           </div>
         </div>
         <div class="orb-chat-memory" id="orb-chat-memory">
@@ -2545,7 +2543,7 @@
         </div>
         <div class="orb-chat-thread" id="orb-chat-thread" aria-live="polite">
           <div class="orb-chat-empty">
-            Right-click the Orb to talk to Francis in place.
+            Ask Francis a question or tell Francis what to do.
           </div>
         </div>
         <div class="orb-chat-plan" id="orb-chat-plan" hidden>
@@ -2564,18 +2562,18 @@
           </ol>
           <div class="orb-chat-plan-actions">
             <button class="btn-primary" type="button" id="orb-chat-plan-run" onclick="executeOrbChatPlan()">Execute</button>
-            <button class="btn-secondary" type="button" id="orb-chat-plan-lens" onclick="openLensFromOrbSurface()">Open Lens</button>
+            <button class="btn-secondary" type="button" id="orb-chat-plan-clear" onclick="clearOrbChatPlan()">Dismiss</button>
           </div>
         </div>
         <div class="orb-chat-status" id="orb-chat-status">
-          Francis is ready to continue from the Orb.
+          Francis is ready to continue in place from the Orb.
         </div>
         <div class="orb-chat-compose">
           <textarea
             id="overlay-chat-input"
             maxlength="1600"
             rows="3"
-            placeholder="Tell Francis what you want done"
+            placeholder="Ask Francis anything or tell Francis what to do"
           ></textarea>
           <div class="orb-chat-compose-actions">
             <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
@@ -3447,6 +3445,14 @@
         syncOrbWindowPassThrough().catch(() => {});
       }
 
+      function clearOrbChatPlan() {
+        orbQuickChat.latestPlan = null;
+        orbQuickChat.latestExecution = null;
+        orbQuickChat.error = "";
+        orbQuickChat.status = orbQuickChat.latestAssistantReply || "Francis is ready to continue in place from the Orb.";
+        renderOverlayDock();
+      }
+
       function openOrbCommandMenu() {
         ensureOrbQuickChatState();
         orbCommandMenu.open = true;
@@ -3497,6 +3503,31 @@
           }
         }
         setLensViewMode("orb_only");
+      }
+
+      async function panicStopFromOrbSurface() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.panicStop !== "function") {
+          orbQuickChat.error = "Panic stop is unavailable because the desktop bridge is not attached.";
+          orbQuickChat.status = orbQuickChat.error;
+          renderOverlayDock();
+          return;
+        }
+        try {
+          orbQuickChat.pending = true;
+          orbQuickChat.error = "";
+          orbQuickChat.status = "Francis is releasing authority now.";
+          renderOverlayDock();
+          await bridge.panicStop();
+          orbQuickChat.status = "Francis released the active stop path and returned control to the user.";
+        } catch (error) {
+          orbQuickChat.error = `Panic stop failed: ${error?.message || error}`;
+          orbQuickChat.status = orbQuickChat.error;
+        } finally {
+          orbQuickChat.pending = false;
+          renderOverlayDock();
+          applyOrbSignals();
+        }
       }
 
       function renderOrbTargetCue(node, cue, fallbackText) {
@@ -3937,13 +3968,12 @@
         const chatStatus = document.getElementById("orb-chat-status");
         const chatInput = document.getElementById("overlay-chat-input");
         const chatSend = document.getElementById("overlay-chat-send");
-        const openLens = document.getElementById("overlay-open-lens");
-        const hideOverlay = document.getElementById("overlay-hide-app");
-        const exitOverlay = document.getElementById("overlay-exit-app");
+        const panicStop = document.getElementById("overlay-panic-stop");
+        const closeChat = document.getElementById("overlay-close-chat");
         const motionExplore = document.getElementById("overlay-motion-explore");
         const motionTrace = document.getElementById("overlay-motion-trace");
         const motionAutonomous = document.getElementById("overlay-motion-autonomous");
-        if (!dock || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !openLens || !hideOverlay || !exitOverlay || !motionExplore || !motionTrace || !motionAutonomous) {
+        if (!dock || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !panicStop || !closeChat || !motionExplore || !motionTrace || !motionAutonomous) {
           return;
         }
         ensureOrbQuickChatState();
@@ -3980,7 +4010,7 @@
           ? orbQuickChat.error
           : orbQuickChat.pending
             ? "Francis is preparing or executing the current Orb plan."
-            : orbQuickChat.status || "Francis is ready to continue from the Orb.";
+            : orbQuickChat.status || "Francis is ready to continue in place from the Orb.";
         renderOrbChatThread();
         renderOrbChatPlan();
         renderOrbThoughtBubble();
@@ -3989,9 +4019,8 @@
         motionExplore.className = motionControl.selectedMode === "explore" ? "btn-primary" : "btn-secondary";
         motionTrace.className = motionControl.selectedMode === "trace" ? "btn-primary" : "btn-secondary";
         motionAutonomous.className = motionControl.selectedMode === "autonomous" ? "btn-primary" : "btn-secondary";
-        openLens.disabled = !desktopState.available && !orbWindowMode;
-        hideOverlay.disabled = !desktopState.available;
-        exitOverlay.disabled = !desktopState.available;
+        panicStop.disabled = !desktopState.available || !Boolean(currentOrb?.panic_ready);
+        closeChat.disabled = orbQuickChat.pending;
         positionOrbConversationSurfaces();
         if (thought?.id) {
           rememberOrbThoughtInConversation(thought).catch(() => {});
@@ -6604,10 +6633,10 @@
           return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Human cursor trace stays path-faithful until then, with only a slight visual lag.`;
         }
         return selectedMode === "trace"
-          ? "Trace is active. Hold the Orb to panic stop when that path is live, or right-click it to chat, inspect, or open Lens."
-          : selectedMode === "explore"
-            ? "Explore is active. Hold the Orb to panic stop when that path is live, or right-click it to chat, inspect, or open Lens while it moves on its own."
-            : "Autonomous is active. Hold the Orb to panic stop when that path is live, or right-click it to chat, inspect, or open Lens. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
+          ? "Trace is active. Hold the Orb to panic stop when that path is live, or right-click it to talk and act in place."
+            : selectedMode === "explore"
+              ? "Explore is active. Hold the Orb to panic stop when that path is live, or right-click it to talk and act in place while it moves on its own."
+              : "Autonomous is active. Hold the Orb to panic stop when that path is live, or right-click it to talk and act in place. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
       }
 
       function getOrbCursorIdleThresholdMs() {
@@ -6854,7 +6883,7 @@
                 ? "Explore is active. The Orb moves on its own and keeps learning your human traces locally so autonomous motion stays machine-native but personal."
               : currentOrb.posture === "acting"
               ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away becomes idle-gated and takes authority after you step away. Local traces keep teaching the Orb how autonomous motion should feel."
-              : "The Orb floats independently and stays out of the way until you open Lens or the work genuinely needs attention. When you move, Francis follows your path with a short visible delay.";
+              : "The Orb floats independently and stays out of the way until the work genuinely needs attention. When you move, Francis follows your path with a short visible delay.";
         document.getElementById("orb-anchor").textContent = handbackActive
           ? "ambient return"
           : cursorAuthority
