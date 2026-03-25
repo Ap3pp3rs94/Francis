@@ -46,7 +46,32 @@ function patchConsoleForDetachedPipes(consoleObject = console) {
   return consoleObject;
 }
 
+function guardStreamForDetachedPipes(stream) {
+  if (!stream || typeof stream.on !== "function" || stream.__francisDetachedPipeSafe) {
+    return stream;
+  }
+  stream.on("error", (error) => {
+    if (!isDetachedConsoleError(error)) {
+      throw error;
+    }
+  });
+  Object.defineProperty(stream, "__francisDetachedPipeSafe", {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return stream;
+}
+
+function guardStandardStreams(stdout = process.stdout, stderr = process.stderr) {
+  guardStreamForDetachedPipes(stdout);
+  guardStreamForDetachedPipes(stderr);
+  return { stdout, stderr };
+}
+
 module.exports = {
+  guardStandardStreams,
   isDetachedConsoleError,
   patchConsoleForDetachedPipes,
   writeConsole,

@@ -4,7 +4,7 @@ const os = require("node:os");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
 const { getScheduledHudRecoveryReason } = require("./hud-recovery");
-const { patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
+const { guardStandardStreams, patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
 const {
   buildDefaultPreferences,
   PREFERENCES_VERSION,
@@ -93,6 +93,7 @@ const {
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 
+guardStandardStreams(process.stdout, process.stderr);
 patchConsoleForDetachedPipes(console);
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";

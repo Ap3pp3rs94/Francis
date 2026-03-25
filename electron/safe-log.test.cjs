@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { isDetachedConsoleError, patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
+const { guardStandardStreams, isDetachedConsoleError, patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
 
 test("detects detached console errors", () => {
   assert.equal(isDetachedConsoleError({ code: "EPIPE" }), true);
@@ -55,4 +55,29 @@ test("patchConsoleForDetachedPipes wraps console methods only once", () => {
     ["error", "error"],
   ]);
   assert.equal(fakeConsole.__francisDetachedPipeSafe, true);
+});
+
+test("guardStandardStreams adds detached-pipe guards only once", async () => {
+  const listeners = [];
+  const fakeStream = {
+    on(eventName, handler) {
+      listeners.push([eventName, handler]);
+      return this;
+    },
+  };
+
+  guardStandardStreams(fakeStream, fakeStream);
+  guardStandardStreams(fakeStream, fakeStream);
+
+  assert.equal(listeners.length, 1);
+  assert.equal(listeners[0][0], "error");
+  assert.equal(fakeStream.__francisDetachedPipeSafe, true);
+
+  await assert.doesNotReject(async () => {
+    listeners[0][1]({ code: "EPIPE", message: "broken pipe" });
+  });
+
+  assert.throws(() => {
+    listeners[0][1](new Error("real stream failure"));
+  }, /real stream failure/);
 });
