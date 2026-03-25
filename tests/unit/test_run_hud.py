@@ -17,11 +17,20 @@ def test_run_hud_main_runs_imported_fastapi_app(monkeypatch) -> None:
 
     monkeypatch.setattr(run_hud, "build_parser", lambda: parser)
 
-    def fake_run(app, **kwargs) -> None:
+    def fake_config(app, **kwargs):
         captured["app"] = app
         captured.update(kwargs)
+        return SimpleNamespace(app=app, **kwargs)
 
-    monkeypatch.setattr(run_hud.uvicorn, "run", fake_run)
+    class FakeServer:
+        def __init__(self, config) -> None:
+            captured["config"] = config
+
+        def run(self) -> None:
+            captured["server_run_called"] = True
+
+    monkeypatch.setattr(run_hud.uvicorn, "Config", fake_config)
+    monkeypatch.setattr(run_hud.uvicorn, "Server", FakeServer)
 
     run_hud.main()
 
@@ -31,3 +40,4 @@ def test_run_hud_main_runs_imported_fastapi_app(monkeypatch) -> None:
     assert captured["log_level"] == "warning"
     assert captured["reload"] is False
     assert captured["workers"] == 1
+    assert captured["server_run_called"] is True

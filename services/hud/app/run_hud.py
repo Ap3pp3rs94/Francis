@@ -16,16 +16,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    # Run the already-imported FastAPI app object so the HUD stays in-process on
-    # Windows instead of spawning an extra import-string child.
-    uvicorn.run(
-        hud_app,
-        host=str(args.host),
-        port=int(args.port),
-        log_level=str(args.log_level),
-        reload=False,
-        workers=1,
+    # Drive uvicorn through Server(Config(...)).run() so the managed HUD stays
+    # as a normal Windows server process instead of re-spawning a second Python
+    # runtime and breaking local health probing.
+    server = uvicorn.Server(
+        uvicorn.Config(
+            hud_app,
+            host=str(args.host),
+            port=int(args.port),
+            log_level=str(args.log_level),
+            reload=False,
+            workers=1,
+        )
     )
+    server.run()
 
 
 if __name__ == "__main__":

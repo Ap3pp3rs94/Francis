@@ -14,6 +14,7 @@ from services.hud.app.orb_memory import (
     refresh_orb_long_term_memory,
 )
 from services.hud.app.orb_planner import build_orb_chat_plan
+from services.orchestrator.app import lens_snapshot as shared_snapshot
 from services.orchestrator.app.orb_perception import get_orb_perception_view, resolve_orb_focus_target
 from services.hud.app.orchestrator_bridge import get_lens_actions
 from services.hud.app.state import build_lens_snapshot
@@ -901,6 +902,16 @@ def _build_orb_direct_chat_reply(
         return _orb_chat_why_reply(orb)
     if any(phrase in normalized for phrase in {"can you run", "ready to run", "can you continue", "are you ready"}):
         return _orb_chat_run_reply(orb)
+    if "pilot mode" in normalized:
+        return "Pilot is takeover-on-command inside explicit scope. Francis can act, but the work stays visible, revocable, and receipted."
+    if "assist mode" in normalized:
+        return "Assist prepares plans, drafts, and guidance, but execution still waits on your decision."
+    if "observe mode" in normalized:
+        return "Observe is read-only. Francis gathers context and suggests without mutating the work."
+    if "away mode" in normalized:
+        return "Away continues approved work within scope and policy while keeping receipts and handback intact."
+    if normalized in {"hi", "hello", "hey"}:
+        return "I am here. Ask a question or tell me what to do."
     return None
 
 
@@ -950,6 +961,126 @@ def _build_orb_thought_view(
         "summary": "",
         "detail": "",
         "target_cue": None,
+    }
+
+
+def _build_orb_chat_snapshot() -> dict[str, Any]:
+    workspace_root = shared_snapshot.get_workspace_root().resolve()
+    repo_root = workspace_root.parent.resolve()
+    control = shared_snapshot._control_state(workspace_root)
+    takeover = shared_snapshot.load_takeover_state(workspace_root)
+    missions = shared_snapshot._materialize_missions(workspace_root)
+    approvals = shared_snapshot._materialize_approvals(workspace_root)
+    inbox = shared_snapshot._materialize_inbox(workspace_root)
+    incidents = shared_snapshot._materialize_incidents(workspace_root)
+    runs = shared_snapshot._materialize_runs(workspace_root)
+    apprenticeship = shared_snapshot._materialize_apprenticeship(workspace_root)
+    current_work = shared_snapshot.build_current_work(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        control=control,
+        missions=missions,
+        approvals=approvals,
+        incidents=incidents,
+        inbox=inbox,
+        runs=runs,
+        apprenticeship=apprenticeship,
+    )
+    next_best_action = shared_snapshot.build_next_best_action(current_work=current_work, control=control)
+    active_mission = missions["active"][0] if missions["active"] else None
+    objective_label = (
+        str(active_mission.get("title", "")).strip()
+        if isinstance(active_mission, dict)
+        else ""
+    ) or "Systematically build Francis"
+    return {
+        "control": control,
+        "takeover": takeover,
+        "runs": runs,
+        "current_work": current_work,
+        "next_best_action": next_best_action,
+        "objective": {
+            "label": objective_label,
+            "definition_of_done": "Francis keeps the operator loop grounded, visible, and receipted.",
+        },
+    }
+
+
+def _build_orb_chat_surface(*, snapshot: dict[str, Any], perception: dict[str, Any]) -> dict[str, Any]:
+    mode = str(snapshot.get("control", {}).get("mode", "assist")).strip().lower() or "assist"
+    orb_state = build_orb_state(
+        mode=mode,
+        snapshot=snapshot,
+        actions_payload={"action_chips": []},
+        voice={"summary": "", "lines": []},
+    )
+    authority = get_orb_authority_view()
+    recent = authority.get("recent", []) if isinstance(authority.get("recent"), list) else []
+    latest_receipt = recent[0] if recent and isinstance(recent[0], dict) else None
+    current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
+    next_best_action = snapshot.get("next_best_action", {}) if isinstance(snapshot.get("next_best_action"), dict) else {}
+    target_cue = _build_orb_target_cue()
+    focus_kind = _normalize_usage_action_kind(next_best_action.get("kind"))
+    receipt_cue = _build_orb_receipt_cue(
+        related_receipt=latest_receipt if isinstance(latest_receipt, dict) else None,
+        focus_kind=focus_kind,
+        target_cue=target_cue if isinstance(target_cue, dict) else None,
+    )
+    operator = {
+        "surface": "orb_operator",
+        "state": "idle",
+        "focus_kind": focus_kind,
+        "summary": (
+            str(current_work.get("summary", "")).strip()
+            or str(next_best_action.get("label", "")).strip()
+            or "No grounded move is surfaced yet."
+        ),
+        "meta": str(next_best_action.get("reason", "")).strip(),
+        "focus_action": {},
+        "next_action_resume": {},
+        "approval": None,
+        "latest_receipt": latest_receipt if isinstance(latest_receipt, dict) else None,
+        "target_cue": target_cue if isinstance(target_cue, dict) else None,
+        "receipt_cue": receipt_cue if isinstance(receipt_cue, dict) else None,
+        "receipt_summary": (
+            _receipt_summary(latest_receipt)
+            if isinstance(latest_receipt, dict)
+            else "No latest receipt is anchoring the Orb surface yet."
+        ),
+        "controls": {
+            "preview_enabled": False,
+            "run_enabled": False,
+            "run_mode": "execute",
+            "receipt_available": isinstance(latest_receipt, dict),
+            "takeover_active": bool(snapshot.get("takeover", {}).get("active", False))
+            if isinstance(snapshot.get("takeover"), dict)
+            else False,
+        },
+    }
+    interjection = {
+        "surface": "orb_interjection",
+        "state": "idle",
+        "level": 0,
+        "reason_kind": "idle",
+        "summary": "Francis is not interrupting the work.",
+        "detail": "The Orb stays ambient until a grounded decision edge appears.",
+        "prompt": "",
+        "can_defer": True,
+        "target_cue": target_cue if isinstance(target_cue, dict) else None,
+        "controls": {
+            "primary_action": "",
+            "primary_label": "",
+            "secondary_action": "",
+            "secondary_label": "",
+        },
+    }
+    return {
+        **orb_state,
+        "authority": authority,
+        "operator": operator,
+        "interjection": interjection,
+        "thought": _build_orb_thought_view(operator=operator, interjection=interjection),
+        "perception": perception,
     }
 
 
@@ -1342,21 +1473,9 @@ def build_orb_chat_reply(
     conversation_id: str = DEFAULT_ORB_CONVERSATION_ID,
     max_actions: int = 4,
 ) -> dict[str, Any]:
-    snapshot = build_lens_snapshot()
-    actions = get_lens_actions(max_actions=max_actions)
-    voice = build_operator_presence(
-        mode=str(snapshot.get("control", {}).get("mode", "assist")),
-        max_actions=min(max_actions, 3),
-        snapshot=snapshot,
-        actions_payload=actions,
-    )
-    orb = get_orb_view(
-        max_actions=max_actions,
-        snapshot=snapshot,
-        actions=actions,
-        voice=voice,
-    )
+    snapshot = _build_orb_chat_snapshot()
     perception = get_orb_perception_view(include_frame_data=False)
+    orb = _build_orb_chat_surface(snapshot=snapshot, perception=perception)
     user_message = str(message or "").strip()
     if not user_message:
         raise ValueError("Orb chat message is required.")

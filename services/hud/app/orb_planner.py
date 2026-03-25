@@ -611,6 +611,20 @@ def build_orb_chat_plan(
 ) -> dict[str, Any]:
     user_message = str(message or "").strip()
     heuristic = _heuristic_plan(user_message)
+    if heuristic and _is_explicit_action_request(user_message):
+        plan = _normalize_plan(heuristic.get("plan")) if isinstance(heuristic, dict) else None
+        intent = _infer_turn_intent(user_message=user_message, parsed=None, plan=plan)
+        if isinstance(plan, dict):
+            plan["auto_execute"] = bool(intent["should_execute"])
+        return {
+            "reply": str(heuristic.get("reply", "")).strip() or "Francis prepared a grounded desktop plan.",
+            "thought": str(heuristic.get("thought", "")).strip(),
+            "plan": plan,
+            "intent": intent,
+            "should_execute": bool(intent["should_execute"]),
+            "raw_response": "",
+            "planner": "heuristic",
+        }
 
     system_prompt = (
         "You are Francis, a governed autonomous operator speaking through the Orb. "

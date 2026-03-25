@@ -796,15 +796,17 @@ def test_build_orb_chat_reply_answers_status_directly(monkeypatch) -> None:
         "long_term_memory": {"summary": ""},
     }
 
-    monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}})
-    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
-    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(
+        orb_view,
+        "_build_orb_chat_snapshot",
+        lambda: {"control": {"mode": "assist"}},
+    )
     monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="default": conversation)
     monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: conversation)
     monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
     monkeypatch.setattr(
         orb_view,
-        "get_orb_view",
+        "_build_orb_chat_surface",
         lambda **_: {
             "mode": "assist",
             "posture": "resting",
@@ -854,15 +856,17 @@ def test_build_orb_chat_reply_answers_receipt_directly(monkeypatch) -> None:
         "long_term_memory": {"summary": ""},
     }
 
-    monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}})
-    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
-    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(
+        orb_view,
+        "_build_orb_chat_snapshot",
+        lambda: {"control": {"mode": "assist"}},
+    )
     monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="default": conversation)
     monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: conversation)
     monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
     monkeypatch.setattr(
         orb_view,
-        "get_orb_view",
+        "_build_orb_chat_surface",
         lambda **_: {
             "mode": "assist",
             "posture": "resting",
@@ -923,7 +927,7 @@ def test_build_orb_chat_reply_returns_planner_payload_with_memory(monkeypatch) -
 
     monkeypatch.setattr(
         orb_view,
-        "build_lens_snapshot",
+        "_build_orb_chat_snapshot",
         lambda: {
             "control": {"mode": "assist"},
             "runs": {"last_run": {"run_id": "run-42", "summary": "waiting"}},
@@ -931,8 +935,6 @@ def test_build_orb_chat_reply_returns_planner_payload_with_memory(monkeypatch) -
             "objective": {"label": "Desk help"},
         },
     )
-    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
-    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
     monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="desk-1": conversation)
     monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: appended.append(kwargs) or conversation)
     monkeypatch.setattr(
@@ -942,7 +944,7 @@ def test_build_orb_chat_reply_returns_planner_payload_with_memory(monkeypatch) -
     )
     monkeypatch.setattr(
         orb_view,
-        "get_orb_view",
+        "_build_orb_chat_surface",
         lambda **_: {
             "mode": "assist",
             "posture": "resting",
@@ -1016,15 +1018,17 @@ def test_build_orb_chat_reply_keeps_conversation_turns_in_answer_mode(monkeypatc
     }
     appended: list[dict[str, object]] = []
 
-    monkeypatch.setattr(orb_view, "build_lens_snapshot", lambda: {"control": {"mode": "assist"}, "runs": {}})
-    monkeypatch.setattr(orb_view, "get_lens_actions", lambda max_actions=4: {"action_chips": []})
-    monkeypatch.setattr(orb_view, "build_operator_presence", lambda **_: {"surface": "voice"})
+    monkeypatch.setattr(
+        orb_view,
+        "_build_orb_chat_snapshot",
+        lambda: {"control": {"mode": "assist"}, "runs": {}},
+    )
     monkeypatch.setattr(orb_view, "build_orb_chat_history", lambda conversation_id="desk-2": conversation)
     monkeypatch.setattr(orb_view, "append_orb_turn", lambda **kwargs: appended.append(kwargs) or conversation)
     monkeypatch.setattr(orb_view, "refresh_orb_long_term_memory", lambda **kwargs: conversation["long_term_memory"])
     monkeypatch.setattr(
         orb_view,
-        "get_orb_view",
+        "_build_orb_chat_surface",
         lambda **_: {
             "mode": "assist",
             "posture": "resting",
@@ -1050,7 +1054,7 @@ def test_build_orb_chat_reply_keeps_conversation_turns_in_answer_mode(monkeypatc
         orb_view,
         "build_orb_chat_plan",
         lambda **kwargs: {
-            "reply": "Pilot mode is takeover-on-command inside explicit scope. Francis acts, but you keep revocation and receipts.",
+            "reply": "Francis stays in Assist until you explicitly switch modes and hand over action authority.",
             "thought": "Answering the control-mode question directly.",
             "planner": "ollama",
             "intent": {"kind": "conversation.answer", "confidence": "likely"},
@@ -1059,7 +1063,7 @@ def test_build_orb_chat_reply_keeps_conversation_turns_in_answer_mode(monkeypatc
         },
     )
 
-    payload = orb_view.build_orb_chat_reply(message="What is Pilot mode?", conversation_id="desk-2")
+    payload = orb_view.build_orb_chat_reply(message="How does the current control posture work?", conversation_id="desk-2")
 
     assert payload["status"] == "ok"
     assert payload["intent"]["kind"] == "conversation.answer"
@@ -1068,7 +1072,7 @@ def test_build_orb_chat_reply_keeps_conversation_turns_in_answer_mode(monkeypatc
     assert payload["execution"]["ready"] is False
     assert payload["execution"]["auto_execute"] is False
     assert payload["thought"] is None
-    assert "takeover-on-command" in payload["reply"]
+    assert "Assist" in payload["reply"]
     assert len(appended) == 2
 
 
