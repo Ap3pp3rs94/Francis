@@ -67,6 +67,25 @@ test("provider posture warns when remote primary has no fallback", () => {
   assert.match(posture.summary, /only active provider/i);
 });
 
+test("provider posture treats a live Ollama runtime as the active local provider", () => {
+  const posture = buildProviderPosture({
+    env: {},
+    hudState: { mode: "managed", runtimeKind: "bundled", ready: true },
+    ollamaState: {
+      ready: true,
+      managed: true,
+      mode: "managed",
+      serviceUrl: "http://127.0.0.1:11434",
+      availableModels: ["llama3.1:8b", "phi4:14b"],
+    },
+  });
+
+  assert.equal(posture.severity, "low");
+  assert.equal(posture.activeProviderId, "ollama");
+  assert.match(posture.summary, /active local provider/i);
+  assert.ok(posture.cards.some((card) => card.label === "Ollama Models" && /llama3\.1:8b/.test(card.value)));
+});
+
 test("provider ids normalize aliases into canonical values", () => {
   assert.equal(normalizeProviderId("local"), "ollama");
   assert.equal(normalizeProviderId("llama.cpp"), "llamacpp");

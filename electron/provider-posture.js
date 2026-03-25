@@ -106,18 +106,29 @@ function resolveRoleModel(env, providerId, role) {
   return "unassigned";
 }
 
-function buildProviderRecord(definition, env) {
+function buildProviderRecord(definition, env, runtimeState = null) {
   const credential = readEnvValue(env, definition.credentialKeys);
   const endpoint = readEnvValue(env, definition.endpointKeys);
   const hasImplicitLocalDefault = Boolean(definition.implicitEndpoint);
   const explicitConfig = Boolean(credential || endpoint);
+  const runtimeReady = Boolean(runtimeState?.ready);
+  const runtimeManaged = Boolean(runtimeState?.managed);
+  const runtimeServiceUrl = typeof runtimeState?.serviceUrl === "string" ? runtimeState.serviceUrl : null;
+  const runtimeModels = Array.isArray(runtimeState?.availableModels) ? runtimeState.availableModels : [];
 
   let configured = explicitConfig;
   let status = "blocked";
   let detail = "No provider path declared.";
 
   if (definition.kind === "local") {
-    if (endpoint) {
+    if (runtimeReady && runtimeServiceUrl && definition.id === "ollama") {
+      configured = true;
+      status = "ok";
+      detail = `${runtimeManaged ? "Managed" : "External"} runtime ${runtimeServiceUrl}${runtimeModels.length ? ` | ${runtimeModels.length} model(s)` : ""}`;
+    } else if (definition.id === "ollama" && runtimeState && runtimeState.lastError) {
+      status = "attention";
+      detail = `Runtime unavailable: ${String(runtimeState.lastError)}`;
+    } else if (endpoint) {
       configured = true;
       status = "ok";
       detail = `Endpoint ${endpoint}`;
@@ -185,12 +196,14 @@ function describePrivacyPosture(dependency) {
   }
 }
 
-function buildProviderPosture({ env = process.env, hudState = null } = {}) {
+function buildProviderPosture({ env = process.env, hudState = null, ollamaState = null } = {}) {
   const requestedRaw = readEnvValue(env, ACTIVE_PROVIDER_KEYS);
   const requestedId = normalizeProviderId(requestedRaw);
   const fallbackIds = parseFallbackProviders(env);
-  const records = PROVIDER_DEFINITIONS.map((definition) => buildProviderRecord(definition, env));
-  const activeProviderId = requestedId || inferActiveProvider(records);
+  const records = PROVIDER_DEFINITIONS.map((definition) =>
+    buildProviderRecord(definition, env, definition.id === "ollama" ? ollamaState : null),
+  );
+  const activeProviderId = requestedId || inferActiveProvider(records) || (ollamaState ? "ollama" : null);
   const activeRecord = records.find((record) => record.id === activeProviderId) || null;
   const fallbackRecords = fallbackIds
     .filter((providerId) => providerId !== activeProviderId)
@@ -231,8 +244,8 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
   }
 
   const runtime = hudState
-    ? `${String(hudState.mode || "unknown")} | ${String(hudState.runtimeKind || "unknown")}`
-    : "unknown | unknown";
+    ? `${String(hudState.mode || "unknown")} | ${String(hudState.runtimeKind || "unknown")} | ollama ${String(ollamaState?.mode || "unknown")}`
+    : `unknown | unknown | ollama ${String(ollamaState?.mode || "unknown")}`;
   const fallbackSummary = fallbackRecords.length ? fallbackRecords.map((record) => record.label).join(", ") : "none";
   const items = records.map((record) => {
     const roleParts = [];
@@ -321,6 +334,13 @@ function buildProviderPosture({ env = process.env, hudState = null } = {}) {
         label: "Runtime",
         value: runtime,
         tone: hudState?.ready === false ? "medium" : "low",
+      },
+      {
+        label: "Ollama Models",
+        value: Array.isArray(ollamaState?.availableModels) && ollamaState.availableModels.length
+          ? ollamaState.availableModels.slice(0, 4).join(", ")
+          : "none surfaced",
+        tone: Array.isArray(ollamaState?.availableModels) && ollamaState.availableModels.length ? "low" : "medium",
       },
       {
         label: "Configured",

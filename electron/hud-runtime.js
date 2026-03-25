@@ -1,4 +1,6 @@
 const path = require("node:path");
+const http = require("node:http");
+const https = require("node:https");
 const { spawn } = require("node:child_process");
 const {
   buildBundledRuntimeEnv,
@@ -137,13 +139,25 @@ function appendEnvPath(existingValue, nextValue) {
 
 async function isHudReachable(hudUrl, timeoutMs = 1500) {
   try {
-    const response = await fetch(buildHudHealthUrl(hudUrl), {
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: {
-        accept: "application/json",
-      },
+    const target = new URL(buildHudHealthUrl(hudUrl));
+    const transport = target.protocol === "https:" ? https : http;
+    const statusCode = await new Promise((resolve, reject) => {
+      const request = transport.request(target, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+        },
+      }, (response) => {
+        response.resume();
+        response.once("end", () => resolve(Number(response.statusCode || 0)));
+      });
+      request.setTimeout(timeoutMs, () => {
+        request.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+      });
+      request.once("error", reject);
+      request.end();
     });
-    return response.ok;
+    return statusCode >= 200 && statusCode < 300;
   } catch {
     return false;
   }
@@ -207,6 +221,37 @@ function buildManagedExitUpdate({ previousState, code, signal, shutdownRequested
     crashCount: unexpected ? intOrZero(safeState.crashCount) + 1 : intOrZero(safeState.crashCount),
     restartSuggested: unexpected,
   };
+}
+
+async function resolveManagedHudExitUpdate({
+  previousState,
+  code,
+  signal,
+  shutdownRequested,
+  hudUrl,
+  timeoutMs = 2000,
+}) {
+  const safeState = previousState && typeof previousState === "object" ? previousState : {};
+  const unexpectedManagedExit = !shutdownRequested && safeState.mode === "managed";
+  if (unexpectedManagedExit && await isHudReachable(hudUrl, timeoutMs)) {
+    return {
+      ...safeState,
+      ready: true,
+      mode: "external",
+      managed: false,
+      pid: null,
+      lastError: null,
+      lastExitCode: code,
+      lastExitSignal: signal,
+      restartSuggested: false,
+    };
+  }
+  return buildManagedExitUpdate({
+    previousState: safeState,
+    code,
+    signal,
+    shutdownRequested,
+  });
 }
 
 async function terminateProcessTree(child, { force = false } = {}) {
@@ -301,15 +346,16 @@ function createHudRuntimeManager({
         return;
       }
       child = null;
-      setState(
-        buildManagedExitUpdate({
+      void resolveManagedHudExitUpdate({
           previousState: state,
           code,
           signal,
           shutdownRequested,
-        }),
-      );
-      shutdownRequested = false;
+          hudUrl: normalizedHudUrl,
+        }).then((nextState) => {
+          setState(nextState);
+          shutdownRequested = false;
+        });
     });
   }
 
@@ -481,6 +527,7 @@ module.exports = {
   createHudRuntimeManager,
   isHudReachable,
   normalizeHudUrl,
+  resolveManagedHudExitUpdate,
   resolveHudSourceRoot,
   waitForHudReady,
 };

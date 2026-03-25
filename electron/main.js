@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
+const { createOllamaRuntimeManager, isOllamaReachable, normalizeOllamaUrl, DEFAULT_OLLAMA_URL } = require("./ollama-runtime");
 const { isCaptureForegroundWindow } = require("./capture-mode");
 const { getScheduledHudRecoveryReason } = require("./hud-recovery");
 const { guardStandardStreams, patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
@@ -93,13 +94,18 @@ const {
 } = require("./lifecycle-history");
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
+const OLLAMA_URL = normalizeOllamaUrl(process.env.FRANCIS_OLLAMA_HOST || process.env.OLLAMA_HOST || DEFAULT_OLLAMA_URL);
 
 guardStandardStreams(process.stdout, process.stderr);
 patchConsoleForDetachedPipes(console);
 const OVERLAY_TOGGLE_SHORTCUT = "Control+Shift+Alt+F";
 const CLICK_THROUGH_TOGGLE_SHORTCUT = "Control+Shift+Alt+C";
 const HUD_HEALTH_RECONCILE_INTERVAL_MS = 4000;
+const HUD_HEALTH_TIMEOUT_MS = 8000;
+const HUD_HEALTH_FAILURES_BEFORE_RECOVERY = 3;
 const HUD_MAX_RECOVERY_ATTEMPTS = 3;
+const OLLAMA_HEALTH_RECONCILE_INTERVAL_MS = 7000;
+const OLLAMA_MAX_RECOVERY_ATTEMPTS = 3;
 const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
 const ORB_AUTHORITY_SYNC_INTERVAL_MS = 350;
 const ORB_FOREGROUND_WINDOW_CACHE_MS = 2000;
@@ -119,10 +125,16 @@ let buildProvenance = null;
 let lifecycleHistoryState = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
+let ollamaRuntime = null;
 let hudRecoveryTimer = null;
 let hudRecoveryAttempts = 0;
 let hudHealthTimer = null;
 let hudHealthCheckPending = false;
+let hudHealthFailureCount = 0;
+let ollamaRecoveryTimer = null;
+let ollamaRecoveryAttempts = 0;
+let ollamaHealthTimer = null;
+let ollamaHealthCheckPending = false;
 let captureRecoveryTimer = null;
 let captureCheckPending = false;
 let orbPerceptionTimer = null;
@@ -294,6 +306,17 @@ function markSessionExit(reason, { clean = true } = {}) {
 
 function getHudState() {
   return hudRuntime ? hudRuntime.getPublicState() : null;
+}
+
+function getOllamaState() {
+  return ollamaRuntime ? ollamaRuntime.getPublicState() : null;
+}
+
+function buildManagedHudEnv() {
+  return {
+    ...process.env,
+    FRANCIS_OLLAMA_HOST: String(getOllamaState()?.serviceUrl || OLLAMA_URL),
+  };
 }
 
 function getShellWindows() {
@@ -915,6 +938,7 @@ function getLifecycleState(inputState = null) {
   const provider = buildProviderPosture({
     env: process.env,
     hudState,
+    ollamaState: getOllamaState(),
   });
   const authority = buildAuthorityPosture({
     env: process.env,
@@ -1075,6 +1099,7 @@ function getOverlayState(win = mainWindow) {
     launchOnStartup: lifecycle.launchAtLogin.enabled,
     recovery: overlayRecovery,
     hud: getHudState(),
+    ollama: getOllamaState(),
     lifecycle,
       shortcuts: {
         toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
@@ -2530,8 +2555,23 @@ async function reconcileHudHealth() {
 
   hudHealthCheckPending = true;
   try {
-    const reachable = await isHudReachable(HUD_URL, 1500);
+    const reachable = await isHudReachable(HUD_URL, HUD_HEALTH_TIMEOUT_MS);
     if (reachable) {
+      hudHealthFailureCount = 0;
+      return;
+    }
+
+    hudHealthFailureCount += 1;
+    if (hudHealthFailureCount < HUD_HEALTH_FAILURES_BEFORE_RECOVERY) {
+      log("HUD probe missed while the shell still considered it ready", {
+        managed: Boolean(hudState?.managed),
+        mode: hudState?.mode || null,
+        pid: hudState?.pid || null,
+        healthUrl: hudState?.healthUrl || null,
+        timeoutMs: HUD_HEALTH_TIMEOUT_MS,
+        failureCount: hudHealthFailureCount,
+        failureThreshold: HUD_HEALTH_FAILURES_BEFORE_RECOVERY,
+      });
       return;
     }
 
@@ -2540,6 +2580,9 @@ async function reconcileHudHealth() {
       mode: hudState?.mode || null,
       pid: hudState?.pid || null,
       healthUrl: hudState?.healthUrl || null,
+      timeoutMs: HUD_HEALTH_TIMEOUT_MS,
+      failureCount: hudHealthFailureCount,
+      failureThreshold: HUD_HEALTH_FAILURES_BEFORE_RECOVERY,
     });
 
     if (hudState?.managed) {
@@ -2575,6 +2618,94 @@ function stopHudHealthMonitor() {
     hudHealthTimer = null;
   }
   hudHealthCheckPending = false;
+  hudHealthFailureCount = 0;
+}
+
+function clearOllamaRecovery() {
+  if (ollamaRecoveryTimer) {
+    clearTimeout(ollamaRecoveryTimer);
+    ollamaRecoveryTimer = null;
+  }
+  ollamaRecoveryAttempts = 0;
+}
+
+function scheduleOllamaRecovery(reason) {
+  if (!ollamaRuntime || quitAfterHudShutdown) {
+    return;
+  }
+  if (ollamaRecoveryTimer || ollamaRecoveryAttempts >= OLLAMA_MAX_RECOVERY_ATTEMPTS) {
+    return;
+  }
+  ollamaRecoveryAttempts += 1;
+  log("Scheduling Ollama runtime recovery", {
+    reason,
+    attempt: ollamaRecoveryAttempts,
+    maxAttempts: OLLAMA_MAX_RECOVERY_ATTEMPTS,
+  });
+  notifyOverlayState(mainWindow);
+  ollamaRecoveryTimer = setTimeout(async () => {
+    ollamaRecoveryTimer = null;
+    try {
+      await ollamaRuntime.restart();
+      clearOllamaRecovery();
+      notifyOverlayState(mainWindow);
+    } catch (error) {
+      log("Ollama runtime recovery failed", error instanceof Error ? error.message : String(error));
+      notifyOverlayState(mainWindow);
+    }
+  }, 1500);
+}
+
+async function reconcileOllamaHealth() {
+  if (ollamaHealthCheckPending || !ollamaRuntime || quitAfterHudShutdown) {
+    return;
+  }
+
+  const ollamaState = getOllamaState();
+  if (ollamaState?.restartSuggested) {
+    scheduleOllamaRecovery(`ollama-${ollamaState.mode || "crashed"}`);
+    return;
+  }
+
+  if (!ollamaState?.ready) {
+    return;
+  }
+
+  ollamaHealthCheckPending = true;
+  try {
+    const reachable = await isOllamaReachable(ollamaState.serviceUrl || OLLAMA_URL, 1500);
+    if (reachable !== null) {
+      return;
+    }
+
+    log("Ollama runtime became unreachable while the shell still considered it ready", {
+      managed: Boolean(ollamaState?.managed),
+      mode: ollamaState?.mode || null,
+      pid: ollamaState?.pid || null,
+      healthUrl: ollamaState?.healthUrl || null,
+    });
+    scheduleOllamaRecovery("ollama-unreachable");
+  } finally {
+    ollamaHealthCheckPending = false;
+  }
+}
+
+function ensureOllamaHealthMonitor() {
+  if (ollamaHealthTimer !== null) {
+    return;
+  }
+  ollamaHealthTimer = setInterval(() => {
+    void reconcileOllamaHealth();
+  }, OLLAMA_HEALTH_RECONCILE_INTERVAL_MS);
+  void reconcileOllamaHealth();
+}
+
+function stopOllamaHealthMonitor() {
+  if (ollamaHealthTimer !== null) {
+    clearInterval(ollamaHealthTimer);
+    ollamaHealthTimer = null;
+  }
+  ollamaHealthCheckPending = false;
 }
 
 async function loadHud(win) {
@@ -3107,6 +3238,7 @@ async function initializeHudRuntime() {
     userDataPath: app.getPath("userData"),
     isPackaged: app.isPackaged,
     hudUrl: HUD_URL,
+    env: buildManagedHudEnv(),
     log,
     onStateChanged: (publicState) => {
       if (publicState?.restartSuggested) {
@@ -3127,6 +3259,30 @@ async function initializeHudRuntime() {
     if (recoveryReason) {
       scheduleHudRecovery(recoveryReason);
     }
+  }
+}
+
+async function initializeOllamaRuntime() {
+  ollamaRuntime = createOllamaRuntimeManager({
+    appDir: __dirname,
+    ollamaUrl: OLLAMA_URL,
+    env: process.env,
+    log,
+    onStateChanged: (publicState) => {
+      if (publicState?.restartSuggested) {
+        scheduleOllamaRecovery(`ollama-${publicState.mode || "crashed"}`);
+      } else if (publicState?.ready) {
+        clearOllamaRecovery();
+      }
+      notifyOverlayState(mainWindow);
+    },
+  });
+
+  try {
+    const ollamaState = await ollamaRuntime.ensureReady();
+    log("Ollama runtime ready", ollamaState);
+  } catch (error) {
+    log("Ollama runtime initialization did not produce a ready server", error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -3188,6 +3344,8 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc();
     registerDisplayListeners();
     registerPowerMonitorListeners();
+    await initializeOllamaRuntime();
+    ensureOllamaHealthMonitor();
     await initializeHudRuntime();
     ensureHudHealthMonitor();
     mainWindow = createMainWindow();
@@ -3224,16 +3382,25 @@ app.on("before-quit", (event) => {
     return;
   }
   markSessionExit("clean-exit", { clean: true });
-  if (!hudRuntime || !getHudState()?.managed) {
+  const shouldShutdownHud = Boolean(hudRuntime && getHudState()?.managed);
+  const shouldShutdownOllama = Boolean(ollamaRuntime && getOllamaState()?.managed);
+  if (!shouldShutdownHud && !shouldShutdownOllama) {
     return;
   }
   event.preventDefault();
   quitAfterHudShutdown = true;
-  hudRuntime
-    .shutdown({ force: true })
-    .catch((error) => {
-      log("Managed HUD shutdown failed", error instanceof Error ? error.message : String(error));
-    })
+  Promise.all([
+    shouldShutdownHud
+      ? hudRuntime.shutdown({ force: true }).catch((error) => {
+          log("Managed HUD shutdown failed", error instanceof Error ? error.message : String(error));
+        })
+      : Promise.resolve(),
+    shouldShutdownOllama
+      ? ollamaRuntime.shutdown({ force: true }).catch((error) => {
+          log("Managed Ollama shutdown failed", error instanceof Error ? error.message : String(error));
+        })
+      : Promise.resolve(),
+  ])
     .finally(() => {
       app.quit();
     });
@@ -3254,7 +3421,12 @@ app.on("will-quit", () => {
     clearTimeout(hudRecoveryTimer);
     hudRecoveryTimer = null;
   }
+  if (ollamaRecoveryTimer) {
+    clearTimeout(ollamaRecoveryTimer);
+    ollamaRecoveryTimer = null;
+  }
   stopHudHealthMonitor();
+  stopOllamaHealthMonitor();
   stopCaptureRecoveryLoop();
   stopOrbPerceptionLoop();
   stopOrbAuthorityLoop();

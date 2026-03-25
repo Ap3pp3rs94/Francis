@@ -13,6 +13,7 @@ const {
   buildHudWorkspaceRoot,
   isHudReachable,
   normalizeHudUrl,
+  resolveManagedHudExitUpdate,
   resolveHudSourceRoot,
   waitForHudReady,
 } = require("./hud-runtime");
@@ -160,4 +161,45 @@ test("buildManagedExitUpdate leaves intentional shutdowns in stopped mode", () =
   assert.equal(update.mode, "stopped");
   assert.equal(update.restartSuggested, false);
   assert.equal(update.crashCount, 2);
+});
+
+test("resolveManagedHudExitUpdate keeps a healthy detached HUD alive", async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === "/health") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end('{"status":"ok"}');
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const hudUrl = `http://127.0.0.1:${address.port}`;
+  const update = await resolveManagedHudExitUpdate({
+    previousState: {
+      ready: true,
+      mode: "managed",
+      managed: true,
+      attemptedAutoStart: true,
+      runtimeKind: "external",
+      runtimePath: "D:/francis/.venv/Scripts/python.exe",
+      crashCount: 1,
+      lastError: null,
+    },
+    code: 0,
+    signal: null,
+    shutdownRequested: false,
+    hudUrl,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(update.ready, true);
+  assert.equal(update.mode, "external");
+  assert.equal(update.managed, false);
+  assert.equal(update.restartSuggested, false);
+  assert.equal(update.lastError, null);
+
+  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 });
