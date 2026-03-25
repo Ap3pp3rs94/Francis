@@ -2810,7 +2810,10 @@
       let orbBridgeWarningEmitted = false;
       let orbSystemInput = {
         cursorScreen: { x: 0, y: 0 },
-        cursorDisplay: { x: window.innerWidth * 0.54, y: Math.max(96, window.innerHeight * 0.24) },
+        cursorDisplay: { x: Math.max(96, window.innerWidth - 176), y: Math.max(96, window.innerHeight - 144) },
+        displayBounds: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight },
+        displayWorkArea: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight },
+        overlayBounds: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight },
         idleSeconds: 0,
         idleThresholdSeconds: 30,
         humanActive: true,
@@ -2826,8 +2829,8 @@
       const ORB_HUMAN_TRACE_TRAIL_SPACING_MS = 18;
       const ORB_HUMAN_TRACE_TRAIL_REDUCED_SPACING_MS = 24;
       let orbMotion = {
-        x: window.innerWidth * 0.54,
-        y: Math.max(96, window.innerHeight * 0.24),
+        x: Math.max(96, window.innerWidth - 176),
+        y: Math.max(96, window.innerHeight - 144),
         targetX: window.innerWidth * 0.54,
         targetY: Math.max(96, window.innerHeight * 0.24),
         vx: 0,
@@ -3637,6 +3640,38 @@
         };
       }
 
+      function getOrbResidentMotionFrame() {
+        const frame = getResidentDisplayFrame();
+        const overlayBounds =
+          orbSystemInput.overlayBounds && typeof orbSystemInput.overlayBounds === "object"
+            ? orbSystemInput.overlayBounds
+            : frame.bounds;
+        const bounds =
+          orbSystemInput.displayBounds && typeof orbSystemInput.displayBounds === "object"
+            ? orbSystemInput.displayBounds
+            : frame.bounds;
+        const workArea =
+          orbSystemInput.displayWorkArea && typeof orbSystemInput.displayWorkArea === "object"
+            ? orbSystemInput.displayWorkArea
+            : frame.workArea;
+        const originX = Number(overlayBounds.x || 0);
+        const originY = Number(overlayBounds.y || 0);
+        return {
+          bounds: {
+            x: Number(bounds.x || 0) - originX,
+            y: Number(bounds.y || 0) - originY,
+            width: Math.max(1, Number(bounds.width) || window.innerWidth),
+            height: Math.max(1, Number(bounds.height) || window.innerHeight),
+          },
+          workArea: {
+            x: Number(workArea.x || 0) - originX,
+            y: Number(workArea.y || 0) - originY,
+            width: Math.max(1, Number(workArea.width) || window.innerWidth),
+            height: Math.max(1, Number(workArea.height) || window.innerHeight),
+          },
+        };
+      }
+
       function getResidentDisplayFrame() {
         const activeDisplay =
           getDesktopDisplayById(desktopState.activeDisplayId)
@@ -4225,6 +4260,15 @@
               x: Number.isFinite(nextX) ? nextX : orbSystemInput.cursorDisplay.x,
               y: Number.isFinite(nextY) ? nextY : orbSystemInput.cursorDisplay.y,
             },
+            displayBounds: payload?.displayBounds && typeof payload.displayBounds === "object"
+              ? payload.displayBounds
+              : orbSystemInput.displayBounds,
+            displayWorkArea: payload?.displayWorkArea && typeof payload.displayWorkArea === "object"
+              ? payload.displayWorkArea
+              : orbSystemInput.displayWorkArea,
+            overlayBounds: payload?.workArea && typeof payload.workArea === "object"
+              ? payload.workArea
+              : orbSystemInput.overlayBounds,
             idleSeconds: nextIdleSeconds,
             idleThresholdSeconds: nextThresholdSeconds,
             humanActive: Boolean(payload?.humanActive ?? nextIdleSeconds < nextThresholdSeconds),
@@ -7063,21 +7107,43 @@
       }
 
       function getOrbFallbackTarget() {
+        const residentTarget = getOrbResidentHomeTarget();
         return {
-          x: Math.max(84, Math.min(window.innerWidth - 84, window.innerWidth - 176)),
-          y: Math.max(92, Math.min(window.innerHeight - 92, window.innerHeight * 0.2)),
+          x: residentTarget.x,
+          y: residentTarget.y,
         };
       }
 
+      function getOrbResidentHomeTarget(size = 0) {
+        const frame = getOrbResidentMotionFrame();
+        const workArea = frame.workArea;
+        const taskbar = resolveResidentTaskbarEdge(frame.bounds, workArea);
+        const safeSize = Math.max(0, Number(size || 0));
+        const marginX = Math.max(84, safeSize * 0.5 + 24);
+        const marginY = Math.max(92, safeSize * 0.5 + 24);
+        let targetX = workArea.x + workArea.width - marginX;
+        let targetY = workArea.y + workArea.height - marginY;
+
+        if (taskbar.edge === "top") {
+          targetY = workArea.y + marginY;
+        } else if (taskbar.edge === "left") {
+          targetX = workArea.x + marginX;
+        }
+
+        return clampOrbRoamPoint(targetX, targetY, size);
+      }
+
       function getOrbRoamBounds(size = 0) {
+        const frame = getOrbResidentMotionFrame();
+        const workArea = frame.workArea;
         const safeSize = Math.max(0, Number(size || 0));
         const marginX = Math.max(84, safeSize * 0.5 + 24);
         const marginY = Math.max(92, safeSize * 0.5 + 24);
         return {
-          minX: marginX,
-          maxX: Math.max(marginX, window.innerWidth - marginX),
-          minY: marginY,
-          maxY: Math.max(marginY, window.innerHeight - marginY),
+          minX: workArea.x + marginX,
+          maxX: Math.max(workArea.x + marginX, workArea.x + workArea.width - marginX),
+          minY: workArea.y + marginY,
+          maxY: Math.max(workArea.y + marginY, workArea.y + workArea.height - marginY),
         };
       }
 
