@@ -275,6 +275,8 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'function syncOrbPerception()' in response.text
     assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
     assert 'const operator = currentOrbOperator && typeof currentOrbOperator === "object"' in response.text
+    assert 'function resolveResidentTaskbarEdge(bounds, workArea)' in response.text
+    assert 'function resolveOrbResidentPlacement(anchorX, anchorY, width, height)' in response.text
     assert 'id="overlay-interjection"' in response.text
     assert 'id="overlay-interjection-target"' in response.text
     assert 'function executeOrbInterjectionAction(slot)' in response.text

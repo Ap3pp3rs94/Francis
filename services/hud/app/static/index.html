@@ -3637,9 +3637,101 @@
         };
       }
 
+      function getResidentDisplayFrame() {
+        const activeDisplay =
+          getDesktopDisplayById(desktopState.activeDisplayId)
+          || desktopState.displayInfo?.activeDisplay
+          || getDesktopDisplayById(desktopState.targetDisplayId)
+          || desktopState.displayInfo?.targetDisplay
+          || null;
+        const bounds = activeDisplay?.bounds && typeof activeDisplay.bounds === "object"
+          ? activeDisplay.bounds
+          : { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+        const workArea = activeDisplay?.workArea && typeof activeDisplay.workArea === "object"
+          ? activeDisplay.workArea
+          : bounds;
+        return {
+          bounds: {
+            x: Number(bounds.x) || 0,
+            y: Number(bounds.y) || 0,
+            width: Math.max(1, Number(bounds.width) || window.innerWidth),
+            height: Math.max(1, Number(bounds.height) || window.innerHeight),
+          },
+          workArea: {
+            x: Number(workArea.x) || 0,
+            y: Number(workArea.y) || 0,
+            width: Math.max(1, Number(workArea.width) || window.innerWidth),
+            height: Math.max(1, Number(workArea.height) || window.innerHeight),
+          },
+        };
+      }
+
+      function resolveResidentTaskbarEdge(bounds, workArea) {
+        const insets = {
+          top: Math.max(0, Number(workArea.y || 0) - Number(bounds.y || 0)),
+          left: Math.max(0, Number(workArea.x || 0) - Number(bounds.x || 0)),
+          right: Math.max(
+            0,
+            Number(bounds.x || 0) + Number(bounds.width || 0) - (Number(workArea.x || 0) + Number(workArea.width || 0)),
+          ),
+          bottom: Math.max(
+            0,
+            Number(bounds.y || 0) + Number(bounds.height || 0) - (Number(workArea.y || 0) + Number(workArea.height || 0)),
+          ),
+        };
+        let edge = "bottom";
+        let maxInset = insets.bottom;
+        for (const candidate of ["top", "left", "right", "bottom"]) {
+          if (insets[candidate] > maxInset) {
+            edge = candidate;
+            maxInset = insets[candidate];
+          }
+        }
+        return {
+          edge,
+          insets,
+        };
+      }
+
+      function resolveOrbResidentPlacement(anchorX, anchorY, width, height) {
+        const safeWidth = Math.max(220, Math.min(window.innerWidth - 36, Number(width) || 320));
+        const safeHeight = Math.max(90, Math.min(window.innerHeight - 36, Number(height) || 160));
+        const margin = 18;
+        const residentGap = 16;
+        const frame = getResidentDisplayFrame();
+        const workArea = frame.workArea;
+        const taskbar = resolveResidentTaskbarEdge(frame.bounds, workArea);
+        const workLeft = workArea.x + margin;
+        const workTop = workArea.y + margin;
+        const workRight = workArea.x + workArea.width - safeWidth - margin;
+        const workBottom = workArea.y + workArea.height - safeHeight - margin;
+        let left = clamp((Number(anchorX) || workArea.x + workArea.width * 0.5) - safeWidth * 0.5, workLeft, workRight);
+        let top = clamp((Number(anchorY) || workArea.y + workArea.height * 0.5) - safeHeight * 0.5, workTop, workBottom);
+
+        if (taskbar.edge === "bottom") {
+          top = clamp(workArea.y + workArea.height - safeHeight - residentGap, workTop, workBottom);
+        } else if (taskbar.edge === "top") {
+          top = clamp(workArea.y + residentGap, workTop, workBottom);
+        } else if (taskbar.edge === "left") {
+          left = clamp(workArea.x + residentGap, workLeft, workRight);
+        } else if (taskbar.edge === "right") {
+          left = clamp(workArea.x + workArea.width - safeWidth - residentGap, workLeft, workRight);
+        }
+
+        return {
+          side: left + safeWidth * 0.5 > workArea.x + workArea.width * 0.5 ? "left" : "right",
+          left,
+          top,
+          taskbarEdge: taskbar.edge,
+        };
+      }
+
       function resolveOrbSurfacePlacement(anchorX, anchorY, width, height, bias = "chat") {
         const safeWidth = Math.max(220, Math.min(window.innerWidth - 36, Number(width) || 320));
         const safeHeight = Math.max(90, Math.min(window.innerHeight - 36, Number(height) || 160));
+        if (bias === "chat") {
+          return resolveOrbResidentPlacement(anchorX, anchorY, safeWidth, safeHeight);
+        }
         const margin = 18;
         const side = anchorX > window.innerWidth * 0.56 ? "left" : "right";
         const offsetX = bias === "bubble" ? 54 : 66;
