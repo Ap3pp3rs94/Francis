@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
+const { isCaptureForegroundWindow } = require("./capture-mode");
 const { getScheduledHudRecoveryReason } = require("./hud-recovery");
 const { guardStandardStreams, patchConsoleForDetachedPipes, writeConsole } = require("./safe-log");
 const {
@@ -122,6 +123,8 @@ let hudRecoveryTimer = null;
 let hudRecoveryAttempts = 0;
 let hudHealthTimer = null;
 let hudHealthCheckPending = false;
+let captureRecoveryTimer = null;
+let captureCheckPending = false;
 let orbPerceptionTimer = null;
 let orbPerceptionSyncPending = false;
 let orbPerceptionErrorLogged = false;
@@ -164,6 +167,15 @@ let overlayRecovery = {
   status: "nominal",
   message: "",
   lastExitReason: "",
+};
+let captureSuspensionState = {
+  active: false,
+  reason: "",
+  lensVisible: false,
+  orbVisible: false,
+  overlayIgnoreMouseEvents: false,
+  orbIgnoreMouseEvents: true,
+  overlayAlwaysOnTop: true,
 };
 
 function log(message, extra) {
@@ -2262,6 +2274,133 @@ function ensureOrbPerceptionLoop() {
   void pushOrbPerceptionFrame();
 }
 
+function stopCaptureRecoveryLoop() {
+  if (captureRecoveryTimer !== null) {
+    clearInterval(captureRecoveryTimer);
+    captureRecoveryTimer = null;
+  }
+}
+
+function ensureCaptureRecoveryLoop() {
+  if (captureRecoveryTimer !== null) {
+    return;
+  }
+  captureRecoveryTimer = setInterval(() => {
+    void reconcileCaptureRecovery();
+  }, 350);
+}
+
+function suspendOverlayForCapture(foregroundWindow) {
+  if (captureSuspensionState.active) {
+    return;
+  }
+  const lensVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+  const orbVisible = Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible());
+  if (!lensVisible && !orbVisible) {
+    return;
+  }
+
+  captureSuspensionState = {
+    active: true,
+    reason: String(foregroundWindow?.process || foregroundWindow?.title || "capture-mode"),
+    lensVisible,
+    orbVisible,
+    overlayIgnoreMouseEvents: overlayState.ignoreMouseEvents,
+    orbIgnoreMouseEvents: orbInputState.ignoreMouseEvents,
+    overlayAlwaysOnTop: overlayState.alwaysOnTop,
+  };
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    applyIgnoreMouseEvents(mainWindow, true);
+    mainWindow.hide();
+  }
+  applyOrbIgnoreMouseEvents(true);
+  if (orbWindow && !orbWindow.isDestroyed()) {
+    orbWindow.hide();
+  }
+  log("Suspended overlay for capture mode", {
+    process: foregroundWindow?.process || "",
+    title: foregroundWindow?.title || "",
+  });
+  ensureCaptureRecoveryLoop();
+}
+
+function restoreOverlayAfterCapture() {
+  if (!captureSuspensionState.active) {
+    return;
+  }
+  const restore = { ...captureSuspensionState };
+  captureSuspensionState = {
+    active: false,
+    reason: "",
+    lensVisible: false,
+    orbVisible: false,
+    overlayIgnoreMouseEvents: false,
+    orbIgnoreMouseEvents: true,
+    overlayAlwaysOnTop: true,
+  };
+  stopCaptureRecoveryLoop();
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    applyAlwaysOnTop(mainWindow, restore.overlayAlwaysOnTop);
+    applyIgnoreMouseEvents(mainWindow, restore.overlayIgnoreMouseEvents);
+    if (restore.lensVisible) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.showInactive();
+    }
+  }
+
+  applyOrbIgnoreMouseEvents(restore.orbIgnoreMouseEvents);
+  if (restore.orbVisible && orbWindow && !orbWindow.isDestroyed()) {
+    if (orbWindow.isMinimized()) {
+      orbWindow.restore();
+    }
+    orbWindow.showInactive();
+    reinforceOrbWindowPresence(orbWindow);
+  }
+  log("Restored overlay after capture mode");
+  notifyOverlayState(mainWindow);
+}
+
+async function checkForCaptureActivation() {
+  if (captureCheckPending || captureSuspensionState.active) {
+    return;
+  }
+  const shellVisible = Boolean(
+    (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) ||
+    (orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
+  );
+  if (!shellVisible) {
+    return;
+  }
+  captureCheckPending = true;
+  try {
+    const foregroundWindow = await getForegroundWindowInfo({ timeoutMs: 700 });
+    if (isCaptureForegroundWindow(foregroundWindow)) {
+      suspendOverlayForCapture(foregroundWindow);
+    }
+  } finally {
+    captureCheckPending = false;
+  }
+}
+
+async function reconcileCaptureRecovery() {
+  if (!captureSuspensionState.active || captureCheckPending) {
+    return;
+  }
+  captureCheckPending = true;
+  try {
+    const foregroundWindow = await getForegroundWindowInfo({ timeoutMs: 700 });
+    if (!isCaptureForegroundWindow(foregroundWindow)) {
+      restoreOverlayAfterCapture();
+    }
+  } finally {
+    captureCheckPending = false;
+  }
+}
+
 function showLensWindow() {
   const win = requireWindow();
   if (win.isMinimized()) {
@@ -2580,6 +2719,9 @@ function createOrbWindow() {
     reinforceOrbWindowPresence(win);
     notifyOverlayState(mainWindow);
   });
+  win.on("blur", () => {
+    void checkForCaptureActivation();
+  });
   win.on("hide", () => notifyOverlayState(mainWindow));
   win.on("closed", () => {
     log("Orb window closed");
@@ -2679,6 +2821,9 @@ function createMainWindow() {
   win.on("move", () => schedulePreferenceSave(win));
   win.on("resize", () => schedulePreferenceSave(win));
   win.on("show", () => notifyOverlayState(win));
+  win.on("blur", () => {
+    void checkForCaptureActivation();
+  });
   win.on("hide", () => notifyOverlayState(win));
   win.on("minimize", () => notifyOverlayState(win));
   win.on("restore", () => notifyOverlayState(win));
@@ -3110,6 +3255,7 @@ app.on("will-quit", () => {
     hudRecoveryTimer = null;
   }
   stopHudHealthMonitor();
+  stopCaptureRecoveryLoop();
   stopOrbPerceptionLoop();
   stopOrbAuthorityLoop();
   if (mainWindow && !mainWindow.isDestroyed()) {
