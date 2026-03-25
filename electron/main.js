@@ -2,6 +2,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
 const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
+const { getScheduledHudRecoveryReason } = require("./hud-recovery");
 const {
   buildDefaultPreferences,
   PREFERENCES_VERSION,
@@ -2346,6 +2347,12 @@ async function reconcileHudHealth() {
   }
 
   const hudState = getHudState();
+  const recoveryReason = getScheduledHudRecoveryReason(hudState);
+  if (recoveryReason) {
+    scheduleHudRecovery(recoveryReason);
+    return;
+  }
+
   if (!hudState?.ready) {
     return;
   }
@@ -2939,6 +2946,10 @@ async function initializeHudRuntime() {
     log("HUD runtime ready", hudState);
   } catch (error) {
     log("HUD runtime initialization did not produce a ready server", error instanceof Error ? error.message : String(error));
+    const recoveryReason = getScheduledHudRecoveryReason(hudRuntime.getPublicState());
+    if (recoveryReason) {
+      scheduleHudRecovery(recoveryReason);
+    }
   }
 }
 
