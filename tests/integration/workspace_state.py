@@ -30,6 +30,15 @@ AUTONOMY_RUNTIME_PATHS = MISSION_RUNTIME_PATHS + (
     "incidents/incidents.jsonl",
 )
 
+SECURITY_RUNTIME_PATHS = (
+    "security/quarantine.jsonl",
+    "incidents/incidents.jsonl",
+    "logs/francis.log.jsonl",
+    "journals/decisions.jsonl",
+    "runs/run_ledger.jsonl",
+    "apprenticeship/sessions.json",
+)
+
 
 def _stash(path: Path) -> str | None:
     if not path.exists():

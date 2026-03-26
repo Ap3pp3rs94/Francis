@@ -41,6 +41,7 @@ class WorkerRepairRequest(BaseModel):
     apply: bool = False
     normalize_mission_queue: bool = True
     cancel_stale_synthetic_missions: bool = True
+    supersede_stale_malformed_skill_jobs: bool = True
     archive_test_deadletters: bool = True
     archive_stale_unsupported_deadletters: bool = True
     replay_timeout_deadletters: bool = False
@@ -156,6 +157,7 @@ def worker_repair(request: Request, payload: WorkerRepairRequest | None = None) 
         apply=body.apply,
         normalize_mission_queue=body.normalize_mission_queue,
         cancel_stale_synthetic_missions=body.cancel_stale_synthetic_missions,
+        supersede_stale_malformed_skill_jobs=body.supersede_stale_malformed_skill_jobs,
         archive_test_deadletters=body.archive_test_deadletters,
         archive_stale_unsupported_deadletters=body.archive_stale_unsupported_deadletters,
         replay_timeout_deadletters=body.replay_timeout_deadletters,

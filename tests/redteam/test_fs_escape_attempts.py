@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import SECURITY_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _workspace_root() -> Path:
@@ -77,34 +78,33 @@ def _enable_tools_app(scope: dict) -> dict:
 
 
 def test_workspace_path_escape_attempt_is_quarantined_before_tool_execution() -> None:
-    c = TestClient(app)
-    original_mode = _get_mode(c)
-    original_scope = _get_scope(c)
-    quarantine_before = _stash(_quarantine_file())
-    escape_name = f"redteam_escape_{uuid4()}.txt"
-    escaped_path = (Path(__file__).resolve().parents[2] / escape_name).resolve()
-    if escaped_path.exists():
-        escaped_path.unlink()
-
-    try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(c, _enable_tools_app(original_scope))
-
-        response = c.post(
-            "/tools/run",
-            json={"skill": "workspace.write", "args": {"path": f"../{escape_name}", "content": "owned"}},
-        )
-        assert response.status_code == 409
-        detail = response.json()["detail"]
-        assert "filesystem_escape" in detail["quarantine"]["categories"]
-        assert not escaped_path.exists()
-
-        quarantine_rows = _read_jsonl(_quarantine_file())
-        assert quarantine_rows
-        assert quarantine_rows[-1]["action"] == "tools.run"
-    finally:
+    with isolated_workspace_files(SECURITY_RUNTIME_PATHS):
+        c = TestClient(app)
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
+        escape_name = f"redteam_escape_{uuid4()}.txt"
+        escaped_path = (Path(__file__).resolve().parents[2] / escape_name).resolve()
         if escaped_path.exists():
             escaped_path.unlink()
-        _restore(_quarantine_file(), quarantine_before)
-        _set_scope(c, original_scope)
-        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+        try:
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_tools_app(original_scope))
+
+            response = c.post(
+                "/tools/run",
+                json={"skill": "workspace.write", "args": {"path": f"../{escape_name}", "content": "owned"}},
+            )
+            assert response.status_code == 409
+            detail = response.json()["detail"]
+            assert "filesystem_escape" in detail["quarantine"]["categories"]
+            assert not escaped_path.exists()
+
+            quarantine_rows = _read_jsonl(_quarantine_file())
+            assert quarantine_rows
+            assert quarantine_rows[-1]["action"] == "tools.run"
+        finally:
+            if escaped_path.exists():
+                escaped_path.unlink()
+            _set_scope(c, original_scope)
+            _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
