@@ -124,7 +124,13 @@ def generate_briefing(request: Request) -> dict:
     b = compose_briefing(headline=headline, bullets=bullets)
 
     # Write to inbox (existing pipeline)
-    entry = write_system_message(title=b["headline"], body=b["body"], severity="alert" if st.inbox_alerts > 0 else "info")
+    entry = write_system_message(
+        title=b["headline"],
+        body=b["body"],
+        severity="alert" if st.inbox_alerts > 0 else "info",
+        message_key="presence.briefing",
+        replace_existing=True,
+    )
 
     # Write to ledger (durable continuity)
     _ledger.append(

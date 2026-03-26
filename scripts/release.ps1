@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $steps = @(
     @{ Name = "ruff"; Command = @("ruff", "check", ".") },
     @{ Name = "unit-hardening"; Command = @("pytest", "-q", "tests/unit/test_mission_queue_repair.py", "tests/unit/test_runtime_hygiene.py", "tests/unit/test_observer_emitter.py") },
+    @{ Name = "presence-hardening"; Command = @("pytest", "-q", "tests/unit/test_presence_state.py", "tests/test_presence_state_grounding.py") },
     @{ Name = "observer-integration"; Command = @("pytest", "-q", "tests/integration/test_observer_emits_events.py") },
     @{ Name = "mission-smoke"; Command = @("pytest", "-q", "tests/integration/test_mission_tick.py", "-k", "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance") },
     @{ Name = "worker-smoke"; Command = @("pytest", "-q", "tests/integration/test_worker_cycle.py", "-k", "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter") },

@@ -10,6 +10,8 @@ from francis.core.run_context import ActorKind, RunContext
 from francis.core.workspace_fs import WorkspaceFS
 from francis.brain.ledger import RunLedger
 
+TERMINAL_INBOX_STATUSES = {"archived", "resolved", "acknowledged", "superseded"}
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -56,13 +58,16 @@ def _count_inbox(fs: WorkspaceFS, inbox_rel: str = "inbox/messages.jsonl") -> tu
         ln = ln.strip()
         if not ln:
             continue
-        total += 1
         try:
             obj = json.loads(ln)
-            if obj.get("severity") == "alert":
+            if str(obj.get("status", obj.get("state", "open"))).strip().lower() in TERMINAL_INBOX_STATUSES:
+                continue
+            total += 1
+            if str(obj.get("severity", "")).strip().lower() == "alert":
                 alerts += 1
         except Exception:
             # malformed line still counts as message
+            total += 1
             continue
     return (total, alerts)
 
@@ -77,4 +82,3 @@ def compute_state(fs: WorkspaceFS, ledger: RunLedger, workspace_root: Path) -> P
         inbox_alerts=inbox_alerts,
         last_ledger=last_ledger,
     )
-

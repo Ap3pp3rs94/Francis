@@ -7,7 +7,10 @@
 - Expanded the governed `worker/repair` path so it can preview or apply mission queue normalization, archive stale unsupported deadletters, replay stale timeout deadletters, and resolve stale security probe incidents with receipts.
 - Observer scans now manage incidents by anomaly kind instead of appending a fresh open row on every pass; repeated anomalies refresh existing incidents and cleared anomalies resolve in place.
 - Applied the new repair path against the live workspace, reducing active deadletters from `183` to `0`, open incidents from `295` to `12`, and draining replayed `forge.propose` residue back to the mission baseline queue.
+- Inbox system messages now support managed replacement via `message_key`, `/presence/briefing` reuses its existing managed inbox row instead of appending indefinitely, and active-only inbox counting now ignores archived lifecycle rows across presence and reactor surfaces.
+- Applied the governed inbox cleanup path against the live workspace, archiving `1628` stale synthetic inbox rows and reducing active inbox alerts from `1656` to `28`.
 - Added focused hardening tests for mission queue repair, runtime hygiene replay/archive logic, and observer incident lifecycle, plus updated observer integration assertions for managed incident state.
+- Added focused presence/inbox coverage so shared-workspace presence smoke tests now snapshot and restore workspace state, and the managed briefing flow is verified end to end.
 - Verified `ruff check .`, focused mission/observer pytest lanes, `npm run overlay:test`, `npm run overlay:prepare-runtime`, `npm run overlay:pack`, and `npm run overlay:installer`.
-- Added a bounded `npm run release:hardening` lane so the current release-hardening checks are runnable as one command, and isolated the shared-workspace integration smoke tests so the lane now preserves live workspace counters before and after execution.
+- Added a bounded `npm run release:hardening` lane so the current release-hardening checks are runnable as one command, and isolated the shared-workspace integration smoke tests so the lane now preserves live workspace counters before and after execution, including the new presence/inbox hardening step.
 - Added a completion ledger under `docs/operations/COMPLETION_LEDGER.md` and updated README/workspace docs to reflect current maturity and verification lanes.

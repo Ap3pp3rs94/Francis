@@ -14,6 +14,7 @@ from francis.core.run_context import ActorKind, RunContext
 from francis.core.workspace_fs import WorkspaceFS
 
 router = APIRouter(tags=["inbox"])
+TERMINAL_MESSAGE_STATUSES = {"archived", "resolved", "acknowledged", "superseded"}
 
 _workspace_root = Path(settings.workspace_root).resolve()
 _fs = WorkspaceFS(
@@ -32,13 +33,28 @@ class InboxPost(BaseModel):
     body: str
 
 
-def _read_messages() -> list[dict[str, Any]]:
-    ctx = RunContext(
+def _new_ctx(reason: str) -> RunContext:
+    return RunContext(
         run_id=uuid4(),
         actor_kind=ActorKind.SYSTEM,
         actor_name="francis",
-        reason="inbox.read",
+        reason=reason,
     )
+
+
+def _message_status(row: dict[str, Any]) -> str:
+    return str(row.get("status", row.get("state", "open"))).strip().lower() or "open"
+
+
+def _is_active_message(row: dict[str, Any]) -> bool:
+    return _message_status(row) not in TERMINAL_MESSAGE_STATUSES
+
+
+def _normalize_message_key(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
+def _read_message_rows(ctx: RunContext) -> list[dict[str, Any]]:
     try:
         raw = _fs.read_text(ctx, "inbox/messages.jsonl")
     except Exception:
@@ -56,32 +72,75 @@ def _read_messages() -> list[dict[str, Any]]:
     return out
 
 
-def write_system_message(*, title: str, body: str, severity: str = "info") -> dict:
+def _write_message_rows(ctx: RunContext, rows: list[dict[str, Any]]) -> None:
+    payload = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows) if rows else ""
+    _fs.write_text(ctx, "inbox/messages.jsonl", payload)
+
+
+def _read_messages() -> list[dict[str, Any]]:
+    return [row for row in _read_message_rows(_new_ctx("inbox.read")) if _is_active_message(row)]
+
+
+def write_system_message(
+    *,
+    title: str,
+    body: str,
+    severity: str = "info",
+    message_key: str | None = None,
+    replace_existing: bool = False,
+) -> dict:
+    ts = _utc_now_iso()
+    normalized_key = _normalize_message_key(message_key)
     entry = {
         "id": str(uuid4()),
-        "ts": _utc_now_iso(),
+        "ts": ts,
         "severity": severity,
         "title": title,
         "body": body,
         "source": "system",
+        "status": "open",
     }
+    if normalized_key:
+        entry["message_key"] = normalized_key
 
-    ctx = RunContext(
-        run_id=uuid4(),
-        actor_kind=ActorKind.SYSTEM,
-        actor_name="francis",
-        reason="inbox.write_system_message",
-    )
+    ctx = _new_ctx("inbox.write_system_message")
+    rows = _read_message_rows(ctx)
+    if replace_existing and normalized_key:
+        matching_indexes = [
+            index
+            for index, row in enumerate(rows)
+            if _is_active_message(row)
+            and str(row.get("source", "")).strip().lower() == "system"
+            and _normalize_message_key(str(row.get("message_key", ""))) == normalized_key
+        ]
+        if matching_indexes:
+            canonical_index = matching_indexes[-1]
+            canonical = dict(rows[canonical_index])
+            canonical["ts"] = ts
+            canonical["updated_at"] = ts
+            canonical["severity"] = severity
+            canonical["title"] = title
+            canonical["body"] = body
+            canonical["source"] = "system"
+            canonical["status"] = "open"
+            canonical["message_key"] = normalized_key
+            rows[canonical_index] = canonical
 
-    try:
-        existing = _fs.read_text(ctx, "inbox/messages.jsonl")
-    except Exception:
-        existing = ""
+            for duplicate_index in matching_indexes[:-1]:
+                duplicate = dict(rows[duplicate_index])
+                duplicate["status"] = "superseded"
+                duplicate["state"] = "superseded"
+                duplicate["updated_at"] = ts
+                duplicate["archived_at"] = ts
+                duplicate["superseded_by"] = canonical["id"]
+                duplicate["archived_reason"] = "message_key_replaced"
+                rows[duplicate_index] = duplicate
 
-    if existing and not existing.endswith("\n"):
-        existing += "\n"
-    payload = existing + json.dumps(entry, ensure_ascii=False) + "\n"
-    _fs.write_text(ctx, "inbox/messages.jsonl", payload)
+            _write_message_rows(ctx, rows)
+            return canonical
+
+    rows.append(entry)
+    _write_message_rows(ctx, rows)
     return entry
 
 
@@ -94,4 +153,3 @@ def inbox_list() -> list[dict[str, Any]]:
 def inbox_write(payload: InboxPost) -> dict:
     entry = write_system_message(title=payload.title, body=payload.body, severity=payload.severity)
     return {"status": "ok", **entry}
-

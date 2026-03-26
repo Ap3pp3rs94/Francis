@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -420,3 +421,98 @@ def test_repair_runtime_state_resolves_stale_security_probe_incidents(
     assert resolved["status"] == "resolved"
     assert resolved["resolution_reason"] == "runtime_repair:stale_security_probe"
     assert still_open["status"] == "open"
+
+
+def test_repair_runtime_state_archives_stale_inbox_noise_and_keeps_latest_briefing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _bind_temp_workspace(monkeypatch, tmp_path)
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    _write_jsonl(
+        workspace / "inbox" / "messages.jsonl",
+        [
+            {
+                "id": "msg-test",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "severity": "alert",
+                "title": "Test Alert",
+                "body": "Something needs attention",
+                "source": "system",
+                "status": "open",
+            },
+            {
+                "id": "brief-old",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "severity": "alert",
+                "title": "Attention required: 2 alerts in your inbox.",
+                "body": (
+                    "Attention required: 2 alerts in your inbox.\n\n"
+                    "- Inbox: 2 total  2 alerts\n"
+                    "- Missions: 5 active\n"
+                    "- Recommendation: open the inbox and clear alerts first (highest signal).\n"
+                    "- If you want: I can generate a mission plan once you name the target (project/goal)."
+                ),
+                "source": "system",
+                "status": "open",
+            },
+            {
+                "id": "brief-new",
+                "ts": recent_ts,
+                "severity": "alert",
+                "title": "Attention required: 1 alerts in your inbox.",
+                "body": (
+                    "Attention required: 1 alerts in your inbox.\n\n"
+                    "- Inbox: 1 total  1 alerts\n"
+                    "- Missions: 1 active\n"
+                    "- Recommendation: open the inbox and clear alerts first (highest signal).\n"
+                    "- If you want: I can generate a mission plan once you name the target (project/goal)."
+                ),
+                "source": "system",
+                "status": "open",
+            },
+            {
+                "id": "msg-info",
+                "ts": recent_ts,
+                "severity": "info",
+                "title": "hello",
+                "body": "world",
+                "source": "system",
+                "status": "open",
+            },
+        ],
+    )
+
+    summary = worker_main.repair_runtime_state(
+        run_id="repair-run",
+        trace_id="repair-trace",
+        apply=True,
+        normalize_mission_queue=False,
+        archive_test_deadletters=False,
+        archive_stale_unsupported_deadletters=False,
+        replay_timeout_deadletters=False,
+        resolve_test_incidents=False,
+        resolve_stale_security_incidents=False,
+        archive_test_inbox_messages=True,
+        archive_stale_presence_briefings=True,
+        min_age_hours=24,
+    )
+
+    inbox_summary = summary["runtime_hygiene_repair"]["inbox"]
+    assert inbox_summary["candidate_count"] == 2
+    assert inbox_summary["active_before"] == 4
+    assert inbox_summary["active_after"] == 2
+    assert inbox_summary["active_alerts_before"] == 3
+    assert inbox_summary["active_alerts_after"] == 1
+
+    inbox_rows = _read_jsonl(workspace / "inbox" / "messages.jsonl")
+    test_row = [row for row in inbox_rows if row.get("id") == "msg-test"][0]
+    old_brief = [row for row in inbox_rows if row.get("id") == "brief-old"][0]
+    new_brief = [row for row in inbox_rows if row.get("id") == "brief-new"][0]
+    info_row = [row for row in inbox_rows if row.get("id") == "msg-info"][0]
+    assert test_row["status"] == "archived"
+    assert test_row["repair_reason"] == "runtime_repair:test_inbox"
+    assert old_brief["status"] == "archived"
+    assert old_brief["repair_reason"] == "runtime_repair:presence_briefing"
+    assert new_brief["status"] == "open"
+    assert info_row["status"] == "open"

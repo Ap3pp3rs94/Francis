@@ -47,3 +47,36 @@ def test_event_reactor_ignores_archived_deadletters(tmp_path: Path) -> None:
         event.get("type") == "queue.deadletter_present" and int(event.get("count", 0)) == 1
         for event in state.get("events", [])
     )
+
+
+def test_event_reactor_ignores_archived_inbox_alerts(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    fs = WorkspaceFS(roots=[root], journal_path=root / "journals" / "fs.jsonl")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    _write_jsonl(
+        root / "inbox" / "messages.jsonl",
+        [
+            {
+                "id": "msg-open",
+                "ts": now_iso,
+                "severity": "alert",
+                "title": "Live alert",
+                "status": "open",
+            },
+            {
+                "id": "msg-archived",
+                "ts": now_iso,
+                "severity": "alert",
+                "title": "Old alert",
+                "status": "archived",
+            },
+        ],
+    )
+
+    state = collect_events(fs)
+    assert state["inbox_alert_count"] == 1
+    assert any(
+        event.get("type") == "inbox.alerts_present" and int(event.get("count", 0)) == 1
+        for event in state.get("events", [])
+    )

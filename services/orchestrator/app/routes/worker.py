@@ -45,6 +45,8 @@ class WorkerRepairRequest(BaseModel):
     replay_timeout_deadletters: bool = False
     resolve_test_incidents: bool = True
     resolve_stale_security_incidents: bool = True
+    archive_test_inbox_messages: bool = True
+    archive_stale_presence_briefings: bool = True
     min_age_hours: int = Field(default=24, ge=0, le=720)
     max_rows: int = Field(default=5000, ge=1, le=50000)
 
@@ -157,6 +159,8 @@ def worker_repair(request: Request, payload: WorkerRepairRequest | None = None) 
         replay_timeout_deadletters=body.replay_timeout_deadletters,
         resolve_test_incidents=body.resolve_test_incidents,
         resolve_stale_security_incidents=body.resolve_stale_security_incidents,
+        archive_test_inbox_messages=body.archive_test_inbox_messages,
+        archive_stale_presence_briefings=body.archive_stale_presence_briefings,
         min_age_hours=body.min_age_hours,
         max_rows=body.max_rows,
     )

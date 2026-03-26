@@ -10,16 +10,17 @@ Estimated completion:
 * feature and build coverage: `~80%`
 * production readiness: `~55%`
 
-Current live runtime pressure after the repair pass, replay drain, and release-lane verification on `2026-03-25`:
+Current live runtime pressure after the repair pass, replay drain, inbox cleanup, and release-lane verification on `2026-03-25`:
 
 * active missions: `849`
 * queued mission jobs / queue due: `849`
 * deadletters: `0`
 * open incidents: `12`
 * critical open incidents: `0`
-* inbox alerts: `1656`
+* active inbox messages: `205`
+* inbox alerts: `28`
 
-These counts come from the live event reactor and now use active deadletters plus open incidents rather than raw historical append volume.
+These counts come from the live event reactor and presence surfaces and now use active deadletters, open incidents, and active inbox rows rather than raw historical append volume.
 
 ## Shipped
 
@@ -38,14 +39,16 @@ These counts come from the live event reactor and now use active deadletters plu
 * Worker backlog drainage: worker cycles run mission-queue normalization before dispatch and record mission queue repair posture in cycle summaries and receipts.
 * Runtime repair discipline: the worker surface now exposes a governed `worker/repair` path for previewing or applying queue normalization, stale deadletter replay/archive, and stale security incident cleanup with receipts.
 * Incident hygiene: observer incidents are now managed by anomaly kind, refreshed in place, deduplicated, and resolved when the anomaly clears instead of inflating open-incident counts on every scan.
+* Inbox hygiene: presence briefings now reuse a managed inbox message instead of appending a fresh system alert on every `/presence/briefing`, and inbox counts now ignore archived, resolved, acknowledged, or superseded rows.
 * Operator traceability: mission and worker results now carry queue-repair summaries, replayed job IDs, and repair reasons so cleanup and replay operations are inspectable after the fact.
 * Backlog drainage: the live repair pass archived `93` stale unsupported deadletters, replayed `88` stale timeout deadletters, resolved `283` stale security probe incidents, and then drained the replayed forge backlog back to the mission baseline queue.
-* Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, and observer incident lifecycle, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
+* Backlog drainage: the governed inbox cleanup pass archived `1628` stale synthetic inbox rows and reduced live inbox alerts from `1656` to `28` without changing the active mission baseline queue.
+* Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, and presence/inbox state, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
 * Documentation truthfulness: changelog, README, roadmap framing, and workspace guidance now reflect a real build under productization instead of a scaffold claim.
 
 ## Partial
 
-* Runtime backlog drainage is improved, but the live workspace still carries a large active mission queue and inbox backlog that needs controlled cleanup or operational handling.
+* Runtime backlog drainage is improved, but the live workspace still carries a large active mission queue and a non-trivial active inbox that need controlled cleanup or operational handling.
 * Deadletter discipline is now materially stronger, but replay/archive still runs as an explicit operator action rather than a scheduled housekeeping policy.
 * Incident posture is much cleaner, but the inbox backlog and active mission queue still dominate day-to-day runtime pressure.
 * Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
@@ -69,6 +72,7 @@ Use these commands as the current release-hardening lanes:
 * `npm run release:hardening`
 * `ruff check .`
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py`
+* `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
 * `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`
 * `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter"`

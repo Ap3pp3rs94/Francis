@@ -237,6 +237,7 @@ The most reliable verification lanes right now are:
 * `npm run release:hardening`
 * `ruff check .`
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py`
+* `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
 * `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`
 * `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter"`
@@ -245,7 +246,7 @@ The most reliable verification lanes right now are:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the full-suite lane, but the commands above are the current hardening-smoke lanes for queue/observer/runtime and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
+`pytest -q` remains the full-suite lane, but the commands above are the current hardening-smoke lanes for queue, observer, inbox/presence state, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
 
 ### Runtime state
 

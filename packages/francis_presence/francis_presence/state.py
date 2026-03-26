@@ -8,6 +8,8 @@ from francis_brain.ledger import RunLedger
 from francis_core.clock import utc_now_iso
 from francis_core.workspace_fs import WorkspaceFS
 
+TERMINAL_INBOX_STATUSES = {"archived", "resolved", "acknowledged", "superseded"}
+
 
 @dataclass(frozen=True)
 class PresenceState:
@@ -38,12 +40,15 @@ def _count_inbox(fs: WorkspaceFS, inbox_rel: str = "inbox/messages.jsonl") -> tu
         line = line.strip()
         if not line:
             continue
-        total += 1
         try:
             item = json.loads(line)
-            if item.get("severity") == "alert":
+            if str(item.get("status", item.get("state", "open"))).strip().lower() in TERMINAL_INBOX_STATUSES:
+                continue
+            total += 1
+            if str(item.get("severity", "")).strip().lower() == "alert":
                 alerts += 1
         except Exception:
+            total += 1
             continue
     return (total, alerts)
 

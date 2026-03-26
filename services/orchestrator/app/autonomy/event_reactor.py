@@ -5,7 +5,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
-from services.orchestrator.app.runtime_hygiene import count_active_deadletters, is_open_incident
+from services.orchestrator.app.runtime_hygiene import (
+    count_active_deadletters,
+    count_active_inbox_alerts,
+    is_open_incident,
+)
 
 
 def _read_json(fs: WorkspaceFS, rel_path: str, default: object) -> object:
@@ -120,9 +124,7 @@ def collect_events(
     open_incidents = [i for i in incidents if is_open_incident(i)]
     critical_incidents = [i for i in open_incidents if str(i.get("severity", "")).lower() == "critical"]
 
-    inbox_alert_count = sum(
-        1 for row in _read_jsonl(fs, "inbox/messages.jsonl") if str(row.get("severity", "")).lower() == "alert"
-    )
+    inbox_alert_count = count_active_inbox_alerts(_read_jsonl(fs, "inbox/messages.jsonl"))
     telemetry_rows = _read_jsonl(fs, "telemetry/events.jsonl")
     telemetry_horizon = now - timedelta(hours=max(1, min(168, _safe_int(telemetry_horizon_hours, 24))))
     telemetry_in_horizon: list[dict[str, Any]] = []

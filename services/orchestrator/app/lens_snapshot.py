@@ -15,6 +15,7 @@ from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from services.orchestrator.app.federation_store import load_or_init_topology
 from services.orchestrator.app.managed_copy_store import build_managed_copy_state
 from services.orchestrator.app.portability_store import build_portability_state
+from services.orchestrator.app.runtime_hygiene import is_active_inbox_message
 from services.orchestrator.app.swarm_store import build_swarm_state
 from services.orchestrator.app.takeover_snapshot import load_takeover_state
 from services.orchestrator.app.usage_loop import build_current_work, build_next_best_action
@@ -192,6 +193,8 @@ def _materialize_inbox(workspace_root: Path) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     alerts = 0
     for row in rows:
+        if not is_active_inbox_message(row):
+            continue
         severity = str(row.get("severity", "info")).strip().lower() or "info"
         if severity == "alert":
             alerts += 1

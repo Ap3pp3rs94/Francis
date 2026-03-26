@@ -554,6 +554,8 @@ def repair_runtime_state(
     replay_timeout_deadletters: bool = False,
     resolve_test_incidents: bool = True,
     resolve_stale_security_incidents: bool = True,
+    archive_test_inbox_messages: bool = True,
+    archive_stale_presence_briefings: bool = True,
     min_age_hours: int = 24,
     max_rows: int = 5000,
 ) -> dict[str, Any]:
@@ -652,6 +654,8 @@ def repair_runtime_state(
         replay_timeout_deadletters=replay_timeout_deadletters,
         resolve_test_incidents=resolve_test_incidents,
         resolve_stale_security_incidents=resolve_stale_security_incidents,
+        archive_test_inbox_messages=archive_test_inbox_messages,
+        archive_stale_presence_briefings=archive_stale_presence_briefings,
         min_age_hours=min_age_hours,
         max_rows=max_rows,
         build_replay_job=_build_replay_job if replay_timeout_deadletters else None,
