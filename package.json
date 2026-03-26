@@ -13,7 +13,8 @@
     "overlay:prepare-provenance": "node electron/generate-build-provenance.cjs",
     "overlay:pack": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --dir --win",
     "overlay:installer": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --win nsis",
-    "overlay:dist": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --win portable nsis"
+    "overlay:dist": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --win portable nsis",
+    "release:hardening": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
   },
   "devDependencies": {
     "electron": "40.8.0",

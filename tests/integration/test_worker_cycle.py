@@ -6,7 +6,9 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Iterator
 from uuid import uuid4
+from contextlib import contextmanager
 
 from fastapi.testclient import TestClient
 
@@ -82,6 +84,40 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 
 
+def _stash(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def _restore(path: Path, content: str | None) -> None:
+    if content is None:
+        if path.exists():
+            path.unlink()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+@contextmanager
+def _isolated_worker_workspace_state() -> Iterator[None]:
+    paths = [
+        _workspace_root() / "missions" / "missions.json",
+        _workspace_root() / "missions" / "history.jsonl",
+        _workspace_root() / "queue" / "jobs.jsonl",
+        _workspace_root() / "queue" / "deadletter.jsonl",
+        _workspace_root() / "queue" / "worker_cycle_gate.json",
+        _workspace_root() / "runs" / "run_ledger.jsonl",
+        _workspace_root() / "runs" / "last_worker_run.json",
+    ]
+    snapshots = {path: _stash(path) for path in paths}
+    try:
+        yield
+    finally:
+        for path, content in snapshots.items():
+            _restore(path, content)
+
+
 def _remove_jobs(job_ids: list[str]) -> None:
     path = _workspace_root() / "queue" / "jobs.jsonl"
     rows = _read_jsonl(path)
@@ -93,50 +129,49 @@ def test_worker_cycle_processes_mission_queue() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
     original_scope = _get_scope(c)
-    jobs_path = _workspace_root() / "queue" / "jobs.jsonl"
-    jobs_before = jobs_path.read_text(encoding="utf-8") if jobs_path.exists() else ""
 
     try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["missions", "worker", "receipts"]))
-        jobs_path.parent.mkdir(parents=True, exist_ok=True)
-        jobs_path.write_text("", encoding="utf-8")
+        with _isolated_worker_workspace_state():
+            jobs_path = _workspace_root() / "queue" / "jobs.jsonl"
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["missions", "worker", "receipts"]))
+            jobs_path.parent.mkdir(parents=True, exist_ok=True)
+            jobs_path.write_text("", encoding="utf-8")
 
-        create = c.post(
-            "/missions",
-            json={
-                "title": f"Worker-{uuid4()}",
-                "objective": "worker cycle integration",
-                "steps": ["only-step"],
-            },
-        )
-        assert create.status_code == 200
-        mission_id = create.json()["mission"]["id"]
+            create = c.post(
+                "/missions",
+                json={
+                    "title": f"Worker-{uuid4()}",
+                    "objective": "worker cycle integration",
+                    "steps": ["only-step"],
+                },
+            )
+            assert create.status_code == 200
+            mission_id = create.json()["mission"]["id"]
 
-        cycle = c.post(
-            "/worker/cycle",
-            json={"max_jobs": 200, "max_runtime_seconds": 60, "action_allowlist": ["mission.tick"]},
-        )
-        assert cycle.status_code == 200
-        payload = cycle.json()
-        assert payload["status"] == "ok"
-        assert payload["processed_count"] >= 1
-        assert payload["success_count"] >= 1
-        assert any(
-            row.get("action") == "mission.tick" and row.get("mission_id") == mission_id for row in payload.get("jobs", [])
-        )
+            cycle = c.post(
+                "/worker/cycle",
+                json={"max_jobs": 200, "max_runtime_seconds": 60, "action_allowlist": ["mission.tick"]},
+            )
+            assert cycle.status_code == 200
+            payload = cycle.json()
+            assert payload["status"] == "ok"
+            assert payload["processed_count"] >= 1
+            assert payload["success_count"] >= 1
+            assert any(
+                row.get("action") == "mission.tick" and row.get("mission_id") == mission_id for row in payload.get("jobs", [])
+            )
 
-        mission = c.get(f"/missions/{mission_id}")
-        assert mission.status_code == 200
-        status = mission.json()["mission"]["status"]
-        assert status in {"completed", "active"}
+            mission = c.get(f"/missions/{mission_id}")
+            assert mission.status_code == 200
+            status = mission.json()["mission"]["status"]
+            assert status in {"completed", "active"}
 
-        receipts = c.get("/receipts/latest", params={"limit": 200})
-        assert receipts.status_code == 200
-        ledger_rows = receipts.json()["receipts"]["ledger"]
-        assert any(row.get("kind") == "worker.cycle" for row in ledger_rows)
+            receipts = c.get("/receipts/latest", params={"limit": 200})
+            assert receipts.status_code == 200
+            ledger_rows = receipts.json()["receipts"]["ledger"]
+            assert any(row.get("kind") == "worker.cycle" for row in ledger_rows)
     finally:
-        jobs_path.write_text(jobs_before, encoding="utf-8")
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
@@ -842,44 +877,45 @@ def test_worker_cycle_action_timeout_can_escalate_to_deadletter() -> None:
     original_scope = _get_scope(c)
     job_id = str(uuid4())
     try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["worker", "forge"]))
-        jobs_path = _workspace_root() / "queue" / "jobs.jsonl"
-        jobs = _read_jsonl(jobs_path)
-        jobs.append(
-            {
-                "id": job_id,
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "run_id": str(uuid4()),
-                "action": "forge.propose",
-                "status": "queued",
-                "attempts": 0,
-                "max_attempts": 1,
-                "context": {"deadletter_count": 0, "open_incident_count": 0, "active_mission_count": 0},
-            }
-        )
-        _write_jsonl(jobs_path, jobs)
+        with _isolated_worker_workspace_state():
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["worker", "forge"]))
+            jobs_path = _workspace_root() / "queue" / "jobs.jsonl"
+            jobs = _read_jsonl(jobs_path)
+            jobs.append(
+                {
+                    "id": job_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "run_id": str(uuid4()),
+                    "action": "forge.propose",
+                    "status": "queued",
+                    "attempts": 0,
+                    "max_attempts": 1,
+                    "context": {"deadletter_count": 0, "open_incident_count": 0, "active_mission_count": 0},
+                }
+            )
+            _write_jsonl(jobs_path, jobs)
 
-        cycle = c.post(
-            "/worker/cycle",
-            json={
-                "max_jobs": 10,
-                "max_runtime_seconds": 60,
-                "action_allowlist": ["forge.propose"],
-                "action_timeouts": {"forge.propose": 0},
-            },
-        )
-        assert cycle.status_code == 200
-        payload = cycle.json()
-        assert payload["deadlettered_count"] >= 1
-        matched = [row for row in payload.get("jobs", []) if row.get("job_id") == job_id]
-        assert matched
-        assert matched[0]["ok"] is False
-        assert "runtime exceeded timeout" in matched[0]["error"]
+            cycle = c.post(
+                "/worker/cycle",
+                json={
+                    "max_jobs": 10,
+                    "max_runtime_seconds": 60,
+                    "action_allowlist": ["forge.propose"],
+                    "action_timeouts": {"forge.propose": 0},
+                },
+            )
+            assert cycle.status_code == 200
+            payload = cycle.json()
+            assert payload["deadlettered_count"] >= 1
+            matched = [row for row in payload.get("jobs", []) if row.get("job_id") == job_id]
+            assert matched
+            assert matched[0]["ok"] is False
+            assert "runtime exceeded timeout" in matched[0]["error"]
 
-        jobs_after = _read_jsonl(jobs_path)
-        final_job = [row for row in jobs_after if row.get("id") == job_id][0]
-        assert final_job.get("status") == "failed"
+            jobs_after = _read_jsonl(jobs_path)
+            final_job = [row for row in jobs_after if row.get("id") == job_id][0]
+            assert final_job.get("status") == "failed"
     finally:
         _remove_jobs([job_id])
         _set_scope(c, original_scope)
