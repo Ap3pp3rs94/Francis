@@ -6,9 +6,9 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `86%`
+* overall: `87%`
 * feature and build coverage: `92%`
-* production readiness: `79%`
+* production readiness: `80%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -59,6 +59,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
 * Shared-workspace discipline: portability, receipts-lens, and lens-usage integration files now isolate their runtime write sets, prune new handback-export artifacts, and stop depending on ad hoc manual cleanup when run serially.
 * Verification discipline: the repo now exposes `npm run test:full:first-failure` for serial full-suite triage, and the formerly dirty portability/receipts/lens nodes now pass together in a single serial pytest process.
+* Verification discipline: shared-workspace isolation now restores giant append-only ledgers such as `journals/fs.jsonl` and `runs/run_ledger.jsonl` by truncation instead of full copies, which reduced the formerly dirty serial portability/receipts/lens batch from `572.73s` to `249.52s`, with the slowest single nodes now bounded at `46.30s` and `30.04s`.
 * Documentation truthfulness: changelog, README, roadmap framing, and workspace guidance now reflect a real build under productization instead of a scaffold claim.
 
 ## Partial
@@ -99,4 +100,4 @@ Use these commands as the current release-hardening lanes:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and it has already progressed cleanly through the former early-failure band on `2026-03-26`. Full-suite completion time is still not bounded tightly enough to claim routine green release confidence.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and it has already progressed cleanly through the former early-failure band on `2026-03-26`. Full-suite completion time is lower at the old serial hot spots, but still not bounded tightly enough to claim routine green release confidence.
