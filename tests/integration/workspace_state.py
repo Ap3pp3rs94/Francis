@@ -95,6 +95,14 @@ PORTABILITY_RUNTIME_PATHS = (
     "telemetry/config.json",
 )
 
+APPEND_ONLY_RUNTIME_PATHS = {
+    "control/handback_exports/index.jsonl",
+    "control/takeover_activity.jsonl",
+    "journals/fs.jsonl",
+    "logs/francis.log.jsonl",
+    "runs/run_ledger.jsonl",
+}
+
 
 def _stash(path: Path) -> str | None:
     if not path.exists():
@@ -120,31 +128,53 @@ def _remove_path(path: Path) -> None:
 
 @contextmanager
 def isolated_workspace_paths(rel_paths: Iterable[str]) -> Iterator[None]:
-    paths = [WORKSPACE_ROOT / rel_path for rel_path in rel_paths]
+    paths = [(rel_path, WORKSPACE_ROOT / rel_path) for rel_path in rel_paths]
     with tempfile.TemporaryDirectory(prefix="francis-workspace-state-") as temp_dir:
         stash_root = Path(temp_dir)
-        snapshots: list[tuple[Path, str, Path | None]] = []
-        for index, path in enumerate(paths):
+        snapshots: list[dict[str, object]] = []
+        for index, (rel_path, path) in enumerate(paths):
             if path.is_dir():
                 stash_path = stash_root / str(index)
                 shutil.copytree(path, stash_path)
-                snapshots.append((path, "dir", stash_path))
+                snapshots.append({"path": path, "kind": "dir", "stash_path": stash_path})
             elif path.exists():
-                stash_path = stash_root / str(index)
-                stash_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, stash_path)
-                snapshots.append((path, "file", stash_path))
+                if rel_path in APPEND_ONLY_RUNTIME_PATHS:
+                    snapshots.append({"path": path, "kind": "append_only_file", "size": path.stat().st_size})
+                else:
+                    stash_path = stash_root / str(index)
+                    stash_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, stash_path)
+                    snapshots.append({"path": path, "kind": "file", "stash_path": stash_path})
             else:
-                snapshots.append((path, "missing", None))
+                snapshots.append({"path": path, "kind": "missing"})
         try:
             yield
         finally:
-            for path, kind, stash_path in snapshots:
+            for snapshot in snapshots:
+                path = snapshot.get("path")
+                kind = snapshot.get("kind")
+                if not isinstance(path, Path) or not isinstance(kind, str):
+                    continue
+                if kind == "append_only_file":
+                    original_size = int(snapshot.get("size", 0))
+                    if not path.exists():
+                        raise RuntimeError(f"append-only runtime file missing during restore: {path}")
+                    current_size = path.stat().st_size
+                    if current_size < original_size:
+                        raise RuntimeError(
+                            f"append-only runtime file shrank during isolated test run: {path} "
+                            f"({current_size} < {original_size})"
+                        )
+                    with path.open("rb+") as handle:
+                        handle.truncate(original_size)
+                    continue
+
                 _remove_path(path)
-                if kind == "dir" and stash_path is not None:
+                stash_path = snapshot.get("stash_path")
+                if kind == "dir" and isinstance(stash_path, Path):
                     path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copytree(stash_path, path)
-                elif kind == "file" and stash_path is not None:
+                elif kind == "file" and isinstance(stash_path, Path):
                     path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(stash_path, path)
 
