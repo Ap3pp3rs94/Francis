@@ -6,9 +6,9 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `84%`
-* feature and build coverage: `91%`
-* production readiness: `74%`
+* overall: `85%`
+* feature and build coverage: `92%`
+* production readiness: `78%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -17,8 +17,8 @@ Current live runtime pressure after the repair pass, replay drain, inbox cleanup
 * deadletters: `0`
 * open incidents: `0`
 * critical open incidents: `0`
-* active inbox messages: `205`
-* inbox alerts: `28`
+* active inbox messages: `0`
+* inbox alerts: `0`
 
 These counts come from the live event reactor and presence surfaces and now use active deadletters, open incidents, and active inbox rows rather than raw historical append volume.
 
@@ -50,16 +50,20 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Backlog drainage: the governed incident/queue cleanup pass resolved the final `10` stale quarantine-generated security incidents, superseded the last malformed queued `skill.run`, and brought live due-queue pressure from `1` to `0` while leaving only `2` real observer incidents open.
 * Observer trust: pathological observer baseline files are now normalized in place through `WorkspaceFS`, so absurd threshold residue such as `100%` disk or memory minima no longer pins false anomaly incidents open.
 * Backlog drainage: the observer baseline normalization pass cleared the final `2` false observer incidents and brought live open-incident pressure from `2` to `0`.
-* Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
+* Inbox hygiene: governed runtime repair now archives stale unkeyed inbox test residue such as legacy `hello/world` rows and pre-managed presence briefings instead of leaving them active forever.
+* Telemetry hygiene: governed runtime repair now prunes stale `source=pytest` telemetry rows so synthetic verification crashes stop keeping `telemetry.critical_present` alive after the run that created them.
+* Backlog drainage: the governed inbox and telemetry cleanup pass archived the final `205` stale inbox rows and pruned the final `3` stale pytest telemetry rows, bringing active inbox pressure from `205` to `0`, inbox alerts from `28` to `0`, and telemetry critical residue from `1` to `0`.
+* Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, inbox/telemetry shared-workspace isolation, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
+* Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
 * Documentation truthfulness: changelog, README, roadmap framing, and workspace guidance now reflect a real build under productization instead of a scaffold claim.
 
 ## Partial
 
-* Runtime backlog drainage is materially improved, but the live workspace still carries `28` active inbox alerts and `1` critical telemetry residue event that still need operational handling or cleanup policy.
+* Runtime backlog drainage is materially improved and the live workspace is now quiet by default, but that posture still depends on explicit governed cleanup and bounded verification discipline rather than a scheduled housekeeping policy.
 * Deadletter discipline is now materially stronger, but replay/archive still runs as an explicit operator action rather than a scheduled housekeeping policy.
-* Incident posture is now quiet, but inbox pressure and telemetry critical residue now dominate day-to-day runtime pressure.
+* Incident, inbox, and telemetry posture are now quiet, so the remaining productization risk is release confidence and distribution trust rather than day-to-day runtime noise.
 * Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
 * Verification structure is materially better, but the full `pytest -q` lane is still slower and less decisive than the focused lanes.
 
@@ -71,7 +75,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 
 ## Blocked
 
-* Production-readiness claims are blocked on draining or explicitly triaging the remaining inbox and telemetry residue so the live workspace is quiet by default instead of merely accurate.
+* Production-readiness claims are blocked on routine full-suite release confidence and signed Windows distribution rather than on live queue, incident, inbox, or telemetry pressure.
 * Distribution trust is blocked on Windows code signing even though the pack and installer lanes now complete successfully on this machine.
 
 ## Verification Lanes
@@ -82,6 +86,7 @@ Use these commands as the current release-hardening lanes:
 * `ruff check .`
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py tests/unit/test_observer_baselines.py`
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
+* `pytest -q tests/integration/test_inbox_pipeline.py tests/integration/test_telemetry_pipeline.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
 * `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py`
 * `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`

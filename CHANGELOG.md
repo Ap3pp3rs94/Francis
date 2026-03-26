@@ -21,6 +21,9 @@
 - Observer baseline loading now normalizes pathological threshold files in `workspace/observer/baselines.json`, rewrites repaired values through `WorkspaceFS`, and prevents false disk/memory anomaly incidents from persisting across scans.
 - Added focused observer baseline coverage and expanded `npm run release:hardening` so the bounded unit lane now includes that normalization path.
 - Applied the observer baseline normalization against the live workspace through the normal observer cycle, clearing the final `2` false observer incidents so open incidents are now `0`.
+- Governed runtime repair now also archives stale unkeyed inbox test residue such as legacy `hello/world` rows and pre-managed presence briefings, and prunes stale `source=pytest` telemetry rows that should not keep the reactor noisy after verification.
+- Shared-workspace inbox and telemetry integration tests now snapshot and restore their runtime artifacts, and `npm run release:hardening` now includes that inbox/telemetry hardening lane.
+- Applied the governed inbox and telemetry cleanup path against the live workspace, reducing active inbox messages from `205` to `0`, inbox alerts from `28` to `0`, and telemetry critical residue from `1` to `0`.
 - Verified `ruff check .`, focused mission/observer pytest lanes, `npm run overlay:test`, `npm run overlay:prepare-runtime`, `npm run overlay:pack`, and `npm run overlay:installer`.
 - Added a bounded `npm run release:hardening` lane so the current release-hardening checks are runnable as one command, and isolated the shared-workspace integration smoke tests so the lane now preserves live workspace counters before and after execution, including the new presence/inbox hardening step.
 - Added a completion ledger under `docs/operations/COMPLETION_LEDGER.md` and updated README/workspace docs to reflect current maturity and verification lanes.
