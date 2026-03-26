@@ -11,6 +11,7 @@ DEADLETTER_PATH = "queue/deadletter.jsonl"
 QUEUE_PATH = "queue/jobs.jsonl"
 INCIDENTS_PATH = "incidents/incidents.jsonl"
 INBOX_PATH = "inbox/messages.jsonl"
+TELEMETRY_PATH = "telemetry/events.jsonl"
 MISSIONS_PATH = "missions/missions.json"
 TERMINAL_DEADLETTER_STATUSES = {"archived", "resolved", "ignored", "replayed"}
 TERMINAL_INCIDENT_STATUSES = {"resolved", "closed", "mitigated", "superseded"}
@@ -23,6 +24,12 @@ TEST_DEADLETTER_MARKERS = {
 }
 TEST_INBOX_TITLE_MARKERS = {
     "test alert",
+}
+TEST_INBOX_BODY_MARKERS = {
+    "something needs attention",
+}
+TEST_INBOX_SYNTHETIC_ROWS = {
+    ("hello", "world"),
 }
 UNSUPPORTED_DEADLETTER_MARKERS = {
     "unsupported forge worker action:",
@@ -51,10 +58,13 @@ PRESENCE_BRIEFING_TITLE_PREFIXES = (
     "inbox active:",
     "quiet morning.",
 )
-PRESENCE_BRIEFING_BODY_MARKERS = {
+PRESENCE_BRIEFING_REQUIRED_BODY_MARKERS = {
     "recommendation:",
     "if you want: i can generate a mission plan",
-    "missions:",
+}
+PRESENCE_BRIEFING_CONTEXT_BODY_MARKERS = {
+    "inbox:",
+    "last action:",
 }
 SYNTHETIC_MISSION_TITLE_PREFIXES = (
     "Auto-",
@@ -76,6 +86,9 @@ SYNTHETIC_MISSION_TITLE_PREFIXES = (
     "TraceMission-",
     "Worker-",
 )
+TEST_TELEMETRY_SOURCES = {
+    "pytest",
+}
 
 
 def read_json(fs: WorkspaceFS, rel_path: str, default: object) -> object:
@@ -139,6 +152,17 @@ def job_status(row: dict[str, Any]) -> str:
     return str(row.get("status", "queued")).strip().lower() or "queued"
 
 
+def telemetry_severity(row: dict[str, Any]) -> str:
+    raw = str(row.get("severity", "info")).strip().lower()
+    if raw == "warning":
+        return "warn"
+    if raw == "fatal":
+        return "critical"
+    if raw == "err":
+        return "error"
+    return raw or "info"
+
+
 def is_active_deadletter(row: dict[str, Any]) -> bool:
     return deadletter_status(row) not in TERMINAL_DEADLETTER_STATUSES
 
@@ -169,6 +193,10 @@ def count_active_inbox_alerts(rows: list[dict[str, Any]]) -> int:
         for row in rows
         if is_active_inbox_message(row) and str(row.get("severity", "")).strip().lower() == "alert"
     )
+
+
+def count_critical_telemetry_events(rows: list[dict[str, Any]]) -> int:
+    return sum(1 for row in rows if telemetry_severity(row) == "critical")
 
 
 def _parse_ts(ts: str | None) -> datetime | None:
@@ -260,9 +288,10 @@ def is_stale_test_inbox_message(
     title = str(row.get("title", "")).strip().lower()
     source = str(row.get("source", "")).strip().lower()
     body = str(row.get("body", row.get("summary", ""))).strip().lower()
-    if title not in TEST_INBOX_TITLE_MARKERS and source != "test":
+    synthetic_row = (title, body) in TEST_INBOX_SYNTHETIC_ROWS
+    if not synthetic_row and title not in TEST_INBOX_TITLE_MARKERS and source != "test":
         return False
-    if "something needs attention" not in body and title not in TEST_INBOX_TITLE_MARKERS:
+    if not synthetic_row and not any(marker in body for marker in TEST_INBOX_BODY_MARKERS) and title not in TEST_INBOX_TITLE_MARKERS:
         return False
     ts = _parse_ts(str(row.get("ts", "")).strip() or None)
     if ts is None:
@@ -277,15 +306,7 @@ def is_stale_presence_briefing_message(
     min_age_hours: int = 24,
     now: datetime | None = None,
 ) -> bool:
-    if not is_active_inbox_message(row):
-        return False
-    if str(row.get("source", "")).strip().lower() != "system":
-        return False
-    title = str(row.get("title", "")).strip().lower()
-    if not any(title.startswith(prefix) for prefix in PRESENCE_BRIEFING_TITLE_PREFIXES):
-        return False
-    body = str(row.get("body", row.get("summary", ""))).strip().lower()
-    if not all(marker in body for marker in PRESENCE_BRIEFING_BODY_MARKERS):
+    if not is_presence_briefing_message(row):
         return False
     ts = _parse_ts(str(row.get("ts", "")).strip() or None)
     if ts is None:
@@ -303,7 +324,9 @@ def is_presence_briefing_message(row: dict[str, Any]) -> bool:
     if not any(title.startswith(prefix) for prefix in PRESENCE_BRIEFING_TITLE_PREFIXES):
         return False
     body = str(row.get("body", row.get("summary", ""))).strip().lower()
-    return all(marker in body for marker in PRESENCE_BRIEFING_BODY_MARKERS)
+    return all(marker in body for marker in PRESENCE_BRIEFING_REQUIRED_BODY_MARKERS) and any(
+        marker in body for marker in PRESENCE_BRIEFING_CONTEXT_BODY_MARKERS
+    )
 
 
 def deadletter_action(row: dict[str, Any]) -> str:
@@ -404,6 +427,22 @@ def is_stale_security_probe_incident(
     return reference - ts >= timedelta(hours=max(0, int(min_age_hours)))
 
 
+def is_stale_test_telemetry_event(
+    row: dict[str, Any],
+    *,
+    min_age_hours: int = 24,
+    now: datetime | None = None,
+) -> bool:
+    source = str(row.get("source", "")).strip().lower()
+    if source not in TEST_TELEMETRY_SOURCES:
+        return False
+    ts = _parse_ts(str(row.get("ts", "")).strip() or None)
+    if ts is None:
+        return False
+    reference = now or datetime.now(timezone.utc)
+    return reference - ts >= timedelta(hours=max(0, int(min_age_hours)))
+
+
 def repair_runtime_hygiene(
     fs: WorkspaceFS,
     *,
@@ -419,6 +458,7 @@ def repair_runtime_hygiene(
     resolve_stale_security_incidents: bool = True,
     archive_test_inbox_messages: bool = True,
     archive_stale_presence_briefings: bool = True,
+    prune_stale_test_telemetry_events: bool = True,
     min_age_hours: int = 24,
     max_rows: int = 5000,
     build_replay_job: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
@@ -436,11 +476,14 @@ def repair_runtime_hygiene(
     deadletters = read_jsonl(fs, DEADLETTER_PATH)
     incidents = read_jsonl(fs, INCIDENTS_PATH)
     inbox = read_jsonl(fs, INBOX_PATH)
+    telemetry_events = read_jsonl(fs, TELEMETRY_PATH)
     active_missions_before = sum(1 for row in missions if isinstance(row, dict) and is_active_mission(row))
     active_deadletters_before = count_active_deadletters(deadletters)
     open_incidents_before = sum(1 for row in incidents if is_open_incident(row))
     active_inbox_before = count_active_inbox_messages(inbox)
     active_inbox_alerts_before = count_active_inbox_alerts(inbox)
+    telemetry_event_count_before = len(telemetry_events)
+    telemetry_critical_count_before = count_critical_telemetry_events(telemetry_events)
 
     mission_candidate_indexes: list[int] = []
     if cancel_stale_synthetic_missions:
@@ -551,6 +594,14 @@ def repair_runtime_hygiene(
             ):
                 inbox_presence_candidate_indexes.append(index)
 
+    telemetry_candidate_indexes: list[int] = []
+    if prune_stale_test_telemetry_events:
+        for index, row in enumerate(telemetry_events):
+            if len(telemetry_candidate_indexes) >= normalized_limit:
+                break
+            if is_stale_test_telemetry_event(row, min_age_hours=normalized_min_age_hours, now=now_dt):
+                telemetry_candidate_indexes.append(index)
+
     archived_deadletter_ids = [str(deadletters[index].get("id", "")).strip() for index in deadletter_candidate_indexes]
     archived_unsupported_deadletter_ids = [
         str(deadletters[index].get("id", "")).strip() for index in deadletter_unsupported_candidate_indexes
@@ -564,6 +615,7 @@ def repair_runtime_hygiene(
     archived_presence_inbox_ids = [
         str(inbox[index].get("id", "")).strip() for index in inbox_presence_candidate_indexes
     ]
+    pruned_telemetry_ids = [str(telemetry_events[index].get("id", "")).strip() for index in telemetry_candidate_indexes]
     repaired_mission_ids = [str(missions[index].get("id", "")).strip() for index in mission_candidate_indexes]
     repaired_mission_job_ids = [str(jobs[index].get("id", "")).strip() for index in mission_job_candidate_indexes]
     superseded_malformed_skill_job_ids = [
@@ -715,6 +767,12 @@ def repair_runtime_hygiene(
     if apply and (inbox_test_candidate_indexes or inbox_presence_candidate_indexes):
         write_jsonl(fs, INBOX_PATH, inbox)
 
+    if apply and telemetry_candidate_indexes:
+        telemetry_events = [
+            row for index, row in enumerate(telemetry_events) if index not in set(telemetry_candidate_indexes)
+        ]
+        write_jsonl(fs, TELEMETRY_PATH, telemetry_events)
+
     if apply and jobs_changed:
         write_jsonl(fs, QUEUE_PATH, jobs)
 
@@ -753,6 +811,16 @@ def repair_runtime_hygiene(
         if apply
         else max(0, active_inbox_alerts_before - inbox_candidate_alert_count)
     )
+    telemetry_event_count_after = (
+        len(telemetry_events)
+        if apply
+        else max(0, telemetry_event_count_before - len(telemetry_candidate_indexes))
+    )
+    telemetry_critical_count_after = (
+        count_critical_telemetry_events(telemetry_events)
+        if apply
+        else max(0, telemetry_critical_count_before - len(telemetry_candidate_indexes))
+    )
 
     return {
         "status": "ok",
@@ -768,6 +836,7 @@ def repair_runtime_hygiene(
         "resolve_stale_security_incidents": resolve_stale_security_incidents,
         "archive_test_inbox_messages": archive_test_inbox_messages,
         "archive_stale_presence_briefings": archive_stale_presence_briefings,
+        "prune_stale_test_telemetry_events": prune_stale_test_telemetry_events,
         "min_age_hours": normalized_min_age_hours,
         "max_rows": normalized_limit,
         "missions": {
@@ -844,6 +913,18 @@ def repair_runtime_hygiene(
             "presence_briefing_archive": {
                 "candidate_count": len(inbox_presence_candidate_indexes),
                 "archived_ids": archived_presence_inbox_ids[:10],
+            },
+        },
+        "telemetry": {
+            "event_count_before": telemetry_event_count_before,
+            "event_count_after": telemetry_event_count_after,
+            "critical_count_before": telemetry_critical_count_before,
+            "critical_count_after": telemetry_critical_count_after,
+            "candidate_count": len(telemetry_candidate_indexes),
+            "dropped_ids": pruned_telemetry_ids[:10],
+            "test_prune": {
+                "candidate_count": len(telemetry_candidate_indexes),
+                "dropped_ids": pruned_telemetry_ids[:10],
             },
         },
     }

@@ -570,7 +570,7 @@ def test_repair_runtime_state_archives_stale_inbox_noise_and_keeps_latest_briefi
                 "body": (
                     "Attention required: 2 alerts in your inbox.\n\n"
                     "- Inbox: 2 total  2 alerts\n"
-                    "- Missions: 5 active\n"
+                    "- Last action: presence.state @ 2026-03-20T00:00:00+00:00\n"
                     "- Recommendation: open the inbox and clear alerts first (highest signal).\n"
                     "- If you want: I can generate a mission plan once you name the target (project/goal)."
                 ),
@@ -594,7 +594,7 @@ def test_repair_runtime_state_archives_stale_inbox_noise_and_keeps_latest_briefi
             },
             {
                 "id": "msg-info",
-                "ts": recent_ts,
+                "ts": "2026-03-20T00:00:00+00:00",
                 "severity": "info",
                 "title": "hello",
                 "body": "world",
@@ -620,9 +620,9 @@ def test_repair_runtime_state_archives_stale_inbox_noise_and_keeps_latest_briefi
     )
 
     inbox_summary = summary["runtime_hygiene_repair"]["inbox"]
-    assert inbox_summary["candidate_count"] == 2
+    assert inbox_summary["candidate_count"] == 3
     assert inbox_summary["active_before"] == 4
-    assert inbox_summary["active_after"] == 2
+    assert inbox_summary["active_after"] == 1
     assert inbox_summary["active_alerts_before"] == 3
     assert inbox_summary["active_alerts_after"] == 1
 
@@ -636,7 +636,86 @@ def test_repair_runtime_state_archives_stale_inbox_noise_and_keeps_latest_briefi
     assert old_brief["status"] == "archived"
     assert old_brief["repair_reason"] == "runtime_repair:presence_briefing"
     assert new_brief["status"] == "open"
-    assert info_row["status"] == "open"
+    assert info_row["status"] == "archived"
+    assert info_row["repair_reason"] == "runtime_repair:test_inbox"
+
+
+def test_repair_runtime_state_prunes_stale_test_telemetry_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _bind_temp_workspace(monkeypatch, tmp_path)
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    _write_jsonl(
+        workspace / "telemetry" / "events.jsonl",
+        [
+            {
+                "id": "telemetry-old-pytest",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "ingested_at": "2026-03-20T00:00:01+00:00",
+                "run_id": "telemetry-old-pytest",
+                "kind": "telemetry.event",
+                "stream": "dev_server",
+                "source": "pytest",
+                "severity": "critical",
+                "text": "dev_server:api:critical :: service crashed",
+                "fields": {"service": "api", "port": 8000, "level": "critical", "message": "service crashed"},
+            },
+            {
+                "id": "telemetry-old-real",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "ingested_at": "2026-03-20T00:00:01+00:00",
+                "run_id": "telemetry-old-real",
+                "kind": "telemetry.event",
+                "stream": "dev_server",
+                "source": "orchestrator",
+                "severity": "critical",
+                "text": "real service outage",
+                "fields": {"service": "api"},
+            },
+            {
+                "id": "telemetry-recent-pytest",
+                "ts": recent_ts,
+                "ingested_at": recent_ts,
+                "run_id": "telemetry-recent-pytest",
+                "kind": "telemetry.event",
+                "stream": "terminal",
+                "source": "pytest",
+                "severity": "error",
+                "text": "recent pytest stderr",
+                "fields": {"command": "pytest -q"},
+            },
+        ],
+    )
+
+    summary = worker_main.repair_runtime_state(
+        run_id="repair-run",
+        trace_id="repair-trace",
+        apply=True,
+        normalize_mission_queue=False,
+        cancel_stale_synthetic_missions=False,
+        archive_test_deadletters=False,
+        archive_stale_unsupported_deadletters=False,
+        replay_timeout_deadletters=False,
+        resolve_test_incidents=False,
+        resolve_stale_security_incidents=False,
+        archive_test_inbox_messages=False,
+        archive_stale_presence_briefings=False,
+        prune_stale_test_telemetry_events=True,
+        min_age_hours=24,
+    )
+
+    telemetry_summary = summary["runtime_hygiene_repair"]["telemetry"]
+    assert telemetry_summary["candidate_count"] == 1
+    assert telemetry_summary["event_count_before"] == 3
+    assert telemetry_summary["event_count_after"] == 2
+    assert telemetry_summary["critical_count_before"] == 2
+    assert telemetry_summary["critical_count_after"] == 1
+    assert telemetry_summary["dropped_ids"] == ["telemetry-old-pytest"]
+
+    telemetry_rows = _read_jsonl(workspace / "telemetry" / "events.jsonl")
+    telemetry_ids = {str(row.get("id", "")).strip() for row in telemetry_rows}
+    assert telemetry_ids == {"telemetry-old-real", "telemetry-recent-pytest"}
 
 
 def test_repair_runtime_state_cancels_stale_synthetic_missions_and_supersedes_jobs(

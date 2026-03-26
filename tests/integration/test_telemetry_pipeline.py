@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import TELEMETRY_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _workspace_root() -> Path:
@@ -87,6 +89,12 @@ def _set_telemetry_config(client: TestClient, payload: dict) -> dict:
     response = client.put("/telemetry/config", json=payload)
     assert response.status_code == 200
     return response.json()["config"]
+
+
+@pytest.fixture(autouse=True)
+def _isolated_telemetry_workspace() -> None:
+    with isolated_workspace_files(TELEMETRY_RUNTIME_PATHS):
+        yield
 
 
 def test_telemetry_disabled_ingest_is_ignored() -> None:

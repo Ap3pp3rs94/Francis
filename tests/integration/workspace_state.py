@@ -6,6 +6,10 @@ from typing import Iterable, Iterator
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2] / "workspace"
 
+INBOX_RUNTIME_PATHS = (
+    "inbox/messages.jsonl",
+)
+
 MISSION_RUNTIME_PATHS = (
     "missions/missions.json",
     "missions/history.jsonl",
@@ -37,6 +41,12 @@ SECURITY_RUNTIME_PATHS = (
     "journals/decisions.jsonl",
     "runs/run_ledger.jsonl",
     "apprenticeship/sessions.json",
+)
+
+TELEMETRY_RUNTIME_PATHS = (
+    "telemetry/config.json",
+    "telemetry/events.jsonl",
+    "autonomy/events.jsonl",
 )
 
 
