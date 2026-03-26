@@ -51,8 +51,8 @@ The current state is best described as:
 
 * broad alpha coverage with real operator/runtime surfaces already wired
 * active release-hardening and productization work, especially around queue health, incident noise, verification discipline, and packaging reliability
-* governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, and malformed queued job cleanup
-* current estimated completion is `83%` overall, `91%` for feature/build coverage, and `72%` for production readiness
+* governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, and malformed queued job cleanup, and observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open
+* current estimated completion is `84%` overall, `91%` for feature/build coverage, and `74%` for production readiness
 
 The current shipped, hardened, partial, and blocked surfaces are tracked in [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
 
@@ -236,7 +236,7 @@ The most reliable verification lanes right now are:
 
 * `npm run release:hardening`
 * `ruff check .`
-* `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py`
+* `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py tests/unit/test_observer_baselines.py`
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
 * `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py`
@@ -247,7 +247,7 @@ The most reliable verification lanes right now are:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the full-suite lane, but the commands above are the current hardening-smoke lanes for queue, observer, security quarantine, inbox/presence state, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
+`pytest -q` remains the full-suite lane, but the commands above are the current hardening-smoke lanes for queue, observer, observer-baseline normalization, security quarantine, inbox/presence state, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
 
 ### Runtime state
 
