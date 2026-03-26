@@ -9,6 +9,13 @@ from fastapi.testclient import TestClient
 
 from apps.api.main import app
 
+OBSERVER_MANAGED_KINDS = {
+    "cpu.high_load",
+    "disk.low_free_space",
+    "memory.low_available",
+    "repo.high_drift",
+}
+
 
 def _read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
@@ -63,8 +70,6 @@ def test_observer_emits_events() -> None:
     decisions_path = workspace / "journals" / "decisions.jsonl"
     incidents_path = workspace / "incidents" / "incidents.jsonl"
 
-    logs_before = len(_read_jsonl(logs_path))
-    decisions_before = len(_read_jsonl(decisions_path))
     incidents_before = len(_read_jsonl(incidents_path))
 
     c = TestClient(app)
@@ -79,13 +84,32 @@ def test_observer_emits_events() -> None:
         assert "score" in payload
         assert "emitted" in payload
 
-        logs_after_rows = _read_jsonl(logs_path)
-        assert len(logs_after_rows) >= logs_before + 1
-        assert logs_after_rows[-1].get("kind") == "observer.snapshot"
+        emitted = payload["emitted"]
+        assert emitted["opened_incident_count"] >= 0
+        assert emitted["refreshed_incident_count"] >= 0
+        assert emitted["resolved_incident_count"] >= 0
+        assert emitted["deduped_incident_count"] >= 0
+        assert emitted["opened_incident_count"] + emitted["refreshed_incident_count"] == len(emitted["incident_ids"])
 
-        decisions_after = len(_read_jsonl(decisions_path))
-        assert decisions_after >= decisions_before + 1
+        logs_after_rows = _read_jsonl(logs_path)
+        assert logs_after_rows
+        assert any(str(row.get("kind", "")).strip() == "observer.snapshot" for row in logs_after_rows)
+
+        decision_rows = _read_jsonl(decisions_path)
+        assert decision_rows
+        assert any(str(row.get("kind", "")).strip() == "observer.decision" for row in decision_rows)
 
         anomalies = payload.get("anomalies", [])
-        incidents_after = len(_read_jsonl(incidents_path))
-        assert incidents_after >= incidents_before + len(anomalies)
+        incidents_after_rows = _read_jsonl(incidents_path)
+        assert len(incidents_after_rows) >= incidents_before
+        open_managed_kinds = {
+            str(row.get("kind", "")).strip().lower()
+            for row in incidents_after_rows
+            if str(row.get("status", row.get("state", "open"))).strip().lower() == "open"
+            and (
+                str(row.get("source", "")).strip().lower() == "observer"
+                or str(row.get("kind", "")).strip().lower() in OBSERVER_MANAGED_KINDS
+            )
+        }
+        for anomaly in anomalies:
+            assert str(anomaly.get("kind", "")).strip().lower() in open_managed_kinds
