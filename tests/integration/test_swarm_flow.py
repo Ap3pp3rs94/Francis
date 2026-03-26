@@ -3,9 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import SWARM_RUNTIME_PATHS, isolated_workspace_files
+
+
+@pytest.fixture(autouse=True)
+def _isolated_swarm_runtime() -> None:
+    with isolated_workspace_files(SWARM_RUNTIME_PATHS):
+        yield
 
 
 def _get_mode(client: TestClient) -> dict:

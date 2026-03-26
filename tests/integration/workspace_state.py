@@ -95,6 +95,16 @@ PORTABILITY_RUNTIME_PATHS = (
     "telemetry/config.json",
 )
 
+SWARM_RUNTIME_PATHS = (
+    "journals/decisions.jsonl",
+    "journals/fs.jsonl",
+    "logs/francis.log.jsonl",
+    "runs/run_ledger.jsonl",
+    "swarm/deadletter.jsonl",
+    "swarm/delegations.jsonl",
+    "swarm/units.json",
+)
+
 APPEND_ONLY_RUNTIME_PATHS = {
     "control/handback_exports/index.jsonl",
     "control/takeover_activity.jsonl",

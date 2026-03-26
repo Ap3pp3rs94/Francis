@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -246,6 +247,33 @@ def _normalize_unit_registry(
     ]
 
 
+def _unit_id(row: dict[str, Any]) -> str:
+    return _normalize_text(str(row.get("unit_id", "")), max_length=80).lower()
+
+
+def _merge_units_with_canonical_defaults(
+    current_units: list[dict[str, Any]],
+    canonical_units: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    current_by_id = {_unit_id(row): row for row in current_units if _unit_id(row)}
+
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in canonical_units:
+        unit_id = _unit_id(row)
+        if not unit_id:
+            continue
+        merged.append(deepcopy(current_by_id.get(unit_id, row)))
+        seen.add(unit_id)
+    for row in current_units:
+        unit_id = _unit_id(row)
+        if not unit_id or unit_id in seen:
+            continue
+        merged.append(deepcopy(row))
+        seen.add(unit_id)
+    return merged
+
+
 def load_or_init_units(
     fs: WorkspaceFS,
     *,
@@ -253,23 +281,37 @@ def load_or_init_units(
     workspace_root: Path,
 ) -> list[dict[str, Any]]:
     payload = _read_json(fs, SWARM_UNITS_PATH, {})
+    canonical_units = _normalize_unit_registry(repo_root, workspace_root)
+    canonical_ids = {_unit_id(row) for row in canonical_units if _unit_id(row)}
     if isinstance(payload, dict):
         rows = payload.get("units", []) if isinstance(payload.get("units"), list) else []
         units = [row for row in rows if isinstance(row, dict)]
         if units:
-            return units
+            current_ids = [_unit_id(row) for row in units if _unit_id(row)]
+            if canonical_ids.issubset(set(current_ids)) and len(current_ids) == len(set(current_ids)):
+                return units
+            merged_units = _merge_units_with_canonical_defaults(units, canonical_units)
+            _write_json(
+                fs,
+                SWARM_UNITS_PATH,
+                {
+                    "version": int(payload.get("version", 1) or 1),
+                    "updated_at": utc_now_iso(),
+                    "units": merged_units,
+                },
+            )
+            return merged_units
 
-    units = _normalize_unit_registry(repo_root, workspace_root)
     _write_json(
         fs,
         SWARM_UNITS_PATH,
         {
             "version": 1,
             "updated_at": utc_now_iso(),
-            "units": units,
+            "units": canonical_units,
         },
     )
-    return units
+    return canonical_units
 
 
 def _find_unit(units: list[dict[str, Any]], unit_id: str) -> dict[str, Any] | None:
