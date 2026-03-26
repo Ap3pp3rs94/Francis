@@ -15,6 +15,9 @@
 - Mission queue normalization now supersedes orphaned `mission.tick` jobs that reference missing missions instead of leaving them queued indefinitely.
 - Isolated the remaining mission-writing integration files that still used the live workspace, so older runs stop rebuilding synthetic mission backlog during autonomy, runs, receipts, control, tools, and trace tests.
 - Applied the synthetic mission cleanup path against the live workspace, cancelling `849` stale test missions, superseding `848` queued `mission.tick` jobs, and reducing active mission pressure from `849` to `0` with one residual non-mission queued job left.
+- Governed runtime repair now also supersedes stale malformed queued `skill.run` rows and resolves stale quarantine-generated `security.untrusted_input` incidents from the bounded security/red-team lanes with explicit repair reasons and receipt metadata.
+- Shared-workspace security quarantine and red-team tests now snapshot and restore their runtime artifacts instead of leaving synthetic incident residue behind, and `npm run release:hardening` now includes that security-hardening lane.
+- Applied the governed incident/queue cleanup path against the live workspace, reducing open incidents from `12` to `2` and removing the final malformed queued `skill.run` so queue-due pressure is now `0`.
 - Verified `ruff check .`, focused mission/observer pytest lanes, `npm run overlay:test`, `npm run overlay:prepare-runtime`, `npm run overlay:pack`, and `npm run overlay:installer`.
 - Added a bounded `npm run release:hardening` lane so the current release-hardening checks are runnable as one command, and isolated the shared-workspace integration smoke tests so the lane now preserves live workspace counters before and after execution, including the new presence/inbox hardening step.
 - Added a completion ledger under `docs/operations/COMPLETION_LEDGER.md` and updated README/workspace docs to reflect current maturity and verification lanes.

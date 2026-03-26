@@ -1,21 +1,21 @@
 # Completion Ledger
 
-Snapshot date: `2026-03-25`
+Snapshot date: `2026-03-26`
 
 This ledger tracks repo reality, not roadmap aspiration. Francis is already a substantial operator system. The current posture is broad alpha coverage with real runtime, governance, HUD, worker, and packaging surfaces in place, but with productization debt still concentrated in runtime health, backlog control, and release packaging.
 
 Estimated completion:
 
-* overall: `~70%`
-* feature and build coverage: `~80%`
-* production readiness: `~55%`
+* overall: `83%`
+* feature and build coverage: `91%`
+* production readiness: `72%`
 
-Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, and release-lane verification on `2026-03-25`:
+Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
 * active missions: `0`
-* queued mission jobs / queue due: `1`
+* queued mission jobs / queue due: `0`
 * deadletters: `0`
-* open incidents: `12`
+* open incidents: `2`
 * critical open incidents: `0`
 * active inbox messages: `205`
 * inbox alerts: `28`
@@ -42,19 +42,22 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Inbox hygiene: presence briefings now reuse a managed inbox message instead of appending a fresh system alert on every `/presence/briefing`, and inbox counts now ignore archived, resolved, acknowledged, or superseded rows.
 * Mission hygiene: governed runtime repair now cancels stale synthetic missions from shared-workspace integration residue, supersedes their queued `mission.tick` jobs, and records the affected mission/job ids in repair receipts.
 * Queue integrity: mission queue normalization now also supersedes orphaned `mission.tick` jobs that reference missing missions instead of leaving them due forever.
+* Queue hygiene: governed runtime repair now supersedes stale malformed queued `skill.run` rows that have no executable skill payload instead of leaving them due indefinitely.
 * Operator traceability: mission and worker results now carry queue-repair summaries, replayed job IDs, and repair reasons so cleanup and replay operations are inspectable after the fact.
 * Backlog drainage: the live repair pass archived `93` stale unsupported deadletters, replayed `88` stale timeout deadletters, resolved `283` stale security probe incidents, and then drained the replayed forge backlog back to the mission baseline queue.
 * Backlog drainage: the governed inbox cleanup pass archived `1628` stale synthetic inbox rows and reduced live inbox alerts from `1656` to `28` without changing the active mission baseline queue.
 * Backlog drainage: the governed synthetic-mission cleanup pass cancelled `849` stale test missions, superseded `848` queued `mission.tick` jobs, and brought active mission pressure from `849` to `0` with only a single non-mission queued job left.
-* Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, and presence/inbox state, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
+* Backlog drainage: the governed incident/queue cleanup pass resolved the final `10` stale quarantine-generated security incidents, superseded the last malformed queued `skill.run`, and brought live due-queue pressure from `1` to `0` while leaving only `2` real observer incidents open.
+* Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
+* Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
 * Documentation truthfulness: changelog, README, roadmap framing, and workspace guidance now reflect a real build under productization instead of a scaffold claim.
 
 ## Partial
 
-* Runtime backlog drainage is materially improved, but the live workspace still carries `12` open incidents, `28` active inbox alerts, and one queued `skill.run` job that still need controlled cleanup or operational handling.
+* Runtime backlog drainage is materially improved, but the live workspace still carries `2` real observer incidents and `28` active inbox alerts that still need operational handling or threshold tuning.
 * Deadletter discipline is now materially stronger, but replay/archive still runs as an explicit operator action rather than a scheduled housekeeping policy.
-* Incident posture is much cleaner, but inbox pressure and residual queued non-mission work now dominate day-to-day runtime pressure.
+* Incident posture is much cleaner, but inbox pressure and telemetry critical residue now dominate day-to-day runtime pressure.
 * Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
 * Verification structure is materially better, but the full `pytest -q` lane is still slower and less decisive than the focused lanes.
 
@@ -78,6 +81,7 @@ Use these commands as the current release-hardening lanes:
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py`
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
+* `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py`
 * `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`
 * `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter"`
 * `npm run overlay:test`
