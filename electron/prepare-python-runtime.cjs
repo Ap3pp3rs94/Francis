@@ -88,14 +88,17 @@ function copySitePackages(venvSitePackages, runtimeRoot) {
   const targetSitePackages = path.join(runtimeRoot, "Lib", "site-packages");
   fs.mkdirSync(targetSitePackages, { recursive: true });
 
-  for (const entry of fs.readdirSync(venvSitePackages, { withFileTypes: true })) {
-    if (shouldExcludeSitePackageEntry(entry.name)) {
-      continue;
-    }
+  const entries = fs
+    .readdirSync(venvSitePackages, { withFileTypes: true })
+    .filter((entry) => !shouldExcludeSitePackageEntry(entry.name));
+  log("Copying site-packages", { entryCount: entries.length });
+
+  entries.forEach((entry, index) => {
+    log(`Copying site-packages entry ${index + 1}/${entries.length}: ${entry.name}`);
     const sourcePath = path.join(venvSitePackages, entry.name);
     const targetPath = path.join(targetSitePackages, entry.name);
     fs.cpSync(sourcePath, targetPath, { recursive: true, force: true });
-  }
+  });
 }
 
 function verifyBundledRuntime(runtimeRoot, sourceRoot) {
@@ -161,9 +164,13 @@ function main() {
   fs.mkdirSync(runtimeRoot, { recursive: true });
 
   copyRuntimeRootFiles(pythonHome, runtimeRoot);
+  log("Copied runtime root files");
   copyStdlib(pythonHome, runtimeRoot);
+  log("Copied stdlib");
   copyDlls(pythonHome, runtimeRoot);
+  log("Copied DLLs");
   copySitePackages(venvSitePackages, runtimeRoot);
+  log("Copied site-packages");
   verifyBundledRuntime(runtimeRoot, sourceRoot);
 
   log("Bundled Python runtime is ready", {

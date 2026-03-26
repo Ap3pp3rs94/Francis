@@ -71,6 +71,7 @@ That PowerShell helper checks the HUD URL first and, if it is down, lets the Ele
 
 The packaged shell includes the Francis HUD Python source under `resources/python-src` and will attempt to boot it locally when no HUD server is already running.
 Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / `overlay:dist` do it for you. That stages a bundled Python runtime under `dist/python-runtime-staging` and packages it as `resources/python-runtime`.
+The first staging run can take a while because it copies the embedded runtime, stdlib, DLLs, and site-packages; the script now emits explicit progress so long Windows copies are visible instead of looking hung.
 
 ## Assumptions
 
