@@ -6,9 +6,9 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `85%`
+* overall: `86%`
 * feature and build coverage: `92%`
-* production readiness: `78%`
+* production readiness: `79%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -57,6 +57,8 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
 * Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
+* Shared-workspace discipline: portability, receipts-lens, and lens-usage integration files now isolate their runtime write sets, prune new handback-export artifacts, and stop depending on ad hoc manual cleanup when run serially.
+* Verification discipline: the repo now exposes `npm run test:full:first-failure` for serial full-suite triage, and the formerly dirty portability/receipts/lens nodes now pass together in a single serial pytest process.
 * Documentation truthfulness: changelog, README, roadmap framing, and workspace guidance now reflect a real build under productization instead of a scaffold claim.
 
 ## Partial
@@ -65,7 +67,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Deadletter discipline is now materially stronger, but replay/archive still runs as an explicit operator action rather than a scheduled housekeeping policy.
 * Incident, inbox, and telemetry posture are now quiet, so the remaining productization risk is release confidence and distribution trust rather than day-to-day runtime noise.
 * Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
-* Verification structure is materially better, but the full `pytest -q` lane is still slower and less decisive than the focused lanes.
+* Verification structure is materially better, but the full `pytest -q` lane is still slower than the focused lanes and the serial full-suite story is only partially confirmed beyond the former early-failure band.
 
 ## Missing
 
@@ -83,6 +85,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 Use these commands as the current release-hardening lanes:
 
 * `npm run release:hardening`
+* `npm run test:full:first-failure`
 * `ruff check .`
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py tests/unit/test_observer_baselines.py`
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
@@ -96,4 +99,4 @@ Use these commands as the current release-hardening lanes:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the full-suite lane and should still be treated as the release-wide check once its runtime and reliability are tightened further.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and it has already progressed cleanly through the former early-failure band on `2026-03-26`. Full-suite completion time is still not bounded tightly enough to claim routine green release confidence.

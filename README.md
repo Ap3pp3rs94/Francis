@@ -52,7 +52,7 @@ The current state is best described as:
 * broad alpha coverage with real operator/runtime surfaces already wired
 * active release-hardening and productization work, especially around queue health, incident noise, verification discipline, and packaging reliability
 * governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, malformed queued job cleanup, stale synthetic inbox cleanup, and stale pytest telemetry cleanup, and observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open
-* current estimated completion is `85%` overall, `92%` for feature/build coverage, and `78%` for production readiness
+* current estimated completion is `86%` overall, `92%` for feature/build coverage, and `79%` for production readiness
 
 The current shipped, hardened, partial, and blocked surfaces are tracked in [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
 
@@ -235,6 +235,7 @@ The repo includes:
 The most reliable verification lanes right now are:
 
 * `npm run release:hardening`
+* `npm run test:full:first-failure`
 * `ruff check .`
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py tests/unit/test_observer_baselines.py`
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
@@ -248,7 +249,9 @@ The most reliable verification lanes right now are:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the full-suite lane, but the commands above are the current hardening-smoke lanes for queue, inbox, telemetry, observer, observer-baseline normalization, security quarantine, inbox/presence state, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is now the supported full-suite triage lane because it fails fast without requiring a complete long-running pass before the first useful answer. The commands above are the current hardening-smoke lanes for queue, inbox, telemetry, observer, observer-baseline normalization, security quarantine, inbox/presence state, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
+
+Shared-workspace integration files also need to stay serial. The previously dirty portability, receipts-lens, and lens-usage nodes now pass in one serial pytest process, but they are still too slow and stateful to treat as safe parallel smoke tests against the live workspace.
 
 ### Runtime state
 

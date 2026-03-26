@@ -26,4 +26,6 @@
 - Applied the governed inbox and telemetry cleanup path against the live workspace, reducing active inbox messages from `205` to `0`, inbox alerts from `28` to `0`, and telemetry critical residue from `1` to `0`.
 - Verified `ruff check .`, focused mission/observer pytest lanes, `npm run overlay:test`, `npm run overlay:prepare-runtime`, `npm run overlay:pack`, and `npm run overlay:installer`.
 - Added a bounded `npm run release:hardening` lane so the current release-hardening checks are runnable as one command, and isolated the shared-workspace integration smoke tests so the lane now preserves live workspace counters before and after execution, including the new presence/inbox hardening step.
+- Portability, receipts-lens, and lens-usage integration files now isolate their runtime write sets through the shared workspace-state helper, and receipts-lens teardown now prunes only newly created handback-export artifacts instead of snapshotting the entire export history on every test.
+- Added `npm run test:full:first-failure` as the supported serial full-suite triage lane, and revalidated the formerly dirty portability/receipts/lens nodes together in one serial pytest process (`4 passed in 572.73s`).
 - Added a completion ledger under `docs/operations/COMPLETION_LEDGER.md` and updated README/workspace docs to reflect current maturity and verification lanes.
