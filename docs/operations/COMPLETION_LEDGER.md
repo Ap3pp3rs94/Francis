@@ -6,9 +6,9 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `88%`
+* overall: `89%`
 * feature and build coverage: `92%`
-* production readiness: `82%`
+* production readiness: `84%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -53,6 +53,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Inbox hygiene: governed runtime repair now archives stale unkeyed inbox test residue such as legacy `hello/world` rows and pre-managed presence briefings instead of leaving them active forever.
 * Telemetry hygiene: governed runtime repair now prunes stale `source=pytest` telemetry rows so synthetic verification crashes stop keeping `telemetry.critical_present` alive after the run that created them.
 * Backlog drainage: the governed inbox and telemetry cleanup pass archived the final `205` stale inbox rows and pruned the final `3` stale pytest telemetry rows, bringing active inbox pressure from `205` to `0`, inbox alerts from `28` to `0`, and telemetry critical residue from `1` to `0`.
+* Scheduled housekeeping: the autonomy reactor now previews stale runtime-hygiene debt, emits a `runtime.hygiene_due` signal, budgets a low-risk `worker.repair` action, and executes the existing governed cleanup path through normal autonomy receipts instead of leaving hygiene as a purely manual operator action.
 * Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, inbox/telemetry shared-workspace isolation, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
@@ -66,8 +67,8 @@ These counts come from the live event reactor and presence surfaces and now use 
 
 ## Partial
 
-* Runtime backlog drainage is materially improved and the live workspace is now quiet by default, but that posture still depends on explicit governed cleanup and bounded verification discipline rather than a scheduled housekeeping policy.
-* Deadletter discipline is now materially stronger, but replay/archive still runs as an explicit operator action rather than a scheduled housekeeping policy.
+* Runtime backlog drainage is materially improved and the live workspace is now quiet by default, with governed cleanup now available both as an explicit operator action and as a budgeted autonomy housekeeping action. The remaining risk is keeping those policies narrow and routine rather than inventing broader self-directed cleanup.
+* Deadletter discipline is now materially stronger, but timeout replay still remains an explicit operator action rather than a scheduled housekeeping policy.
 * Incident, inbox, and telemetry posture are now quiet, so the remaining productization risk is release confidence and distribution trust rather than day-to-day runtime noise.
 * Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
 * Verification structure is materially better, but the full `pytest -q` lane is still slower than the focused lanes and a single fresh monolithic rerun on the final code state is still optional if you want one-command proof instead of segmented confirmation.
@@ -93,6 +94,7 @@ Use these commands as the current release-hardening lanes:
 * `ruff check .`
 * `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py tests/unit/test_observer_baselines.py`
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
+* `pytest -q tests/unit/test_telemetry_reactor.py::test_event_reactor_surfaces_runtime_hygiene_signal tests/unit/test_telemetry_reactor.py::test_decision_engine_selects_worker_repair_when_runtime_hygiene_due tests/integration/test_autonomy_cycle.py::test_autonomy_can_execute_worker_repair_when_runtime_hygiene_due tests/integration/test_autonomy_events.py::test_autonomy_collect_events_enqueues_runtime_hygiene_signal`
 * `pytest -q tests/integration/test_inbox_pipeline.py tests/integration/test_telemetry_pipeline.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
 * `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py`
@@ -103,4 +105,4 @@ Use these commands as the current release-hardening lanes:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and `npm run test:full:stepwise` is the current resume command for continuing from the last failure point without replaying the already-confirmed prefix. Full-suite completion time is lower at the old serial hot spots, and the remaining tail now passes through the saved stepwise state, but the lane is still too long to call routine green release confidence cheap.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and `npm run test:full:stepwise` is the current resume command for continuing from the last failure point without replaying the already-confirmed prefix. Full-suite completion time is lower at the old serial hot spots, the remaining tail now passes through the saved stepwise state, and the bounded hardening lane now also exercises autonomy housekeeping, but the monolithic lane is still too long to call routine green release confidence cheap.
