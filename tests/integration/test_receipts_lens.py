@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+import shutil
 import time
 from uuid import uuid4
 
@@ -20,7 +21,11 @@ from services.orchestrator.app.control_state import (
 )
 import services.orchestrator.app.routes.control as control_routes
 import services.orchestrator.app.routes.lens as lens_routes
-from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
+from tests.integration.workspace_state import (
+    MISSION_RUNTIME_PATHS,
+    RECEIPTS_LENS_RUNTIME_PATHS,
+    isolated_workspace_files,
+)
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -190,6 +195,34 @@ def _live_lens_routes() -> None:
     finally:
         _restore_lens_routes(lens_previous)
         _restore_control_routes(control_previous)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_receipts_workspace() -> None:
+    with isolated_workspace_files(RECEIPTS_LENS_RUNTIME_PATHS):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _prune_new_handback_exports() -> None:
+    exports_root = Path(__file__).resolve().parents[2] / "workspace" / "control" / "handback_exports"
+    baseline = {path.relative_to(exports_root).as_posix() for path in exports_root.rglob("*")} if exports_root.exists() else set()
+    try:
+        yield
+    finally:
+        if not exports_root.exists():
+            return
+        current_paths = sorted(exports_root.rglob("*"), key=lambda path: len(path.parts), reverse=True)
+        for path in current_paths:
+            relative = path.relative_to(exports_root).as_posix()
+            if relative in baseline:
+                continue
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        if not baseline and exports_root.exists() and not any(exports_root.iterdir()):
+            exports_root.rmdir()
 
 
 def test_receipts_and_run_lookup() -> None:

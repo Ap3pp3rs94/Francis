@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Iterable, Iterator
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2] / "workspace"
@@ -49,6 +51,50 @@ TELEMETRY_RUNTIME_PATHS = (
     "autonomy/events.jsonl",
 )
 
+LENS_USAGE_RUNTIME_PATHS = (
+    "apprenticeship/sessions.json",
+    "approvals/requests.jsonl",
+    "forge/catalog.json",
+    "journals/decisions.jsonl",
+    "journals/fs.jsonl",
+    "lens/repo_drilldown.json",
+    "runs/run_ledger.jsonl",
+    "telemetry/events.jsonl",
+)
+
+RECEIPTS_LENS_RUNTIME_PATHS = MISSION_RUNTIME_PATHS + (
+    "autonomy/action_budget_state.json",
+    "autonomy/events.jsonl",
+    "autonomy/last_dispatch.json",
+    "autonomy/last_tick.json",
+    "autonomy/reactor_guardrail_state.json",
+    "control/handback_exports/index.jsonl",
+    "control/takeover.json",
+    "control/takeover_activity.jsonl",
+    "journals/fs.jsonl",
+    "lens/repo_drilldown.json",
+)
+
+PORTABILITY_RUNTIME_PATHS = (
+    "approvals/requests.jsonl",
+    "control/handback_exports",
+    "control/takeover.json",
+    "federation/topology.json",
+    "forge/catalog.json",
+    "journals/decisions.jsonl",
+    "journals/fs.jsonl",
+    "logs/francis.log.jsonl",
+    "managed_copies/deltas.jsonl",
+    "managed_copies/registry.json",
+    "missions/history.jsonl",
+    "missions/missions.json",
+    "portability",
+    "runs/run_ledger.jsonl",
+    "swarm/delegations.jsonl",
+    "swarm/units.json",
+    "telemetry/config.json",
+)
+
 
 def _stash(path: Path) -> str | None:
     if not path.exists():
@@ -65,12 +111,45 @@ def _restore(path: Path, content: str | None) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+
+
+@contextmanager
+def isolated_workspace_paths(rel_paths: Iterable[str]) -> Iterator[None]:
+    paths = [WORKSPACE_ROOT / rel_path for rel_path in rel_paths]
+    with tempfile.TemporaryDirectory(prefix="francis-workspace-state-") as temp_dir:
+        stash_root = Path(temp_dir)
+        snapshots: list[tuple[Path, str, Path | None]] = []
+        for index, path in enumerate(paths):
+            if path.is_dir():
+                stash_path = stash_root / str(index)
+                shutil.copytree(path, stash_path)
+                snapshots.append((path, "dir", stash_path))
+            elif path.exists():
+                stash_path = stash_root / str(index)
+                stash_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, stash_path)
+                snapshots.append((path, "file", stash_path))
+            else:
+                snapshots.append((path, "missing", None))
+        try:
+            yield
+        finally:
+            for path, kind, stash_path in snapshots:
+                _remove_path(path)
+                if kind == "dir" and stash_path is not None:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(stash_path, path)
+                elif kind == "file" and stash_path is not None:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(stash_path, path)
+
+
 @contextmanager
 def isolated_workspace_files(rel_paths: Iterable[str]) -> Iterator[None]:
-    paths = [(WORKSPACE_ROOT / rel_path) for rel_path in rel_paths]
-    snapshots = {path: _stash(path) for path in paths}
-    try:
+    with isolated_workspace_paths(rel_paths):
         yield
-    finally:
-        for path, content in snapshots.items():
-            _restore(path, content)

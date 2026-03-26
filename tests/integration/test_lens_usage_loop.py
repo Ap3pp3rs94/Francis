@@ -12,6 +12,7 @@ from francis_core.workspace_fs import WorkspaceFS
 from francis_skills.executor import SkillExecutor
 import services.orchestrator.app.routes.control as control_routes
 import services.orchestrator.app.routes.lens as lens_routes
+from tests.integration.workspace_state import LENS_USAGE_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -131,6 +132,12 @@ def _live_lens_routes() -> None:
     finally:
         _restore_lens_routes(lens_previous)
         _restore_control_routes(control_previous)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_workspace_runtime() -> None:
+    with isolated_workspace_files(LENS_USAGE_RUNTIME_PATHS):
+        yield
 
 
 def _read_text(path: Path) -> str:

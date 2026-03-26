@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("fast", "full", "integration", "redteam", "evals")]
+    [ValidateSet("fast", "full", "full-first-failure", "integration", "redteam", "evals")]
     [string]$Lane = "fast",
     [string[]]$Target = @(),
     [switch]$NoQuiet,
@@ -18,7 +18,7 @@ if ($null -ne $MaxFailures) {
     if ($MaxFailures -gt 0) {
         $args += "--maxfail=$MaxFailures"
     }
-} elseif ($Lane -eq "fast") {
+} elseif ($Lane -in @("fast", "full-first-failure")) {
     $args += "--maxfail=1"
 }
 
@@ -36,6 +36,8 @@ switch ($Lane) {
         $args += @("-m", "evals")
     }
     "full" {
+    }
+    "full-first-failure" {
     }
 }
 
