@@ -34,6 +34,8 @@ AUTONOMY_RUNTIME_PATHS = MISSION_RUNTIME_PATHS + (
     "autonomy/last_tick.json",
     "autonomy/deadletter.jsonl",
     "incidents/incidents.jsonl",
+    "inbox/messages.jsonl",
+    "telemetry/events.jsonl",
 )
 
 SECURITY_RUNTIME_PATHS = (

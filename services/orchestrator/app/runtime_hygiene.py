@@ -443,6 +443,41 @@ def is_stale_test_telemetry_event(
     return reference - ts >= timedelta(hours=max(0, int(min_age_hours)))
 
 
+def preview_runtime_hygiene(
+    fs: WorkspaceFS,
+    *,
+    min_age_hours: int = 24,
+    max_rows: int = 5000,
+) -> dict[str, Any]:
+    return repair_runtime_hygiene(
+        fs,
+        run_id="runtime-hygiene-preview",
+        trace_id="runtime-hygiene-preview",
+        apply=False,
+        min_age_hours=min_age_hours,
+        max_rows=max_rows,
+    )
+
+
+def runtime_hygiene_candidate_breakdown(summary: dict[str, Any]) -> dict[str, int]:
+    breakdown: dict[str, int] = {}
+    for key in ("missions", "queue", "deadletters", "incidents", "inbox", "telemetry"):
+        section = summary.get(key)
+        if not isinstance(section, dict):
+            continue
+        try:
+            count = max(0, int(section.get("candidate_count", 0)))
+        except Exception:
+            count = 0
+        if count > 0:
+            breakdown[key] = count
+    return breakdown
+
+
+def runtime_hygiene_candidate_count(summary: dict[str, Any]) -> int:
+    return sum(runtime_hygiene_candidate_breakdown(summary).values())
+
+
 def repair_runtime_hygiene(
     fs: WorkspaceFS,
     *,

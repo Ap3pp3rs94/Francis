@@ -10,6 +10,7 @@ BUDGET_STATE_PATH = "autonomy/action_budget_state.json"
 DEFAULT_ACTION_POLICIES: dict[str, dict[str, int]] = {
     "observer.scan": {"daily_cap": 500, "cooldown_seconds": 300},
     "worker.cycle": {"daily_cap": 500, "cooldown_seconds": 120},
+    "worker.repair": {"daily_cap": 96, "cooldown_seconds": 1800},
     "mission.tick": {"daily_cap": 2000, "cooldown_seconds": 0},
     "forge.propose": {"daily_cap": 300, "cooldown_seconds": 300},
 }

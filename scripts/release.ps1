@@ -8,6 +8,7 @@ $steps = @(
     @{ Name = "ruff"; Command = @("ruff", "check", ".") },
     @{ Name = "unit-hardening"; Command = @("pytest", "-q", "tests/unit/test_mission_queue_repair.py", "tests/unit/test_runtime_hygiene.py", "tests/unit/test_observer_emitter.py", "tests/unit/test_observer_baselines.py") },
     @{ Name = "presence-hardening"; Command = @("pytest", "-q", "tests/unit/test_presence_state.py", "tests/test_presence_state_grounding.py") },
+    @{ Name = "autonomy-housekeeping"; Command = @("pytest", "-q", "tests/unit/test_telemetry_reactor.py::test_event_reactor_surfaces_runtime_hygiene_signal", "tests/unit/test_telemetry_reactor.py::test_decision_engine_selects_worker_repair_when_runtime_hygiene_due", "tests/integration/test_autonomy_cycle.py::test_autonomy_can_execute_worker_repair_when_runtime_hygiene_due", "tests/integration/test_autonomy_events.py::test_autonomy_collect_events_enqueues_runtime_hygiene_signal") },
     @{ Name = "inbox-telemetry-hardening"; Command = @("pytest", "-q", "tests/integration/test_inbox_pipeline.py", "tests/integration/test_telemetry_pipeline.py") },
     @{ Name = "observer-integration"; Command = @("pytest", "-q", "tests/integration/test_observer_emits_events.py") },
     @{ Name = "security-hardening"; Command = @("pytest", "-q", "tests/integration/test_security_quarantine.py", "tests/redteam/test_prompt_injection.py", "tests/redteam/test_fs_escape_attempts.py") },

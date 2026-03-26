@@ -263,7 +263,7 @@ def _event_signal_policy(event_type: str) -> tuple[str, str]:
         "mission.jobs_queued",
     }:
         return ("high", "medium")
-    if normalized in {"observer.scan_due", "inbox.alerts_present", "worker.queue_backoff"}:
+    if normalized in {"observer.scan_due", "inbox.alerts_present", "worker.queue_backoff", "runtime.hygiene_due"}:
         return ("normal", "low")
     return ("normal", "low")
 

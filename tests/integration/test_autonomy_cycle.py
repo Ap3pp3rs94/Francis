@@ -178,6 +178,75 @@ def test_autonomy_can_select_worker_cycle_when_queue_due() -> None:
         assert "worker.cycle" in executed_kinds
 
 
+def test_autonomy_can_execute_worker_repair_when_runtime_hygiene_due() -> None:
+    with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
+        _clear_budget_state()
+        workspace = _workspace_root()
+        (workspace / "missions").mkdir(parents=True, exist_ok=True)
+        (workspace / "queue").mkdir(parents=True, exist_ok=True)
+        (workspace / "incidents").mkdir(parents=True, exist_ok=True)
+        (workspace / "telemetry").mkdir(parents=True, exist_ok=True)
+        (workspace / "inbox").mkdir(parents=True, exist_ok=True)
+        (workspace / "runs").mkdir(parents=True, exist_ok=True)
+        (workspace / "missions" / "missions.json").write_text(
+            json.dumps({"missions": []}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (workspace / "queue" / "jobs.jsonl").write_text("", encoding="utf-8")
+        (workspace / "incidents" / "incidents.jsonl").write_text("", encoding="utf-8")
+        (workspace / "telemetry" / "events.jsonl").write_text("", encoding="utf-8")
+        (workspace / "runs" / "last_run.json").write_text(
+            json.dumps({"ts": datetime.now(timezone.utc).isoformat()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (workspace / "inbox" / "messages.jsonl").write_text(
+            json.dumps(
+                {
+                    "id": str(uuid4()),
+                    "ts": "2000-01-01T00:00:00+00:00",
+                    "run_id": str(uuid4()),
+                    "severity": "alert",
+                    "source": "test",
+                    "title": "Test Alert",
+                    "body": "Something needs attention",
+                    "status": "open",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        c = TestClient(app)
+        cycle = c.post(
+            "/autonomy/cycle",
+            json={
+                "max_actions": 5,
+                "max_runtime_seconds": 60,
+                "allow_medium": False,
+                "stop_on_critical": False,
+            },
+        )
+        assert cycle.status_code == 200
+        payload = cycle.json()
+        candidate_kinds = [item.get("kind") for item in payload.get("candidate_actions", [])]
+        assert "worker.repair" in candidate_kinds
+        selected_kinds = [item.get("kind") for item in payload.get("selected_actions", [])]
+        assert "worker.repair" in selected_kinds
+        repair_result = next(item for item in payload.get("executed_actions", []) if item.get("kind") == "worker.repair")
+        runtime_hygiene = repair_result.get("result", {}).get("runtime_hygiene_repair", {})
+        assert runtime_hygiene.get("inbox", {}).get("candidate_count", 0) >= 1
+
+        rows = [
+            json.loads(line)
+            for line in (workspace / "inbox" / "messages.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert rows
+        assert rows[0]["status"] == "archived"
+        assert rows[0]["repair_reason"] == "runtime_repair:test_inbox"
+
+
 def test_autonomy_can_select_worker_cycle_when_leases_expired() -> None:
     _clear_budget_state()
     workspace = _workspace_root()

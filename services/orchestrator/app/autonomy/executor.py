@@ -128,6 +128,43 @@ def execute_action(
             "recovered_count": summary.get("recovered_count", 0),
         }
 
+    if kind == "worker.repair":
+        from services.orchestrator.app.runtime_hygiene import runtime_hygiene_candidate_count
+        from services.worker.app.main import repair_runtime_state
+
+        summary = repair_runtime_state(
+            run_id=f"{run_id}:worker-repair:{uuid4()}",
+            trace_id=normalized_trace_id,
+            apply=bool(action.get("apply", True)),
+            normalize_mission_queue=bool(action.get("normalize_mission_queue", True)),
+            cancel_stale_synthetic_missions=bool(action.get("cancel_stale_synthetic_missions", True)),
+            supersede_stale_malformed_skill_jobs=bool(action.get("supersede_stale_malformed_skill_jobs", True)),
+            archive_test_deadletters=bool(action.get("archive_test_deadletters", True)),
+            archive_stale_unsupported_deadletters=bool(action.get("archive_stale_unsupported_deadletters", True)),
+            replay_timeout_deadletters=bool(action.get("replay_timeout_deadletters", False)),
+            resolve_test_incidents=bool(action.get("resolve_test_incidents", True)),
+            resolve_stale_security_incidents=bool(action.get("resolve_stale_security_incidents", True)),
+            archive_test_inbox_messages=bool(action.get("archive_test_inbox_messages", True)),
+            archive_stale_presence_briefings=bool(action.get("archive_stale_presence_briefings", True)),
+            prune_stale_test_telemetry_events=bool(action.get("prune_stale_test_telemetry_events", True)),
+            min_age_hours=int(action.get("min_age_hours", 24)),
+            max_rows=int(action.get("max_rows", 500)),
+        )
+        hygiene_summary = summary.get("runtime_hygiene_repair", {})
+        candidate_count = (
+            runtime_hygiene_candidate_count(hygiene_summary)
+            if isinstance(hygiene_summary, dict)
+            else 0
+        )
+        return {
+            "ok": True,
+            "kind": kind,
+            "ts": ts,
+            "trace_id": normalized_trace_id,
+            "result": summary,
+            "candidate_count": candidate_count,
+        }
+
     return {
         "ok": False,
         "kind": kind,

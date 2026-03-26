@@ -9,6 +9,9 @@ from services.orchestrator.app.runtime_hygiene import (
     count_active_deadletters,
     count_active_inbox_alerts,
     is_open_incident,
+    preview_runtime_hygiene,
+    runtime_hygiene_candidate_breakdown,
+    runtime_hygiene_candidate_count,
 )
 
 
@@ -154,6 +157,13 @@ def collect_events(
         for stream, count in sorted(telemetry_stream_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]
     ]
     last_telemetry = telemetry_rows[-1] if telemetry_rows else None
+    hygiene_preview = preview_runtime_hygiene(fs)
+    hygiene_breakdown = runtime_hygiene_candidate_breakdown(hygiene_preview)
+    hygiene_candidate_count = runtime_hygiene_candidate_count(hygiene_preview)
+    hygiene_categories_top = [
+        {"key": key, "count": count}
+        for key, count in sorted(hygiene_breakdown.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    ]
 
     last_run = _read_json(fs, "runs/last_run.json", {})
     last_run_ts = _parse_ts(last_run.get("ts")) if isinstance(last_run, dict) else None
@@ -201,6 +211,14 @@ def collect_events(
         events.append({"type": "telemetry.errors_present", "count": telemetry_error_count})
     if telemetry_critical_count > 0:
         events.append({"type": "telemetry.critical_present", "count": telemetry_critical_count})
+    if hygiene_candidate_count > 0:
+        events.append(
+            {
+                "type": "runtime.hygiene_due",
+                "count": hygiene_candidate_count,
+                "categories": hygiene_categories_top,
+            }
+        )
 
     return {
         "events": events,
@@ -230,5 +248,8 @@ def collect_events(
         "telemetry_streams_top": telemetry_streams_top,
         "telemetry_last_event_ts": last_telemetry.get("ts") if isinstance(last_telemetry, dict) else None,
         "telemetry_last_event_stream": last_telemetry.get("stream") if isinstance(last_telemetry, dict) else None,
+        "runtime_hygiene_candidate_count": hygiene_candidate_count,
+        "runtime_hygiene_categories_top": hygiene_categories_top,
+        "runtime_hygiene_min_age_hours": hygiene_preview.get("min_age_hours", 24),
         "observer_scan_due": observer_scan_due,
     }

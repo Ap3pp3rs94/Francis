@@ -71,6 +71,31 @@ def test_event_reactor_surfaces_telemetry_signal_fields(tmp_path: Path) -> None:
     assert any(event.get("type") == "telemetry.critical_present" for event in state.get("events", []))
 
 
+def test_event_reactor_surfaces_runtime_hygiene_signal(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    fs = WorkspaceFS(roots=[root], journal_path=root / "journals" / "fs.jsonl")
+    _write_jsonl(
+        root / "inbox" / "messages.jsonl",
+        [
+            {
+                "id": "inbox-1",
+                "ts": "2000-01-01T00:00:00+00:00",
+                "run_id": "r-inbox-1",
+                "severity": "alert",
+                "source": "test",
+                "title": "Test Alert",
+                "body": "Something needs attention",
+                "status": "open",
+            }
+        ],
+    )
+
+    state = collect_events(fs, telemetry_horizon_hours=24)
+    assert state["runtime_hygiene_candidate_count"] == 1
+    assert state["runtime_hygiene_categories_top"] == [{"key": "inbox", "count": 1}]
+    assert any(event.get("type") == "runtime.hygiene_due" for event in state.get("events", []))
+
+
 def test_decision_engine_uses_telemetry_to_trigger_scan_and_forge() -> None:
     event_state = {
         "observer_scan_due": False,
@@ -95,3 +120,37 @@ def test_decision_engine_uses_telemetry_to_trigger_scan_and_forge() -> None:
     kinds = [str(item.get("kind", "")) for item in plan.get("candidate_actions", [])]
     assert "observer.scan" in kinds
     assert "forge.propose" in kinds
+
+
+def test_decision_engine_selects_worker_repair_when_runtime_hygiene_due() -> None:
+    event_state = {
+        "observer_scan_due": False,
+        "critical_incident_count": 0,
+        "telemetry_error_count_horizon": 0,
+        "telemetry_critical_count_horizon": 0,
+        "deadletter_count": 0,
+        "worker_queue_due_count": 0,
+        "worker_leased_expired_count": 0,
+        "active_mission_count": 0,
+        "runtime_hygiene_candidate_count": 3,
+        "runtime_hygiene_categories_top": [
+            {"key": "inbox", "count": 2},
+            {"key": "telemetry", "count": 1},
+        ],
+        "runtime_hygiene_min_age_hours": 24,
+    }
+    intent_state = {"intent_count": 0, "intents": []}
+
+    plan = build_plan(
+        event_state=event_state,
+        intent_state=intent_state,
+        max_actions=5,
+        allow_medium=False,
+        allow_high=False,
+    )
+    repair = next(item for item in plan.get("selected_actions", []) if item.get("kind") == "worker.repair")
+    assert repair["risk_tier"] == "low"
+    assert repair["apply"] is True
+    assert repair["min_age_hours"] == 24
+    assert repair["max_rows"] == 3
+    assert "2 inbox" in str(repair.get("reason", "")).lower()

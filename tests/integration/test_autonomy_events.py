@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -459,6 +460,64 @@ def test_autonomy_collect_events_enqueues_filtered_reactor_signals() -> None:
     finally:
         _restore(_events_file(), events_before)
         _restore(_incidents_file(), incidents_before)
+        _set_scope(c, original_scope)
+        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_autonomy_collect_events_enqueues_runtime_hygiene_signal() -> None:
+    c = TestClient(app)
+    original_mode = _get_mode(c)
+    original_scope = _get_scope(c)
+    test_scope = _scope_with_app(original_scope, "autonomy")
+    events_before = _stash(_events_file())
+    inbox_path = _workspace_root() / "inbox" / "messages.jsonl"
+    inbox_before = _stash(inbox_path)
+    last_run_path = _workspace_root() / "runs" / "last_run.json"
+    last_run_before = _stash(last_run_path)
+
+    try:
+        _set_scope(c, test_scope)
+        _set_mode(c, "pilot", kill_switch=False)
+        _restore(_events_file(), "")
+        _restore(
+            inbox_path,
+            json.dumps(
+                {
+                    "id": "inbox-hygiene-1",
+                    "ts": "2000-01-01T00:00:00+00:00",
+                    "run_id": "r-hygiene-1",
+                    "severity": "alert",
+                    "source": "test",
+                    "title": "Test Alert",
+                    "body": "Something needs attention",
+                    "status": "open",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+        )
+        _restore(
+            last_run_path,
+            json.dumps({"ts": datetime.now(timezone.utc).isoformat()}, ensure_ascii=False),
+        )
+
+        collected = c.post(
+            "/autonomy/events/collect",
+            json={"max_events": 10, "include_types": ["runtime.hygiene_due"]},
+        )
+        assert collected.status_code == 200
+        payload = collected.json()
+        assert payload["status"] == "ok"
+        assert payload["seen_count"] >= 1
+        assert payload["queued_count"] >= 1
+        queued = payload.get("queued", [])
+        assert any(str(item.get("event_type", "")) == "runtime.hygiene_due" for item in queued)
+        queued_signal = next(item for item in queued if str(item.get("event_type", "")) == "runtime.hygiene_due")
+        assert int(queued_signal.get("payload", {}).get("count", 0)) >= 1
+    finally:
+        _restore(_events_file(), events_before)
+        _restore(inbox_path, inbox_before)
+        _restore(last_run_path, last_run_before)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 

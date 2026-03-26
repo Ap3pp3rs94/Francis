@@ -62,6 +62,29 @@ def build_plan(
             }
         )
 
+    runtime_hygiene_candidate_count = int(event_state.get("runtime_hygiene_candidate_count", 0))
+    if runtime_hygiene_candidate_count > 0:
+        hygiene_categories = event_state.get("runtime_hygiene_categories_top", [])
+        hygiene_reason_parts = [
+            f"{int(item.get('count', 0))} {str(item.get('key', '')).strip()}"
+            for item in hygiene_categories
+            if isinstance(item, dict) and str(item.get("key", "")).strip()
+        ]
+        if hygiene_reason_parts:
+            hygiene_reason = "; ".join(hygiene_reason_parts[:3])
+        else:
+            hygiene_reason = f"{runtime_hygiene_candidate_count} stale runtime hygiene candidate(s)"
+        candidates.append(
+            {
+                "kind": "worker.repair",
+                "risk_tier": "low",
+                "apply": True,
+                "min_age_hours": max(0, int(event_state.get("runtime_hygiene_min_age_hours", 24))),
+                "max_rows": min(5000, max(runtime_hygiene_candidate_count, 1)),
+                "reason": "Governed runtime hygiene due: " + hygiene_reason + ".",
+            }
+        )
+
     if worker_queue_due > 0 or worker_leased_expired > 0:
         due_actions = event_state.get("worker_due_actions_top", [])
         action_allowlist = [
