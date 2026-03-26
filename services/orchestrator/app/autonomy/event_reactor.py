@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
+from services.orchestrator.app.runtime_hygiene import count_active_deadletters, is_open_incident
 
 
 def _read_json(fs: WorkspaceFS, rel_path: str, default: object) -> object:
@@ -114,8 +115,9 @@ def collect_events(
     ]
 
     deadletters = _read_jsonl(fs, "queue/deadletter.jsonl")
+    active_deadletter_count = count_active_deadletters(deadletters)
     incidents = _read_jsonl(fs, "incidents/incidents.jsonl")
-    open_incidents = [i for i in incidents if str(i.get("status", "")).lower() == "open"]
+    open_incidents = [i for i in incidents if is_open_incident(i)]
     critical_incidents = [i for i in open_incidents if str(i.get("severity", "")).lower() == "critical"]
 
     inbox_alert_count = sum(
@@ -189,8 +191,8 @@ def collect_events(
                 "max_concurrent_cycles": worker_cycle_max,
             }
         )
-    if deadletters:
-        events.append({"type": "queue.deadletter_present", "count": len(deadletters)})
+    if active_deadletter_count > 0:
+        events.append({"type": "queue.deadletter_present", "count": active_deadletter_count})
     if inbox_alert_count > 0:
         events.append({"type": "inbox.alerts_present", "count": inbox_alert_count})
     if telemetry_error_count > 0:
@@ -215,7 +217,7 @@ def collect_events(
         "worker_last_lease_lost_count": worker_last_lease_lost_count,
         "worker_last_lease_conflict_count": worker_last_lease_conflict_count,
         "worker_last_recovered_count": worker_last_recovered_count,
-        "deadletter_count": len(deadletters),
+        "deadletter_count": active_deadletter_count,
         "open_incident_count": len(open_incidents),
         "critical_incident_count": len(critical_incidents),
         "inbox_alert_count": inbox_alert_count,

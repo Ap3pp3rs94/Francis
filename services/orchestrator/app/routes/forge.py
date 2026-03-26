@@ -24,6 +24,7 @@ from francis_policy.approvals import requires_approval
 from francis_policy.rbac import can
 from services.orchestrator.app.approvals_store import ensure_action_approved
 from services.orchestrator.app.control_state import check_action_allowed
+from services.orchestrator.app.runtime_hygiene import count_active_deadletters, is_open_incident
 
 router = APIRouter(tags=["forge"])
 
@@ -131,9 +132,10 @@ def _read_jsonl(rel_path: str) -> list[dict]:
 
 
 def _build_context() -> dict:
-    deadletter_count = len(_read_jsonl("queue/deadletter.jsonl"))
+    deadletters = _read_jsonl("queue/deadletter.jsonl")
+    deadletter_count = count_active_deadletters(deadletters)
     incidents = _read_jsonl("incidents/incidents.jsonl")
-    open_incidents = sum(1 for item in incidents if str(item.get("status", "")).lower() == "open")
+    open_incidents = sum(1 for item in incidents if is_open_incident(item))
     missions_doc = _read_json("missions/missions.json", {"missions": []})
     missions = missions_doc.get("missions", []) if isinstance(missions_doc, dict) else []
     inactive = {"completed", "failed", "cancelled", "canceled"}

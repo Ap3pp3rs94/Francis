@@ -13,6 +13,8 @@ from francis_brain.ledger import RunLedger
 from francis_core.clock import utc_now_iso
 from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
+from services.orchestrator.app.runtime_hygiene import deadletter_action, is_active_deadletter, repair_runtime_hygiene
+from services.orchestrator.app.routes.missions import normalize_mission_job_queue
 
 from .executors.forge_executor import execute as execute_forge_job
 from .executors.mission_executor import execute as execute_mission_job
@@ -541,6 +543,155 @@ def recover_stale_leased_jobs(
     return summary
 
 
+def repair_runtime_state(
+    *,
+    run_id: str | None = None,
+    trace_id: str | None = None,
+    apply: bool = False,
+    normalize_mission_queue: bool = True,
+    archive_test_deadletters: bool = True,
+    archive_stale_unsupported_deadletters: bool = True,
+    replay_timeout_deadletters: bool = False,
+    resolve_test_incidents: bool = True,
+    resolve_stale_security_incidents: bool = True,
+    min_age_hours: int = 24,
+    max_rows: int = 5000,
+) -> dict[str, Any]:
+    effective_run_id = (run_id or str(uuid4())).strip()
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=effective_run_id)
+    workspace_root = Path(settings.workspace_root).resolve()
+    repo_root = workspace_root.parent.resolve()
+    ensure_local_first(repo_root=repo_root, workspace_root=workspace_root)
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger = RunLedger(fs, rel_path="runs/run_ledger.jsonl")
+
+    def _build_replay_job(deadletter_row: dict[str, Any]) -> dict[str, Any] | None:
+        original_job = deadletter_row.get("job")
+        if not isinstance(original_job, dict):
+            return None
+        action = deadletter_action(deadletter_row)
+        if not action:
+            return None
+        replay_job = {
+            key: value
+            for key, value in original_job.items()
+            if key
+            not in {
+                "id",
+                "status",
+                "attempts",
+                "last_result",
+                "last_error",
+                "lease_key",
+                "lease_owner",
+                "lease_expires_at",
+                "finished_at",
+                "next_run_after",
+                "backoff_seconds",
+            }
+        }
+        action_policy = _action_policy(action)
+        default_max_attempts = _safe_int(action_policy.get("max_attempts", DEFAULT_MAX_ATTEMPTS), DEFAULT_MAX_ATTEMPTS)
+        default_backoff = _safe_int(
+            action_policy.get("base_backoff_seconds", DEFAULT_BACKOFF_SECONDS),
+            DEFAULT_BACKOFF_SECONDS,
+        )
+        replay_job.update(
+            {
+                "id": str(uuid4()),
+                "ts": utc_now_iso(),
+                "run_id": effective_run_id,
+                "trace_id": normalized_trace_id,
+                "action": action,
+                "status": "queued",
+                "attempts": 0,
+                "max_attempts": max(
+                    1,
+                    _safe_int(original_job.get("max_attempts", default_max_attempts), default_max_attempts),
+                    default_max_attempts,
+                ),
+                "base_backoff_seconds": max(
+                    1,
+                    _safe_int(original_job.get("base_backoff_seconds", default_backoff), default_backoff),
+                    default_backoff,
+                ),
+                "lease_key": None,
+                "lease_owner": None,
+                "lease_expires_at": None,
+                "finished_at": None,
+                "next_run_after": None,
+                "last_result": None,
+                "last_error": None,
+                "replayed_from_deadletter_id": deadletter_row.get("id"),
+                "replayed_from_job_id": original_job.get("id"),
+                "repair_run_id": effective_run_id,
+                "repair_trace_id": normalized_trace_id,
+            }
+        )
+        return replay_job
+
+    mission_queue_repair = (
+        normalize_mission_job_queue(run_id=effective_run_id, trace_id=normalized_trace_id)
+        if normalize_mission_queue and apply
+        else {
+            "status": "skipped",
+            "apply": apply,
+            "reason": "mission queue normalization requires apply=true",
+        }
+    )
+    hygiene_repair = repair_runtime_hygiene(
+        fs,
+        run_id=effective_run_id,
+        trace_id=normalized_trace_id,
+        apply=apply,
+        archive_test_deadletters=archive_test_deadletters,
+        archive_stale_unsupported_deadletters=archive_stale_unsupported_deadletters,
+        replay_timeout_deadletters=replay_timeout_deadletters,
+        resolve_test_incidents=resolve_test_incidents,
+        resolve_stale_security_incidents=resolve_stale_security_incidents,
+        min_age_hours=min_age_hours,
+        max_rows=max_rows,
+        build_replay_job=_build_replay_job if replay_timeout_deadletters else None,
+    )
+    summary = {
+        "status": "ok",
+        "run_id": effective_run_id,
+        "trace_id": normalized_trace_id,
+        "apply": apply,
+        "min_age_hours": max(0, min(int(min_age_hours), 24 * 30)),
+        "mission_queue_repair": mission_queue_repair,
+        "runtime_hygiene_repair": hygiene_repair,
+    }
+    _append_jsonl(
+        fs,
+        "journals/decisions.jsonl",
+        {
+            "id": str(uuid4()),
+            "ts": utc_now_iso(),
+            "run_id": effective_run_id,
+            "trace_id": normalized_trace_id,
+            "kind": "worker.repair",
+            "apply": apply,
+            "mission_queue_repair": mission_queue_repair,
+            "runtime_hygiene_repair": hygiene_repair,
+        },
+    )
+    ledger.append(
+        run_id=effective_run_id,
+        kind="worker.repair",
+        summary={
+            "apply": apply,
+            "mission_queue_repair": mission_queue_repair,
+            "runtime_hygiene_repair": hygiene_repair,
+            "trace_id": normalized_trace_id,
+        },
+    )
+    return summary
+
+
 def run_worker_cycle(
     *,
     run_id: str | None = None,
@@ -654,6 +805,10 @@ def run_worker_cycle(
         started_at = utc_now_iso()
         started_monotonic = time.monotonic()
         reclaimed_leases_count, recovered_by_action_class, recovered_by_action = _recover_stale_leases(fs)
+        mission_queue_repair = normalize_mission_job_queue(
+            run_id=effective_run_id,
+            trace_id=normalized_trace_id,
+        )
         queue_before = queued_count(fs, action_allowlist=allowlist, due_only=False)
         queue_due_before = queued_count(fs, action_allowlist=allowlist, due_only=True)
         queued = list_queued_jobs(fs, limit=limits.max_jobs_per_cycle, action_allowlist=allowlist, due_only=True)
@@ -877,6 +1032,7 @@ def run_worker_cycle(
             "recovered_leases_by_action": recovered_by_action,
             "active_worker_cycles": active_cycles,
             "max_concurrent_cycles": max_concurrent_cycles,
+            "mission_queue_repair": mission_queue_repair,
             "halted_reason": halted_reason,
             "jobs": processed,
         }
@@ -906,6 +1062,7 @@ def run_worker_cycle(
                 "lease_finalize_conflict_count": lease_finalize_conflict_count,
                 "reclaimed_leases_count": reclaimed_leases_count,
                 "recovered_leases_by_action_class": recovered_by_action_class,
+                "mission_queue_repair": mission_queue_repair,
                 "halted_reason": halted_reason,
             },
         )
@@ -930,6 +1087,7 @@ def run_worker_cycle(
                 "lease_finalize_conflict_count": lease_finalize_conflict_count,
                 "reclaimed_leases_count": reclaimed_leases_count,
                 "recovered_leases_by_action_class": recovered_by_action_class,
+                "mission_queue_repair": mission_queue_repair,
                 "halted_reason": halted_reason,
                 "trace_id": normalized_trace_id,
             },
@@ -955,6 +1113,7 @@ def get_worker_status() -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     jobs = _read_jsonl(fs, QUEUE_PATH)
     deadletters = _read_jsonl(fs, DEADLETTER_PATH)
+    active_deadletters = [row for row in deadletters if is_active_deadletter(row)]
     last_run = _read_json(fs, LAST_WORKER_RUN_PATH, {})
     cycle_gate_doc = _read_json(fs, CYCLE_GATE_PATH, {})
     if not isinstance(last_run, dict):
@@ -1004,7 +1163,7 @@ def get_worker_status() -> dict[str, Any]:
             counts["other"] += 1
 
     deadletter_by_action: dict[str, int] = {}
-    for item in deadletters:
+    for item in active_deadletters:
         job = item.get("job", {})
         action = ""
         if isinstance(job, dict):
@@ -1032,7 +1191,7 @@ def get_worker_status() -> dict[str, Any]:
             "failed_by_action_top": _top(failed_by_action),
         },
         "deadletter": {
-            "count": len(deadletters),
+            "count": len(active_deadletters),
             "by_action_top": _top(deadletter_by_action),
         },
         "cycle_gate": {

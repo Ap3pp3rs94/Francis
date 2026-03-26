@@ -10,7 +10,7 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from services.orchestrator.app.control_state import check_action_allowed
-from services.worker.app.main import get_worker_status, recover_stale_leased_jobs, run_worker_cycle
+from services.worker.app.main import get_worker_status, recover_stale_leased_jobs, repair_runtime_state, run_worker_cycle
 
 router = APIRouter(tags=["worker"])
 
@@ -35,6 +35,18 @@ class WorkerCycleRequest(BaseModel):
 
 class WorkerRecoverRequest(BaseModel):
     action_classes: list[str] | None = None
+
+
+class WorkerRepairRequest(BaseModel):
+    apply: bool = False
+    normalize_mission_queue: bool = True
+    archive_test_deadletters: bool = True
+    archive_stale_unsupported_deadletters: bool = True
+    replay_timeout_deadletters: bool = False
+    resolve_test_incidents: bool = True
+    resolve_stale_security_incidents: bool = True
+    min_age_hours: int = Field(default=24, ge=0, le=720)
+    max_rows: int = Field(default=5000, ge=1, le=50000)
 
 
 def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
@@ -116,6 +128,37 @@ def worker_recover(request: Request, payload: WorkerRecoverRequest | None = None
         run_id=run_id,
         trace_id=trace_id,
         action_classes=classes if classes else None,
+    )
+
+
+@router.post("/worker/repair")
+def worker_repair(request: Request, payload: WorkerRepairRequest | None = None) -> dict:
+    body = payload or WorkerRepairRequest()
+    run_id = str(getattr(request.state, "run_id", uuid4()))
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None), fallback_run_id=run_id)
+    _enforce_rbac(request, "worker.repair")
+    allowed, reason, _state = check_action_allowed(
+        _fs,
+        repo_root=_repo_root,
+        workspace_root=_workspace_root,
+        app="worker",
+        action="worker.repair",
+        mutating=bool(body.apply),
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
+    return repair_runtime_state(
+        run_id=run_id,
+        trace_id=trace_id,
+        apply=body.apply,
+        normalize_mission_queue=body.normalize_mission_queue,
+        archive_test_deadletters=body.archive_test_deadletters,
+        archive_stale_unsupported_deadletters=body.archive_stale_unsupported_deadletters,
+        replay_timeout_deadletters=body.replay_timeout_deadletters,
+        resolve_test_incidents=body.resolve_test_incidents,
+        resolve_stale_security_incidents=body.resolve_stale_security_incidents,
+        min_age_hours=body.min_age_hours,
+        max_rows=body.max_rows,
     )
 
 

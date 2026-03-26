@@ -108,20 +108,34 @@ def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
     return normalized or fallback_run_id
 
 
-def _queue_job(
+TERMINAL_MISSION_STATUSES = {"completed", "failed", "cancelled", "canceled"}
+
+
+def _job_status(job: dict) -> str:
+    return str(job.get("status", "")).strip().lower()
+
+
+def _is_mission_tick_job(job: dict, *, mission_id: str | None = None) -> bool:
+    if str(job.get("action", "")).strip().lower() != "mission.tick":
+        return False
+    if mission_id is None:
+        return True
+    return str(job.get("mission_id", "")).strip() == mission_id
+
+
+def _build_job(
     *,
     run_id: str,
     mission_id: str,
-    action: str = "mission.tick",
-    priority: str = "normal",
-    trace_id: str | None = None,
+    action: str,
+    priority: str,
+    trace_id: str,
 ) -> dict:
-    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
-    job = {
+    return {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
         "run_id": run_id,
-        "trace_id": normalized_trace_id,
+        "trace_id": trace_id,
         "mission_id": mission_id,
         "action": action,
         "priority": priority,
@@ -133,7 +147,193 @@ def _queue_job(
         "finished_at": None,
         "last_result": None,
     }
-    _append_jsonl("queue/jobs.jsonl", job)
+
+
+def _mark_job_superseded(
+    job: dict,
+    *,
+    ts: str,
+    trace_id: str,
+    reason: str,
+    superseded_by: str | None = None,
+) -> bool:
+    changed = False
+    if _job_status(job) != "superseded":
+        job["status"] = "superseded"
+        changed = True
+    if job.get("finished_at") != ts:
+        job["finished_at"] = ts
+        changed = True
+    normalized_trace_id = str(job.get("trace_id", "")).strip() or trace_id
+    if job.get("trace_id") != normalized_trace_id:
+        job["trace_id"] = normalized_trace_id
+        changed = True
+    if superseded_by and job.get("superseded_by") != superseded_by:
+        job["superseded_by"] = superseded_by
+        changed = True
+    desired_result = {
+        "status": "superseded",
+        "reason": reason,
+        "trace_id": normalized_trace_id,
+    }
+    if superseded_by:
+        desired_result["superseded_by"] = superseded_by
+    if job.get("last_result") != desired_result:
+        job["last_result"] = desired_result
+        changed = True
+    return changed
+
+
+def normalize_mission_job_queue(
+    *,
+    run_id: str,
+    trace_id: str | None = None,
+    mission_id: str | None = None,
+) -> dict:
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
+    missions = _load_missions()
+    mission_statuses = {
+        str(item.get("id", "")).strip(): str(item.get("status", "")).strip().lower()
+        for item in missions
+        if isinstance(item, dict) and str(item.get("id", "")).strip()
+    }
+    jobs = _read_jsonl("queue/jobs.jsonl")
+    now = utc_now_iso()
+    changed = False
+    pending_by_mission: dict[str, str] = {}
+    duplicate_superseded_count = 0
+    terminal_superseded_count = 0
+    considered_count = 0
+
+    for index, job in enumerate(jobs):
+        if not _is_mission_tick_job(job):
+            continue
+        current_mission_id = str(job.get("mission_id", "")).strip()
+        if not current_mission_id:
+            continue
+        if mission_id is not None and current_mission_id != mission_id:
+            continue
+        considered_count += 1
+        status = _job_status(job)
+        if status != "queued":
+            continue
+
+        current_mission_status = mission_statuses.get(current_mission_id, "")
+        if current_mission_status in TERMINAL_MISSION_STATUSES:
+            if _mark_job_superseded(
+                job,
+                ts=now,
+                trace_id=normalized_trace_id,
+                reason=f"mission_terminal:{current_mission_status}",
+            ):
+                jobs[index] = job
+                terminal_superseded_count += 1
+                changed = True
+            continue
+
+        canonical_job_id = pending_by_mission.get(current_mission_id)
+        if canonical_job_id:
+            if _mark_job_superseded(
+                job,
+                ts=now,
+                trace_id=normalized_trace_id,
+                reason="duplicate_pending_mission_job",
+                superseded_by=canonical_job_id,
+            ):
+                jobs[index] = job
+                duplicate_superseded_count += 1
+                changed = True
+            continue
+
+        canonical_job_id = str(job.get("id", "")).strip()
+        if not canonical_job_id:
+            canonical_job_id = str(uuid4())
+            job["id"] = canonical_job_id
+            changed = True
+        if not str(job.get("trace_id", "")).strip():
+            job["trace_id"] = normalized_trace_id
+            changed = True
+        jobs[index] = job
+        pending_by_mission[current_mission_id] = canonical_job_id
+
+    if changed:
+        _write_jsonl("queue/jobs.jsonl", jobs)
+
+    repaired_count = duplicate_superseded_count + terminal_superseded_count
+    return {
+        "status": "ok",
+        "run_id": run_id,
+        "trace_id": normalized_trace_id,
+        "mission_id": mission_id,
+        "considered_count": considered_count,
+        "pending_active_count": len(pending_by_mission),
+        "duplicate_superseded_count": duplicate_superseded_count,
+        "terminal_superseded_count": terminal_superseded_count,
+        "repaired_count": repaired_count,
+        "changed": repaired_count > 0 or changed,
+    }
+
+
+def _queue_job(
+    *,
+    run_id: str,
+    mission_id: str,
+    action: str = "mission.tick",
+    priority: str = "normal",
+    trace_id: str | None = None,
+) -> dict:
+    normalized_trace_id = _normalize_trace_id(trace_id, fallback_run_id=run_id)
+    if action != "mission.tick":
+        job = _build_job(
+            run_id=run_id,
+            mission_id=mission_id,
+            action=action,
+            priority=priority,
+            trace_id=normalized_trace_id,
+        )
+        _append_jsonl("queue/jobs.jsonl", job)
+        return job
+
+    jobs = _read_jsonl("queue/jobs.jsonl")
+    queued_indexes = [
+        index
+        for index, job in enumerate(jobs)
+        if _is_mission_tick_job(job, mission_id=mission_id) and _job_status(job) == "queued"
+    ]
+    if queued_indexes:
+        now = utc_now_iso()
+        keep_index = queued_indexes[0]
+        keep_job = jobs[keep_index]
+        changed = False
+        if not str(keep_job.get("trace_id", "")).strip():
+            keep_job["trace_id"] = normalized_trace_id
+            changed = True
+        jobs[keep_index] = keep_job
+        keep_job_id = str(keep_job.get("id", "")).strip()
+        for index in queued_indexes[1:]:
+            duplicate = jobs[index]
+            if _mark_job_superseded(
+                duplicate,
+                ts=now,
+                trace_id=normalized_trace_id,
+                reason="duplicate_pending_mission_job",
+                superseded_by=keep_job_id or None,
+            ):
+                jobs[index] = duplicate
+                changed = True
+        if changed:
+            _write_jsonl("queue/jobs.jsonl", jobs)
+        return keep_job
+
+    job = _build_job(
+        run_id=run_id,
+        mission_id=mission_id,
+        action=action,
+        priority=priority,
+        trace_id=normalized_trace_id,
+    )
+    jobs.append(job)
+    _write_jsonl("queue/jobs.jsonl", jobs)
     return job
 
 
@@ -227,8 +427,7 @@ def _complete_lease(*, job_id: str, lease_key: str, outcome: str, result: dict) 
 
 
 def _active_mission_count(missions: list[dict]) -> int:
-    inactive = {"completed", "failed", "cancelled", "canceled"}
-    return sum(1 for mission in missions if str(mission.get("status", "")).lower() not in inactive)
+    return sum(1 for mission in missions if str(mission.get("status", "")).lower() not in TERMINAL_MISSION_STATUSES)
 
 
 def _enforce_policy(action: str) -> None:
@@ -387,13 +586,19 @@ def execute_mission_tick(
     missions = _load_missions()
     idx, mission = _find_mission(missions, mission_id)
 
-    if mission.get("status") in {"completed", "failed", "cancelled", "canceled"}:
+    if mission.get("status") in TERMINAL_MISSION_STATUSES:
+        queue_repair = normalize_mission_job_queue(
+            run_id=run_id,
+            trace_id=normalized_trace_id,
+            mission_id=mission_id,
+        )
         return {
             "status": "ok",
             "run_id": run_id,
             "trace_id": normalized_trace_id,
             "mission": mission,
             "tick": "skipped",
+            "queue_repair": queue_repair,
         }
 
     lease_state, leased_job = _lease_or_replay_job(
@@ -417,6 +622,11 @@ def execute_mission_tick(
         mission["updated_at"] = now
         missions[idx] = mission
         _save_missions(missions)
+        queue_repair = normalize_mission_job_queue(
+            run_id=run_id,
+            trace_id=normalized_trace_id,
+            mission_id=mission_id,
+        )
 
         dead = {
             "id": str(uuid4()),
@@ -448,6 +658,7 @@ def execute_mission_tick(
                 "mission_id": mission_id,
                 "reason": mission["last_error"],
                 "trace_id": normalized_trace_id,
+                "queue_repair": queue_repair,
             },
         )
         result = {
@@ -456,6 +667,7 @@ def execute_mission_tick(
             "trace_id": normalized_trace_id,
             "mission": mission,
             "deadletter": dead,
+            "queue_repair": queue_repair,
         }
         _complete_lease(
             job_id=str(leased_job.get("id")),
@@ -485,6 +697,11 @@ def execute_mission_tick(
     mission["updated_at"] = now
     missions[idx] = mission
     _save_missions(missions)
+    queue_repair = normalize_mission_job_queue(
+        run_id=run_id,
+        trace_id=normalized_trace_id,
+        mission_id=mission_id,
+    )
 
     queued_job = None
     if mission["status"] == "active":
@@ -515,6 +732,7 @@ def execute_mission_tick(
             "status": mission["status"],
             "step_executed": step_executed,
             "queued_next": queued_job is not None,
+            "queue_repair": queue_repair,
             "trace_id": normalized_trace_id,
         },
     )
@@ -525,6 +743,7 @@ def execute_mission_tick(
         "mission": mission,
         "step_executed": step_executed,
         "queued_job": queued_job,
+        "queue_repair": queue_repair,
     }
     _complete_lease(
         job_id=str(leased_job.get("id")),

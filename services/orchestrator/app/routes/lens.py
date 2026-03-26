@@ -26,6 +26,7 @@ from services.orchestrator.app.adversarial_guard import assess_untrusted_input, 
 from services.observer.app.main import run_cycle as run_observer_cycle
 
 from services.orchestrator.app.approvals_store import ensure_action_approved, list_requests, pending_count
+from services.orchestrator.app.runtime_hygiene import count_active_deadletters
 from services.orchestrator.app.autonomy.action_budget import check_action_budget, load_state as load_budget_state
 from services.orchestrator.app.autonomy.decision_engine import build_plan
 from services.orchestrator.app.autonomy.event_queue import (
@@ -2755,7 +2756,7 @@ def lens_state(request: Request) -> dict:
     autonomy_retry_pressure = int(autonomy_queue.get("queued_retry_count", 0))
     catalog_entries = list_entries(_fs)
     staged_count = sum(1 for entry in catalog_entries if str(entry.get("status", "")).lower() == "staged")
-    pending_approvals = pending_count(_fs) + len(_read_jsonl("queue/deadletter.jsonl")) + staged_count
+    pending_approvals = pending_count(_fs) + count_active_deadletters(_read_jsonl("queue/deadletter.jsonl")) + staged_count
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
