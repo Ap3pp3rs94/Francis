@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $steps = @(
     @{ Name = "ruff"; Command = @("ruff", "check", ".") },
-    @{ Name = "unit-hardening"; Command = @("pytest", "-q", "tests/unit/test_mission_queue_repair.py", "tests/unit/test_runtime_hygiene.py", "tests/unit/test_observer_emitter.py") },
+    @{ Name = "unit-hardening"; Command = @("pytest", "-q", "tests/unit/test_mission_queue_repair.py", "tests/unit/test_runtime_hygiene.py", "tests/unit/test_observer_emitter.py", "tests/unit/test_observer_baselines.py") },
     @{ Name = "presence-hardening"; Command = @("pytest", "-q", "tests/unit/test_presence_state.py", "tests/test_presence_state_grounding.py") },
     @{ Name = "observer-integration"; Command = @("pytest", "-q", "tests/integration/test_observer_emits_events.py") },
     @{ Name = "security-hardening"; Command = @("pytest", "-q", "tests/integration/test_security_quarantine.py", "tests/redteam/test_prompt_injection.py", "tests/redteam/test_fs_escape_attempts.py") },
