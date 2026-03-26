@@ -1,5 +1,7 @@
 This document is the canonical roadmap for Francis. It defines the end state, system law, build sequence, and quality gates in one place.
 
+It is a target-state document, not the shipped-state ledger. For the current repo posture, hardening progress, and productization gaps, use [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
+
 # 1.0 The End State
 
 Francis exists to become the thing people have been trying to describe for decades whenever they say they want “real AI.”

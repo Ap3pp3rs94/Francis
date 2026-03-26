@@ -43,6 +43,19 @@ The key phrase is simple:
 
 Francis should feel unreal in capability and boringly trustworthy in law.
 
+## Current Build Posture
+
+Francis is no longer at scaffold stage. The repo already contains a working orchestrator, a broad HUD/Lens surface, a queue-backed worker, receipts and trust/governance layers, and a Windows Electron overlay shell.
+
+The current state is best described as:
+
+* broad alpha coverage with real operator/runtime surfaces already wired
+* active release-hardening and productization work, especially around queue health, incident noise, verification discipline, and packaging reliability
+* governed runtime repair now exists for queue normalization, stale deadletter replay/archive, and stale security incident cleanup
+* roughly `70%` complete overall, with feature breadth ahead of production readiness
+
+The current shipped, hardened, partial, and blocked surfaces are tracked in [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
+
 ## What Francis Is
 
 Francis is a compound system. It is not one trick.
@@ -218,6 +231,21 @@ The repo includes:
 * integration tests
 * evals
 * red-team coverage
+
+The most reliable verification lanes right now are:
+
+* `npm run release:hardening`
+* `ruff check .`
+* `pytest -q tests/unit/test_mission_queue_repair.py tests/unit/test_runtime_hygiene.py tests/unit/test_observer_emitter.py`
+* `pytest -q tests/integration/test_observer_emits_events.py`
+* `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`
+* `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter"`
+* `npm run overlay:test`
+* `npm run overlay:prepare-runtime`
+* `npm run overlay:pack`
+* `npm run overlay:installer`
+
+`pytest -q` remains the full-suite lane, but the commands above are the current hardening-smoke lanes for queue/observer/runtime and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run.
 
 ### Runtime state
 
