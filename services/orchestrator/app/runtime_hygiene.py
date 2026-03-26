@@ -11,9 +11,11 @@ DEADLETTER_PATH = "queue/deadletter.jsonl"
 QUEUE_PATH = "queue/jobs.jsonl"
 INCIDENTS_PATH = "incidents/incidents.jsonl"
 INBOX_PATH = "inbox/messages.jsonl"
+MISSIONS_PATH = "missions/missions.json"
 TERMINAL_DEADLETTER_STATUSES = {"archived", "resolved", "ignored", "replayed"}
 TERMINAL_INCIDENT_STATUSES = {"resolved", "closed", "mitigated", "superseded"}
 TERMINAL_INBOX_STATUSES = {"archived", "resolved", "acknowledged", "superseded"}
+TERMINAL_MISSION_STATUSES = {"completed", "failed", "cancelled", "canceled"}
 TEST_DEADLETTER_MARKERS = {
     "test failure path",
     "forced test deadletter",
@@ -52,6 +54,41 @@ PRESENCE_BRIEFING_BODY_MARKERS = {
     "if you want: i can generate a mission plan",
     "missions:",
 }
+SYNTHETIC_MISSION_TITLE_PREFIXES = (
+    "Auto-",
+    "Blocked-",
+    "ChainMission-",
+    "Dedupe-",
+    "FailMission-",
+    "Idempotent-",
+    "LensPanic-",
+    "Mission-",
+    "PanicBlocked-",
+    "PanicResume-",
+    "PresenceMission-",
+    "Receipt-",
+    "RemotePanic-",
+    "RunHistory-",
+    "TickMission-",
+    "TraceHistory-",
+    "TraceMission-",
+    "Worker-",
+)
+
+
+def read_json(fs: WorkspaceFS, rel_path: str, default: object) -> object:
+    try:
+        raw = fs.read_text(rel_path)
+    except Exception:
+        return default
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default
+
+
+def write_json(fs: WorkspaceFS, rel_path: str, value: object) -> None:
+    fs.write_text(rel_path, json.dumps(value, ensure_ascii=False, indent=2))
 
 
 def read_jsonl(fs: WorkspaceFS, rel_path: str) -> list[dict[str, Any]]:
@@ -92,6 +129,10 @@ def inbox_status(row: dict[str, Any]) -> str:
     return str(row.get("status", row.get("state", "open"))).strip().lower() or "open"
 
 
+def mission_status(row: dict[str, Any]) -> str:
+    return str(row.get("status", "queued")).strip().lower() or "queued"
+
+
 def is_active_deadletter(row: dict[str, Any]) -> bool:
     return deadletter_status(row) not in TERMINAL_DEADLETTER_STATUSES
 
@@ -102,6 +143,10 @@ def is_open_incident(row: dict[str, Any]) -> bool:
 
 def is_active_inbox_message(row: dict[str, Any]) -> bool:
     return inbox_status(row) not in TERMINAL_INBOX_STATUSES
+
+
+def is_active_mission(row: dict[str, Any]) -> bool:
+    return mission_status(row) not in TERMINAL_MISSION_STATUSES
 
 
 def count_active_deadletters(rows: list[dict[str, Any]]) -> int:
@@ -145,9 +190,57 @@ def _text_fields(value: Any) -> list[str]:
     return fields
 
 
+def _normalized_steps(row: dict[str, Any]) -> tuple[str, ...]:
+    steps = row.get("steps")
+    if not isinstance(steps, list):
+        return ()
+    return tuple(str(step).strip().lower() for step in steps if str(step).strip())
+
+
 def is_test_deadletter(row: dict[str, Any]) -> bool:
     texts = " ".join(_text_fields(row))
     return any(marker in texts for marker in TEST_DEADLETTER_MARKERS)
+
+
+def is_synthetic_test_mission(row: dict[str, Any]) -> bool:
+    title = str(row.get("title", "")).strip()
+    if not title.startswith(SYNTHETIC_MISSION_TITLE_PREFIXES):
+        return False
+    title_lower = title.lower()
+    objective = str(row.get("objective", "")).strip().lower()
+    steps = _normalized_steps(row)
+    if title_lower.startswith("mission-"):
+        return objective == "ship stage 3" and steps == ("design", "implement")
+    if title_lower.startswith("dedupe-"):
+        return steps == ("s1", "s2", "s3")
+    if title_lower.startswith("worker-"):
+        return objective == "worker cycle integration"
+    if title_lower.startswith("tickmission-"):
+        return objective == "advance mission"
+    if title_lower.startswith("failmission-"):
+        return objective == "fail mission"
+    if title_lower.startswith("presencemission-"):
+        return steps == ("s1", "s2")
+    return True
+
+
+def is_stale_synthetic_mission(
+    row: dict[str, Any],
+    *,
+    min_age_hours: int = 24,
+    now: datetime | None = None,
+) -> bool:
+    if not is_active_mission(row):
+        return False
+    if not is_synthetic_test_mission(row):
+        return False
+    ts = _parse_ts(str(row.get("updated_at", "")).strip() or None) or _parse_ts(
+        str(row.get("created_at", "")).strip() or None
+    )
+    if ts is None:
+        return False
+    reference = now or datetime.now(timezone.utc)
+    return reference - ts >= timedelta(hours=max(0, int(min_age_hours)))
 
 
 def is_stale_test_inbox_message(
@@ -292,6 +385,7 @@ def repair_runtime_hygiene(
     run_id: str,
     trace_id: str,
     apply: bool,
+    cancel_stale_synthetic_missions: bool = True,
     archive_test_deadletters: bool = True,
     archive_stale_unsupported_deadletters: bool = True,
     replay_timeout_deadletters: bool = False,
@@ -308,13 +402,41 @@ def repair_runtime_hygiene(
     normalized_limit = max(1, min(int(max_rows), 50000))
     normalized_min_age_hours = max(0, min(int(min_age_hours), 24 * 30))
 
+    missions_doc = read_json(fs, MISSIONS_PATH, {"missions": []})
+    missions = missions_doc.get("missions", []) if isinstance(missions_doc, dict) else []
+    if not isinstance(missions, list):
+        missions = []
+    jobs = read_jsonl(fs, QUEUE_PATH)
     deadletters = read_jsonl(fs, DEADLETTER_PATH)
     incidents = read_jsonl(fs, INCIDENTS_PATH)
     inbox = read_jsonl(fs, INBOX_PATH)
+    active_missions_before = sum(1 for row in missions if isinstance(row, dict) and is_active_mission(row))
     active_deadletters_before = count_active_deadletters(deadletters)
     open_incidents_before = sum(1 for row in incidents if is_open_incident(row))
     active_inbox_before = count_active_inbox_messages(inbox)
     active_inbox_alerts_before = count_active_inbox_alerts(inbox)
+
+    mission_candidate_indexes: list[int] = []
+    if cancel_stale_synthetic_missions:
+        for index, row in enumerate(missions):
+            if len(mission_candidate_indexes) >= normalized_limit:
+                break
+            if not isinstance(row, dict):
+                continue
+            if is_stale_synthetic_mission(row, min_age_hours=normalized_min_age_hours, now=now_dt):
+                mission_candidate_indexes.append(index)
+    mission_candidate_ids = {str(missions[index].get("id", "")).strip() for index in mission_candidate_indexes}
+    mission_job_candidate_indexes: list[int] = []
+    if mission_candidate_ids:
+        for index, row in enumerate(jobs):
+            if len(mission_job_candidate_indexes) >= normalized_limit:
+                break
+            if str(row.get("status", "")).strip().lower() != "queued":
+                continue
+            if str(row.get("action", "")).strip().lower() != "mission.tick":
+                continue
+            if str(row.get("mission_id", "")).strip() in mission_candidate_ids:
+                mission_job_candidate_indexes.append(index)
 
     deadletter_candidate_indexes: list[int] = []
     if archive_test_deadletters:
@@ -408,7 +530,41 @@ def repair_runtime_hygiene(
     archived_presence_inbox_ids = [
         str(inbox[index].get("id", "")).strip() for index in inbox_presence_candidate_indexes
     ]
+    repaired_mission_ids = [str(missions[index].get("id", "")).strip() for index in mission_candidate_indexes]
+    repaired_mission_job_ids = [str(jobs[index].get("id", "")).strip() for index in mission_job_candidate_indexes]
     replay_job_ids: list[str] = []
+    jobs_changed = False
+
+    if apply and mission_candidate_indexes:
+        for index in mission_candidate_indexes:
+            mission_row = dict(missions[index])
+            mission_row["status"] = "cancelled"
+            mission_row["updated_at"] = now
+            mission_row["cancelled_at"] = now
+            mission_row["repair_run_id"] = run_id
+            mission_row["repair_trace_id"] = trace_id
+            mission_row["repair_reason"] = "runtime_repair:synthetic_mission"
+            missions[index] = mission_row
+
+    if apply and mission_job_candidate_indexes:
+        for index in mission_job_candidate_indexes:
+            job_row = dict(jobs[index])
+            job_row["status"] = "superseded"
+            job_row["finished_at"] = now
+            job_row["repair_run_id"] = run_id
+            job_row["repair_trace_id"] = trace_id
+            job_row["repair_reason"] = "runtime_repair:synthetic_mission"
+            job_row["last_result"] = {
+                "status": "superseded",
+                "reason": "runtime_repair:synthetic_mission",
+                "trace_id": str(job_row.get("trace_id", "")).strip() or trace_id,
+                "mission_id": job_row.get("mission_id"),
+            }
+            jobs[index] = job_row
+        jobs_changed = True
+
+    if apply and mission_candidate_indexes:
+        write_json(fs, MISSIONS_PATH, {"missions": missions})
 
     if apply and deadletter_candidate_indexes:
         for index in deadletter_candidate_indexes:
@@ -431,7 +587,6 @@ def repair_runtime_hygiene(
             deadletters[index] = row
 
     if apply and deadletter_replay_candidate_indexes and build_replay_job is not None:
-        jobs = read_jsonl(fs, QUEUE_PATH)
         for index in deadletter_replay_candidate_indexes:
             deadletter_row = dict(deadletters[index])
             replay_job = build_replay_job(deadletter_row)
@@ -446,7 +601,7 @@ def repair_runtime_hygiene(
             deadletter_row["replay_job_id"] = replay_job.get("id")
             deadletter_row["repair_reason"] = "runtime_repair:replayed_timeout_deadletter"
             deadletters[index] = deadletter_row
-        write_jsonl(fs, QUEUE_PATH, jobs)
+        jobs_changed = True
 
     if apply and (
         deadletter_candidate_indexes
@@ -503,6 +658,15 @@ def repair_runtime_hygiene(
     if apply and (inbox_test_candidate_indexes or inbox_presence_candidate_indexes):
         write_jsonl(fs, INBOX_PATH, inbox)
 
+    if apply and jobs_changed:
+        write_jsonl(fs, QUEUE_PATH, jobs)
+
+    active_missions_after = (
+        sum(1 for row in missions if isinstance(row, dict) and is_active_mission(row))
+        if apply
+        else max(0, active_missions_before - len(mission_candidate_indexes))
+    )
+
     active_deadletters_after = (
         count_active_deadletters(deadletters)
         if apply
@@ -538,6 +702,7 @@ def repair_runtime_hygiene(
         "run_id": run_id,
         "trace_id": trace_id,
         "apply": apply,
+        "cancel_stale_synthetic_missions": cancel_stale_synthetic_missions,
         "archive_test_deadletters": archive_test_deadletters,
         "archive_stale_unsupported_deadletters": archive_stale_unsupported_deadletters,
         "replay_timeout_deadletters": replay_timeout_deadletters,
@@ -547,6 +712,20 @@ def repair_runtime_hygiene(
         "archive_stale_presence_briefings": archive_stale_presence_briefings,
         "min_age_hours": normalized_min_age_hours,
         "max_rows": normalized_limit,
+        "missions": {
+            "active_before": active_missions_before,
+            "active_after": active_missions_after,
+            "candidate_count": len(mission_candidate_indexes),
+            "cancelled_ids": repaired_mission_ids[:10],
+            "queued_job_candidate_count": len(mission_job_candidate_indexes),
+            "queued_job_ids": repaired_mission_job_ids[:10],
+            "synthetic_cancel": {
+                "candidate_count": len(mission_candidate_indexes),
+                "cancelled_ids": repaired_mission_ids[:10],
+                "queued_job_candidate_count": len(mission_job_candidate_indexes),
+                "queued_job_ids": repaired_mission_job_ids[:10],
+            },
+        },
         "deadletters": {
             "active_before": active_deadletters_before,
             "active_after": active_deadletters_after,

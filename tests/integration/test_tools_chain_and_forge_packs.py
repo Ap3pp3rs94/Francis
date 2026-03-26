@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -55,73 +56,74 @@ def _approve(client: TestClient, approval_id: str) -> None:
 
 
 def test_tools_chain_mission_context_and_rollback_receipts() -> None:
-    c = TestClient(app)
-    original_mode = _get_mode(c)
-    original_scope = _get_scope(c)
+    with isolated_workspace_files(MISSION_RUNTIME_PATHS):
+        c = TestClient(app)
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
 
-    try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["tools", "missions", "receipts"]))
+        try:
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["tools", "missions", "receipts"]))
 
-        mission = c.post(
-            "/missions",
-            json={
-                "title": f"ChainMission-{uuid4()}",
-                "objective": "validate chain behavior",
-                "steps": ["write", "verify"],
-            },
-        )
-        assert mission.status_code == 200
-        mission_id = mission.json()["mission"]["id"]
+            mission = c.post(
+                "/missions",
+                json={
+                    "title": f"ChainMission-{uuid4()}",
+                    "objective": "validate chain behavior",
+                    "steps": ["write", "verify"],
+                },
+            )
+            assert mission.status_code == 200
+            mission_id = mission.json()["mission"]["id"]
 
-        request = c.post(
-            "/approvals/request",
-            json={"action": "tools.workspace.write", "reason": "chain write step"},
-        )
-        assert request.status_code == 200
-        approval_id = request.json()["approval"]["id"]
-        _approve(c, approval_id)
+            request = c.post(
+                "/approvals/request",
+                json={"action": "tools.workspace.write", "reason": "chain write step"},
+            )
+            assert request.status_code == 200
+            approval_id = request.json()["approval"]["id"]
+            _approve(c, approval_id)
 
-        rel_path = f"brain/chain_{uuid4()}.txt"
-        chain = c.post(
-            "/tools/chain",
-            json={
-                "mission_id": mission_id,
-                "goal": "write then fail to trigger rollback",
-                "rollback_on_failure": True,
-                "steps": [
-                    {
-                        "skill": "workspace.write",
-                        "approval_id": approval_id,
-                        "args": {"path": rel_path, "content": "temporary content"},
-                    },
-                    {
-                        "skill": "unknown.tool",
-                        "args": {},
-                    },
-                ],
-            },
-        )
-        assert chain.status_code == 200
-        payload = chain.json()
-        assert payload["status"] == "failed"
-        assert payload["mission"]["id"] == mission_id
-        assert payload["rollback"]["count"] >= 1
-        assert payload["failed"]["skill"] == "unknown.tool"
+            rel_path = f"brain/chain_{uuid4()}.txt"
+            chain = c.post(
+                "/tools/chain",
+                json={
+                    "mission_id": mission_id,
+                    "goal": "write then fail to trigger rollback",
+                    "rollback_on_failure": True,
+                    "steps": [
+                        {
+                            "skill": "workspace.write",
+                            "approval_id": approval_id,
+                            "args": {"path": rel_path, "content": "temporary content"},
+                        },
+                        {
+                            "skill": "unknown.tool",
+                            "args": {},
+                        },
+                    ],
+                },
+            )
+            assert chain.status_code == 200
+            payload = chain.json()
+            assert payload["status"] == "failed"
+            assert payload["mission"]["id"] == mission_id
+            assert payload["rollback"]["count"] >= 1
+            assert payload["failed"]["skill"] == "unknown.tool"
 
-        read_back = c.post("/tools/run", json={"skill": "workspace.read", "args": {"path": rel_path}})
-        assert read_back.status_code == 200
-        assert "temporary content" not in read_back.json()["result"]["output"]["content"]
+            read_back = c.post("/tools/run", json={"skill": "workspace.read", "args": {"path": rel_path}})
+            assert read_back.status_code == 200
+            assert "temporary content" not in read_back.json()["result"]["output"]["content"]
 
-        receipts = c.get("/receipts/latest", params={"limit": 200})
-        assert receipts.status_code == 200
-        history = receipts.json()["receipts"]["mission_history"]
-        assert any(
-            row.get("event") == "mission.tool_chain" and row.get("mission_id") == mission_id for row in history
-        )
-    finally:
-        _set_scope(c, original_scope)
-        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+            receipts = c.get("/receipts/latest", params={"limit": 200})
+            assert receipts.status_code == 200
+            history = receipts.json()["receipts"]["mission_history"]
+            assert any(
+                row.get("event") == "mission.tool_chain" and row.get("mission_id") == mission_id for row in history
+            )
+        finally:
+            _set_scope(c, original_scope)
+            _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
 def test_forge_promoted_tool_pack_auto_registers_and_runs() -> None:

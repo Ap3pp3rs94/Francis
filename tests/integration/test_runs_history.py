@@ -5,30 +5,32 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
 
 
 def test_runs_endpoint_returns_recent_history() -> None:
-    c = TestClient(app)
-    mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
-    assert mode.status_code == 200
+    with isolated_workspace_files(MISSION_RUNTIME_PATHS):
+        c = TestClient(app)
+        mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
+        assert mode.status_code == 200
 
-    created = c.post(
-        "/missions",
-        json={"title": f"RunHistory-{uuid4()}", "objective": "Generate run ledger", "steps": ["s1"]},
-    )
-    assert created.status_code == 200
-    run_id = created.json()["run_id"]
+        created = c.post(
+            "/missions",
+            json={"title": f"RunHistory-{uuid4()}", "objective": "Generate run ledger", "steps": ["s1"]},
+        )
+        assert created.status_code == 200
+        run_id = created.json()["run_id"]
 
-    runs = c.get("/runs")
-    assert runs.status_code == 200
-    payload = runs.json()
-    assert payload["status"] == "ok"
-    assert isinstance(payload.get("runs"), list)
+        runs = c.get("/runs")
+        assert runs.status_code == 200
+        payload = runs.json()
+        assert payload["status"] == "ok"
+        assert isinstance(payload.get("runs"), list)
 
-    matched = [row for row in payload["runs"] if row.get("run_id") == run_id]
-    assert matched
-    assert int(matched[0].get("event_count", 0)) >= 1
-    assert isinstance(matched[0].get("kinds"), list)
+        matched = [row for row in payload["runs"] if row.get("run_id") == run_id]
+        assert matched
+        assert int(matched[0].get("event_count", 0)) >= 1
+        assert isinstance(matched[0].get("kinds"), list)
 
 
 def test_runs_limit_applies() -> None:
@@ -41,33 +43,34 @@ def test_runs_limit_applies() -> None:
 
 
 def test_runs_trace_endpoint_returns_trace_receipts() -> None:
-    c = TestClient(app)
-    mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
-    assert mode.status_code == 200
+    with isolated_workspace_files(MISSION_RUNTIME_PATHS):
+        c = TestClient(app)
+        mode = c.put("/control/mode", json={"mode": "pilot", "kill_switch": False})
+        assert mode.status_code == 200
 
-    created = c.post(
-        "/missions",
-        json={"title": f"TraceHistory-{uuid4()}", "objective": "Trace receipts", "steps": ["s1"]},
-    )
-    assert created.status_code == 200
-    run_id = created.json()["run_id"]
+        created = c.post(
+            "/missions",
+            json={"title": f"TraceHistory-{uuid4()}", "objective": "Trace receipts", "steps": ["s1"]},
+        )
+        assert created.status_code == 200
+        run_id = created.json()["run_id"]
 
-    trace = c.get(f"/runs/trace/{run_id}", params={"limit": 50})
-    assert trace.status_code == 200
-    payload = trace.json()
-    assert payload["status"] == "ok"
-    assert payload["trace_id"] == run_id
-    assert payload["count"] >= 1
-    counts = payload.get("counts", {})
-    assert isinstance(counts, dict)
-    receipts = payload.get("receipts", {})
-    assert isinstance(receipts, dict)
-    combined = []
-    for rows in receipts.values():
-        if isinstance(rows, list):
-            combined.extend(rows)
-    assert combined
-    assert all(
-        str(item.get("run_id", "")) == run_id or str(item.get("trace_id", "")) == run_id
-        for item in combined
-    )
+        trace = c.get(f"/runs/trace/{run_id}", params={"limit": 50})
+        assert trace.status_code == 200
+        payload = trace.json()
+        assert payload["status"] == "ok"
+        assert payload["trace_id"] == run_id
+        assert payload["count"] >= 1
+        counts = payload.get("counts", {})
+        assert isinstance(counts, dict)
+        receipts = payload.get("receipts", {})
+        assert isinstance(receipts, dict)
+        combined = []
+        for rows in receipts.values():
+            if isinstance(rows, list):
+                combined.extend(rows)
+        assert combined
+        assert all(
+            str(item.get("run_id", "")) == run_id or str(item.get("trace_id", "")) == run_id
+            for item in combined
+        )

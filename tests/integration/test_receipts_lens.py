@@ -20,6 +20,7 @@ from services.orchestrator.app.control_state import (
 )
 import services.orchestrator.app.routes.control as control_routes
 import services.orchestrator.app.routes.lens as lens_routes
+from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -192,50 +193,51 @@ def _live_lens_routes() -> None:
 
 
 def test_receipts_and_run_lookup() -> None:
-    with TestClient(app) as c:
-        original_mode = _get_mode(c)
-        original_scope = _get_scope(c)
-        try:
-            _set_mode(c, "pilot", kill_switch=False)
-            _set_scope(c, _enable_apps(original_scope, ["missions", "receipts", "lens"]))
+    with isolated_workspace_files(MISSION_RUNTIME_PATHS):
+        with TestClient(app) as c:
+            original_mode = _get_mode(c)
+            original_scope = _get_scope(c)
+            try:
+                _set_mode(c, "pilot", kill_switch=False)
+                _set_scope(c, _enable_apps(original_scope, ["missions", "receipts", "lens"]))
 
-            create = c.post(
-                "/missions",
-                json={"title": f"Receipt-{uuid4()}", "objective": "Receipts", "steps": ["s1"]},
-            )
-            assert create.status_code == 200
-            run_id = create.json()["run_id"]
+                create = c.post(
+                    "/missions",
+                    json={"title": f"Receipt-{uuid4()}", "objective": "Receipts", "steps": ["s1"]},
+                )
+                assert create.status_code == 200
+                run_id = create.json()["run_id"]
 
-            latest = c.get("/receipts/latest")
-            assert latest.status_code == 200
-            latest_payload = latest.json()
-            assert latest_payload["status"] == "ok"
-            summary = latest_payload["summary"]
-            assert summary["evidence_scope"] == "workspace"
-            assert "fabric" in summary
-            assert "trust" in summary["fabric"]
-            receipts = latest_payload["receipts"]
-            assert "ledger" in receipts
-            assert "decisions" in receipts
-            assert "logs" in receipts
+                latest = c.get("/receipts/latest")
+                assert latest.status_code == 200
+                latest_payload = latest.json()
+                assert latest_payload["status"] == "ok"
+                summary = latest_payload["summary"]
+                assert summary["evidence_scope"] == "workspace"
+                assert "fabric" in summary
+                assert "trust" in summary["fabric"]
+                receipts = latest_payload["receipts"]
+                assert "ledger" in receipts
+                assert "decisions" in receipts
+                assert "logs" in receipts
 
-            run = c.get(f"/runs/{run_id}")
-            assert run.status_code == 200
-            run_payload = run.json()
-            assert run_payload["status"] == "ok"
-            assert run_payload["run_id"] == run_id
-            assert run_payload["count"] >= 1
-            run_summary = run_payload["summary"]
-            assert run_summary["evidence_scope"] == "run"
-            assert "fabric" in run_summary
-            assert "trust" in run_summary["fabric"]
-        finally:
-            _set_scope(c, original_scope)
-            _set_mode(
-                c,
-                str(original_mode.get("mode", "pilot")),
-                kill_switch=bool(original_mode.get("kill_switch", False)),
-            )
+                run = c.get(f"/runs/{run_id}")
+                assert run.status_code == 200
+                run_payload = run.json()
+                assert run_payload["status"] == "ok"
+                assert run_payload["run_id"] == run_id
+                assert run_payload["count"] >= 1
+                run_summary = run_payload["summary"]
+                assert run_summary["evidence_scope"] == "run"
+                assert "fabric" in run_summary
+                assert "trust" in run_summary["fabric"]
+            finally:
+                _set_scope(c, original_scope)
+                _set_mode(
+                    c,
+                    str(original_mode.get("mode", "pilot")),
+                    kill_switch=bool(original_mode.get("kill_switch", False)),
+                )
 
 
 def test_receipts_and_trace_surfaces_expose_handback_summary() -> None:

@@ -202,6 +202,7 @@ def normalize_mission_job_queue(
     changed = False
     pending_by_mission: dict[str, str] = {}
     duplicate_superseded_count = 0
+    missing_superseded_count = 0
     terminal_superseded_count = 0
     considered_count = 0
 
@@ -219,6 +220,17 @@ def normalize_mission_job_queue(
             continue
 
         current_mission_status = mission_statuses.get(current_mission_id, "")
+        if current_mission_id not in mission_statuses:
+            if _mark_job_superseded(
+                job,
+                ts=now,
+                trace_id=normalized_trace_id,
+                reason="mission_missing",
+            ):
+                jobs[index] = job
+                missing_superseded_count += 1
+                changed = True
+            continue
         if current_mission_status in TERMINAL_MISSION_STATUSES:
             if _mark_job_superseded(
                 job,
@@ -259,7 +271,7 @@ def normalize_mission_job_queue(
     if changed:
         _write_jsonl("queue/jobs.jsonl", jobs)
 
-    repaired_count = duplicate_superseded_count + terminal_superseded_count
+    repaired_count = duplicate_superseded_count + missing_superseded_count + terminal_superseded_count
     return {
         "status": "ok",
         "run_id": run_id,
@@ -268,6 +280,7 @@ def normalize_mission_job_queue(
         "considered_count": considered_count,
         "pending_active_count": len(pending_by_mission),
         "duplicate_superseded_count": duplicate_superseded_count,
+        "missing_superseded_count": missing_superseded_count,
         "terminal_superseded_count": terminal_superseded_count,
         "repaired_count": repaired_count,
         "changed": repaired_count > 0 or changed,

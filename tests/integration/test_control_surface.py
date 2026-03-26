@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
 import services.orchestrator.app.routes.control as control_routes
 
 
@@ -123,48 +124,49 @@ def test_control_scope_blocks_forge_when_app_removed() -> None:
 
 
 def test_control_panic_blocks_mutations_until_resume() -> None:
-    c = TestClient(app)
-    original_mode = _get_mode(c)
-    original_scope = _get_scope(c)
-    try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(
-            c,
-            {
-                "repos": original_scope.get("repos", []),
-                "workspaces": original_scope.get("workspaces", []),
-                "apps": ["missions", "control", "receipts", "lens"],
-            },
-        )
+    with isolated_workspace_files(MISSION_RUNTIME_PATHS):
+        c = TestClient(app)
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
+        try:
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(
+                c,
+                {
+                    "repos": original_scope.get("repos", []),
+                    "workspaces": original_scope.get("workspaces", []),
+                    "apps": ["missions", "control", "receipts", "lens"],
+                },
+            )
 
-        panic = c.post("/control/panic", json={"reason": "integration panic"})
-        assert panic.status_code == 200
-        panic_payload = panic.json()
-        assert panic_payload["status"] == "ok"
-        assert panic_payload["kill_switch"] is True
+            panic = c.post("/control/panic", json={"reason": "integration panic"})
+            assert panic.status_code == 200
+            panic_payload = panic.json()
+            assert panic_payload["status"] == "ok"
+            assert panic_payload["kill_switch"] is True
 
-        blocked = c.post(
-            "/missions",
-            json={"title": f"PanicBlocked-{uuid4()}", "objective": "blocked", "steps": ["s1"]},
-        )
-        assert blocked.status_code == 403
-        assert "kill switch active" in str(blocked.json().get("detail", "")).lower()
+            blocked = c.post(
+                "/missions",
+                json={"title": f"PanicBlocked-{uuid4()}", "objective": "blocked", "steps": ["s1"]},
+            )
+            assert blocked.status_code == 403
+            assert "kill switch active" in str(blocked.json().get("detail", "")).lower()
 
-        resume = c.post("/control/resume", json={"reason": "integration resume", "mode": "pilot"})
-        assert resume.status_code == 200
-        resume_payload = resume.json()
-        assert resume_payload["status"] == "ok"
-        assert resume_payload["kill_switch"] is False
-        assert resume_payload["mode"] == "pilot"
+            resume = c.post("/control/resume", json={"reason": "integration resume", "mode": "pilot"})
+            assert resume.status_code == 200
+            resume_payload = resume.json()
+            assert resume_payload["status"] == "ok"
+            assert resume_payload["kill_switch"] is False
+            assert resume_payload["mode"] == "pilot"
 
-        create = c.post(
-            "/missions",
-            json={"title": f"PanicResume-{uuid4()}", "objective": "allowed", "steps": ["s1"]},
-        )
-        assert create.status_code == 200
-    finally:
-        _set_scope(c, original_scope)
-        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+            create = c.post(
+                "/missions",
+                json={"title": f"PanicResume-{uuid4()}", "objective": "allowed", "steps": ["s1"]},
+            )
+            assert create.status_code == 200
+        finally:
+            _set_scope(c, original_scope)
+            _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
 def test_control_receipts_are_traceable_via_runs_trace() -> None:

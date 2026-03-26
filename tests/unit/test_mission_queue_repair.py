@@ -39,6 +39,11 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 
 
+def _write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _append_duplicate_jobs(path: Path, *, mission_id: str, count: int) -> None:
     rows = _read_jsonl(path)
     for _ in range(count):
@@ -153,6 +158,44 @@ def test_execute_mission_tick_terminal_repair_supersedes_pending_duplicates(
     assert not [row for row in rows if row.get("status") == "queued"]
     assert len([row for row in rows if row.get("status") == "superseded"]) == 2
     assert len([row for row in rows if row.get("status") == "done"]) == 1
+
+
+def test_normalize_mission_job_queue_supersedes_orphaned_mission_tick_jobs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _bind_temp_workspace(monkeypatch, tmp_path)
+    _write_json(workspace / "missions" / "missions.json", {"missions": []})
+    _write_jsonl(
+        workspace / "queue" / "jobs.jsonl",
+        [
+            {
+                "id": "job-orphan",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "run_id": "run-orphan",
+                "trace_id": "trace-orphan",
+                "mission_id": "missing-mission",
+                "action": "mission.tick",
+                "priority": "normal",
+                "status": "queued",
+                "attempts": 0,
+                "lease_key": None,
+                "lease_owner": None,
+                "lease_expires_at": None,
+                "finished_at": None,
+                "last_result": None,
+            }
+        ],
+    )
+
+    summary = missions.normalize_mission_job_queue(run_id="repair-run", trace_id="repair-trace")
+
+    assert summary["missing_superseded_count"] == 1
+    assert summary["repaired_count"] == 1
+
+    rows = _read_jsonl(workspace / "queue" / "jobs.jsonl")
+    assert rows[0]["status"] == "superseded"
+    assert rows[0]["last_result"]["reason"] == "mission_missing"
 
 
 def test_worker_cycle_normalizes_duplicate_mission_jobs_before_processing(
@@ -516,3 +559,150 @@ def test_repair_runtime_state_archives_stale_inbox_noise_and_keeps_latest_briefi
     assert old_brief["repair_reason"] == "runtime_repair:presence_briefing"
     assert new_brief["status"] == "open"
     assert info_row["status"] == "open"
+
+
+def test_repair_runtime_state_cancels_stale_synthetic_missions_and_supersedes_jobs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _bind_temp_workspace(monkeypatch, tmp_path)
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    _write_json(
+        workspace / "missions" / "missions.json",
+        {
+            "missions": [
+                {
+                    "id": "mission-run-history",
+                    "title": "RunHistory-1234",
+                    "objective": "Generate run ledger",
+                    "status": "queued",
+                    "steps": ["s1"],
+                    "next_step_index": 0,
+                    "completed_steps": [],
+                    "created_at": "2026-03-20T00:00:00+00:00",
+                    "updated_at": "2026-03-20T00:00:00+00:00",
+                },
+                {
+                    "id": "mission-generic-test",
+                    "title": "Mission-1234",
+                    "objective": "Ship stage 3",
+                    "status": "active",
+                    "steps": ["design", "implement"],
+                    "next_step_index": 1,
+                    "completed_steps": ["design"],
+                    "created_at": "2026-03-20T00:00:00+00:00",
+                    "updated_at": "2026-03-20T00:00:00+00:00",
+                },
+                {
+                    "id": "mission-real",
+                    "title": "RealOperatorMission",
+                    "objective": "real work",
+                    "status": "active",
+                    "steps": ["inspect", "ship"],
+                    "next_step_index": 1,
+                    "completed_steps": ["inspect"],
+                    "created_at": "2026-03-20T00:00:00+00:00",
+                    "updated_at": "2026-03-20T00:00:00+00:00",
+                },
+                {
+                    "id": "mission-recent-synth",
+                    "title": "TraceMission-1234",
+                    "objective": "trace propagation",
+                    "status": "active",
+                    "steps": ["step-1", "step-2"],
+                    "next_step_index": 1,
+                    "completed_steps": ["step-1"],
+                    "created_at": recent_ts,
+                    "updated_at": recent_ts,
+                },
+            ]
+        },
+    )
+    _write_jsonl(
+        workspace / "queue" / "jobs.jsonl",
+        [
+            {
+                "id": "job-run-history",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "run_id": "job-run-history",
+                "trace_id": "job-run-history",
+                "mission_id": "mission-run-history",
+                "action": "mission.tick",
+                "priority": "normal",
+                "status": "queued",
+                "attempts": 0,
+            },
+            {
+                "id": "job-generic-test",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "run_id": "job-generic-test",
+                "trace_id": "job-generic-test",
+                "mission_id": "mission-generic-test",
+                "action": "mission.tick",
+                "priority": "normal",
+                "status": "queued",
+                "attempts": 0,
+            },
+            {
+                "id": "job-real",
+                "ts": "2026-03-20T00:00:00+00:00",
+                "run_id": "job-real",
+                "trace_id": "job-real",
+                "mission_id": "mission-real",
+                "action": "mission.tick",
+                "priority": "normal",
+                "status": "queued",
+                "attempts": 0,
+            },
+            {
+                "id": "job-recent-synth",
+                "ts": recent_ts,
+                "run_id": "job-recent-synth",
+                "trace_id": "job-recent-synth",
+                "mission_id": "mission-recent-synth",
+                "action": "mission.tick",
+                "priority": "normal",
+                "status": "queued",
+                "attempts": 0,
+            },
+        ],
+    )
+
+    summary = worker_main.repair_runtime_state(
+        run_id="repair-run",
+        trace_id="repair-trace",
+        apply=True,
+        normalize_mission_queue=False,
+        cancel_stale_synthetic_missions=True,
+        archive_test_deadletters=False,
+        archive_stale_unsupported_deadletters=False,
+        replay_timeout_deadletters=False,
+        resolve_test_incidents=False,
+        resolve_stale_security_incidents=False,
+        archive_test_inbox_messages=False,
+        archive_stale_presence_briefings=False,
+        min_age_hours=24,
+    )
+
+    missions_summary = summary["runtime_hygiene_repair"]["missions"]
+    assert missions_summary["candidate_count"] == 2
+    assert missions_summary["active_before"] == 4
+    assert missions_summary["active_after"] == 2
+    assert missions_summary["queued_job_candidate_count"] == 2
+
+    missions_doc = json.loads((workspace / "missions" / "missions.json").read_text(encoding="utf-8"))
+    mission_rows = {row["id"]: row for row in missions_doc["missions"]}
+    assert mission_rows["mission-run-history"]["status"] == "cancelled"
+    assert mission_rows["mission-run-history"]["repair_reason"] == "runtime_repair:synthetic_mission"
+    assert mission_rows["mission-generic-test"]["status"] == "cancelled"
+    assert mission_rows["mission-generic-test"]["repair_reason"] == "runtime_repair:synthetic_mission"
+    assert mission_rows["mission-real"]["status"] == "active"
+    assert mission_rows["mission-recent-synth"]["status"] == "active"
+
+    jobs = {row["id"]: row for row in _read_jsonl(workspace / "queue" / "jobs.jsonl")}
+    assert jobs["job-run-history"]["status"] == "superseded"
+    assert jobs["job-run-history"]["repair_reason"] == "runtime_repair:synthetic_mission"
+    assert jobs["job-generic-test"]["status"] == "superseded"
+    assert jobs["job-generic-test"]["repair_reason"] == "runtime_repair:synthetic_mission"
+    assert jobs["job-real"]["status"] == "queued"
+    assert jobs["job-recent-synth"]["status"] == "queued"

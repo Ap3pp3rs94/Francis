@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _get_mode(client: TestClient) -> dict:
@@ -47,47 +48,48 @@ def _enable_apps(scope: dict, required_apps: list[str]) -> dict:
 
 
 def test_trace_header_propagates_through_missions_and_runs_trace() -> None:
-    c = TestClient(app)
-    original_mode = _get_mode(c)
-    original_scope = _get_scope(c)
-    trace_id = f"trace-{uuid4()}"
-    headers = {"x-trace-id": trace_id}
-    try:
-        _set_mode(c, "pilot", kill_switch=False)
-        _set_scope(c, _enable_apps(original_scope, ["missions", "receipts"]))
+    with isolated_workspace_files(MISSION_RUNTIME_PATHS):
+        c = TestClient(app)
+        original_mode = _get_mode(c)
+        original_scope = _get_scope(c)
+        trace_id = f"trace-{uuid4()}"
+        headers = {"x-trace-id": trace_id}
+        try:
+            _set_mode(c, "pilot", kill_switch=False)
+            _set_scope(c, _enable_apps(original_scope, ["missions", "receipts"]))
 
-        created = c.post(
-            "/missions",
-            headers=headers,
-            json={
-                "title": f"TraceMission-{uuid4()}",
-                "objective": "trace propagation",
-                "steps": ["step-1", "step-2"],
-            },
-        )
-        assert created.status_code == 200
-        created_payload = created.json()
-        mission_id = created_payload["mission"]["id"]
-        assert created_payload["trace_id"] == trace_id
+            created = c.post(
+                "/missions",
+                headers=headers,
+                json={
+                    "title": f"TraceMission-{uuid4()}",
+                    "objective": "trace propagation",
+                    "steps": ["step-1", "step-2"],
+                },
+            )
+            assert created.status_code == 200
+            created_payload = created.json()
+            mission_id = created_payload["mission"]["id"]
+            assert created_payload["trace_id"] == trace_id
 
-        tick = c.post(f"/missions/{mission_id}/tick", headers=headers)
-        assert tick.status_code == 200
-        assert tick.json()["trace_id"] == trace_id
+            tick = c.post(f"/missions/{mission_id}/tick", headers=headers)
+            assert tick.status_code == 200
+            assert tick.json()["trace_id"] == trace_id
 
-        trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 100})
-        assert trace.status_code == 200
-        payload = trace.json()
-        assert payload["trace_id"] == trace_id
+            trace = c.get(f"/runs/trace/{trace_id}", params={"limit": 100})
+            assert trace.status_code == 200
+            payload = trace.json()
+            assert payload["trace_id"] == trace_id
 
-        mission_history = payload.get("receipts", {}).get("mission_history", [])
-        assert any(
-            str(row.get("mission_id", "")) == mission_id and str(row.get("trace_id", "")) == trace_id
-            for row in mission_history
-        )
-        assert any(str(row.get("event", "")) == "mission.tick" for row in mission_history)
-    finally:
-        _set_scope(c, original_scope)
-        _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+            mission_history = payload.get("receipts", {}).get("mission_history", [])
+            assert any(
+                str(row.get("mission_id", "")) == mission_id and str(row.get("trace_id", "")) == trace_id
+                for row in mission_history
+            )
+            assert any(str(row.get("event", "")) == "mission.tick" for row in mission_history)
+        finally:
+            _set_scope(c, original_scope)
+            _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
 
 
 def test_trace_header_propagates_through_tools_and_worker_cycle() -> None:

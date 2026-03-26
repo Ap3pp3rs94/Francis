@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from tests.integration.workspace_state import AUTONOMY_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _workspace_root() -> Path:
@@ -51,98 +52,99 @@ def _clear_budget_state() -> None:
 
 
 def test_autonomy_cycle_writes_last_run() -> None:
-    _clear_budget_state()
-    c = TestClient(app)
+    with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
+        _clear_budget_state()
+        c = TestClient(app)
 
-    create = c.post(
-        "/missions",
-        json={"title": f"Auto-{uuid4()}", "objective": "Autonomy run", "steps": ["s1"]},
-    )
-    assert create.status_code == 200
+        create = c.post(
+            "/missions",
+            json={"title": f"Auto-{uuid4()}", "objective": "Autonomy run", "steps": ["s1"]},
+        )
+        assert create.status_code == 200
 
-    cycle = c.post("/autonomy/cycle", json={"max_actions": 3, "allow_medium": True})
-    assert cycle.status_code == 200
-    payload = cycle.json()
-    assert payload["status"] == "ok"
-    assert isinstance(payload.get("candidate_actions"), list)
-    assert isinstance(payload.get("executed_actions"), list)
-    assert len(payload["executed_actions"]) >= 1
+        cycle = c.post("/autonomy/cycle", json={"max_actions": 3, "allow_medium": True})
+        assert cycle.status_code == 200
+        payload = cycle.json()
+        assert payload["status"] == "ok"
+        assert isinstance(payload.get("candidate_actions"), list)
+        assert isinstance(payload.get("executed_actions"), list)
+        assert len(payload["executed_actions"]) >= 1
 
-    last_run = _read_json(_workspace_root() / "runs" / "last_run.json", {})
-    assert isinstance(last_run, dict)
-    assert last_run.get("run_id") == payload.get("run_id")
+        last_run = _read_json(_workspace_root() / "runs" / "last_run.json", {})
+        assert isinstance(last_run, dict)
+        assert last_run.get("run_id") == payload.get("run_id")
 
 
 def test_autonomy_blocks_medium_without_flag() -> None:
-    _clear_budget_state()
-    c = TestClient(app)
-    create = c.post(
-        "/missions",
-        json={"title": f"Blocked-{uuid4()}", "objective": "Medium risk block", "steps": ["s1"]},
-    )
-    assert create.status_code == 200
+    with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
+        _clear_budget_state()
+        c = TestClient(app)
+        create = c.post(
+            "/missions",
+            json={"title": f"Blocked-{uuid4()}", "objective": "Medium risk block", "steps": ["s1"]},
+        )
+        assert create.status_code == 200
 
-    cycle = c.post("/autonomy/cycle", json={"max_actions": 3, "allow_medium": False})
-    assert cycle.status_code == 200
-    payload = cycle.json()
-    blocked = payload.get("blocked_actions", [])
-    assert any(
-        action.get("kind") == "mission.tick" and "medium risk disabled" in str(action.get("policy_reason", ""))
-        for action in blocked
-    )
+        cycle = c.post("/autonomy/cycle", json={"max_actions": 3, "allow_medium": False})
+        assert cycle.status_code == 200
+        payload = cycle.json()
+        blocked = payload.get("blocked_actions", [])
+        assert any(
+            action.get("kind") == "mission.tick" and "medium risk disabled" in str(action.get("policy_reason", ""))
+            for action in blocked
+        )
 
 
 def test_autonomy_halts_on_critical_observer_result() -> None:
-    _clear_budget_state()
-    workspace = _workspace_root()
-    incidents = workspace / "incidents" / "incidents.jsonl"
-    incidents.parent.mkdir(parents=True, exist_ok=True)
-    with incidents.open("a", encoding="utf-8") as f:
-        f.write(
-            json.dumps(
-                {
-                    "id": str(uuid4()),
-                    "ts": "2026-01-01T00:00:00+00:00",
-                    "run_id": str(uuid4()),
-                    "severity": "critical",
-                    "kind": "test.critical",
-                    "message": "critical incident injected for autonomy halt test",
-                    "status": "open",
-                },
-                ensure_ascii=False,
+    with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
+        _clear_budget_state()
+        workspace = _workspace_root()
+        incidents = workspace / "incidents" / "incidents.jsonl"
+        incidents.parent.mkdir(parents=True, exist_ok=True)
+        with incidents.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "id": str(uuid4()),
+                        "ts": "2026-01-01T00:00:00+00:00",
+                        "run_id": str(uuid4()),
+                        "severity": "critical",
+                        "kind": "test.critical",
+                        "message": "critical incident injected for autonomy halt test",
+                        "status": "open",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
             )
-            + "\n"
+
+        (workspace / "runs" / "last_run.json").write_text(
+            json.dumps({"ts": "2000-01-01T00:00:00+00:00"}, ensure_ascii=False),
+            encoding="utf-8",
         )
 
-    # Force observer scan due.
-    (workspace / "runs" / "last_run.json").write_text(
-        json.dumps({"ts": "2000-01-01T00:00:00+00:00"}, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-    c = TestClient(app)
-    cycle = c.post(
-        "/autonomy/cycle",
-        json={"max_actions": 3, "allow_medium": True, "stop_on_critical": True},
-    )
-    assert cycle.status_code == 200
-    payload = cycle.json()
-    assert payload["halted_after_critical"] is True
-    assert payload["halted_reason"] == "critical_anomaly"
+        c = TestClient(app)
+        cycle = c.post(
+            "/autonomy/cycle",
+            json={"max_actions": 3, "allow_medium": True, "stop_on_critical": True},
+        )
+        assert cycle.status_code == 200
+        payload = cycle.json()
+        assert payload["halted_after_critical"] is True
+        assert payload["halted_reason"] == "critical_anomaly"
 
 
 def test_autonomy_can_select_worker_cycle_when_queue_due() -> None:
-    _clear_budget_state()
-    workspace = _workspace_root()
-    now_iso = "2026-01-01T00:00:00+00:00"
-    (workspace / "runs" / "last_run.json").write_text(
-        json.dumps({"ts": now_iso}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
+        _clear_budget_state()
+        workspace = _workspace_root()
+        now_iso = "2026-01-01T00:00:00+00:00"
+        (workspace / "runs" / "last_run.json").write_text(
+            json.dumps({"ts": now_iso}, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
-    jobs_path = workspace / "queue" / "jobs.jsonl"
-    existing = jobs_path.read_text(encoding="utf-8") if jobs_path.exists() else ""
-    try:
+        jobs_path = workspace / "queue" / "jobs.jsonl"
         jobs_path.parent.mkdir(parents=True, exist_ok=True)
         queued_job = {
             "id": str(uuid4()),
@@ -174,8 +176,6 @@ def test_autonomy_can_select_worker_cycle_when_queue_due() -> None:
         assert "worker.cycle" in selected_kinds
         executed_kinds = [item.get("kind") for item in payload.get("executed_actions", [])]
         assert "worker.cycle" in executed_kinds
-    finally:
-        jobs_path.write_text(existing, encoding="utf-8")
 
 
 def test_autonomy_can_select_worker_cycle_when_leases_expired() -> None:
