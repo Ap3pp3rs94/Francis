@@ -87,6 +87,7 @@ The packaging flow now uses `electron/builder-config.cjs` so supported signing r
 The repo now also includes `scripts/signing-public.example.ps1` plus an ignored `scripts/signing-public.local.ps1` pattern so public-release signer configuration can live in one local PowerShell file instead of ad hoc shell residue.
 Placeholder values such as `<legal publisher name>` are treated as unset, so the ignored local signer file can exist safely before real publisher material is provisioned.
 `release:publish:windows:public:local` now also fails in PowerShell before npm starts if that local bootstrap file is missing, still placeholder-valued, or does not yet contain one complete signing route.
+The generated signing manifest and verifier output now also capture primary-chain metadata such as `rootSubject`, `rootIssuer`, and `chainSubjects`, so leaf-vs-root signer identity is inspectable during public-release review.
 
 ## Assumptions
 

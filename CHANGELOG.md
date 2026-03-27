@@ -12,6 +12,7 @@
 - Added an ignored local public-signing bootstrap path through `scripts/signing-public.local.ps1`, `scripts/signing-public.example.ps1`, and `npm run release:publish:windows:public:local` so real publisher credentials can be loaded from one local PowerShell file before the public release gate runs.
 - Placeholder signing-template values are now treated as unset across the signing surfaces, so the ignored local signer bootstrap file can exist before real publisher material is installed without accidentally looking ready.
 - The local public-release wrapper now fails in PowerShell before npm starts when `scripts/signing-public.local.ps1` is missing, still placeholder-valued, or lacks one complete signing route.
+- The signing manifest and verifier output now capture primary-chain metadata such as `rootSubject`, `rootIssuer`, and `chainSubjects`, so signer-chain review is explicit during public-release validation.
 - Added a fail-fast public-signing preflight so `npm run release:publish:windows:public` now stops immediately on machines that only have self-issued or otherwise non-public signer material.
 - Mission queue repair now normalizes duplicate `mission.tick` jobs, supersedes stale queued work for terminal missions, and exposes repair counts in mission/worker receipts.
 - Worker cycles now run queue normalization before dispatch and record mission-queue repair posture in the worker-cycle summary and ledger.
