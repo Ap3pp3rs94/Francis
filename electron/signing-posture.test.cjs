@@ -45,6 +45,22 @@ test("signing posture becomes high when signer inputs are partial", () => {
   assert.match(posture.summary, /partial/i);
 });
 
+test("signing posture is ready when Windows cert-store selectors are configured", () => {
+  const posture = buildSigningPosture({
+    env: {
+      FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME: "Ap3pp3rs94",
+    },
+    distribution: "installer",
+    packaged: false,
+  });
+
+  assert.equal(posture.mode, "local_certificate");
+  assert.equal(posture.severity, "low");
+  assert.equal(posture.ready, true);
+  assert.ok(posture.configuredPaths.includes("Windows cert store"));
+  assert.match(posture.summary, /certificate-store/i);
+});
+
 test("signing posture is ready when Azure Trusted Signing inputs are complete", () => {
   const posture = buildSigningPosture({
     env: {

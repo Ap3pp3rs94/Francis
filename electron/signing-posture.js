@@ -34,6 +34,8 @@ function buildSigningPosture({
 } = {}) {
   const localCertificate = readEnvValue(env, ["WIN_CSC_LINK", "CSC_LINK"]);
   const localPassword = readEnvValue(env, ["WIN_CSC_KEY_PASSWORD", "CSC_KEY_PASSWORD"]);
+  const localStoreSubject = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
+  const localStoreSha1 = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
   const azureEndpoint = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
   const azureAccount = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
   const azureProfile = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
@@ -49,7 +51,9 @@ function buildSigningPosture({
   const requiresSigning = distribution === "installer" || distribution === "portable";
   const verified = normalizeVerifiedExecutable(verifiedExecutable);
 
-  const localReady = Boolean(localCertificate && localPassword);
+  const localFileReady = Boolean(localCertificate && localPassword);
+  const localStoreReady = Boolean(localStoreSubject || localStoreSha1);
+  const localReady = localFileReady || localStoreReady;
   const azureAuthReady = Boolean(
     azureClient &&
       azureTenant &&
@@ -60,6 +64,8 @@ function buildSigningPosture({
   const anySignals = Boolean(
     localCertificate ||
       localPassword ||
+      localStoreSubject ||
+      localStoreSha1 ||
       azureEndpoint ||
       azureAccount ||
       azureProfile ||
@@ -87,7 +93,9 @@ function buildSigningPosture({
     summary = verified.summary || "Packaged Windows build signature is present but not valid.";
   } else if (localReady) {
     mode = "local_certificate";
-    summary = "Windows signing material is configured through a local certificate path.";
+    summary = localStoreReady
+      ? "Windows signing material is configured through a Windows certificate-store selector."
+      : "Windows signing material is configured through a local certificate path.";
   } else if (azureReady) {
     mode = "cloud_signing";
     summary = "Windows signing material is configured through Azure Trusted Signing.";
@@ -112,6 +120,9 @@ function buildSigningPosture({
   const configuredPaths = [];
   if (localCertificate) {
     configuredPaths.push("local certificate");
+  }
+  if (localStoreReady) {
+    configuredPaths.push("Windows cert store");
   }
   if (azureReady || azureEndpoint || azureAccount || azureProfile || azurePublisher) {
     configuredPaths.push("Azure Trusted Signing");
@@ -203,13 +214,24 @@ function buildSigningPosture({
     items: [
       {
         id: "certificate",
-        label: "Local certificate",
-        tone: localReady ? "low" : localCertificate || localPassword ? "high" : "low",
-        summary: localReady
+        label: "Local signing",
+        tone:
+          localReady
+            ? "low"
+            : localCertificate || localPassword || localStoreSubject || localStoreSha1
+              ? "high"
+              : "low",
+        summary: localFileReady
           ? "Certificate path and password are configured."
-          : localCertificate || localPassword
-            ? "Certificate path or password is present, but the local signer is incomplete."
-            : "No local certificate path is configured.",
+          : localStoreReady
+            ? localStoreSubject && localStoreSha1
+              ? "Windows cert-store subject and thumbprint selectors are configured."
+              : "A Windows cert-store selector is configured."
+            : localCertificate || localPassword
+              ? "Certificate path or password is present, but the local signer is incomplete."
+              : localStoreSubject || localStoreSha1
+                ? "A Windows cert-store selector is present, but it is incomplete."
+                : "No local certificate path or Windows cert-store selector is configured.",
       },
       {
         id: "azure",
@@ -285,7 +307,9 @@ function buildSigningPosture({
         summary: azureReady
           ? "Electron Builder will use Azure Trusted Signing when packaging."
           : localReady
-            ? "Electron Builder will use signtool/local certificate signing when packaging."
+            ? localStoreReady
+              ? "Electron Builder will use signtool with Windows cert-store selection when packaging."
+              : "Electron Builder will use signtool/local certificate signing when packaging."
             : requiresSigning
               ? "Packaging will remain unsigned until a supported signing route is configured."
               : "Source checkout does not require packaged signing.",

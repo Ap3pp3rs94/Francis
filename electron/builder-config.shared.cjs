@@ -37,6 +37,20 @@ function buildAzureTrustedSigningOptions(env = process.env) {
   };
 }
 
+function buildWindowsSigntoolOptions(env = process.env) {
+  const certificateSubjectName = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
+  const certificateSha1 = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
+
+  if (!(certificateSubjectName || certificateSha1)) {
+    return null;
+  }
+
+  return {
+    ...(certificateSubjectName ? { certificateSubjectName } : {}),
+    ...(certificateSha1 ? { certificateSha1 } : {}),
+  };
+}
+
 function buildElectronBuilderConfig({
   packageJson: packageJsonInput = packageJson,
   env = process.env,
@@ -44,11 +58,16 @@ function buildElectronBuilderConfig({
   const build = cloneBuildConfig(packageJsonInput.build || {});
   const win = { ...(build.win || {}) };
   const azureSignOptions = buildAzureTrustedSigningOptions(env);
+  const signtoolOptions = buildWindowsSigntoolOptions(env);
 
   if (azureSignOptions) {
     win.azureSignOptions = azureSignOptions;
+    delete win.signtoolOptions;
+  } else if (signtoolOptions) {
+    win.signtoolOptions = signtoolOptions;
   } else {
     delete win.azureSignOptions;
+    delete win.signtoolOptions;
   }
 
   return {
@@ -63,4 +82,5 @@ function buildElectronBuilderConfig({
 module.exports = {
   buildAzureTrustedSigningOptions,
   buildElectronBuilderConfig,
+  buildWindowsSigntoolOptions,
 };
