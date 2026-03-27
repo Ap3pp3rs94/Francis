@@ -66,10 +66,14 @@ That PowerShell helper checks the HUD URL first and, if it is down, lets the Ele
 ## Package
 
 - `npm run overlay:pack` builds an unpacked portable app directory for local verification and emits `electron/generated/build-signing.json`
+- `npm run overlay:pack:signed` builds the unpacked portable app directory and fails unless the resulting executable is signed
 - `npm run overlay:installer` builds a guided NSIS installer in `dist/overlay` and emits `electron/generated/build-signing.json`
+- `npm run overlay:installer:signed` builds the NSIS installer and fails unless the resulting installer is signed
 - `npm run overlay:dist` builds both the portable executable and the NSIS installer in `dist/overlay`, then emits `electron/generated/build-signing.json`
+- `npm run overlay:dist:signed` builds both Windows artifacts and fails unless the packaged outputs are signed
 - `npm run overlay:verify-signing` inspects the current packaged artifacts with the vendored `signtool.exe` verifier
 - `npm run overlay:verify-signing:required` fails if the current packaged artifacts are not signed
+- `npm run release:publish:windows` is the canonical signed Windows publish command: it runs `release:hardening`, then `overlay:dist:signed`
 
 The packaged shell includes the Francis HUD Python source under `resources/python-src` and will attempt to boot it locally when no HUD server is already running.
 Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / `overlay:dist` do it for you. That stages a bundled Python runtime under `dist/python-runtime-staging` and packages it as `resources/python-runtime`.
@@ -137,7 +141,7 @@ The packaging flow now uses `electron/builder-config.cjs` so supported signing r
 ## Next Extensions
 
 - trim the staged runtime footprint now that the first bundled-runtime path exists
-- publish signed Windows artifacts now that the distribution path and verification gate are explicit
+- configure signer material and publish signed Windows artifacts now that the distribution path fails closed
 - add richer per-display policies if Francis eventually needs different overlay presence on different monitors
 - add selective hit-testing only if the whole-window click-through toggle stops being sufficient
 
