@@ -10,6 +10,7 @@
 - Added `npm run overlay:signing-doctor` so the current machine can report whether public-trust release signing is ready or blocked on missing publisher hints, self-issued-only certs, publisher mismatch, or missing public-trust signer material.
 - The signing doctor now also emits exact PowerShell env suggestions for the viable local-store and Azure signing routes, so the remaining public-signing setup is copy-pasteable instead of interpretive.
 - Added an ignored local public-signing bootstrap path through `scripts/signing-public.local.ps1`, `scripts/signing-public.example.ps1`, and `npm run release:publish:windows:public:local` so real publisher credentials can be loaded from one local PowerShell file before the public release gate runs.
+- Placeholder signing-template values are now treated as unset across the signing surfaces, so the ignored local signer bootstrap file can exist before real publisher material is installed without accidentally looking ready.
 - Added a fail-fast public-signing preflight so `npm run release:publish:windows:public` now stops immediately on machines that only have self-issued or otherwise non-public signer material.
 - Mission queue repair now normalizes duplicate `mission.tick` jobs, supersedes stale queued work for terminal missions, and exposes repair counts in mission/worker receipts.
 - Worker cycles now run queue normalization before dispatch and record mission-queue repair posture in the worker-cycle summary and ledger.

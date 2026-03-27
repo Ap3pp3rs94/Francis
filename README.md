@@ -57,6 +57,7 @@ The current state is best described as:
 * `npm run overlay:signing-doctor` now diagnoses the public-signing blocker on the current machine in one command, including missing publisher hints, self-issued-only cert stores, publisher mismatches, and absent public-trust signer material, and it emits exact PowerShell env suggestions for the viable signing routes it can see
 * `release:publish:windows:public` now fails fast through the signing doctor preflight, so a machine with only a self-issued dev signer does not burn a full Windows build before the public gate blocks it
 * the repo now includes a canonical ignored local signer bootstrap path through `scripts/signing-public.local.ps1`, `scripts/signing-public.example.ps1`, and `npm run release:publish:windows:public:local`
+* placeholder values such as `<legal publisher name>` are now treated as unset across the signing surfaces, so the local bootstrap file can exist safely before real publisher values are installed
 * Windows signing now supports three explicit routes: local PFX material, Windows cert-store selection, or Azure Trusted Signing
 * current estimated completion is `96%` overall, `96%` for feature/build coverage, and `92%` for production readiness
 
