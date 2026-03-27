@@ -2,6 +2,9 @@
 
 ## Unreleased
 - Release-hardening sprint for queue integrity, incident hygiene, verification lanes, and packaging truthfulness.
+- Overlay packaging now uses a dedicated Electron Builder config so the supported signing routes are real and explicit: local certificate signing or Azure Trusted Signing.
+- Added artifact-level Authenticode verification for overlay packaging, including `npm run overlay:verify-signing`, `npm run overlay:verify-signing:required`, and a generated `electron/generated/build-signing.json` manifest.
+- Packaged overlay signing posture now accepts verifier-backed executable state instead of assuming every packaged build is unsigned, and the packaging flow now leaves a concrete signed-vs-unsigned manifest even when signer inputs are absent.
 - Mission queue repair now normalizes duplicate `mission.tick` jobs, supersedes stale queued work for terminal missions, and exposes repair counts in mission/worker receipts.
 - Worker cycles now run queue normalization before dispatch and record mission-queue repair posture in the worker-cycle summary and ledger.
 - Expanded the governed `worker/repair` path so it can preview or apply mission queue normalization, archive stale unsupported deadletters, replay stale timeout deadletters, and resolve stale security probe incidents with receipts.

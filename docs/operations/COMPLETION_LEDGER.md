@@ -6,9 +6,9 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `90%`
-* feature and build coverage: `92%`
-* production readiness: `86%`
+* overall: `91%`
+* feature and build coverage: `93%`
+* production readiness: `88%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -56,6 +56,9 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Scheduled housekeeping: the autonomy reactor now previews stale runtime-hygiene debt, emits a `runtime.hygiene_due` signal, budgets a low-risk `worker.repair` action, and executes the existing governed cleanup path through normal autonomy receipts instead of leaving hygiene as a purely manual operator action.
 * Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, inbox/telemetry shared-workspace isolation, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
 * Verification discipline: the monolithic `pytest -q` run cleared end to end with `359 passed in 2291.66s`, and the remaining workspace-leak cases it exposed in the worker deadletter retry path and red-team policy-bypass lens path are now isolated and folded into the bounded release lane.
+* Distribution trust: the overlay packaging flow now uses a dedicated Electron Builder config that is wired to the signing routes the repo actually supports, namely local certificate signing and Azure Trusted Signing.
+* Distribution trust: packaged artifact builds now emit `electron/generated/build-signing.json`, `npm run overlay:verify-signing` inspects the real artifacts with the vendored `signtool.exe` verifier, and `npm run overlay:verify-signing:required` can fail a release packaging pass until signed outputs are present.
+* Distribution trust: signing posture now accepts verifier-backed executable state instead of assuming every packaged build is unsigned, while still falling back cleanly when no verifier is available in the current runtime.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
 * Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
@@ -71,7 +74,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Runtime backlog drainage is materially improved and the live workspace is now quiet by default, with governed cleanup now available both as an explicit operator action and as a budgeted autonomy housekeeping action. The remaining risk is keeping those policies narrow and routine rather than inventing broader self-directed cleanup.
 * Deadletter discipline is now materially stronger, but timeout replay still remains an explicit operator action rather than a scheduled housekeeping policy.
 * Incident, inbox, and telemetry posture are now quiet, so the remaining productization risk is release confidence and distribution trust rather than day-to-day runtime noise.
-* Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
+* Productization is real in the overlay shell, and the signing routes plus verification gates are now explicit, but the current local artifacts remain unsigned until signer inputs are supplied.
 * Verification structure is materially better, and the fresh monolithic `pytest -q` lane is now confirmed green, but it is still materially slower than the focused lanes.
 
 ## Missing
@@ -82,8 +85,8 @@ These counts come from the live event reactor and presence surfaces and now use 
 
 ## Blocked
 
-* Production-readiness claims are now blocked primarily on signed Windows distribution and ongoing release-lane operating cost rather than on live queue, incident, inbox, telemetry, or full-suite confidence.
-* Distribution trust is blocked on Windows code signing even though the pack and installer lanes now complete successfully on this machine.
+* Production-readiness claims are now blocked primarily on signed Windows distribution publication and ongoing release-lane operating cost rather than on live queue, incident, inbox, telemetry, or full-suite confidence.
+* Distribution trust is blocked on actual signer material and signed artifact publication, not on missing packaging or verification plumbing.
 
 ## Verification Lanes
 
@@ -98,11 +101,13 @@ Use these commands as the current release-hardening lanes:
 * `pytest -q tests/unit/test_telemetry_reactor.py::test_event_reactor_surfaces_runtime_hygiene_signal tests/unit/test_telemetry_reactor.py::test_decision_engine_selects_worker_repair_when_runtime_hygiene_due tests/integration/test_autonomy_cycle.py::test_autonomy_can_execute_worker_repair_when_runtime_hygiene_due tests/integration/test_autonomy_events.py::test_autonomy_collect_events_enqueues_runtime_hygiene_signal`
 * `pytest -q tests/integration/test_inbox_pipeline.py tests/integration/test_telemetry_pipeline.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
-* `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py`
+* `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py tests/redteam/test_policy_bypass.py`
 * `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`
-* `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter"`
+* `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_retry_backoff_and_deadletter_escalation or worker_cycle_action_timeout_can_escalate_to_deadletter"`
 * `npm run overlay:test`
 * `npm run overlay:prepare-runtime`
+* `npm run overlay:verify-signing`
+* `npm run overlay:verify-signing:required`
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 

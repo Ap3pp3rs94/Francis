@@ -65,13 +65,16 @@ That PowerShell helper checks the HUD URL first and, if it is down, lets the Ele
 
 ## Package
 
-- `npm run overlay:pack` builds an unpacked portable app directory for local verification
-- `npm run overlay:installer` builds a guided NSIS installer in `dist/overlay`
-- `npm run overlay:dist` builds both the portable executable and the NSIS installer in `dist/overlay`
+- `npm run overlay:pack` builds an unpacked portable app directory for local verification and emits `electron/generated/build-signing.json`
+- `npm run overlay:installer` builds a guided NSIS installer in `dist/overlay` and emits `electron/generated/build-signing.json`
+- `npm run overlay:dist` builds both the portable executable and the NSIS installer in `dist/overlay`, then emits `electron/generated/build-signing.json`
+- `npm run overlay:verify-signing` inspects the current packaged artifacts with the vendored `signtool.exe` verifier
+- `npm run overlay:verify-signing:required` fails if the current packaged artifacts are not signed
 
 The packaged shell includes the Francis HUD Python source under `resources/python-src` and will attempt to boot it locally when no HUD server is already running.
 Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / `overlay:dist` do it for you. That stages a bundled Python runtime under `dist/python-runtime-staging` and packages it as `resources/python-runtime`.
 The first staging run can take a while because it copies the embedded runtime, stdlib, DLLs, and site-packages; the script now emits explicit progress so long Windows copies are visible instead of looking hung.
+The packaging flow now uses `electron/builder-config.cjs` so supported signing routes are explicit: local certificate signing through `CSC_LINK` / `WIN_CSC_LINK` and `CSC_KEY_PASSWORD` / `WIN_CSC_KEY_PASSWORD`, or Azure Trusted Signing through `FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT`, `FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`, `FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`, optional `FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME`, and the required Microsoft Entra environment credentials.
 
 ## Assumptions
 
@@ -89,10 +92,11 @@ The first staging run can take a while because it copies the embedded runtime, s
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
 - The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
 - The shell also stores a small `overlay-session.json` continuity record so crash recovery can be surfaced on the next launch.
-- The Windows portable build is unsigned. SmartScreen or local policy may require an explicit trust decision until code signing is added.
-- The NSIS installer is also unsigned. SmartScreen or local policy may require an explicit trust decision until code signing is added.
+- Unless local certificate or Azure Trusted Signing inputs are configured, the Windows portable build remains unsigned. SmartScreen or local policy may require an explicit trust decision.
+- Unless local certificate or Azure Trusted Signing inputs are configured, the NSIS installer remains unsigned. SmartScreen or local policy may require an explicit trust decision.
 - Uninstall removes installed app files and shortcuts, but retained shell state under Electron user data is intentionally not deleted automatically.
 - Packaging assumes the build machine can supply a valid base Python home. If that is not discoverable from `.venv/pyvenv.cfg`, set `FRANCIS_OVERLAY_PYTHON_HOME` before running the package scripts.
+- SignPath inputs are surfaced for audit only. The current overlay packaging flow is wired to local certificate signing and Azure Trusted Signing, not SignPath.
 
 ## Current Operator Surface
 
@@ -133,7 +137,7 @@ The first staging run can take a while because it copies the embedded runtime, s
 ## Next Extensions
 
 - trim the staged runtime footprint now that the first bundled-runtime path exists
-- add Windows signing once the distribution path stabilizes
+- publish signed Windows artifacts now that the distribution path and verification gate are explicit
 - add richer per-display policies if Francis eventually needs different overlay presence on different monitors
 - add selective hit-testing only if the whole-window click-through toggle stops being sufficient
 

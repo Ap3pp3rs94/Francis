@@ -50,9 +50,9 @@ Francis is no longer at scaffold stage. The repo already contains a working orch
 The current state is best described as:
 
 * broad alpha coverage with real operator/runtime surfaces already wired
-* active release-hardening and productization work, especially around queue health, incident noise, verification discipline, and packaging reliability
-* governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, malformed queued job cleanup, stale synthetic inbox cleanup, and stale pytest telemetry cleanup, the autonomy reactor can now preview that cleanup debt and schedule a budgeted `worker.repair` action, and observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open
-* current estimated completion is `90%` overall, `92%` for feature/build coverage, and `86%` for production readiness
+* active release-hardening and productization work, especially around verification discipline, packaging trust, and signed-distribution closeout rather than live backlog noise
+* governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, malformed queued job cleanup, stale synthetic inbox cleanup, and stale pytest telemetry cleanup, the autonomy reactor can now preview that cleanup debt and schedule a budgeted `worker.repair` action, observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open, and the Electron overlay packaging flow now verifies actual Authenticode state for packaged artifacts instead of only describing signer inputs
+* current estimated completion is `91%` overall, `93%` for feature/build coverage, and `88%` for production readiness
 
 The current shipped, hardened, partial, and blocked surfaces are tracked in [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
 
@@ -242,15 +242,17 @@ The most reliable verification lanes right now are:
 * `pytest -q tests/unit/test_presence_state.py tests/test_presence_state_grounding.py`
 * `pytest -q tests/integration/test_inbox_pipeline.py tests/integration/test_telemetry_pipeline.py`
 * `pytest -q tests/integration/test_observer_emits_events.py`
-* `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py`
+* `pytest -q tests/integration/test_security_quarantine.py tests/redteam/test_prompt_injection.py tests/redteam/test_fs_escape_attempts.py tests/redteam/test_policy_bypass.py`
 * `pytest -q tests/integration/test_mission_tick.py -k "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance"`
-* `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter"`
+* `pytest -q tests/integration/test_worker_cycle.py -k "worker_cycle_processes_mission_queue or worker_retry_backoff_and_deadletter_escalation or worker_cycle_action_timeout_can_escalate_to_deadletter"`
 * `npm run overlay:test`
 * `npm run overlay:prepare-runtime`
+* `npm run overlay:verify-signing`
+* `npm run overlay:verify-signing:required`
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the supported full-suite triage lane for the first concrete break, and `npm run test:full:stepwise` is the supported resume lane for continuing from that failure point without replaying the already-confirmed prefix. The commands above are the current hardening-smoke lanes for queue, inbox, telemetry, observer, observer-baseline normalization, security quarantine, inbox/presence state, autonomy housekeeping, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run, and the autonomy reactor can now keep stale synthetic residue from reaccumulating through a budgeted housekeeping pass instead of depending only on manual repair.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the supported full-suite triage lane for the first concrete break, and `npm run test:full:stepwise` is the supported resume lane for continuing from that failure point without replaying the already-confirmed prefix. The commands above are the current hardening-smoke lanes for queue, inbox, telemetry, observer, observer-baseline normalization, security quarantine, inbox/presence state, autonomy housekeeping, and overlay packaging posture. `npm run release:hardening` now runs that bounded release subset without changing the live workspace counters before vs. after the run, the autonomy reactor can now keep stale synthetic residue from reaccumulating through a budgeted housekeeping pass instead of depending only on manual repair, and the overlay packaging flow now emits an Authenticode verification manifest plus a required-sign gate for release builds.
 
 Shared-workspace integration files also need to stay serial. The previously dirty portability, receipts-lens, lens-usage, and swarm surfaces now restore their giant append-only ledgers by truncation instead of copying the whole history, the formerly dirty serial portability/receipts/lens batch dropped from `572.73s` to `249.52s`, the resumed stepwise tail completed with `355 passed in 2541.74s`, and a fresh monolithic `pytest -q` run cleared end to end with `359 passed in 2291.66s`. That monolithic proof then exposed two remaining workspace-leak cases in the worker deadletter and red-team policy-bypass files; those files are now isolated too, and the expanded bounded `release:hardening` lane again leaves the live workspace counters at zero afterward. The full-suite correctness story is now confirmed directly, not just by segmented reconstruction.
 
