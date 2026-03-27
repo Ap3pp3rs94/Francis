@@ -11,9 +11,9 @@ $steps = @(
     @{ Name = "autonomy-housekeeping"; Command = @("pytest", "-q", "tests/unit/test_telemetry_reactor.py::test_event_reactor_surfaces_runtime_hygiene_signal", "tests/unit/test_telemetry_reactor.py::test_decision_engine_selects_worker_repair_when_runtime_hygiene_due", "tests/integration/test_autonomy_cycle.py::test_autonomy_can_execute_worker_repair_when_runtime_hygiene_due", "tests/integration/test_autonomy_events.py::test_autonomy_collect_events_enqueues_runtime_hygiene_signal") },
     @{ Name = "inbox-telemetry-hardening"; Command = @("pytest", "-q", "tests/integration/test_inbox_pipeline.py", "tests/integration/test_telemetry_pipeline.py") },
     @{ Name = "observer-integration"; Command = @("pytest", "-q", "tests/integration/test_observer_emits_events.py") },
-    @{ Name = "security-hardening"; Command = @("pytest", "-q", "tests/integration/test_security_quarantine.py", "tests/redteam/test_prompt_injection.py", "tests/redteam/test_fs_escape_attempts.py") },
+    @{ Name = "security-hardening"; Command = @("pytest", "-q", "tests/integration/test_security_quarantine.py", "tests/redteam/test_prompt_injection.py", "tests/redteam/test_fs_escape_attempts.py", "tests/redteam/test_policy_bypass.py") },
     @{ Name = "mission-smoke"; Command = @("pytest", "-q", "tests/integration/test_mission_tick.py", "-k", "create_mission_persists_and_queues or tick_advances_mission_and_history or failed_tick_goes_to_deadletter or tick_idempotency_replays_without_double_advance") },
-    @{ Name = "worker-smoke"; Command = @("pytest", "-q", "tests/integration/test_worker_cycle.py", "-k", "worker_cycle_processes_mission_queue or worker_cycle_action_timeout_can_escalate_to_deadletter") },
+    @{ Name = "worker-smoke"; Command = @("pytest", "-q", "tests/integration/test_worker_cycle.py", "-k", "worker_cycle_processes_mission_queue or worker_retry_backoff_and_deadletter_escalation or worker_cycle_action_timeout_can_escalate_to_deadletter") },
     @{ Name = "overlay-test"; Command = @("npm", "run", "overlay:test") }
 )
 

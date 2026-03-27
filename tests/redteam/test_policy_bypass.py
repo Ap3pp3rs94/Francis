@@ -5,8 +5,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+import pytest
 
 from apps.api.main import app
+from tests.integration.workspace_state import SECURITY_RUNTIME_PATHS, isolated_workspace_files
 
 
 def _workspace_root() -> Path:
@@ -91,11 +93,22 @@ def _ensure_takeover_idle(client: TestClient) -> None:
         client.post("/control/takeover/handback", json={"summary": "test reset", "verification": {}, "pending_approvals": 0, "mode": "assist"})
 
 
+POLICY_BYPASS_RUNTIME_PATHS = SECURITY_RUNTIME_PATHS + (
+    "control/takeover.json",
+    "control/takeover_activity.jsonl",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_policy_bypass_runtime() -> None:
+    with isolated_workspace_files(POLICY_BYPASS_RUNTIME_PATHS):
+        yield
+
+
 def test_policy_bypass_language_is_quarantined_before_lens_execution() -> None:
     c = TestClient(app)
     original_mode = _get_mode(c)
     original_scope = _get_scope(c)
-    quarantine_before = _stash(_quarantine_file())
 
     try:
         _set_mode(c, "assist", kill_switch=False)
@@ -125,7 +138,6 @@ def test_policy_bypass_language_is_quarantined_before_lens_execution() -> None:
         assert quarantine_rows
         assert quarantine_rows[-1]["surface"] == "lens"
     finally:
-        _restore(_quarantine_file(), quarantine_before)
         _ensure_takeover_idle(c)
         _set_scope(c, original_scope)
         _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
