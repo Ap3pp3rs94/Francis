@@ -54,6 +54,7 @@ The current state is best described as:
 * governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, malformed queued job cleanup, stale synthetic inbox cleanup, and stale pytest telemetry cleanup, the autonomy reactor can now preview that cleanup debt and schedule a budgeted `worker.repair` action, observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open, and the Electron overlay packaging flow now verifies actual Authenticode state for packaged artifacts instead of only describing signer inputs
 * the canonical Windows publish path now fails closed on unsigned artifacts through `npm run release:publish:windows`, which runs the bounded hardening lane and then requires signed distribution outputs before publish can succeed
 * the repo now distinguishes machine-local signed packaging from public-trust release packaging: `release:publish:windows` accepts any valid local signer, while `release:publish:windows:public` additionally requires a configured publisher identity and rejects self-issued signers
+* `npm run overlay:signing-doctor` now diagnoses the public-signing blocker on the current machine in one command, including missing publisher hints, self-issued-only cert stores, publisher mismatches, and absent public-trust signer material
 * Windows signing now supports three explicit routes: local PFX material, Windows cert-store selection, or Azure Trusted Signing
 * current estimated completion is `96%` overall, `96%` for feature/build coverage, and `92%` for production readiness
 
@@ -255,6 +256,7 @@ The most reliable verification lanes right now are:
 * `npm run overlay:verify-signing`
 * `npm run overlay:verify-signing:required`
 * `npm run overlay:verify-signing:public`
+* `npm run overlay:signing-doctor`
 * `npm run overlay:pack`
 * `npm run overlay:pack:signed`
 * `npm run overlay:installer`

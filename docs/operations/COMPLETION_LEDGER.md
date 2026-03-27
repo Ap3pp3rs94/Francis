@@ -63,6 +63,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Distribution trust: signing posture now accepts verifier-backed executable state instead of assuming every packaged build is unsigned, while still falling back cleanly when no verifier is available in the current runtime.
 * Distribution trust: the signing manifest now records the actual leaf signer subject, issuer, and thumbprint instead of collapsing to the timestamp responder identity.
 * Distribution trust: the repo now exposes `npm run overlay:verify-signing:public`, `npm run overlay:dist:public`, and `npm run release:publish:windows:public` so self-issued or publisher-mismatched signers fail closed even when local signed packaging succeeds.
+* Distribution trust: the repo now exposes `npm run overlay:signing-doctor`, which diagnoses whether the current machine is ready for public-trust release signing or blocked on missing publisher hint, self-issued-only certs, publisher mismatch, or absent public-trust signer material.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
 * Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
@@ -115,6 +116,7 @@ Use these commands as the current release-hardening lanes:
 * `npm run overlay:verify-signing`
 * `npm run overlay:verify-signing:required`
 * `npm run overlay:verify-signing:public`
+* `npm run overlay:signing-doctor`
 * `npm run overlay:pack`
 * `npm run overlay:pack:signed`
 * `npm run overlay:installer`
