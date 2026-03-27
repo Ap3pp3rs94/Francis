@@ -41,6 +41,28 @@ test("builder config omits incomplete Azure Trusted Signing settings", () => {
   assert.equal(config.win.azureSignOptions, undefined);
 });
 
+test("builder config ignores placeholder signing template values", () => {
+  const config = buildElectronBuilderConfig({
+    packageJson: {
+      build: {
+        appId: "com.francis.overlay",
+        win: {
+          target: ["portable", "nsis"],
+        },
+      },
+    },
+    env: {
+      FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: "<legal publisher name>",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT: "https://<region>.codesigning.azure.net/",
+      FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: "<certificate-profile>",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: "<trusted-signing-account>",
+    },
+  });
+
+  assert.equal(config.win.azureSignOptions, undefined);
+  assert.equal(config.win.signtoolOptions, undefined);
+});
+
 test("builder config supports Windows cert-store selectors when Azure signing is absent", () => {
   const signtoolOptions = buildWindowsSigntoolOptions({
     FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME: "Ap3pp3rs94",

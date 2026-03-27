@@ -2,6 +2,7 @@ const childProcess = require("node:child_process");
 const path = require("node:path");
 
 const { loadGeneratedSigningReport } = require("./signature-state");
+const { readConfiguredEnvValue } = require("./signing-env");
 
 function normalizeIdentity(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -132,20 +133,20 @@ function buildSigningDoctor({
   certificates = [],
   signingReport = null,
 } = {}) {
-  const azureEndpoint = String(env.FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT || "").trim();
-  const azureAccount = String(env.FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME || "").trim();
-  const azureProfile = String(env.FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME || "").trim();
-  const azurePublisher = String(env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME || "").trim();
-  const azureClient = String(env.AZURE_CLIENT_ID || "").trim();
-  const azureTenant = String(env.AZURE_TENANT_ID || "").trim();
-  const azureSecret = String(env.AZURE_CLIENT_SECRET || "").trim();
-  const azureCertificatePath = String(env.AZURE_CLIENT_CERTIFICATE_PATH || "").trim();
-  const azureUsername = String(env.AZURE_USERNAME || "").trim();
-  const azurePassword = String(env.AZURE_PASSWORD || "").trim();
-  const localCertificate = String(env.WIN_CSC_LINK || env.CSC_LINK || "").trim();
-  const localPassword = String(env.WIN_CSC_KEY_PASSWORD || env.CSC_KEY_PASSWORD || "").trim();
-  const localStoreSubject = String(env.FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME || "").trim();
-  const localStoreSha1 = String(env.FRANCIS_WINDOWS_SIGNING_SHA1 || "").trim();
+  const azureEndpoint = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
+  const azureAccount = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
+  const azureProfile = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
+  const azurePublisher = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
+  const azureClient = readConfiguredEnvValue(env, ["AZURE_CLIENT_ID"]);
+  const azureTenant = readConfiguredEnvValue(env, ["AZURE_TENANT_ID"]);
+  const azureSecret = readConfiguredEnvValue(env, ["AZURE_CLIENT_SECRET"]);
+  const azureCertificatePath = readConfiguredEnvValue(env, ["AZURE_CLIENT_CERTIFICATE_PATH"]);
+  const azureUsername = readConfiguredEnvValue(env, ["AZURE_USERNAME"]);
+  const azurePassword = readConfiguredEnvValue(env, ["AZURE_PASSWORD"]);
+  const localCertificate = readConfiguredEnvValue(env, ["WIN_CSC_LINK", "CSC_LINK"]);
+  const localPassword = readConfiguredEnvValue(env, ["WIN_CSC_KEY_PASSWORD", "CSC_KEY_PASSWORD"]);
+  const localStoreSubject = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
+  const localStoreSha1 = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
 
   const azureAuthReady = Boolean(
     azureClient &&

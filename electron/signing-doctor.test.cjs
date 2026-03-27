@@ -158,3 +158,22 @@ test("signing doctor surfaces an Azure template even when the current machine is
     /release:publish:windows:public/i,
   );
 });
+
+test("signing doctor ignores placeholder values loaded from a local template file", () => {
+  const report = buildSigningDoctor({
+    env: {
+      FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: "<legal publisher name>",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT: "https://<region>.codesigning.azure.net/",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: "<trusted-signing-account>",
+      FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: "<certificate-profile>",
+      AZURE_CLIENT_ID: "<entra-client-id>",
+      AZURE_TENANT_ID: "<entra-tenant-id>",
+      AZURE_CLIENT_SECRET: "<entra-client-secret>",
+    },
+    certificates: [],
+  });
+
+  assert.equal(report.publicReleaseReady, false);
+  assert.ok(report.blockingReasons.includes("missing_publisher_hint"));
+  assert.ok(report.blockingReasons.includes("no_public_trust_certificate"));
+});

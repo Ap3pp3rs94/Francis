@@ -1,12 +1,4 @@
-function readEnvValue(env, keys = []) {
-  for (const key of keys) {
-    const value = env && typeof env[key] === "string" ? env[key].trim() : "";
-    if (value) {
-      return value;
-    }
-  }
-  return "";
-}
+const { readConfiguredEnvValue } = require("./signing-env");
 
 function normalizeVerifiedExecutable(entry = null) {
   if (!entry || typeof entry !== "object") {
@@ -32,22 +24,22 @@ function buildSigningPosture({
   packaged = false,
   verifiedExecutable = null,
 } = {}) {
-  const localCertificate = readEnvValue(env, ["WIN_CSC_LINK", "CSC_LINK"]);
-  const localPassword = readEnvValue(env, ["WIN_CSC_KEY_PASSWORD", "CSC_KEY_PASSWORD"]);
-  const localStoreSubject = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
-  const localStoreSha1 = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
-  const azureEndpoint = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
-  const azureAccount = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
-  const azureProfile = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
-  const azurePublisher = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
-  const azureClient = readEnvValue(env, ["AZURE_CLIENT_ID"]);
-  const azureTenant = readEnvValue(env, ["AZURE_TENANT_ID"]);
-  const azureSecret = readEnvValue(env, ["AZURE_CLIENT_SECRET"]);
-  const azureCertificatePath = readEnvValue(env, ["AZURE_CLIENT_CERTIFICATE_PATH"]);
-  const azureUsername = readEnvValue(env, ["AZURE_USERNAME"]);
-  const azurePassword = readEnvValue(env, ["AZURE_PASSWORD"]);
-  const signpathToken = readEnvValue(env, ["SIGNPATH_API_TOKEN"]);
-  const signpathProject = readEnvValue(env, ["SIGNPATH_PROJECT_SLUG", "SIGNPATH_ORGANIZATION_ID"]);
+  const localCertificate = readConfiguredEnvValue(env, ["WIN_CSC_LINK", "CSC_LINK"]);
+  const localPassword = readConfiguredEnvValue(env, ["WIN_CSC_KEY_PASSWORD", "CSC_KEY_PASSWORD"]);
+  const localStoreSubject = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
+  const localStoreSha1 = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
+  const azureEndpoint = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
+  const azureAccount = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
+  const azureProfile = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
+  const azurePublisher = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
+  const azureClient = readConfiguredEnvValue(env, ["AZURE_CLIENT_ID"]);
+  const azureTenant = readConfiguredEnvValue(env, ["AZURE_TENANT_ID"]);
+  const azureSecret = readConfiguredEnvValue(env, ["AZURE_CLIENT_SECRET"]);
+  const azureCertificatePath = readConfiguredEnvValue(env, ["AZURE_CLIENT_CERTIFICATE_PATH"]);
+  const azureUsername = readConfiguredEnvValue(env, ["AZURE_USERNAME"]);
+  const azurePassword = readConfiguredEnvValue(env, ["AZURE_PASSWORD"]);
+  const signpathToken = readConfiguredEnvValue(env, ["SIGNPATH_API_TOKEN"]);
+  const signpathProject = readConfiguredEnvValue(env, ["SIGNPATH_PROJECT_SLUG", "SIGNPATH_ORGANIZATION_ID"]);
   const requiresSigning = distribution === "installer" || distribution === "portable";
   const verified = normalizeVerifiedExecutable(verifiedExecutable);
 

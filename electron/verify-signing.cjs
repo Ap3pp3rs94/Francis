@@ -6,6 +6,7 @@ const {
   validateSigningReport,
   writeGeneratedSigningReport,
 } = require("./signature-state");
+const { normalizeConfiguredEnvValue } = require("./signing-env");
 
 function main() {
   const sourceRoot = path.resolve(__dirname, "..");
@@ -15,9 +16,9 @@ function main() {
   const requirePublisherEnv = process.argv.includes("--require-publisher-env");
   const explicitPublisherNameArg = process.argv.find((entry) => entry.startsWith("--require-publisher-name="));
   const requirePublisherName = requirePublisherEnv
-    ? String(process.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME || "").trim()
+    ? normalizeConfiguredEnvValue(process.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME)
     : explicitPublisherNameArg
-      ? explicitPublisherNameArg.slice("--require-publisher-name=".length).trim()
+      ? normalizeConfiguredEnvValue(explicitPublisherNameArg.slice("--require-publisher-name=".length))
       : "";
   const rejectSelfIssued =
     process.argv.includes("--reject-self-issued") ||

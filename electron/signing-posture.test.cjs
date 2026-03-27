@@ -45,6 +45,24 @@ test("signing posture becomes high when signer inputs are partial", () => {
   assert.match(posture.summary, /partial/i);
 });
 
+test("signing posture ignores placeholder signing template values", () => {
+  const posture = buildSigningPosture({
+    env: {
+      FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: "<legal publisher name>",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT: "https://<region>.codesigning.azure.net/",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: "<trusted-signing-account>",
+      FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: "<certificate-profile>",
+    },
+    distribution: "installer",
+    packaged: false,
+  });
+
+  assert.equal(posture.mode, "unsigned");
+  assert.equal(posture.severity, "medium");
+  assert.equal(posture.ready, false);
+  assert.deepEqual(posture.configuredPaths, []);
+});
+
 test("signing posture is ready when Windows cert-store selectors are configured", () => {
   const posture = buildSigningPosture({
     env: {

@@ -1,29 +1,18 @@
 const packageJson = require("../package.json");
-
-function readEnvValue(env, keys = []) {
-  for (const key of keys) {
-    const value = env && typeof env[key] === "string" ? env[key].trim() : "";
-    if (value) {
-      return value;
-    }
-  }
-  return "";
-}
-
-function readEnvBoolean(env, keys = []) {
-  const value = readEnvValue(env, keys).toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
-}
+const {
+  readConfiguredEnvBoolean,
+  readConfiguredEnvValue,
+} = require("./signing-env");
 
 function cloneBuildConfig(buildConfig = {}) {
   return JSON.parse(JSON.stringify(buildConfig));
 }
 
 function buildAzureTrustedSigningOptions(env = process.env) {
-  const endpoint = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
-  const certificateProfileName = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
-  const codeSigningAccountName = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
-  const publisherName = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
+  const endpoint = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
+  const certificateProfileName = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
+  const codeSigningAccountName = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
+  const publisherName = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
 
   if (!(endpoint && certificateProfileName && codeSigningAccountName)) {
     return null;
@@ -38,8 +27,8 @@ function buildAzureTrustedSigningOptions(env = process.env) {
 }
 
 function buildWindowsSigntoolOptions(env = process.env) {
-  const certificateSubjectName = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
-  const certificateSha1 = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
+  const certificateSubjectName = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME"]);
+  const certificateSha1 = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_SHA1"]);
 
   if (!(certificateSubjectName || certificateSha1)) {
     return null;
@@ -75,7 +64,7 @@ function buildElectronBuilderConfig({
     win,
     forceCodeSigning:
       build.forceCodeSigning ||
-      readEnvBoolean(env, ["FRANCIS_REQUIRE_SIGNED_OVERLAY", "FRANCIS_FORCE_CODE_SIGNING"]),
+      readConfiguredEnvBoolean(env, ["FRANCIS_REQUIRE_SIGNED_OVERLAY", "FRANCIS_FORCE_CODE_SIGNING"]),
   };
 }
 
