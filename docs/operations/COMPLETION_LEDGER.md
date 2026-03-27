@@ -8,7 +8,7 @@ Estimated completion:
 
 * overall: `96%`
 * feature and build coverage: `96%`
-* production readiness: `92%`
+* production readiness: `94%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -68,6 +68,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Distribution trust: the repo now includes `scripts/signing-public.example.ps1`, ignores `scripts/signing-public.local.ps1`, and exposes `npm run release:publish:windows:public:local` so real publisher credentials can live in one local PowerShell bootstrap file instead of ad hoc shell residue.
 * Distribution trust: placeholder signing-template values such as `<legal publisher name>` are now treated as unset across the signing surfaces, so the local bootstrap file can exist safely before real publisher material is provisioned.
 * Distribution trust: the local public-release wrapper now stops in PowerShell before npm starts if the bootstrap file is missing, still placeholder-valued, or does not yet contain one complete public signing route.
+* Distribution trust: public-signing verification now also requires `FRANCIS_WINDOWS_SIGNING_CHAIN_HINT`, so the expected non-leaf issuer or chain identity is pinned and an arbitrary privately issued non-self-issued certificate cannot silently satisfy the public gate.
 * Distribution trust: the generated signing manifest and verifier output now capture primary-chain metadata such as `rootSubject`, `rootIssuer`, and `chainSubjects`, so leaf-vs-root signer identity is inspectable during public-release review.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
@@ -132,4 +133,4 @@ Use these commands as the current release-hardening lanes:
 * `npm run overlay:dist:signed`
 * `npm run overlay:dist:public`
 
-`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and `npm run test:full:stepwise` is the current resume command for continuing from the last failure point without replaying the already-confirmed prefix. Full-suite completion time is lower at the old serial hot spots, the remaining tail now passes through the saved stepwise state, the bounded hardening lane now also exercises autonomy housekeeping plus the formerly leaking worker deadletter and policy-bypass cases, and the monolithic lane is now directly confirmed green (`359 passed in 2291.66s`), but it is still too long to call cheap routine verification. `npm run release:publish:windows` is now the machine-local Windows publish gate for valid signed artifacts, `npm run overlay:dist:public` now fails fast through the public signing-doctor preflight before any packaging work, and `npm run release:publish:windows:public` adds publisher-name and non-self-issued validation for public-trust release packaging.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and `npm run test:full:stepwise` is the current resume command for continuing from the last failure point without replaying the already-confirmed prefix. Full-suite completion time is lower at the old serial hot spots, the remaining tail now passes through the saved stepwise state, the bounded hardening lane now also exercises autonomy housekeeping plus the formerly leaking worker deadletter and policy-bypass cases, and the monolithic lane is now directly confirmed green (`359 passed in 2291.66s`), but it is still too long to call cheap routine verification. `npm run release:publish:windows` is now the machine-local Windows publish gate for valid signed artifacts, `npm run overlay:dist:public` now fails fast through the public signing-doctor preflight before any packaging work, and `npm run release:publish:windows:public` adds publisher-name, chain-hint, and non-self-issued validation for public-trust release packaging.
