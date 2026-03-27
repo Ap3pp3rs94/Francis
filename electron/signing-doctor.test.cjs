@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   buildSigningDoctor,
   loadWindowsCodeSigningCertificates,
+  validateSigningDoctorReport,
 } = require("./signing-doctor");
 
 test("signing doctor blocks public release when only a self-issued local certificate is present", () => {
@@ -88,4 +89,34 @@ test("signing doctor can normalize certificate rows returned from PowerShell JSO
       store: "Cert:\\CurrentUser\\My",
     },
   ]);
+});
+
+test("signing doctor validation fails closed when public signing is not ready", () => {
+  const validation = validateSigningDoctorReport(
+    {
+      publicReleaseReady: false,
+      blockingReasons: ["self_issued_only"],
+    },
+    {
+      requirePublicReady: true,
+    },
+  );
+
+  assert.equal(validation.ok, false);
+  assert.deepEqual(validation.reasons, ["self_issued_only"]);
+});
+
+test("signing doctor validation passes when public signing is ready", () => {
+  const validation = validateSigningDoctorReport(
+    {
+      publicReleaseReady: true,
+      blockingReasons: [],
+    },
+    {
+      requirePublicReady: true,
+    },
+  );
+
+  assert.equal(validation.ok, true);
+  assert.deepEqual(validation.reasons, []);
 });

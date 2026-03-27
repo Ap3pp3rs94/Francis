@@ -237,9 +237,46 @@ function runSigningDoctor({
   });
 }
 
+function validateSigningDoctorReport(
+  report,
+  {
+    requirePublicReady = false,
+  } = {},
+) {
+  if (!requirePublicReady) {
+    return {
+      ok: true,
+      reasons: [],
+    };
+  }
+
+  return {
+    ok: Boolean(report?.publicReleaseReady),
+    reasons: Array.isArray(report?.blockingReasons)
+      ? report.blockingReasons
+      : report?.blockingReason
+        ? [report.blockingReason]
+        : [],
+  };
+}
+
 function main() {
+  const requirePublicReady = process.argv.includes("--require-public-ready");
   const report = runSigningDoctor();
   console.log(JSON.stringify(report, null, 2));
+
+  const validation = validateSigningDoctorReport(report, {
+    requirePublicReady,
+  });
+  if (!validation.ok) {
+    const reasons = validation.reasons.length
+      ? validation.reasons.join(", ")
+      : "not_ready";
+    console.error(
+      `[francis-overlay] Public signing is not ready: ${reasons}`,
+    );
+    process.exit(1);
+  }
 }
 
 if (require.main === module) {
@@ -251,4 +288,5 @@ module.exports = {
   loadWindowsCodeSigningCertificates,
   parseCertificateRows,
   runSigningDoctor,
+  validateSigningDoctorReport,
 };
