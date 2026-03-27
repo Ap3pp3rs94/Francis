@@ -6,8 +6,8 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `92%`
-* feature and build coverage: `93%`
+* overall: `93%`
+* feature and build coverage: `94%`
 * production readiness: `89%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
@@ -56,7 +56,8 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Scheduled housekeeping: the autonomy reactor now previews stale runtime-hygiene debt, emits a `runtime.hygiene_due` signal, budgets a low-risk `worker.repair` action, and executes the existing governed cleanup path through normal autonomy receipts instead of leaving hygiene as a purely manual operator action.
 * Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, inbox/telemetry shared-workspace isolation, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
 * Verification discipline: the monolithic `pytest -q` run cleared end to end with `359 passed in 2291.66s`, and the remaining workspace-leak cases it exposed in the worker deadletter retry path and red-team policy-bypass lens path are now isolated and folded into the bounded release lane.
-* Distribution trust: the overlay packaging flow now uses a dedicated Electron Builder config that is wired to the signing routes the repo actually supports, namely local certificate signing and Azure Trusted Signing.
+* Distribution trust: the overlay packaging flow now uses a dedicated Electron Builder config that is wired to the signing routes the repo actually supports, namely local certificate signing, Windows cert-store signing, and Azure Trusted Signing.
+* Distribution trust: Windows packaging now also supports signtool certificate-store selection through `FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME` and optional `FRANCIS_WINDOWS_SIGNING_SHA1`, so provisioned Windows builders do not need to expose a PFX path just to produce signed artifacts.
 * Distribution trust: packaged artifact builds now emit `electron/generated/build-signing.json`, `npm run overlay:verify-signing` inspects the real artifacts with the vendored `signtool.exe` verifier, and `npm run overlay:verify-signing:required` can fail a release packaging pass until signed outputs are present.
 * Distribution trust: the repo now exposes `npm run overlay:pack:signed`, `npm run overlay:installer:signed`, `npm run overlay:dist:signed`, and the canonical `npm run release:publish:windows` path so Windows publication fails closed unless both the bounded hardening lane and signed artifact verification pass.
 * Distribution trust: signing posture now accepts verifier-backed executable state instead of assuming every packaged build is unsigned, while still falling back cleanly when no verifier is available in the current runtime.

@@ -2,7 +2,7 @@
 
 ## Unreleased
 - Release-hardening sprint for queue integrity, incident hygiene, verification lanes, and packaging truthfulness.
-- Overlay packaging now uses a dedicated Electron Builder config so the supported signing routes are real and explicit: local certificate signing or Azure Trusted Signing.
+- Overlay packaging now uses a dedicated Electron Builder config so the supported signing routes are real and explicit: local certificate signing, Windows cert-store signing, or Azure Trusted Signing.
 - Added artifact-level Authenticode verification for overlay packaging, including `npm run overlay:verify-signing`, `npm run overlay:verify-signing:required`, and a generated `electron/generated/build-signing.json` manifest.
 - Added signed-required packaging commands for unpacked, installer, and full Windows distribution builds, plus a canonical `npm run release:publish:windows` gate that runs the bounded hardening lane and then fails closed unless the packaged artifacts verify as signed.
 - Packaged overlay signing posture now accepts verifier-backed executable state instead of assuming every packaged build is unsigned, and the packaging flow now leaves a concrete signed-vs-unsigned manifest even when signer inputs are absent.

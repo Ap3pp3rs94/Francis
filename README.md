@@ -53,7 +53,8 @@ The current state is best described as:
 * active release-hardening and productization work, especially around verification discipline, packaging trust, and signed-distribution closeout rather than live backlog noise
 * governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, malformed queued job cleanup, stale synthetic inbox cleanup, and stale pytest telemetry cleanup, the autonomy reactor can now preview that cleanup debt and schedule a budgeted `worker.repair` action, observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open, and the Electron overlay packaging flow now verifies actual Authenticode state for packaged artifacts instead of only describing signer inputs
 * the canonical Windows publish path now fails closed on unsigned artifacts through `npm run release:publish:windows`, which runs the bounded hardening lane and then requires signed distribution outputs before publish can succeed
-* current estimated completion is `92%` overall, `93%` for feature/build coverage, and `89%` for production readiness
+* Windows signing now supports three explicit routes: local PFX material, Windows cert-store selection, or Azure Trusted Signing
+* current estimated completion is `93%` overall, `94%` for feature/build coverage, and `89%` for production readiness
 
 The current shipped, hardened, partial, and blocked surfaces are tracked in [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
 
