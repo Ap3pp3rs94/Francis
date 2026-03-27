@@ -6,9 +6,9 @@ This ledger tracks repo reality, not roadmap aspiration. Francis is already a su
 
 Estimated completion:
 
-* overall: `89%`
+* overall: `90%`
 * feature and build coverage: `92%`
-* production readiness: `84%`
+* production readiness: `86%`
 
 Current live runtime pressure after the repair pass, replay drain, inbox cleanup, synthetic mission cleanup, incident cleanup, and release-lane verification on `2026-03-26`:
 
@@ -55,6 +55,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Backlog drainage: the governed inbox and telemetry cleanup pass archived the final `205` stale inbox rows and pruned the final `3` stale pytest telemetry rows, bringing active inbox pressure from `205` to `0`, inbox alerts from `28` to `0`, and telemetry critical residue from `1` to `0`.
 * Scheduled housekeeping: the autonomy reactor now previews stale runtime-hygiene debt, emits a `runtime.hygiene_due` signal, budgets a low-risk `worker.repair` action, and executes the existing governed cleanup path through normal autonomy receipts instead of leaving hygiene as a purely manual operator action.
 * Verification lanes: focused hardening tests exist for mission queue repair, runtime hygiene, observer incident lifecycle, presence/inbox state, inbox/telemetry shared-workspace isolation, and security-quarantine isolation, alongside validated mission/observer integration smoke lanes, the Electron overlay test lane, and a bundled `release:hardening` command that now leaves the shared workspace counters unchanged before and after execution.
+* Verification discipline: the monolithic `pytest -q` run cleared end to end with `359 passed in 2291.66s`, and the remaining workspace-leak cases it exposed in the worker deadletter retry path and red-team policy-bypass lens path are now isolated and folded into the bounded release lane.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
 * Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
@@ -62,7 +63,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Verification discipline: the repo now exposes `npm run test:full:first-failure` for serial full-suite triage, and the formerly dirty portability/receipts/lens nodes now pass together in a single serial pytest process.
 * Verification discipline: shared-workspace isolation now restores giant append-only ledgers such as `journals/fs.jsonl` and `runs/run_ledger.jsonl` by truncation instead of full copies, which reduced the formerly dirty serial portability/receipts/lens batch from `572.73s` to `249.52s`, with the slowest single nodes now bounded at `46.30s` and `30.04s`.
 * Swarm integrity: the swarm unit loader now merges canonical built-in units back into partial or portability-imported `swarm/units.json` payloads instead of treating a one-row registry as authoritative, and the swarm integration file now isolates its runtime write set before mutating delegations, deadletters, or receipts.
-* Verification discipline: after fixing the swarm tail break, `pytest -q --maxfail=1` had already cleared `196` tests before the swarm failure, and `python -m pytest -q --stepwise --maxfail=1` then passed the remaining `355` tests in `2541.74s`, giving a materially confirmed full-suite path even though a single fresh monolithic rerun is still optional.
+* Verification discipline: after fixing the swarm tail break, `pytest -q --maxfail=1` had already cleared `196` tests before the swarm failure, `python -m pytest -q --stepwise --maxfail=1` then passed the remaining `355` tests in `2541.74s`, and a fresh monolithic `pytest -q` run on the final code state then cleared end to end with `359 passed in 2291.66s`.
 * Documentation truthfulness: changelog, README, roadmap framing, and workspace guidance now reflect a real build under productization instead of a scaffold claim.
 
 ## Partial
@@ -71,17 +72,17 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Deadletter discipline is now materially stronger, but timeout replay still remains an explicit operator action rather than a scheduled housekeeping policy.
 * Incident, inbox, and telemetry posture are now quiet, so the remaining productization risk is release confidence and distribution trust rather than day-to-day runtime noise.
 * Productization is real in the overlay shell, but the distribution is still unsigned and Windows trust prompts remain expected.
-* Verification structure is materially better, but the full `pytest -q` lane is still slower than the focused lanes and a single fresh monolithic rerun on the final code state is still optional if you want one-command proof instead of segmented confirmation.
+* Verification structure is materially better, and the fresh monolithic `pytest -q` lane is now confirmed green, but it is still materially slower than the focused lanes.
 
 ## Missing
 
 * A first-class operator runbook for bulk queue repair, deadletter replay selection, and stale incident cleanup across an already-heavy workspace.
 * Signed Windows distribution for the portable and installer artifacts.
-* A fully green and routinely enforced full-suite release lane with bounded runtime expectations.
+* A routinely enforced full-suite release lane with bounded runtime expectations.
 
 ## Blocked
 
-* Production-readiness claims are blocked on routine full-suite release confidence and signed Windows distribution rather than on live queue, incident, inbox, or telemetry pressure.
+* Production-readiness claims are now blocked primarily on signed Windows distribution and ongoing release-lane operating cost rather than on live queue, incident, inbox, telemetry, or full-suite confidence.
 * Distribution trust is blocked on Windows code signing even though the pack and installer lanes now complete successfully on this machine.
 
 ## Verification Lanes
@@ -105,4 +106,4 @@ Use these commands as the current release-hardening lanes:
 * `npm run overlay:pack`
 * `npm run overlay:installer`
 
-`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and `npm run test:full:stepwise` is the current resume command for continuing from the last failure point without replaying the already-confirmed prefix. Full-suite completion time is lower at the old serial hot spots, the remaining tail now passes through the saved stepwise state, and the bounded hardening lane now also exercises autonomy housekeeping, but the monolithic lane is still too long to call routine green release confidence cheap.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the current release-triage command for narrowing the first failing node without waiting for the entire suite to finish, and `npm run test:full:stepwise` is the current resume command for continuing from the last failure point without replaying the already-confirmed prefix. Full-suite completion time is lower at the old serial hot spots, the remaining tail now passes through the saved stepwise state, the bounded hardening lane now also exercises autonomy housekeeping plus the formerly leaking worker deadletter and policy-bypass cases, and the monolithic lane is now directly confirmed green (`359 passed in 2291.66s`), but it is still too long to call cheap routine verification.

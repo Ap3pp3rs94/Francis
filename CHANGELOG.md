@@ -34,4 +34,6 @@
 - The autonomy reactor now previews stale runtime-hygiene debt, emits a `runtime.hygiene_due` signal, and executes the governed `worker.repair` path as a budgeted housekeeping action instead of leaving cleanup as a purely manual operator step.
 - Added focused autonomy-housekeeping coverage for the reactor signal, decision engine, autonomy cycle execution, and filtered event collection, and folded that coverage into `npm run release:hardening`.
 - Verified the quiet live workspace against the new preview path; current runtime hygiene candidate count is `0`.
+- Re-ran a fresh monolithic `pytest -q` on the final code state and cleared the full suite directly (`359 passed in 2291.66s`), then re-applied governed cleanup so the live workspace returned to `0` active backlog pressure.
+- Tightened shared-workspace isolation again so `tests/integration/test_worker_cycle.py` and `tests/redteam/test_policy_bypass.py` stop leaking unsupported deadletters and quarantine incidents into the live workspace, and expanded `npm run release:hardening` to exercise those formerly leaking cases.
 - Added a completion ledger under `docs/operations/COMPLETION_LEDGER.md` and updated README/workspace docs to reflect current maturity and verification lanes.
