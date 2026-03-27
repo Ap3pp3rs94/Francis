@@ -53,8 +53,9 @@ The current state is best described as:
 * active release-hardening and productization work, especially around verification discipline, packaging trust, and signed-distribution closeout rather than live backlog noise
 * governed runtime repair now exists for queue normalization, stale deadletter replay/archive, stale quarantine-incident cleanup, malformed queued job cleanup, stale synthetic inbox cleanup, and stale pytest telemetry cleanup, the autonomy reactor can now preview that cleanup debt and schedule a budgeted `worker.repair` action, observer baseline loading now normalizes pathological threshold files before they can pin false anomaly incidents open, and the Electron overlay packaging flow now verifies actual Authenticode state for packaged artifacts instead of only describing signer inputs
 * the canonical Windows publish path now fails closed on unsigned artifacts through `npm run release:publish:windows`, which runs the bounded hardening lane and then requires signed distribution outputs before publish can succeed
+* the repo now distinguishes machine-local signed packaging from public-trust release packaging: `release:publish:windows` accepts any valid local signer, while `release:publish:windows:public` additionally requires a configured publisher identity and rejects self-issued signers
 * Windows signing now supports three explicit routes: local PFX material, Windows cert-store selection, or Azure Trusted Signing
-* current estimated completion is `93%` overall, `94%` for feature/build coverage, and `89%` for production readiness
+* current estimated completion is `96%` overall, `96%` for feature/build coverage, and `92%` for production readiness
 
 The current shipped, hardened, partial, and blocked surfaces are tracked in [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
 
@@ -238,6 +239,7 @@ The most reliable verification lanes right now are:
 
 * `npm run release:hardening`
 * `npm run release:publish:windows`
+* `npm run release:publish:windows:public`
 * `npm run test:full:first-failure`
 * `npm run test:full:stepwise`
 * `ruff check .`
@@ -252,14 +254,16 @@ The most reliable verification lanes right now are:
 * `npm run overlay:prepare-runtime`
 * `npm run overlay:verify-signing`
 * `npm run overlay:verify-signing:required`
+* `npm run overlay:verify-signing:public`
 * `npm run overlay:pack`
 * `npm run overlay:pack:signed`
 * `npm run overlay:installer`
 * `npm run overlay:installer:signed`
 * `npm run overlay:dist`
 * `npm run overlay:dist:signed`
+* `npm run overlay:dist:public`
 
-`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the supported full-suite triage lane for the first concrete break, and `npm run test:full:stepwise` is the supported resume lane for continuing from that failure point without replaying the already-confirmed prefix. The commands above are the current hardening-smoke and distribution lanes for queue, inbox, telemetry, observer, observer-baseline normalization, security quarantine, inbox/presence state, autonomy housekeeping, overlay packaging posture, and signed Windows publish gating. `npm run release:hardening` runs the bounded release subset without changing the live workspace counters before vs. after the run, `npm run release:publish:windows` composes that bounded lane with `overlay:dist:signed` so unsigned artifacts fail closed before a Windows publish can succeed, the autonomy reactor can now keep stale synthetic residue from reaccumulating through a budgeted housekeeping pass instead of depending only on manual repair, and the overlay packaging flow now emits an Authenticode verification manifest plus a required-sign gate for release builds.
+`pytest -q` remains the unbounded full-suite lane. `npm run test:full:first-failure` is the supported full-suite triage lane for the first concrete break, and `npm run test:full:stepwise` is the supported resume lane for continuing from that failure point without replaying the already-confirmed prefix. The commands above are the current hardening-smoke and distribution lanes for queue, inbox, telemetry, observer, observer-baseline normalization, security quarantine, inbox/presence state, autonomy housekeeping, overlay packaging posture, and Windows publish gating. `npm run release:hardening` runs the bounded release subset without changing the live workspace counters before vs. after the run, `npm run release:publish:windows` composes that bounded lane with `overlay:dist:signed` so unsigned artifacts fail closed before a Windows publish can succeed, and `npm run release:publish:windows:public` adds publisher-name and non-self-issued gating so a machine-local dev cert cannot be mistaken for a public-trust release signer. The autonomy reactor can now keep stale synthetic residue from reaccumulating through a budgeted housekeeping pass instead of depending only on manual repair, and the overlay packaging flow now emits an Authenticode verification manifest plus both signed and public-trust release gates.
 
 Shared-workspace integration files also need to stay serial. The previously dirty portability, receipts-lens, lens-usage, and swarm surfaces now restore their giant append-only ledgers by truncation instead of copying the whole history, the formerly dirty serial portability/receipts/lens batch dropped from `572.73s` to `249.52s`, the resumed stepwise tail completed with `355 passed in 2541.74s`, and a fresh monolithic `pytest -q` run cleared end to end with `359 passed in 2291.66s`. That monolithic proof then exposed two remaining workspace-leak cases in the worker deadletter and red-team policy-bypass files; those files are now isolated too, and the expanded bounded `release:hardening` lane again leaves the live workspace counters at zero afterward. The full-suite correctness story is now confirmed directly, not just by segmented reconstruction.
 

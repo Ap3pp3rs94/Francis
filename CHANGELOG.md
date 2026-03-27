@@ -6,6 +6,7 @@
 - Added artifact-level Authenticode verification for overlay packaging, including `npm run overlay:verify-signing`, `npm run overlay:verify-signing:required`, and a generated `electron/generated/build-signing.json` manifest.
 - Added signed-required packaging commands for unpacked, installer, and full Windows distribution builds, plus a canonical `npm run release:publish:windows` gate that runs the bounded hardening lane and then fails closed unless the packaged artifacts verify as signed.
 - Packaged overlay signing posture now accepts verifier-backed executable state instead of assuming every packaged build is unsigned, and the packaging flow now leaves a concrete signed-vs-unsigned manifest even when signer inputs are absent.
+- Added public-trust signing gates for overlay packaging and Windows publish, including publisher-name enforcement, self-issued signer rejection, stale-artifact filtering, and leaf-signer manifest capture so local dev signing cannot be confused with a real publisher release.
 - Mission queue repair now normalizes duplicate `mission.tick` jobs, supersedes stale queued work for terminal missions, and exposes repair counts in mission/worker receipts.
 - Worker cycles now run queue normalization before dispatch and record mission-queue repair posture in the worker-cycle summary and ledger.
 - Expanded the governed `worker/repair` path so it can preview or apply mission queue normalization, archive stale unsupported deadletters, replay stale timeout deadletters, and resolve stale security probe incidents with receipts.

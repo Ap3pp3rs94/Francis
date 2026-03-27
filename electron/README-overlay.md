@@ -73,12 +73,14 @@ That PowerShell helper checks the HUD URL first and, if it is down, lets the Ele
 - `npm run overlay:dist:signed` builds both Windows artifacts and fails unless the packaged outputs are signed
 - `npm run overlay:verify-signing` inspects the current packaged artifacts with the vendored `signtool.exe` verifier
 - `npm run overlay:verify-signing:required` fails if the current packaged artifacts are not signed
+- `npm run overlay:verify-signing:public` fails unless the current packaged artifacts are signed, match `FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME`, and are not self-issued
 - `npm run release:publish:windows` is the canonical signed Windows publish command: it runs `release:hardening`, then `overlay:dist:signed`
+- `npm run release:publish:windows:public` is the public-trust Windows publish command: it runs `release:hardening`, then `overlay:dist:public`
 
 The packaged shell includes the Francis HUD Python source under `resources/python-src` and will attempt to boot it locally when no HUD server is already running.
 Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / `overlay:dist` do it for you. That stages a bundled Python runtime under `dist/python-runtime-staging` and packages it as `resources/python-runtime`.
 The first staging run can take a while because it copies the embedded runtime, stdlib, DLLs, and site-packages; the script now emits explicit progress so long Windows copies are visible instead of looking hung.
-The packaging flow now uses `electron/builder-config.cjs` so supported signing routes are explicit: local certificate signing through `CSC_LINK` / `WIN_CSC_LINK` and `CSC_KEY_PASSWORD` / `WIN_CSC_KEY_PASSWORD`, Windows cert-store signing through `FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME` and optional `FRANCIS_WINDOWS_SIGNING_SHA1`, or Azure Trusted Signing through `FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT`, `FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`, `FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`, optional `FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME`, and the required Microsoft Entra environment credentials.
+The packaging flow now uses `electron/builder-config.cjs` so supported signing routes are explicit: local certificate signing through `CSC_LINK` / `WIN_CSC_LINK` and `CSC_KEY_PASSWORD` / `WIN_CSC_KEY_PASSWORD`, Windows cert-store signing through `FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME` and optional `FRANCIS_WINDOWS_SIGNING_SHA1`, or Azure Trusted Signing through `FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT`, `FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`, `FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`, optional `FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME`, and the required Microsoft Entra environment credentials. `release:publish:windows` proves current-machine signed packaging; `release:publish:windows:public` adds publisher-name and non-self-issued gating for public-trust distribution.
 
 ## Assumptions
 
@@ -96,8 +98,9 @@ The packaging flow now uses `electron/builder-config.cjs` so supported signing r
 - If the HUD server is offline, Electron shows a fallback operator page instead of the real overlay.
 - The shell stores preferences locally in `overlay-preferences.json`; use the HUD `Reset Layout` action if bounds, mode, or display targeting become undesirable.
 - The shell also stores a small `overlay-session.json` continuity record so crash recovery can be surfaced on the next launch.
-- Unless local certificate or Azure Trusted Signing inputs are configured, the Windows portable build remains unsigned. SmartScreen or local policy may require an explicit trust decision.
-- Unless local certificate or Azure Trusted Signing inputs are configured, the NSIS installer remains unsigned. SmartScreen or local policy may require an explicit trust decision.
+- Without any configured signer route, the Windows portable build remains unsigned. SmartScreen or local policy may require an explicit trust decision.
+- Without any configured signer route, the NSIS installer remains unsigned. SmartScreen or local policy may require an explicit trust decision.
+- A machine-local self-signed cert can satisfy `overlay:verify-signing:required`, but `overlay:verify-signing:public` and `release:publish:windows:public` are intended for real publisher identities and reject self-issued signers.
 - Uninstall removes installed app files and shortcuts, but retained shell state under Electron user data is intentionally not deleted automatically.
 - Packaging assumes the build machine can supply a valid base Python home. If that is not discoverable from `.venv/pyvenv.cfg`, set `FRANCIS_OVERLAY_PYTHON_HOME` before running the package scripts.
 - SignPath inputs are surfaced for audit only. The current overlay packaging flow is wired to local certificate signing and Azure Trusted Signing, not SignPath.
