@@ -65,6 +65,7 @@ These counts come from the live event reactor and presence surfaces and now use 
 * Distribution trust: the repo now exposes `npm run overlay:verify-signing:public`, `npm run overlay:dist:public`, and `npm run release:publish:windows:public` so self-issued or publisher-mismatched signers fail closed even when local signed packaging succeeds.
 * Distribution trust: the repo now exposes `npm run overlay:signing-doctor`, which diagnoses whether the current machine is ready for public-trust release signing or blocked on missing publisher hint, self-issued-only certs, publisher mismatch, or absent public-trust signer material, and emits exact PowerShell env suggestions for the viable local-store and Azure routes.
 * Distribution trust: `npm run release:publish:windows:public` now runs the signing-doctor public preflight first, so a machine that only has a self-issued dev signer fails closed before the expensive Windows packaging step.
+* Distribution trust: the repo now includes `scripts/signing-public.example.ps1`, ignores `scripts/signing-public.local.ps1`, and exposes `npm run release:publish:windows:public:local` so real publisher credentials can live in one local PowerShell bootstrap file instead of ad hoc shell residue.
 * Shared-workspace discipline: the remaining mission-writing integration files now snapshot and restore workspace state so routine test runs stop repopulating the live mission backlog.
 * Shared-workspace discipline: security quarantine and red-team lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic security incidents into the live workspace.
 * Shared-workspace discipline: inbox and telemetry integration lanes now snapshot and restore their runtime artifacts so bounded release verification stops reintroducing synthetic inbox and telemetry pressure into the live workspace.
@@ -101,6 +102,7 @@ Use these commands as the current release-hardening lanes:
 * `npm run release:hardening`
 * `npm run release:publish:windows`
 * `npm run release:publish:windows:public`
+* `npm run release:publish:windows:public:local`
 * `npm run test:full:first-failure`
 * `npm run test:full:stepwise`
 * `ruff check .`
