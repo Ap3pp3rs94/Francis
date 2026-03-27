@@ -32,6 +32,7 @@ function buildSigningPosture({
   const azureAccount = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
   const azureProfile = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
   const azurePublisher = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
+  const chainHint = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_CHAIN_HINT"]);
   const azureClient = readConfiguredEnvValue(env, ["AZURE_CLIENT_ID"]);
   const azureTenant = readConfiguredEnvValue(env, ["AZURE_TENANT_ID"]);
   const azureSecret = readConfiguredEnvValue(env, ["AZURE_CLIENT_SECRET"]);
@@ -62,6 +63,7 @@ function buildSigningPosture({
       azureAccount ||
       azureProfile ||
       azurePublisher ||
+      chainHint ||
       azureClient ||
       azureTenant ||
       azureSecret ||
@@ -291,6 +293,14 @@ function buildSigningPosture({
         summary: azurePublisher
           ? `Expected publisher hint is ${azurePublisher}.`
           : "No publisher hint is configured.",
+      },
+      {
+        id: "chain_hint",
+        label: "Chain hint",
+        tone: chainHint ? "medium" : "low",
+        summary: chainHint
+          ? `Expected non-leaf chain hint is ${chainHint}.`
+          : "No public chain hint is configured.",
       },
       {
         id: "signing_mode",

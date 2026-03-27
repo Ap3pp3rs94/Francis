@@ -296,16 +296,29 @@ function normalizeIdentityValue(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function collectNonLeafChainIdentities(entry = {}) {
+  const values = [
+    entry.issuer,
+    ...(Array.isArray(entry.chainSubjects) ? entry.chainSubjects.slice(1) : []),
+    ...(Array.isArray(entry.chainIssuers) ? entry.chainIssuers : []),
+    entry.rootSubject,
+    entry.rootIssuer,
+  ];
+  return [...new Set(values.map((value) => normalizeIdentityValue(value)).filter(Boolean))];
+}
+
 function validateSigningReport(
   report,
   {
     requireSigned = false,
     requirePublisherName = "",
+    requireChainHint = "",
     rejectSelfIssued = false,
   } = {},
 ) {
   const normalizedPublisherName = normalizeIdentityValue(requirePublisherName);
-  if (!requireSigned && !normalizedPublisherName && !rejectSelfIssued) {
+  const normalizedChainHint = normalizeIdentityValue(requireChainHint);
+  if (!requireSigned && !normalizedPublisherName && !normalizedChainHint && !rejectSelfIssued) {
     return {
       ok: true,
       failures: [],
@@ -335,6 +348,17 @@ function validateSigningReport(
         reason: "publisher_mismatch",
       });
       continue;
+    }
+
+    if (normalizedChainHint) {
+      const chainIdentities = collectNonLeafChainIdentities(entry);
+      if (!chainIdentities.some((value) => value.includes(normalizedChainHint))) {
+        failures.push({
+          ...entry,
+          reason: "chain_hint_mismatch",
+        });
+        continue;
+      }
     }
 
     if (rejectSelfIssued && normalizedSubject && normalizedSubject === normalizedIssuer) {

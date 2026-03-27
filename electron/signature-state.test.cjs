@@ -167,6 +167,33 @@ test("validateSigningReport rejects a self-issued signed artifact when public tr
   assert.equal(validation.failures[0].reason, "self_issued");
 });
 
+test("validateSigningReport rejects a signed artifact when the public chain hint does not match a non-leaf signer identity", () => {
+  const report = {
+    artifacts: [
+      {
+        path: "D:\\dist\\overlay\\Francis Overlay.exe",
+        state: "signed",
+        subject: "Acme Software LLC",
+        issuer: "Acme Internal Issuing CA",
+        chainSubjects: ["Acme Software LLC", "Acme Internal Issuing CA"],
+        chainIssuers: ["Acme Internal Issuing CA", "Acme Internal Root CA"],
+        rootSubject: "Acme Internal Issuing CA",
+        rootIssuer: "Acme Internal Root CA",
+      },
+    ],
+  };
+
+  const validation = validateSigningReport(report, {
+    requireSigned: true,
+    requirePublisherName: "Acme Software LLC",
+    requireChainHint: "DigiCert",
+    rejectSelfIssued: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.equal(validation.failures[0].reason, "chain_hint_mismatch");
+});
+
 test("validateSigningReport accepts a signed artifact with a matching non-self-issued publisher", () => {
   const report = {
     artifacts: [
@@ -175,6 +202,10 @@ test("validateSigningReport accepts a signed artifact with a matching non-self-i
         state: "signed",
         subject: "Ap3pp3rs94 LLC",
         issuer: "Trusted Publisher CA",
+        chainSubjects: ["Ap3pp3rs94 LLC", "Trusted Publisher CA"],
+        chainIssuers: ["Trusted Publisher CA", "Trusted Root CA"],
+        rootSubject: "Trusted Publisher CA",
+        rootIssuer: "Trusted Root CA",
       },
     ],
   };
@@ -182,6 +213,7 @@ test("validateSigningReport accepts a signed artifact with a matching non-self-i
   const validation = validateSigningReport(report, {
     requireSigned: true,
     requirePublisherName: "Ap3pp3rs94 LLC",
+    requireChainHint: "Trusted Publisher CA",
     rejectSelfIssued: true,
   });
 

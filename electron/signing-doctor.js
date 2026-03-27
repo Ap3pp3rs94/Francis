@@ -137,6 +137,7 @@ function buildSigningDoctor({
   const azureAccount = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
   const azureProfile = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
   const azurePublisher = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
+  const chainHint = readConfiguredEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_CHAIN_HINT"]);
   const azureClient = readConfiguredEnvValue(env, ["AZURE_CLIENT_ID"]);
   const azureTenant = readConfiguredEnvValue(env, ["AZURE_TENANT_ID"]);
   const azureSecret = readConfiguredEnvValue(env, ["AZURE_CLIENT_SECRET"]);
@@ -159,6 +160,7 @@ function buildSigningDoctor({
 
   const certificateRows = normalizeCertificateRows(certificates);
   const normalizedPublisher = normalizeIdentity(azurePublisher);
+  const normalizedChainHint = normalizeIdentity(chainHint);
   const publicTrustCandidates = certificateRows.filter((entry) => {
     const subject = normalizeIdentity(entry.subject);
     const issuer = normalizeIdentity(entry.issuer);
@@ -182,6 +184,9 @@ function buildSigningDoctor({
   if (!normalizedPublisher) {
     blockingReasons.push("missing_publisher_hint");
   }
+  if (!normalizedChainHint) {
+    blockingReasons.push("missing_chain_hint");
+  }
   if (!azureReady) {
     if (!publicTrustCandidates.length) {
       blockingReasons.push(
@@ -195,8 +200,8 @@ function buildSigningDoctor({
   }
 
   const publicReleaseReady =
-    (azureReady && Boolean(normalizedPublisher)) ||
-    (Boolean(normalizedPublisher) && matchingPublisherCandidates.length > 0);
+    (azureReady && Boolean(normalizedPublisher) && Boolean(normalizedChainHint)) ||
+    (Boolean(normalizedPublisher) && Boolean(normalizedChainHint) && matchingPublisherCandidates.length > 0);
   const signedPackagingReady =
     azureReady || localPfxReady || localStoreReady || currentArtifactsSigned;
   const localStoreCandidates = certificateRows.filter((entry) => entry.hasPrivateKey);
@@ -211,6 +216,11 @@ function buildSigningDoctor({
   if (!azurePublisher) {
     nextSteps.push(
       "Set FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME to the exact legal publisher name in the release certificate.",
+    );
+  }
+  if (!chainHint) {
+    nextSteps.push(
+      "Set FRANCIS_WINDOWS_SIGNING_CHAIN_HINT to the expected non-leaf issuer or chain identity for the public release signer.",
     );
   }
   if (selfIssuedPrivateKeyCertificates.length > 0 && !publicTrustCandidates.length) {
@@ -251,6 +261,8 @@ function buildSigningDoctor({
           env: {
             FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME:
               azurePublisher || normalizePublisherDisplay(preferredPublicCertStoreCandidate.subject),
+            FRANCIS_WINDOWS_SIGNING_CHAIN_HINT:
+              chainHint || normalizePublisherDisplay(preferredPublicCertStoreCandidate.issuer),
             FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME: normalizePublisherDisplay(
               preferredPublicCertStoreCandidate.subject,
             ),
@@ -267,6 +279,7 @@ function buildSigningDoctor({
     publicReleaseAzureTrustedSigning: buildPowerShellSuggestion({
       env: {
         FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: azurePublisher || "<legal publisher name>",
+        FRANCIS_WINDOWS_SIGNING_CHAIN_HINT: chainHint || "<expected issuer or chain hint>",
         FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT:
           azureEndpoint || "https://<region>.codesigning.azure.net/",
         FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME:
@@ -293,6 +306,7 @@ function buildSigningDoctor({
       azureReady,
     },
     publisherName: azurePublisher,
+    chainHint,
     certificates: {
       total: certificateRows.length,
       publicTrustCandidates: publicTrustCandidates.length,

@@ -82,6 +82,7 @@ test("signing posture is ready when Windows cert-store selectors are configured"
 test("signing posture is ready when Azure Trusted Signing inputs are complete", () => {
   const posture = buildSigningPosture({
     env: {
+      FRANCIS_WINDOWS_SIGNING_CHAIN_HINT: "Microsoft ID Verified CS EOC CA 01",
       FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT: "https://eus.codesigning.azure.net/",
       FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: "francis-overlay",
       FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: "francis-account",
@@ -97,6 +98,10 @@ test("signing posture is ready when Azure Trusted Signing inputs are complete", 
   assert.equal(posture.severity, "low");
   assert.equal(posture.ready, true);
   assert.ok(posture.configuredPaths.includes("Azure Trusted Signing"));
+  assert.match(
+    posture.items.find((entry) => entry.id === "chain_hint")?.summary || "",
+    /Microsoft ID Verified CS EOC CA 01/,
+  );
 });
 
 test("signing posture trusts a packaged executable with a verified signature", () => {

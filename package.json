@@ -18,7 +18,7 @@
     "overlay:signing-doctor:public": "node electron/signing-doctor.js --require-public-ready",
     "overlay:verify-signing": "node electron/verify-signing.cjs",
     "overlay:verify-signing:required": "node electron/verify-signing.cjs --require-signed",
-    "overlay:verify-signing:public": "node electron/verify-signing.cjs --require-signed --require-publisher-env --reject-self-issued",
+    "overlay:verify-signing:public": "node electron/verify-signing.cjs --require-signed --require-publisher-env --require-chain-hint-env --reject-self-issued",
     "overlay:pack": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --dir --win && npm run overlay:verify-signing",
     "overlay:pack:signed": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --dir --win && npm run overlay:verify-signing:required",
     "overlay:installer": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --win nsis && npm run overlay:verify-signing",

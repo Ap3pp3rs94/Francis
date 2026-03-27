@@ -37,6 +37,7 @@ test("signing doctor blocks public release when only a self-issued local certifi
   assert.equal(report.signedPackagingReady, true);
   assert.equal(report.publicReleaseReady, false);
   assert.ok(report.blockingReasons.includes("missing_publisher_hint"));
+  assert.ok(report.blockingReasons.includes("missing_chain_hint"));
   assert.ok(report.blockingReasons.includes("self_issued_only"));
   assert.equal(
     report.suggestedPowerShell.machineLocalSignedBuild.env.FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME,
@@ -54,6 +55,7 @@ test("signing doctor is ready when a matching public-trust certificate is availa
   const report = buildSigningDoctor({
     env: {
       FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: "Acme Software LLC",
+      FRANCIS_WINDOWS_SIGNING_CHAIN_HINT: "Trusted Publisher CA",
       FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME: "Acme Software LLC",
     },
     certificates: [
@@ -71,9 +73,14 @@ test("signing doctor is ready when a matching public-trust certificate is availa
   assert.equal(report.publicReleaseReady, true);
   assert.equal(report.blockingReasons.length, 0);
   assert.equal(report.certificates.matchingPublisherCandidates, 1);
+  assert.equal(report.chainHint, "Trusted Publisher CA");
   assert.equal(
     report.suggestedPowerShell.publicReleaseCertStore.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME,
     "Acme Software LLC",
+  );
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseCertStore.env.FRANCIS_WINDOWS_SIGNING_CHAIN_HINT,
+    "Trusted Publisher CA",
   );
   assert.equal(
     report.suggestedPowerShell.publicReleaseCertStore.env.FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME,
@@ -153,6 +160,10 @@ test("signing doctor surfaces an Azure template even when the current machine is
     report.suggestedPowerShell.publicReleaseAzureTrustedSigning.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME,
     "<legal publisher name>",
   );
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseAzureTrustedSigning.env.FRANCIS_WINDOWS_SIGNING_CHAIN_HINT,
+    "<expected issuer or chain hint>",
+  );
   assert.match(
     report.suggestedPowerShell.publicReleaseAzureTrustedSigning.lines.join("\n"),
     /release:publish:windows:public/i,
@@ -175,5 +186,6 @@ test("signing doctor ignores placeholder values loaded from a local template fil
 
   assert.equal(report.publicReleaseReady, false);
   assert.ok(report.blockingReasons.includes("missing_publisher_hint"));
+  assert.ok(report.blockingReasons.includes("missing_chain_hint"));
   assert.ok(report.blockingReasons.includes("no_public_trust_certificate"));
 });

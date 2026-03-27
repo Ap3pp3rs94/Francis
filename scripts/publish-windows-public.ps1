@@ -38,6 +38,10 @@ if (-not (Test-ConfiguredValue $env:FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME)) {
     Stop-WithMessage ("[francis-overlay] FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME is still unset or placeholder in " + $EnvFilePath + ". Fill the real legal publisher name before retrying.")
 }
 
+if (-not (Test-ConfiguredValue $env:FRANCIS_WINDOWS_SIGNING_CHAIN_HINT)) {
+    Stop-WithMessage ("[francis-overlay] FRANCIS_WINDOWS_SIGNING_CHAIN_HINT is still unset or placeholder in " + $EnvFilePath + ". Fill the expected public issuer or chain hint before retrying.")
+}
+
 $localPfxReady =
     ((Test-ConfiguredValue $env:WIN_CSC_LINK) -or (Test-ConfiguredValue $env:CSC_LINK)) -and
     ((Test-ConfiguredValue $env:WIN_CSC_KEY_PASSWORD) -or (Test-ConfiguredValue $env:CSC_KEY_PASSWORD))
