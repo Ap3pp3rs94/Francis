@@ -95,10 +95,18 @@ function createSignatureRecord({
 
 function parseSigntoolOutput(output, resolvedPath) {
   const text = String(output || "");
+  const firstMatch = (pattern, input = text) => {
+    const match = input.match(pattern);
+    return match ? match[1].trim() : "";
+  };
   const lastMatch = (pattern) => {
     const matches = [...text.matchAll(pattern)];
     return matches.length ? matches[matches.length - 1][1].trim() : "";
   };
+  const primaryChainSection =
+    firstMatch(
+      /Signing Certificate Chain:\s*([\s\S]*?)(?:\r?\n\s*\r?\n(?:The signature is timestamped:|Successfully verified:)|\r?\n(?:The signature is timestamped:|Successfully verified:)|$)/i,
+    ) || text;
 
   if (/No signature found/i.test(text)) {
     return createSignatureRecord({
@@ -117,9 +125,18 @@ function parseSigntoolOutput(output, resolvedPath) {
       state: "signed",
       status: "Valid",
       statusMessage: "Successfully verified by signtool.",
-      subject: lastMatch(/Issued to:\s+([^\r\n]+)/gi),
-      issuer: lastMatch(/Issued by:\s+([^\r\n]+)/gi),
-      notAfter: lastMatch(/Expires:\s+([^\r\n]+)/gi),
+      subject:
+        firstMatch(/Issued to:\s+([^\r\n]+)/i, primaryChainSection) ||
+        lastMatch(/Issued to:\s+([^\r\n]+)/gi),
+      issuer:
+        firstMatch(/Issued by:\s+([^\r\n]+)/i, primaryChainSection) ||
+        lastMatch(/Issued by:\s+([^\r\n]+)/gi),
+      notAfter:
+        firstMatch(/Expires:\s+([^\r\n]+)/i, primaryChainSection) ||
+        lastMatch(/Expires:\s+([^\r\n]+)/gi),
+      thumbprint:
+        firstMatch(/SHA1 hash:\s+([A-Fa-f0-9]+)/i, primaryChainSection) ||
+        lastMatch(/SHA1 hash:\s+([A-Fa-f0-9]+)/gi),
     });
   }
 
