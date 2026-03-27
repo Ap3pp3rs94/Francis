@@ -71,6 +71,10 @@ function createSignatureRecord({
   statusMessage = "",
   subject = "",
   issuer = "",
+  chainSubjects = [],
+  chainIssuers = [],
+  rootSubject = "",
+  rootIssuer = "",
   thumbprint = "",
   notAfter = "",
   checkedAt = new Date().toISOString(),
@@ -83,6 +87,10 @@ function createSignatureRecord({
     statusMessage: statusMessage || "",
     subject: subject || "",
     issuer: issuer || "",
+    chainSubjects: Array.isArray(chainSubjects) ? chainSubjects.filter(Boolean) : [],
+    chainIssuers: Array.isArray(chainIssuers) ? chainIssuers.filter(Boolean) : [],
+    rootSubject: rootSubject || "",
+    rootIssuer: rootIssuer || "",
     thumbprint: thumbprint || "",
     notAfter: notAfter || "",
     checkedAt,
@@ -107,6 +115,12 @@ function parseSigntoolOutput(output, resolvedPath) {
     firstMatch(
       /Signing Certificate Chain:\s*([\s\S]*?)(?:\r?\n\s*\r?\n(?:The signature is timestamped:|Successfully verified:)|\r?\n(?:The signature is timestamped:|Successfully verified:)|$)/i,
     ) || text;
+  const primaryChainSubjects = [...primaryChainSection.matchAll(/Issued to:\s+([^\r\n]+)/gi)].map((match) =>
+    match[1].trim(),
+  );
+  const primaryChainIssuers = [...primaryChainSection.matchAll(/Issued by:\s+([^\r\n]+)/gi)].map((match) =>
+    match[1].trim(),
+  );
 
   if (/No signature found/i.test(text)) {
     return createSignatureRecord({
@@ -130,6 +144,14 @@ function parseSigntoolOutput(output, resolvedPath) {
         lastMatch(/Issued to:\s+([^\r\n]+)/gi),
       issuer:
         firstMatch(/Issued by:\s+([^\r\n]+)/i, primaryChainSection) ||
+        lastMatch(/Issued by:\s+([^\r\n]+)/gi),
+      chainSubjects: primaryChainSubjects,
+      chainIssuers: primaryChainIssuers,
+      rootSubject:
+        primaryChainSubjects[primaryChainSubjects.length - 1] ||
+        lastMatch(/Issued to:\s+([^\r\n]+)/gi),
+      rootIssuer:
+        primaryChainIssuers[primaryChainIssuers.length - 1] ||
         lastMatch(/Issued by:\s+([^\r\n]+)/gi),
       notAfter:
         firstMatch(/Expires:\s+([^\r\n]+)/i, primaryChainSection) ||

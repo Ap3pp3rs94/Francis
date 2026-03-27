@@ -43,6 +43,9 @@ test("inspectAuthenticodeSignature normalizes valid signatures", () => {
 
   assert.equal(record.state, "signed");
   assert.equal(record.status, "Valid");
+  assert.deepEqual(record.chainSubjects, ["Francis Overlay"]);
+  assert.equal(record.rootSubject, "Francis Overlay");
+  assert.equal(record.rootIssuer, "Francis Root");
   assert.match(record.summary, /Valid Authenticode signature/i);
 });
 
@@ -59,9 +62,13 @@ test("inspectAuthenticodeSignature prefers the primary signer over the timestamp
         "Signature Index: 0 (Primary Signature)",
         "Signing Certificate Chain:",
         "    Issued to: Francis Overlay Dev Signing",
-        "    Issued by: Francis Overlay Dev Signing",
+        "    Issued by: DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1",
         "    Expires:   Tue Mar 27 08:14:49 2029",
         "    SHA1 hash: EBF0099D5256C8E32E5F70D7F6879F66F9C09B08",
+        "",
+        "    Issued to: DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1",
+        "    Issued by: DigiCert Trusted Root G4",
+        "    Expires:   Tue Mar 27 08:14:49 2031",
         "",
         "The signature is timestamped: Fri Mar 27 08:51:07 2026",
         "Timestamp Verified by:",
@@ -80,8 +87,14 @@ test("inspectAuthenticodeSignature prefers the primary signer over the timestamp
 
   assert.equal(record.state, "signed");
   assert.equal(record.subject, "Francis Overlay Dev Signing");
-  assert.equal(record.issuer, "Francis Overlay Dev Signing");
+  assert.equal(record.issuer, "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1");
   assert.equal(record.thumbprint, "EBF0099D5256C8E32E5F70D7F6879F66F9C09B08");
+  assert.deepEqual(record.chainSubjects, [
+    "Francis Overlay Dev Signing",
+    "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1",
+  ]);
+  assert.equal(record.rootSubject, "DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1");
+  assert.equal(record.rootIssuer, "DigiCert Trusted Root G4");
   assert.match(record.summary, /Francis Overlay Dev Signing/);
 });
 
