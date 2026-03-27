@@ -1,0 +1,66 @@
+const packageJson = require("../package.json");
+
+function readEnvValue(env, keys = []) {
+  for (const key of keys) {
+    const value = env && typeof env[key] === "string" ? env[key].trim() : "";
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function readEnvBoolean(env, keys = []) {
+  const value = readEnvValue(env, keys).toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+function cloneBuildConfig(buildConfig = {}) {
+  return JSON.parse(JSON.stringify(buildConfig));
+}
+
+function buildAzureTrustedSigningOptions(env = process.env) {
+  const endpoint = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
+  const certificateProfileName = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
+  const codeSigningAccountName = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
+  const publisherName = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
+
+  if (!(endpoint && certificateProfileName && codeSigningAccountName)) {
+    return null;
+  }
+
+  return {
+    endpoint,
+    certificateProfileName,
+    codeSigningAccountName,
+    ...(publisherName ? { publisherName } : {}),
+  };
+}
+
+function buildElectronBuilderConfig({
+  packageJson: packageJsonInput = packageJson,
+  env = process.env,
+} = {}) {
+  const build = cloneBuildConfig(packageJsonInput.build || {});
+  const win = { ...(build.win || {}) };
+  const azureSignOptions = buildAzureTrustedSigningOptions(env);
+
+  if (azureSignOptions) {
+    win.azureSignOptions = azureSignOptions;
+  } else {
+    delete win.azureSignOptions;
+  }
+
+  return {
+    ...build,
+    win,
+    forceCodeSigning:
+      build.forceCodeSigning ||
+      readEnvBoolean(env, ["FRANCIS_REQUIRE_SIGNED_OVERLAY", "FRANCIS_FORCE_CODE_SIGNING"]),
+  };
+}
+
+module.exports = {
+  buildAzureTrustedSigningOptions,
+  buildElectronBuilderConfig,
+};

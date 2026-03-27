@@ -8,39 +8,93 @@ function readEnvValue(env, keys = []) {
   return "";
 }
 
+function normalizeVerifiedExecutable(entry = null) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  return {
+    path: typeof entry.path === "string" ? entry.path : "",
+    state: typeof entry.state === "string" ? entry.state : "unavailable",
+    status: typeof entry.status === "string" ? entry.status : "",
+    statusMessage: typeof entry.statusMessage === "string" ? entry.statusMessage : "",
+    subject: typeof entry.subject === "string" ? entry.subject : "",
+    issuer: typeof entry.issuer === "string" ? entry.issuer : "",
+    thumbprint: typeof entry.thumbprint === "string" ? entry.thumbprint : "",
+    notAfter: typeof entry.notAfter === "string" ? entry.notAfter : "",
+    checkedAt: typeof entry.checkedAt === "string" ? entry.checkedAt : "",
+    summary: typeof entry.summary === "string" ? entry.summary : "",
+  };
+}
+
 function buildSigningPosture({
   env = process.env,
   distribution = "source",
   packaged = false,
+  verifiedExecutable = null,
 } = {}) {
   const localCertificate = readEnvValue(env, ["WIN_CSC_LINK", "CSC_LINK"]);
   const localPassword = readEnvValue(env, ["WIN_CSC_KEY_PASSWORD", "CSC_KEY_PASSWORD"]);
-  const azureVault = readEnvValue(env, ["AZURE_KEY_VAULT_URI"]);
+  const azureEndpoint = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
+  const azureAccount = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
+  const azureProfile = readEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
+  const azurePublisher = readEnvValue(env, ["FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME"]);
   const azureClient = readEnvValue(env, ["AZURE_CLIENT_ID"]);
   const azureTenant = readEnvValue(env, ["AZURE_TENANT_ID"]);
   const azureSecret = readEnvValue(env, ["AZURE_CLIENT_SECRET"]);
+  const azureCertificatePath = readEnvValue(env, ["AZURE_CLIENT_CERTIFICATE_PATH"]);
+  const azureUsername = readEnvValue(env, ["AZURE_USERNAME"]);
+  const azurePassword = readEnvValue(env, ["AZURE_PASSWORD"]);
   const signpathToken = readEnvValue(env, ["SIGNPATH_API_TOKEN"]);
   const signpathProject = readEnvValue(env, ["SIGNPATH_PROJECT_SLUG", "SIGNPATH_ORGANIZATION_ID"]);
   const requiresSigning = distribution === "installer" || distribution === "portable";
+  const verified = normalizeVerifiedExecutable(verifiedExecutable);
 
   const localReady = Boolean(localCertificate && localPassword);
-  const azureReady = Boolean(azureVault && azureClient && azureTenant && azureSecret);
-  const signpathReady = Boolean(signpathToken && signpathProject);
-  const anySignals = Boolean(localCertificate || localPassword || azureVault || azureClient || azureTenant || azureSecret || signpathToken || signpathProject);
+  const azureAuthReady = Boolean(
+    azureClient &&
+      azureTenant &&
+      (azureSecret || azureCertificatePath || (azureUsername && azurePassword)),
+  );
+  const azureReady = Boolean(azureEndpoint && azureAccount && azureProfile && azureAuthReady);
+  const signpathSignals = Boolean(signpathToken || signpathProject);
+  const anySignals = Boolean(
+    localCertificate ||
+      localPassword ||
+      azureEndpoint ||
+      azureAccount ||
+      azureProfile ||
+      azurePublisher ||
+      azureClient ||
+      azureTenant ||
+      azureSecret ||
+      azureCertificatePath ||
+      azureUsername ||
+      azurePassword ||
+      signpathSignals,
+  );
 
   let mode = "unsigned";
   let severity = "low";
   let summary = "Code signing is not active in this source checkout.";
 
-  if (localReady) {
+  if (packaged && verified?.state === "signed") {
+    mode = "signed";
+    severity = "low";
+    summary = verified.summary || "Packaged Windows build carries a valid Authenticode signature.";
+  } else if (packaged && verified?.state === "invalid") {
+    mode = "invalid";
+    severity = "high";
+    summary = verified.summary || "Packaged Windows build signature is present but not valid.";
+  } else if (localReady) {
     mode = "local_certificate";
     summary = "Windows signing material is configured through a local certificate path.";
   } else if (azureReady) {
     mode = "cloud_signing";
-    summary = "Windows signing material is configured through Azure Key Vault.";
-  } else if (signpathReady) {
-    mode = "cloud_signing";
-    summary = "Windows signing material is configured through SignPath.";
+    summary = "Windows signing material is configured through Azure Trusted Signing.";
+  } else if (signpathSignals) {
+    mode = "partial";
+    severity = "high";
+    summary = "SignPath inputs are present, but the overlay build is not wired to SignPath. Use Azure Trusted Signing or local certificate signing.";
   } else if (anySignals) {
     mode = "partial";
     severity = "high";
@@ -59,20 +113,47 @@ function buildSigningPosture({
   if (localCertificate) {
     configuredPaths.push("local certificate");
   }
-  if (azureReady || azureVault) {
-    configuredPaths.push("Azure Key Vault");
+  if (azureReady || azureEndpoint || azureAccount || azureProfile || azurePublisher) {
+    configuredPaths.push("Azure Trusted Signing");
   }
-  if (signpathReady || signpathToken) {
+  if (signpathSignals) {
     configuredPaths.push("SignPath");
   }
+
+  const verificationState =
+    packaged && verified
+      ? verified.state
+      : packaged
+        ? "unavailable"
+        : "not_applicable";
+  const verificationSummary =
+    packaged && verified
+      ? verified.summary
+      : packaged
+        ? "Packaged executable verification has not been captured yet."
+        : "Source checkout does not require packaged Authenticode verification.";
+  const ready = packaged
+    ? verified?.state === "signed"
+    : localReady || azureReady;
 
   return {
     severity,
     mode,
     summary,
     requiresSigning,
-    ready: localReady || azureReady || signpathReady,
+    ready,
     configuredPaths,
+    verification: {
+      state: verificationState,
+      summary: verificationSummary,
+      path: verified?.path || "",
+      status: verified?.status || "",
+      subject: verified?.subject || "",
+      issuer: verified?.issuer || "",
+      thumbprint: verified?.thumbprint || "",
+      notAfter: verified?.notAfter || "",
+      checkedAt: verified?.checkedAt || "",
+    },
     cards: [
       {
         label: "Summary",
@@ -91,8 +172,8 @@ function buildSigningPosture({
       },
       {
         label: "Readiness",
-        value: localReady || azureReady || signpathReady ? "ready" : anySignals ? "partial" : "missing",
-        tone: localReady || azureReady || signpathReady ? "low" : anySignals ? "high" : requiresSigning ? "medium" : "low",
+        value: ready ? "ready" : anySignals ? "partial" : packaged ? "missing" : "missing",
+        tone: ready ? "low" : anySignals ? "high" : requiresSigning ? "medium" : "low",
       },
       {
         label: "Paths",
@@ -103,6 +184,20 @@ function buildSigningPosture({
         label: "Packaging",
         value: requiresSigning ? "signature expected" : "source-only",
         tone: requiresSigning ? "medium" : "low",
+      },
+      {
+        label: "Verification",
+        value: verificationState.replaceAll("_", " "),
+        tone:
+          verificationState === "signed"
+            ? "low"
+            : verificationState === "invalid"
+              ? "high"
+              : verificationState === "unsigned"
+                ? "medium"
+                : requiresSigning
+                  ? "medium"
+                  : "low",
       },
     ],
     items: [
@@ -118,23 +213,82 @@ function buildSigningPosture({
       },
       {
         id: "azure",
-        label: "Azure Key Vault",
-        tone: azureReady ? "low" : azureVault || azureClient || azureTenant || azureSecret ? "high" : "low",
+        label: "Azure Trusted Signing",
+        tone:
+          azureReady
+            ? "low"
+            : azureEndpoint ||
+                azureAccount ||
+                azureProfile ||
+                azurePublisher ||
+                azureClient ||
+                azureTenant ||
+                azureSecret ||
+                azureCertificatePath ||
+                azureUsername ||
+                azurePassword
+              ? "high"
+              : "low",
         summary: azureReady
-          ? "Azure signing inputs are complete."
-          : azureVault || azureClient || azureTenant || azureSecret
-            ? "Azure signing inputs are present, but the signer is incomplete."
-            : "No Azure signing inputs are configured.",
+          ? "Azure Trusted Signing inputs are complete."
+          : azureEndpoint ||
+              azureAccount ||
+              azureProfile ||
+              azurePublisher ||
+              azureClient ||
+              azureTenant ||
+              azureSecret ||
+              azureCertificatePath ||
+              azureUsername ||
+              azurePassword
+            ? "Azure Trusted Signing inputs are present, but the signer is incomplete."
+            : "No Azure Trusted Signing inputs are configured.",
       },
       {
         id: "signpath",
         label: "SignPath",
-        tone: signpathReady ? "low" : signpathToken || signpathProject ? "high" : "low",
-        summary: signpathReady
-          ? "SignPath signing inputs are complete."
-          : signpathToken || signpathProject
-            ? "SignPath signing inputs are present, but the signer is incomplete."
-            : "No SignPath signing inputs are configured.",
+        tone: signpathSignals ? "high" : "low",
+        summary: signpathSignals
+          ? "SignPath inputs are present, but the overlay build is not wired to SignPath."
+          : "No SignPath signing inputs are configured.",
+      },
+      {
+        id: "verification",
+        label: "Authenticode verification",
+        tone:
+          verificationState === "signed"
+            ? "low"
+            : verificationState === "invalid"
+              ? "high"
+              : verificationState === "unsigned"
+                ? "medium"
+                : requiresSigning
+                  ? "medium"
+                  : "low",
+        summary:
+          verificationState === "not_applicable"
+            ? "Source checkout does not require packaged Authenticode verification."
+            : verificationSummary,
+      },
+      {
+        id: "publisher",
+        label: "Publisher hint",
+        tone: azurePublisher ? "medium" : "low",
+        summary: azurePublisher
+          ? `Expected publisher hint is ${azurePublisher}.`
+          : "No publisher hint is configured.",
+      },
+      {
+        id: "signing_mode",
+        label: "Packaging route",
+        tone: azureReady || localReady ? "low" : requiresSigning ? "medium" : "low",
+        summary: azureReady
+          ? "Electron Builder will use Azure Trusted Signing when packaging."
+          : localReady
+            ? "Electron Builder will use signtool/local certificate signing when packaging."
+            : requiresSigning
+              ? "Packaging will remain unsigned until a supported signing route is configured."
+              : "Source checkout does not require packaged signing.",
       },
     ],
   };

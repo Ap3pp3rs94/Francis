@@ -72,6 +72,7 @@ const { buildDegradedModePosture } = require("./degraded-mode");
 const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
+const { inspectAuthenticodeSignature } = require("./signature-state");
 const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
 const { buildOrbFocusCropRect, buildOrbTargetStability } = require("./orb-perception");
 const {
@@ -123,6 +124,7 @@ let backupState = null;
 let supportState = null;
 let buildProvenance = null;
 let lifecycleHistoryState = null;
+let executableSignature = null;
 let preferenceSaveTimer = null;
 let hudRuntime = null;
 let ollamaRuntime = null;
@@ -949,6 +951,7 @@ function getLifecycleState(inputState = null) {
     env: process.env,
     distribution: currentBuild.distribution,
     packaged: currentBuild.packaged,
+    verifiedExecutable: executableSignature,
   });
   const preflight = ready
     ? buildPreflightState({
@@ -3291,6 +3294,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.whenReady().then(async () => {
     buildInfo = resolveBuildIdentity(app, __dirname);
+    executableSignature = app.isPackaged ? inspectAuthenticodeSignature(app.getPath("exe")) : null;
     buildProvenance =
       loadGeneratedProvenance(path.resolve(__dirname, "..")) ||
       buildRuntimeProvenance({
