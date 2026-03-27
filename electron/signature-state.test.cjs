@@ -5,8 +5,10 @@ const os = require("node:os");
 const path = require("node:path");
 
 const {
+  GENERATED_SIGNING_DIR,
   buildArtifactSigningReport,
   inspectAuthenticodeSignature,
+  resolveOverlayArtifactPaths,
   resolveSignToolPath,
   validateSigningReport,
 } = require("./signature-state");
@@ -69,6 +71,53 @@ test("buildArtifactSigningReport counts unsigned artifacts and require-signed fa
   assert.equal(report.counts.unsigned, 1);
   assert.match(report.summary, /unsigned/i);
   assert.equal(validateSigningReport(report, { requireSigned: true }).ok, false);
+});
+
+test("resolveOverlayArtifactPaths ignores stale top-level artifacts from older builds", () => {
+  const root = makeTempRoot();
+  const generatedDir = path.join(root, GENERATED_SIGNING_DIR);
+  const distRoot = path.join(root, "dist", "overlay");
+  const unpackedRoot = path.join(distRoot, "win-unpacked");
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.mkdirSync(unpackedRoot, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({
+      version: "0.1.0",
+      build: {
+        productName: "Francis Overlay",
+      },
+    }),
+    "utf8",
+  );
+
+  const provenancePath = path.join(generatedDir, "build-provenance.json");
+  fs.writeFileSync(
+    provenancePath,
+    JSON.stringify({
+      generatedAt: "2026-03-27T12:00:00.000Z",
+    }),
+    "utf8",
+  );
+
+  const unpackedExe = path.join(unpackedRoot, "Francis Overlay.exe");
+  const currentPortable = path.join(distRoot, "Francis-Overlay-0.1.0-x64-portable.exe");
+  const staleArtifact = path.join(distRoot, "Francis-Overlay-0.1.0-x64.exe");
+  fs.writeFileSync(unpackedExe, "unpacked", "utf8");
+  fs.writeFileSync(currentPortable, "portable", "utf8");
+  fs.writeFileSync(staleArtifact, "stale", "utf8");
+
+  const staleTime = new Date("2026-03-11T10:28:48.000Z");
+  const currentTime = new Date("2026-03-27T12:10:00.000Z");
+  fs.utimesSync(currentPortable, currentTime, currentTime);
+  fs.utimesSync(staleArtifact, staleTime, staleTime);
+
+  const artifactPaths = resolveOverlayArtifactPaths(root);
+
+  assert.ok(artifactPaths.includes(unpackedExe));
+  assert.ok(artifactPaths.includes(currentPortable));
+  assert.ok(!artifactPaths.includes(staleArtifact));
 });
 
 test("inspectAuthenticodeSignature can query the vendored signtool binary", { skip: process.platform !== "win32" }, () => {

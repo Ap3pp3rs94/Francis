@@ -4,6 +4,7 @@ const childProcess = require("node:child_process");
 
 const GENERATED_SIGNING_DIR = path.join("electron", "generated");
 const GENERATED_SIGNING_FILE = "build-signing.json";
+const GENERATED_PROVENANCE_FILE = "build-provenance.json";
 
 function safeStat(targetPath) {
   try {
@@ -287,13 +288,37 @@ function loadGeneratedSigningReport(sourceRoot) {
   }
 }
 
+function resolveGeneratedProvenancePath(sourceRoot) {
+  return path.join(sourceRoot, GENERATED_SIGNING_DIR, GENERATED_PROVENANCE_FILE);
+}
+
+function loadGeneratedBuildProvenance(sourceRoot) {
+  const filePath = resolveGeneratedProvenancePath(sourceRoot);
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function resolveOverlayArtifactPaths(sourceRoot) {
   const distRoot = path.join(sourceRoot, "dist", "overlay");
+  const buildProvenance = loadGeneratedBuildProvenance(sourceRoot);
+  const buildStartMs = Date.parse(String(buildProvenance?.generatedAt || ""));
   const topLevelArtifacts = [];
   try {
     for (const entry of fs.readdirSync(distRoot, { withFileTypes: true })) {
       if (entry.isFile() && entry.name.toLowerCase().endsWith(".exe")) {
-        topLevelArtifacts.push(path.join(distRoot, entry.name));
+        const artifactPath = path.join(distRoot, entry.name);
+        const artifactStat = safeStat(artifactPath);
+        if (
+          Number.isFinite(buildStartMs) &&
+          artifactStat &&
+          artifactStat.mtimeMs < buildStartMs
+        ) {
+          continue;
+        }
+        topLevelArtifacts.push(artifactPath);
       }
     }
   } catch {
@@ -316,13 +341,16 @@ function resolveOverlayArtifactPaths(sourceRoot) {
 }
 
 module.exports = {
+  GENERATED_PROVENANCE_FILE,
   GENERATED_SIGNING_DIR,
   GENERATED_SIGNING_FILE,
   buildArtifactSigningReport,
   inspectAuthenticodeSignature,
+  loadGeneratedBuildProvenance,
   loadGeneratedSigningReport,
   normalizeAuthenticodeState,
   resolveSignToolPath,
+  resolveGeneratedProvenancePath,
   resolveGeneratedSigningPath,
   resolveOverlayArtifactPaths,
   validateSigningReport,
