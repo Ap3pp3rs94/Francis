@@ -38,6 +38,16 @@ test("signing doctor blocks public release when only a self-issued local certifi
   assert.equal(report.publicReleaseReady, false);
   assert.ok(report.blockingReasons.includes("missing_publisher_hint"));
   assert.ok(report.blockingReasons.includes("self_issued_only"));
+  assert.equal(
+    report.suggestedPowerShell.machineLocalSignedBuild.env.FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME,
+    "Francis Overlay Dev Signing",
+  );
+  assert.equal(
+    report.suggestedPowerShell.machineLocalSignedBuild.env.FRANCIS_WINDOWS_SIGNING_SHA1,
+    "ABC123",
+  );
+  assert.equal(report.suggestedPowerShell.publicReleaseCertStore.available, false);
+  assert.equal(report.suggestedPowerShell.publicReleaseCertStore.reason, "self_issued_only");
 });
 
 test("signing doctor is ready when a matching public-trust certificate is available", () => {
@@ -61,6 +71,18 @@ test("signing doctor is ready when a matching public-trust certificate is availa
   assert.equal(report.publicReleaseReady, true);
   assert.equal(report.blockingReasons.length, 0);
   assert.equal(report.certificates.matchingPublisherCandidates, 1);
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseCertStore.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME,
+    "Acme Software LLC",
+  );
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseCertStore.env.FRANCIS_WINDOWS_SIGNING_SUBJECT_NAME,
+    "Acme Software LLC",
+  );
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseCertStore.env.FRANCIS_WINDOWS_SIGNING_SHA1,
+    "DEF456",
+  );
 });
 
 test("signing doctor can normalize certificate rows returned from PowerShell JSON", () => {
@@ -119,4 +141,20 @@ test("signing doctor validation passes when public signing is ready", () => {
 
   assert.equal(validation.ok, true);
   assert.deepEqual(validation.reasons, []);
+});
+
+test("signing doctor surfaces an Azure template even when the current machine is blocked", () => {
+  const report = buildSigningDoctor({
+    env: {},
+    certificates: [],
+  });
+
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseAzureTrustedSigning.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME,
+    "<legal publisher name>",
+  );
+  assert.match(
+    report.suggestedPowerShell.publicReleaseAzureTrustedSigning.lines.join("\n"),
+    /release:publish:windows:public/i,
+  );
 });
