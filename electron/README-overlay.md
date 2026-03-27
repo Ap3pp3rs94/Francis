@@ -75,8 +75,9 @@ That PowerShell helper checks the HUD URL first and, if it is down, lets the Ele
 - `npm run overlay:verify-signing:required` fails if the current packaged artifacts are not signed
 - `npm run overlay:verify-signing:public` fails unless the current packaged artifacts are signed, match `FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME`, and are not self-issued
 - `npm run overlay:signing-doctor` reports whether the current machine is ready for machine-local signed packaging, public-trust release signing, or blocked on missing publisher-grade signer material
+- `npm run overlay:signing-doctor:public` fails fast when the current machine is not ready for public-trust release signing
 - `npm run release:publish:windows` is the canonical signed Windows publish command: it runs `release:hardening`, then `overlay:dist:signed`
-- `npm run release:publish:windows:public` is the public-trust Windows publish command: it runs `release:hardening`, then `overlay:dist:public`
+- `npm run release:publish:windows:public` is the public-trust Windows publish command: it runs the signing doctor preflight, then `release:hardening`, then `overlay:dist:public`
 
 The packaged shell includes the Francis HUD Python source under `resources/python-src` and will attempt to boot it locally when no HUD server is already running.
 Before packaging, run `npm run overlay:prepare-runtime` or let `overlay:pack` / `overlay:dist` do it for you. That stages a bundled Python runtime under `dist/python-runtime-staging` and packages it as `resources/python-runtime`.

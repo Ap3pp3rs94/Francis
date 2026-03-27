@@ -55,6 +55,7 @@ The current state is best described as:
 * the canonical Windows publish path now fails closed on unsigned artifacts through `npm run release:publish:windows`, which runs the bounded hardening lane and then requires signed distribution outputs before publish can succeed
 * the repo now distinguishes machine-local signed packaging from public-trust release packaging: `release:publish:windows` accepts any valid local signer, while `release:publish:windows:public` additionally requires a configured publisher identity and rejects self-issued signers
 * `npm run overlay:signing-doctor` now diagnoses the public-signing blocker on the current machine in one command, including missing publisher hints, self-issued-only cert stores, publisher mismatches, and absent public-trust signer material
+* `release:publish:windows:public` now fails fast through the signing doctor preflight, so a machine with only a self-issued dev signer does not burn a full Windows build before the public gate blocks it
 * Windows signing now supports three explicit routes: local PFX material, Windows cert-store selection, or Azure Trusted Signing
 * current estimated completion is `96%` overall, `96%` for feature/build coverage, and `92%` for production readiness
 
@@ -257,6 +258,7 @@ The most reliable verification lanes right now are:
 * `npm run overlay:verify-signing:required`
 * `npm run overlay:verify-signing:public`
 * `npm run overlay:signing-doctor`
+* `npm run overlay:signing-doctor:public`
 * `npm run overlay:pack`
 * `npm run overlay:pack:signed`
 * `npm run overlay:installer`
