@@ -17,9 +17,13 @@
     "overlay:verify-signing": "node electron/verify-signing.cjs",
     "overlay:verify-signing:required": "node electron/verify-signing.cjs --require-signed",
     "overlay:pack": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --dir --win && npm run overlay:verify-signing",
+    "overlay:pack:signed": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --dir --win && npm run overlay:verify-signing:required",
     "overlay:installer": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --win nsis && npm run overlay:verify-signing",
+    "overlay:installer:signed": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --win nsis && npm run overlay:verify-signing:required",
     "overlay:dist": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --win portable nsis && npm run overlay:verify-signing",
-    "release:hardening": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
+    "overlay:dist:signed": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --win portable nsis && npm run overlay:verify-signing:required",
+    "release:hardening": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "release:publish:windows": "npm run release:hardening && npm run overlay:dist:signed"
   },
   "devDependencies": {
     "electron": "40.8.0",
