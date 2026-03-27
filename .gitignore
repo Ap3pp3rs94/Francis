@@ -8,3 +8,4 @@ output/playwright/
 dist/overlay/
 dist/python-runtime-staging/
 electron/generated/
+scripts/signing-public.local.ps1

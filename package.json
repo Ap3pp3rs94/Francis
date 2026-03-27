@@ -28,7 +28,8 @@
     "overlay:dist:public": "npm run overlay:prepare-runtime && npm run overlay:prepare-provenance && electron-builder --config electron/builder-config.cjs --win portable nsis && npm run overlay:verify-signing:public",
     "release:hardening": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
     "release:publish:windows": "npm run release:hardening && npm run overlay:dist:signed",
-    "release:publish:windows:public": "npm run overlay:signing-doctor:public && npm run release:hardening && npm run overlay:dist:public"
+    "release:publish:windows:public": "npm run overlay:signing-doctor:public && npm run release:hardening && npm run overlay:dist:public",
+    "release:publish:windows:public:local": "powershell -ExecutionPolicy Bypass -File scripts/publish-windows-public.ps1"
   },
   "devDependencies": {
     "electron": "40.8.0",
