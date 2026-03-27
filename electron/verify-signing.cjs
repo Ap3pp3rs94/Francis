@@ -12,11 +12,32 @@ function main() {
   const requireSigned =
     process.argv.includes("--require-signed") ||
     /^(1|true|yes|on)$/i.test(String(process.env.FRANCIS_REQUIRE_SIGNED_OVERLAY || ""));
+  const requirePublisherEnv = process.argv.includes("--require-publisher-env");
+  const explicitPublisherNameArg = process.argv.find((entry) => entry.startsWith("--require-publisher-name="));
+  const requirePublisherName = requirePublisherEnv
+    ? String(process.env.FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME || "").trim()
+    : explicitPublisherNameArg
+      ? explicitPublisherNameArg.slice("--require-publisher-name=".length).trim()
+      : "";
+  const rejectSelfIssued =
+    process.argv.includes("--reject-self-issued") ||
+    /^(1|true|yes|on)$/i.test(String(process.env.FRANCIS_REQUIRE_PUBLIC_TRUST_OVERLAY || ""));
+
+  if (requirePublisherEnv && !requirePublisherName) {
+    console.error(
+      "[francis-overlay] Signing verification failed: FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME is required for publisher-gated verification.",
+    );
+    process.exit(1);
+  }
 
   const artifactPaths = resolveOverlayArtifactPaths(sourceRoot);
   const report = buildArtifactSigningReport({ artifactPaths });
   const reportPath = writeGeneratedSigningReport(sourceRoot, report);
-  const validation = validateSigningReport(report, { requireSigned });
+  const validation = validateSigningReport(report, {
+    requireSigned,
+    requirePublisherName,
+    rejectSelfIssued,
+  });
 
   console.log(
     JSON.stringify(
@@ -24,11 +45,15 @@ function main() {
         summary: report.summary,
         reportPath,
         requireSigned,
+        requirePublisherName,
+        rejectSelfIssued,
         counts: report.counts,
         artifacts: report.artifacts.map((artifact) => ({
           path: artifact.path,
           state: artifact.state,
           status: artifact.status,
+          subject: artifact.subject,
+          issuer: artifact.issuer,
           summary: artifact.summary,
         })),
       },
@@ -40,7 +65,7 @@ function main() {
   if (!validation.ok) {
     console.error(
       `[francis-overlay] Signing verification failed: ${validation.failures
-        .map((entry) => `${path.basename(entry.path)}=${entry.state}`)
+        .map((entry) => `${path.basename(entry.path)}=${entry.reason || entry.state}`)
         .join(", ")}`,
     );
     process.exit(1);

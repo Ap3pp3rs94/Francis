@@ -270,15 +270,58 @@ function buildArtifactSigningReport({
   };
 }
 
-function validateSigningReport(report, { requireSigned = false } = {}) {
-  if (!requireSigned) {
+function normalizeIdentityValue(value = "") {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function validateSigningReport(
+  report,
+  {
+    requireSigned = false,
+    requirePublisherName = "",
+    rejectSelfIssued = false,
+  } = {},
+) {
+  const normalizedPublisherName = normalizeIdentityValue(requirePublisherName);
+  if (!requireSigned && !normalizedPublisherName && !rejectSelfIssued) {
     return {
       ok: true,
       failures: [],
     };
   }
 
-  const failures = (report?.artifacts || []).filter((entry) => entry.state !== "signed");
+  const failures = [];
+  for (const entry of report?.artifacts || []) {
+    if (requireSigned && entry.state !== "signed") {
+      failures.push({
+        ...entry,
+        reason: entry.state,
+      });
+      continue;
+    }
+
+    if (entry.state !== "signed") {
+      continue;
+    }
+
+    const normalizedSubject = normalizeIdentityValue(entry.subject);
+    const normalizedIssuer = normalizeIdentityValue(entry.issuer);
+
+    if (normalizedPublisherName && !normalizedSubject.includes(normalizedPublisherName)) {
+      failures.push({
+        ...entry,
+        reason: "publisher_mismatch",
+      });
+      continue;
+    }
+
+    if (rejectSelfIssued && normalizedSubject && normalizedSubject === normalizedIssuer) {
+      failures.push({
+        ...entry,
+        reason: "self_issued",
+      });
+    }
+  }
   return {
     ok: failures.length === 0 && (report?.artifacts || []).length > 0,
     failures,

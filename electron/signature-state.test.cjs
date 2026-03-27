@@ -112,6 +112,69 @@ test("buildArtifactSigningReport counts unsigned artifacts and require-signed fa
   assert.equal(validateSigningReport(report, { requireSigned: true }).ok, false);
 });
 
+test("validateSigningReport rejects a signed artifact when the publisher name does not match", () => {
+  const report = {
+    artifacts: [
+      {
+        path: "D:\\dist\\overlay\\Francis Overlay.exe",
+        state: "signed",
+        subject: "Francis Overlay Dev Signing",
+        issuer: "Francis Overlay Dev Signing",
+      },
+    ],
+  };
+
+  const validation = validateSigningReport(report, {
+    requireSigned: true,
+    requirePublisherName: "Acme Software",
+  });
+
+  assert.equal(validation.ok, false);
+  assert.equal(validation.failures[0].reason, "publisher_mismatch");
+});
+
+test("validateSigningReport rejects a self-issued signed artifact when public trust is required", () => {
+  const report = {
+    artifacts: [
+      {
+        path: "D:\\dist\\overlay\\Francis Overlay.exe",
+        state: "signed",
+        subject: "Francis Overlay Dev Signing",
+        issuer: "Francis Overlay Dev Signing",
+      },
+    ],
+  };
+
+  const validation = validateSigningReport(report, {
+    requireSigned: true,
+    rejectSelfIssued: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.equal(validation.failures[0].reason, "self_issued");
+});
+
+test("validateSigningReport accepts a signed artifact with a matching non-self-issued publisher", () => {
+  const report = {
+    artifacts: [
+      {
+        path: "D:\\dist\\overlay\\Francis Overlay.exe",
+        state: "signed",
+        subject: "Ap3pp3rs94 LLC",
+        issuer: "Trusted Publisher CA",
+      },
+    ],
+  };
+
+  const validation = validateSigningReport(report, {
+    requireSigned: true,
+    requirePublisherName: "Ap3pp3rs94 LLC",
+    rejectSelfIssued: true,
+  });
+
+  assert.equal(validation.ok, true);
+});
+
 test("resolveOverlayArtifactPaths ignores stale top-level artifacts from older builds", () => {
   const root = makeTempRoot();
   const generatedDir = path.join(root, GENERATED_SIGNING_DIR);
