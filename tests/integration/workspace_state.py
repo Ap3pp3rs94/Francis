@@ -13,6 +13,7 @@ INBOX_RUNTIME_PATHS = (
 )
 
 MISSION_RUNTIME_PATHS = (
+    "control/state.json",
     "missions/missions.json",
     "missions/history.jsonl",
     "queue/jobs.jsonl",
@@ -48,6 +49,7 @@ SECURITY_RUNTIME_PATHS = (
 )
 
 TELEMETRY_RUNTIME_PATHS = (
+    "control/state.json",
     "telemetry/config.json",
     "telemetry/events.jsonl",
     "autonomy/events.jsonl",

@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from tests.integration.workspace_state import AUTONOMY_RUNTIME_PATHS, isolated_workspace_files
 
 
@@ -51,9 +52,33 @@ def _clear_budget_state() -> None:
     )
 
 
+def _prime_control_state() -> None:
+    workspace = _workspace_root()
+    control_path = workspace / "control" / "state.json"
+    control_path.parent.mkdir(parents=True, exist_ok=True)
+    control_path.write_text(
+        json.dumps(
+            {
+                "mode": "pilot",
+                "kill_switch": False,
+                "scopes": {
+                    "repos": [str(workspace.parent.resolve())],
+                    "workspaces": [str(workspace.resolve())],
+                    "apps": list(DEFAULT_ALLOWED_APPS),
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_autonomy_cycle_writes_last_run() -> None:
     with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
         _clear_budget_state()
+        _prime_control_state()
         c = TestClient(app)
 
         create = c.post(
@@ -78,6 +103,7 @@ def test_autonomy_cycle_writes_last_run() -> None:
 def test_autonomy_blocks_medium_without_flag() -> None:
     with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
         _clear_budget_state()
+        _prime_control_state()
         c = TestClient(app)
         create = c.post(
             "/missions",
@@ -98,6 +124,7 @@ def test_autonomy_blocks_medium_without_flag() -> None:
 def test_autonomy_halts_on_critical_observer_result() -> None:
     with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
         _clear_budget_state()
+        _prime_control_state()
         workspace = _workspace_root()
         incidents = workspace / "incidents" / "incidents.jsonl"
         incidents.parent.mkdir(parents=True, exist_ok=True)
@@ -137,6 +164,7 @@ def test_autonomy_halts_on_critical_observer_result() -> None:
 def test_autonomy_can_select_worker_cycle_when_queue_due() -> None:
     with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
         _clear_budget_state()
+        _prime_control_state()
         workspace = _workspace_root()
         now_iso = "2026-01-01T00:00:00+00:00"
         (workspace / "runs" / "last_run.json").write_text(
@@ -181,6 +209,7 @@ def test_autonomy_can_select_worker_cycle_when_queue_due() -> None:
 def test_autonomy_can_execute_worker_repair_when_runtime_hygiene_due() -> None:
     with isolated_workspace_files(AUTONOMY_RUNTIME_PATHS):
         _clear_budget_state()
+        _prime_control_state()
         workspace = _workspace_root()
         (workspace / "missions").mkdir(parents=True, exist_ok=True)
         (workspace / "queue").mkdir(parents=True, exist_ok=True)

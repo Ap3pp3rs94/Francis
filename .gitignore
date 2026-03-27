@@ -6,6 +6,7 @@ node_modules/
 .playwright-cli/
 output/playwright/
 dist/overlay/
+dist/internal-beta/
 dist/python-runtime-staging/
 electron/generated/
 scripts/signing-public.local.ps1
