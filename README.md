@@ -58,6 +58,7 @@ The current state is best described as:
 * `release:publish:windows:public` now fails fast through the signing doctor preflight, so a machine with only a self-issued dev signer does not burn a full Windows build before the public gate blocks it
 * the repo now includes a canonical ignored local signer bootstrap path through `scripts/signing-public.local.ps1`, `scripts/signing-public.example.ps1`, and `npm run release:publish:windows:public:local`
 * placeholder values such as `<legal publisher name>` are now treated as unset across the signing surfaces, so the local bootstrap file can exist safely before real publisher values are installed
+* the local public-release wrapper now stops in PowerShell before npm starts if the bootstrap file is missing, still placeholder-valued, or lacks one complete signing route
 * Windows signing now supports three explicit routes: local PFX material, Windows cert-store selection, or Azure Trusted Signing
 * current estimated completion is `96%` overall, `96%` for feature/build coverage, and `92%` for production readiness
 
