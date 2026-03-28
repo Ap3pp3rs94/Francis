@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   buildSigningDoctor,
   loadWindowsCodeSigningCertificates,
+  sanitizeSigningDoctorReportForConsole,
   validateSigningDoctorReport,
 } = require("./signing-doctor");
 
@@ -188,4 +189,39 @@ test("signing doctor ignores placeholder values loaded from a local template fil
   assert.ok(report.blockingReasons.includes("missing_publisher_hint"));
   assert.ok(report.blockingReasons.includes("missing_chain_hint"));
   assert.ok(report.blockingReasons.includes("no_public_trust_certificate"));
+});
+
+test("signing doctor redacts secret values from console output", () => {
+  const report = buildSigningDoctor({
+    env: {
+      FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: "Austin Peppers",
+      FRANCIS_WINDOWS_SIGNING_CHAIN_HINT: "Microsoft ID Verified Code Signing PCA 2021",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT: "https://cus.codesigning.azure.net/",
+      FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: "francis-signing-rg",
+      FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: "francis-public-trust",
+      AZURE_CLIENT_ID: "client-id",
+      AZURE_TENANT_ID: "tenant-id",
+      AZURE_CLIENT_SECRET: "super-secret-value",
+    },
+    certificates: [],
+  });
+
+  const sanitized = sanitizeSigningDoctorReportForConsole(report);
+
+  assert.equal(
+    report.suggestedPowerShell.publicReleaseAzureTrustedSigning.env.AZURE_CLIENT_SECRET,
+    "super-secret-value",
+  );
+  assert.equal(
+    sanitized.suggestedPowerShell.publicReleaseAzureTrustedSigning.env.AZURE_CLIENT_SECRET,
+    "<redacted>",
+  );
+  assert.doesNotMatch(
+    sanitized.suggestedPowerShell.publicReleaseAzureTrustedSigning.lines.join("\n"),
+    /super-secret-value/,
+  );
+  assert.match(
+    sanitized.suggestedPowerShell.publicReleaseAzureTrustedSigning.lines.join("\n"),
+    /<redacted>/,
+  );
 });

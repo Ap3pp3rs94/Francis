@@ -4,11 +4,13 @@ const {
   readConfiguredEnvValue,
 } = require("./signing-env");
 
+const WINDOWS_SIGN_HOOK_PATH = "./build/sign/windows-sign.cjs";
+
 function cloneBuildConfig(buildConfig = {}) {
   return JSON.parse(JSON.stringify(buildConfig));
 }
 
-function buildAzureTrustedSigningOptions(env = process.env) {
+function buildAzureTrustedSigningSigntoolOptions(env = process.env) {
   const endpoint = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT"]);
   const certificateProfileName = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME"]);
   const codeSigningAccountName = readConfiguredEnvValue(env, ["FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"]);
@@ -19,9 +21,8 @@ function buildAzureTrustedSigningOptions(env = process.env) {
   }
 
   return {
-    endpoint,
-    certificateProfileName,
-    codeSigningAccountName,
+    sign: WINDOWS_SIGN_HOOK_PATH,
+    signingHashAlgorithms: ["sha256"],
     ...(publisherName ? { publisherName } : {}),
   };
 }
@@ -46,14 +47,15 @@ function buildElectronBuilderConfig({
 } = {}) {
   const build = cloneBuildConfig(packageJsonInput.build || {});
   const win = { ...(build.win || {}) };
-  const azureSignOptions = buildAzureTrustedSigningOptions(env);
+  const azureSigntoolOptions = buildAzureTrustedSigningSigntoolOptions(env);
   const signtoolOptions = buildWindowsSigntoolOptions(env);
 
-  if (azureSignOptions) {
-    win.azureSignOptions = azureSignOptions;
-    delete win.signtoolOptions;
+  if (azureSigntoolOptions) {
+    win.signtoolOptions = azureSigntoolOptions;
+    delete win.azureSignOptions;
   } else if (signtoolOptions) {
     win.signtoolOptions = signtoolOptions;
+    delete win.azureSignOptions;
   } else {
     delete win.azureSignOptions;
     delete win.signtoolOptions;
@@ -69,7 +71,8 @@ function buildElectronBuilderConfig({
 }
 
 module.exports = {
-  buildAzureTrustedSigningOptions,
+  WINDOWS_SIGN_HOOK_PATH,
+  buildAzureTrustedSigningSigntoolOptions,
   buildElectronBuilderConfig,
   buildWindowsSigntoolOptions,
 };

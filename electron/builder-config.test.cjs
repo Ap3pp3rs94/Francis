@@ -2,23 +2,23 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  buildAzureTrustedSigningOptions,
+  WINDOWS_SIGN_HOOK_PATH,
+  buildAzureTrustedSigningSigntoolOptions,
   buildElectronBuilderConfig,
   buildWindowsSigntoolOptions,
 } = require("./builder-config.shared.cjs");
 
-test("builder config enables Azure Trusted Signing only when the config is complete", () => {
-  const azureSignOptions = buildAzureTrustedSigningOptions({
+test("builder config enables the repo-owned Azure Trusted Signing hook only when the config is complete", () => {
+  const signtoolOptions = buildAzureTrustedSigningSigntoolOptions({
     FRANCIS_AZURE_TRUSTED_SIGNING_ENDPOINT: "https://eus.codesigning.azure.net/",
     FRANCIS_AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: "francis-overlay",
     FRANCIS_AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: "francis-account",
     FRANCIS_WINDOWS_SIGNING_PUBLISHER_NAME: "Ap3pp3rs94",
   });
 
-  assert.deepEqual(azureSignOptions, {
-    endpoint: "https://eus.codesigning.azure.net/",
-    certificateProfileName: "francis-overlay",
-    codeSigningAccountName: "francis-account",
+  assert.deepEqual(signtoolOptions, {
+    sign: WINDOWS_SIGN_HOOK_PATH,
+    signingHashAlgorithms: ["sha256"],
     publisherName: "Ap3pp3rs94",
   });
 });
@@ -38,7 +38,7 @@ test("builder config omits incomplete Azure Trusted Signing settings", () => {
     },
   });
 
-  assert.equal(config.win.azureSignOptions, undefined);
+  assert.equal(config.win.signtoolOptions, undefined);
 });
 
 test("builder config ignores placeholder signing template values", () => {
@@ -132,10 +132,9 @@ test("builder config prefers Azure signing when both Azure and cert-store select
     },
   });
 
-  assert.deepEqual(config.win.azureSignOptions, {
-    endpoint: "https://eus.codesigning.azure.net/",
-    certificateProfileName: "francis-overlay",
-    codeSigningAccountName: "francis-account",
+  assert.deepEqual(config.win.signtoolOptions, {
+    sign: WINDOWS_SIGN_HOOK_PATH,
+    signingHashAlgorithms: ["sha256"],
   });
-  assert.equal(config.win.signtoolOptions, undefined);
+  assert.equal(config.win.azureSignOptions, undefined);
 });

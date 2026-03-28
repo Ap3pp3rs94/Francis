@@ -119,12 +119,62 @@ function buildPowerShellSuggestion({
     available,
     reason: available ? "" : reason,
     env,
+    command,
     lines: available
       ? [
           ...envEntries.map(([key, value]) => `$env:${key}=${quotePowerShell(value)}`),
           ...(command ? [command] : []),
         ]
       : [],
+  };
+}
+
+const REDACTED_VALUE = "<redacted>";
+const SENSITIVE_ENV_KEYS = new Set([
+  "AZURE_CLIENT_SECRET",
+  "AZURE_PASSWORD",
+  "CSC_KEY_PASSWORD",
+  "WIN_CSC_KEY_PASSWORD",
+]);
+
+function redactPowerShellSuggestion(suggestion = {}) {
+  if (!suggestion || typeof suggestion !== "object") {
+    return suggestion;
+  }
+
+  const env = { ...(suggestion.env || {}) };
+  for (const key of Object.keys(env)) {
+    if (SENSITIVE_ENV_KEYS.has(key) && String(env[key] || "").trim()) {
+      env[key] = REDACTED_VALUE;
+    }
+  }
+
+  const envEntries = Object.entries(env).filter(([, value]) => String(value || "").trim());
+  return {
+    ...suggestion,
+    env,
+    lines: suggestion.available
+      ? [
+          ...envEntries.map(([key, value]) => `$env:${key}=${quotePowerShell(value)}`),
+          ...(suggestion.command ? [suggestion.command] : []),
+        ]
+      : [],
+  };
+}
+
+function sanitizeSigningDoctorReportForConsole(report = {}) {
+  if (!report || typeof report !== "object") {
+    return report;
+  }
+
+  const suggestedPowerShell = { ...(report.suggestedPowerShell || {}) };
+  for (const key of Object.keys(suggestedPowerShell)) {
+    suggestedPowerShell[key] = redactPowerShellSuggestion(suggestedPowerShell[key]);
+  }
+
+  return {
+    ...report,
+    suggestedPowerShell,
   };
 }
 
@@ -364,7 +414,7 @@ function validateSigningDoctorReport(
 function main() {
   const requirePublicReady = process.argv.includes("--require-public-ready");
   const report = runSigningDoctor();
-  console.log(JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(sanitizeSigningDoctorReportForConsole(report), null, 2));
 
   const validation = validateSigningDoctorReport(report, {
     requirePublicReady,
@@ -388,6 +438,7 @@ module.exports = {
   buildSigningDoctor,
   loadWindowsCodeSigningCertificates,
   parseCertificateRows,
+  sanitizeSigningDoctorReportForConsole,
   runSigningDoctor,
   validateSigningDoctorReport,
 };
