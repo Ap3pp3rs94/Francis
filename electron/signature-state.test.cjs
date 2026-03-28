@@ -220,6 +220,43 @@ test("validateSigningReport accepts a signed artifact with a matching non-self-i
   assert.equal(validation.ok, true);
 });
 
+test("validateSigningReport accepts Azure-signed artifacts when the verified publisher is the leaf signer", () => {
+  const report = {
+    artifacts: [
+      {
+        path: "D:\\dist\\overlay\\Francis Overlay.exe",
+        state: "signed",
+        status: "Valid",
+        subject: "Microsoft Identity Verification Root Certificate Authority 2020",
+        issuer: "Microsoft Identity Verification Root Certificate Authority 2020",
+        chainSubjects: [
+          "Microsoft Identity Verification Root Certificate Authority 2020",
+          "Microsoft ID Verified Code Signing PCA 2021",
+          "Microsoft ID Verified CS AOC CA 02",
+          "Austin Peppers",
+        ],
+        chainIssuers: [
+          "Microsoft Identity Verification Root Certificate Authority 2020",
+          "Microsoft Identity Verification Root Certificate Authority 2020",
+          "Microsoft ID Verified Code Signing PCA 2021",
+          "Microsoft ID Verified CS AOC CA 02",
+        ],
+        rootSubject: "Austin Peppers",
+        rootIssuer: "Microsoft ID Verified CS AOC CA 02",
+      },
+    ],
+  };
+
+  const validation = validateSigningReport(report, {
+    requireSigned: true,
+    requirePublisherName: "Austin Peppers",
+    requireChainHint: "Microsoft ID Verified Code Signing PCA 2021",
+    rejectSelfIssued: true,
+  });
+
+  assert.equal(validation.ok, true);
+});
+
 test("resolveOverlayArtifactPaths ignores stale top-level artifacts from older builds", () => {
   const root = makeTempRoot();
   const generatedDir = path.join(root, GENERATED_SIGNING_DIR);

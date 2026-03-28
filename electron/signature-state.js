@@ -296,6 +296,16 @@ function normalizeIdentityValue(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function collectSignerIdentities(entry = {}) {
+  return [
+    entry.subject,
+    entry.rootSubject,
+    ...(Array.isArray(entry.chainSubjects) ? entry.chainSubjects : []),
+  ]
+    .map((value) => normalizeIdentityValue(value))
+    .filter(Boolean);
+}
+
 function collectNonLeafChainIdentities(entry = {}) {
   const values = [
     entry.issuer,
@@ -305,6 +315,25 @@ function collectNonLeafChainIdentities(entry = {}) {
     entry.rootIssuer,
   ];
   return [...new Set(values.map((value) => normalizeIdentityValue(value)).filter(Boolean))];
+}
+
+function isSelfIssuedSigningRecord(entry = {}) {
+  const normalizedSubject = normalizeIdentityValue(entry.subject);
+  const normalizedIssuer = normalizeIdentityValue(entry.issuer);
+  const chainSubjects = Array.isArray(entry.chainSubjects)
+    ? entry.chainSubjects.map((value) => normalizeIdentityValue(value)).filter(Boolean)
+    : [];
+  const chainIssuers = Array.isArray(entry.chainIssuers)
+    ? entry.chainIssuers.map((value) => normalizeIdentityValue(value)).filter(Boolean)
+    : [];
+  const uniqueSubjects = [...new Set(chainSubjects)];
+  const uniqueIssuers = [...new Set(chainIssuers)];
+
+  if (!normalizedSubject || normalizedSubject !== normalizedIssuer) {
+    return false;
+  }
+
+  return uniqueSubjects.length <= 1 && uniqueIssuers.length <= 1;
 }
 
 function validateSigningReport(
@@ -340,9 +369,9 @@ function validateSigningReport(
     }
 
     const normalizedSubject = normalizeIdentityValue(entry.subject);
-    const normalizedIssuer = normalizeIdentityValue(entry.issuer);
+    const signerIdentities = collectSignerIdentities(entry);
 
-    if (normalizedPublisherName && !normalizedSubject.includes(normalizedPublisherName)) {
+    if (normalizedPublisherName && !signerIdentities.some((value) => value.includes(normalizedPublisherName))) {
       failures.push({
         ...entry,
         reason: "publisher_mismatch",
@@ -361,7 +390,7 @@ function validateSigningReport(
       }
     }
 
-    if (rejectSelfIssued && normalizedSubject && normalizedSubject === normalizedIssuer) {
+    if (rejectSelfIssued && isSelfIssuedSigningRecord(entry)) {
       failures.push({
         ...entry,
         reason: "self_issued",
