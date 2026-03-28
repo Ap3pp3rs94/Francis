@@ -17,6 +17,9 @@
 - Added `docs/operations/WINDOWS_INTERNAL_BETA.md` so the internal Windows tester rollout has a concrete trust/import/install procedure and an explicit boundary against the still-blocked public release path.
 - The signing manifest and verifier output now capture primary-chain metadata such as `rootSubject`, `rootIssuer`, and `chainSubjects`, so signer-chain review is explicit during public-release validation.
 - Added a fail-fast public-signing preflight so both `npm run release:publish:windows:public` and direct `npm run overlay:dist:public` now stop immediately on machines that only have self-issued or otherwise non-public signer material.
+- Replaced Electron Builder's built-in Azure Trusted Signing wrapper with a repo-owned Windows sign hook at `build/sign/windows-sign.cjs`, so public Windows signing now calls `signtool.exe` directly with `Azure.CodeSigning.Dlib.dll` and `metadata.json`.
+- Added `scripts/verify-windows-signing-env.ps1` plus `npm run overlay:verify-windows-signing-env`, so the public lane now fails fast on missing `signtool.exe`, missing `Azure.CodeSigning.Dlib.dll`, missing or mismatched `metadata.json`, or missing `.NET 8` before Electron Builder packaging starts.
+- Added `docs/operations/WINDOWS_PUBLIC_SIGNING.md` so the repo now has one Windows-first reference for Artifact Signing client tools, `metadata.json`, `.NET 8`, and the exact local verification commands.
 - Mission queue repair now normalizes duplicate `mission.tick` jobs, supersedes stale queued work for terminal missions, and exposes repair counts in mission/worker receipts.
 - Worker cycles now run queue normalization before dispatch and record mission-queue repair posture in the worker-cycle summary and ledger.
 - Expanded the governed `worker/repair` path so it can preview or apply mission queue normalization, archive stale unsupported deadletters, replay stale timeout deadletters, and resolve stale security probe incidents with receipts.
