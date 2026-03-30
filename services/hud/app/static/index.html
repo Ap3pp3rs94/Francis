@@ -53,6 +53,7 @@
 
       body[data-orb-surface="external"] .orb-chamber,
       body[data-orb-surface="external"] #orb-overlay,
+      body[data-orb-surface="external"] #overlay-strip,
       body[data-orb-surface="external"] #overlay-dock {
         display: none !important;
       }
@@ -636,14 +637,23 @@
         will-change: transform, opacity;
       }
 
+      #orb-surface-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 148;
+        pointer-events: none;
+        overflow: visible;
+      }
+
       #overlay-dock {
-        position: fixed;
+        position: absolute;
         top: 18px;
         left: 18px;
         z-index: 140;
         display: none;
         gap: 10px;
         width: min(360px, calc(100vw - 36px));
+        pointer-events: auto;
       }
 
       body[data-orb-menu="open"] #overlay-dock {
@@ -1058,6 +1068,68 @@
           brightness(0.95);
       }
 
+      #orb-render-root[data-body-state="idle_anchored"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.24))
+          contrast(1.04)
+          saturate(0.86)
+          brightness(0.98);
+      }
+
+      #orb-render-root[data-body-state="attentive"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-body-state="waiting_for_user"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 20px 32px rgba(0, 0, 0, 0.28))
+          contrast(1.06)
+          saturate(0.9)
+          brightness(1);
+      }
+
+      #orb-render-root[data-body-state="investigate"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 22px 34px rgba(0, 0, 0, 0.3))
+          contrast(1.08)
+          saturate(0.94)
+          brightness(1.01);
+      }
+
+      #orb-render-root[data-body-state="target_lock"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-body-state="hover_ready"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 25px 38px rgba(0, 0, 0, 0.34))
+          contrast(1.12)
+          saturate(0.98)
+          brightness(1.04);
+      }
+
+      #orb-render-root[data-body-state="commit_move"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-body-state="drag_act"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-body-state="type_hold"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 28px 42px rgba(0, 0, 0, 0.36))
+          contrast(1.12)
+          saturate(1)
+          brightness(1.05);
+      }
+
+      #orb-render-root[data-body-state="click_act"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 0 14px rgba(255, 232, 196, 0.22))
+          drop-shadow(0 28px 42px rgba(0, 0, 0, 0.38))
+          contrast(1.14)
+          saturate(1.04)
+          brightness(1.08);
+      }
+
+      #orb-render-root[data-body-state="blocked_uncertain"]:not(.orb-hold):not(.orb-handback) canvas,
+      #orb-render-root[data-body-state="abort_interrupted"]:not(.orb-hold):not(.orb-handback) canvas {
+        filter:
+          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.24))
+          contrast(1.01)
+          saturate(0.82)
+          brightness(0.96);
+      }
+
       #orb-overlay[data-target-stability="settled"] .orb-trail-node {
         filter: blur(1.2px) saturate(1.02);
       }
@@ -1174,7 +1246,7 @@
       }
 
       #overlay-thought-bubble {
-        position: fixed;
+        position: absolute;
         top: 18px;
         left: 18px;
         z-index: 148;
@@ -1264,14 +1336,135 @@
         cursor: pointer;
       }
 
+      #overlay-strip {
+        position: absolute;
+        top: 18px;
+        left: 18px;
+        z-index: 148;
+        display: none;
+        width: min(380px, calc(100vw - 36px));
+        pointer-events: auto;
+      }
+
+      body[data-orb-surface="window"] #overlay-strip {
+        display: block;
+      }
+
+      body[data-lens-view="orb_only"] #overlay-strip {
+        display: block;
+      }
+
+      body[data-orb-surface="external"] #overlay-strip {
+        display: none !important;
+      }
+
+      .orb-strip-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid rgba(178, 197, 255, 0.16);
+        border-radius: 20px;
+        color: #eef4ff;
+        background:
+          radial-gradient(circle at top right, rgba(76, 112, 184, 0.1), transparent 36%),
+          linear-gradient(180deg, rgba(4, 7, 12, 0.97), rgba(3, 6, 11, 0.965));
+        box-shadow:
+          0 18px 40px rgba(0, 0, 0, 0.44),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(14px);
+      }
+
+      .orb-strip-copy {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .orb-strip-topline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .orb-strip-state {
+        font-size: 0.92rem;
+        letter-spacing: 0.04em;
+        color: #f4f7ff;
+      }
+
+      .orb-strip-detail,
+      .orb-strip-meta {
+        color: rgba(214, 224, 246, 0.78);
+        font-size: 0.79rem;
+        line-height: 1.45;
+        min-width: 0;
+      }
+
+      .orb-mini-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(178, 197, 255, 0.16);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(232, 239, 252, 0.88);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .orb-mini-chip[data-tone="active"] {
+        border-color: rgba(120, 172, 255, 0.26);
+        color: #d9e6ff;
+      }
+
+      .orb-mini-chip[data-tone="waiting"] {
+        border-color: rgba(224, 184, 101, 0.28);
+        color: #ffe7b7;
+      }
+
+      .orb-mini-chip[data-tone="blocked"],
+      .orb-mini-chip[data-tone="stopped"] {
+        border-color: rgba(221, 140, 110, 0.26);
+        color: #ffd5cb;
+      }
+
+      .orb-strip-actions {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+
+      .orb-strip-actions button {
+        min-width: 0;
+      }
+
+      .orb-strip-shell[data-tone="active"] {
+        border-color: rgba(120, 172, 255, 0.22);
+      }
+
+      .orb-strip-shell[data-tone="waiting"] {
+        border-color: rgba(224, 184, 101, 0.26);
+      }
+
+      .orb-strip-shell[data-tone="blocked"],
+      .orb-strip-shell[data-tone="stopped"] {
+        border-color: rgba(221, 140, 110, 0.26);
+      }
+
       #overlay-dock {
         position: fixed;
         top: 18px;
         left: 18px;
         z-index: 150;
         display: none;
-        width: min(760px, calc(100vw - 36px));
-        max-height: min(84vh, 820px);
+        width: min(460px, calc(100vw - 36px));
+        max-height: min(72vh, 680px);
         pointer-events: auto;
       }
 
@@ -1279,23 +1472,25 @@
         display: block;
       }
 
+      body[data-orb-menu="open"] #overlay-strip {
+        display: none !important;
+      }
+
       .orb-chat-shell {
         display: grid;
-        gap: 14px;
-        grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
-        padding: 18px;
+        gap: 12px;
+        padding: 16px;
         border: 1px solid rgba(178, 197, 255, 0.16);
-        border-radius: 28px;
+        border-radius: 24px;
         color: #eef4ff;
         background:
           radial-gradient(circle at top right, rgba(76, 112, 184, 0.12), transparent 34%),
           linear-gradient(180deg, rgba(4, 7, 12, 0.985), rgba(2, 4, 8, 0.975));
         box-shadow:
-          0 32px 72px rgba(0, 0, 0, 0.58),
+          0 28px 62px rgba(0, 0, 0, 0.56),
           inset 0 1px 0 rgba(255, 255, 255, 0.04);
         backdrop-filter: blur(12px);
-        min-height: min(78vh, 760px);
-        max-height: min(84vh, 820px);
+        max-height: min(72vh, 680px);
         overflow: hidden;
       }
 
@@ -1315,16 +1510,16 @@
       }
 
       .orb-chat-head-copy strong {
-        font-size: 1rem;
+        font-size: 0.98rem;
         letter-spacing: 0.04em;
       }
 
       .orb-chat-head-copy span,
-      .orb-chat-memory,
       .orb-chat-status,
       .orb-chat-plan-summary,
       .orb-chat-thread-empty,
-      .orb-chat-message-meta {
+      .orb-chat-message-meta,
+      .orb-console-card span {
         color: rgba(214, 224, 246, 0.72);
       }
 
@@ -1338,23 +1533,43 @@
         min-width: 0;
       }
 
-      .orb-chat-memory,
+      .orb-console-cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .orb-console-card {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border: 1px solid rgba(178, 197, 255, 0.12);
+        border-radius: 14px;
+        background: rgba(6, 10, 16, 0.9);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+      }
+
+      .orb-console-card strong {
+        color: #eef4ff;
+        font-size: 0.84rem;
+      }
+
       .orb-chat-status,
       .orb-chat-plan,
       .orb-chat-thread,
       .orb-chat-modes,
-      .orb-chat-compose textarea {
+      .orb-chat-compose textarea,
+      .orb-diagnostics {
         border: 1px solid rgba(178, 197, 255, 0.12);
         background: rgba(6, 10, 16, 0.9);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
       }
 
-      .orb-chat-memory,
       .orb-chat-status {
         padding: 12px 14px;
         border-radius: 16px;
         font-size: 0.84rem;
-        line-height: 1.55;
+        line-height: 1.5;
       }
 
       .orb-chat-modes {
@@ -1366,10 +1581,16 @@
 
       .orb-chat-modes-label {
         color: rgba(214, 224, 246, 0.76);
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
+      }
+
+      .orb-chat-modes-copy {
+        color: rgba(214, 224, 246, 0.7);
+        font-size: 0.78rem;
+        line-height: 1.45;
       }
 
       .orb-chat-modes-buttons {
@@ -1380,7 +1601,7 @@
 
       .orb-chat-thread {
         min-height: 0;
-        max-height: none;
+        max-height: min(22vh, 220px);
         overflow-y: auto;
         padding: 14px;
         border-radius: 18px;
@@ -1390,16 +1611,22 @@
         scrollbar-gutter: stable both-edges;
       }
 
-      .orb-chat-thread::-webkit-scrollbar {
+      .orb-chat-thread::-webkit-scrollbar,
+      .orb-chat-plan::-webkit-scrollbar,
+      .orb-diagnostics::-webkit-scrollbar {
         width: 12px;
       }
 
-      .orb-chat-thread::-webkit-scrollbar-track {
+      .orb-chat-thread::-webkit-scrollbar-track,
+      .orb-chat-plan::-webkit-scrollbar-track,
+      .orb-diagnostics::-webkit-scrollbar-track {
         background: rgba(255, 255, 255, 0.03);
         border-radius: 999px;
       }
 
-      .orb-chat-thread::-webkit-scrollbar-thumb {
+      .orb-chat-thread::-webkit-scrollbar-thumb,
+      .orb-chat-plan::-webkit-scrollbar-thumb,
+      .orb-diagnostics::-webkit-scrollbar-thumb {
         background: rgba(193, 208, 244, 0.22);
         border-radius: 999px;
         border: 2px solid rgba(6, 10, 16, 0.9);
@@ -1424,9 +1651,9 @@
 
       .orb-chat-message-bubble {
         max-width: 100%;
-        padding: 12px 14px;
-        border-radius: 18px;
-        line-height: 1.58;
+        padding: 10px 12px;
+        border-radius: 16px;
+        line-height: 1.52;
         white-space: pre-wrap;
         word-break: break-word;
       }
@@ -1471,7 +1698,7 @@
         gap: 12px;
         padding: 14px;
         border-radius: 18px;
-        max-height: min(24vh, 220px);
+        max-height: min(22vh, 220px);
         overflow-y: auto;
       }
 
@@ -1493,7 +1720,7 @@
 
       .orb-chat-plan-summary {
         margin: 0;
-        line-height: 1.55;
+        line-height: 1.45;
       }
 
       .orb-chat-plan-reasoning,
@@ -1505,7 +1732,7 @@
 
       .orb-chat-plan-reasoning li,
       .orb-chat-plan-steps li {
-        line-height: 1.5;
+        line-height: 1.44;
       }
 
       .orb-chat-plan-reasoning li + li,
@@ -1527,11 +1754,11 @@
 
       .orb-chat-compose textarea {
         width: 100%;
-        min-height: 112px;
-        max-height: 24vh;
+        min-height: 72px;
+        max-height: 18vh;
         resize: vertical;
         border-radius: 18px;
-        padding: 14px 16px;
+        padding: 12px 14px;
         color: #eef4ff;
       }
 
@@ -1539,8 +1766,20 @@
         color: rgba(214, 224, 246, 0.48);
       }
 
+      .orb-diagnostics {
+        margin: 0;
+        min-height: 72px;
+        max-height: min(16vh, 140px);
+        overflow: auto;
+        border-radius: 16px;
+        padding: 12px 14px;
+        color: rgba(224, 231, 245, 0.78);
+        font-size: 0.74rem;
+        line-height: 1.45;
+      }
+
       .orb-chat-status[data-tone="error"] {
-        border-color: rgba(221, 140, 110, 0.2);
+        border-color: rgba(221, 140, 110, 0.22);
         color: #ffd3c8;
       }
 
@@ -1553,43 +1792,35 @@
         border-color: rgba(112, 195, 152, 0.18);
         color: #d7f3e6;
       }
+
+      @media (max-width: 720px) {
+        #overlay-strip {
+          width: min(340px, calc(100vw - 24px));
+        }
+
+        #overlay-dock {
+          width: min(420px, calc(100vw - 24px));
+        }
+
+        .orb-strip-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .orb-strip-actions {
+          justify-content: flex-start;
+          flex-wrap: wrap;
+        }
+
+        .orb-console-cards {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body data-boot="loading" data-orb-menu="closed">
     <main class="shell">
       <section class="hero">
         <div class="hero-grid">
-          <article class="orb-chamber">
-            <div class="panel-head">
-              <div>
-                <div class="eyebrow orb-eyebrow">Orb Chamber</div>
-                <h2 id="orb-title">Ambient Francis Orb</h2>
-              </div>
-              <span class="orb-status meta tiny" id="orb-status">L0 | ambient</span>
-            </div>
-            <div class="orb-stage" id="orb-stage" title="The Orb stays free-floating unless Away execution explicitly takes cursor authority.">
-              <p class="orb-stage-copy" id="orb-stage-copy">
-                The Orb trails your cursor on a short, path-faithful delay while you are active, then returns to free ambient motion the moment you stop driving it.
-              </p>
-              <div class="orb-stage-tags">
-                <div class="orb-tag"><strong>Anchor</strong><span id="orb-anchor">ambient</span></div>
-                <div class="orb-tag"><strong>Motion</strong><span id="orb-motion">free float</span></div>
-              </div>
-            </div>
-            <p class="hero-copy orb-summary" id="orb-summary">
-              The Orb will stay nearby and out of the way once live Lens state arrives.
-            </p>
-            <p class="meta orb-detail" id="orb-detail">
-              Ambient presence, interjections, away authority, and panic readiness all resolve from one live state contract.
-            </p>
-            <div class="orb-metrics" id="orb-metrics">
-              <div class="metric-pill"><strong>Posture</strong><span>waiting</span></div>
-              <div class="metric-pill"><strong>Pulse</strong><span>steady</span></div>
-            </div>
-            <p class="meta tiny orb-controls" id="orb-controls">
-              Right-click the Orb to talk and act in place. Hold it to panic stop when control exposes that path in scope.
-            </p>
-          </article>
           <div class="hero-copy-block">
             <div class="eyebrow">Francis Lens</div>
             <div class="status" id="stream-status">Stream connecting</div>
@@ -2509,104 +2740,145 @@
       </section>
     </main>
 
-    <div id="overlay-thought-bubble" hidden>
-      <button class="orb-thought-dismiss" type="button" aria-label="Dismiss Francis thought" onclick="dismissOrbThoughtBubble(event)">×</button>
-      <button class="orb-thought-body" type="button" onclick="openOrbChatFromThoughtBubble()">
-        <span class="orb-thought-label">Francis</span>
-        <strong id="orb-thought-summary">Francis is ambient.</strong>
-        <span id="orb-thought-detail">Thoughts will surface here when Francis has something grounded to say.</span>
-      </button>
-    </div>
+    <div id="orb-overlay" aria-hidden="true">
+      <div id="orb-trail"></div>
+      <div id="orb-render-root" aria-label="Francis Orb renderer"></div>
+      <div id="orb-surface-layer">
+        <div id="overlay-thought-bubble" hidden>
+          <button class="orb-thought-dismiss" type="button" aria-label="Dismiss Francis thought" onclick="dismissOrbThoughtBubble(event)">×</button>
+          <button class="orb-thought-body" type="button" onclick="openOrbChatFromThoughtBubble()">
+            <span class="orb-thought-label">Francis</span>
+            <strong id="orb-thought-summary">Francis is ambient.</strong>
+            <span id="orb-thought-detail">Thoughts will surface here when Francis has something grounded to say.</span>
+          </button>
+        </div>
 
-    <div id="overlay-dock" role="dialog" aria-modal="false" aria-label="Francis Orb chat">
-      <div class="orb-chat-shell">
-        <div class="orb-chat-head">
-          <div class="orb-chat-head-copy">
-            <strong>Francis</strong>
-            <span id="overlay-chat-meta">Orb conversation continuity is loading.</span>
-          </div>
-          <div class="orb-chat-head-actions">
-            <button class="btn-danger" type="button" id="overlay-panic-stop" onclick="panicStopFromOrbSurface()">Stop</button>
-            <button class="btn-secondary" type="button" id="overlay-close-chat" onclick="closeOrbCommandMenu()">Close</button>
-          </div>
-        </div>
-        <div class="orb-chat-memory" id="orb-chat-memory">
-          Short-term and long-term conversation continuity will appear here once the Orb chat history loads.
-        </div>
-        <div class="orb-chat-modes">
-          <span class="orb-chat-modes-label">Motion Control</span>
-          <div class="orb-chat-modes-buttons">
-            <button class="btn-secondary" type="button" id="overlay-motion-explore" onclick="setOrbBehaviorMode('explore')">Explore</button>
-            <button class="btn-secondary" type="button" id="overlay-motion-trace" onclick="setOrbBehaviorMode('trace')">Trace</button>
-            <button class="btn-primary" type="button" id="overlay-motion-autonomous" onclick="setOrbBehaviorMode('autonomous')">Autonomous</button>
+        <div id="overlay-strip" role="group" aria-label="Francis operator strip">
+          <div class="orb-strip-shell" data-tone="idle" id="orb-strip-shell">
+            <div class="orb-strip-copy">
+              <div class="orb-strip-topline">
+                <strong class="orb-strip-state" id="orb-strip-state">Idle</strong>
+                <span class="orb-mini-chip" data-tone="idle" id="orb-strip-mode">Observe</span>
+                <span class="orb-mini-chip" data-tone="idle" id="orb-strip-authority">Observe only</span>
+                <span class="orb-mini-chip" data-tone="waiting" id="orb-strip-approval" hidden>Approval needed</span>
+              </div>
+              <div class="orb-strip-detail" id="orb-strip-detail">Perched nearby and out of the way.</div>
+              <div class="orb-strip-meta" id="orb-strip-meta">Target: none</div>
+            </div>
+            <div class="orb-strip-actions">
+              <button class="btn-danger" type="button" id="orb-strip-stop" onclick="panicStopFromOrbSurface()">Stop</button>
+              <button class="btn-secondary" type="button" id="orb-strip-details" onclick="toggleOrbCommandMenu()">Details</button>
+              <button class="btn-secondary" type="button" id="orb-strip-open-lens" onclick="openLensFromOrbSurface()">Lens</button>
+            </div>
           </div>
         </div>
-        <div class="orb-chat-thread" id="orb-chat-thread" aria-live="polite">
-          <div class="orb-chat-empty">
-            Ask Francis a question or tell Francis what to do.
+        <div id="overlay-dock" role="dialog" aria-modal="false" aria-label="Francis details console">
+          <div class="orb-chat-shell">
+            <div class="orb-chat-head">
+              <div class="orb-chat-head-copy">
+                <strong>Francis Console</strong>
+                <span id="overlay-chat-meta">Operator detail is loading.</span>
+              </div>
+              <div class="orb-chat-head-actions">
+                <button class="btn-danger" type="button" id="overlay-panic-stop" onclick="panicStopFromOrbSurface()">Stop</button>
+                <button class="btn-secondary" type="button" id="overlay-close-chat" onclick="closeOrbCommandMenu()">Close</button>
+              </div>
+            </div>
+            <div class="orb-console-cards">
+              <div class="orb-console-card">
+                <strong id="orb-console-state">Idle</strong>
+                <span id="orb-console-state-detail">Observe only</span>
+              </div>
+              <div class="orb-console-card">
+                <strong id="orb-console-target">Target: none</strong>
+                <span id="orb-console-confidence">Low confidence</span>
+              </div>
+              <div class="orb-console-card">
+                <strong id="orb-console-approval">No approvals</strong>
+                <span id="orb-console-approval-detail">Francis is not waiting on you.</span>
+              </div>
+              <div class="orb-console-card">
+                <strong id="orb-console-continuity">Continuity</strong>
+                <span id="orb-chat-memory">Conversation continuity is loading.</span>
+              </div>
+            </div>
+            <div class="orb-chat-modes" id="orb-chat-modes">
+              <span class="orb-chat-modes-label">Motion Bias</span>
+              <span class="orb-chat-modes-copy" id="overlay-motion-meta">
+                Motion bias tunes how the orb body scouts and settles. It does not grant authority by itself.
+              </span>
+              <div class="orb-chat-modes-buttons">
+                <button class="btn-secondary" type="button" id="overlay-motion-explore" onclick="setOrbBehaviorMode('explore')">Explore</button>
+                <button class="btn-secondary" type="button" id="overlay-motion-trace" onclick="setOrbBehaviorMode('trace')">Trace</button>
+                <button class="btn-primary" type="button" id="overlay-motion-autonomous" onclick="setOrbBehaviorMode('autonomous')">Autonomous</button>
+              </div>
+            </div>
+            <div class="orb-chat-status" id="orb-chat-status">
+              Francis is resident and compact. Open details only when you need receipts, diagnostics, or direct command input.
+            </div>
+            <div class="orb-chat-thread" id="orb-chat-thread" aria-live="polite">
+              <div class="orb-chat-empty">
+                Details stay closed by default. When you open this console, receipts, conversation turns, and operator history resolve here.
+              </div>
+            </div>
+            <div class="orb-chat-plan" id="orb-chat-plan" hidden>
+              <div class="orb-chat-plan-head">
+                <strong id="orb-chat-plan-title">No active desktop plan</strong>
+                <span id="orb-chat-plan-mode">Plan</span>
+              </div>
+              <p class="orb-chat-plan-summary" id="orb-chat-plan-summary">
+                Francis will show the current action plan here before the shell executes anything.
+              </p>
+              <ul class="orb-chat-plan-reasoning" id="orb-chat-plan-reasoning">
+                <li>Click reasoning and execution steps will appear here when Francis prepares a desktop plan.</li>
+              </ul>
+              <ol class="orb-chat-plan-steps" id="orb-chat-plan-steps">
+                <li>No desktop steps are prepared yet.</li>
+              </ol>
+              <div class="orb-chat-plan-actions">
+                <button class="btn-primary" type="button" id="orb-chat-plan-run" onclick="executeOrbChatPlan()">Execute</button>
+                <button class="btn-secondary" type="button" id="orb-chat-plan-clear" onclick="clearOrbChatPlan()">Dismiss</button>
+              </div>
+            </div>
+            <div class="orb-chat-compose">
+              <textarea
+                id="overlay-chat-input"
+                maxlength="1600"
+                rows="3"
+                placeholder="Give Francis a bounded instruction"
+              ></textarea>
+              <div class="orb-chat-compose-actions">
+                <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
+              </div>
+            </div>
+            <pre class="orb-diagnostics" id="orb-diagnostics">Diagnostics stay parked here until Francis hits a real transport, authority, or runtime issue.</pre>
+            <div hidden aria-hidden="true">
+              <div id="overlay-interjection">Interjections stay earned and grounded.</div>
+              <div id="overlay-interjection-target">Interjection target quality will surface here when Francis has a grounded control target.</div>
+              <button id="overlay-interjection-primary" type="button">Open Lens</button>
+              <div id="overlay-authority-summary">Away Authority</div>
+              <div id="overlay-authority-recent"><div class="overlay-authority-recent-item">Grounded authority receipts will appear here after Orb commands move through the governed queue.</div></div>
+              <div id="overlay-perception-preview">A cursor-local active-surface crop will appear here when Orb perception is live.</div>
+              <div id="overlay-focus-target">Current target quality will surface here when the Orb has a grounded move target.</div>
+              <div id="overlay-receipt-target">Receipt target grounding will surface here when a latest receipt is attached to the Orb.</div>
+              <div>Focused local crop state will appear here.</div>
+              <div>Current Move</div>
+              <button type="button">Queue Move Here</button>
+              <button type="button">Queue Click Here</button>
+              <button type="button">Queue Save</button>
+              <button type="button">Queue Typed Input</button>
+              <button type="button">Clear Queue</button>
+              <button type="button">Preview</button>
+              <button type="button">Latest Receipt</button>
+            </div>
           </div>
-        </div>
-        <div class="orb-chat-plan" id="orb-chat-plan" hidden>
-          <div class="orb-chat-plan-head">
-            <strong id="orb-chat-plan-title">No active desktop plan</strong>
-            <span id="orb-chat-plan-mode">Plan</span>
-          </div>
-          <p class="orb-chat-plan-summary" id="orb-chat-plan-summary">
-            Francis will show the current action plan here before the shell executes anything.
-          </p>
-          <ul class="orb-chat-plan-reasoning" id="orb-chat-plan-reasoning">
-            <li>Click reasoning and execution steps will appear here when Francis prepares a desktop plan.</li>
-          </ul>
-          <ol class="orb-chat-plan-steps" id="orb-chat-plan-steps">
-            <li>No desktop steps are prepared yet.</li>
-          </ol>
-          <div class="orb-chat-plan-actions">
-            <button class="btn-primary" type="button" id="orb-chat-plan-run" onclick="executeOrbChatPlan()">Execute</button>
-            <button class="btn-secondary" type="button" id="orb-chat-plan-clear" onclick="clearOrbChatPlan()">Dismiss</button>
-          </div>
-        </div>
-        <div class="orb-chat-status" id="orb-chat-status">
-          Francis is ready to continue in place from the Orb.
-        </div>
-        <div class="orb-chat-compose">
-          <textarea
-            id="overlay-chat-input"
-            maxlength="1600"
-            rows="3"
-            placeholder="Ask Francis anything or tell Francis what to do"
-          ></textarea>
-          <div class="orb-chat-compose-actions">
-            <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
-          </div>
-        </div>
-        <div hidden aria-hidden="true">
-          <div id="overlay-interjection">Interjections stay earned and grounded.</div>
-          <div id="overlay-interjection-target">Interjection target quality will surface here when Francis has a grounded control target.</div>
-          <button id="overlay-interjection-primary" type="button">Open Lens</button>
-          <div id="overlay-authority-summary">Away Authority</div>
-          <div id="overlay-authority-recent"><div class="overlay-authority-recent-item">Grounded authority receipts will appear here after Orb commands move through the governed queue.</div></div>
-          <div id="overlay-perception-preview">A cursor-local active-surface crop will appear here when Orb perception is live.</div>
-          <div id="overlay-focus-target">Current target quality will surface here when the Orb has a grounded move target.</div>
-          <div id="overlay-receipt-target">Receipt target grounding will surface here when a latest receipt is attached to the Orb.</div>
-          <div>Focused local crop state will appear here.</div>
-          <div>Current Move</div>
-          <button type="button">Queue Move Here</button>
-          <button type="button">Queue Click Here</button>
-          <button type="button">Queue Save</button>
-          <button type="button">Queue Typed Input</button>
-          <button type="button">Clear Queue</button>
-          <button type="button">Preview</button>
-          <button type="button">Latest Receipt</button>
         </div>
       </div>
     </div>
 
-    <div id="orb-overlay" aria-hidden="true">
-      <div id="orb-trail"></div>
-      <div id="orb-render-root" aria-label="Francis Orb renderer"></div>
-    </div>
-
     <script src="/static/orb/francis-orb.js"></script>
+    <script src="/static/orb/orb-motion.js"></script>
+    <script src="/static/orb/orb-surface-state.js"></script>
     <script>
       const pageUrl = new URL(window.location.href);
       const orbSurfaceMode = String(pageUrl.searchParams.get("orb") || "").trim().toLowerCase();
@@ -2807,6 +3079,8 @@
         syncedThoughtIds: {},
         chatAnchor: null,
       };
+      let orbTransientStatus = "";
+      let orbLocalPanic = null;
       let orbBridgeWarningEmitted = false;
       let orbSystemInput = {
         cursorScreen: { x: 0, y: 0 },
@@ -2880,6 +3154,49 @@
         control2Y: 0,
         releaseX: 0,
         releaseY: 0,
+      };
+      const ORB_BODY_STATES = window.FrancisOrbMotion?.ORB_BODY_STATES || {
+        IDLE_ANCHORED: "idle_anchored",
+        ATTENTIVE: "attentive",
+        INVESTIGATE: "investigate",
+        TARGET_LOCK: "target_lock",
+        COMMIT_MOVE: "commit_move",
+        HOVER_READY: "hover_ready",
+        CLICK_ACT: "click_act",
+        DRAG_ACT: "drag_act",
+        TYPE_HOLD: "type_hold",
+        BLOCKED_UNCERTAIN: "blocked_uncertain",
+        WAITING_FOR_USER: "waiting_for_user",
+        ABORT_INTERRUPTED: "abort_interrupted",
+      };
+      let orbBodyPresence = {
+        state: ORB_BODY_STATES.IDLE_ANCHORED,
+        anchorLabel: "resident perch",
+        motionLabel: "anchored idle",
+        summary: "Resting at an intentional perch.",
+        targetPoint: null,
+        perchPoint: null,
+        desiredPoint: null,
+        targetConfidence: "low",
+        targetStability: "idle",
+        taskbarIntent: false,
+        stiffness: 0.16,
+        damping: 0.78,
+        scale: 1,
+        waitingForUser: false,
+        actionKind: "",
+      };
+      let orbBodyPhase = {
+        hoverStartedAt: 0,
+        hoverReady: false,
+        blockedUntil: 0,
+        clickPulseUntil: 0,
+        lastReceiptId: "",
+      };
+      let orbPerchLatch = {
+        point: null,
+        until: 0,
+        sourceState: "",
       };
       let orbAutonomousReplay = {
         active: false,
@@ -3064,15 +3381,15 @@
         const movement = currentOrb?.movement || {};
         return {
           enabled: Boolean(movement.autonomous_replay_enabled ?? true),
-          windowMs: clamp(Number(movement.autonomous_replay_window_ms ?? 880), 280, 1800),
+          windowMs: clamp(Number(movement.autonomous_replay_window_ms ?? 720), 280, 1800),
           maxSnippets: Math.max(6, Math.min(24, Math.round(Number(movement.autonomous_replay_max_snippets ?? 18)))),
           minPoints: Math.max(4, Math.min(12, Math.round(Number(movement.autonomous_replay_min_points ?? 5)))),
-          scaleMin: clamp(Number(movement.autonomous_replay_scale_min ?? 0.62), 0.3, 1.2),
-          scaleMax: clamp(Number(movement.autonomous_replay_scale_max ?? 1.18), 0.5, 1.8),
-          wanderPx: clamp(Number(movement.autonomous_replay_wander_px ?? 64), 12, 180),
-          pauseMinMs: clamp(Number(movement.autonomous_replay_pause_min_ms ?? 180), 60, 2000),
-          pauseMaxMs: clamp(Number(movement.autonomous_replay_pause_max_ms ?? 820), 120, 3200),
-          bias: clamp(Number(movement.autonomous_replay_bias ?? 0.72), 0.18, 0.92),
+          scaleMin: clamp(Number(movement.autonomous_replay_scale_min ?? 0.38), 0.3, 1.2),
+          scaleMax: clamp(Number(movement.autonomous_replay_scale_max ?? 0.82), 0.5, 1.8),
+          wanderPx: clamp(Number(movement.autonomous_replay_wander_px ?? 18), 12, 180),
+          pauseMinMs: clamp(Number(movement.autonomous_replay_pause_min_ms ?? 820), 60, 2000),
+          pauseMaxMs: clamp(Number(movement.autonomous_replay_pause_max_ms ?? 2200), 120, 3200),
+          bias: clamp(Number(movement.autonomous_replay_bias ?? 0.28), 0.18, 0.92),
         };
       }
 
@@ -3298,11 +3615,21 @@
         handbackActive = false,
         cursorAuthority = false,
         humanActive = false,
+        investigationPressure = false,
       } = {}) {
         const desktopBehavior = getDesktopOrbBehavior();
         if (desktopBehavior) {
+          const selectedMode = normalizeOrbBehaviorMode(desktopBehavior.requested);
+          if (selectedMode === "autonomous" && !handbackActive && !cursorAuthority) {
+            return {
+              selectedMode,
+              effectiveMode: humanActive ? "trace" : investigationPressure ? "investigate" : "autonomous",
+              trace: Boolean(humanActive),
+              explore: Boolean(!humanActive && investigationPressure),
+            };
+          }
           return {
-            selectedMode: normalizeOrbBehaviorMode(desktopBehavior.requested),
+            selectedMode,
             effectiveMode: String(desktopBehavior.effective || desktopBehavior.requested || "autonomous"),
             trace: Boolean(desktopBehavior.trace),
             explore: Boolean(desktopBehavior.explore),
@@ -3343,10 +3670,50 @@
         }
         return {
           selectedMode,
-          effectiveMode: humanActive ? "trace" : "explore",
+          effectiveMode: humanActive ? "trace" : investigationPressure ? "investigate" : "autonomous",
           trace: Boolean(humanActive),
-          explore: !humanActive,
+          explore: Boolean(!humanActive && investigationPressure),
         };
+      }
+
+      function hasOrbGroundedInvestigationPressure() {
+        const cue = currentOrbOperator?.target_cue || currentOrb?.operator?.target_cue || null;
+        const cueSummary = String(cue?.summary || cue?.label || cue?.reason || "").trim();
+        if (cueSummary) {
+          return true;
+        }
+        const claimed = Array.isArray(currentOrbAuthority?.claimed) && currentOrbAuthority.claimed.length
+          ? currentOrbAuthority.claimed[0]
+          : null;
+        const actionKindCandidates = [
+          claimed?.kind,
+          currentOrbOperator?.controls?.desktop_run_kind,
+          currentOrbOperator?.controls?.surface_action_command_kind,
+          currentOrbOperator?.controls?.run_kind,
+          currentOrbOperator?.focus_kind,
+        ];
+        if (actionKindCandidates.some((value) => String(value || "").trim())) {
+          return true;
+        }
+        const targetConfidence = String(
+          cue?.confidence
+          || currentOrbPerception?.target?.confidence
+          || "low",
+        ).trim().toLowerCase();
+        const targetStability = String(
+          cue?.stability
+          || currentOrbPerception?.target?.stability?.state
+          || "idle",
+        ).trim().toLowerCase();
+        const targetSummary = String(
+          currentOrbPerception?.target?.summary
+          || currentOrbPerception?.target?.label
+          || "",
+        ).trim();
+        if (targetConfidence === "high" && ["tracking", "settled"].includes(targetStability)) {
+          return true;
+        }
+        return targetConfidence === "medium" && ["tracking", "settled"].includes(targetStability) && Boolean(targetSummary);
       }
 
       function titleCase(value) {
@@ -3438,6 +3805,18 @@
         renderOverlayDock();
       }
 
+      function isCompactOrbSurface() {
+        return orbWindowMode || lensViewMode === "orb_only";
+      }
+
+      function toggleOrbCommandMenu() {
+        if (orbCommandMenu.open) {
+          closeOrbCommandMenu();
+          return;
+        }
+        openOrbCommandMenu();
+      }
+
       function closeOrbCommandMenu() {
         orbCommandMenu.open = false;
         orbHoverInteraction.inside = false;
@@ -3456,7 +3835,7 @@
         renderOverlayDock();
       }
 
-      function openOrbCommandMenu() {
+      function openOrbCommandMenu(options = {}) {
         ensureOrbQuickChatState();
         orbCommandMenu.open = true;
         orbQuickChat.chatAnchor = getOrbAnchorPoint();
@@ -3464,12 +3843,14 @@
         renderOverlayDock();
         ensureOrbQuickChatLoaded().catch(() => {});
         syncOrbWindowPassThrough(orbQuickChat.chatAnchor.x, orbQuickChat.chatAnchor.y).catch(() => {});
-        window.setTimeout(() => {
-          const input = document.getElementById("overlay-chat-input");
-          if (input && input instanceof HTMLElement) {
-            input.focus();
-          }
-        }, 24);
+        if (options?.focusComposer) {
+          window.setTimeout(() => {
+            const input = document.getElementById("overlay-chat-input");
+            if (input && input instanceof HTMLElement) {
+              input.focus();
+            }
+          }, 24);
+        }
       }
 
       async function openLensFromOrbSurface() {
@@ -3511,23 +3892,50 @@
       async function panicStopFromOrbSurface() {
         const bridge = getDesktopBridge();
         if (!bridge || typeof bridge.panicStop !== "function") {
-          orbQuickChat.error = "Panic stop is unavailable because the desktop bridge is not attached.";
-          orbQuickChat.status = orbQuickChat.error;
+          const unavailable = "Panic stop is unavailable because the desktop bridge is not attached.";
+          orbQuickChat.error = unavailable;
+          orbQuickChat.status = summarizeOrbSurfaceText(unavailable, "Panic stop unavailable.");
+          setOrbTransientStatus("Panic stop unavailable.");
           renderOverlayDock();
           return;
         }
         try {
           orbQuickChat.pending = true;
           orbQuickChat.error = "";
-          orbQuickChat.status = "Francis is releasing authority now.";
+          setOrbTransientStatus("Dropping local authority now.");
+          orbQuickChat.status = "Francis is dropping local authority now.";
           renderOverlayDock();
-          await bridge.panicStop();
-          orbQuickChat.status = "Francis released the active stop path and returned control to the user.";
+          const result = await bridge.panicStop();
+          orbLocalPanic = {
+            engaged: Boolean(result?.localStopped),
+            summary: String(result?.summary || "").trim(),
+            detail: String(result?.detail || "").trim(),
+            remoteSynced: Boolean(result?.remoteSynced),
+            diagnostics: result?.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : {},
+            status: String(result?.status || "").trim().toLowerCase(),
+          };
+          orbQuickChat.status = summarizeOrbSurfaceText(result?.summary, "Panic stop engaged.");
+          orbQuickChat.error = [
+            orbLocalPanic?.diagnostics?.localError,
+            orbLocalPanic?.diagnostics?.remoteError,
+          ].filter(Boolean).join(" | ");
         } catch (error) {
           orbQuickChat.error = `Panic stop failed: ${error?.message || error}`;
-          orbQuickChat.status = orbQuickChat.error;
+          orbQuickChat.status = summarizeOrbSurfaceText(orbQuickChat.error, "Panic stop degraded.");
+          orbLocalPanic = {
+            engaged: false,
+            summary: "Panic stop degraded.",
+            detail: "Local stop work did not complete cleanly. Inspect diagnostics before resuming actuation.",
+            remoteSynced: false,
+            diagnostics: {
+              localError: String(error?.message || error || "").trim(),
+              remoteError: "",
+            },
+            status: "degraded",
+          };
         } finally {
           orbQuickChat.pending = false;
+          setOrbTransientStatus("");
           renderOverlayDock();
           applyOrbSignals();
         }
@@ -3728,6 +4136,224 @@
         };
       }
 
+      function getOrbMotionBundle() {
+        return window.FrancisOrbMotion && typeof window.FrancisOrbMotion.deriveOrbBodyIntent === "function"
+          ? window.FrancisOrbMotion
+          : null;
+      }
+
+      function isOrbCommitBodyState(state) {
+        return [
+          ORB_BODY_STATES.COMMIT_MOVE,
+          ORB_BODY_STATES.HOVER_READY,
+          ORB_BODY_STATES.CLICK_ACT,
+          ORB_BODY_STATES.DRAG_ACT,
+          ORB_BODY_STATES.TYPE_HOLD,
+          ORB_BODY_STATES.TARGET_LOCK,
+        ].includes(String(state || ""));
+      }
+
+      function isOrbRestBodyState(state) {
+        return [
+          ORB_BODY_STATES.IDLE_ANCHORED,
+          ORB_BODY_STATES.ATTENTIVE,
+          ORB_BODY_STATES.WAITING_FOR_USER,
+        ].includes(String(state || ""));
+      }
+
+      function clearOrbPerchLatch() {
+        orbPerchLatch.point = null;
+        orbPerchLatch.until = 0;
+        orbPerchLatch.sourceState = "";
+      }
+
+      function getOrbPerchLatchPoint(timestamp = performance.now()) {
+        if (timestamp >= Number(orbPerchLatch.until || 0)) {
+          clearOrbPerchLatch();
+          return null;
+        }
+        const point = orbPerchLatch.point && typeof orbPerchLatch.point === "object"
+          ? orbPerchLatch.point
+          : null;
+        if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+          clearOrbPerchLatch();
+          return null;
+        }
+        return {
+          x: Number(point.x),
+          y: Number(point.y),
+        };
+      }
+
+      function holdOrbPerch(point, timestamp = performance.now(), durationMs = 1200, sourceState = "") {
+        if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+          return;
+        }
+        orbPerchLatch.point = {
+          x: Number(point.x),
+          y: Number(point.y),
+        };
+        orbPerchLatch.until = timestamp + Math.max(420, Number(durationMs || 0));
+        orbPerchLatch.sourceState = String(sourceState || "");
+      }
+
+      function shouldHoldOrbPerch(previousState, nextState) {
+        return isOrbRestBodyState(nextState)
+          && (
+            isOrbCommitBodyState(previousState)
+            || String(previousState || "") === ORB_BODY_STATES.BLOCKED_UNCERTAIN
+            || String(previousState || "") === ORB_BODY_STATES.ABORT_INTERRUPTED
+          );
+      }
+
+      function resolveOrbBodyIntent({
+        timestamp = performance.now(),
+        size = 144,
+        cursorAuthority = false,
+        handbackActive = false,
+        holdPerch = false,
+        latchedPerchPoint = null,
+      } = {}) {
+        const bundle = getOrbMotionBundle();
+        const operator = currentOrbOperator && typeof currentOrbOperator === "object"
+          ? currentOrbOperator
+          : currentOrb?.operator && typeof currentOrb.operator === "object"
+            ? currentOrb.operator
+            : {};
+        const authority = currentOrbAuthority && typeof currentOrbAuthority === "object"
+          ? currentOrbAuthority
+          : currentOrb?.authority && typeof currentOrb.authority === "object"
+            ? currentOrb.authority
+            : {};
+        const interjection = currentOrbInterjection && typeof currentOrbInterjection === "object"
+          ? currentOrbInterjection
+          : currentOrb?.interjection && typeof currentOrb.interjection === "object"
+            ? currentOrb.interjection
+            : {};
+        const perception = currentOrbPerception && typeof currentOrbPerception === "object"
+          ? currentOrbPerception
+          : currentOrb?.perception && typeof currentOrb.perception === "object"
+            ? currentOrb.perception
+            : {};
+        if (!bundle || !currentOrb) {
+          return orbBodyPresence;
+        }
+        return bundle.deriveOrbBodyIntent({
+          timestamp,
+          size,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          currentPosition: {
+            x: Number.isFinite(orbMotion.x) ? orbMotion.x : orbMotion.pointerX,
+            y: Number.isFinite(orbMotion.y) ? orbMotion.y : orbMotion.pointerY,
+          },
+          orb: {
+            ...currentOrb,
+            operator,
+            authority,
+            interjection,
+            perception,
+          },
+          operator,
+          authority,
+          interjection,
+          perception,
+          input: orbSystemInput,
+          previousState: orbBodyPresence.state,
+          cursorAuthority,
+          handbackActive,
+          humanActive: orbSystemInput.humanActive,
+          hoverReady: orbBodyPhase.hoverReady,
+          clickPulseActive: timestamp < Number(orbBodyPhase.clickPulseUntil || 0),
+          blockedActive: timestamp < Number(orbBodyPhase.blockedUntil || 0),
+          behaviorMode: getOrbBehaviorMode(),
+          holdPerch,
+          latchedPerchPoint,
+        });
+      }
+
+      function updateOrbBodyPhases(intent, timestamp = performance.now()) {
+        const recentReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length
+          ? currentOrbAuthority.recent[0]
+          : null;
+        const recentReceiptId = String(recentReceipt?.id || "").trim();
+        const recentReceiptKind = String(recentReceipt?.kind || "").trim().toLowerCase();
+        const recentReceiptStatus = String(recentReceipt?.status || "").trim().toLowerCase();
+        if (
+          recentReceiptId &&
+          recentReceiptId !== orbBodyPhase.lastReceiptId &&
+          recentReceiptKind === "mouse.click" &&
+          recentReceiptStatus === "completed"
+        ) {
+          const pulseMs = Math.max(80, Number(intent?.config?.clickPulseMs || 160));
+          orbBodyPhase.clickPulseUntil = timestamp + pulseMs;
+        }
+        orbBodyPhase.lastReceiptId = recentReceiptId;
+
+        const targetPoint = intent?.targetPoint && typeof intent.targetPoint === "object"
+          ? intent.targetPoint
+          : null;
+        if (targetPoint && isOrbCommitBodyState(intent?.state)) {
+          const currentX = Number.isFinite(orbMotion.x) ? orbMotion.x : targetPoint.x;
+          const currentY = Number.isFinite(orbMotion.y) ? orbMotion.y : targetPoint.y;
+          const distance = Math.hypot(targetPoint.x - currentX, targetPoint.y - currentY);
+          const hoverRadius = Math.max(8, Number(intent?.config?.hoverRadiusPx || 16));
+          const hoverDwellMs = Math.max(40, Number(intent?.config?.hoverDwellMs || 130));
+          if (distance <= hoverRadius) {
+            if (!orbBodyPhase.hoverStartedAt) {
+              orbBodyPhase.hoverStartedAt = timestamp;
+            }
+            orbBodyPhase.hoverReady = timestamp - orbBodyPhase.hoverStartedAt >= hoverDwellMs;
+          } else {
+            orbBodyPhase.hoverStartedAt = 0;
+            orbBodyPhase.hoverReady = false;
+          }
+        } else {
+          orbBodyPhase.hoverStartedAt = 0;
+          orbBodyPhase.hoverReady = false;
+        }
+
+        const wasCommitState = isOrbCommitBodyState(orbBodyPresence.state);
+        const lostTarget = wasCommitState
+          && targetPoint
+          && (String(intent?.targetConfidence || "low") === "low" || String(intent?.targetStability || "idle") === "transient");
+        if (lostTarget) {
+          orbBodyPhase.blockedUntil = timestamp + Math.max(180, Number(intent?.config?.hoverDwellMs || 130) + 120);
+        }
+        if (timestamp >= Number(orbBodyPhase.blockedUntil || 0)) {
+          orbBodyPhase.blockedUntil = 0;
+        }
+        if (timestamp >= Number(orbBodyPhase.clickPulseUntil || 0)) {
+          orbBodyPhase.clickPulseUntil = 0;
+        }
+      }
+
+      function resolveOrbVisualStateOverride(bodyState) {
+        const shellOverride = resolveOrbStateOverride();
+        if (shellOverride) {
+          return shellOverride;
+        }
+        if (
+          bodyState === ORB_BODY_STATES.COMMIT_MOVE
+          || bodyState === ORB_BODY_STATES.HOVER_READY
+          || bodyState === ORB_BODY_STATES.CLICK_ACT
+          || bodyState === ORB_BODY_STATES.DRAG_ACT
+          || bodyState === ORB_BODY_STATES.TYPE_HOLD
+        ) {
+          return "acting";
+        }
+        if (bodyState === ORB_BODY_STATES.ATTENTIVE || bodyState === ORB_BODY_STATES.WAITING_FOR_USER) {
+          return "listening";
+        }
+        if (bodyState === ORB_BODY_STATES.BLOCKED_UNCERTAIN) {
+          return "thinking";
+        }
+        if (bodyState === ORB_BODY_STATES.INVESTIGATE || bodyState === ORB_BODY_STATES.TARGET_LOCK) {
+          return "thinking";
+        }
+        return null;
+      }
+
       function resolveOrbResidentPlacement(anchorX, anchorY, width, height) {
         const safeWidth = Math.max(220, Math.min(window.innerWidth - 36, Number(width) || 320));
         const safeHeight = Math.max(90, Math.min(window.innerHeight - 36, Number(height) || 160));
@@ -3801,6 +4427,25 @@
         bubble.dataset.side = placement.side;
       }
 
+      function positionOrbOperatorStrip() {
+        const strip = document.getElementById("overlay-strip");
+        if (!strip) {
+          return;
+        }
+        const anchor = getOrbAnchorPoint();
+        const placement = resolveOrbSurfacePlacement(
+          anchor.x,
+          anchor.y,
+          strip.offsetWidth || 360,
+          strip.offsetHeight || 96,
+          "strip",
+        );
+        strip.style.left = `${Math.round(placement.left)}px`;
+        strip.style.top = `${Math.round(placement.top)}px`;
+        strip.style.right = "auto";
+        strip.dataset.side = placement.side;
+      }
+
       function positionOrbChatWindow(forceAnchor = false) {
         const dock = document.getElementById("overlay-dock");
         if (!dock || !orbCommandMenu.open) {
@@ -3823,6 +4468,7 @@
       }
 
       function positionOrbConversationSurfaces(forceChatAnchor = false) {
+        positionOrbOperatorStrip();
         positionOrbThoughtBubble();
         positionOrbChatWindow(forceChatAnchor);
       }
@@ -4088,7 +4734,64 @@
         positionOrbThoughtBubble();
       }
 
+      function setOrbPanelText(id, value) {
+        const node = document.getElementById(id);
+        if (!node) {
+          return;
+        }
+        node.textContent = value;
+      }
+
+      function setOrbPanelHtml(id, value) {
+        const node = document.getElementById(id);
+        if (!node) {
+          return;
+        }
+        node.innerHTML = value;
+      }
+
+      function renderOrbOperatorStrip() {
+        const strip = document.getElementById("overlay-strip");
+        const shell = document.getElementById("orb-strip-shell");
+        const stateNode = document.getElementById("orb-strip-state");
+        const modeNode = document.getElementById("orb-strip-mode");
+        const authorityNode = document.getElementById("orb-strip-authority");
+        const approvalNode = document.getElementById("orb-strip-approval");
+        const detailNode = document.getElementById("orb-strip-detail");
+        const metaNode = document.getElementById("orb-strip-meta");
+        const stopButton = document.getElementById("orb-strip-stop");
+        const detailsButton = document.getElementById("orb-strip-details");
+        const lensButton = document.getElementById("orb-strip-open-lens");
+        if (!strip || !shell || !stateNode || !modeNode || !authorityNode || !approvalNode || !detailNode || !metaNode || !stopButton || !detailsButton || !lensButton) {
+          return;
+        }
+        const compactSurface = isCompactOrbSurface() && !externalOrbMode;
+        const stripVisible = compactSurface && !orbCommandMenu.open;
+        strip.hidden = !stripVisible;
+        strip.style.display = stripVisible ? "block" : "none";
+        const surfaceState = deriveCurrentOrbSurfaceState();
+        shell.dataset.tone = surfaceState.tone || "idle";
+        stateNode.textContent = surfaceState.stateLabel || "Idle";
+        modeNode.textContent = surfaceState.modeLabel || "Observe";
+        modeNode.dataset.tone = surfaceState.tone || "idle";
+        authorityNode.textContent = surfaceState.authorityLabel || "Observe only";
+        authorityNode.dataset.tone = surfaceState.tone || "idle";
+        approvalNode.hidden = !surfaceState.approvalNeeded;
+        approvalNode.textContent = surfaceState.approvalLabel || "Approval needed";
+        detailNode.textContent = surfaceState.detailLabel || "Francis is ready.";
+        metaNode.textContent = [surfaceState.targetLabel, surfaceState.confidenceLabel].filter(Boolean).join(" | ");
+        stopButton.disabled = !desktopState.available || (!Boolean(currentOrb?.panic_ready) && !surfaceState.stopped);
+        stopButton.textContent = surfaceState.stopped ? "Stopped" : "Stop";
+        detailsButton.textContent = orbCommandMenu.open ? "Hide" : "Details";
+        detailsButton.className = orbCommandMenu.open ? "btn-primary" : "btn-secondary";
+        lensButton.disabled = !desktopState.available && compactSurface;
+        if (stripVisible) {
+          positionOrbOperatorStrip();
+        }
+      }
+
       function renderOverlayDock() {
+        renderOrbOperatorStrip();
         const dock = document.getElementById("overlay-dock");
         const chatMeta = document.getElementById("overlay-chat-meta");
         const chatMemory = document.getElementById("orb-chat-memory");
@@ -4097,10 +4800,20 @@
         const chatSend = document.getElementById("overlay-chat-send");
         const panicStop = document.getElementById("overlay-panic-stop");
         const closeChat = document.getElementById("overlay-close-chat");
+        const motionModes = document.getElementById("orb-chat-modes");
         const motionExplore = document.getElementById("overlay-motion-explore");
         const motionTrace = document.getElementById("overlay-motion-trace");
         const motionAutonomous = document.getElementById("overlay-motion-autonomous");
-        if (!dock || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !panicStop || !closeChat || !motionExplore || !motionTrace || !motionAutonomous) {
+        const stateNode = document.getElementById("orb-console-state");
+        const stateDetailNode = document.getElementById("orb-console-state-detail");
+        const targetNode = document.getElementById("orb-console-target");
+        const confidenceNode = document.getElementById("orb-console-confidence");
+        const approvalNode = document.getElementById("orb-console-approval");
+        const approvalDetailNode = document.getElementById("orb-console-approval-detail");
+        const continuityNode = document.getElementById("orb-console-continuity");
+        const diagnosticsNode = document.getElementById("orb-diagnostics");
+        const motionMeta = document.getElementById("overlay-motion-meta");
+        if (!dock || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !panicStop || !closeChat || !motionModes || !motionExplore || !motionTrace || !motionAutonomous || !stateNode || !stateDetailNode || !targetNode || !confidenceNode || !approvalNode || !approvalDetailNode || !continuityNode || !diagnosticsNode || !motionMeta) {
           return;
         }
         ensureOrbQuickChatState();
@@ -4118,35 +4831,69 @@
           handbackActive: isOrbHandbackActive(),
           cursorAuthority: hasEffectiveOrbCursorAuthority(),
           humanActive: orbSystemInput.humanActive,
+          investigationPressure: hasOrbGroundedInvestigationPressure(),
         });
+        const surfaceState = deriveCurrentOrbSurfaceState();
+        const continuitySummary = String(longTerm.summary || "").trim();
+        const selectedMode = String(motionControl.selectedMode || "autonomous").trim().toLowerCase();
         document.body.dataset.orbMenu = orbCommandMenu.open ? "open" : "closed";
-        chatMeta.textContent = orbQuickChat.pending
-          ? "Francis is planning through the local operator stack."
-          : `Conversation ${orbQuickChat.conversationId} | ${totalCount} stored turn${totalCount === 1 ? "" : "s"}`;
-        chatMemory.textContent = String(longTerm.summary || "").trim()
-          ? `Short-term continuity: ${recentCount} visible turn${recentCount === 1 ? "" : "s"}. Long-term memory: ${String(longTerm.summary).trim()}`
-          : `Short-term continuity: ${recentCount} visible turn${recentCount === 1 ? "" : "s"}. Long-term memory is still forming locally across restarts.`;
-        chatStatus.dataset.tone = orbQuickChat.error
+        chatMeta.textContent = `${surfaceState.modeLabel} | ${surfaceState.authorityLabel}`;
+        stateNode.textContent = surfaceState.stateLabel;
+        stateDetailNode.textContent = surfaceState.detailLabel;
+        targetNode.textContent = surfaceState.targetLabel;
+        confidenceNode.textContent = surfaceState.confidenceLabel;
+        approvalNode.textContent = surfaceState.approvalNeeded
+          ? "Approval needed"
+          : surfaceState.stopped
+            ? "Stopped"
+            : "No approvals";
+        approvalDetailNode.textContent = surfaceState.approvalNeeded
+          ? "Francis is paused and waiting for your explicit confirmation."
+          : surfaceState.stopped
+            ? surfaceState.detailLabel
+            : "Francis is not waiting on you.";
+        continuityNode.textContent = `Continuity | ${totalCount} stored turn${totalCount === 1 ? "" : "s"}`;
+        chatMemory.textContent = continuitySummary
+          ? continuitySummary
+          : `Short-term continuity keeps ${recentCount} visible turn${recentCount === 1 ? "" : "s"} in reach. Long-form history stays here, not on the live strip.`;
+        motionModes.hidden = orbWindowMode;
+        motionMeta.textContent = selectedMode === "explore"
+          ? "Explore scouts candidate UI regions more aggressively. It still does not grant cursor authority by itself."
+          : selectedMode === "trace"
+            ? "Trace stays tighter to the current work region so the orb body feels more deliberate and less ambient."
+            : motionControl.effectiveMode === "investigate"
+              ? "Autonomous is active. Francis has a grounded inspection cue, so the orb is scouting deliberately instead of idling."
+              : orbWindowMode
+                ? "Mode controls stay off the live orb surface. Change motion bias from Lens or tray controls when you mean to."
+                : "Autonomous is active. The orb stays perched and quiet until grounded inspection or execution pressure justifies movement.";
+        chatStatus.dataset.tone = surfaceState.stopped
           ? "error"
           : orbQuickChat.pending
             ? "working"
             : orbQuickChat.latestExecution?.status && String(orbQuickChat.latestExecution.status).trim().toLowerCase() === "ok"
               ? "ok"
-              : "neutral";
-        chatStatus.textContent = orbQuickChat.error
-          ? orbQuickChat.error
-          : orbQuickChat.pending
-            ? "Francis is preparing or executing the current Orb plan."
-            : orbQuickChat.status || "Francis is ready to continue in place from the Orb.";
+              : surfaceState.tone === "blocked"
+                ? "error"
+                : "neutral";
+        chatStatus.textContent = surfaceState.stopped
+          ? surfaceState.detailLabel
+          : summarizeOrbSurfaceText(
+            orbTransientStatus || orbQuickChat.status || currentOrbOperator?.summary || currentOrb?.summary,
+            surfaceState.detailLabel || "Francis is ready to continue in place from the Orb.",
+          );
+        diagnosticsNode.textContent = buildOrbDiagnosticsText(surfaceState);
         renderOrbChatThread();
         renderOrbChatPlan();
         renderOrbThoughtBubble();
         chatInput.disabled = orbQuickChat.pending;
         chatSend.disabled = orbQuickChat.pending;
+        motionExplore.disabled = orbWindowMode;
+        motionTrace.disabled = orbWindowMode;
+        motionAutonomous.disabled = orbWindowMode;
         motionExplore.className = motionControl.selectedMode === "explore" ? "btn-primary" : "btn-secondary";
         motionTrace.className = motionControl.selectedMode === "trace" ? "btn-primary" : "btn-secondary";
         motionAutonomous.className = motionControl.selectedMode === "autonomous" ? "btn-primary" : "btn-secondary";
-        panicStop.disabled = !desktopState.available || !Boolean(currentOrb?.panic_ready);
+        panicStop.disabled = !desktopState.available || (!Boolean(currentOrb?.panic_ready) && !surfaceState.stopped);
         closeChat.disabled = orbQuickChat.pending;
         positionOrbConversationSurfaces();
         if (thought?.id) {
@@ -4200,12 +4947,15 @@
           return;
         }
         const bubble = document.getElementById("overlay-thought-bubble");
+        const strip = document.getElementById("overlay-strip");
         const dock = document.getElementById("overlay-dock");
         const activeElement = document.activeElement;
         const insideBubble = !bubble?.hidden && isPointInsideElement(bubble, clientX, clientY);
+        const insideStrip = isPointInsideElement(strip, clientX, clientY);
         const insideChat = orbCommandMenu.open && isPointInsideElement(dock, clientX, clientY);
         const chatFocused = Boolean(orbCommandMenu.open && dock && activeElement instanceof Node && dock.contains(activeElement));
-        if (insideBubble || insideChat || chatFocused) {
+        const stripFocused = Boolean(strip && activeElement instanceof Node && strip.contains(activeElement));
+        if (insideBubble || insideStrip || insideChat || chatFocused || stripFocused) {
           orbHoverInteraction.inside = false;
           orbHoverInteraction.enteredAt = 0;
           await setOrbWindowInteractive(true);
@@ -4934,6 +5684,8 @@
           renderOverlayDock();
           return null;
         }
+        clearOrbLocalPanicState();
+        setOrbTransientStatus("");
         orbQuickChat.pending = true;
         orbQuickChat.error = "";
         orbQuickChat.status = options.auto
@@ -4988,6 +5740,8 @@
           return;
         }
         ensureOrbQuickChatState();
+        clearOrbLocalPanicState();
+        setOrbTransientStatus("");
         orbQuickChat.pending = true;
         orbQuickChat.error = "";
         orbQuickChat.status = "Francis is planning the next move through the local operator stack.";
@@ -6212,9 +6966,7 @@
         if (!lensViewInitialized) {
           const initialLensMode = orbWindowMode || requestedViewMode === "orb_only"
             ? "orb_only"
-            : desktopState.available && !externalOrbMode
-              ? "orb_only"
-              : "lens";
+            : "lens";
           setLensViewMode(initialLensMode);
           lensViewInitialized = true;
         } else {
@@ -6732,6 +7484,108 @@
           : null;
       }
 
+      function getOrbSurfaceStateBridge() {
+        return window.FrancisOrbSurfaceState && typeof window.FrancisOrbSurfaceState === "object"
+          ? window.FrancisOrbSurfaceState
+          : null;
+      }
+
+      function clearOrbLocalPanicState() {
+        orbLocalPanic = null;
+      }
+
+      function setOrbTransientStatus(message = "") {
+        orbTransientStatus = String(message || "").trim();
+      }
+
+      function summarizeOrbSurfaceText(message, fallback = "Francis is ready.") {
+        const bridge = getOrbSurfaceStateBridge();
+        if (bridge && typeof bridge.compressStatusMessage === "function") {
+          return bridge.compressStatusMessage(message, fallback);
+        }
+        return String(message || fallback || "").trim() || fallback;
+      }
+
+      function getOrbSurfaceTargetCue() {
+        const cue = currentOrb?.operator?.target_cue && typeof currentOrb.operator.target_cue === "object"
+          ? currentOrb.operator.target_cue
+          : currentOrbInterjection?.target_cue && typeof currentOrbInterjection.target_cue === "object"
+            ? currentOrbInterjection.target_cue
+            : null;
+        return cue;
+      }
+
+      function deriveCurrentOrbSurfaceState() {
+        const bridge = getOrbSurfaceStateBridge();
+        const waitingForUser =
+          String(orbBodyPresence?.state || "") === ORB_BODY_STATES.WAITING_FOR_USER
+          || Boolean(currentOrbOperator?.controls?.approval_id)
+          || Boolean(currentOrbInterjection?.controls?.primary_action);
+        const blocked =
+          String(orbBodyPresence?.state || "") === ORB_BODY_STATES.BLOCKED_UNCERTAIN
+          || String(currentOrbOperator?.state || "").trim().toLowerCase() === "blocked";
+        if (orbLocalPanic?.engaged && hasEffectiveOrbCursorAuthority()) {
+          clearOrbLocalPanicState();
+        }
+        const localPanic = orbLocalPanic && typeof orbLocalPanic === "object" ? orbLocalPanic : null;
+        if (bridge && typeof bridge.deriveOrbSurfaceState === "function") {
+          return bridge.deriveOrbSurfaceState({
+            bodyState: orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED,
+            cursorAuthority: hasEffectiveOrbCursorAuthority(),
+            cursorEligibility: isOrbCursorEligible(),
+            waitingForUser,
+            blocked,
+            taskbarIntent: Boolean(orbBodyPresence?.taskbarIntent),
+            targetCue: getOrbSurfaceTargetCue(),
+            targetConfidence:
+              orbBodyPresence?.targetConfidence
+              || currentOrb?.operator?.target_cue?.confidence
+              || currentOrb?.perception?.target?.confidence
+              || "low",
+            statusMessage: orbTransientStatus || orbQuickChat.status || currentOrbOperator?.summary || currentOrb?.summary || "",
+            summary: currentOrbOperator?.summary || currentOrb?.summary || "",
+            localPanic,
+            pending: orbQuickChat.pending,
+          });
+        }
+        return {
+          stateLabel: localPanic?.engaged ? "Panic stopped" : "Idle",
+          detailLabel: summarizeOrbSurfaceText(orbTransientStatus || orbQuickChat.status, "Francis is ready."),
+          modeLabel: localPanic?.engaged ? "Stopped" : hasEffectiveOrbCursorAuthority() ? "Act" : "Observe",
+          authorityLabel: localPanic?.engaged ? "Local stop" : hasEffectiveOrbCursorAuthority() ? "Cursor live" : "Observe only",
+          targetLabel: "Target: none",
+          confidenceLabel: "Low confidence",
+          approvalNeeded: waitingForUser,
+          approvalLabel: waitingForUser ? "Approval needed" : "",
+          diagnosticsSummary: "",
+          stopped: Boolean(localPanic?.engaged),
+          tone: localPanic?.engaged ? "stopped" : waitingForUser ? "waiting" : blocked ? "blocked" : "idle",
+        };
+      }
+
+      function buildOrbDiagnosticsText(surfaceState = deriveCurrentOrbSurfaceState()) {
+        const lines = [];
+        if (surfaceState?.diagnosticsSummary) {
+          lines.push(`status: ${surfaceState.diagnosticsSummary}`);
+        }
+        if (orbLocalPanic?.diagnostics?.localError) {
+          lines.push(`panic.local: ${orbLocalPanic.diagnostics.localError}`);
+        }
+        if (orbLocalPanic?.diagnostics?.remoteError) {
+          lines.push(`panic.remote: ${orbLocalPanic.diagnostics.remoteError}`);
+        }
+        if (orbQuickChat.error) {
+          lines.push(`orb.error: ${orbQuickChat.error}`);
+        }
+        if (String(currentOrbPerception?.state || "").trim().toLowerCase() === "error" && currentOrbPerception?.summary) {
+          lines.push(`perception: ${currentOrbPerception.summary}`);
+        }
+        if (!lines.length) {
+          return "Diagnostics stay parked here until Francis hits a real transport, authority, or runtime issue.";
+        }
+        return lines.join("\n");
+      }
+
       function mountOrbEngine() {
         if (orbApi) {
           return orbApi;
@@ -6756,23 +7610,23 @@
         );
         const selectedMode = getOrbBehaviorMode();
         if (!panicChip) {
-          return selectedMode === "trace"
-            ? "Trace is active. The Orb follows your cursor path with a short visual lag while keeping the mouse fully yours."
-            : selectedMode === "explore"
-              ? "Explore is active. The Orb can move on its own and keeps learning your human traces locally for better autonomous motion."
-              : "Autonomous is active. The Orb traces your cursor while you are active, then explores on its own using learned local motion.";
+          return selectedMode === "explore"
+            ? "Explore bias is active. The Orb will scout candidate regions deliberately, but it still returns to a deliberate perch between inspections."
+            : selectedMode === "trace"
+              ? "Trace bias is active. The Orb stays tighter to your current work region without collapsing into a decorative cursor skin."
+              : "Autonomous bias is active. The Orb stays anchored and quiet until grounded inspection or execution pressure gives it a reason to move.";
         }
         if (hasEffectiveOrbCursorAuthority()) {
           return "Away cursor authority is live. Hold the Orb to panic stop or right-click it for controls.";
         }
         if (isOrbCursorEligible()) {
-          return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Human cursor trace stays path-faithful until then, with only a slight visual lag.`;
+          return `Away cursor authority is armed but waiting for ${Math.round(getOrbCursorIdleThresholdMs() / 1000)} seconds of mouse and keyboard inactivity. Until then, Francis keeps a visible body nearby without taking the pointer.`;
         }
-        return selectedMode === "trace"
-          ? "Trace is active. Hold the Orb to panic stop when that path is live, or right-click it to talk and act in place."
-            : selectedMode === "explore"
-              ? "Explore is active. Hold the Orb to panic stop when that path is live, or right-click it to talk and act in place while it moves on its own."
-              : "Autonomous is active. Hold the Orb to panic stop when that path is live, or right-click it to talk and act in place. Human traces are learned locally so autonomous motion keeps tightening toward your style.";
+        return selectedMode === "explore"
+          ? "Explore bias is active. Hold the Orb to panic stop when authority is live, or right-click it to talk and act in place while it scouts deliberately."
+          : selectedMode === "trace"
+            ? "Trace bias is active. Hold the Orb to panic stop when authority is live, or right-click it to talk and act in place while it stays tight to your working region."
+            : "Autonomous bias is active. Hold the Orb to panic stop when authority is live, or right-click it to talk and act in place while it stays perched until the work gives it a reason to move.";
       }
 
       function getOrbCursorIdleThresholdMs() {
@@ -6830,6 +7684,7 @@
       function maybeStartOrbHandback(previousOrb, nextOrb) {
         if (!nextOrb || nextOrb.operator_cursor_live) {
           clearOrbHandback();
+          clearOrbPerchLatch();
           return;
         }
         const handback = nextOrb.handback || {};
@@ -6987,77 +7842,78 @@
         const cursorAuthority = hasEffectiveOrbCursorAuthority();
         const cursorEligibility = isOrbCursorEligible();
         const authorityState = resolveOrbAuthorityState();
-        const motionControl = getOrbMotionControlState({
-          handbackActive,
-          cursorAuthority,
-          humanActive: orbSystemInput.humanActive,
-        });
         const idleThresholdSeconds = Math.round(getOrbCursorIdleThresholdMs() / 1000);
-        document.getElementById("orb-title").textContent =
-          `${titleCase(currentOrb.posture || "resting")} | ${titleCase(currentOrb.mode || "assist")}`;
-        document.getElementById("orb-status").textContent = handbackActive
+        const bodyState = String(orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED);
+        const bodyStateLabel = titleCase(bodyState.replaceAll("_", " "));
+        const targetConfidence = titleCase(String(orbBodyPresence?.targetConfidence || "low"));
+        const targetStability = titleCase(String(orbBodyPresence?.targetStability || "idle").replaceAll("_", " "));
+        const topLayerLabel = orbBodyPresence?.taskbarIntent ? "Taskbar Ready" : "Desktop Top Layer";
+        const stateSummary = String(orbBodyPresence?.summary || "").trim();
+        setOrbPanelText("orb-title", `${titleCase(currentOrb.posture || "resting")} | ${bodyStateLabel}`);
+        setOrbPanelText("orb-status", handbackActive
           ? `L${currentOrb.interjection_level || 0} | handback`
-          : `L${currentOrb.interjection_level || 0} | ${cursorAuthority ? "away authority" : cursorEligibility ? "away armed" : authorityState}`;
-        document.getElementById("orb-summary").textContent = handbackActive
+          : `L${currentOrb.interjection_level || 0} | ${cursorAuthority ? "away authority" : cursorEligibility ? "away armed" : authorityState.replaceAll("-", " ")}`);
+        setOrbPanelText("orb-summary", handbackActive
           ? "Authority ended cleanly. The Orb is returning to ambient rest in view."
-          : currentOrb.summary || "Ambient presence is standing by.";
-        document.getElementById("orb-detail").textContent = handbackActive
+          : stateSummary || currentOrb.summary || "Ambient presence is standing by.");
+        setOrbPanelText("orb-detail", handbackActive
           ? "Handback is in progress. The return path remains visible so sovereignty transfer stays explicit."
-          : currentOrb.detail || "Orb detail is not available.";
-        document.getElementById("orb-controls").textContent = handbackActive
+          : (
+            bodyState === ORB_BODY_STATES.BLOCKED_UNCERTAIN
+              ? String(currentOrb?.perception?.target?.summary || currentOrb.detail || "Target confidence dropped and Francis is reassessing.")
+              : bodyState === ORB_BODY_STATES.WAITING_FOR_USER
+                ? String(currentOrb?.interjection?.detail || currentOrb.detail || "Francis is paused for your confirmation.")
+                : currentOrb.detail || "Orb detail is not available."
+          ));
+        setOrbPanelText("orb-controls", handbackActive
           ? "Handback is visible. The Orb is returning to ambient rest and will settle back into normal presence."
-          : orbControlHint();
-        document.getElementById("orb-stage-copy").textContent = handbackActive
+          : (
+            bodyState === ORB_BODY_STATES.HOVER_READY
+              ? "The Orb is holding over the target intentionally before it acts."
+              : bodyState === ORB_BODY_STATES.CLICK_ACT
+                ? "Click confirmation is visible. Francis is committing the action at the real pointer location."
+                : bodyState === ORB_BODY_STATES.DRAG_ACT
+                  ? "Drag tension is live. The Orb stays in contact until the motion resolves."
+                : bodyState === ORB_BODY_STATES.TYPE_HOLD
+                    ? "Typing posture is live. The Orb is holding near the insertion context while the action completes."
+                    : orbControlHint()
+          ));
+        setOrbPanelText("orb-stage-copy", handbackActive
           ? "Authority has ended cleanly. The Orb is carrying the last motion briefly, then settling back to its ambient anchor so handback stays spatial, not implied."
-          : cursorAuthority
-            ? "Away execution is live. The Orb is carrying cursor authority visibly so delegated motion stays inspectable and bounded."
-            : cursorEligibility
-              ? `Away execution is live, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse and keyboard inactivity before taking cursor authority. While you remain active, the Orb traces your live cursor path with a slight visual lag.`
-              : motionControl.selectedMode === "trace"
-              ? "Trace is active. The Orb follows your cursor path directly with a short visible lag while keeping the mouse under your control."
-              : motionControl.selectedMode === "explore"
-                ? "Explore is active. The Orb moves on its own and keeps learning your human traces locally so autonomous motion stays machine-native but personal."
-              : currentOrb.posture === "acting"
-              ? "The Orb stays free-floating while Francis works. Your mouse remains yours unless Away becomes idle-gated and takes authority after you step away. Local traces keep teaching the Orb how autonomous motion should feel."
-              : "The Orb floats independently and stays out of the way until the work genuinely needs attention. When you move, Francis follows your path with a short visible delay.";
-        document.getElementById("orb-anchor").textContent = handbackActive
+          : bodyState === ORB_BODY_STATES.COMMIT_MOVE
+            ? "The Orb is physically travelling to the execution point. Motion is direct, eased, and aligned to the real cursor path instead of teleporting or drifting."
+            : bodyState === ORB_BODY_STATES.TARGET_LOCK
+              ? "Francis has a likely target. The body tightens and settles so focus reads as commitment, not wandering."
+              : bodyState === ORB_BODY_STATES.INVESTIGATE
+                ? "Francis is scouting candidate UI regions with short deliberate arcs. This is inspection, not idle wandering."
+                : bodyState === ORB_BODY_STATES.WAITING_FOR_USER
+                  ? "Francis is paused for you. The Orb has moved off the control edge and is holding at a respectful side-anchor."
+                  : bodyState === ORB_BODY_STATES.BLOCKED_UNCERTAIN
+                    ? "Confidence dropped or the surface changed. The Orb recoils slightly, stays visible, and reassesses instead of pretending the target is still valid."
+                : cursorAuthority
+                      ? "Away execution is live. The Orb is carrying real cursor authority visibly so delegated desktop action stays inspectable and interruptible."
+                      : cursorEligibility
+                        ? `Away execution is armed, but Francis is waiting for ${idleThresholdSeconds} seconds of mouse and keyboard inactivity before it can lawfully take cursor authority.`
+                        : "The Orb is resting at an intentional perch, staying visible but out of the way until the work needs precision.");
+        setOrbPanelText("orb-anchor", handbackActive
           ? "ambient return"
-          : cursorAuthority
-            ? "away cursor"
-            : cursorEligibility
-              ? "away armed"
-            : motionControl.selectedMode === "trace"
-              ? "trace follow"
-            : motionControl.selectedMode === "explore"
-              ? "free explore"
-            : "free ambient";
-        document.getElementById("orb-motion").textContent = handbackActive
+          : String(orbBodyPresence?.anchorLabel || "resident perch"));
+        setOrbPanelText("orb-motion", handbackActive
           ? "release arc | handback"
-          : cursorAuthority && currentOrb.movement?.profile === "cursor_ride"
-            ? "away ride | predictive commit"
-            : cursorEligibility
-              ? "armed idle gate | waiting"
-            : motionControl.selectedMode === "trace"
-              ? "trace replay | cursor path"
-            : motionControl.selectedMode === "explore"
-              ? "learned replay | explore"
-            : currentOrb.movement?.profile === "focus_orbit"
-              ? "focus orbit | free float"
-              : currentOrb.movement?.profile === "guard_orbit"
-                ? "guard orbit | stop ready"
-                : "ambient float | breathing";
-          const metrics = [
-            ["Posture", handbackActive ? "Handback" : titleCase(currentOrb.posture || "resting")],
+          : `${String(orbBodyPresence?.motionLabel || "anchored idle")}${orbBodyPresence?.taskbarIntent ? " | taskbar" : ""}`);
+        const metrics = [
+            ["Body", handbackActive ? "Handback" : bodyStateLabel],
             ["Pulse", handbackActive ? "Return Arc" : titleCase(currentOrb.visual?.pulse_kind || "steady")],
             ["Authority", handbackActive ? "Handback" : cursorAuthority ? "Away Authority" : cursorEligibility ? `User Control | Arms In ${idleThresholdSeconds}s` : "User Control"],
-            ["Stop Path", currentOrb.panic_ready ? "Immediate" : "Unavailable"],
+            ["Target", `${targetStability} | ${targetConfidence}`],
+            ["Top Layer", topLayerLabel],
           ];
-        document.getElementById("orb-metrics").innerHTML = metrics
+        setOrbPanelHtml("orb-metrics", metrics
           .map(
             ([label, value]) =>
               `<div class="metric-pill"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`,
           )
-          .join("");
+          .join(""));
         renderOverlayDock();
       }
 
@@ -7087,6 +7943,12 @@
         }
         currentOrb.operator_cursor_live = hasEffectiveOrbCursorAuthority();
         maybeStartOrbHandback(previousOrb, currentOrb);
+        orbBodyPresence = resolveOrbBodyIntent({
+          timestamp: performance.now(),
+          size: Number(document.getElementById("orb-render-root")?.clientWidth || 160),
+          cursorAuthority: Boolean(currentOrb.operator_cursor_live),
+          handbackActive: isOrbHandbackActive(),
+        });
         ensureOrbQuickChatLoaded().catch(() => {});
         renderOrbPresentation();
         mountOrbEngine();
@@ -7554,7 +8416,7 @@
 
       function applyHumanMotionProfile(base) {
         const learned = getOrbHumanMotionAdaptation();
-        const blend = base.cursorLock ? 0.82 : 0.42;
+        const blend = base.cursorLock ? 0.82 : 0.18;
         const lerp = (from, to) => from + (to - from) * blend;
         return {
           ...base,
@@ -7576,17 +8438,17 @@
           cursorLock,
           profile: String(movement.profile || (cursorLock ? "cursor_lock" : "ambient_float")),
           leadStrength: Number(movement.lead_strength ?? (cursorLock ? 0.06 : 0.035)),
-          settleStrength: Number(movement.settle_strength ?? (cursorLock ? 0.42 : 0.24)),
-          damping: Number(movement.damping ?? (cursorLock ? 0.68 : 0.82)),
-          driftStrength: Number(movement.drift_strength ?? (cursorLock ? 0.45 : 1.35)),
-          microStrength: Number(movement.micro_strength ?? (cursorLock ? 0.22 : 0.75)),
+          settleStrength: Number(movement.settle_strength ?? (cursorLock ? 0.42 : 0.28)),
+          damping: Number(movement.damping ?? (cursorLock ? 0.68 : 0.88)),
+          driftStrength: Number(movement.drift_strength ?? (cursorLock ? 0.45 : 0.18)),
+          microStrength: Number(movement.micro_strength ?? (cursorLock ? 0.22 : 0.08)),
           verticalBias: Number(movement.vertical_bias ?? (cursorLock ? -0.02 : -0.06)),
-          hesitationMs: Number(movement.hesitation_ms ?? (cursorLock ? 180 : 260)),
+          hesitationMs: Number(movement.hesitation_ms ?? (cursorLock ? 180 : 340)),
           correctionStrength: Number(movement.correction_strength ?? (cursorLock ? 2.8 : 3.4)),
           correctionCap: Number(movement.correction_cap ?? (cursorLock ? 5 : 8)),
           leadCap: Number(movement.lead_cap ?? (cursorLock ? 10 : 14)),
-          lockRadius: Number(movement.lock_radius ?? (cursorLock ? 0.8 : 1.4)),
-          orbitBias: Number(movement.orbit_bias ?? 0),
+          lockRadius: Number(movement.lock_radius ?? (cursorLock ? 0.8 : 0.72)),
+          orbitBias: Number(movement.orbit_bias ?? (cursorLock ? 0 : 0.03)),
           interjectionBias: Number(movement.interjection_bias ?? 0),
         };
         if (!isReducedMotionEnabled()) {
@@ -7708,9 +8570,29 @@
         if (!bundle || !api || !root || !currentOrb) {
           return;
         }
-        const actionTarget = resolveOrbActionTarget();
-        const attentionTarget = resolveOrbAttentionTarget(actionTarget);
-        const stateOverride = resolveOrbStateOverride();
+        const bodyTarget = orbBodyPresence?.targetPoint && typeof orbBodyPresence.targetPoint === "object"
+          ? bundle.screenPointToOrbTarget(
+            orbBodyPresence.targetPoint.x,
+            orbBodyPresence.targetPoint.y,
+            window.innerWidth,
+            window.innerHeight,
+          )
+          : null;
+        const actionTarget = orbWindowMode ? bodyTarget : resolveOrbActionTarget();
+        const attentionTarget = orbWindowMode
+          ? (
+            bodyTarget
+            || (orbBodyPresence?.perchPoint && typeof orbBodyPresence.perchPoint === "object"
+              ? bundle.screenPointToOrbTarget(
+                orbBodyPresence.perchPoint.x,
+                orbBodyPresence.perchPoint.y,
+                window.innerWidth,
+                window.innerHeight,
+              )
+              : null)
+          )
+          : resolveOrbAttentionTarget(actionTarget);
+        const stateOverride = resolveOrbVisualStateOverride(orbBodyPresence?.state);
         api.orb.setSignals(
           bundle.mapHudOrbPayloadToSignals(currentOrb, {
             stateOverride,
@@ -7718,7 +8600,7 @@
             attentionTarget,
             actionTarget,
             actionStrength:
-              hasEffectiveOrbCursorAuthority() || stateOverride === "acting"
+              isOrbCommitBodyState(orbBodyPresence?.state) || stateOverride === "acting"
                 ? Math.max(0.45, Number(currentOrb.visual?.core_brightness || 0.7))
                 : 0,
           }),
@@ -7757,15 +8639,24 @@
 
         const handbackState = resolveOrbHandbackTarget(timestamp);
         const handbackActive = Boolean(handbackState);
-        const motionControl = getOrbMotionControlState({
-          handbackActive,
-          cursorAuthority,
-          humanActive: orbSystemInput.humanActive,
-        });
-        const exactHumanTrace = motionControl.trace;
+        const previousBodyState = String(orbBodyPresence?.state || "");
+        const previousStability = String(root.dataset.targetStability || "");
+        const previousConfidence = String(root.dataset.targetConfidence || "");
+        const previousWindowMatch = String(root.dataset.windowMatch || "");
         let positionX = 0;
         let positionY = 0;
         if (handbackState) {
+          orbBodyPresence = {
+            ...orbBodyPresence,
+            state: ORB_BODY_STATES.ABORT_INTERRUPTED,
+            summary: "Backing off cleanly and returning to a safe anchor.",
+            anchorLabel: "return path",
+            motionLabel: "graceful retreat",
+            desiredPoint: { x: handbackState.x, y: handbackState.y },
+            targetPoint: null,
+            taskbarIntent: false,
+            scale: 0.98,
+          };
           orbMotion.targetX = handbackState.x;
           orbMotion.targetY = handbackState.y;
           orbMotion.vx = 0;
@@ -7784,125 +8675,132 @@
           orbMotion.roamSegmentArrivesAt = timestamp;
           orbMotion.roamPauseUntil = 0;
           if (handbackState.complete) {
+            holdOrbPerch({ x: handbackState.x, y: handbackState.y }, timestamp, 1600, ORB_BODY_STATES.ABORT_INTERRUPTED);
             clearOrbHandback();
             renderOrbPresentation();
           }
-        } else if (exactHumanTrace) {
-          const traceTarget = resolveOrbHumanTraceTarget(timestamp);
-          orbMotion.targetX = traceTarget.x;
-          orbMotion.targetY = traceTarget.y;
-          orbMotion.vx = 0;
-          orbMotion.vy = 0;
-          orbMotion.speed = 0;
-          orbMotion.correctionX = 0;
-          orbMotion.correctionY = 0;
-          orbMotion.x = traceTarget.x;
-          orbMotion.y = traceTarget.y;
-          orbMotion.roamX = traceTarget.x;
-          orbMotion.roamY = traceTarget.y;
-          orbMotion.roamStartX = traceTarget.x;
-          orbMotion.roamStartY = traceTarget.y;
-          orbMotion.roamControlX = traceTarget.x;
-          orbMotion.roamControlY = traceTarget.y;
-          orbMotion.roamTargetX = traceTarget.x;
-          orbMotion.roamTargetY = traceTarget.y;
-          orbMotion.roamSegmentStartedAt = timestamp;
-          orbMotion.roamSegmentArrivesAt = timestamp;
-          orbMotion.roamPauseUntil = timestamp + 420;
         } else {
-          const motionProfile = getOrbMotionProfile();
-          const fallback = getOrbFallbackTarget();
-          const useCursorAnchor = motionProfile.anchor === "cursor" && cursorAuthority;
-          const pointerFresh =
-            orbMotion.lastMoveAt > 0 &&
-            timestamp - orbMotion.lastMoveAt < Math.max(700, motionProfile.hesitationMs * 6);
-          const freeRoamAnchor = !useCursorAnchor && motionControl.explore
-            ? resolveOrbFreeRoamAnchor(timestamp, motionProfile, size)
-            : null;
-          const freeRoamMotion = Boolean(freeRoamAnchor);
-          const anchorX = useCursorAnchor && pointerFresh
-            ? orbMotion.pointerX
-            : freeRoamMotion
-              ? freeRoamAnchor.x
-              : fallback.x;
-          const anchorY = useCursorAnchor && pointerFresh
-            ? orbMotion.pointerY
-            : freeRoamMotion
-              ? freeRoamAnchor.y
-              : fallback.y;
-          const speedFactor = useCursorAnchor ? Math.min(1, orbMotion.speed / 18) : 0;
-          const ambientOffset = freeRoamMotion
-            ? { x: 0, y: 0 }
-            : resolveOrbHumanOffset(timestamp, motionProfile, speedFactor);
-          const autonomousReplay = !useCursorAnchor && motionControl.explore && !freeRoamMotion
-            ? resolveOrbAutonomousReplayOffset(timestamp, motionProfile)
-            : null;
-          const replayBias = clamp(Number(autonomousReplay?.bias || 0), 0, 1);
-          const humanOffset = autonomousReplay
-            ? {
-              x: ambientOffset.x * (1 - replayBias) + Number(autonomousReplay.x || 0) * replayBias,
-              y: ambientOffset.y * (1 - replayBias) + Number(autonomousReplay.y || 0) * replayBias,
-            }
-            : ambientOffset;
-          const leadStrength = useCursorAnchor ? motionProfile.leadStrength * (0.6 + speedFactor * 0.4) : 0;
-          const leadX = useCursorAnchor
-            ? Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVx * leadStrength))
-            : 0;
-          const leadY = useCursorAnchor
-            ? Math.max(-motionProfile.leadCap, Math.min(motionProfile.leadCap, orbMotion.pointerVy * leadStrength))
-            : 0;
-          orbMotion.correctionX *= useCursorAnchor && pointerFresh ? 0.82 : freeRoamMotion ? 0.42 : 0.68;
-          orbMotion.correctionY *= useCursorAnchor && pointerFresh ? 0.82 : freeRoamMotion ? 0.42 : 0.68;
-          orbMotion.targetX = anchorX + leadX + humanOffset.x + orbMotion.correctionX;
-          orbMotion.targetY =
-            anchorY +
-            (freeRoamMotion ? 0 : size * motionProfile.verticalBias) +
-            leadY +
-            humanOffset.y +
-            orbMotion.correctionY -
-            (freeRoamMotion ? 0 : motionProfile.interjectionBias * size * 0.12);
-          if (freeRoamMotion) {
-            orbMotion.vx = (orbMotion.targetX - orbMotion.x) * 0.82;
-            orbMotion.vy = (orbMotion.targetY - orbMotion.y) * 0.82;
-            orbMotion.x = orbMotion.targetX;
-            orbMotion.y = orbMotion.targetY;
-          } else {
-            const rideProfile = motionProfile.profile === "cursor_ride";
-            const stiffness = Math.min(
-              rideProfile ? 0.72 : 0.58,
-              motionProfile.settleStrength + speedFactor * (rideProfile ? 0.09 : 0.06),
+          const activePerchLatchPoint = getOrbPerchLatchPoint(timestamp);
+          const motionControl = getOrbMotionControlState({
+            handbackActive: false,
+            cursorAuthority,
+            humanActive: orbSystemInput.humanActive,
+            investigationPressure: hasOrbGroundedInvestigationPressure(),
+          });
+          const provisionalIntent = resolveOrbBodyIntent({
+            timestamp,
+            size,
+            cursorAuthority,
+            handbackActive: false,
+            forceInvestigate: Boolean(motionControl.explore),
+            holdPerch: Boolean(activePerchLatchPoint),
+            latchedPerchPoint: activePerchLatchPoint,
+          });
+          updateOrbBodyPhases(provisionalIntent, timestamp);
+          if (
+            !activePerchLatchPoint
+            && shouldHoldOrbPerch(previousBodyState, provisionalIntent?.state)
+          ) {
+            const settlePoint = {
+              x: Number.isFinite(orbMotion.x)
+                ? orbMotion.x
+                : Number(provisionalIntent?.desiredPoint?.x ?? provisionalIntent?.perchPoint?.x ?? getOrbFallbackTarget().x),
+              y: Number.isFinite(orbMotion.y)
+                ? orbMotion.y
+                : Number(provisionalIntent?.desiredPoint?.y ?? provisionalIntent?.perchPoint?.y ?? getOrbFallbackTarget().y),
+            };
+            holdOrbPerch(
+              settlePoint,
+              timestamp,
+              Math.max(960, Number(provisionalIntent?.config?.hoverDwellMs || 140) * 7),
+              previousBodyState,
             );
-            const damping = Math.max(rideProfile ? 0.52 : 0.58, motionProfile.damping - speedFactor * 0.04);
-            orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
-            orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
-            orbMotion.vx *= damping;
-            orbMotion.vy *= damping;
-            if (motionProfile.cursorLock) {
-              const lockDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
-              if (lockDistance < size * motionProfile.lockRadius * 0.08) {
-                orbMotion.vx *= 0.86;
-                orbMotion.vy *= 0.86;
-              }
-            }
-            orbMotion.x += orbMotion.vx;
-            orbMotion.y += orbMotion.vy;
           }
-          const clampedPoint = clampOrbRoamPoint(orbMotion.x, orbMotion.y, size);
-          orbMotion.x = clampedPoint.x;
-          orbMotion.y = clampedPoint.y;
+          const nextPerchLatchPoint = getOrbPerchLatchPoint(timestamp);
+          const nextIntent = resolveOrbBodyIntent({
+            timestamp,
+            size,
+            cursorAuthority,
+            handbackActive: false,
+            forceInvestigate: Boolean(motionControl.explore),
+            holdPerch: Boolean(nextPerchLatchPoint),
+            latchedPerchPoint: nextPerchLatchPoint,
+          });
+          orbBodyPresence = nextIntent;
+          orbMotion.targetX = Number(nextIntent?.desiredPoint?.x ?? getOrbFallbackTarget().x);
+          orbMotion.targetY = Number(nextIntent?.desiredPoint?.y ?? getOrbFallbackTarget().y);
+          const stiffness = clamp(Number(nextIntent?.stiffness || 0.18), 0.06, 0.92);
+          const damping = clamp(Number(nextIntent?.damping || 0.78), 0.48, 0.96);
+          orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
+          orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
+          orbMotion.vx *= damping;
+          orbMotion.vy *= damping;
+          if (
+            nextIntent?.state === ORB_BODY_STATES.TARGET_LOCK
+            || nextIntent?.state === ORB_BODY_STATES.HOVER_READY
+            || nextIntent?.state === ORB_BODY_STATES.TYPE_HOLD
+          ) {
+            const lockDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
+            const lockRadius = Math.max(6, Number(nextIntent?.config?.lockRadiusPx || 18));
+            if (lockDistance < lockRadius) {
+              orbMotion.vx *= 0.72;
+              orbMotion.vy *= 0.72;
+            }
+          }
+          if (nextIntent?.holdPerch) {
+            const settleRadius = Math.max(1.25, Number(nextIntent?.config?.idleAmplitudePx || 0) * 1.8);
+            orbMotion.vx *= 0.36;
+            orbMotion.vy *= 0.36;
+            if (Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y) <= settleRadius) {
+              orbMotion.x = orbMotion.targetX;
+              orbMotion.y = orbMotion.targetY;
+              orbMotion.vx = 0;
+              orbMotion.vy = 0;
+            }
+          }
+          orbMotion.x += orbMotion.vx;
+          orbMotion.y += orbMotion.vy;
+          const bounds = nextIntent?.taskbarIntent
+            ? {
+              minX: size * 0.5,
+              maxX: window.innerWidth - size * 0.5,
+              minY: size * 0.5,
+              maxY: window.innerHeight - size * 0.5,
+            }
+            : getOrbRoamBounds(size);
+          orbMotion.x = clamp(orbMotion.x, bounds.minX, bounds.maxX);
+          orbMotion.y = clamp(orbMotion.y, bounds.minY, bounds.maxY);
         }
-        if (exactHumanTrace) {
-          positionX = orbMotion.x - size / 2;
-          positionY = orbMotion.y - size / 2;
-        } else {
-          positionX = Math.max(24, Math.min(window.innerWidth - size - 24, orbMotion.x - size / 2));
-          positionY = Math.max(24, Math.min(window.innerHeight - size - 24, orbMotion.y - size / 2));
-        }
-        root.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0)`;
-        renderOrbTraceTrail(timestamp, size, exactHumanTrace);
+        const allowEdgeTravel = handbackActive || Boolean(orbBodyPresence?.taskbarIntent) || isOrbCommitBodyState(orbBodyPresence?.state);
+        const edgeOverscan = allowEdgeTravel ? size * 0.5 : 24;
+        positionX = clamp(orbMotion.x - size / 2, -edgeOverscan, window.innerWidth - size + edgeOverscan);
+        positionY = clamp(orbMotion.y - size / 2, -edgeOverscan, window.innerHeight - size + edgeOverscan);
+        root.style.transform = `translate3d(${positionX.toFixed(1)}px, ${positionY.toFixed(1)}px, 0) scale(${Number(orbBodyPresence?.scale || 1).toFixed(3)})`;
+        renderOrbTraceTrail(timestamp, size, false);
         root.classList.toggle("orb-handback", handbackActive);
+        const targetWindowMatch = orbBodyPresence?.taskbarIntent
+          ? "taskbar"
+          : String(
+            currentOrb?.operator?.target_cue?.window_match
+            || (currentOrb?.perception?.target?.window?.in_bounds ? "inside_foreground_window" : "weak"),
+          );
+        root.dataset.bodyState = String(orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED);
+        root.dataset.targetStability = String(orbBodyPresence?.targetStability || "idle");
+        root.dataset.targetConfidence = String(orbBodyPresence?.targetConfidence || "low");
+        root.dataset.windowMatch = targetWindowMatch;
+        overlay.dataset.bodyState = String(orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED);
+        overlay.dataset.targetStability = String(orbBodyPresence?.targetStability || "idle");
+        overlay.dataset.windowMatch = targetWindowMatch;
         overlay.dataset.posture = handbackActive ? "handback" : String(currentOrb.posture || "resting");
         document.body.dataset.orbAuthority = resolveOrbAuthorityState(timestamp);
+        if (
+          previousBodyState !== String(orbBodyPresence?.state || "")
+          || previousStability !== String(orbBodyPresence?.targetStability || "idle")
+          || previousConfidence !== String(orbBodyPresence?.targetConfidence || "low")
+          || previousWindowMatch !== targetWindowMatch
+        ) {
+          renderOrbPresentation();
+        }
         positionOrbConversationSurfaces();
         applyOrbSignals();
       }
@@ -7920,19 +8818,21 @@
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
         if (!panicChip) {
-          document.getElementById("orb-controls").textContent =
-            "Panic stop is unavailable in the current scope or mode.";
+          setOrbTransientStatus("Panic stop is unavailable in the current scope or mode.");
+          setOrbPanelText("orb-controls", "Panic stop is unavailable in the current scope or mode.");
+          renderOverlayDock();
           return;
         }
         orbHoldTriggered = false;
         root.classList.add("orb-hold");
-        document.getElementById("orb-controls").textContent =
-          "Hold steady. Panic stop will trigger if you keep pressure on the Orb.";
+        setOrbTransientStatus("Hold steady. Panic stop will trigger if you keep pressure on the Orb.");
+        setOrbPanelText("orb-controls", "Hold steady. Panic stop will trigger if you keep pressure on the Orb.");
+        renderOverlayDock();
         orbHoldTimer = window.setTimeout(async () => {
           orbHoldTriggered = true;
-          document.getElementById("orb-controls").textContent =
-            "Panic stop executed through the Orb control path.";
-          await executeAction("control.panic", false);
+          setOrbTransientStatus("Panic stop engaged.");
+          setOrbPanelText("orb-controls", "Panic stop executed through the Orb control path.");
+          await panicStopFromOrbSurface();
           endOrbHold();
         }, 900);
       }
@@ -7947,9 +8847,11 @@
           root.classList.remove("orb-hold");
         }
         if (!orbHoldTriggered) {
-          document.getElementById("orb-controls").textContent = orbControlHint();
+          setOrbPanelText("orb-controls", orbControlHint());
+          setOrbTransientStatus("");
         }
         orbHoldTriggered = false;
+        renderOverlayDock();
       }
 
       function initHudInteractions() {
@@ -8039,13 +8941,15 @@
         window.addEventListener("pointerdown", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
           const rootNode = document.getElementById("orb-render-root");
+          const stripNode = document.getElementById("overlay-strip");
           const menuNode = document.getElementById("overlay-dock");
           const thoughtNode = document.getElementById("overlay-thought-bubble");
           const target = event.target;
           const inOrb = Boolean(rootNode && target instanceof Node && rootNode.contains(target));
+          const inStrip = Boolean(stripNode && target instanceof Node && stripNode.contains(target));
           const inMenu = Boolean(menuNode && target instanceof Node && menuNode.contains(target));
           const inThought = Boolean(thoughtNode && target instanceof Node && thoughtNode.contains(target));
-          if (orbCommandMenu.open && !inOrb && !inMenu && !inThought) {
+          if (orbCommandMenu.open && !inOrb && !inStrip && !inMenu && !inThought) {
             closeOrbCommandMenu();
           }
           syncOrbWindowPassThrough(event.clientX, event.clientY).catch(() => {});
@@ -8070,9 +8974,6 @@
           if (orbCommandMenu.open) {
             closeOrbCommandMenu();
             return;
-          }
-          if (!orbWindowMode && lensViewMode === "lens" && desktopState.available) {
-            setLensViewMode("orb_only");
           }
         });
         if (chatInput && chatInput instanceof HTMLElement) {
@@ -8140,6 +9041,10 @@
         currentRunsSurface = payload.runs || { run_groups: [] };
         currentExecutionJournal = payload.execution_journal || { items: [] };
         currentExecutionFeed = payload.execution_feed || {};
+
+        if (isCompactOrbSurface()) {
+          renderOverlayDock();
+        }
 
         if (shouldRender("dashboard") || shouldRender("snapshot")) {
           const mode = currentDashboard.mode;
@@ -11818,7 +12723,7 @@
         if (currentSnapshot) {
           renderCurrentWork(currentCurrentWork, currentSnapshot, currentActions);
         }
-        document.getElementById("orb-controls").textContent = orbControlHint();
+        setOrbPanelText("orb-controls", orbControlHint());
         applyOrbSignals();
       }
 
@@ -12357,6 +13262,9 @@
       applyAccessibilityPosture();
       loadOrbBehaviorMode();
       loadOrbHumanMotionProfile();
+      if (isCompactOrbSurface()) {
+        renderOverlayDock();
+      }
       window.addEventListener("beforeunload", () => {
         if (orbInputSyncTimer !== null) {
           window.clearInterval(orbInputSyncTimer);
