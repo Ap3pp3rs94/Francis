@@ -31,7 +31,11 @@ const {
 } = require("./session-state");
 const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
 const { normalizeStartupProfile, resolveStartupProfile } = require("./startup-profile");
-const { normalizeOrbBehaviorMode, resolveOrbBehaviorMode } = require("./orb-behavior");
+const {
+  normalizeOrbBehaviorMode,
+  normalizePersistedOrbBehaviorMode,
+  resolveOrbBehaviorMode,
+} = require("./orb-behavior");
 const { resolveBuildIdentity } = require("./build-info");
 const {
   buildDefaultUpdateState,
@@ -86,6 +90,7 @@ const {
 const { getForegroundWindowInfo } = require("./foreground-window");
 const { executeWindowsInputCommand } = require("./windows-input");
 const { executeOrbDesktopPlan } = require("./orb-plan");
+const { buildPanicStopResult } = require("./orb-panic");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -1895,8 +1900,11 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
     getWindowOrPreferenceBounds(safeWindow) ||
     buildDefaultPreferences(fallbackDisplay).windowBounds;
   const activeDisplay = screen.getDisplayMatching(bounds);
+  const requestedOrbBehaviorMode = normalizeOrbBehaviorMode(
+    overrides.orbBehaviorMode ?? overlayPreferences?.orbBehaviorMode,
+  );
 
-  overlayPreferences = savePreferences(
+  const persistedPreferences = savePreferences(
     app.getPath("userData"),
     {
       ...(overlayPreferences || buildDefaultPreferences(fallbackDisplay)),
@@ -1906,12 +1914,18 @@ function persistOverlayPreferences(win = mainWindow, overrides = {}) {
       ignoreMouseEvents: overrides.ignoreMouseEvents ?? overlayState.ignoreMouseEvents,
       launchOnStartup: overrides.launchOnStartup ?? launchAtLogin.enabled,
       startupProfile: overrides.startupProfile ?? overlayPreferences?.startupProfile,
-      orbBehaviorMode: overrides.orbBehaviorMode ?? overlayPreferences?.orbBehaviorMode,
+      // Persist a calm boot posture, but keep explicit Explore active for the current session.
+      orbBehaviorMode: normalizePersistedOrbBehaviorMode(requestedOrbBehaviorMode),
       windowBounds: bounds,
     },
     displays,
     primaryDisplayId,
   );
+
+  overlayPreferences = {
+    ...persistedPreferences,
+    orbBehaviorMode: requestedOrbBehaviorMode,
+  };
 
   return overlayPreferences;
 }
@@ -2158,7 +2172,7 @@ function applyAlwaysOnTop(win, enabled) {
     const isOrbShell = shellWindow === orbWindow;
     const nextEnabled = isOrbShell ? true : Boolean(enabled);
     const nextLevel = nextEnabled ? ORB_WINDOW_TOPMOST_LEVEL : "normal";
-    shellWindow.setAlwaysOnTop(nextEnabled, nextLevel);
+    shellWindow.setAlwaysOnTop(nextEnabled, nextLevel, isOrbShell && nextEnabled ? 1 : 0);
   }
   overlayState.alwaysOnTop = Boolean(enabled);
   schedulePreferenceSave(win);
@@ -2170,7 +2184,7 @@ function reinforceOrbWindowPresence(targetWindow = orbWindow) {
   if (!targetWindow || targetWindow.isDestroyed()) {
     return;
   }
-  targetWindow.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL);
+  targetWindow.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL, 1);
   if (typeof targetWindow.moveTop === "function") {
     try {
       targetWindow.moveTop();
@@ -2803,6 +2817,9 @@ function createOrbWindow() {
   win.setIgnoreMouseEvents(true, { forward: true });
   win.removeMenu();
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (typeof win.webContents.setBackgroundThrottling === "function") {
+    win.webContents.setBackgroundThrottling(false);
+  }
   reinforceOrbWindowPresence(win);
   win.webContents.once("did-finish-load", () => {
     log("Orb HUD loaded", win.webContents.getURL());
@@ -2912,6 +2929,9 @@ function createMainWindow() {
   win.setMenuBarVisibility(false);
   applyAlwaysOnTop(win, overlayPreferences.alwaysOnTop);
   applyIgnoreMouseEvents(win, startupProfile.ignoreMouseEvents);
+  if (typeof win.setOpacity === "function") {
+    win.setOpacity(0);
+  }
 
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, targetUrl) => {
@@ -2946,6 +2966,10 @@ function createMainWindow() {
   });
 
   win.once("ready-to-show", () => {
+    if (typeof win.setOpacity === "function") {
+      win.setOpacity(0);
+    }
+    win.hide();
     log("Lens ready; keeping the HUD hidden until the Orb opens it", {
       startupProfile: startupProfile.effective,
     });
@@ -2954,11 +2978,21 @@ function createMainWindow() {
 
   win.on("move", () => schedulePreferenceSave(win));
   win.on("resize", () => schedulePreferenceSave(win));
-  win.on("show", () => notifyOverlayState(win));
+  win.on("show", () => {
+    if (typeof win.setOpacity === "function") {
+      win.setOpacity(1);
+    }
+    notifyOverlayState(win);
+  });
   win.on("blur", () => {
     void checkForCaptureActivation();
   });
-  win.on("hide", () => notifyOverlayState(win));
+  win.on("hide", () => {
+    if (typeof win.setOpacity === "function") {
+      win.setOpacity(0);
+    }
+    notifyOverlayState(win);
+  });
   win.on("minimize", () => notifyOverlayState(win));
   win.on("restore", () => notifyOverlayState(win));
 
@@ -3113,20 +3147,46 @@ function registerIpc() {
     return result;
   });
   ipcMain.handle("overlay:panic-stop", async () => {
-    const response = await fetchHudJson("/api/actions/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "control.panic",
-        args: {},
-        dry_run: false,
-        role: "architect",
-        user: "electron.orb",
-      }),
+    let remoteResponse = null;
+    let remoteError = null;
+    let localError = null;
+    let queueCleared = false;
+    let authorityReleased = false;
+
+    try {
+      await cancelOrbAuthorityQueue("Panic stop canceled queued Orb authority commands.");
+      queueCleared = true;
+      await releaseOrbAuthority("Panic stop released Orb authority immediately.");
+      authorityReleased = true;
+    } catch (error) {
+      localError = error instanceof Error ? error.message : String(error);
+      log("Panic stop local release failed", localError);
+    }
+
+    try {
+      remoteResponse = await fetchHudJson("/api/actions/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "control.panic",
+          args: {},
+          dry_run: false,
+          role: "architect",
+          user: "electron.orb",
+        }),
+      });
+    } catch (error) {
+      remoteError = error instanceof Error ? error.message : String(error);
+      log("Panic stop remote sync failed", remoteError);
+    }
+
+    return buildPanicStopResult({
+      queueCleared,
+      authorityReleased,
+      localError,
+      remoteResponse,
+      remoteError,
     });
-    await cancelOrbAuthorityQueue("Panic stop canceled queued Orb authority commands.");
-    await releaseOrbAuthority("Panic stop released Orb authority immediately.");
-    return response;
   });
   ipcMain.handle("overlay:show-lens", () => showLensWindow());
   ipcMain.handle("overlay:hide-lens", () => hideLensWindow());

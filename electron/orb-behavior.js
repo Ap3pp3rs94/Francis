@@ -2,17 +2,17 @@ const ORB_BEHAVIOR_MODES = Object.freeze({
   explore: {
     id: "explore",
     label: "Explore",
-    description: "Let the Orb move on its own while it stays local-first and out of the mouse path.",
+    description: "Bias the Orb toward deliberate investigation arcs when the desktop opens up, while it still returns to a purposeful perch.",
   },
   trace: {
     id: "trace",
     label: "Trace",
-    description: "Keep the Orb tracing the live cursor path while the mouse remains fully yours.",
+    description: "Bias the Orb toward tighter workspace following without collapsing into a decorative cursor skin.",
   },
   autonomous: {
     id: "autonomous",
     label: "Autonomous",
-    description: "Trace while you are active, then let the Orb explore on its own when you stop driving it.",
+    description: "Let the Orb choose between anchored rest, attentive following, and deliberate investigation based on live desktop context.",
   },
 });
 
@@ -21,6 +21,11 @@ const DEFAULT_ORB_BEHAVIOR_MODE = ORB_BEHAVIOR_MODES.autonomous.id;
 function normalizeOrbBehaviorMode(value) {
   const requested = typeof value === "string" ? value.trim().toLowerCase() : "";
   return ORB_BEHAVIOR_MODES[requested] ? requested : DEFAULT_ORB_BEHAVIOR_MODE;
+}
+
+function normalizePersistedOrbBehaviorMode(value) {
+  const requested = normalizeOrbBehaviorMode(value);
+  return requested === ORB_BEHAVIOR_MODES.explore.id ? DEFAULT_ORB_BEHAVIOR_MODE : requested;
 }
 
 function listOrbBehaviorModes() {
@@ -37,6 +42,7 @@ function resolveOrbBehaviorMode(
     humanActive = false,
     authorityLive = false,
     handback = false,
+    investigationPressure = false,
   } = {},
 ) {
   const requested = normalizeOrbBehaviorMode(mode);
@@ -66,7 +72,7 @@ function resolveOrbBehaviorMode(
       effective: ORB_BEHAVIOR_MODES.trace.id,
       trace: true,
       explore: false,
-      summary: "Trace is active. The Orb follows the cursor path with a short visual lag while the mouse remains yours.",
+      summary: "Trace bias is active. The Orb stays close to your current work region while the mouse remains fully yours.",
       options: listOrbBehaviorModes(),
     };
   }
@@ -76,18 +82,20 @@ function resolveOrbBehaviorMode(
       effective: ORB_BEHAVIOR_MODES.explore.id,
       trace: false,
       explore: true,
-      summary: "Explore is active. The Orb moves on its own while still learning human motion locally.",
+      summary: "Explore bias is active. The Orb uses deliberate scouting motion when the desktop opens up while keeping a disciplined perch.",
       options: listOrbBehaviorModes(),
     };
   }
   return {
     requested,
-    effective: humanActive ? ORB_BEHAVIOR_MODES.trace.id : ORB_BEHAVIOR_MODES.explore.id,
+    effective: humanActive ? ORB_BEHAVIOR_MODES.trace.id : investigationPressure ? "investigate" : ORB_BEHAVIOR_MODES.autonomous.id,
     trace: Boolean(humanActive),
-    explore: !humanActive,
+    explore: Boolean(!humanActive && investigationPressure),
     summary: humanActive
-      ? "Autonomous is active. The Orb is tracing the live cursor path while you are active."
-      : "Autonomous is active. The Orb is exploring on its own using learned local motion.",
+      ? "Autonomous bias is active. The Orb stays attentive to your current work region while you are active."
+      : investigationPressure
+        ? "Autonomous bias is active. Grounded target pressure is present, so the Orb investigates deliberately."
+        : "Autonomous bias is active. The Orb stays perched and quiet until grounded target pressure justifies movement.",
     options: listOrbBehaviorModes(),
   };
 }
@@ -97,5 +105,6 @@ module.exports = {
   ORB_BEHAVIOR_MODES,
   listOrbBehaviorModes,
   normalizeOrbBehaviorMode,
+  normalizePersistedOrbBehaviorMode,
   resolveOrbBehaviorMode,
 };

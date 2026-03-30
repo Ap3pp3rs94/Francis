@@ -5,12 +5,18 @@ const {
   DEFAULT_ORB_BEHAVIOR_MODE,
   listOrbBehaviorModes,
   normalizeOrbBehaviorMode,
+  normalizePersistedOrbBehaviorMode,
   resolveOrbBehaviorMode,
 } = require("./orb-behavior");
 
 test("orb behavior normalizes unknown values to autonomous", () => {
   assert.equal(normalizeOrbBehaviorMode("trace"), "trace");
   assert.equal(normalizeOrbBehaviorMode("unknown"), DEFAULT_ORB_BEHAVIOR_MODE);
+});
+
+test("persisted orb behavior demotes explore to autonomous on next boot", () => {
+  assert.equal(normalizePersistedOrbBehaviorMode("explore"), DEFAULT_ORB_BEHAVIOR_MODE);
+  assert.equal(normalizePersistedOrbBehaviorMode("trace"), "trace");
 });
 
 test("orb behavior exposes the three operator-facing modes", () => {
@@ -24,7 +30,8 @@ test("orb behavior resolves trace explore autonomous authority and handback", ()
   assert.equal(resolveOrbBehaviorMode("trace").effective, "trace");
   assert.equal(resolveOrbBehaviorMode("explore").effective, "explore");
   assert.equal(resolveOrbBehaviorMode("autonomous", { humanActive: true }).effective, "trace");
-  assert.equal(resolveOrbBehaviorMode("autonomous", { humanActive: false }).effective, "explore");
+  assert.equal(resolveOrbBehaviorMode("autonomous", { humanActive: false }).effective, "autonomous");
+  assert.equal(resolveOrbBehaviorMode("autonomous", { humanActive: false, investigationPressure: true }).effective, "investigate");
   assert.equal(resolveOrbBehaviorMode("autonomous", { authorityLive: true }).effective, "authority");
   assert.equal(resolveOrbBehaviorMode("autonomous", { handback: true }).effective, "handback");
 });

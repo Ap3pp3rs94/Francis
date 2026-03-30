@@ -128,6 +128,26 @@ test("preferences normalize unknown startup profiles back to operator", () => {
   assert.equal(saved.densityMode, "comfortable");
 });
 
+test("preferences demote explore to autonomous when restoring retained boot posture", () => {
+  const userDataPath = tempUserDataPath();
+  const saved = savePreferences(
+    userDataPath,
+    {
+      targetDisplayId: 101,
+      startupProfile: "operator",
+      orbBehaviorMode: "explore",
+      windowBounds: { x: 32, y: 48, width: 900, height: 720 },
+    },
+    DISPLAYS,
+    101,
+  );
+
+  const loaded = loadPreferences(userDataPath, DISPLAYS, 101);
+
+  assert.equal(saved.orbBehaviorMode, "autonomous");
+  assert.equal(loaded.orbBehaviorMode, "autonomous");
+});
+
 test("loadPreferences ignores malformed json and returns defaults", () => {
   const userDataPath = tempUserDataPath();
   fs.writeFileSync(getPreferencesPath(userDataPath), "{broken", "utf8");

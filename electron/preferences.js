@@ -6,7 +6,11 @@ const PREFERENCES_VERSION = 6;
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 360;
 const { DEFAULT_STARTUP_PROFILE, normalizeStartupProfile } = require("./startup-profile");
-const { DEFAULT_ORB_BEHAVIOR_MODE, normalizeOrbBehaviorMode } = require("./orb-behavior");
+const {
+  DEFAULT_ORB_BEHAVIOR_MODE,
+  normalizeOrbBehaviorMode,
+  normalizePersistedOrbBehaviorMode,
+} = require("./orb-behavior");
 const {
   DEFAULT_CONTRAST_MODE,
   DEFAULT_DENSITY_MODE,
@@ -108,7 +112,8 @@ function normalizePreferences(raw, displays, primaryDisplayId = null) {
     alwaysOnTop: raw.alwaysOnTop !== false,
     ignoreMouseEvents: Boolean(raw.ignoreMouseEvents),
     startupProfile: normalizeStartupProfile(raw.startupProfile),
-    orbBehaviorMode: normalizeOrbBehaviorMode(raw.orbBehaviorMode),
+    // "Explore" is a live session bias, not a retained boot posture.
+    orbBehaviorMode: normalizePersistedOrbBehaviorMode(raw.orbBehaviorMode),
     motionMode: normalizeMotionMode(raw.motionMode),
     contrastMode: normalizeContrastMode(raw.contrastMode),
     densityMode: normalizeDensityMode(raw.densityMode),

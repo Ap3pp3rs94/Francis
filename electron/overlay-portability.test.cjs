@@ -75,7 +75,7 @@ test("overlay portability import only extracts safe portable preferences", () =>
   });
 
   assert.equal(preferences.startupProfile, "core_only");
-  assert.equal(preferences.orbBehaviorMode, "explore");
+  assert.equal(preferences.orbBehaviorMode, "autonomous");
   assert.equal(preferences.motionMode, "full");
   assert.equal(preferences.contrastMode, "standard");
   assert.equal(preferences.densityMode, "comfortable");
@@ -86,6 +86,25 @@ test("overlay portability import only extracts safe portable preferences", () =>
     width: 1280,
     height: 720,
   });
+});
+
+test("overlay portability export demotes explore so imported startup stays calm", () => {
+  const payload = buildOverlayExportPayload({
+    buildIdentity: "0.1.0+abc1234",
+    version: "0.1.0",
+    exportedAt: "2026-03-12T12:00:00Z",
+    preferences: {
+      startupProfile: "operator",
+      orbBehaviorMode: "explore",
+      motionMode: "reduce",
+      contrastMode: "system",
+      densityMode: "comfortable",
+      alwaysOnTop: true,
+      ignoreMouseEvents: false,
+    },
+  });
+
+  assert.equal(payload.shell.orbBehaviorMode, "autonomous");
 });
 
 test("overlay portability blocks incompatible import channels", () => {
