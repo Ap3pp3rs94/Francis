@@ -36,3 +36,30 @@ def test_workspace_fs_appends_jsonl_and_journals(tmp_path: Path) -> None:
     assert '"kind": "test"' in ledger_path.read_text(encoding="utf-8")
     journal_text = (root / "journals" / "fs.jsonl").read_text(encoding="utf-8")
     assert '"op": "append_jsonl"' in journal_text
+
+
+def test_workspace_fs_does_not_journal_reads_by_default(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    fs = WorkspaceFS(roots=[root], journal_path=root / "journals" / "fs.jsonl")
+    fs.write_text("inbox/messages.jsonl", '{"x":1}\n')
+
+    fs.read_text("inbox/messages.jsonl")
+
+    journal_text = (root / "journals" / "fs.jsonl").read_text(encoding="utf-8")
+    assert '"op": "write_text"' in journal_text
+    assert '"op": "read_text"' not in journal_text
+
+
+def test_workspace_fs_can_journal_reads_when_enabled(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    fs = WorkspaceFS(
+        roots=[root],
+        journal_path=root / "journals" / "fs.jsonl",
+        journal_reads=True,
+    )
+    fs.write_text("inbox/messages.jsonl", '{"x":1}\n')
+
+    fs.read_text("inbox/messages.jsonl")
+
+    journal_text = (root / "journals" / "fs.jsonl").read_text(encoding="utf-8")
+    assert '"op": "read_text"' in journal_text

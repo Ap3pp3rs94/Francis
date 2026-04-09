@@ -55,51 +55,35 @@ float fbm(vec3 p) {
 void main() {
   vec3 normal = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
   vec3 viewDir = normalize(vViewDir);
-  float fresnel = pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), uFresnelPower);
+  float facing = clamp(dot(normal, viewDir), 0.0, 1.0);
+  float fresnel = pow(1.0 - facing, uFresnelPower);
 
-  vec3 basePos = vObjectPos * (2.8 * uNoiseDensity);
-  vec3 slowFlow = vec3(uTime * 0.12, -uTime * 0.08, uTime * 0.18);
-  vec3 fastFlow = vec3(-uTime * 0.21, uTime * 0.15, -uTime * 0.11);
-  vec3 refracted = refract(-viewDir, normal, 1.0 / (1.04 + uRefractionStrength * 0.08));
+  vec3 basePos = normalize(vObjectPos) * (1.32 + uNoiseDensity * 0.08);
+  vec3 slowFlow = vec3(uTime * 0.06, -uTime * 0.04, uTime * 0.08);
+  vec3 fastFlow = vec3(-uTime * 0.09, uTime * 0.06, -uTime * 0.05);
+  vec3 refracted = refract(-viewDir, normal, 1.0 / (1.005 + uRefractionStrength * 0.012));
 
-  vec3 warp = vec3(
-    fbm(basePos + slowFlow),
-    fbm(basePos * 1.7 - fastFlow),
-    fbm(vWorldPos * 1.3 + slowFlow * 0.6)
-  ) - 0.5;
+  float veil = fbm(basePos * 1.9 + slowFlow + refracted * 0.08);
+  float wisps = fbm(basePos * 3.1 - fastFlow + vec3(veil * 0.12));
+  float threads = fbm(basePos * 4.1 + refracted * 0.16 - slowFlow * 0.6);
 
-  float coarse = fbm(basePos + slowFlow + refracted * (0.7 + uRefractionStrength * 0.8));
-  float billow = fbm(basePos * 2.05 - fastFlow + warp * 1.8);
-  float grain = fbm(basePos * 3.9 + refracted * 1.35 - slowFlow * 1.4);
-  float filigree = fbm(basePos * 4.6 + warp * 2.4 - fastFlow * 1.6);
+  float rim = smoothstep(0.4, 1.0, fresnel);
+  float veilMask = smoothstep(0.6, 0.88, veil * 0.68 + wisps * 0.32);
+  float fiber = smoothstep(0.56, 0.84, wisps * 0.44 + threads * 0.56);
+  float innerVeil = (1.0 - facing) * (0.02 + veilMask * 0.04);
+  float shimmer = clamp(0.96 + (uPulse - 1.0) * 0.42, 0.92, 1.02);
 
-  float shellBody = smoothstep(0.26, 0.88, coarse * 0.6 + billow * 0.4);
-  float internalHaze = smoothstep(0.18, 0.92, grain * 0.65 + coarse * 0.35);
-  float fracture = smoothstep(0.5, 0.94, filigree + grain * 0.22);
-  float meshLines = 1.0 - smoothstep(0.08, 0.28, abs(billow - filigree));
-  meshLines *= 0.55 + fracture * 0.45;
+  vec3 voidTone = vec3(0.004, 0.006, 0.01);
+  vec3 silver = vec3(0.42, 0.48, 0.56);
+  vec3 ice = vec3(0.86, 0.9, 0.95);
 
-  float rim = clamp(fresnel * 1.2 + meshLines * 0.35 + fracture * 0.25, 0.0, 1.0);
-  float shimmer = clamp(0.82 + (uPulse - 1.0) * 2.8, 0.75, 1.1);
-
-  float prismR = fbm(basePos * 2.6 + refracted * 1.4 + vec3(uTime * 0.18, 0.0, 0.0));
-  float prismB = fbm(basePos * 2.6 + refracted * 1.4 - vec3(0.0, uTime * 0.16, 0.0));
-  vec3 prismShift = vec3(prismR - 0.5, internalHaze - 0.5, prismB - 0.5);
-
-  vec3 deepColor = vec3(0.08, 0.19, 0.28);
-  vec3 bodyColor = vec3(0.33, 0.72, 0.94);
-  vec3 rimColor = vec3(0.84, 0.97, 1.0);
-
-  vec3 color = mix(deepColor, bodyColor, shellBody);
-  color = mix(color, rimColor, rim * 0.45 + fracture * 0.2);
-  color += prismShift * (0.09 + uRefractionStrength * 0.06) * (0.35 + rim * 0.65);
-  color += rimColor * meshLines * (0.08 + uActivity * 0.06);
-  color *= (0.62 + internalHaze * 0.25 + rim * 0.45) * shimmer;
+  vec3 color = mix(voidTone, silver, veilMask * 0.05 + fiber * 0.07 + innerVeil * 0.06);
+  color = mix(color, ice, rim * 0.16 + fiber * 0.04);
+  color *= (0.06 + rim * 0.16 + innerVeil * 0.08) * shimmer;
   color = max(color, vec3(0.0));
 
-  float alpha = uOpacity * (0.78 + uActivity * 0.32);
-  alpha *= clamp(fresnel * 1.15 + shellBody * 0.42 + fracture * 0.18, 0.0, 1.1);
-  alpha *= 0.86 + meshLines * 0.22;
+  float alpha = uOpacity * (0.56 + uActivity * 0.08);
+  alpha *= clamp(rim * 0.18 + fiber * 0.12 + innerVeil * 0.1, 0.0, 1.0);
 
   gl_FragColor = vec4(color, alpha);
 }

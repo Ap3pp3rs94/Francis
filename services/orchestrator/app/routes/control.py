@@ -22,7 +22,13 @@ from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from francis_presence.rituals import build_handback_ritual
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
-from services.orchestrator.app.approvals_store import add_decision, get_request, list_requests, pending_count
+from services.orchestrator.app.approvals_store import (
+    add_decision,
+    get_request,
+    list_requests,
+    load_approval_snapshot,
+    pending_count,
+)
 from services.orchestrator.app.federation_store import get_paired_node, node_has_app_scope
 from services.orchestrator.app.orb_authority import queue_orb_authority_command
 
@@ -46,6 +52,7 @@ _ledger = RunLedger(_fs, rel_path="runs/run_ledger.jsonl")
 _takeover_state_path = "control/takeover.json"
 _takeover_history_path = "control/takeover_history.jsonl"
 _takeover_activity_path = "control/takeover_activity.jsonl"
+_takeover_sessions_index_path = "control/takeover_sessions_index.json"
 _REMOTE_FEED_RISK_TIERS = {"low", "medium", "high", "critical"}
 _REMOTE_FEED_SOURCES = {"takeover.activity", "journals.decisions"}
 _REMOTE_SPARKLINE_CHARS = " .:-=+*#%@"
@@ -143,13 +150,7 @@ class ControlRemoteTakeoverDesktopEnqueueRequest(ControlTakeoverDesktopEnqueueRe
 
 
 def _append_jsonl(rel_path: str, row: dict[str, Any]) -> None:
-    try:
-        raw = _fs.read_text(rel_path)
-    except Exception:
-        raw = ""
-    if raw and not raw.endswith("\n"):
-        raw += "\n"
-    _fs.write_text(rel_path, raw + json.dumps(row, ensure_ascii=False) + "\n")
+    _fs.append_jsonl(rel_path, row)
 
 
 def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
@@ -214,8 +215,12 @@ def _resolve_remote_approval_node(node_id: str | None, *, require_active: bool) 
     return node
 
 
-def _default_takeover_state() -> dict[str, Any]:
-    control = load_or_init_control_state(_fs, _repo_root, _workspace_root)
+def _default_takeover_state(control_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    control = (
+        control_state
+        if isinstance(control_state, dict)
+        else load_or_init_control_state(_fs, _repo_root, _workspace_root)
+    )
     return {
         "status": "idle",
         "session_id": None,
@@ -247,6 +252,26 @@ def _default_takeover_state() -> dict[str, Any]:
     }
 
 
+def _normalize_takeover_state(
+    state: dict[str, Any],
+    *,
+    control_state: dict[str, Any] | None = None,
+    preserve_updated_at: bool = False,
+) -> dict[str, Any]:
+    baseline = _default_takeover_state(control_state)
+    merged = {**baseline, **state}
+    merged["scope"] = _sanitize_scope(merged.get("scope", {}) if isinstance(merged.get("scope"), dict) else {})
+    merged["previous_scope"] = _sanitize_scope(
+        merged.get("previous_scope", {}) if isinstance(merged.get("previous_scope"), dict) else {}
+    )
+    merged["applied_scope"] = _sanitize_scope(
+        merged.get("applied_scope", {}) if isinstance(merged.get("applied_scope"), dict) else {}
+    )
+    existing_updated_at = str(state.get("updated_at", "")).strip() if preserve_updated_at else ""
+    merged["updated_at"] = existing_updated_at or str(baseline.get("updated_at", "")).strip() or utc_now_iso()
+    return merged
+
+
 def _read_jsonl_rows(rel_path: str) -> list[dict[str, Any]]:
     try:
         raw = _fs.read_text(rel_path)
@@ -264,6 +289,46 @@ def _read_jsonl_rows(rel_path: str) -> list[dict[str, Any]]:
         except Exception:
             continue
     return rows
+
+
+def _read_json_object(rel_path: str) -> dict[str, Any]:
+    try:
+        raw = _fs.read_text(rel_path)
+    except Exception:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _write_json_object(rel_path: str, payload: dict[str, Any]) -> None:
+    _fs.write_text(rel_path, json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _workspace_rel_path(rel_path: str) -> Path:
+    return (_workspace_root / rel_path).resolve()
+
+
+def _takeover_sessions_index_is_stale() -> bool:
+    index_path = _workspace_rel_path(_takeover_sessions_index_path)
+    if not index_path.exists():
+        return True
+    try:
+        index_mtime = index_path.stat().st_mtime_ns
+    except Exception:
+        return True
+    for rel_path in (_takeover_history_path, _takeover_activity_path, "control/handback_exports/index.jsonl"):
+        source_path = _workspace_rel_path(rel_path)
+        if not source_path.exists():
+            continue
+        try:
+            if source_path.stat().st_mtime_ns > index_mtime:
+                return True
+        except Exception:
+            return True
+    return False
 
 
 def _tail_rows(rows: list[dict[str, Any]], limit: int, cap: int = 2000) -> list[dict[str, Any]]:
@@ -412,24 +477,20 @@ def _normalize_takeover_desktop_command(command: ControlTakeoverDesktopCommand) 
     return {"kind": normalized_kind, "args": normalized_args, "reason": reason, "grounding": grounding}
 
 
-def _load_or_init_takeover_state() -> dict[str, Any]:
-    baseline = _default_takeover_state()
+def _load_or_init_takeover_state(control_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    baseline = _default_takeover_state(control_state)
     try:
         raw = _fs.read_text(_takeover_state_path)
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
-            merged = {**baseline, **parsed}
-            merged["scope"] = _sanitize_scope(
-                merged.get("scope", {}) if isinstance(merged.get("scope"), dict) else {}
+            normalized = _normalize_takeover_state(
+                parsed,
+                control_state=control_state,
+                preserve_updated_at=True,
             )
-            merged["previous_scope"] = _sanitize_scope(
-                merged.get("previous_scope", {}) if isinstance(merged.get("previous_scope"), dict) else {}
-            )
-            merged["applied_scope"] = _sanitize_scope(
-                merged.get("applied_scope", {}) if isinstance(merged.get("applied_scope"), dict) else {}
-            )
-            _fs.write_text(_takeover_state_path, json.dumps(merged, ensure_ascii=False, indent=2))
-            return merged
+            if normalized != parsed:
+                _fs.write_text(_takeover_state_path, json.dumps(normalized, ensure_ascii=False, indent=2))
+            return normalized
     except Exception:
         pass
     _fs.write_text(_takeover_state_path, json.dumps(baseline, ensure_ascii=False, indent=2))
@@ -455,17 +516,11 @@ def _resolve_active_takeover_session(session_id: str | None = None) -> tuple[dic
     return takeover_state, normalized_session_id
 
 
-def _save_takeover_state(state: dict[str, Any]) -> dict[str, Any]:
-    baseline = _default_takeover_state()
-    merged = {**baseline, **state}
-    merged["scope"] = _sanitize_scope(merged.get("scope", {}) if isinstance(merged.get("scope"), dict) else {})
-    merged["previous_scope"] = _sanitize_scope(
-        merged.get("previous_scope", {}) if isinstance(merged.get("previous_scope"), dict) else {}
-    )
-    merged["applied_scope"] = _sanitize_scope(
-        merged.get("applied_scope", {}) if isinstance(merged.get("applied_scope"), dict) else {}
-    )
-    merged["updated_at"] = utc_now_iso()
+def _save_takeover_state(
+    state: dict[str, Any],
+    control_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    merged = _normalize_takeover_state(state, control_state=control_state, preserve_updated_at=False)
     _fs.write_text(_takeover_state_path, json.dumps(merged, ensure_ascii=False, indent=2))
     return merged
 
@@ -969,8 +1024,23 @@ def _build_takeover_session_summary(
     }
 
 
-def _build_takeover_sessions(limit: int) -> list[dict[str, Any]]:
-    state = _load_or_init_takeover_state()
+def _load_takeover_sessions_index_rows() -> list[dict[str, Any]]:
+    payload = _read_json_object(_takeover_sessions_index_path)
+    rows = payload.get("sessions", []) if isinstance(payload.get("sessions"), list) else []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _save_takeover_sessions_index_rows(rows: list[dict[str, Any]]) -> None:
+    _write_json_object(
+        _takeover_sessions_index_path,
+        {
+            "updated_at": utc_now_iso(),
+            "sessions": rows,
+        },
+    )
+
+
+def _rebuild_takeover_sessions_index_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
     transitions = _read_jsonl_rows(_takeover_history_path)
     activity_rows = _read_jsonl_rows(_takeover_activity_path)
     export_rows = _read_handback_export_index_rows()
@@ -978,10 +1048,27 @@ def _build_takeover_sessions(limit: int) -> list[dict[str, Any]]:
     last_session_id = str(state.get("last_session_id") or "").strip()
 
     session_ids: set[str] = set()
-    for row in [*transitions, *activity_rows, *export_rows]:
+    transition_groups: dict[str, list[dict[str, Any]]] = {}
+    activity_groups: dict[str, list[dict[str, Any]]] = {}
+    export_groups: dict[str, list[dict[str, Any]]] = {}
+    for row in transitions:
         session_id = str(row.get("session_id", "")).strip()
-        if session_id:
-            session_ids.add(session_id)
+        if not session_id:
+            continue
+        session_ids.add(session_id)
+        transition_groups.setdefault(session_id, []).append(row)
+    for row in activity_rows:
+        session_id = str(row.get("session_id", "")).strip()
+        if not session_id:
+            continue
+        session_ids.add(session_id)
+        activity_groups.setdefault(session_id, []).append(row)
+    for row in export_rows:
+        session_id = str(row.get("session_id", "")).strip()
+        if not session_id:
+            continue
+        session_ids.add(session_id)
+        export_groups.setdefault(session_id, []).append(row)
     if active_session_id:
         session_ids.add(active_session_id)
     if last_session_id:
@@ -989,20 +1076,86 @@ def _build_takeover_sessions(limit: int) -> list[dict[str, Any]]:
 
     summaries: list[dict[str, Any]] = []
     for session_id in session_ids:
-        session_transitions = [row for row in transitions if str(row.get("session_id", "")).strip() == session_id]
-        session_activity = [row for row in activity_rows if str(row.get("session_id", "")).strip() == session_id]
-        session_exports = [row for row in export_rows if str(row.get("session_id", "")).strip() == session_id]
         summaries.append(
             _build_takeover_session_summary(
                 session_id=session_id,
                 state=state,
-                transitions=session_transitions,
-                activity=session_activity,
-                exports=session_exports,
+                transitions=transition_groups.get(session_id, []),
+                activity=activity_groups.get(session_id, []),
+                exports=export_groups.get(session_id, []),
             )
         )
     summaries.sort(key=lambda row: str(row.get("last_event_ts", "")), reverse=True)
-    return summaries[: max(0, min(limit, 500))]
+    _save_takeover_sessions_index_rows(summaries)
+    return summaries
+
+
+def _placeholder_takeover_session_summary(session_id: str, state: dict[str, Any]) -> dict[str, Any]:
+    objective = str(state.get("objective", "")).strip() or None
+    status = "idle"
+    if str(state.get("session_id") or "").strip() == session_id:
+        status = str(state.get("status", "idle")).strip().lower() or "idle"
+    return {
+        "session_id": session_id,
+        "status": status,
+        "objective": objective,
+        "requested_by": None,
+        "requested_at": str(state.get("requested_at") or "").strip() or None,
+        "confirmed_at": str(state.get("confirmed_at") or "").strip() or None,
+        "handed_back_at": str(state.get("handed_back_at") or "").strip() or None,
+        "pending_approvals": int(state.get("handback_pending_approvals", 0) or 0),
+        "handback_fabric_posture": (
+            state.get("handback_fabric_posture", {})
+            if isinstance(state.get("handback_fabric_posture"), dict)
+            else None
+        ),
+        "counts": {"transitions": 0, "activity": 0, "exports": 0},
+        "last_event_ts": str(state.get("updated_at") or "").strip() or None,
+        "last_transition_kind": None,
+        "last_activity_kind": None,
+        "last_export_id": None,
+        "orb_authority": None,
+    }
+
+
+def _overlay_takeover_session_state(rows: list[dict[str, Any]], state: dict[str, Any]) -> list[dict[str, Any]]:
+    active_session_id = str(state.get("session_id") or "").strip()
+    last_session_id = str(state.get("last_session_id") or "").strip()
+    normalized_rows: list[dict[str, Any]] = []
+    seen_session_ids: set[str] = set()
+    for row in rows:
+        session_id = str(row.get("session_id", "")).strip()
+        if not session_id:
+            continue
+        seen_session_ids.add(session_id)
+        normalized = dict(row)
+        normalized["status"] = (
+            str(state.get("status", "idle")).strip().lower() or "idle" if session_id == active_session_id else "idle"
+        )
+        normalized_rows.append(normalized)
+    for session_id in (active_session_id, last_session_id):
+        if session_id and session_id not in seen_session_ids:
+            normalized_rows.append(_placeholder_takeover_session_summary(session_id, state))
+    normalized_rows.sort(key=lambda row: str(row.get("last_event_ts", "")), reverse=True)
+    return normalized_rows
+
+
+def _get_takeover_sessions_index_rows(state: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = _load_takeover_sessions_index_rows()
+    if _takeover_sessions_index_is_stale() or not rows:
+        rows = _rebuild_takeover_sessions_index_rows(state)
+    return _overlay_takeover_session_state(rows, state)
+
+
+def _build_takeover_sessions(
+    limit: int,
+    *,
+    state: dict[str, Any] | None = None,
+    control_state: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    state = state if isinstance(state, dict) else _load_or_init_takeover_state(control_state)
+    rows = _get_takeover_sessions_index_rows(state)
+    return rows[: max(0, min(limit, 500))]
 
 
 def _remote_feed_risk_tier(kind: str) -> str:
@@ -1507,10 +1660,11 @@ def control_remote_state(request: Request, approval_limit: int = 10, session_lim
     _enforce_remote_control("control.remote.read")
     role = _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
+    approval_snapshot = load_approval_snapshot(_fs)
     control_state = load_or_init_control_state(_fs, _repo_root, _workspace_root)
     takeover_state = _load_or_init_takeover_state()
     sessions = _build_takeover_sessions(limit=session_limit)
-    pending_approvals = list_requests(_fs, status="pending", limit=approval_limit)
+    pending_approvals = list_requests(_fs, status="pending", limit=approval_limit, snapshot=approval_snapshot)
     latest_session = sessions[0] if sessions else {}
     remote_write_allowed = can(role, "control.remote.write")
     approvals_decide_allowed = can(role, "approvals.decide")
@@ -1562,7 +1716,7 @@ def control_remote_state(request: Request, approval_limit: int = 10, session_lim
             "latest_session": latest_session,
         },
         "approvals": {
-            "pending_count": pending_count(_fs),
+            "pending_count": pending_count(_fs, snapshot=approval_snapshot),
             "pending": pending_approvals,
         },
         "sessions": {
@@ -1585,16 +1739,18 @@ def control_remote_approvals(
     _enforce_remote_rbac(request, "control.remote.read")
     _enforce_remote_rbac(request, "approvals.read")
     remote_node = _resolve_remote_approval_node(node_id, require_active=True)
+    approval_snapshot = load_approval_snapshot(_fs)
     approvals_list = list_requests(
         _fs,
         status=str(status).strip().lower() or None,
         action=str(action).strip() if action is not None else None,
         limit=limit,
+        snapshot=approval_snapshot,
     )
     return {
         "status": "ok",
         "count": len(approvals_list),
-        "pending_count": pending_count(_fs),
+        "pending_count": pending_count(_fs, snapshot=approval_snapshot),
         "approvals": approvals_list,
         "via_node": _remote_approval_node_context(remote_node) if remote_node is not None else None,
     }
@@ -2375,7 +2531,8 @@ def _control_remote_approval_decision(
             detail={"message": assessment["message"], "quarantine": quarantine},
         )
 
-    before = get_request(_fs, normalized_approval_id)
+    approval_snapshot = load_approval_snapshot(_fs)
+    before = get_request(_fs, normalized_approval_id, snapshot=approval_snapshot)
     if before is None:
         raise HTTPException(status_code=404, detail=f"Approval not found: {normalized_approval_id}")
     via_node = _remote_approval_node_context(remote_node) if remote_node is not None else None
@@ -2388,6 +2545,7 @@ def _control_remote_approval_decision(
             decision=decision,
             decided_by=role,
             note=normalized_note,
+            snapshot=approval_snapshot,
             metadata={
                 "decision_surface": "control.remote.approvals",
                 "via_node": via_node,

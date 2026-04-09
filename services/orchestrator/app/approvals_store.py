@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
+import threading
+from typing import Any, Iterable
 from uuid import uuid4
 
 from francis_core.clock import utc_now_iso
@@ -10,14 +13,23 @@ from francis_policy.approvals import requires_approval
 APPROVAL_REQUESTS_PATH = "approvals/requests.jsonl"
 DECISIONS_PATH = "journals/decisions.jsonl"
 VALID_DECISIONS = {"approved", "rejected"}
+_APPROVAL_SNAPSHOT_CACHE_LOCK = threading.Lock()
+_APPROVAL_SNAPSHOT_CACHE: dict[
+    str,
+    tuple[tuple[str, str], ApprovalSnapshot],
+] = {}
 
 
-def _read_jsonl(fs: WorkspaceFS, rel_path: str) -> list[dict]:
-    try:
-        raw = fs.read_text(rel_path)
-    except Exception:
-        return []
-    rows: list[dict] = []
+@dataclass(frozen=True, slots=True)
+class ApprovalSnapshot:
+    approvals: tuple[dict[str, Any], ...]
+    approvals_by_id: dict[str, dict[str, Any]]
+    approvals_by_action: dict[str, tuple[dict[str, Any], ...]]
+    pending_count: int
+
+
+def _parse_jsonl_text(raw: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for line in raw.splitlines():
         line = line.strip()
         if not line:
@@ -31,16 +43,28 @@ def _read_jsonl(fs: WorkspaceFS, rel_path: str) -> list[dict]:
     return rows
 
 
-def _append_jsonl(fs: WorkspaceFS, rel_path: str, row: dict) -> None:
-    rows = _read_jsonl(fs, rel_path)
-    rows.append(row)
-    payload = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in rows)
-    fs.write_text(rel_path, payload)
+def _read_jsonl(fs: WorkspaceFS, rel_path: str) -> list[dict[str, Any]]:
+    try:
+        raw = fs.read_text(rel_path)
+    except Exception:
+        return []
+    return _parse_jsonl_text(raw)
 
 
-def _latest_decisions_map(fs: WorkspaceFS) -> dict[str, dict]:
-    rows = _read_jsonl(fs, DECISIONS_PATH)
-    latest: dict[str, dict] = {}
+def _read_workspace_text(fs: WorkspaceFS, rel_path: str) -> str:
+    path = (fs.roots[0] / rel_path).resolve()
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+
+def _append_jsonl(fs: WorkspaceFS, rel_path: str, row: dict[str, Any]) -> None:
+    fs.append_jsonl(rel_path, row)
+
+
+def _latest_decisions_map_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
     for row in rows:
         if str(row.get("kind", "")).strip().lower() != "approval.decision":
             continue
@@ -51,7 +75,10 @@ def _latest_decisions_map(fs: WorkspaceFS) -> dict[str, dict]:
     return latest
 
 
-def _materialize_status(request: dict, latest_decisions: dict[str, dict]) -> dict:
+def _materialize_status(
+    request: dict[str, Any],
+    latest_decisions: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     out = dict(request)
     request_id = str(out.get("id", "")).strip()
     status = "pending"
@@ -67,6 +94,114 @@ def _materialize_status(request: dict, latest_decisions: dict[str, dict]) -> dic
     return out
 
 
+def _materialize_requests_rows(
+    request_rows: list[dict[str, Any]],
+    decision_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    latest_decisions = _latest_decisions_map_rows(decision_rows)
+    return [_materialize_status(row, latest_decisions) for row in request_rows]
+
+
+def _materialize_requests(fs: WorkspaceFS) -> list[dict[str, Any]]:
+    rows = _read_jsonl(fs, APPROVAL_REQUESTS_PATH)
+    decision_rows = _read_jsonl(fs, DECISIONS_PATH)
+    latest_decisions = _latest_decisions_map_rows(decision_rows)
+    return [_materialize_status(row, latest_decisions) for row in rows]
+
+
+def _normalize_action(action: str | None) -> str | None:
+    normalized = str(action or "").strip().lower()
+    return normalized or None
+
+
+def _normalize_status(status: str | None) -> str | None:
+    normalized = str(status or "").strip().lower()
+    return normalized or None
+
+
+def load_approval_snapshot(fs: WorkspaceFS) -> ApprovalSnapshot:
+    workspace_root = fs.roots[0]
+    cache_key = str(workspace_root)
+    raw_texts = (
+        _read_workspace_text(fs, APPROVAL_REQUESTS_PATH),
+        _read_workspace_text(fs, DECISIONS_PATH),
+    )
+    with _APPROVAL_SNAPSHOT_CACHE_LOCK:
+        cached = _APPROVAL_SNAPSHOT_CACHE.get(cache_key)
+        if cached is not None and cached[0] == raw_texts:
+            return cached[1]
+    approvals = _materialize_requests_rows(
+        _parse_jsonl_text(raw_texts[0]),
+        _parse_jsonl_text(raw_texts[1]),
+    )
+    approvals_by_id: dict[str, dict[str, Any]] = {}
+    approvals_by_action_lists: dict[str, list[dict[str, Any]]] = {}
+    pending_count_value = 0
+    normalized_rows: list[dict[str, Any]] = []
+    for row in approvals:
+        normalized = dict(row)
+        normalized_rows.append(normalized)
+        approval_id = str(normalized.get("id", "")).strip()
+        if approval_id:
+            approvals_by_id[approval_id] = normalized
+        action_key = _normalize_action(str(normalized.get("action", "")))
+        if action_key:
+            approvals_by_action_lists.setdefault(action_key, []).append(normalized)
+        if _normalize_status(str(normalized.get("status", ""))) == "pending":
+            pending_count_value += 1
+    approvals_by_action = {key: tuple(value) for key, value in approvals_by_action_lists.items()}
+    snapshot = ApprovalSnapshot(
+        approvals=tuple(normalized_rows),
+        approvals_by_id=approvals_by_id,
+        approvals_by_action=approvals_by_action,
+        pending_count=pending_count_value,
+    )
+    with _APPROVAL_SNAPSHOT_CACHE_LOCK:
+        _APPROVAL_SNAPSHOT_CACHE[cache_key] = (raw_texts, snapshot)
+    return snapshot
+
+
+def find_latest_request_by_metadata(
+    fs: WorkspaceFS,
+    *,
+    action: str | None = None,
+    metadata_keys: Iterable[str],
+    metadata_value: str,
+    status: str | None = None,
+    snapshot: ApprovalSnapshot | None = None,
+    case_insensitive: bool = False,
+) -> dict[str, Any] | None:
+    approval_snapshot = snapshot if isinstance(snapshot, ApprovalSnapshot) else load_approval_snapshot(fs)
+    normalized_action = _normalize_action(action)
+    normalized_status = _normalize_status(status)
+    normalized_value = str(metadata_value).strip()
+    if case_insensitive:
+        normalized_value = normalized_value.lower()
+    keys = [str(key).strip() for key in metadata_keys if str(key).strip()]
+    if not keys or not normalized_value:
+        return None
+    rows = (
+        approval_snapshot.approvals_by_action.get(normalized_action, ())
+        if normalized_action is not None
+        else approval_snapshot.approvals
+    )
+    for row in reversed(rows):
+        if normalized_status is not None and _normalize_status(str(row.get("status", ""))) != normalized_status:
+            continue
+        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+        if any(
+            (
+                str(metadata.get(key, "")).strip().lower()
+                if case_insensitive
+                else str(metadata.get(key, "")).strip()
+            )
+            == normalized_value
+            for key in keys
+        ):
+            return dict(row)
+    return None
+
+
 def create_request(
     fs: WorkspaceFS,
     *,
@@ -74,8 +209,8 @@ def create_request(
     action: str,
     reason: str,
     requested_by: str,
-    metadata: dict | None = None,
-) -> dict:
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     request = {
         "id": str(uuid4()),
         "ts": utc_now_iso(),
@@ -96,32 +231,39 @@ def list_requests(
     status: str | None = None,
     action: str | None = None,
     limit: int = 50,
-) -> list[dict]:
-    rows = _read_jsonl(fs, APPROVAL_REQUESTS_PATH)
-    latest_decisions = _latest_decisions_map(fs)
-    materialized = [_materialize_status(row, latest_decisions) for row in rows]
-
-    filtered = materialized
-    if status is not None:
-        normalized = status.strip().lower()
-        filtered = [row for row in filtered if str(row.get("status", "")).lower() == normalized]
-    if action is not None:
-        normalized_action = action.strip().lower()
-        filtered = [row for row in filtered if str(row.get("action", "")).lower() == normalized_action]
-
+    snapshot: ApprovalSnapshot | None = None,
+) -> list[dict[str, Any]]:
     n = max(0, min(limit, 200))
     if n == 0:
         return []
-    return filtered[-n:]
-
-
-def get_request(fs: WorkspaceFS, approval_id: str) -> dict | None:
-    rows = _read_jsonl(fs, APPROVAL_REQUESTS_PATH)
-    latest_decisions = _latest_decisions_map(fs)
+    approval_snapshot = snapshot if isinstance(snapshot, ApprovalSnapshot) else load_approval_snapshot(fs)
+    normalized_status = _normalize_status(status)
+    normalized_action = _normalize_action(action)
+    rows = (
+        approval_snapshot.approvals_by_action.get(normalized_action, ())
+        if normalized_action is not None
+        else approval_snapshot.approvals
+    )
+    selected: list[dict[str, Any]] = []
     for row in reversed(rows):
-        if str(row.get("id", "")).strip() == approval_id:
-            return _materialize_status(row, latest_decisions)
-    return None
+        if normalized_status is not None and _normalize_status(str(row.get("status", ""))) != normalized_status:
+            continue
+        selected.append(dict(row))
+        if len(selected) >= n:
+            break
+    selected.reverse()
+    return selected
+
+
+def get_request(
+    fs: WorkspaceFS,
+    approval_id: str,
+    *,
+    snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any] | None:
+    approval_snapshot = snapshot if isinstance(snapshot, ApprovalSnapshot) else load_approval_snapshot(fs)
+    row = approval_snapshot.approvals_by_id.get(str(approval_id).strip())
+    return dict(row) if isinstance(row, dict) else None
 
 
 def add_decision(
@@ -132,9 +274,10 @@ def add_decision(
     decision: str,
     decided_by: str,
     note: str = "",
-    metadata: dict | None = None,
-) -> dict | None:
-    request = get_request(fs, approval_id)
+    metadata: dict[str, Any] | None = None,
+    snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any] | None:
+    request = get_request(fs, approval_id, snapshot=snapshot)
     if request is None:
         return None
 
@@ -167,8 +310,9 @@ def add_decision(
     return event
 
 
-def pending_count(fs: WorkspaceFS) -> int:
-    return len(list_requests(fs, status="pending", limit=200))
+def pending_count(fs: WorkspaceFS, *, snapshot: ApprovalSnapshot | None = None) -> int:
+    approval_snapshot = snapshot if isinstance(snapshot, ApprovalSnapshot) else load_approval_snapshot(fs)
+    return approval_snapshot.pending_count
 
 
 def ensure_action_approved(
@@ -180,14 +324,15 @@ def ensure_action_approved(
     reason: str,
     approval_required: bool | None = None,
     approval_id: str | None = None,
-    metadata: dict | None = None,
+    metadata: dict[str, Any] | None = None,
+    snapshot: ApprovalSnapshot | None = None,
 ) -> tuple[bool, dict]:
     needs_approval = requires_approval(action) if approval_required is None else bool(approval_required)
     if not needs_approval:
         return (True, {"approval_required": False})
 
     if approval_id:
-        existing = get_request(fs, approval_id.strip())
+        existing = get_request(fs, approval_id.strip(), snapshot=snapshot)
         if existing is None:
             return (
                 False,

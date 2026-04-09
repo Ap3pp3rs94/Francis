@@ -33,7 +33,20 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
     return ipcRenderer.invoke("overlay:set-ignore-mouse-events", assertBoolean("ignore", ignore));
   },
   setOrbIgnoreMouseEvents(ignore) {
-    return ipcRenderer.invoke("overlay:set-orb-ignore-mouse-events", assertBoolean("ignore", ignore));
+    const nextIgnore = assertBoolean("ignore", ignore);
+    return ipcRenderer.invoke(
+      "overlay:set-orb-ownership-mode",
+      nextIgnore ? "pass_through" : "interactable_orb",
+      "legacy_orb_mouse_events",
+    );
+  },
+  setOrbOwnershipMode(modeId, reason = "") {
+    const normalizedReason = String(reason || "").trim();
+    return ipcRenderer.invoke(
+      "overlay:set-orb-ownership-mode",
+      assertString("modeId", modeId),
+      normalizedReason,
+    );
   },
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", assertBoolean("value", value));
@@ -103,6 +116,9 @@ contextBridge.exposeInMainWorld("FrancisDesktop", {
   },
   panicStop() {
     return ipcRenderer.invoke("overlay:panic-stop");
+  },
+  pauseAuthority() {
+    return ipcRenderer.invoke("overlay:pause-authority");
   },
   showLens() {
     return ipcRenderer.invoke("overlay:show-lens");

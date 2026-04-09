@@ -75,11 +75,13 @@ def _sanitize_state(raw: dict[str, Any], now: datetime) -> dict[str, Any]:
             continue
         out_last[k] = ts.isoformat()
 
+    updated_at = _parse_iso(str(raw.get("updated_at", "")).strip() or None)
+
     return {
         "date": today,
         "counts": out_counts,
         "last_executed_at": out_last,
-        "updated_at": now.isoformat(),
+        "updated_at": updated_at.isoformat() if updated_at is not None else now.isoformat(),
     }
 
 
@@ -90,7 +92,8 @@ def load_state(fs: WorkspaceFS, *, now: datetime | None = None) -> dict[str, Any
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
             state = _sanitize_state(parsed, current)
-            fs.write_text(BUDGET_STATE_PATH, json.dumps(state, ensure_ascii=False, indent=2))
+            if parsed != state:
+                fs.write_text(BUDGET_STATE_PATH, json.dumps(state, ensure_ascii=False, indent=2))
             return state
     except Exception:
         pass

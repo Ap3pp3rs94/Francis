@@ -156,6 +156,7 @@ def _normalize_node(
     repo_root: Path,
     workspace_root: Path,
     local: bool,
+    reconcile: bool = True,
 ) -> dict[str, Any]:
     now = utc_now_iso()
     node_id = str(entry.get("node_id", "")).strip() or f"node-{uuid4().hex[:12]}"
@@ -198,7 +199,9 @@ def _normalize_node(
         "revoked_at": str(entry.get("revoked_at", "")).strip() or None,
         "revocation_reason": str(entry.get("revocation_reason", "")).strip(),
     }
-    return _reconcile_node(normalized, local=local)
+    if reconcile:
+        return _reconcile_node(normalized, local=local)
+    return normalized
 
 
 def _reconcile_node(entry: dict[str, Any], *, local: bool) -> dict[str, Any]:
@@ -252,9 +255,63 @@ def _read_topology(fs: WorkspaceFS) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _write_topology(fs: WorkspaceFS, topology: dict[str, Any]) -> dict[str, Any]:
-    fs.write_text(FEDERATION_TOPOLOGY_PATH, json.dumps(topology, ensure_ascii=False, indent=2))
-    return topology
+def _normalize_topology_document(
+    parsed: dict[str, Any] | None,
+    *,
+    repo_root: Path,
+    workspace_root: Path,
+) -> dict[str, Any]:
+    source = parsed if isinstance(parsed, dict) else {}
+    local_entry = source.get("local_node", {}) if isinstance(source.get("local_node"), dict) else {}
+    paired_entries = source.get("paired_nodes", []) if isinstance(source.get("paired_nodes"), list) else []
+    return {
+        "version": int(source.get("version", 1) or 1),
+        "updated_at": str(source.get("updated_at", "")).strip() or utc_now_iso(),
+        "local_node": _normalize_node(
+            local_entry or _default_local_node(repo_root=repo_root, workspace_root=workspace_root),
+            repo_root=repo_root,
+            workspace_root=workspace_root,
+            local=True,
+            reconcile=False,
+        ),
+        "paired_nodes": [
+            _normalize_node(
+                entry,
+                repo_root=repo_root,
+                workspace_root=workspace_root,
+                local=False,
+                reconcile=False,
+            )
+            for entry in paired_entries
+            if isinstance(entry, dict)
+        ],
+    }
+
+
+def _reconcile_topology(topology: dict[str, Any]) -> dict[str, Any]:
+    local_entry = topology.get("local_node", {}) if isinstance(topology.get("local_node"), dict) else {}
+    paired_entries = topology.get("paired_nodes", []) if isinstance(topology.get("paired_nodes"), list) else []
+    return {
+        **topology,
+        "local_node": _reconcile_node(dict(local_entry), local=True),
+        "paired_nodes": [
+            _reconcile_node(dict(entry), local=False)
+            for entry in paired_entries
+            if isinstance(entry, dict)
+        ],
+    }
+
+
+def _write_topology(
+    fs: WorkspaceFS,
+    topology: dict[str, Any],
+    *,
+    repo_root: Path,
+    workspace_root: Path,
+) -> dict[str, Any]:
+    normalized = _normalize_topology_document(topology, repo_root=repo_root, workspace_root=workspace_root)
+    fs.write_text(FEDERATION_TOPOLOGY_PATH, json.dumps(normalized, ensure_ascii=False, indent=2))
+    return _reconcile_topology(normalized)
 
 
 def get_paired_node(
@@ -291,21 +348,10 @@ def load_or_init_topology(
     workspace_root: Path,
 ) -> dict[str, Any]:
     parsed = _read_topology(fs)
-    if not isinstance(parsed, dict):
-        parsed = {}
-    local_entry = parsed.get("local_node", {}) if isinstance(parsed.get("local_node"), dict) else {}
-    paired_entries = parsed.get("paired_nodes", []) if isinstance(parsed.get("paired_nodes"), list) else []
-    topology = {
-        "version": int(parsed.get("version", 1) or 1),
-        "updated_at": utc_now_iso(),
-        "local_node": _normalize_node(local_entry or _default_local_node(repo_root=repo_root, workspace_root=workspace_root), repo_root=repo_root, workspace_root=workspace_root, local=True),
-        "paired_nodes": [
-            _normalize_node(entry, repo_root=repo_root, workspace_root=workspace_root, local=False)
-            for entry in paired_entries
-            if isinstance(entry, dict)
-        ],
-    }
-    return _write_topology(fs, topology)
+    topology = _normalize_topology_document(parsed, repo_root=repo_root, workspace_root=workspace_root)
+    if topology != parsed:
+        return _write_topology(fs, topology, repo_root=repo_root, workspace_root=workspace_root)
+    return _reconcile_topology(topology)
 
 
 def _replace_paired_node(topology: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
@@ -366,7 +412,12 @@ def pair_node(
         workspace_root=workspace_root,
         local=False,
     )
-    _write_topology(fs, _replace_paired_node(topology, node))
+    _write_topology(
+        fs,
+        _replace_paired_node(topology, node),
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+    )
     return node
 
 
@@ -397,7 +448,12 @@ def heartbeat_node(
         if isinstance(capabilities, dict):
             entry["capabilities"] = _normalize_capabilities(capabilities)
         normalized = _normalize_node(entry, repo_root=repo_root, workspace_root=workspace_root, local=False)
-        _write_topology(fs, _replace_paired_node(topology, normalized))
+        _write_topology(
+            fs,
+            _replace_paired_node(topology, normalized),
+            repo_root=repo_root,
+            workspace_root=workspace_root,
+        )
         return normalized
     return None
 
@@ -442,7 +498,12 @@ def sync_node(
             }
         )
         normalized = _normalize_node(entry, repo_root=repo_root, workspace_root=workspace_root, local=False)
-        _write_topology(fs, _replace_paired_node(topology, normalized))
+        _write_topology(
+            fs,
+            _replace_paired_node(topology, normalized),
+            repo_root=repo_root,
+            workspace_root=workspace_root,
+        )
         return normalized
     return None
 
@@ -467,6 +528,11 @@ def revoke_node(
         entry["revocation_reason"] = reason.strip()
         entry["last_sync_summary"] = reason.strip() or "Node trust revoked."
         normalized = _normalize_node(entry, repo_root=repo_root, workspace_root=workspace_root, local=False)
-        _write_topology(fs, _replace_paired_node(topology, normalized))
+        _write_topology(
+            fs,
+            _replace_paired_node(topology, normalized),
+            repo_root=repo_root,
+            workspace_root=workspace_root,
+        )
         return normalized
     return None

@@ -3,6 +3,7 @@ function buildDegradedModePosture({
   migration = null,
   update = null,
   recovery = null,
+  runtimeHealth = null,
   hud = null,
   provider = null,
   authority = null,
@@ -23,24 +24,32 @@ function buildDegradedModePosture({
   const authoritySummary = String(authority?.summary || "");
   const signingSeverity = String(signing?.severity || "low");
   const signingSummary = String(signing?.summary || "");
+  const runtimeStatus = String(runtimeHealth?.status || "nominal").trim().toLowerCase() || "nominal";
+  const runtimeSummary = String(runtimeHealth?.summary || runtimeHealth?.detail || "");
 
   let mode = "nominal";
   let summary = "Shell posture is nominal.";
 
-  if (blockedChecks > 0 || blockedMigrations > 0 || hudMode === "crashed") {
+  if (blockedChecks > 0 || blockedMigrations > 0 || hudMode === "crashed" || runtimeStatus === "disconnected") {
     mode = "restricted";
     summary =
       blockedMigrations > 0
         ? `${blockedMigrations} migration check${blockedMigrations === 1 ? " is" : "s are"} blocked. Treat continuity as unsafe until repaired.`
+        : runtimeStatus === "disconnected"
+          ? runtimeSummary || "The local operator runtime is disconnected. Treat the shell as restricted until stable proofs return."
         : hudMode === "crashed"
           ? "The managed HUD crashed. Treat the overlay as restricted until runtime health is restored."
           : `${blockedChecks} preflight check${blockedChecks === 1 ? " is" : "s are"} blocked. Treat the shell as restricted until repaired.`;
-  } else if (attentionChecks > 0 || attentionMigrations > 0 || updatePending || recoveryNeeded || !hudReady) {
+  } else if (attentionChecks > 0 || attentionMigrations > 0 || updatePending || recoveryNeeded || !hudReady || runtimeStatus === "recovering" || runtimeStatus === "degraded") {
     mode = "reduced";
     summary = updatePending
       ? "A new build or schema change is pending review. Continuity is visible, but not fully settled."
       : attentionMigrations > 0
         ? `${attentionMigrations} migration check${attentionMigrations === 1 ? "" : "s"} need review before continuity is treated as current.`
+        : runtimeStatus === "recovering"
+          ? runtimeSummary || "The local operator runtime is recovering. Wait for stable proofs before treating the shell as current."
+        : runtimeStatus === "degraded"
+          ? runtimeSummary || "The local operator runtime is degraded. Keep work review-first until stable proofs return."
         : recoveryNeeded
           ? "Recovery needs inspection before the shell is treated as fully normal."
           : !hudReady
@@ -72,6 +81,9 @@ function buildDegradedModePosture({
     restrictions.push("Treat retained continuity as inspection-only until blocked checks or migrations are cleared.");
   } else if (mode === "reduced") {
     restrictions.push("Treat continuity as review-first until update, migration, or recovery posture returns to current.");
+    if (runtimeStatus === "recovering" || runtimeStatus === "degraded") {
+      restrictions.push("Treat the orb runtime as proof-gated until stable consecutive healthy checks are re-established.");
+    }
     if (providerSeverity === "high" || providerSeverity === "medium") {
       restrictions.push("Treat model-backed execution as narrowed until provider posture is explicit and current.");
     }
@@ -122,6 +134,11 @@ function buildDegradedModePosture({
         label: "HUD Runtime",
         value: hudMode,
         tone: hudMode === "crashed" ? "high" : hudMode === "managed" ? "medium" : "low",
+      },
+      {
+        label: "Orb Runtime",
+        value: runtimeStatus,
+        tone: runtimeStatus === "disconnected" ? "high" : runtimeStatus === "recovering" || runtimeStatus === "degraded" ? "medium" : "low",
       },
       {
         label: "Provider",

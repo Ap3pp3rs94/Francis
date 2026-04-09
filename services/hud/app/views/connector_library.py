@@ -10,7 +10,7 @@ from francis_connectors.library import (
 )
 from francis_core.workspace_fs import WorkspaceFS
 from services.hud.app.state import build_lens_snapshot, get_workspace_root
-from services.orchestrator.app.approvals_store import list_requests
+from services.orchestrator.app.approvals_store import ApprovalSnapshot, list_requests
 from services.orchestrator.app.control_state import check_action_allowed
 
 
@@ -52,6 +52,49 @@ def _approval_for_connector(fs: WorkspaceFS, connector_id: str, *, action: str) 
         if str(metadata.get("connector_id", "")).strip() == connector_id:
             return row
     return None
+
+
+def _approval_index(
+    fs: WorkspaceFS,
+    *,
+    action: str,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for row in list_requests(fs, action=action, limit=200, snapshot=approval_snapshot):
+        if not isinstance(row, dict):
+            continue
+        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+        connector_id = str(metadata.get("connector_id", "")).strip()
+        if connector_id:
+            indexed[connector_id] = row
+    return indexed
+
+
+def _resolve_action_state(
+    control_state: dict[str, tuple[bool, str]],
+    key: str,
+    *,
+    fs: WorkspaceFS,
+    repo_root: Path,
+    workspace_root: Path,
+    app: str,
+    action: str,
+    mutating: bool,
+) -> tuple[bool, str]:
+    cached = control_state.get(key)
+    if cached is not None:
+        return cached
+    resolved = _action_allowed(
+        fs=fs,
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        app=app,
+        action=action,
+        mutating=mutating,
+    )
+    control_state[key] = resolved
+    return resolved
 
 
 def _focus_entry(entries: list[dict[str, Any]], *, focus_connector_id: str = "") -> dict[str, Any] | None:
@@ -158,12 +201,16 @@ def _controls(
     workspace_root: Path,
     entry: dict[str, Any],
     revoke_approval: dict[str, Any] | None,
+    control_state: dict[str, tuple[bool, str]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     connector_id = str(entry.get("id", "")).strip()
     status = str(entry.get("status", "available")).strip().lower() or "available"
     revoke_status = str((revoke_approval or {}).get("status", "")).strip().lower()
     revoke_id = str((revoke_approval or {}).get("id", "")).strip()
-    quarantine_allowed, quarantine_reason = _action_allowed(
+    shared_control_state = control_state if isinstance(control_state, dict) else {}
+    quarantine_allowed, quarantine_reason = _resolve_action_state(
+        shared_control_state,
+        "connectors.quarantine",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -171,7 +218,9 @@ def _controls(
         action="connectors.quarantine",
         mutating=True,
     )
-    revoke_allowed, revoke_reason = _action_allowed(
+    revoke_allowed, revoke_reason = _resolve_action_state(
+        shared_control_state,
+        "connectors.revoke",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -179,7 +228,9 @@ def _controls(
         action="connectors.revoke",
         mutating=True,
     )
-    request_allowed, request_reason = _action_allowed(
+    request_allowed, request_reason = _resolve_action_state(
+        shared_control_state,
+        "approvals.request",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -257,7 +308,11 @@ def _entry_summary(entry: dict[str, Any], *, revoke_approval: dict[str, Any] | N
     return summary
 
 
-def get_connector_library_view(*, snapshot: dict[str, object] | None = None) -> dict[str, Any]:
+def get_connector_library_view(
+    *,
+    snapshot: dict[str, object] | None = None,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
     workspace_root, repo_root, fs = _workspace_context()
@@ -265,11 +320,13 @@ def get_connector_library_view(*, snapshot: dict[str, object] | None = None) -> 
     library = build_connector_library(entries)
     focus_entry = _focus_entry(entries)
     focus_connector_id = str((focus_entry or {}).get("id", "")).strip()
+    revoke_approvals = _approval_index(fs, action="connectors.revoke", approval_snapshot=approval_snapshot)
+    control_state: dict[str, tuple[bool, str]] = {}
 
     rows: list[dict[str, Any]] = []
     for entry in entries:
         connector_id = str(entry.get("id", "")).strip()
-        revoke_approval = _approval_for_connector(fs, connector_id, action="connectors.revoke") if connector_id else None
+        revoke_approval = revoke_approvals.get(connector_id) if connector_id else None
         detail_state = _detail_state(connector_id, focus_connector_id)
         provenance = build_connector_provenance(entry)
         rows.append(
@@ -291,6 +348,7 @@ def get_connector_library_view(*, snapshot: dict[str, object] | None = None) -> 
                     workspace_root=workspace_root,
                     entry=entry,
                     revoke_approval=revoke_approval,
+                    control_state=control_state,
                 ),
             }
         )

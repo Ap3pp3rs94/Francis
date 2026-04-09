@@ -326,6 +326,8 @@ At a high level, the repository is shaped like this:
 5. Shared packages provide common policy, state, memory, presence, and LLM-facing logic.
 6. Runtime artifacts are stored locally for continuity, auditability, and receipts.
 
+For the practical "where should new work land?" answer, use [`docs/architecture/MODULE_BOUNDARIES.md`](./docs/architecture/MODULE_BOUNDARIES.md). That document separates the current primary runtime spine from compatibility wrappers and adjacent prototype surfaces.
+
 ### Main orchestrator route families
 
 The orchestrator currently exposes families such as:
@@ -361,6 +363,7 @@ Use this as the practical top-level orientation:
 * `services/` - runtime service surfaces
 * `packages/` - shared internal libraries
 * `docs/` - architecture, governance, operations, product, business, and lore
+  * [`docs/architecture/MODULE_BOUNDARIES.md`](./docs/architecture/MODULE_BOUNDARIES.md) - practical map of primary runtime surfaces vs compatibility wrappers vs adjacent code
 * `tests/` - unit, integration, eval, and red-team coverage
 * `policies/` - policy surfaces
 * `schemas/` - schema contracts

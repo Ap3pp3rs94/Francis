@@ -7,6 +7,12 @@ The shell now splits into two surfaces:
 - a dedicated Orb window that lives on the desktop outside the HUD
 - a separate Lens window that stays hidden until the Orb opens it
 
+The current operator contract is:
+
+- Orb: compact body plus strip only
+- Lens: deeper diagnostics, receipts, runtime-health detail, and longer interaction
+- no inline mini-console on the live orb window
+
 ## What It Does
 
 - creates a transparent, frameless, always-on-top desktop Orb window
@@ -57,11 +63,14 @@ The shell now splits into two surfaces:
 3. Launch the overlay:
    - `npm run overlay:start`
 
+That default launch path is intentionally clean and detached so the desktop Orb can appear without a separate black console host overlapping the work surface.
+
 For a guard-railed dev launch:
 
 - `npm run overlay:dev`
+- `npm run overlay:start:console`
 
-That PowerShell helper checks the HUD URL first and, if it is down, lets the Electron shell attempt managed HUD startup automatically.
+`overlay:dev` keeps the console-bound engineering path on purpose: it checks the HUD URL first and, if it is down, lets the Electron shell attempt managed HUD startup automatically.
 
 ## Package
 
@@ -151,6 +160,11 @@ See [`docs/operations/WINDOWS_PUBLIC_SIGNING.md`](../docs/operations/WINDOWS_PUB
 - the Orb now lives in its own desktop window while the Lens HUD opens separately in external-Orb mode, and the Orb window itself is backed by the HUD's orb-only surface so the renderer path stays canonical
 - the shell now attaches live Orb perception locally by sampling the current cursor display and the foreground window title/process into the Orb surface
 - the shell now owns a governed Orb authority queue, so Away-eligible mouse and keyboard commands can be claimed locally, receipted into the workspace, and executed only after the Orb crosses the idle gate
+- the shell now keeps a canonical local authority spine so stop, pause, local stop, remote-sync status, and disconnected posture are renderer-visible without the orb guessing
+- the shell now keeps a canonical runtime-health state machine for the orb lane: `nominal`, `degraded`, `disconnected`, and `recovering`
+- the shell now keeps a canonical ownership model for the orb lane: `pass_through`, `interactable_orb`, `interactable_lens`, and `restricted`
+- the live orb strip now derives its controls from canonical authority, runtime health, and ownership instead of renderer-local heuristics alone
+- the live orb window now demotes the old inline console surface entirely; detail entry points reroute to Lens instead of reopening a hidden mini panel
 
 ## Next Extensions
 
@@ -158,5 +172,6 @@ See [`docs/operations/WINDOWS_PUBLIC_SIGNING.md`](../docs/operations/WINDOWS_PUB
 - configure signer material and publish signed Windows artifacts now that the distribution path fails closed
 - add richer per-display policies if Francis eventually needs different overlay presence on different monitors
 - add selective hit-testing only if the whole-window click-through toggle stops being sufficient
+- keep a small manual orb-shell smoke on Windows for startup, Lens handoff, stop/pause truth, degraded posture, and blur/focus ownership recovery
 
 

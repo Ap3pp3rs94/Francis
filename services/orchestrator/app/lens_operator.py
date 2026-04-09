@@ -26,6 +26,10 @@ class ActionChip(TypedDict, total=False):
     reason: str
     policy_reason: str
     requires_confirmation: bool
+    policy_state: str
+    policy_scope: str
+    policy_summary: str
+    policy_detail: str
     execute_via: ExecuteVia
 
 
@@ -80,17 +84,145 @@ def _call_orchestrator(
     return body
 
 
-def get_lens_actions(*, max_actions: int = 8, role: str = DEFAULT_ROLE, user: str = DEFAULT_USER) -> dict[str, Any]:
-    return _call_orchestrator(
-        method="GET",
-        path="/lens/actions",
-        params={"max_actions": max_actions},
+def get_lens_actions(
+    *,
+    max_actions: int = 8,
+    role: str = DEFAULT_ROLE,
+    user: str = DEFAULT_USER,
+    snapshot: dict[str, Any] | None = None,
+    approval_snapshot: Any | None = None,
+) -> dict[str, Any]:
+    from services.orchestrator.app.routes.lens import build_lens_actions_payload
+
+    return build_lens_actions_payload(
+        max_actions=max_actions,
         role=role,
         user=user,
+        snapshot=snapshot,
+        approval_snapshot=approval_snapshot,
     )
 
 
+def _normalize_policy_scope(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {
+        "observation",
+        "navigation",
+        "click",
+        "typing",
+        "drag",
+        "destructive",
+        "cross_app_transfer",
+        "sensitive",
+    }:
+        return normalized
+    return "observation"
+
+
+def _policy_scope_label(scope: str) -> str:
+    return {
+        "observation": "Observation",
+        "navigation": "Navigation",
+        "click": "Click",
+        "typing": "Typing",
+        "drag": "Drag",
+        "destructive": "Destructive",
+        "cross_app_transfer": "Cross-app transfer",
+        "sensitive": "Sensitive",
+    }.get(scope, "Observation")
+
+
+def _text_contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    lowered = str(text or "").strip().lower()
+    return any(token in lowered for token in tokens)
+
+
+def _derive_policy_scope(chip: dict[str, Any]) -> str:
+    explicit = _normalize_policy_scope(chip.get("policy_scope"))
+    if explicit != "observation" or str(chip.get("policy_scope", "")).strip():
+        return explicit
+
+    kind = str(chip.get("kind", "")).strip().lower()
+    args = chip.get("args", {}) if isinstance(chip.get("args"), dict) else {}
+    reason_text = " ".join(
+        part
+        for part in (
+            str(chip.get("policy_reason", "")).strip(),
+            str(chip.get("reason", "")).strip(),
+            str(chip.get("label", "")).strip(),
+        )
+        if part
+    ).lower()
+
+    if bool(args.get("cross_app")) or bool(args.get("transfer")):
+        return "cross_app_transfer"
+    if str(args.get("source_app", "")).strip() and str(args.get("target_app", "")).strip():
+        return "cross_app_transfer"
+    if _text_contains_any(reason_text, ("clipboard", "cross-app", "cross app", "handoff", "transfer")):
+        return "cross_app_transfer"
+    if bool(args.get("sensitive")) or _text_contains_any(
+        reason_text,
+        ("secret", "token", "credential", "password", "approval", "inbox", "payment", "personal"),
+    ):
+        return "sensitive"
+    if kind.startswith("mouse.drag") or ".drag" in kind:
+        return "drag"
+    if kind.startswith("mouse.click") or ".click" in kind or kind.endswith("focus_click"):
+        return "click"
+    if kind.startswith("keyboard.") or ".type" in kind or ".shortcut" in kind:
+        return "typing"
+    if _text_contains_any(kind, (".delete", ".remove", ".revoke", ".quarantine", ".panic", ".kill", ".destroy")):
+        return "destructive"
+    if _text_contains_any(kind, (".move", ".open", ".navigate", ".focus", ".switch", ".reveal", ".show")):
+        return "navigation"
+    return "observation"
+
+
+def _build_action_policy(chip: dict[str, Any]) -> dict[str, str | bool]:
+    explicit_state = str(chip.get("policy_state", "")).strip().lower()
+    requires_confirmation = bool(chip.get("requires_confirmation", False))
+    enabled = bool(chip.get("enabled", False))
+    policy_reason = str(chip.get("policy_reason") or chip.get("reason") or "").strip()
+    risk_tier = str(chip.get("risk_tier", "low")).strip().lower() or "low"
+    scope = _derive_policy_scope(chip)
+    scope_label = _policy_scope_label(scope)
+
+    if explicit_state in {"approval_required", "policy_blocked", "allowed", "observe_only"}:
+        state = explicit_state
+    elif requires_confirmation:
+        state = "approval_required"
+    elif not enabled and policy_reason:
+        state = "policy_blocked"
+    elif enabled:
+        state = "allowed"
+    else:
+        state = "observe_only"
+
+    if state == "approval_required":
+        summary = "Waiting approval"
+        detail = policy_reason or f"{scope_label} action is held until approval is granted."
+    elif state == "policy_blocked":
+        summary = "Blocked by policy"
+        detail = policy_reason or f"{scope_label} action is outside the current governed boundary."
+    elif state == "allowed":
+        summary = f"{scope_label} allowed"
+        detail = policy_reason or f"{scope_label} action is inside the current approved scope."
+    else:
+        summary = "Observe only"
+        detail = policy_reason or "No mutating action is armed."
+
+    return {
+        "policy_state": state,
+        "policy_scope": scope,
+        "policy_summary": summary,
+        "policy_detail": detail,
+        "requires_confirmation": requires_confirmation,
+        "risk_tier": risk_tier,
+    }
+
+
 def compact_action_chip(chip: dict[str, Any]) -> ActionChip:
+    policy = _build_action_policy(chip)
     return {
         "kind": str(chip.get("kind", "")).strip(),
         "label": str(chip.get("label", "")).strip(),
@@ -100,6 +232,10 @@ def compact_action_chip(chip: dict[str, Any]) -> ActionChip:
         "reason": str(chip.get("reason", "")).strip(),
         "policy_reason": str(chip.get("policy_reason", "")).strip(),
         "requires_confirmation": bool(chip.get("requires_confirmation", False)),
+        "policy_state": str(policy.get("policy_state", "")).strip(),
+        "policy_scope": str(policy.get("policy_scope", "")).strip(),
+        "policy_summary": str(policy.get("policy_summary", "")).strip(),
+        "policy_detail": str(policy.get("policy_detail", "")).strip(),
         "execute_via": chip.get("execute_via", {}),
     }
 

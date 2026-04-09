@@ -1,4 +1,5 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
 const { spawn } = require("node:child_process");
@@ -154,6 +155,46 @@ function onceProcessExit(child) {
   });
 }
 
+function raceChildError(child, guardedPromise) {
+  if (!child || typeof child.once !== "function") {
+    return Promise.resolve(guardedPromise);
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const detach = () => {
+      if (typeof child.removeListener === "function") {
+        child.removeListener("error", onError);
+      }
+    };
+    const finish = (fn, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      detach();
+      fn(value);
+    };
+    const onError = (error) => {
+      finish(reject, error instanceof Error ? error : new Error(String(error)));
+    };
+
+    child.once("error", onError);
+    Promise.resolve(guardedPromise).then(
+      (value) => finish(resolve, value),
+      (error) => finish(reject, error),
+    );
+  });
+}
+
+function formatManagedLaunchError(error, candidate = {}) {
+  if (error && typeof error === "object" && error.code === "ENOENT") {
+    const launcher = String(candidate.runtimePath || candidate.command || "ollama").trim() || "ollama";
+    return new Error(`Managed Ollama launcher not found: ${launcher}`);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 function intOrZero(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
@@ -182,7 +223,7 @@ function buildManagedExitUpdate({ previousState, code, signal, shutdownRequested
 }
 
 async function terminateProcessTree(child, { force = false } = {}) {
-  if (!child || child.exitCode !== null) {
+  if (!child || child.exitCode !== null || !Number.isInteger(child.pid) || child.pid <= 0) {
     return { code: child?.exitCode ?? null, signal: null };
   }
 
@@ -257,6 +298,21 @@ function buildOllamaLaunchCandidates({ appDir, ollamaUrl = DEFAULT_OLLAMA_URL, e
     }));
 }
 
+function isLaunchCandidateAvailable(candidate = {}) {
+  const command = String(candidate.command || "").trim();
+  if (!command) {
+    return false;
+  }
+  if (path.isAbsolute(command)) {
+    try {
+      return fs.existsSync(command);
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
 function createOllamaRuntimeManager({
   appDir,
   ollamaUrl = DEFAULT_OLLAMA_URL,
@@ -302,6 +358,9 @@ function createOllamaRuntimeManager({
     });
     processRef.stderr.on("data", (chunk) => {
       log(`Ollama stderr: ${String(chunk).trimEnd()}`);
+    });
+    processRef.on("error", (error) => {
+      log(`Ollama process error: ${error instanceof Error ? error.message : String(error)}`);
     });
     processRef.on("exit", (code, signal) => {
       const exitedManaged = child && processRef.pid === child.pid;
@@ -363,10 +422,31 @@ function createOllamaRuntimeManager({
       ollamaUrl: normalizedOllamaUrl,
       env,
     });
+    const launchableCandidates = candidates.filter(isLaunchCandidateAvailable);
 
     let lastError = null;
 
-    for (const candidate of candidates) {
+    if (launchableCandidates.length === 0) {
+      const message = "Managed Ollama launcher not found";
+      setState({
+        ready: false,
+        mode: "disabled",
+        managed: false,
+        attemptedAutoStart: true,
+        launcher: null,
+        runtimeKind: null,
+        runtimePath: null,
+        pid: null,
+        availableModels: [],
+        lastError: message,
+        lastExitCode: null,
+        lastExitSignal: null,
+        restartSuggested: false,
+      });
+      throw new Error(message);
+    }
+
+    for (const candidate of launchableCandidates) {
       setState({
         ready: false,
         mode: "starting",
@@ -395,16 +475,19 @@ function createOllamaRuntimeManager({
           windowsHide: true,
         });
       } catch (error) {
-        lastError = error;
-        log(`Managed Ollama launch failed: ${error instanceof Error ? error.message : String(error)}`);
+        lastError = formatManagedLaunchError(error, candidate);
+        log(`Managed Ollama launch failed: ${lastError.message}`);
         continue;
       }
 
       attachManagedLogs(child);
-      setState({ pid: child.pid });
+      setState({ pid: Number.isInteger(child.pid) ? child.pid : null });
 
       try {
-        const availableModels = await waitForOllamaReady(normalizedOllamaUrl, child);
+        const availableModels = await raceChildError(
+          child,
+          waitForOllamaReady(normalizedOllamaUrl, child),
+        );
         setState({
           ready: true,
           mode: "managed",
@@ -420,8 +503,8 @@ function createOllamaRuntimeManager({
         });
         return getPublicState();
       } catch (error) {
-        lastError = error;
-        log(`Managed Ollama did not become ready: ${error instanceof Error ? error.message : String(error)}`);
+        lastError = formatManagedLaunchError(error, candidate);
+        log(`Managed Ollama did not become ready: ${lastError.message}`);
         await terminateProcessTree(child, { force: true });
         child = null;
       }
@@ -495,10 +578,13 @@ module.exports = {
   buildOllamaListenAddress,
   createOllamaRuntimeManager,
   fetchOllamaCatalog,
+  isLaunchCandidateAvailable,
   isOllamaReachable,
   normalizeOllamaUrl,
   parseOllamaModelCatalog,
   probeOllamaHealth,
+  raceChildError,
   resolveOllamaSourceRoot,
+  formatManagedLaunchError,
   waitForOllamaReady,
 };

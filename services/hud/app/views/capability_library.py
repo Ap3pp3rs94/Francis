@@ -4,15 +4,14 @@ from pathlib import Path
 from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
-from francis_forge.catalog import list_entries
 from francis_forge.library import (
-    build_capability_library,
     build_capability_provenance,
     build_promotion_rules,
     build_quality_standard,
 )
 from services.hud.app.state import build_lens_snapshot, get_workspace_root
-from services.orchestrator.app.approvals_store import list_requests
+from services.orchestrator.app.approvals_store import ApprovalSnapshot
+from services.orchestrator.app.capability_state import build_capability_state, build_focus_pack
 from services.orchestrator.app.control_state import check_action_allowed
 
 
@@ -59,42 +58,30 @@ def _pack_id(entry: dict[str, Any]) -> str:
     return str(entry.get("pack_id", "")).strip() or str(entry.get("slug", "")).strip() or str(entry.get("id", "")).strip()
 
 
-def _approval_for_entry(fs: WorkspaceFS, entry_id: str, *, action: str) -> dict[str, Any] | None:
-    requests = list_requests(fs, action=action, limit=50)
-    for row in reversed(requests):
-        if not isinstance(row, dict):
-            continue
-        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        target_id = str(metadata.get("entry_id", "")).strip() or str(metadata.get("stage_id", "")).strip()
-        if target_id != entry_id:
-            continue
-        return row
-    return None
-
-
-def _focus_pack(
-    packs: list[dict[str, Any]],
+def _resolve_action_state(
+    control_state: dict[str, tuple[bool, str]],
+    key: str,
     *,
-    focus_pack_id: str = "",
-) -> dict[str, Any] | None:
-    if focus_pack_id:
-        explicit = next(
-            (pack for pack in packs if str(pack.get("pack_id", "")).strip() == focus_pack_id),
-            None,
-        )
-        if explicit is not None:
-            return explicit
-    for pack in packs:
-        if int(pack.get("staged_count", 0) or 0) > 0:
-            return pack
-    for pack in packs:
-        focus_version = pack.get("focus_version", {}) if isinstance(pack.get("focus_version"), dict) else {}
-        if str(focus_version.get("status", "")).strip().lower() == "quarantined":
-            return pack
-    for pack in packs:
-        if int(pack.get("active_count", 0) or 0) > 0:
-            return pack
-    return packs[0] if packs else None
+    fs: WorkspaceFS,
+    repo_root: Path,
+    workspace_root: Path,
+    app: str,
+    action: str,
+    mutating: bool,
+) -> tuple[bool, str]:
+    cached = control_state.get(key)
+    if cached is not None:
+        return cached
+    resolved = _action_allowed(
+        fs=fs,
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        app=app,
+        action=action,
+        mutating=mutating,
+    )
+    control_state[key] = resolved
+    return resolved
 
 
 def _detail_state(pack_id: str, focus_pack_id: str) -> str:
@@ -290,6 +277,7 @@ def _row_controls(
     entry: dict[str, Any],
     promote_approval: dict[str, Any] | None,
     revoke_approval: dict[str, Any] | None,
+    control_state: dict[str, tuple[bool, str]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     entry_id = str(entry.get("id", "")).strip()
     status = _entry_status(entry)
@@ -301,7 +289,10 @@ def _row_controls(
     promotion_rules = build_promotion_rules(entry, approval_status=promote_approval_status)
     promotion_ready = bool(promotion_rules.get("ready"))
     promotion_blocker = _first_failed_rule_detail(promotion_rules) or str(provenance.get("promotion_rule_detail", "")).strip()
-    promote_allowed, promote_reason = _action_allowed(
+    shared_control_state = control_state if isinstance(control_state, dict) else {}
+    promote_allowed, promote_reason = _resolve_action_state(
+        shared_control_state,
+        "forge.promote",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -309,7 +300,9 @@ def _row_controls(
         action="forge.promote",
         mutating=True,
     )
-    quarantine_allowed, quarantine_reason = _action_allowed(
+    quarantine_allowed, quarantine_reason = _resolve_action_state(
+        shared_control_state,
+        "forge.quarantine",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -317,7 +310,9 @@ def _row_controls(
         action="forge.quarantine",
         mutating=True,
     )
-    revoke_allowed, revoke_reason = _action_allowed(
+    revoke_allowed, revoke_reason = _resolve_action_state(
+        shared_control_state,
+        "forge.revoke",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -325,7 +320,9 @@ def _row_controls(
         action="forge.revoke",
         mutating=True,
     )
-    request_allowed, request_reason = _action_allowed(
+    request_allowed, request_reason = _resolve_action_state(
+        shared_control_state,
+        "approvals.request",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -492,20 +489,31 @@ def _entry_summary(
 def get_capability_library_view(
     *,
     snapshot: dict[str, object] | None = None,
+    capability_state: dict[str, Any] | None = None,
+    approval_snapshot: ApprovalSnapshot | None = None,
 ) -> dict[str, Any]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
-    workspace_root, repo_root, fs = _workspace_context()
-    entries = [row for row in list_entries(fs) if isinstance(row, dict)]
-    library = build_capability_library(entries)
-    packs = [row for row in library.get("packs", []) if isinstance(row, dict)]
+    snapshot_workspace_root = Path(str(snapshot.get("workspace_root", get_workspace_root()))).resolve()
+    workspace_root, repo_root, fs = _workspace_context(snapshot_workspace_root)
+    resolved_capability_state = (
+        capability_state
+        if isinstance(capability_state, dict)
+        else build_capability_state(workspace_root, approval_snapshot=approval_snapshot)
+    )
+    library = (
+        resolved_capability_state.get("library", {})
+        if isinstance(resolved_capability_state.get("library"), dict)
+        else {}
+    )
+    packs = [row for row in resolved_capability_state.get("packs", []) if isinstance(row, dict)]
     current_work = snapshot.get("current_work", {}) if isinstance(snapshot.get("current_work"), dict) else {}
     capabilities = current_work.get("capabilities", {}) if isinstance(current_work.get("capabilities"), dict) else {}
     capability_focus = (
         capabilities.get("focus_entry", {}) if isinstance(capabilities.get("focus_entry"), dict) else {}
     )
     requested_focus_pack_id = str(capability_focus.get("pack_id", "")).strip() or str(capability_focus.get("slug", "")).strip()
-    focus_pack = _focus_pack(packs, focus_pack_id=requested_focus_pack_id)
+    focus_pack = build_focus_pack(packs, focus_pack_id=requested_focus_pack_id)
     focus_entry = (
         focus_pack.get("focus_version", {})
         if isinstance(focus_pack, dict) and isinstance(focus_pack.get("focus_version"), dict)
@@ -513,6 +521,17 @@ def get_capability_library_view(
     )
     focus_pack_id = str((focus_pack or {}).get("pack_id", "")).strip()
     focus_entry_id = str(focus_entry.get("id", "")).strip()
+    promote_approvals = (
+        resolved_capability_state.get("promote_approvals", {})
+        if isinstance(resolved_capability_state.get("promote_approvals"), dict)
+        else {}
+    )
+    revoke_approvals = (
+        resolved_capability_state.get("revoke_approvals", {})
+        if isinstance(resolved_capability_state.get("revoke_approvals"), dict)
+        else {}
+    )
+    control_state: dict[str, tuple[bool, str]] = {}
 
     rows: list[dict[str, Any]] = []
     staged_count = 0
@@ -534,8 +553,9 @@ def get_capability_library_view(
             active_count += 1
         if status == "superseded":
             superseded_count += 1
-        promote_approval = _approval_for_entry(fs, str(entry.get("id", "")).strip(), action="forge.promote")
-        revoke_approval = _approval_for_entry(fs, str(entry.get("id", "")).strip(), action="forge.revoke")
+        entry_id = str(entry.get("id", "")).strip()
+        promote_approval = promote_approvals.get(entry_id)
+        revoke_approval = revoke_approvals.get(entry_id)
         promote_approval_status = str((promote_approval or {}).get("status", "")).strip().lower()
         provenance = build_capability_provenance(entry, approval_status=promote_approval_status)
         if bool(provenance.get("external")):
@@ -572,6 +592,7 @@ def get_capability_library_view(
                     entry=entry,
                     promote_approval=promote_approval,
                     revoke_approval=revoke_approval,
+                    control_state=control_state,
                 ),
             }
         )

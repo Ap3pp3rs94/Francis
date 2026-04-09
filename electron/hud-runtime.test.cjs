@@ -11,8 +11,11 @@ const {
   buildHudHealthUrl,
   buildHudLaunchCandidates,
   buildHudWorkspaceRoot,
+  classifyHudReachabilityFailure,
+  getHudProbeDelayMs,
   isHudReachable,
   normalizeHudUrl,
+  probeHudReachability,
   resolveManagedHudExitUpdate,
   resolveHudSourceRoot,
   waitForHudReady,
@@ -134,6 +137,44 @@ test("isHudReachable and waitForHudReady observe a live local health endpoint", 
   await waitForHudReady(hudUrl, { exitCode: null }, { timeoutMs: 1500, pollMs: 100 });
 
   await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+});
+
+test("probeHudReachability classifies non-200 responses", async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === "/health") {
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end('{"detail":"unavailable"}');
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const probe = await probeHudReachability(`http://127.0.0.1:${address.port}`, 1000);
+  assert.equal(probe.ok, false);
+  assert.equal(probe.error.kind, "non_200");
+  assert.equal(probe.statusCode, 503);
+
+  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+});
+
+test("getHudProbeDelayMs applies bounded retry backoff for managed HUD probes", () => {
+  assert.equal(getHudProbeDelayMs(0, { baseMs: 200 }), 200);
+  assert.equal(getHudProbeDelayMs(1, { baseMs: 200 }), 400);
+  assert.equal(getHudProbeDelayMs(2, { baseMs: 200 }), 800);
+  assert.equal(getHudProbeDelayMs(5, { baseMs: 200, maxMs: 900 }), 900);
+});
+
+test("classifyHudReachabilityFailure distinguishes timeout and connection refusal", () => {
+  assert.equal(
+    classifyHudReachabilityFailure(new Error("Request timed out after 8000ms")).kind,
+    "timeout",
+  );
+  const refused = new Error("connect ECONNREFUSED 127.0.0.1:8767");
+  refused.cause = { code: "ECONNREFUSED" };
+  assert.equal(classifyHudReachabilityFailure(refused).kind, "connection_refused");
 });
 
 test("buildManagedExitUpdate marks unexpected managed exits as recoverable crashes", () => {

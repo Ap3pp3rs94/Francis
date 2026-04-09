@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Francis overlay startup is now orb-first by default; Lens is created lazily and stays secondary until explicitly opened.
+- Added a canonical orb authority spine, runtime-health state machine, and input-ownership model so stop/pause/degraded/recovering/ownership posture are published truthfully from Electron instead of being inferred locally in the renderer.
+- Demoted the legacy inline orb console from the live orb window, routed deeper orb detail paths to Lens, and added focused orb-surface contract tests plus an orb runtime readiness note.
+- Added a practical module-boundary map in `docs/architecture/MODULE_BOUNDARIES.md` so contributors can distinguish the primary Francis runtime spine (`services/`, `packages/`, `electron/`, `build/sign/`) from compatibility façades (`apps/api/`, `francis/`) and adjacent surfaces such as `francis-orb/`.
 - Release-hardening sprint for queue integrity, incident hygiene, verification lanes, and packaging truthfulness.
 - Overlay packaging now uses a dedicated Electron Builder config so the supported signing routes are real and explicit: local certificate signing, Windows cert-store signing, or Azure Trusted Signing.
 - Added artifact-level Authenticode verification for overlay packaging, including `npm run overlay:verify-signing`, `npm run overlay:verify-signing:required`, and a generated `electron/generated/build-signing.json` manifest.

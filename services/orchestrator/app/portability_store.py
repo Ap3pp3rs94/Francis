@@ -466,11 +466,21 @@ def _current_continuity_state(fs: WorkspaceFS, *, repo_root: Path, workspace_roo
     }
 
 
-def build_portability_state(fs: WorkspaceFS, *, repo_root: Path, workspace_root: Path) -> dict[str, Any]:
+def build_portability_state(
+    fs: WorkspaceFS,
+    *,
+    repo_root: Path,
+    workspace_root: Path,
+    continuity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     exports = _read_jsonl(fs, PORTABILITY_EXPORT_INDEX_PATH)
     imports = _read_jsonl(fs, PORTABILITY_IMPORT_INDEX_PATH)
     preview = _read_json(fs, PORTABILITY_PREVIEW_PATH, {})
-    continuity = _current_continuity_state(fs, repo_root=repo_root, workspace_root=workspace_root)
+    continuity_state = (
+        dict(continuity)
+        if isinstance(continuity, dict)
+        else _current_continuity_state(fs, repo_root=repo_root, workspace_root=workspace_root)
+    )
     latest_export = exports[-1] if exports else {}
     latest_import = imports[-1] if imports else {}
     warning_count = len(preview.get("warnings", [])) if isinstance(preview, dict) else 0
@@ -494,7 +504,7 @@ def build_portability_state(fs: WorkspaceFS, *, repo_root: Path, workspace_root:
         "preview_state": preview_state,
         "latest_export_id": str(latest_export.get("bundle_id", "")).strip(),
         "latest_import_id": str(latest_import.get("import_id", "")).strip(),
-        "continuity": continuity,
+        "continuity": continuity_state,
         "exports": _tail(exports, 6),
         "imports": _tail(imports, 6),
         "preview": preview if isinstance(preview, dict) else {},

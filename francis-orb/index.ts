@@ -1,5 +1,14 @@
 export { ORB_CONFIG } from "./core/config";
 export { ORB_STATE_PROFILES } from "./core/state-profiles";
+export {
+  getOrbMotionEnergy,
+  getOrbPulseEnergy,
+  getOrbSettleEnergy,
+  getOrbStateBoost,
+  isOrbActionState,
+  normalizeOrbState,
+  shouldRenderOrbBeam,
+} from "./core/state-semantics";
 export type {
   FrancisOrbEngineOptions,
   OrbRenderable,

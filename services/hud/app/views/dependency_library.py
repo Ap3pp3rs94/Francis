@@ -10,7 +10,7 @@ from francis_core.dependency_library import (
 )
 from francis_core.workspace_fs import WorkspaceFS
 from services.hud.app.state import build_lens_snapshot, get_workspace_root
-from services.orchestrator.app.approvals_store import list_requests
+from services.orchestrator.app.approvals_store import ApprovalSnapshot, list_requests
 from services.orchestrator.app.control_state import check_action_allowed
 
 
@@ -52,6 +52,49 @@ def _approval_for_dependency(fs: WorkspaceFS, dependency_id: str, *, action: str
         if str(metadata.get("dependency_id", "")).strip().lower() == dependency_id.lower():
             return row
     return None
+
+
+def _approval_index(
+    fs: WorkspaceFS,
+    *,
+    action: str,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for row in list_requests(fs, action=action, limit=200, snapshot=approval_snapshot):
+        if not isinstance(row, dict):
+            continue
+        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
+        dependency_id = str(metadata.get("dependency_id", "")).strip()
+        if dependency_id:
+            indexed[dependency_id.lower()] = row
+    return indexed
+
+
+def _resolve_action_state(
+    control_state: dict[str, tuple[bool, str]],
+    key: str,
+    *,
+    fs: WorkspaceFS,
+    repo_root: Path,
+    workspace_root: Path,
+    app: str,
+    action: str,
+    mutating: bool,
+) -> tuple[bool, str]:
+    cached = control_state.get(key)
+    if cached is not None:
+        return cached
+    resolved = _action_allowed(
+        fs=fs,
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        app=app,
+        action=action,
+        mutating=mutating,
+    )
+    control_state[key] = resolved
+    return resolved
 
 
 def _focus_entry(entries: list[dict[str, Any]], *, focus_dependency_id: str = "") -> dict[str, Any] | None:
@@ -154,12 +197,16 @@ def _controls(
     workspace_root: Path,
     entry: dict[str, Any],
     revoke_approval: dict[str, Any] | None,
+    control_state: dict[str, tuple[bool, str]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     dependency_id = str(entry.get("id", "")).strip()
     status = str(entry.get("status", "declared")).strip().lower() or "declared"
     revoke_status = str((revoke_approval or {}).get("status", "")).strip().lower()
     revoke_id = str((revoke_approval or {}).get("id", "")).strip()
-    quarantine_allowed, quarantine_reason = _action_allowed(
+    shared_control_state = control_state if isinstance(control_state, dict) else {}
+    quarantine_allowed, quarantine_reason = _resolve_action_state(
+        shared_control_state,
+        "dependencies.quarantine",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -167,7 +214,9 @@ def _controls(
         action="dependencies.quarantine",
         mutating=True,
     )
-    revoke_allowed, revoke_reason = _action_allowed(
+    revoke_allowed, revoke_reason = _resolve_action_state(
+        shared_control_state,
+        "dependencies.revoke",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -175,7 +224,9 @@ def _controls(
         action="dependencies.revoke",
         mutating=True,
     )
-    request_allowed, request_reason = _action_allowed(
+    request_allowed, request_reason = _resolve_action_state(
+        shared_control_state,
+        "approvals.request",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -259,7 +310,11 @@ def _entry_summary(entry: dict[str, Any], *, revoke_approval: dict[str, Any] | N
     return summary
 
 
-def get_dependency_library_view(*, snapshot: dict[str, object] | None = None) -> dict[str, Any]:
+def get_dependency_library_view(
+    *,
+    snapshot: dict[str, object] | None = None,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any]:
     if snapshot is None:
         snapshot = build_lens_snapshot()
     workspace_root, repo_root, fs = _workspace_context()
@@ -267,11 +322,13 @@ def get_dependency_library_view(*, snapshot: dict[str, object] | None = None) ->
     library = build_dependency_library(entries)
     focus_entry = _focus_entry(entries)
     focus_dependency_id = str((focus_entry or {}).get("id", "")).strip()
+    revoke_approvals = _approval_index(fs, action="dependencies.revoke", approval_snapshot=approval_snapshot)
+    control_state: dict[str, tuple[bool, str]] = {}
 
     rows: list[dict[str, Any]] = []
     for entry in entries:
         dependency_id = str(entry.get("id", "")).strip()
-        revoke_approval = _approval_for_dependency(fs, dependency_id, action="dependencies.revoke") if dependency_id else None
+        revoke_approval = revoke_approvals.get(dependency_id.lower()) if dependency_id else None
         detail_state = _detail_state(dependency_id, focus_dependency_id)
         provenance = build_dependency_provenance(entry)
         rows.append(
@@ -298,6 +355,7 @@ def get_dependency_library_view(*, snapshot: dict[str, object] | None = None) ->
                     workspace_root=workspace_root,
                     entry=entry,
                     revoke_approval=revoke_approval,
+                    control_state=control_state,
                 ),
             }
         )

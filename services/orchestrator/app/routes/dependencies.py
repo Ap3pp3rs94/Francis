@@ -18,7 +18,11 @@ from francis_core.dependency_library import (
 )
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
-from services.orchestrator.app.approvals_store import create_request, ensure_action_approved, list_requests
+from services.orchestrator.app.approvals_store import (
+    create_request,
+    ensure_action_approved,
+    find_latest_request_by_metadata,
+)
 from services.orchestrator.app.control_state import check_action_allowed
 
 router = APIRouter(tags=["dependencies"])
@@ -74,13 +78,13 @@ def _find_dependency(dependency_id: str) -> dict[str, Any] | None:
 
 def _find_revoke_approval(dependency_id: str) -> dict[str, Any] | None:
     normalized = str(dependency_id or "").strip().lower()
-    for row in reversed(list_requests(_fs, action="dependencies.revoke", limit=100)):
-        if not isinstance(row, dict):
-            continue
-        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        if str(metadata.get("dependency_id", "")).strip().lower() == normalized:
-            return row
-    return None
+    return find_latest_request_by_metadata(
+        _fs,
+        action="dependencies.revoke",
+        metadata_keys=("dependency_id",),
+        metadata_value=normalized,
+        case_insensitive=True,
+    )
 
 
 def _dependency_presentation(dependency: dict[str, Any]) -> dict[str, Any]:

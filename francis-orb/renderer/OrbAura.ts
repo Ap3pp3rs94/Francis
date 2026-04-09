@@ -10,10 +10,10 @@ function createAuraTexture(size = 512): THREE.CanvasTexture {
   if (!ctx) throw new Error("Unable to build aura texture");
 
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0.0, "rgba(255,255,255,1)");
-  g.addColorStop(0.15, "rgba(220,240,255,0.95)");
-  g.addColorStop(0.4, "rgba(120,190,255,0.28)");
-  g.addColorStop(0.75, "rgba(60,140,255,0.08)");
+  g.addColorStop(0.0, "rgba(255,255,255,0.1)");
+  g.addColorStop(0.08, "rgba(244,247,251,0.05)");
+  g.addColorStop(0.2, "rgba(214,224,236,0.02)");
+  g.addColorStop(0.38, "rgba(150,166,184,0.006)");
   g.addColorStop(1.0, "rgba(0,0,0,0)");
 
   ctx.fillStyle = g;
@@ -32,11 +32,11 @@ export class OrbAura implements OrbRenderable {
     this.material = new THREE.SpriteMaterial({
       map: createAuraTexture(),
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.008,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       depthTest: false,
-      color: 0xb8d8ea,
+      color: 0xf5f8fb,
     });
 
     this.sprite = new THREE.Sprite(this.material);
@@ -44,11 +44,37 @@ export class OrbAura implements OrbRenderable {
   }
 
   update(frame: OrbSignalFrame, profile: OrbStateProfile): void {
-    const flicker = 1 + Math.sin(frame.elapsed * 1.7) * 0.03;
-    this.material.opacity = profile.auraOpacity * flicker;
+    const attentionStrength = Math.max(0, Math.min(1, Number(frame.attentionStrength ?? frame.confidence ?? 0.28)));
+    const attentionLock = Math.max(0, Math.min(1, Number(frame.attentionLock ?? 0.18)));
+    const attentionUncertainty = Math.max(0, Math.min(1, Number(frame.attentionUncertainty ?? 0.14)));
+    const haloStrength = Math.max(0, Math.min(1, Number(frame.visualHaloStrength ?? 0.78)));
+    const flicker =
+      1 +
+      Math.sin(frame.elapsed * (0.82 + attentionStrength * 0.12)) *
+        (0.008 + attentionUncertainty * 0.004);
+    this.material.opacity =
+      profile.auraOpacity *
+      flicker *
+      Math.max(
+        0.54,
+        0.82 +
+          attentionStrength * 0.04 +
+          attentionLock * 0.04 -
+          attentionUncertainty * 0.1 +
+          haloStrength * 0.04,
+      );
 
-    const amp = frame.state === "speaking" ? frame.speakingAmplitude * 0.08 : 0;
-    const scale = this.baseScale * profile.auraScale * (1 + amp);
+    const amp = frame.speakingAmplitude > 0 ? frame.speakingAmplitude * 0.012 : 0;
+    const scale =
+      this.baseScale *
+      profile.auraScale *
+      (0.94 +
+        amp +
+        attentionStrength * 0.004 +
+        attentionLock * 0.004 -
+        attentionUncertainty * 0.012 +
+        haloStrength * 0.008 -
+        Math.max(0, Math.min(1, Number(profile.rootStillness ?? 0.62))) * 0.01);
     this.sprite.scale.set(scale, scale, 1);
   }
 

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbRenderable, OrbSignalFrame, OrbStateProfile } from "../core/types";
+import { shouldRenderOrbBeam } from "../core/state-semantics";
 
 export class OrbTargetBeam implements OrbRenderable {
   public readonly mesh: THREE.Mesh;
@@ -8,11 +9,11 @@ export class OrbTargetBeam implements OrbRenderable {
   private readonly origin = new THREE.Vector3(0, 0, 0);
 
   constructor() {
-    const geometry = new THREE.CylinderGeometry(0.02, 0.08, 1, 12, 1, true);
+    const geometry = new THREE.CylinderGeometry(0.004, 0.014, 1, 10, 1, true);
     geometry.translate(0, 0.5, 0);
 
     this.material = new THREE.MeshBasicMaterial({
-      color: 0xbfe7ff,
+      color: 0xf2f8ff,
       transparent: true,
       opacity: 0,
       blending: THREE.AdditiveBlending,
@@ -25,13 +26,14 @@ export class OrbTargetBeam implements OrbRenderable {
   }
 
   update(frame: OrbSignalFrame, profile: OrbStateProfile): void {
-    if (frame.state !== "acting" || !frame.actionTarget) {
+    const beamTarget = frame.actionTarget ?? (frame.state === "target_lock" ? frame.attentionTarget : null);
+    if (!shouldRenderOrbBeam(frame.state) || !beamTarget) {
       this.mesh.visible = false;
       this.material.opacity = 0;
       return;
     }
 
-    const target = frame.actionTarget.clone();
+    const target = beamTarget.clone();
     const direction = target.clone().sub(this.origin);
     const length = direction.length();
 
@@ -48,8 +50,10 @@ export class OrbTargetBeam implements OrbRenderable {
     this.temp.copy(this.origin).add(target).multiplyScalar(0.5);
     this.mesh.position.copy(this.temp);
 
-    const strength = frame.actionStrength ?? 1;
-    this.material.opacity = profile.beamOpacity * strength;
+    const strength = frame.actionTarget
+      ? frame.actionStrength ?? 1
+      : Math.max(0.18, Math.min(0.54, Number(frame.attentionLock ?? frame.attentionStrength ?? 0.24)));
+    this.material.opacity = profile.beamOpacity * strength * 0.54;
   }
 
   dispose(): void {

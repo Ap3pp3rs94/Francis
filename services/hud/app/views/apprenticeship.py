@@ -11,7 +11,6 @@ from francis_brain.apprenticeship import (
     create_session,
     list_sessions,
     load_session_steps,
-    summarize_apprenticeship,
 )
 from francis_brain.calibration import summarize_fabric_posture
 from francis_brain.ledger import RunLedger
@@ -380,6 +379,55 @@ def _action_allowed(
     return allowed, reason
 
 
+def _resolve_action_state(
+    control_state: dict[str, tuple[bool, str]],
+    key: str,
+    *,
+    fs: WorkspaceFS,
+    repo_root: Path,
+    workspace_root: Path,
+    action: str,
+) -> tuple[bool, str]:
+    cached = control_state.get(key)
+    if cached is not None:
+        return cached
+    resolved = _action_allowed(
+        fs=fs,
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        action=action,
+    )
+    control_state[key] = resolved
+    return resolved
+
+
+def _summarize_sessions(sessions: list[dict[str, Any]], *, limit: int = 8) -> dict[str, Any]:
+    review_ready = [
+        session
+        for session in sessions
+        if str(session.get("status", "")).strip().lower() == "review"
+    ]
+    recording = [
+        session
+        for session in sessions
+        if str(session.get("status", "")).strip().lower() == "recording"
+    ]
+    skillized = [
+        session
+        for session in sessions
+        if str(session.get("status", "")).strip().lower() == "skillized"
+    ]
+    capped_limit = max(0, min(int(limit), 20))
+    return {
+        "session_count": len(sessions),
+        "recording_count": len(recording),
+        "review_count": len(review_ready),
+        "skillized_count": len(skillized),
+        "recent_sessions": sessions[: max(0, min(int(limit), 200))],
+        "review_ready": review_ready[:capped_limit],
+    }
+
+
 def _skill_artifact(root: Path, session: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(session, dict):
         return {}
@@ -418,6 +466,7 @@ def _session_controls(
     session: dict[str, Any],
     steps: list[dict[str, Any]],
     teaching_context: dict[str, Any],
+    control_state: dict[str, tuple[bool, str]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     session_id = str(session.get("id", "")).strip()
     title = str(session.get("title", "Teaching session")).strip() or "Teaching session"
@@ -425,19 +474,26 @@ def _session_controls(
     record_defaults = (
         teaching_context.get("record_defaults", {}) if isinstance(teaching_context.get("record_defaults"), dict) else {}
     )
-    can_write, write_reason = _action_allowed(
+    shared_control_state = control_state if isinstance(control_state, dict) else {}
+    can_write, write_reason = _resolve_action_state(
+        shared_control_state,
+        "apprenticeship.write",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
         action="apprenticeship.write",
     )
-    can_generalize, generalize_reason = _action_allowed(
+    can_generalize, generalize_reason = _resolve_action_state(
+        shared_control_state,
+        "apprenticeship.generalize",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
         action="apprenticeship.generalize",
     )
-    can_skillize, skillize_reason = _action_allowed(
+    can_skillize, skillize_reason = _resolve_action_state(
+        shared_control_state,
+        "apprenticeship.skillize",
         fs=fs,
         repo_root=repo_root,
         workspace_root=workspace_root,
@@ -568,6 +624,7 @@ def _session_detail(
     workspace_root: Path,
     session: dict[str, Any],
     teaching_context: dict[str, Any],
+    control_state: dict[str, tuple[bool, str]] | None = None,
 ) -> dict[str, Any]:
     steps = load_session_steps(fs, str(session.get("id", "")).strip())
     replay = build_replay(session, steps)
@@ -581,6 +638,7 @@ def _session_detail(
         session=session,
         steps=steps,
         teaching_context=teaching_context,
+        control_state=control_state,
     )
     return {
         "session": session,
@@ -620,6 +678,7 @@ def _session_row(
     workspace_root: Path,
     session: dict[str, Any],
     teaching_context: dict[str, Any],
+    control_state: dict[str, tuple[bool, str]] | None = None,
 ) -> dict[str, Any]:
     detail = _session_detail(
         root=root,
@@ -628,6 +687,7 @@ def _session_row(
         workspace_root=workspace_root,
         session=session,
         teaching_context=teaching_context,
+        control_state=control_state,
     )
     return {
         "id": str(session.get("id", "")).strip(),
@@ -757,11 +817,12 @@ def get_apprenticeship_view(
         snapshot = build_lens_snapshot()
 
     root, repo_root, fs, _ledger = _workspace_context()
-    summary = summarize_apprenticeship(fs, limit=8)
     sessions = [row for row in list_sessions(fs, limit=12) if isinstance(row, dict)]
+    summary = _summarize_sessions(sessions, limit=8)
     focus_session = _focus_session(sessions)
     focus_session_id = str((focus_session or {}).get("id", "")).strip()
     teaching_context = _teaching_context(snapshot)
+    control_state: dict[str, tuple[bool, str]] = {}
     rows = [
         _session_row(
             root=root,
@@ -770,12 +831,15 @@ def get_apprenticeship_view(
             workspace_root=root,
             session=session,
             teaching_context=teaching_context,
+            control_state=control_state,
         )
         for session in sessions
     ]
     focused_row = next((row for row in rows if str(row.get("id", "")).strip() == focus_session_id), None)
 
-    create_allowed, create_reason = _action_allowed(
+    create_allowed, create_reason = _resolve_action_state(
+        control_state,
+        "apprenticeship.write",
         fs=fs,
         repo_root=repo_root,
         workspace_root=root,

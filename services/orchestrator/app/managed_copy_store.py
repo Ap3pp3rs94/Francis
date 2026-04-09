@@ -86,9 +86,20 @@ def _read_registry(fs: WorkspaceFS) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _normalize_registry_document(parsed: dict[str, Any] | None) -> dict[str, Any]:
+    source = parsed if isinstance(parsed, dict) else {}
+    copies = source.get("copies", []) if isinstance(source.get("copies"), list) else []
+    return {
+        "version": int(source.get("version", 1) or 1),
+        "updated_at": str(source.get("updated_at", "")).strip() or utc_now_iso(),
+        "copies": [_normalize_copy(entry) for entry in copies if isinstance(entry, dict)],
+    }
+
+
 def _write_registry(fs: WorkspaceFS, registry: dict[str, Any]) -> dict[str, Any]:
-    fs.write_text(MANAGED_COPY_REGISTRY_PATH, json.dumps(registry, ensure_ascii=False, indent=2))
-    return registry
+    normalized = _normalize_registry_document(registry)
+    fs.write_text(MANAGED_COPY_REGISTRY_PATH, json.dumps(normalized, ensure_ascii=False, indent=2))
+    return normalized
 
 
 def _runtime_paths(namespace: str) -> dict[str, str]:
@@ -227,15 +238,10 @@ def _normalize_copy(entry: dict[str, Any]) -> dict[str, Any]:
 
 def load_or_init_registry(fs: WorkspaceFS) -> dict[str, Any]:
     parsed = _read_registry(fs)
-    if not isinstance(parsed, dict):
-        parsed = {}
-    copies = parsed.get("copies", []) if isinstance(parsed.get("copies"), list) else []
-    registry = {
-        "version": int(parsed.get("version", 1) or 1),
-        "updated_at": utc_now_iso(),
-        "copies": [_normalize_copy(entry) for entry in copies if isinstance(entry, dict)],
-    }
-    return _write_registry(fs, registry)
+    registry = _normalize_registry_document(parsed)
+    if registry != parsed:
+        return _write_registry(fs, registry)
+    return registry
 
 
 def _replace_copy(registry: dict[str, Any], copy_entry: dict[str, Any]) -> dict[str, Any]:

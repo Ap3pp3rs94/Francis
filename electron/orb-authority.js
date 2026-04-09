@@ -83,11 +83,38 @@ function detectHumanActivitySignal({
   return Number(nowMs || 0) - signalAt <= Number(signalGraceMs || 160);
 }
 
+function isOrbClickTargetLocked(orbSurface = null) {
+  const cue = orbSurface?.operator?.target_cue;
+  if (!cue || typeof cue !== "object") {
+    return false;
+  }
+  return Boolean(cue.control_ready) && String(cue.attention_state || "").trim().toLowerCase() === "target_lock";
+}
+
+function describeOrbClickTargetLockFailure({ reason = "", cue = null } = {}) {
+  const normalizedReason = String(reason || "").trim().toLowerCase();
+  let summary = "Orb click target lock could not be confirmed.";
+  if (normalizedReason === "target_lock_timeout") {
+    summary = "Orb click target lock timed out before actuation.";
+  } else if (normalizedReason === "surface_unavailable") {
+    summary = "Orb click target lock could not be verified because the Orb surface is unavailable.";
+  } else if (normalizedReason === "safety_hold") {
+    summary = "Orb click target lock was blocked by an active safety hold.";
+  }
+  const cueState = String(cue?.attention_state || "").trim().toLowerCase();
+  if (!cueState) {
+    return summary;
+  }
+  return `${summary} Last cue: attention_state=${cueState}, control_ready=${Boolean(cue?.control_ready)}.`;
+}
+
 module.exports = {
   canEngageOrbAuthority,
+  describeOrbClickTargetLockFailure,
   detectHumanActivitySignal,
   detectHumanCursorReturn,
   detectHumanIdleRegression,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
+  isOrbClickTargetLocked,
 };

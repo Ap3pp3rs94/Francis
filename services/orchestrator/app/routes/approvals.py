@@ -12,7 +12,13 @@ from francis_core.config import settings
 from francis_core.workspace_fs import WorkspaceFS
 from francis_policy.rbac import can
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
-from services.orchestrator.app.approvals_store import add_decision, create_request, get_request, list_requests
+from services.orchestrator.app.approvals_store import (
+    add_decision,
+    create_request,
+    get_request,
+    list_requests,
+    load_approval_snapshot,
+)
 from services.orchestrator.app.control_state import check_action_allowed
 
 router = APIRouter(tags=["approvals"])
@@ -64,7 +70,8 @@ def _enforce_control(action: str) -> None:
 def approvals(request: Request, status: str | None = None, action: str | None = None, limit: int = 50) -> dict:
     _enforce_control("approvals.read")
     _enforce_rbac(request, "approvals.read")
-    approvals_list = list_requests(_fs, status=status, action=action, limit=limit)
+    approval_snapshot = load_approval_snapshot(_fs)
+    approvals_list = list_requests(_fs, status=status, action=action, limit=limit, snapshot=approval_snapshot)
     return {"status": "ok", "count": len(approvals_list), "approvals": approvals_list}
 
 
@@ -72,7 +79,7 @@ def approvals(request: Request, status: str | None = None, action: str | None = 
 def approval_get(approval_id: str, request: Request) -> dict:
     _enforce_control("approvals.read")
     _enforce_rbac(request, "approvals.read")
-    approval = get_request(_fs, approval_id)
+    approval = get_request(_fs, approval_id, snapshot=load_approval_snapshot(_fs))
     if approval is None:
         raise HTTPException(status_code=404, detail=f"Approval not found: {approval_id}")
     return {"status": "ok", "approval": approval}
@@ -157,6 +164,7 @@ def approval_decision(approval_id: str, request: Request, payload: ApprovalDecis
             detail={"message": assessment["message"], "quarantine": quarantine},
         )
 
+    approval_snapshot = load_approval_snapshot(_fs)
     try:
         decision_event = add_decision(
             _fs,
@@ -165,6 +173,7 @@ def approval_decision(approval_id: str, request: Request, payload: ApprovalDecis
             decision=payload.decision.strip().lower(),
             decided_by=role,
             note=payload.note.strip(),
+            snapshot=approval_snapshot,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

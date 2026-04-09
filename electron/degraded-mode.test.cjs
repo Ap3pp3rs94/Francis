@@ -121,3 +121,41 @@ test("degraded mode becomes reduced when signing posture is not current", () => 
   assert.match(posture.summary, /unsigned|signing/i);
   assert.ok(posture.restrictions.some((entry) => /distribution trust/i.test(entry)));
 });
+
+test("degraded mode becomes reduced while orb runtime is recovering", () => {
+  const posture = buildDegradedModePosture({
+    preflight: { blocked: 0, attention: 0 },
+    migration: { blocked: 0, attention: 0 },
+    update: { pendingNotice: false },
+    recovery: { needed: false },
+    runtimeHealth: { status: "recovering", summary: "Local operator runtime is recovering." },
+    hud: { mode: "managed", ready: true },
+    provider: { severity: "low", activeProviderLabel: "Ollama" },
+    authority: { severity: "low" },
+    signing: { severity: "low" },
+    startupProfile: { requested: "operator" },
+  });
+
+  assert.equal(posture.mode, "reduced");
+  assert.match(posture.summary, /recovering/i);
+  assert.ok(posture.cards.some((entry) => entry.label === "Orb Runtime" && entry.value === "recovering"));
+});
+
+test("degraded mode becomes restricted when orb runtime is disconnected", () => {
+  const posture = buildDegradedModePosture({
+    preflight: { blocked: 0, attention: 0 },
+    migration: { blocked: 0, attention: 0 },
+    update: { pendingNotice: false },
+    recovery: { needed: true },
+    runtimeHealth: { status: "disconnected", summary: "Local operator runtime is disconnected." },
+    hud: { mode: "managed", ready: false },
+    provider: { severity: "low", activeProviderLabel: "Ollama" },
+    authority: { severity: "low" },
+    signing: { severity: "low" },
+    startupProfile: { requested: "operator" },
+  });
+
+  assert.equal(posture.mode, "restricted");
+  assert.match(posture.summary, /disconnected/i);
+  assert.equal(posture.pointerPosture, "interactive_only");
+});

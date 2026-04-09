@@ -57,6 +57,9 @@
 
       #orb-fallback {
         pointer-events: none;
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 160ms ease, visibility 160ms ease;
         filter:
           drop-shadow(0 18px 30px rgba(0, 0, 0, 0.28))
           saturate(0.94);
@@ -127,6 +130,12 @@
       @keyframes orb-orbit-b {
         from { transform: rotate(0deg) scaleX(0.82) scaleY(1.2); }
         to { transform: rotate(-360deg) scaleX(0.82) scaleY(1.2); }
+      }
+
+      body[data-renderer="live"] #orb-fallback,
+      #orb-frame[data-renderer="live"] #orb-fallback {
+        opacity: 0;
+        visibility: hidden;
       }
 
       #orb-render-root.orb-hold canvas {
@@ -212,9 +221,9 @@
       }
     </style>
   </head>
-  <body data-menu-open="false">
+  <body data-menu-open="false" data-renderer="fallback">
     <div id="orb-root">
-      <div id="orb-frame">
+      <div id="orb-frame" data-renderer="fallback">
         <div id="orb-fallback" aria-hidden="true">
           <div class="orb-ring ring-a"></div>
           <div class="orb-ring ring-b"></div>
@@ -247,6 +256,14 @@
       let holdTriggered = false;
       let orbInteractive = false;
       const ORB_SYNC_TIMEOUT_MS = 1500;
+      const ORB_INTERACTION_HIT_RADIUS_RATIO = 0.34;
+      const ORB_HOVER_INTERACTIVE_DELAY_MS = 320;
+      const ORB_HOVER_RELEASE_DELAY_MS = 240;
+      let orbHoverInteraction = {
+        inside: false,
+        enteredAt: 0,
+        lastInsideAt: 0,
+      };
 
       function setMenuOpen(open) {
         document.body.dataset.menuOpen = open ? "true" : "false";
@@ -371,7 +388,7 @@
           return false;
         }
         const rect = root.getBoundingClientRect();
-        const radius = Math.min(rect.width, rect.height) * 0.5;
+        const radius = Math.min(rect.width, rect.height) * ORB_INTERACTION_HIT_RADIUS_RATIO;
         const centerX = rect.left + rect.width * 0.5;
         const centerY = rect.top + rect.height * 0.5;
         return Math.hypot(clientX - centerX, clientY - centerY) <= radius;
@@ -379,24 +396,50 @@
 
       async function setOrbInteractive(interactive) {
         const nextInteractive = Boolean(interactive);
-        if (orbInteractive === nextInteractive || !bridge || typeof bridge.setOrbIgnoreMouseEvents !== "function") {
+        if (orbInteractive === nextInteractive || !bridge) {
           orbInteractive = nextInteractive;
           return;
         }
         orbInteractive = nextInteractive;
-        await bridge.setOrbIgnoreMouseEvents(!nextInteractive);
+        if (typeof bridge.setOrbOwnershipMode === "function") {
+          await bridge.setOrbOwnershipMode(nextInteractive ? "interactable_orb" : "pass_through", "orb_shell");
+          return;
+        }
       }
 
       function syncOrbPassThrough(clientX = null, clientY = null) {
         const menuOpen = document.body.dataset.menuOpen === "true";
+        const now = performance.now();
         if (menuOpen) {
+          orbHoverInteraction.inside = false;
+          orbHoverInteraction.enteredAt = 0;
+          orbHoverInteraction.lastInsideAt = now;
           setOrbInteractive(true).catch(() => {});
           return;
         }
         if (Number.isFinite(clientX) && Number.isFinite(clientY) && isPointerInsideOrb(clientX, clientY)) {
-          setOrbInteractive(true).catch(() => {});
+          if (!orbHoverInteraction.inside) {
+            orbHoverInteraction.inside = true;
+            orbHoverInteraction.enteredAt = now;
+          }
+          orbHoverInteraction.lastInsideAt = now;
+          if (now - orbHoverInteraction.enteredAt >= ORB_HOVER_INTERACTIVE_DELAY_MS) {
+            setOrbInteractive(true).catch(() => {});
+            return;
+          }
+          setOrbInteractive(false).catch(() => {});
           return;
         }
+        if (
+          orbInteractive
+          && orbHoverInteraction.lastInsideAt > 0
+          && now - orbHoverInteraction.lastInsideAt < ORB_HOVER_RELEASE_DELAY_MS
+        ) {
+          return;
+        }
+        orbHoverInteraction.inside = false;
+        orbHoverInteraction.enteredAt = 0;
+        orbHoverInteraction.lastInsideAt = 0;
         setOrbInteractive(false).catch(() => {});
       }
 
@@ -483,9 +526,15 @@
 
       async function mountOrb() {
         const root = document.getElementById("orb-render-root");
+        const frame = document.getElementById("orb-frame");
         if (!root || orbApi) {
           return;
         }
+        root.dataset.renderer = "pending";
+        if (frame) {
+          frame.dataset.renderer = "pending";
+        }
+        document.body.dataset.renderer = "pending";
         const state = await bridge.getState();
         const bundleUrl = `${String(state?.hudUrl || "http://127.0.0.1:8767").replace(/\/$/, "")}/static/orb/francis-orb.js`;
         await loadScript(bundleUrl);
@@ -499,6 +548,11 @@
           usePostFX: false,
           enableBeam: false,
         });
+        root.dataset.renderer = "live";
+        if (frame) {
+          frame.dataset.renderer = "live";
+        }
+        document.body.dataset.renderer = "live";
         currentOrb = normalizeOrbState(currentOrb || buildFallbackOrbState());
         applyFallbackVisuals();
         applyOrbSignals();

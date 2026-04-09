@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import threading
+import time
 from typing import Any
 
-from francis_core.workspace_fs import WorkspaceFS
-from francis_forge.catalog import list_entries
-from francis_forge.library import build_capability_library, build_capability_provenance, build_promotion_rules, build_quality_standard
 from francis_skills.toolbelt.git import repo_status
-from services.orchestrator.app.approvals_store import list_requests
+from services.orchestrator.app.approvals_store import ApprovalSnapshot
+from services.orchestrator.app.capability_state import build_capability_focus, build_capability_state
 from services.orchestrator.app.control_state import AWAY_MUTATING_ACTIONS
 
 SEVERITY_ORDER = {
@@ -23,6 +23,9 @@ SEVERITY_ORDER = {
     "debug": 0,
     "nominal": 0,
 }
+REPO_FOCUS_CACHE_TTL_SECONDS = 1.0
+_repo_focus_cache_lock = threading.Lock()
+_repo_focus_cache: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
 
 
 def _mode_allows_mutating_action(mode: str, action: str) -> tuple[bool, str]:
@@ -85,11 +88,27 @@ def _parse_branch_header(line: str) -> dict[str, Any]:
     return {"branch": branch, "ahead": ahead, "behind": behind}
 
 
-def build_repo_focus(repo_root: Path, *, max_paths: int = 5) -> dict[str, Any]:
+def build_repo_focus(
+    repo_root: Path,
+    *,
+    max_paths: int = 5,
+    max_age_seconds: float | None = REPO_FOCUS_CACHE_TTL_SECONDS,
+) -> dict[str, Any]:
+    resolved_repo_root = repo_root.resolve()
+    normalized_max_paths = max(1, min(int(max_paths), 10))
+    cache_ttl = None if max_age_seconds is None else max(0.0, float(max_age_seconds))
+    cache_key = (str(resolved_repo_root), normalized_max_paths)
+    if cache_ttl is not None and cache_ttl > 0.0:
+        now_mono = time.monotonic()
+        with _repo_focus_cache_lock:
+            cached = _repo_focus_cache.get(cache_key)
+            if cached is not None and cached[0] > now_mono:
+                return dict(cached[1])
+
     result = repo_status(repo_root)
     stdout = str(result.get("stdout", "")).strip()
     if not bool(result.get("ok")):
-        return {
+        payload = {
             "available": False,
             "branch": "unknown",
             "dirty": False,
@@ -103,6 +122,10 @@ def build_repo_focus(repo_root: Path, *, max_paths: int = 5) -> dict[str, Any]:
             "summary": str(result.get("stderr", "")).strip() or "Repository status unavailable.",
             "status_excerpt": stdout,
         }
+        if cache_ttl is not None and cache_ttl > 0.0:
+            with _repo_focus_cache_lock:
+                _repo_focus_cache[cache_key] = (time.monotonic() + cache_ttl, dict(payload))
+        return payload
 
     lines = [line for line in stdout.splitlines() if line.strip()]
     branch_info = _parse_branch_header(lines[0] if lines else "")
@@ -125,7 +148,7 @@ def build_repo_focus(repo_root: Path, *, max_paths: int = 5) -> dict[str, Any]:
                 staged_count += 1
             if status[1] not in {" ", "?"}:
                 unstaged_count += 1
-        if len(top_paths) < max(1, min(int(max_paths), 10)):
+        if len(top_paths) < normalized_max_paths:
             top_paths.append(rel_path)
 
     changed_count = staged_count + unstaged_count + untracked_count
@@ -142,7 +165,7 @@ def build_repo_focus(repo_root: Path, *, max_paths: int = 5) -> dict[str, Any]:
     else:
         summary_parts.append("working tree clean")
 
-    return {
+    payload = {
         "available": True,
         "branch": branch,
         "dirty": changed_count > 0,
@@ -156,6 +179,10 @@ def build_repo_focus(repo_root: Path, *, max_paths: int = 5) -> dict[str, Any]:
         "summary": " | ".join(summary_parts),
         "status_excerpt": stdout,
     }
+    if cache_ttl is not None and cache_ttl > 0.0:
+        with _repo_focus_cache_lock:
+            _repo_focus_cache[cache_key] = (time.monotonic() + cache_ttl, dict(payload))
+    return payload
 
 
 def build_telemetry_focus(workspace_root: Path, *, limit: int = 25) -> dict[str, Any]:
@@ -295,26 +322,6 @@ def _apprenticeship_focus(apprenticeship: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _build_fs(workspace_root: Path) -> WorkspaceFS:
-    return WorkspaceFS(
-        roots=[workspace_root],
-        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
-    )
-
-
-def _capability_approval(fs: WorkspaceFS, entry_id: str, *, action: str) -> dict[str, Any] | None:
-    requests = list_requests(fs, action=action, limit=100)
-    for row in reversed(requests):
-        if not isinstance(row, dict):
-            continue
-        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        target_id = str(metadata.get("entry_id", "")).strip() or str(metadata.get("stage_id", "")).strip()
-        if target_id != entry_id:
-            continue
-        return row
-    return None
-
-
 def _first_failed_rule_detail(rules: dict[str, Any]) -> str:
     for row in rules.get("rules", []) if isinstance(rules.get("rules"), list) else []:
         if not isinstance(row, dict):
@@ -325,173 +332,6 @@ def _first_failed_rule_detail(rules: dict[str, Any]) -> str:
         if detail:
             return detail
     return ""
-
-
-def _capability_focus(workspace_root: Path) -> dict[str, Any]:
-    fs = _build_fs(workspace_root)
-    entries = [row for row in list_entries(fs) if isinstance(row, dict)]
-    library = build_capability_library(entries)
-    packs = [row for row in library.get("packs", []) if isinstance(row, dict)]
-    staged_count = int(library.get("staged_pack_count", 0) or 0)
-    active_count = int(library.get("active_pack_count", 0) or 0)
-
-    focus_pack = next((row for row in packs if int(row.get("staged_count", 0) or 0) > 0), None)
-    if focus_pack is None:
-        focus_pack = next(
-            (
-                row
-                for row in packs
-                if isinstance(row.get("focus_version"), dict)
-                and str(row["focus_version"].get("status", "")).strip().lower() == "quarantined"
-            ),
-            None,
-        )
-    if focus_pack is None:
-        focus_pack = next((row for row in packs if int(row.get("active_count", 0) or 0) > 0), None)
-    focus_entry = (
-        focus_pack.get("focus_version", {})
-        if isinstance(focus_pack, dict) and isinstance(focus_pack.get("focus_version"), dict)
-        else None
-    )
-    if focus_entry is None:
-        focus_entry = None
-
-    if focus_entry is None:
-        return {
-            "catalog_count": len(entries),
-            "pack_count": int(library.get("pack_count", 0) or 0),
-            "staged_count": staged_count,
-            "active_count": active_count,
-            "summary": "No governed capability packs are cataloged yet.",
-            "focus_entry": None,
-        }
-
-    if focus_entry is None:
-        focus_pack = None
-
-    entry_id = str(focus_entry.get("id", "")).strip()
-    status = str(focus_entry.get("status", "")).strip().lower() or "staged"
-    promote_approval = _capability_approval(fs, entry_id, action="forge.promote") if entry_id else None
-    promote_approval_id = str((promote_approval or {}).get("id", "")).strip()
-    promote_approval_status = str((promote_approval or {}).get("status", "")).strip().lower()
-    revoke_approval = _capability_approval(fs, entry_id, action="forge.revoke") if entry_id else None
-    revoke_approval_id = str((revoke_approval or {}).get("id", "")).strip()
-    revoke_approval_status = str((revoke_approval or {}).get("status", "")).strip().lower()
-    version = str(focus_entry.get("version", "")).strip() or "0.1.0"
-    name = str(focus_entry.get("name", "Capability pack")).strip() or "Capability pack"
-    risk_tier = str(focus_entry.get("risk_tier", "low")).strip().lower() or "low"
-    tool_pack = focus_entry.get("tool_pack", {}) if isinstance(focus_entry.get("tool_pack"), dict) else {}
-    diff_summary = focus_entry.get("diff_summary", {}) if isinstance(focus_entry.get("diff_summary"), dict) else {}
-    quality_standard = build_quality_standard(focus_entry)
-    promotion_rules = build_promotion_rules(focus_entry, approval_status=promote_approval_status)
-    provenance = build_capability_provenance(focus_entry, approval_status=promote_approval_status)
-    pack_id = str((focus_pack or {}).get("pack_id", "")).strip() or str(focus_entry.get("slug", "")).strip()
-    version_count = int((focus_pack or {}).get("version_count", 0) or 0)
-    first_failed_rule = _first_failed_rule_detail(promotion_rules)
-    approval_action = ""
-    approval_id = ""
-    approval_status = ""
-
-    if status == "quarantined":
-        summary = (
-            f"{name} {version} in pack {pack_id} is quarantined and blocked from further use. "
-            "Revoke it to keep only audit continuity."
-        )
-        recommended_action = "forge.revoke"
-        approval_action = "forge.revoke"
-        approval_id = revoke_approval_id
-        approval_status = revoke_approval_status
-    elif status == "staged" and (
-        str(provenance.get("review_state", "")).strip() in {"rejected", "quarantined", "revoked"}
-        or (bool(provenance.get("external")) and not bool(provenance.get("traceable")))
-    ):
-        summary = (
-            f"{name} {version} in pack {pack_id} should be quarantined before any promotion path continues. "
-            f"{str(provenance.get('summary', '')).strip()}"
-        ).strip()
-        recommended_action = "forge.quarantine"
-    elif status == "staged":
-        if promote_approval_status == "approved" and promote_approval_id and bool(promotion_rules.get("ready")):
-            summary = f"{name} {version} in pack {pack_id} is staged and already approved for promotion."
-        elif promote_approval_status == "approved" and promote_approval_id:
-            summary = (
-                f"{name} {version} in pack {pack_id} has approval recorded but still needs policy review before promotion. "
-                f"{first_failed_rule or str(provenance.get('summary', '')).strip()}"
-            ).strip()
-        elif promote_approval_status == "pending" and promote_approval_id:
-            summary = f"{name} {version} in pack {pack_id} is staged and waiting on promotion approval {promote_approval_id}."
-        elif promote_approval_status == "rejected":
-            summary = f"{name} {version} in pack {pack_id} is staged after a rejected promotion request and needs a fresh operator decision."
-        else:
-            summary = f"{name} {version} in pack {pack_id} is staged and ready for governed promotion into the active library."
-        recommended_action = "forge.promote"
-        approval_action = "forge.promote"
-        approval_id = promote_approval_id
-        approval_status = promote_approval_status
-    elif status in {"active", "superseded"} and str(provenance.get("review_state", "")).strip() in {
-        "rejected",
-        "quarantined",
-        "revoked",
-    }:
-        summary = (
-            f"{name} {version} in pack {pack_id} has review posture {str(provenance.get('review_label', 'revoked')).strip()} "
-            "and should be revoked from governed use."
-        )
-        recommended_action = "forge.revoke"
-        approval_action = "forge.revoke"
-        approval_id = revoke_approval_id
-        approval_status = revoke_approval_status
-    elif status == "active":
-        summary = f"{name} {version} is active in pack {pack_id} inside the internal capability library."
-        recommended_action = ""
-    else:
-        summary = f"{name} {version} is cataloged in pack {pack_id} with status {status}."
-        recommended_action = ""
-
-    provenance_summary = str(provenance.get("summary", "")).strip()
-    if provenance_summary and provenance.get("kind") != "internal" and provenance_summary not in summary:
-        summary = f"{summary} {provenance_summary}".strip()
-
-    return {
-        "catalog_count": len(entries),
-        "pack_count": int(library.get("pack_count", 0) or 0),
-        "staged_count": staged_count,
-        "active_count": active_count,
-        "summary": summary,
-        "focus_entry": {
-            "id": entry_id,
-            "pack_id": pack_id,
-            "name": name,
-            "slug": str(focus_entry.get("slug", "")).strip(),
-            "version": version,
-            "status": status,
-            "risk_tier": risk_tier,
-            "path": str(focus_entry.get("path", "")).strip(),
-            "approval_id": approval_id,
-            "approval_status": approval_status,
-            "approval_action": approval_action,
-            "summary": summary,
-            "recommended_action": recommended_action,
-            "actionable": bool(
-                (
-                    recommended_action == "forge.promote"
-                    and entry_id
-                    and bool(promotion_rules.get("ready"))
-                    and approval_status == "approved"
-                )
-                or (recommended_action == "forge.quarantine" and entry_id)
-                or (recommended_action == "forge.revoke" and entry_id and approval_status == "approved")
-            ),
-            "validation_ok": bool(quality_standard.get("ok")),
-            "quality_standard": quality_standard,
-            "promotion_rules": promotion_rules,
-            "provenance": provenance,
-            "version_count": version_count,
-            "active_version": str((focus_pack or {}).get("active_version", "")).strip(),
-            "file_count": int(diff_summary.get("file_count", 0) or 0),
-            "tool_pack_skill": str(tool_pack.get("skill_name", "")).strip(),
-        },
-    }
 
 
 def build_current_work(
@@ -505,10 +345,17 @@ def build_current_work(
     inbox: dict[str, Any],
     runs: dict[str, Any],
     apprenticeship: dict[str, Any],
+    approval_snapshot: ApprovalSnapshot | None = None,
+    capability_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     repo = build_repo_focus(repo_root)
     telemetry = build_telemetry_focus(workspace_root)
-    capabilities = _capability_focus(workspace_root)
+    resolved_capability_state = (
+        capability_state
+        if isinstance(capability_state, dict)
+        else build_capability_state(workspace_root, approval_snapshot=approval_snapshot)
+    )
+    capabilities = build_capability_focus(resolved_capability_state)
     active_missions = missions.get("active", []) if isinstance(missions.get("active"), list) else []
     active_mission = active_missions[0] if active_missions else None
     last_run = runs.get("last_run", {}) if isinstance(runs.get("last_run"), dict) else {}

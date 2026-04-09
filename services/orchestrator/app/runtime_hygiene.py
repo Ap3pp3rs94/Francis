@@ -211,6 +211,25 @@ def _parse_ts(ts: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _earliest_future_ts(
+    current: datetime | None,
+    candidate: datetime | None,
+    *,
+    now: datetime,
+) -> datetime | None:
+    if candidate is None or candidate <= now:
+        return current
+    if current is None or candidate < current:
+        return candidate
+    return current
+
+
+def _candidate_threshold(ts: datetime | None, *, min_age_hours: int) -> datetime | None:
+    if ts is None:
+        return None
+    return ts + timedelta(hours=max(0, int(min_age_hours)))
+
+
 def _text_fields(value: Any) -> list[str]:
     fields: list[str] = []
     if isinstance(value, dict):
@@ -457,6 +476,237 @@ def preview_runtime_hygiene(
         min_age_hours=min_age_hours,
         max_rows=max_rows,
     )
+
+
+def summarize_runtime_hygiene_candidates(
+    *,
+    missions_doc: dict[str, Any] | None,
+    jobs: list[dict[str, Any]],
+    deadletters: list[dict[str, Any]],
+    incidents: list[dict[str, Any]],
+    inbox: list[dict[str, Any]],
+    telemetry_events: list[dict[str, Any]],
+    min_age_hours: int = 24,
+    max_rows: int = 5000,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    reference_now = now or datetime.now(timezone.utc)
+    normalized_limit = max(1, min(int(max_rows), 50000))
+    normalized_min_age_hours = max(0, min(int(min_age_hours), 24 * 30))
+    next_refresh_after: datetime | None = None
+    missions = missions_doc.get("missions", []) if isinstance(missions_doc, dict) else []
+    if not isinstance(missions, list):
+        missions = []
+
+    mission_candidate_ids: set[str] = set()
+    mission_candidate_count = 0
+    for row in missions:
+        if mission_candidate_count >= normalized_limit:
+            break
+        if not isinstance(row, dict):
+            continue
+        if not is_active_mission(row) or not is_synthetic_test_mission(row):
+            continue
+        ts = _parse_ts(str(row.get("updated_at", "")).strip() or None) or _parse_ts(
+            str(row.get("created_at", "")).strip() or None
+        )
+        threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+        if threshold is not None and reference_now >= threshold:
+            mission_candidate_count += 1
+            mission_candidate_ids.add(str(row.get("id", "")).strip())
+        else:
+            next_refresh_after = _earliest_future_ts(
+                next_refresh_after,
+                threshold,
+                now=reference_now,
+            )
+
+    queue_candidate_count = 0
+    mission_job_candidate_count = 0
+    malformed_skill_job_candidate_count = 0
+    for row in jobs:
+        if queue_candidate_count >= normalized_limit:
+            break
+        if mission_candidate_ids:
+            if (
+                str(row.get("status", "")).strip().lower() == "queued"
+                and str(row.get("action", "")).strip().lower() == "mission.tick"
+                and str(row.get("mission_id", "")).strip() in mission_candidate_ids
+            ):
+                mission_job_candidate_count += 1
+                queue_candidate_count += 1
+                continue
+        if job_status(row) != "queued":
+            continue
+        if str(row.get("action", "")).strip().lower() != "skill.run":
+            continue
+        if str(row.get("skill", "")).strip():
+            continue
+        ts = _parse_ts(str(row.get("ts", "")).strip() or None)
+        threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+        if threshold is not None and reference_now >= threshold:
+            malformed_skill_job_candidate_count += 1
+            queue_candidate_count += 1
+        else:
+            next_refresh_after = _earliest_future_ts(
+                next_refresh_after,
+                threshold,
+                now=reference_now,
+            )
+
+    deadletter_candidate_indexes: set[int] = set()
+    deadletter_candidate_count = 0
+    for index, row in enumerate(deadletters):
+        if deadletter_candidate_count >= normalized_limit:
+            break
+        if not is_active_deadletter(row):
+            continue
+        if is_test_deadletter(row):
+            deadletter_candidate_indexes.add(index)
+            deadletter_candidate_count += 1
+
+    for index, row in enumerate(deadletters):
+        if deadletter_candidate_count >= normalized_limit:
+            break
+        if index in deadletter_candidate_indexes:
+            continue
+        if not is_active_deadletter(row):
+            continue
+        texts = " ".join(_text_fields(row))
+        if not any(marker in texts for marker in UNSUPPORTED_DEADLETTER_MARKERS):
+            continue
+        ts = _parse_ts(str(row.get("ts", "")).strip() or None)
+        threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+        if threshold is not None and reference_now >= threshold:
+            deadletter_candidate_count += 1
+        else:
+            next_refresh_after = _earliest_future_ts(
+                next_refresh_after,
+                threshold,
+                now=reference_now,
+            )
+
+    incident_candidate_indexes: set[int] = set()
+    incident_candidate_count = 0
+    for index, row in enumerate(incidents):
+        if incident_candidate_count >= normalized_limit:
+            break
+        if not is_open_incident(row):
+            continue
+        if is_test_incident(row):
+            incident_candidate_indexes.add(index)
+            incident_candidate_count += 1
+
+    for index, row in enumerate(incidents):
+        if incident_candidate_count >= normalized_limit:
+            break
+        if index in incident_candidate_indexes:
+            continue
+        if not is_open_incident(row):
+            continue
+        if str(row.get("kind", "")).strip().lower() != "security.untrusted_input":
+            continue
+        texts = " ".join(_text_fields(row.get("evidence")))
+        if not any(marker in texts for marker in STALE_SECURITY_INCIDENT_MARKERS):
+            continue
+        ts = _parse_ts(str(row.get("ts", "")).strip() or None)
+        threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+        if threshold is not None and reference_now >= threshold:
+            incident_candidate_count += 1
+        else:
+            next_refresh_after = _earliest_future_ts(
+                next_refresh_after,
+                threshold,
+                now=reference_now,
+            )
+
+    inbox_test_candidate_indexes: set[int] = set()
+    inbox_candidate_count = 0
+    for index, row in enumerate(inbox):
+        if inbox_candidate_count >= normalized_limit:
+            break
+        if not is_active_inbox_message(row):
+            continue
+        title = str(row.get("title", "")).strip().lower()
+        source = str(row.get("source", "")).strip().lower()
+        body = str(row.get("body", row.get("summary", ""))).strip().lower()
+        synthetic_row = (title, body) in TEST_INBOX_SYNTHETIC_ROWS
+        if not synthetic_row and title not in TEST_INBOX_TITLE_MARKERS and source != "test":
+            continue
+        if (
+            not synthetic_row
+            and not any(marker in body for marker in TEST_INBOX_BODY_MARKERS)
+            and title not in TEST_INBOX_TITLE_MARKERS
+        ):
+            continue
+        ts = _parse_ts(str(row.get("ts", "")).strip() or None)
+        threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+        if threshold is not None and reference_now >= threshold:
+            inbox_test_candidate_indexes.add(index)
+            inbox_candidate_count += 1
+        else:
+            next_refresh_after = _earliest_future_ts(
+                next_refresh_after,
+                threshold,
+                now=reference_now,
+            )
+
+    if inbox_candidate_count < normalized_limit:
+        presence_indexes = [
+            index
+            for index, row in enumerate(inbox)
+            if index not in inbox_test_candidate_indexes and is_presence_briefing_message(row)
+        ]
+        keep_presence_index = presence_indexes[-1] if presence_indexes else None
+        for index in presence_indexes:
+            if inbox_candidate_count >= normalized_limit:
+                break
+            if keep_presence_index is not None and index != keep_presence_index:
+                inbox_candidate_count += 1
+                continue
+            ts = _parse_ts(str(inbox[index].get("ts", "")).strip() or None)
+            threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+            if threshold is not None and reference_now >= threshold:
+                inbox_candidate_count += 1
+            else:
+                next_refresh_after = _earliest_future_ts(
+                    next_refresh_after,
+                    threshold,
+                    now=reference_now,
+                )
+
+    telemetry_candidate_count = 0
+    for row in telemetry_events:
+        if telemetry_candidate_count >= normalized_limit:
+            break
+        source = str(row.get("source", "")).strip().lower()
+        if source not in TEST_TELEMETRY_SOURCES:
+            continue
+        ts = _parse_ts(str(row.get("ts", "")).strip() or None)
+        threshold = _candidate_threshold(ts, min_age_hours=normalized_min_age_hours)
+        if threshold is not None and reference_now >= threshold:
+            telemetry_candidate_count += 1
+        else:
+            next_refresh_after = _earliest_future_ts(
+                next_refresh_after,
+                threshold,
+                now=reference_now,
+            )
+
+    return {
+        "min_age_hours": normalized_min_age_hours,
+        "missions": {"candidate_count": mission_candidate_count},
+        "queue": {"candidate_count": queue_candidate_count},
+        "deadletters": {"candidate_count": deadletter_candidate_count},
+        "incidents": {"candidate_count": incident_candidate_count},
+        "inbox": {"candidate_count": inbox_candidate_count},
+        "telemetry": {"candidate_count": telemetry_candidate_count},
+        "queue_breakdown": {
+            "mission_tick": mission_job_candidate_count,
+            "malformed_skill_job": malformed_skill_job_candidate_count,
+        },
+        "next_refresh_after": next_refresh_after.isoformat() if next_refresh_after is not None else None,
+    }
 
 
 def runtime_hygiene_candidate_breakdown(summary: dict[str, Any]) -> dict[str, int]:

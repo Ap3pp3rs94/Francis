@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from francis_core.workspace_fs import WorkspaceFS
 from tests.integration.workspace_state import MISSION_RUNTIME_PATHS, isolated_workspace_files
 import services.orchestrator.app.routes.control as control_routes
 
@@ -84,6 +86,14 @@ def _to_utc(ts: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _write_jsonl(path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = ""
+    if rows:
+        payload = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+    path.write_text(payload, encoding="utf-8")
 
 
 def test_control_mode_blocks_mission_create_in_observe() -> None:
@@ -167,6 +177,174 @@ def test_control_panic_blocks_mutations_until_resume() -> None:
         finally:
             _set_scope(c, original_scope)
             _set_mode(c, str(original_mode.get("mode", "pilot")), bool(original_mode.get("kill_switch", False)))
+
+
+def test_control_mode_read_does_not_rewrite_state_file() -> None:
+    with isolated_workspace_files(("control/state.json", "journals/fs.jsonl")):
+        c = TestClient(app)
+
+        first = c.get("/control/mode")
+        assert first.status_code == 200
+        first_payload = first.json()
+        state_path = control_routes._workspace_root / "control" / "state.json"
+        before = state_path.read_text(encoding="utf-8")
+
+        second = c.get("/control/mode")
+        assert second.status_code == 200
+        second_payload = second.json()
+        after = state_path.read_text(encoding="utf-8")
+
+        assert after == before
+        assert second_payload["updated_at"] == first_payload["updated_at"]
+
+
+def test_control_takeover_read_does_not_rewrite_state_file() -> None:
+    with isolated_workspace_files(("control/state.json", "control/takeover.json", "journals/fs.jsonl")):
+        c = TestClient(app)
+
+        first = c.get("/control/takeover")
+        assert first.status_code == 200
+        first_payload = first.json()
+        takeover_path = control_routes._workspace_root / "control" / "takeover.json"
+        before = takeover_path.read_text(encoding="utf-8")
+
+        second = c.get("/control/takeover")
+        assert second.status_code == 200
+        second_payload = second.json()
+        after = takeover_path.read_text(encoding="utf-8")
+
+        assert after == before
+        assert second_payload["takeover"]["updated_at"] == first_payload["takeover"]["updated_at"]
+
+
+def test_control_takeover_sessions_reuse_cached_index_until_history_changes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    repo_root = tmp_path / "repo"
+    fs = WorkspaceFS(roots=[workspace_root], journal_path=workspace_root / "journals" / "fs.jsonl")
+    monkeypatch.setattr(control_routes, "_workspace_root", workspace_root)
+    monkeypatch.setattr(control_routes, "_repo_root", repo_root)
+    monkeypatch.setattr(control_routes, "_fs", fs)
+
+    c = TestClient(app)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    takeover_path = workspace_root / "control" / "takeover.json"
+    history_path = workspace_root / "control" / "takeover_history.jsonl"
+    activity_path = workspace_root / "control" / "takeover_activity.jsonl"
+    exports_path = workspace_root / "control" / "handback_exports" / "index.jsonl"
+    index_path = workspace_root / "control" / "takeover_sessions_index.json"
+
+    takeover_path.parent.mkdir(parents=True, exist_ok=True)
+    takeover_path.write_text(
+        json.dumps(
+            {
+                "status": "idle",
+                "session_id": None,
+                "last_session_id": "session-1",
+                "objective": "",
+                "updated_at": now_iso,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    _write_jsonl(
+        history_path,
+        [
+            {
+                "id": "hist-1",
+                "ts": now_iso,
+                "kind": "control.takeover.request",
+                "session_id": "session-1",
+                "after": {"objective": "Ship session one"},
+            }
+        ],
+    )
+    _write_jsonl(
+        activity_path,
+        [
+            {
+                "id": "act-1",
+                "ts": now_iso,
+                "kind": "control.takeover.requested",
+                "session_id": "session-1",
+                "actor": "architect",
+                "objective": "Ship session one",
+            }
+        ],
+    )
+    _write_jsonl(exports_path, [])
+
+    first = c.get("/control/takeover/sessions", params={"limit": 5})
+    assert first.status_code == 200
+    first_sessions = first.json()["sessions"]
+    assert [row["session_id"] for row in first_sessions] == ["session-1"]
+    assert index_path.exists()
+
+    original_read_jsonl_rows = control_routes._read_jsonl_rows
+    cache_reads: list[str] = []
+
+    def counting_read_jsonl_rows(rel_path: str) -> list[dict]:
+        cache_reads.append(rel_path)
+        return original_read_jsonl_rows(rel_path)
+
+    monkeypatch.setattr(control_routes, "_read_jsonl_rows", counting_read_jsonl_rows)
+    second = c.get("/control/takeover/sessions", params={"limit": 5})
+    assert second.status_code == 200
+    assert second.json()["sessions"] == first_sessions
+    assert cache_reads == []
+
+    later_iso = datetime.now(timezone.utc).isoformat()
+    _write_jsonl(
+        history_path,
+        [
+            {
+                "id": "hist-1",
+                "ts": now_iso,
+                "kind": "control.takeover.request",
+                "session_id": "session-1",
+                "after": {"objective": "Ship session one"},
+            },
+            {
+                "id": "hist-2",
+                "ts": later_iso,
+                "kind": "control.takeover.request",
+                "session_id": "session-2",
+                "after": {"objective": "Ship session two"},
+            },
+        ],
+    )
+    _write_jsonl(
+        activity_path,
+        [
+            {
+                "id": "act-1",
+                "ts": now_iso,
+                "kind": "control.takeover.requested",
+                "session_id": "session-1",
+                "actor": "architect",
+                "objective": "Ship session one",
+            },
+            {
+                "id": "act-2",
+                "ts": later_iso,
+                "kind": "control.takeover.requested",
+                "session_id": "session-2",
+                "actor": "architect",
+                "objective": "Ship session two",
+            },
+        ],
+    )
+
+    cache_reads.clear()
+    third = c.get("/control/takeover/sessions", params={"limit": 5})
+    assert third.status_code == 200
+    third_sessions = third.json()["sessions"]
+    assert [row["session_id"] for row in third_sessions[:2]] == ["session-2", "session-1"]
+    assert cache_reads
 
 
 def test_control_receipts_are_traceable_via_runs_trace() -> None:

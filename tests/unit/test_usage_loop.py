@@ -31,6 +31,29 @@ def test_build_repo_focus_reports_dirty_repo(tmp_path: Path) -> None:
     assert "dirty.txt" in focus["top_paths"]
 
 
+def test_build_repo_focus_reuses_short_lived_cache(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    calls: list[Path] = []
+
+    def _repo_status(_repo_root: Path) -> dict[str, object]:
+        calls.append(_repo_root)
+        return {
+            "ok": True,
+            "stdout": "## main\n M cached.txt\n",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr("services.orchestrator.app.usage_loop.repo_status", _repo_status)
+
+    first = build_repo_focus(repo_root, max_age_seconds=60.0)
+    second = build_repo_focus(repo_root, max_age_seconds=60.0)
+
+    assert first["changed_count"] == 1
+    assert second["changed_count"] == 1
+    assert len(calls) == 1
+
+
 def test_usage_loop_prefers_repo_tests_after_terminal_failure(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     workspace_root = repo_root / "workspace"

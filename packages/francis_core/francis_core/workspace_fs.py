@@ -9,18 +9,26 @@ from .journal import append_jsonl
 
 
 class WorkspaceFS:
-    """Workspace-only file IO with audit journaling."""
+    """Workspace-only file IO with write audit journaling and optional read journaling."""
 
-    def __init__(self, *, roots: Iterable[Path], journal_path: Path) -> None:
+    def __init__(
+        self,
+        *,
+        roots: Iterable[Path],
+        journal_path: Path,
+        journal_reads: bool = False,
+    ) -> None:
         self.roots = [Path(r).resolve() for r in roots]
         if not self.roots:
             raise ValueError("WorkspaceFS requires at least one root")
         self.journal_path = Path(journal_path).resolve()
+        self.journal_reads = bool(journal_reads)
 
     def read_text(self, rel_path: str) -> str:
         path = self._resolve(rel_path)
         data = path.read_text(encoding="utf-8")
-        self._journal("read_text", rel_path, len(data))
+        if self.journal_reads:
+            self._journal("read_text", rel_path, len(data))
         return data
 
     def write_text(self, rel_path: str, content: str) -> None:

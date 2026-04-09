@@ -13,7 +13,7 @@ export class OrbParticles implements OrbRenderable {
     this.seeds = new Float32Array(count);
 
     for (let i = 0; i < count; i += 1) {
-      const r = rng.range(1.4, 2.6);
+      const r = rng.range(0.44, 1.02);
       const theta = rng.range(0, Math.PI * 2);
       const phi = Math.acos(rng.range(-1, 1));
 
@@ -27,10 +27,10 @@ export class OrbParticles implements OrbRenderable {
     geometry.setAttribute("position", new THREE.BufferAttribute(this.positions, 3));
 
     const material = new THREE.PointsMaterial({
-      color: 0xe4f5ff,
-      size: 0.03,
+      color: 0xf0f6ff,
+      size: 0.007,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.028,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -47,9 +47,9 @@ export class OrbParticles implements OrbRenderable {
       const y = this.positions[ix + 1];
       const z = this.positions[ix + 2];
 
-      const angle = Math.atan2(y, x) + frame.dt * 0.16 * profile.particleSpeed;
+      const angle = Math.atan2(y, x) + frame.dt * 0.065 * profile.particleSpeed;
       const radius = Math.sqrt(x * x + y * y);
-      const dz = Math.sin(frame.elapsed * 0.7 + this.seeds[i]) * 0.0018 * profile.particleSpeed;
+      const dz = Math.sin(frame.elapsed * 0.44 + this.seeds[i]) * 0.00065 * profile.particleSpeed;
 
       this.positions[ix + 0] = Math.cos(angle) * radius;
       this.positions[ix + 1] = Math.sin(angle) * radius;

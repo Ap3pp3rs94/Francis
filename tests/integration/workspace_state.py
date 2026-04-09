@@ -29,6 +29,7 @@ MISSION_RUNTIME_PATHS = (
 AUTONOMY_RUNTIME_PATHS = MISSION_RUNTIME_PATHS + (
     "autonomy/action_budget_state.json",
     "autonomy/events.jsonl",
+    "autonomy/reactor_events_summary.json",
     "autonomy/dispatch_history.jsonl",
     "autonomy/tick_history.jsonl",
     "autonomy/last_dispatch.json",
@@ -58,6 +59,7 @@ TELEMETRY_RUNTIME_PATHS = (
 LENS_USAGE_RUNTIME_PATHS = (
     "apprenticeship/sessions.json",
     "approvals/requests.jsonl",
+    "autonomy/reactor_events_summary.json",
     "forge/catalog.json",
     "journals/decisions.jsonl",
     "journals/fs.jsonl",
@@ -71,6 +73,7 @@ RECEIPTS_LENS_RUNTIME_PATHS = MISSION_RUNTIME_PATHS + (
     "autonomy/events.jsonl",
     "autonomy/last_dispatch.json",
     "autonomy/last_tick.json",
+    "autonomy/reactor_events_summary.json",
     "autonomy/reactor_guardrail_state.json",
     "control/handback_exports/index.jsonl",
     "control/takeover.json",

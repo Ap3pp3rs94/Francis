@@ -23,10 +23,10 @@ export function createFrancisOrb(
   return {
     orb,
     setIdle() {
-      orb.setSignals({ state: "idle" });
+      orb.setSignals({ state: "idle_anchored" });
     },
     setListening() {
-      orb.setSignals({ state: "listening" });
+      orb.setSignals({ state: "attentive" });
     },
     setThinking(confidence = 1.0) {
       const decision = policy.decide({
@@ -39,20 +39,20 @@ export function createFrancisOrb(
       });
 
       orb.setSignals({
-        state: decision.interject ? "interject" : "thinking",
+        state: decision.interject ? "waiting_user" : "investigate",
         confidence,
         interjectionIntent: decision.interject,
       });
     },
     setSpeaking(amplitude: number) {
       orb.setSignals({
-        state: "speaking",
+        state: "attentive",
         speakingAmplitude: amplitude,
       });
     },
     setActing(target: THREE.Vector3, strength = 1) {
       orb.setSignals({
-        state: "acting",
+        state: "commit_move",
         actionTarget: target,
         actionStrength: strength,
         attentionTarget: target,

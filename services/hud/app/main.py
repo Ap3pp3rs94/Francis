@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -31,7 +32,7 @@ from services.orchestrator.app.orb_authority import (
 )
 from services.orchestrator.app.orb_perception import get_orb_perception_view, record_orb_perception_view
 from services.hud.app.orchestrator_bridge import execute_lens_action, get_lens_actions
-from services.hud.app.state import build_lens_snapshot
+from services.hud.app.state import build_lens_snapshot, get_workspace_root, load_approval_snapshot
 from services.hud.app.views.approval_queue import get_approval_queue_view
 from services.hud.app.views.action_deck import get_action_deck_view
 from services.hud.app.views.apprenticeship import (
@@ -57,6 +58,7 @@ from services.hud.app.views.repo_drilldown import get_repo_drilldown_view
 from services.hud.app.views.runs import get_runs_view
 from services.hud.app.views.shift_report import get_shift_report_view
 from services.hud.app.views.swarm import get_swarm_view
+from services.orchestrator.app.capability_state import build_capability_state
 from services.orchestrator.app.routes.swarm import (
     SwarmCompleteRequest,
     SwarmCycleRequest,
@@ -211,6 +213,8 @@ class HudOrbPerceptionFrameRequest(BaseModel):
     focus_width: int = 0
     focus_height: int = 0
     focus_data_url: str = ""
+    accessibility: dict[str, object] = Field(default_factory=dict)
+    environment: dict[str, object] = Field(default_factory=dict)
 
 
 class HudOrbAuthorityCommandRequest(BaseModel):
@@ -254,30 +258,203 @@ class HudOrbAuthorityCancelRequest(BaseModel):
     actor: str = "electron.orb"
 
 
+def _profiled_build_step(
+    timings: list[dict[str, object]] | None,
+    name: str,
+    builder: Callable[[], object],
+) -> object:
+    started = time.perf_counter()
+    result = builder()
+    if isinstance(timings, list):
+        timings.append(
+            {
+                "name": name,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+            }
+        )
+    return result
+
+
+def _build_bootstrap_profile(
+    *,
+    phases: list[dict[str, object]],
+    total_ms: float,
+    snapshot_reused: bool,
+    actions_reused: bool,
+    execution_supplied: bool,
+    approval_snapshot_loaded: bool,
+    snapshot_profile: dict[str, object] | None = None,
+) -> dict[str, object]:
+    ordered_phases = [dict(phase) for phase in phases]
+    slowest = sorted(
+        ordered_phases,
+        key=lambda phase: float(phase.get("elapsed_ms", 0.0) or 0.0),
+        reverse=True,
+    )[:5]
+    payload = {
+        "surface": "bootstrap_profile",
+        "total_ms": round(total_ms, 3),
+        "phase_count": len(ordered_phases),
+        "phases": ordered_phases,
+        "slowest": slowest,
+        "reused": {
+            "snapshot": bool(snapshot_reused),
+            "actions": bool(actions_reused),
+            "execution": bool(execution_supplied),
+            "approval_snapshot": not approval_snapshot_loaded,
+        },
+    }
+    if isinstance(snapshot_profile, dict):
+        payload["components"] = {"snapshot": dict(snapshot_profile)}
+    return payload
+
+
 def _build_hud_payload(
     *,
     snapshot: dict[str, object] | None = None,
     actions: dict[str, object] | None = None,
     max_actions: int = 8,
     execution: dict[str, object] | None = None,
+    profile: bool = False,
 ) -> dict[str, object]:
-    snapshot_payload = snapshot if snapshot else build_lens_snapshot()
-    actions_payload = actions if actions else get_lens_actions(max_actions=max_actions)
-    current_work = get_current_work_view(snapshot=snapshot_payload, actions=actions_payload)
-    approval_queue = get_approval_queue_view(snapshot=snapshot_payload, actions=actions_payload)
-    blocked_actions = get_blocked_actions_view(snapshot=snapshot_payload, actions=actions_payload)
-    action_deck = get_action_deck_view(
-        snapshot=snapshot_payload,
-        actions=actions_payload,
-        blocked_actions=blocked_actions,
+    build_started = time.perf_counter()
+    timings: list[dict[str, object]] | None = [] if profile else None
+    snapshot_reused = snapshot is not None
+    actions_reused = actions is not None
+    approval_snapshot: object | None = None
+    approval_snapshot_loaded = False
+    capability_state: dict[str, object] | None = None
+    capability_state_root: Path | None = None
+    snapshot_profile: dict[str, object] | None = None
+
+    def _load_shared_capability_state(workspace_root: Path) -> dict[str, object]:
+        nonlocal capability_state
+        nonlocal capability_state_root
+        resolved_root = workspace_root.resolve()
+        if capability_state_root == resolved_root and isinstance(capability_state, dict):
+            return capability_state
+        capability_state = _profiled_build_step(
+            timings,
+            "capability_state",
+            lambda: build_capability_state(resolved_root, approval_snapshot=approval_snapshot),
+        )
+        capability_state_root = resolved_root
+        return capability_state
+
+    if not snapshot and "approval_snapshot" in inspect.signature(build_lens_snapshot).parameters:
+        approval_snapshot = _profiled_build_step(
+            timings,
+            "approval_snapshot",
+            load_approval_snapshot,
+        )
+        approval_snapshot_loaded = True
+    if snapshot:
+        snapshot_payload = snapshot
+    else:
+        snapshot_args: dict[str, object] = {}
+        if approval_snapshot is not None and "approval_snapshot" in inspect.signature(build_lens_snapshot).parameters:
+            snapshot_args["approval_snapshot"] = approval_snapshot
+        if "capability_state" in inspect.signature(build_lens_snapshot).parameters:
+            snapshot_args["capability_state"] = _load_shared_capability_state(get_workspace_root())
+        if profile and "profile" in inspect.signature(build_lens_snapshot).parameters:
+            snapshot_args["profile"] = True
+        snapshot_payload = _profiled_build_step(
+            timings,
+            "snapshot",
+            lambda: build_lens_snapshot(**snapshot_args),
+        )
+        if profile and isinstance(snapshot_payload, dict):
+            raw_snapshot_profile = snapshot_payload.get("build_profile")
+            if isinstance(raw_snapshot_profile, dict):
+                snapshot_profile = dict(raw_snapshot_profile)
+                snapshot_payload = dict(snapshot_payload)
+                snapshot_payload.pop("build_profile", None)
+    if actions:
+        actions_payload = actions
+    else:
+        action_args: dict[str, object] = {"max_actions": max_actions}
+        if "snapshot" in inspect.signature(get_lens_actions).parameters:
+            action_args["snapshot"] = snapshot_payload
+        if approval_snapshot is None and "approval_snapshot" in inspect.signature(get_lens_actions).parameters:
+            approval_snapshot = _profiled_build_step(
+                timings,
+                "approval_snapshot",
+                load_approval_snapshot,
+            )
+            approval_snapshot_loaded = True
+        if approval_snapshot is not None and "approval_snapshot" in inspect.signature(get_lens_actions).parameters:
+            action_args["approval_snapshot"] = approval_snapshot
+        actions_payload = _profiled_build_step(
+            timings,
+            "actions",
+            lambda: get_lens_actions(**action_args),
+        )
+    current_work = _profiled_build_step(
+        timings,
+        "current_work",
+        lambda: get_current_work_view(snapshot=snapshot_payload, actions=actions_payload),
     )
-    execution_journal = get_execution_journal_view(snapshot=snapshot_payload)
-    voice = build_operator_presence(
-        mode=str(snapshot_payload.get("control", {}).get("mode", "assist")),
-        max_actions=min(max_actions, 3),
-        snapshot=snapshot_payload,
-        actions_payload=actions_payload,
+    approval_queue = _profiled_build_step(
+        timings,
+        "approval_queue",
+        lambda: get_approval_queue_view(snapshot=snapshot_payload, actions=actions_payload),
     )
+    blocked_actions = _profiled_build_step(
+        timings,
+        "blocked_actions",
+        lambda: get_blocked_actions_view(snapshot=snapshot_payload, actions=actions_payload),
+    )
+    action_deck = _profiled_build_step(
+        timings,
+        "action_deck",
+        lambda: get_action_deck_view(
+            snapshot=snapshot_payload,
+            actions=actions_payload,
+            blocked_actions=blocked_actions,
+        ),
+    )
+    execution_journal = _profiled_build_step(
+        timings,
+        "execution_journal",
+        lambda: get_execution_journal_view(snapshot=snapshot_payload),
+    )
+    voice = _profiled_build_step(
+        timings,
+        "voice",
+        lambda: build_operator_presence(
+            mode=str(snapshot_payload.get("control", {}).get("mode", "assist")),
+            max_actions=min(max_actions, 3),
+            snapshot=snapshot_payload,
+            actions_payload=actions_payload,
+        ),
+    )
+
+    def _build_capability_library_surface() -> dict[str, object]:
+        capability_args: dict[str, object] = {"snapshot": snapshot_payload}
+        capability_view_signature = inspect.signature(get_capability_library_view).parameters
+        if "capability_state" in capability_view_signature:
+            capability_args["capability_state"] = _load_shared_capability_state(
+                Path(str(snapshot_payload.get("workspace_root", get_workspace_root())))
+            )
+        if approval_snapshot is not None and "approval_snapshot" in capability_view_signature:
+            capability_args["approval_snapshot"] = approval_snapshot
+        return get_capability_library_view(**capability_args)
+
+    def _build_connector_library_surface() -> dict[str, object]:
+        connector_args: dict[str, object] = {"snapshot": snapshot_payload}
+        connector_view_signature = inspect.signature(get_connector_library_view).parameters
+        if approval_snapshot is not None and "approval_snapshot" in connector_view_signature:
+            connector_args["approval_snapshot"] = approval_snapshot
+        return get_connector_library_view(**connector_args)
+
+    def _build_dependency_library_surface() -> dict[str, object]:
+        dependency_args: dict[str, object] = {"snapshot": snapshot_payload}
+        dependency_view_signature = inspect.signature(get_dependency_library_view).parameters
+        if approval_snapshot is not None and "approval_snapshot" in dependency_view_signature:
+            dependency_args["approval_snapshot"] = approval_snapshot
+        return get_dependency_library_view(**dependency_args)
+
+    fabric_summary = snapshot_payload.get("fabric") if isinstance(snapshot_payload.get("fabric"), dict) else None
     payload = {
         "status": "ok",
         "service": "hud",
@@ -285,58 +462,158 @@ def _build_hud_payload(
         "snapshot": snapshot_payload,
         "actions": actions_payload,
         "voice": voice,
-        "orb": get_orb_view(
-            max_actions=max_actions,
-            snapshot=snapshot_payload,
-            actions=actions_payload,
-            voice=voice,
-            include_perception_frame=False,
+        "orb": _profiled_build_step(
+            timings,
+            "orb",
+            lambda: get_orb_view(
+                max_actions=max_actions,
+                snapshot=snapshot_payload,
+                actions=actions_payload,
+                voice=voice,
+                include_perception_frame=False,
+            ),
         ),
         "current_work": current_work,
-        "shift_report": get_shift_report_view(
-            snapshot=snapshot_payload,
-            actions=actions_payload,
-            current_work=current_work,
+        "shift_report": _profiled_build_step(
+            timings,
+            "shift_report",
+            lambda: get_shift_report_view(
+                snapshot=snapshot_payload,
+                actions=actions_payload,
+                current_work=current_work,
+            ),
         ),
-        "repo_drilldown": get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
-        "capability_library": get_capability_library_view(snapshot=snapshot_payload),
-        "connector_library": get_connector_library_view(snapshot=snapshot_payload),
-        "dependency_library": get_dependency_library_view(snapshot=snapshot_payload),
-        "swarm": get_swarm_view(snapshot=snapshot_payload),
-        "federation": get_federation_view(snapshot=snapshot_payload),
-        "managed_copies": get_managed_copies_view(snapshot=snapshot_payload),
-        "portability": get_portability_view(snapshot=snapshot_payload),
+        "repo_drilldown": _profiled_build_step(
+            timings,
+            "repo_drilldown",
+            lambda: get_repo_drilldown_view(snapshot=snapshot_payload, actions=actions_payload),
+        ),
+        "capability_library": _profiled_build_step(
+            timings,
+            "capability_library",
+            _build_capability_library_surface,
+        ),
+        "connector_library": _profiled_build_step(
+            timings,
+            "connector_library",
+            _build_connector_library_surface,
+        ),
+        "dependency_library": _profiled_build_step(
+            timings,
+            "dependency_library",
+            _build_dependency_library_surface,
+        ),
+        "swarm": _profiled_build_step(
+            timings,
+            "swarm",
+            lambda: get_swarm_view(snapshot=snapshot_payload),
+        ),
+        "federation": _profiled_build_step(
+            timings,
+            "federation",
+            lambda: get_federation_view(snapshot=snapshot_payload),
+        ),
+        "managed_copies": _profiled_build_step(
+            timings,
+            "managed_copies",
+            lambda: get_managed_copies_view(snapshot=snapshot_payload),
+        ),
+        "portability": _profiled_build_step(
+            timings,
+            "portability",
+            lambda: get_portability_view(snapshot=snapshot_payload),
+        ),
         "approval_queue": approval_queue,
         "blocked_actions": blocked_actions,
         "action_deck": action_deck,
-        "apprenticeship_surface": get_apprenticeship_view(snapshot=snapshot_payload),
-        "execution_journal": execution_journal,
-        "execution_feed": get_execution_feed_view(
-            snapshot=snapshot_payload,
-            actions=actions_payload,
-            current_work=current_work,
-            approval_queue=approval_queue,
-            execution_journal=execution_journal,
-            execution=execution,
+        "apprenticeship_surface": _profiled_build_step(
+            timings,
+            "apprenticeship_surface",
+            lambda: get_apprenticeship_view(snapshot=snapshot_payload),
         ),
-        "dashboard": get_dashboard_view(snapshot=snapshot_payload),
-        "missions": get_missions_view(snapshot=snapshot_payload),
-        "incidents": get_incidents_view(snapshot=snapshot_payload),
-        "inbox": get_inbox_view(snapshot=snapshot_payload),
-        "runs": get_runs_view(snapshot=snapshot_payload),
-        "fabric": get_fabric_surface(refresh=False, defer_if_missing=True),
+        "execution_journal": execution_journal,
+        "execution_feed": _profiled_build_step(
+            timings,
+            "execution_feed",
+            lambda: get_execution_feed_view(
+                snapshot=snapshot_payload,
+                actions=actions_payload,
+                current_work=current_work,
+                approval_queue=approval_queue,
+                execution_journal=execution_journal,
+                execution=execution,
+            ),
+        ),
+        "dashboard": _profiled_build_step(
+            timings,
+            "dashboard",
+            lambda: get_dashboard_view(snapshot=snapshot_payload),
+        ),
+        "missions": _profiled_build_step(
+            timings,
+            "missions",
+            lambda: get_missions_view(snapshot=snapshot_payload),
+        ),
+        "incidents": _profiled_build_step(
+            timings,
+            "incidents",
+            lambda: get_incidents_view(snapshot=snapshot_payload),
+        ),
+        "inbox": _profiled_build_step(
+            timings,
+            "inbox",
+            lambda: get_inbox_view(snapshot=snapshot_payload),
+        ),
+        "runs": _profiled_build_step(
+            timings,
+            "runs",
+            lambda: get_runs_view(snapshot=snapshot_payload),
+        ),
+        "fabric": _profiled_build_step(
+            timings,
+            "fabric",
+            lambda: {
+                "status": "ok",
+                "surface": "fabric",
+                "summary": dict(fabric_summary),
+            }
+            if isinstance(fabric_summary, dict)
+            else get_fabric_surface(refresh=False, defer_if_missing=True),
+        ),
     }
-    payload["surface_digests"] = _surface_digests(payload)
+    payload["surface_digests"] = _profiled_build_step(
+        timings,
+        "surface_digests",
+        lambda: _surface_digests(payload),
+    )
+    if isinstance(timings, list):
+        payload["bootstrap_profile"] = _build_bootstrap_profile(
+            phases=timings,
+            total_ms=(time.perf_counter() - build_started) * 1000.0,
+            snapshot_reused=snapshot_reused,
+            actions_reused=actions_reused,
+            execution_supplied=execution is not None,
+            approval_snapshot_loaded=approval_snapshot_loaded,
+            snapshot_profile=snapshot_profile,
+        )
     return payload
 
 
-def _build_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
-    return _build_hud_payload(max_actions=max_actions)
+def _build_bootstrap_payload(*, max_actions: int = 8, profile: bool = False) -> dict[str, object]:
+    return _build_hud_payload(max_actions=max_actions, profile=profile)
+
+
+async def _build_bootstrap_payload_async(*, max_actions: int = 8, profile: bool = False) -> dict[str, object]:
+    return await asyncio.to_thread(_build_bootstrap_payload, max_actions=max_actions, profile=profile)
 
 
 def _payload_digest(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+async def _payload_digest_async(payload: dict[str, Any]) -> str:
+    return await asyncio.to_thread(_payload_digest, payload)
 
 
 def _surface_digests(payload: dict[str, Any]) -> dict[str, str]:
@@ -419,6 +696,10 @@ def _surface_update_payload(previous: dict[str, Any], refreshed: dict[str, Any])
     return payload
 
 
+async def _surface_update_payload_async(previous: dict[str, Any], refreshed: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(_surface_update_payload, previous, refreshed)
+
+
 def _sse_event(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -432,7 +713,7 @@ def _build_app() -> FastAPI:
         return FileResponse(STATIC_INDEX)
 
     @app.get("/health")
-    def health() -> dict[str, object]:
+    async def health() -> dict[str, object]:
         return {"status": "ok", "service": "hud", "version": app.version}
 
     @app.get("/api/dashboard")
@@ -630,6 +911,8 @@ def _build_app() -> FastAPI:
                     "height": payload.focus_height,
                     "data_url": payload.focus_data_url,
                 },
+                "accessibility": payload.accessibility,
+                "environment": payload.environment,
             }
         )
 
@@ -1422,8 +1705,8 @@ def _build_app() -> FastAPI:
         sleep_seconds = max(0.1, min(float(poll_interval_ms) / 1000.0, 5.0))
 
         async def _iter_sse():
-            bootstrap = _build_bootstrap_payload(max_actions=max_actions)
-            digest = _payload_digest(bootstrap)
+            bootstrap = await _build_bootstrap_payload_async(max_actions=max_actions)
+            digest = await _payload_digest_async(bootstrap)
             updates = 1
             deadline = time.monotonic() + float(normalized_max_seconds)
 
@@ -1438,10 +1721,10 @@ def _build_app() -> FastAPI:
 
             while time.monotonic() < deadline:
                 await asyncio.sleep(sleep_seconds)
-                refreshed = _build_bootstrap_payload(max_actions=max_actions)
-                refreshed_digest = _payload_digest(refreshed)
+                refreshed = await _build_bootstrap_payload_async(max_actions=max_actions)
+                refreshed_digest = await _payload_digest_async(refreshed)
                 if refreshed_digest != digest:
-                    update_payload = _surface_update_payload(bootstrap, refreshed)
+                    update_payload = await _surface_update_payload_async(bootstrap, refreshed)
                     bootstrap = refreshed
                     digest = refreshed_digest
                     updates += 1
@@ -1481,8 +1764,8 @@ def _build_app() -> FastAPI:
         return StreamingResponse(_iter_sse(), media_type="text/event-stream", headers=headers)
 
     @app.get("/api/bootstrap")
-    def bootstrap() -> dict[str, object]:
-        payload = _build_bootstrap_payload(max_actions=8)
+    def bootstrap(profile: bool = False) -> dict[str, object]:
+        payload = _build_bootstrap_payload(max_actions=8, profile=profile)
         payload["version"] = app.version
         return payload
 

@@ -36,6 +36,9 @@ def _normalize_usage_action_kind(value: object) -> str:
 
 
 def _receipt_summary(row: dict[str, Any]) -> str:
+    review_summary = str(row.get("review_summary", "")).strip()
+    if review_summary:
+        return review_summary
     detail_summary = str(row.get("detail_summary", "")).strip()
     if detail_summary:
         return detail_summary
@@ -59,6 +62,205 @@ def _incident_rank(value: object) -> int:
     return 0
 
 
+def _normalize_orb_policy_scope(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {
+        "observation",
+        "navigation",
+        "click",
+        "typing",
+        "drag",
+        "destructive",
+        "cross_app_transfer",
+        "sensitive",
+    }:
+        return normalized
+    return "observation"
+
+
+def _orb_policy_scope_label(scope: str) -> str:
+    return {
+        "observation": "Observation",
+        "navigation": "Navigation",
+        "click": "Click",
+        "typing": "Typing",
+        "drag": "Drag",
+        "destructive": "Destructive",
+        "cross_app_transfer": "Cross-app transfer",
+        "sensitive": "Sensitive",
+    }.get(scope, "Observation")
+
+
+def _text_contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    lowered = str(text or "").strip().lower()
+    return any(token in lowered for token in tokens)
+
+
+def _derive_orb_policy_scope(
+    *,
+    kind: object,
+    args: dict[str, Any] | None = None,
+    policy_reason: object = "",
+    label: object = "",
+) -> str:
+    normalized_kind = _normalize_usage_action_kind(kind)
+    normalized_args = args if isinstance(args, dict) else {}
+    reason_text = " ".join(
+        part
+        for part in (
+            str(policy_reason or "").strip(),
+            str(label or "").strip(),
+        )
+        if part
+    ).lower()
+
+    if bool(normalized_args.get("cross_app")) or bool(normalized_args.get("transfer")):
+        return "cross_app_transfer"
+    if str(normalized_args.get("source_app", "")).strip() and str(normalized_args.get("target_app", "")).strip():
+        return "cross_app_transfer"
+    if _text_contains_any(reason_text, ("clipboard", "cross-app", "cross app", "handoff", "transfer")):
+        return "cross_app_transfer"
+    if bool(normalized_args.get("sensitive")) or _text_contains_any(
+        reason_text,
+        ("secret", "token", "credential", "password", "approval", "payment", "personal"),
+    ):
+        return "sensitive"
+    if normalized_kind == "mouse.drag" or ".drag" in normalized_kind:
+        return "drag"
+    if normalized_kind == "mouse.click" or ".click" in normalized_kind or normalized_kind.endswith("focus_click"):
+        return "click"
+    if normalized_kind.startswith("keyboard.") or ".type" in normalized_kind or ".shortcut" in normalized_kind:
+        return "typing"
+    if _text_contains_any(normalized_kind, ("delete", "remove", "revoke", "quarantine", "kill", "panic", "destroy")):
+        return "destructive"
+    if _text_contains_any(normalized_kind, (".move", ".open", ".navigate", ".focus", ".switch", ".reveal", ".show")):
+        return "navigation"
+    return "observation"
+
+
+def _find_related_blocked_action(
+    *,
+    focus_kind: str,
+    blocked_items: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    normalized_focus_kind = _normalize_usage_action_kind(focus_kind)
+    if normalized_focus_kind:
+        for row in blocked_items:
+            if _normalize_usage_action_kind(row.get("kind")) == normalized_focus_kind:
+                return row
+    return blocked_items[0] if blocked_items else None
+
+
+def _build_orb_policy_view(
+    *,
+    snapshot: dict[str, Any],
+    focus_kind: str,
+    focus_action: dict[str, Any],
+    next_action: dict[str, Any],
+    next_action_resume: dict[str, Any],
+    related_approval: dict[str, Any] | None,
+    blocked_action: dict[str, Any] | None,
+) -> dict[str, Any]:
+    control = snapshot.get("control", {}) if isinstance(snapshot.get("control"), dict) else {}
+    control_mode = str(control.get("mode", "assist")).strip().lower() or "assist"
+    focus_state = str(focus_action.get("state", "")).strip().lower() or "idle"
+    focus_args = focus_action.get("args", {}) if isinstance(focus_action.get("args"), dict) else {}
+    focus_label = (
+        str(focus_action.get("label", "")).strip()
+        or str(next_action.get("label", "")).strip()
+        or "Current move"
+    )
+    policy_reason = (
+        str(blocked_action.get("policy_reason", "")).strip()
+        if isinstance(blocked_action, dict)
+        else ""
+    ) or str(focus_action.get("policy_reason", "")).strip() or str(focus_action.get("reason", "")).strip() or str(next_action.get("reason", "")).strip()
+    risk_tier = (
+        str(blocked_action.get("risk_tier", "")).strip().lower()
+        if isinstance(blocked_action, dict)
+        else ""
+    ) or str(focus_action.get("risk_tier", "low")).strip().lower() or "low"
+    trust_badge = (
+        str(blocked_action.get("trust_badge", "")).strip()
+        if isinstance(blocked_action, dict)
+        else ""
+    ) or str(focus_action.get("trust_badge", "")).strip() or ("Blocked" if isinstance(blocked_action, dict) else "Likely")
+    requires_confirmation = bool(focus_action.get("requires_confirmation", False))
+    scope = _derive_orb_policy_scope(
+        kind=focus_kind or focus_action.get("execute_kind") or focus_action.get("kind") or next_action.get("kind"),
+        args=focus_args,
+        policy_reason=policy_reason,
+        label=focus_label,
+    )
+    scope_label = _orb_policy_scope_label(scope)
+
+    if control_mode == "observe":
+        state = "observe_only"
+        summary = "Observe only"
+        detail = (
+            policy_reason
+            or f"{focus_label} stays inside {scope_label.lower()} review until control mode permits action."
+        )
+        mode_label = "Observe"
+        authority_label = "Observe only"
+        prompt = ""
+    elif isinstance(related_approval, dict) and str(related_approval.get("id", "")).strip():
+        approval_id = str(related_approval.get("id", "")).strip()
+        state = "approval_required"
+        summary = "Waiting approval"
+        detail = (
+            str(related_approval.get("detail_summary", "")).strip()
+            or policy_reason
+            or f"{focus_label} is holding at the {scope_label.lower()} boundary until you approve."
+        )
+        mode_label = "Assist"
+        authority_label = "Policy hold"
+        prompt = f"Approval {approval_id} is required before Francis may continue."
+    elif isinstance(blocked_action, dict) or focus_state == "blocked":
+        state = "policy_blocked"
+        summary = "Blocked by policy"
+        detail = (
+            str(blocked_action.get("detail_summary", "")).strip()
+            if isinstance(blocked_action, dict)
+            else ""
+        ) or policy_reason or f"{focus_label} is outside the current governed {scope_label.lower()} boundary."
+        mode_label = "Assist"
+        authority_label = "Policy blocked"
+        prompt = "Lower the risk, expand scope, or choose a different move."
+    elif focus_kind or str(focus_action.get("kind", "")).strip() or str(next_action.get("kind", "")).strip():
+        state = "allowed"
+        summary = f"{scope_label} allowed"
+        detail = policy_reason or str(next_action_resume.get("summary", "")).strip() or f"{focus_label} is inside the current approved scope."
+        mode_label = "Act"
+        authority_label = "Within scope"
+        prompt = ""
+    else:
+        state = "observe_only"
+        summary = "Observe only"
+        detail = "No mutating move is armed. Francis is gathering context inside the current scope."
+        mode_label = "Observe"
+        authority_label = "Observe only"
+        prompt = ""
+
+    return {
+        "state": state,
+        "scope": scope,
+        "scope_label": scope_label,
+        "risk_tier": risk_tier,
+        "trust_badge": trust_badge,
+        "policy_reason": policy_reason,
+        "requires_confirmation": requires_confirmation or state == "approval_required",
+        "approval_required": state == "approval_required",
+        "blocked": state == "policy_blocked",
+        "summary": summary,
+        "detail": detail,
+        "prompt": prompt,
+        "mode_label": mode_label,
+        "authority_label": authority_label,
+        "blocked_action": blocked_action if isinstance(blocked_action, dict) else None,
+    }
+
+
 def _coerce_orb_coordinate(value: object) -> int | None:
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
@@ -76,6 +278,16 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
     surface = focus_target.get("surface", {}) if isinstance(focus_target.get("surface"), dict) else {}
     zone = focus_target.get("zone", {}) if isinstance(focus_target.get("zone"), dict) else {}
     target = focus_target.get("target", {}) if isinstance(focus_target.get("target"), dict) else {}
+    target_attention = (
+        target.get("attention", {})
+        if isinstance(target.get("attention"), dict)
+        else {}
+    )
+    target_grounding = (
+        target.get("grounding", {})
+        if isinstance(target.get("grounding"), dict)
+        else {}
+    )
     affordances = focus_target.get("affordances", []) if isinstance(focus_target.get("affordances"), list) else []
     target_window = target.get("window", {}) if isinstance(target.get("window"), dict) else {}
     target_stability = target.get("stability", {}) if isinstance(target.get("stability"), dict) else {}
@@ -87,7 +299,24 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
     target_label = str(target.get("label", "Active focus point")).strip() or "Active focus point"
     confidence = str(target.get("confidence", "low")).strip().lower() or "low"
     stability = str(target_stability.get("state", "idle")).strip().lower() or "idle"
+    grounding_state = str(target_grounding.get("state", "")).strip().lower()
     in_bounds = bool(target_window.get("in_bounds"))
+    attention_state = str(target_attention.get("state", "")).strip().lower()
+    attention_summary = str(target_attention.get("summary", "")).strip()
+    attention_detail = str(target_attention.get("detail", "")).strip()
+    salience = str(target_attention.get("salience", "")).strip().lower()
+    try:
+        attention_strength = max(0.0, min(1.0, float(target_attention.get("strength", 0.0))))
+    except (TypeError, ValueError):
+        attention_strength = 0.0
+    try:
+        lock_strength = max(0.0, min(1.0, float(target_attention.get("lock_strength", 0.0))))
+    except (TypeError, ValueError):
+        lock_strength = 0.0
+    try:
+        uncertainty = max(0.0, min(1.0, float(target_attention.get("uncertainty", 0.0))))
+    except (TypeError, ValueError):
+        uncertainty = 0.0
 
     primary_affordance = next(
         (
@@ -105,13 +334,24 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
         and confidence in {"likely", "medium"}
         and in_bounds
         and primary_label
+        and (grounding_state in {"grounded", ""} or bool(target_grounding.get("control_ready")))
     )
+
+    if not attention_state:
+        if stability == "settled" and confidence in {"likely", "high"} and in_bounds:
+            attention_state = "target_lock"
+        elif stability in {"tracking", "settled"} and confidence in {"likely", "medium", "high"}:
+            attention_state = "investigate"
+        else:
+            attention_state = "reassess"
+    if not salience:
+        salience = "high" if attention_state == "target_lock" else "medium" if attention_state == "investigate" else "low"
 
     if control_ready:
         state = "concrete"
         summary = f"Concrete {zone_label.lower()} target. {primary_label} is grounded from the Orb."
         detail = f"{target_label} is inside the foreground Francis surface and stable enough for precise handoff."
-    elif stability == "tracking" and in_bounds:
+    elif stability == "tracking" and in_bounds and grounding_state not in {"weak", "detached", "stale", "reassess"}:
         state = "tracking"
         summary = f"Tracking {zone_label.lower()} target. Let it settle before Francis acts."
         detail = f"{target_label} is inside {surface_label.lower()}, but the cursor is still moving."
@@ -123,9 +363,45 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
             + (" because it is outside the foreground window." if not in_bounds else ".")
         )
 
+    focal_label = primary_label or zone_label or target_label
+    if not attention_summary:
+        if attention_state == "target_lock":
+            attention_summary = f"Locked on {focal_label.lower()}."
+        elif attention_state == "investigate":
+            attention_summary = f"Investigating {focal_label.lower()}."
+        else:
+            attention_summary = f"Reassessing {focal_label.lower()}."
+    if not attention_detail:
+        if attention_state == "target_lock":
+            attention_detail = (
+                f"{target_label} is stable inside the foreground {surface_label.lower()}, "
+                f"so Francis is tightening onto {focal_label.lower()}."
+            )
+        elif attention_state == "investigate":
+            attention_detail = (
+                f"{target_label} is active inside the foreground {surface_label.lower()}, "
+                "and Francis is narrowing the target arc while confidence settles."
+            )
+        else:
+            attention_detail = (
+                f"Francis is easing off {focal_label.lower()} until the target stabilizes "
+                "and window confidence rises again."
+            )
+    if attention_strength <= 0:
+        attention_strength = 0.88 if attention_state == "target_lock" else 0.56 if attention_state == "investigate" else 0.26
+    if lock_strength <= 0:
+        lock_strength = 0.84 if attention_state == "target_lock" else 0.44 if attention_state == "investigate" else 0.14
+    if uncertainty <= 0:
+        uncertainty = 0.14 if attention_state == "target_lock" else 0.32 if attention_state == "investigate" else 0.72
+
     return {
         "title": "",
         "state": state,
+        "attention_state": attention_state,
+        "salience": salience,
+        "attention_strength": round(attention_strength, 3),
+        "lock_strength": round(lock_strength, 3),
+        "uncertainty": round(uncertainty, 3),
         "control_ready": control_ready,
         "surface_kind": surface_kind,
         "surface_label": surface_label,
@@ -138,6 +414,8 @@ def _build_orb_target_cue() -> dict[str, Any] | None:
         "primary_action_label": primary_label,
         "summary": summary,
         "detail": detail,
+        "attention_summary": attention_summary or summary,
+        "attention_detail": attention_detail or detail,
     }
 
 
@@ -192,6 +470,11 @@ def _build_orb_receipt_cue(
     return {
         "title": "Receipt Grounding",
         "state": state,
+        "attention_state": str(cue.get("attention_state", "idle")).strip().lower() or "idle",
+        "salience": str(cue.get("salience", "low")).strip().lower() or "low",
+        "attention_strength": cue.get("attention_strength", 0.0),
+        "lock_strength": cue.get("lock_strength", 0.0),
+        "uncertainty": cue.get("uncertainty", 0.0),
         "control_ready": bool(aligned and cue_state == "concrete"),
         "surface_kind": str(cue.get("surface_kind", "")).strip(),
         "surface_label": surface_label,
@@ -204,6 +487,8 @@ def _build_orb_receipt_cue(
         "primary_action_label": primary_label,
         "summary": summary,
         "detail": detail,
+        "attention_summary": str(cue.get("attention_summary", summary)).strip() or summary,
+        "attention_detail": str(cue.get("attention_detail", detail)).strip() or detail,
         "receipt_run_id": receipt_run_id,
         "receipt_action_kind": receipt_action_kind,
     }
@@ -451,6 +736,10 @@ def _build_orb_operator_view(
 ) -> dict[str, Any]:
     current_work = get_current_work_view(snapshot=snapshot, actions=actions)
     approval_queue = get_approval_queue_view(snapshot=snapshot, actions=actions)
+    try:
+        blocked_actions = get_blocked_actions_view(snapshot=snapshot, actions=actions)
+    except Exception:
+        blocked_actions = {"surface": "blocked_actions", "count": 0, "items": []}
     journal = get_execution_journal_view(snapshot=snapshot)
     takeover = snapshot.get("takeover", {}) if isinstance(snapshot.get("takeover"), dict) else {}
 
@@ -470,6 +759,7 @@ def _build_orb_operator_view(
     )
 
     approvals = approval_queue.get("items", []) if isinstance(approval_queue.get("items"), list) else []
+    blocked_items = blocked_actions.get("items", []) if isinstance(blocked_actions.get("items"), list) else []
     related_approval = next(
         (
             row
@@ -477,6 +767,10 @@ def _build_orb_operator_view(
             if _normalize_usage_action_kind(row.get("requested_action_kind")) == focus_kind
         ),
         None,
+    )
+    related_blocked = _find_related_blocked_action(
+        focus_kind=focus_kind,
+        blocked_items=[row for row in blocked_items if isinstance(row, dict)],
     )
     receipt_rows = journal.get("items", []) if isinstance(journal.get("items"), list) else []
     linked_run_id = str(operator_link.get("run_id", "")).strip()
@@ -525,6 +819,15 @@ def _build_orb_operator_view(
         focus_kind=focus_kind,
         target_cue=target_cue if isinstance(target_cue, dict) else None,
     )
+    policy = _build_orb_policy_view(
+        snapshot=snapshot,
+        focus_kind=focus_kind,
+        focus_action=focus_action,
+        next_action=next_action,
+        next_action_resume=next_action_resume,
+        related_approval=related_approval if isinstance(related_approval, dict) else None,
+        blocked_action=related_blocked if isinstance(related_blocked, dict) else None,
+    )
     takeover_desktop_run = _build_takeover_desktop_run_contract(focus_action=focus_action, takeover=takeover)
     surface_action = _build_surface_action_contract()
     preview_enabled = bool(focus_action.get("enabled"))
@@ -539,15 +842,18 @@ def _build_orb_operator_view(
 
     if can_approve_and_run:
         meta = (
-            f"Approval {str(related_approval.get('id', '')).strip() or 'pending'} is ready. "
-            "The Orb can approve and continue this move."
+            f"Policy hold | risk {policy['risk_tier']} | {policy['scope']}"
         )
         state = "approval_ready"
+    elif policy["state"] == "policy_blocked":
+        meta = f"Policy blocked | risk {policy['risk_tier']} | {policy['scope']}"
+        state = "blocked"
+    elif policy["state"] == "observe_only":
+        meta = "Observe only | no action is armed."
+        state = "idle"
     elif preview_enabled:
         meta = (
-            f"{str(focus_action.get('execute_kind') or focus_action.get('kind') or 'unknown')} | "
-            f"risk {str(focus_action.get('risk_tier', 'low')).strip() or 'low'} | "
-            f"{focus_state or 'ready'}"
+            f"Within scope | risk {policy['risk_tier']} | {policy['scope']}"
         )
         state = focus_state or "ready"
     elif isinstance(related_receipt, dict):
@@ -566,6 +872,7 @@ def _build_orb_operator_view(
         "focus_action": focus_action,
         "next_action_resume": next_action_resume,
         "approval": related_approval if isinstance(related_approval, dict) else None,
+        "policy": policy,
         "latest_receipt": related_receipt if isinstance(related_receipt, dict) else None,
         "target_cue": target_cue if isinstance(target_cue, dict) else None,
         "receipt_cue": receipt_cue if isinstance(receipt_cue, dict) else None,
@@ -579,6 +886,8 @@ def _build_orb_operator_view(
             "run_kind": str(focus_action.get("execute_kind") or focus_action.get("kind") or "").strip(),
             "run_args": focus_action.get("args", {}) if isinstance(focus_action.get("args"), dict) else {},
             "approval_id": str(related_approval.get("id", "")).strip() if isinstance(related_approval, dict) else "",
+            "policy_state": str(policy.get("state", "")).strip(),
+            "policy_scope": str(policy.get("scope", "")).strip(),
             "receipt_available": isinstance(related_receipt, dict),
             "takeover_active": bool(takeover.get("active", False)),
             "takeover_session_id": str(takeover.get("session_id", "")).strip(),
@@ -618,22 +927,13 @@ def _build_orb_interjection_view(
         incidents = get_incidents_view(snapshot=snapshot)
     except Exception:
         incidents = {"surface": "incidents", "severity": "nominal", "items": []}
-    try:
-        blocked_actions = get_blocked_actions_view(snapshot=snapshot, actions=actions)
-    except Exception:
-        blocked_actions = {"surface": "blocked_actions", "count": 0, "items": []}
 
     incident_items = incidents.get("items", []) if isinstance(incidents.get("items"), list) else []
     top_incident = incident_items[0] if incident_items and isinstance(incident_items[0], dict) else None
     incident_severity = str(incidents.get("severity", "nominal")).strip().lower() or "nominal"
-    blocked_items = (
-        blocked_actions.get("items", [])
-        if isinstance(blocked_actions.get("items"), list)
-        else []
-    )
-    top_blocked = blocked_items[0] if blocked_items and isinstance(blocked_items[0], dict) else None
     operator_controls = operator.get("controls", {}) if isinstance(operator.get("controls"), dict) else {}
     operator_approval = operator.get("approval", {}) if isinstance(operator.get("approval"), dict) else {}
+    operator_policy = operator.get("policy", {}) if isinstance(operator.get("policy"), dict) else {}
     target_cue = operator.get("target_cue", {}) if isinstance(operator.get("target_cue"), dict) else {}
     focus_action = operator.get("focus_action", {}) if isinstance(operator.get("focus_action"), dict) else {}
     next_action_resume = (
@@ -673,22 +973,22 @@ def _build_orb_interjection_view(
             },
         }
 
-    if str(operator_controls.get("run_mode", "")).strip() == "approve_and_run" and str(
+    if str(operator_policy.get("state", "")).strip().lower() == "approval_required" and str(
         operator_controls.get("approval_id", "")
     ).strip():
         approval_id = str(operator_controls.get("approval_id", "")).strip()
-        summary = "Decision required to continue the current move."
-        detail = str(operator.get("meta", "")).strip() or str(
+        summary = str(operator_policy.get("summary", "")).strip() or "Waiting approval"
+        detail = str(operator_policy.get("detail", "")).strip() or str(operator.get("meta", "")).strip() or str(
             operator_approval.get("detail_summary", "")
         ).strip() or "Approval is waiting before Francis can continue."
-        prompt = (
+        prompt = str(operator_policy.get("prompt", "")).strip() or (
             f"Approval {approval_id} is ready. Approve and continue {str(operator.get('summary', 'the current move')).strip()}."
         )
         return {
             "surface": "orb_interjection",
             "state": "needed_decision",
             "level": 2,
-            "reason_kind": "approval_ready",
+            "reason_kind": "policy_approval_required",
             "summary": summary,
             "detail": detail,
             "prompt": prompt,
@@ -706,20 +1006,15 @@ def _build_orb_interjection_view(
             },
         }
 
-    if top_blocked is not None or str(focus_action.get("state", "")).strip().lower() == "blocked":
-        summary = "Work is blocked on a governed edge."
-        detail = (
-            str(top_blocked.get("detail_summary", "")).strip()
-            if isinstance(top_blocked, dict)
-            else str(focus_action.get("reason", "")).strip()
-            or "A blocked action needs your review before Francis can continue intelligently."
-        )
-        prompt = "Clarify scope, lower risk, or open Lens to inspect the blocked path."
+    if str(operator_policy.get("state", "")).strip().lower() == "policy_blocked":
+        summary = str(operator_policy.get("summary", "")).strip() or "Blocked by policy"
+        detail = str(operator_policy.get("detail", "")).strip() or str(focus_action.get("reason", "")).strip() or "A blocked action needs your review before Francis can continue intelligently."
+        prompt = str(operator_policy.get("prompt", "")).strip() or "Clarify scope, lower risk, or open Lens to inspect the blocked path."
         return {
             "surface": "orb_interjection",
             "state": "needed_decision",
             "level": 2,
-            "reason_kind": "blocked_action",
+            "reason_kind": "policy_blocked",
             "summary": summary,
             "detail": detail,
             "prompt": prompt,
@@ -1039,6 +1334,23 @@ def _build_orb_chat_surface(*, snapshot: dict[str, Any], perception: dict[str, A
         "focus_action": {},
         "next_action_resume": {},
         "approval": None,
+        "policy": {
+            "state": "observe_only",
+            "scope": "observation",
+            "scope_label": "Observation",
+            "risk_tier": "low",
+            "trust_badge": "Likely",
+            "policy_reason": "",
+            "requires_confirmation": False,
+            "approval_required": False,
+            "blocked": False,
+            "summary": "Observe only",
+            "detail": "No mutating move is armed. Francis is gathering context inside the current scope.",
+            "prompt": "",
+            "mode_label": "Observe",
+            "authority_label": "Observe only",
+            "blocked_action": None,
+        },
         "latest_receipt": latest_receipt if isinstance(latest_receipt, dict) else None,
         "target_cue": target_cue if isinstance(target_cue, dict) else None,
         "receipt_cue": receipt_cue if isinstance(receipt_cue, dict) else None,
@@ -1110,7 +1422,7 @@ def _coerce_plan_step(row: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(row, dict):
         return None
     kind = str(row.get("kind", "")).strip().lower()
-    if kind not in {"keyboard.shortcut", "keyboard.type", "keyboard.key", "mouse.move", "mouse.click"}:
+    if kind not in {"keyboard.shortcut", "keyboard.type", "keyboard.key", "mouse.move", "mouse.click", "mouse.drag"}:
         return None
     args = row.get("args", {}) if isinstance(row.get("args"), dict) else {}
     reason = str(row.get("reason", "")).strip() or str(row.get("why", "")).strip()
@@ -1118,6 +1430,11 @@ def _coerce_plan_step(row: dict[str, Any]) -> dict[str, Any] | None:
         button = str(args.get("button", "")).strip().lower()
         if button not in {"left", "right"}:
             return None
+    if kind == "mouse.drag":
+        button = str(args.get("button", "left")).strip().lower() or "left"
+        if button not in {"left", "right"}:
+            return None
+        args = {**args, "button": button}
     if kind == "keyboard.type" and not str(args.get("text", "")).strip():
         return None
     if kind == "keyboard.key" and not str(args.get("key", "")).strip():
@@ -1126,7 +1443,7 @@ def _coerce_plan_step(row: dict[str, Any]) -> dict[str, Any] | None:
         keys = args.get("keys")
         if not isinstance(keys, list) or not keys:
             return None
-    if kind in {"mouse.move", "mouse.click"}:
+    if kind in {"mouse.move", "mouse.click", "mouse.drag"}:
         try:
             float(args.get("x"))
             float(args.get("y"))
@@ -1295,7 +1612,7 @@ def _build_orb_planner_messages(
         "Every turn must stay grounded in explicit mode, posture, visible context, and receipts. "
         "You may prepare a desktop action plan, but you do not execute it. The shell executes the plan later. "
         "Return strict JSON with keys reply, thought, should_execute, mode_requirement, and plan. "
-        "If planning a desktop action, plan only with these command kinds: keyboard.shortcut, keyboard.type, keyboard.key, mouse.move, mouse.click. "
+        "If planning a desktop action, plan only with these command kinds: keyboard.shortcut, keyboard.type, keyboard.key, mouse.move, mouse.click, mouse.drag. "
         "Every step must include a reason explaining why that interaction is the right human-like path, including left versus right click reasoning when relevant. "
         "For opening Windows applications, do not launch processes directly; navigate through Start/search/open. "
         "Keep reply text calm, specific, and short enough for an Orb chat window."

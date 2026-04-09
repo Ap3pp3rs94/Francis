@@ -14,7 +14,7 @@ export class FrancisOrbEngine {
   private readonly transitionController = new OrbTransitionController();
   private readonly composer?: OrbComposer;
 
-  private signals: OrbExternalSignals = { state: "idle" };
+  private signals: OrbExternalSignals = { state: "idle_anchored" };
   private rafId: number | null = null;
   private disposed = false;
 
@@ -34,6 +34,9 @@ export class FrancisOrbEngine {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x000000, options.transparentBackground ? 0 : 1);
     this.renderer.domElement.style.background = "transparent";
+    this.container.dataset.renderer = "live";
+    this.container.dataset.rendererOwner = "francis_orb";
+    this.renderer.domElement.dataset.rendererSurface = "orb_canvas";
     this.container.appendChild(this.renderer.domElement);
 
     this.orbScene = new OrbScene({
@@ -90,6 +93,8 @@ export class FrancisOrbEngine {
     if (this.renderer.domElement.parentElement === this.container) {
       this.container.removeChild(this.renderer.domElement);
     }
+    this.container.dataset.renderer = "fallback";
+    delete this.container.dataset.rendererOwner;
   }
 
   private tick = (): void => {

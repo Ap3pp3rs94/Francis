@@ -11,6 +11,7 @@ from francis_core.clock import utc_now_iso
 from francis_core.workspace_fs import WorkspaceFS
 from francis_llm import chat
 from services.hud.app.state import get_workspace_root
+from services.orchestrator.app.orb_authority import build_operator_receipt_summary
 
 DEFAULT_ORB_CONVERSATION_ID = "primary"
 SESSION_DIR = "orb/chat/sessions"
@@ -423,11 +424,28 @@ def build_orb_chat_history(
     session = load_orb_chat_session(conversation_id, workspace_root=workspace_root)
     memory = load_orb_long_term_memory(workspace_root=workspace_root)
     messages = session.get("messages", [])[-max(1, limit) :]
+    recent_receipts = [
+        {
+            "id": str(row.get("id", "")).strip(),
+            "ts": str(row.get("ts", "")).strip(),
+            "summary": str(row.get("content", "")).strip(),
+            "run_id": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("run_id", "")).strip(),
+            "trace_id": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("trace_id", "")).strip(),
+            "status": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("status", "")).strip(),
+            "receipt_kind": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("receipt_kind", "")).strip(),
+            "execution_phase": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("execution_phase", "")).strip(),
+            "policy_state": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("policy_state", "")).strip(),
+            "review_summary": str((row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}).get("review_summary", "")).strip(),
+        }
+        for row in reversed(session.get("messages", []))
+        if isinstance(row, dict) and str(row.get("kind", "")).strip().lower() == "receipt"
+    ][:8]
     return {
         "status": "ok",
         "conversation_id": session["conversation_id"],
         "messages": messages,
         "recent_turns": messages,
+        "recent_receipts": recent_receipts,
         "short_term_memory": {
             "message_count": len(session.get("messages", [])),
             "window_count": len(messages),
@@ -448,7 +466,25 @@ def get_orb_chat_history(
 
 def _build_execution_cards(*, plan: dict[str, Any], result: dict[str, Any]) -> list[dict[str, str]]:
     steps = plan.get("steps", []) if isinstance(plan.get("steps"), list) else []
-    return [
+    execution_steps = result.get("steps", []) if isinstance(result.get("steps"), list) else []
+    last_step = next(
+        (
+            row
+            for row in reversed(execution_steps)
+            if isinstance(row, dict)
+        ),
+        None,
+    )
+    target_label = ""
+    if isinstance(last_step, dict):
+        execution = last_step.get("execution", {}) if isinstance(last_step.get("execution"), dict) else {}
+        target = execution.get("target", {}) if isinstance(execution.get("target"), dict) else {}
+        if isinstance(target, dict) and target.get("x") is not None and target.get("y") is not None:
+            target_label = f"{int(target.get('x'))}, {int(target.get('y'))}"
+    desktop_authority = result.get("desktop_authority") if isinstance(result.get("desktop_authority"), dict) else {}
+    active_limitations = desktop_authority.get("active_limitations") if isinstance(desktop_authority.get("active_limitations"), list) else []
+    desktop_limit = active_limitations[0] if active_limitations and isinstance(active_limitations[0], dict) else {}
+    cards = [
         {
             "label": "Execution",
             "value": str(result.get("status", "unknown")).strip() or "unknown",
@@ -461,7 +497,7 @@ def _build_execution_cards(*, plan: dict[str, Any], result: dict[str, Any]) -> l
         },
         {
             "label": "Steps",
-            "value": str(len(steps)),
+            "value": str(int(result.get("completed_steps", 0) or 0) or len(steps)),
             "tone": "low",
         },
         {
@@ -470,6 +506,75 @@ def _build_execution_cards(*, plan: dict[str, Any], result: dict[str, Any]) -> l
             "tone": "low",
         },
     ]
+    if target_label:
+        cards.append({"label": "Target", "value": target_label, "tone": "medium"})
+    if str(desktop_limit.get("summary", "")).strip():
+        cards.append({"label": "Desktop", "value": str(desktop_limit.get("summary", "")).strip(), "tone": "medium"})
+    return cards
+
+
+def _build_chat_execution_replay(*, plan: dict[str, Any], execution_payload: dict[str, Any]) -> dict[str, Any]:
+    execution_steps = execution_payload.get("steps", []) if isinstance(execution_payload.get("steps"), list) else []
+    normalized_steps = []
+    for index, row in enumerate(execution_steps[:12]):
+        if not isinstance(row, dict):
+            continue
+        execution = row.get("execution", {}) if isinstance(row.get("execution"), dict) else {}
+        normalized_steps.append(
+            {
+                "index": int(row.get("index", index) or index),
+                "kind": str(row.get("kind", "")).strip().lower(),
+                "status": str(row.get("status", "")).strip().lower() or "ok",
+                "reason": str(row.get("reason", "")).strip(),
+                "execution": {
+                    "phase": str(execution.get("phase", "")).strip().lower(),
+                    "summary": str(execution.get("summary", "")).strip(),
+                    "target": execution.get("target", {}) if isinstance(execution.get("target"), dict) else {},
+                },
+            }
+        )
+    return {
+        "source": "orb_chat_execution",
+        "step_count": int(execution_payload.get("step_count", 0) or len(plan.get("steps", []) if isinstance(plan.get("steps"), list) else [])),
+        "completed_steps": int(execution_payload.get("completed_steps", 0) or len(normalized_steps)),
+        "steps": normalized_steps,
+    }
+
+
+def _derive_chat_execution_action_kind(*, plan: dict[str, Any], execution_payload: dict[str, Any]) -> str:
+    execution_steps = execution_payload.get("steps", []) if isinstance(execution_payload.get("steps"), list) else []
+    for row in execution_steps:
+        if isinstance(row, dict) and str(row.get("kind", "")).strip():
+            return str(row.get("kind", "")).strip().lower()
+    steps = plan.get("steps", []) if isinstance(plan.get("steps"), list) else []
+    for row in steps:
+        if isinstance(row, dict) and str(row.get("kind", "")).strip():
+            return str(row.get("kind", "")).strip().lower()
+    return "orb.chat.execution"
+
+
+def _derive_chat_execution_phase(*, execution_payload: dict[str, Any]) -> str:
+    execution_steps = execution_payload.get("steps", []) if isinstance(execution_payload.get("steps"), list) else []
+    for row in reversed(execution_steps):
+        if not isinstance(row, dict):
+            continue
+        execution = row.get("execution", {}) if isinstance(row.get("execution"), dict) else {}
+        phase = str(execution.get("phase", "")).strip().lower()
+        if phase:
+            return phase
+    return "blocked" if str(execution_payload.get("status", "")).strip().lower() == "failed" else "commit_move"
+
+
+def _derive_chat_execution_target(*, execution_payload: dict[str, Any]) -> dict[str, Any] | None:
+    execution_steps = execution_payload.get("steps", []) if isinstance(execution_payload.get("steps"), list) else []
+    for row in reversed(execution_steps):
+        if not isinstance(row, dict):
+            continue
+        execution = row.get("execution", {}) if isinstance(row.get("execution"), dict) else {}
+        target = execution.get("target", {}) if isinstance(execution.get("target"), dict) else {}
+        if target:
+            return target
+    return None
 
 
 def record_orb_chat_execution_receipt(
@@ -504,12 +609,46 @@ def record_orb_chat_execution_receipt(
         if status != "failed"
         else f"{plan_title} failed during Orb shell execution."
     )
+    action_kind = _derive_chat_execution_action_kind(plan=plan, execution_payload=execution_payload)
+    execution_phase = _derive_chat_execution_phase(execution_payload=execution_payload)
+    target = _derive_chat_execution_target(execution_payload=execution_payload)
+    desktop_authority = execution_payload.get("desktop_authority") if isinstance(execution_payload.get("desktop_authority"), dict) else {}
+    foreground_window = execution_payload.get("foreground_window") if isinstance(execution_payload.get("foreground_window"), dict) else {}
+    replay = _build_chat_execution_replay(plan=plan, execution_payload=execution_payload)
+    normalized_execution = {
+        "kind": action_kind,
+        "phase": execution_phase,
+        "summary": summary_text,
+        "detail": str(execution_payload.get("summary", "")).strip() or summary_text,
+        "target": target or {},
+    }
+    summary = build_operator_receipt_summary(
+        kind=f"orb.chat.execution.{status}",
+        status=status,
+        summary_text=summary_text,
+        detail_text=str(execution_payload.get("summary", "")).strip() or summary_text,
+        actor=str(actor or "electron.orb").strip() or "electron.orb",
+        action_kind=action_kind,
+        command_kind=action_kind,
+        execution=normalized_execution,
+        authority=execution_payload.get("authority"),
+        desktop_authority=desktop_authority,
+        foreground_window=foreground_window,
+        interruption=execution_payload.get("interruption"),
+        replay=replay,
+        presentation_cards=_build_execution_cards(plan=plan, result=execution_payload),
+        conversation_id=_safe_conversation_id(conversation_id),
+    ) | {
+        "conversation_id": _safe_conversation_id(conversation_id),
+        "step_count": step_count,
+    }
     detail_payload = {
         "conversation_id": _safe_conversation_id(conversation_id),
         "user_message": str(user_message or "").strip(),
         "assistant_reply": str(assistant_reply or "").strip(),
         "plan": plan if isinstance(plan, dict) else {},
         "result": execution_payload,
+        "replay": replay,
     }
     receipt = {
         "id": str(uuid4()),
@@ -518,14 +657,7 @@ def record_orb_chat_execution_receipt(
         "trace_id": trace_id,
         "kind": f"orb.chat.execution.{status}",
         "actor": str(actor or "electron.orb").strip() or "electron.orb",
-        "summary": {
-            "action_kind": "orb.chat.execution",
-            "summary_text": summary_text,
-            "conversation_id": _safe_conversation_id(conversation_id),
-            "step_count": step_count,
-            "status": status,
-            "presentation_cards": _build_execution_cards(plan=plan, result=execution_payload),
-        },
+        "summary": summary,
         "detail": detail_payload,
     }
     fs.append_jsonl(LOG_PATH, receipt)
@@ -535,12 +667,17 @@ def record_orb_chat_execution_receipt(
         conversation_id=conversation_id,
         role="assistant",
         kind="receipt",
-        content=summary_text,
+        content=str(summary.get("review_summary", "")).strip() or summary_text,
         metadata={
             "run_id": run_id,
             "trace_id": trace_id,
             "status": status,
             "step_count": step_count,
+            "receipt_kind": receipt["kind"],
+            "execution_phase": str(summary.get("execution_phase", "")).strip(),
+            "policy_state": str(summary.get("policy_state", "")).strip(),
+            "review_summary": str(summary.get("review_summary", "")).strip(),
+            "review_detail": str(summary.get("review_detail", "")).strip(),
         },
         workspace_root=workspace_root,
     )

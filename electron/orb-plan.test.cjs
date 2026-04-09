@@ -103,12 +103,73 @@ test("executeOrbDesktopPlan moves before a positioned click and returns a shell 
 
   assert.equal(result.status, "ok");
   assert.equal(result.summary, "Open Context Menu completed through the Orb shell.");
+  assert.equal(result.steps[0].execution.phase, "click_act");
+  assert.equal(result.steps[0].execution.summary, "Right click committed cleanly.");
   assert.deepEqual(commands, [
     { kind: "mouse.move", args: { x: 50, y: 80 } },
     { kind: "mouse.click", args: { button: "right", double: false } },
   ]);
   assert.deepEqual(synthetic, [{ x: 50, y: 80 }]);
   assert.deepEqual(sleeps, [180]);
+});
+
+test("executeOrbDesktopPlan supports mouse.drag and records anchored execution semantics", async () => {
+  const commands = [];
+  const synthetic = [];
+  const result = await executeOrbDesktopPlan(
+    {
+      title: "Drag Francis Lens",
+      steps: [
+        {
+          kind: "mouse.drag",
+          args: {
+            start_anchor: "start_button",
+            x: 260,
+            y: 180,
+            coordinate_space: "display",
+            button: "left",
+            duration_ms: 320,
+            steps: 10,
+          },
+          reason: "Drag the target into place.",
+        },
+      ],
+    },
+    {
+      inputState: {
+        workArea: { x: 10, y: 20 },
+        displayBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+        displayWorkArea: { x: 0, y: 0, width: 1920, height: 1032 },
+      },
+      executeCommand: async (command) => {
+        commands.push(command);
+        return { status: "ok" };
+      },
+      onSyntheticCursor: (point) => {
+        synthetic.push(point);
+      },
+    },
+  );
+
+  assert.equal(result.status, "ok");
+  assert.deepEqual(commands, [
+    {
+      kind: "mouse.drag",
+      args: {
+        button: "left",
+        duration_ms: 320,
+        steps: 10,
+        x: 270,
+        y: 200,
+        coordinate_space: "screen",
+        start_x: 58,
+        start_y: 1056,
+      },
+    },
+  ]);
+  assert.deepEqual(synthetic, [{ x: 270, y: 200 }]);
+  assert.equal(result.steps[0].execution.phase, "drag_act");
+  assert.equal(result.steps[0].execution.sustained_contact, true);
 });
 
 test("executeOrbDesktopPlan returns a failed result instead of throwing when command execution fails", async () => {

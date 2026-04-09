@@ -2,7 +2,12 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, shell, systemPreferences } = require("electron");
-const { createHudRuntimeManager, isHudReachable } = require("./hud-runtime");
+const {
+  classifyHudReachabilityFailure,
+  createHudRuntimeManager,
+  isHudReachable,
+  probeHudReachability,
+} = require("./hud-runtime");
 const { createOllamaRuntimeManager, isOllamaReachable, normalizeOllamaUrl, DEFAULT_OLLAMA_URL } = require("./ollama-runtime");
 const { isCaptureForegroundWindow } = require("./capture-mode");
 const { getScheduledHudRecoveryReason } = require("./hud-recovery");
@@ -31,6 +36,11 @@ const {
 } = require("./session-state");
 const { getLaunchAtLoginState, setLaunchAtLogin } = require("./login-item");
 const { normalizeStartupProfile, resolveStartupProfile } = require("./startup-profile");
+const {
+  resolveOrbFirstAppActivation,
+  resolveOrbFirstSecondInstance,
+  resolveStartupSurface,
+} = require("./startup-surface");
 const {
   normalizeOrbBehaviorMode,
   normalizePersistedOrbBehaviorMode,
@@ -77,20 +87,71 @@ const { buildProviderPosture } = require("./provider-posture");
 const { buildAuthorityPosture } = require("./authority-posture");
 const { buildSigningPosture } = require("./signing-posture");
 const { inspectAuthenticodeSignature } = require("./signature-state");
-const { ORB_WINDOW_TOPMOST_LEVEL, buildOrbWindowBounds } = require("./orb-surface");
-const { buildOrbFocusCropRect, buildOrbTargetStability } = require("./orb-perception");
+const {
+  ORB_WINDOW_REINFORCE_INTERVAL_MS,
+  ORB_WINDOW_TOPMOST_LEVEL,
+  ORB_WINDOW_TOPMOST_PRIORITY,
+  buildDesktopAuthoritySnapshot,
+  buildOrbDisplayTopology,
+  buildOrbWindowBounds,
+} = require("./orb-surface");
+const {
+  EMPTY_ORB_ACCESSIBILITY,
+  buildOrbEnvironmentGrounding,
+  buildOrbFocusCropRect,
+  buildOrbTargetStability,
+  getOrbFocusedAccessibilitySnapshot,
+} = require("./orb-perception");
 const {
   canEngageOrbAuthority,
+  describeOrbClickTargetLockFailure,
   detectHumanActivitySignal,
   detectHumanCursorReturn,
   detectHumanIdleRegression,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
+  isOrbClickTargetLocked,
 } = require("./orb-authority");
+const {
+  buildOrbControlState,
+  buildPauseAuthorityResult,
+  normalizeRemoteSyncStatus,
+} = require("./orb-control-state");
+const {
+  ORB_OWNERSHIP_STATES,
+  armOrbOwnershipUserOverride,
+  buildOrbOwnershipState,
+  buildDefaultOrbOwnershipGovernor,
+  clearOrbOwnershipUserOverride,
+  isOrbOwnershipUserOverrideReason,
+  normalizeOrbOwnershipRequest,
+  shouldClearOrbOwnershipUserOverrideForReason,
+  shouldResetOrbOwnershipForForeground,
+} = require("./orb-ownership-state");
+const {
+  buildDefaultOrbRuntimeHealth,
+  escalateOrbRuntimeFailure,
+  getOrbRuntimeRetryDelayMs,
+  isOrbRuntimeProbeDeferred,
+  recordOrbRuntimeHealthy,
+  startOrbRuntimeRecovery,
+} = require("./orb-runtime-health");
+const {
+  beginHudRecoveryAttempt,
+  buildDefaultHudRecoveryState,
+  finishHudRecoveryAttempt,
+  isStaleHudGeneration,
+  noteHudEndpointFailure,
+  noteHudEndpointSuccess,
+  noteHudGenerationReady,
+  noteHudProcessState,
+  scheduleHudRecovery: planHudRecovery,
+} = require("./hud-recovery-state");
 const { getForegroundWindowInfo } = require("./foreground-window");
-const { executeWindowsInputCommand } = require("./windows-input");
+const { buildWindowsDesktopCapabilityProfile, executeWindowsInputCommand } = require("./windows-input");
 const { executeOrbDesktopPlan } = require("./orb-plan");
 const { buildPanicStopResult } = require("./orb-panic");
+const { buildOrbExecutionSemantics } = require("./orb-execution");
 const {
   buildDefaultLifecycleHistoryState,
   buildLifecycleHistorySurface,
@@ -101,6 +162,20 @@ const {
 
 const HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const OLLAMA_URL = normalizeOllamaUrl(process.env.FRANCIS_OLLAMA_HOST || process.env.OLLAMA_HOST || DEFAULT_OLLAMA_URL);
+const ORB_VERIFICATION_CAPTURE_ENABLED = (() => {
+  const switchValue = app.commandLine.hasSwitch("francis-orb-capture-on-start")
+    ? app.commandLine.getSwitchValue("francis-orb-capture-on-start") || "1"
+    : "";
+  const envValue = String(process.env.FRANCIS_ORB_CAPTURE_ON_START || "").trim();
+  return /^(1|true|yes|on)$/i.test(String(switchValue || envValue).trim());
+})();
+const ORB_VERIFICATION_CAPTURE_DIR = (() => {
+  const switchValue = app.commandLine.hasSwitch("francis-orb-capture-dir")
+    ? app.commandLine.getSwitchValue("francis-orb-capture-dir")
+    : "";
+  const rawValue = String(switchValue || process.env.FRANCIS_ORB_CAPTURE_DIR || "").trim();
+  return path.resolve(rawValue || os.tmpdir());
+})();
 
 guardStandardStreams(process.stdout, process.stderr);
 patchConsoleForDetachedPipes(console);
@@ -110,11 +185,19 @@ const HUD_HEALTH_RECONCILE_INTERVAL_MS = 4000;
 const HUD_HEALTH_TIMEOUT_MS = 8000;
 const HUD_HEALTH_FAILURES_BEFORE_RECOVERY = 3;
 const HUD_MAX_RECOVERY_ATTEMPTS = 3;
+const HUD_RECOVERY_BASE_DELAY_MS = 1500;
+const HUD_RECOVERY_MAX_DELAY_MS = 12000;
 const OLLAMA_HEALTH_RECONCILE_INTERVAL_MS = 7000;
 const OLLAMA_MAX_RECOVERY_ATTEMPTS = 3;
 const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
 const ORB_AUTHORITY_SYNC_INTERVAL_MS = 350;
 const ORB_FOREGROUND_WINDOW_CACHE_MS = 2000;
+const ORB_ACCESSIBILITY_CACHE_MS = 800;
+const ORB_LOCAL_STOP_LATCH_MS = 5000;
+const ORB_CLICK_ACTUATION_LOCK_TIMEOUT_MS = 1400;
+const ORB_CLICK_ACTUATION_LOCK_POLL_MS = 90;
+const TRAY_QUIT_ARM_WINDOW_MS = 8000;
+const REVIEW_HUD_WINDOW_ENABLED = false;
 
 let mainWindow = null;
 let orbWindow = null;
@@ -148,16 +231,31 @@ let orbPerceptionTimer = null;
 let orbPerceptionSyncPending = false;
 let orbPerceptionErrorLogged = false;
 let orbAuthorityTimer = null;
+let orbSurfaceAuthorityTimer = null;
 let orbAuthorityCommandPending = false;
 let orbAuthorityPublishPending = false;
 let orbAuthorityLastPublishedKey = "";
+let orbAuthorityFailureLogged = false;
+let orbAuthorityExecutionClearTimer = null;
 let orbForegroundWindow = {
   title: "",
   process: "",
   pid: null,
+  elevated: false,
+  bounds: {
+    x: null,
+    y: null,
+    width: 0,
+    height: 0,
+  },
+  updatedAt: 0,
+};
+let orbFocusedAccessibility = {
+  ...EMPTY_ORB_ACCESSIBILITY,
   updatedAt: 0,
 };
 let orbCursorStabilitySamples = [];
+let orbPerceptionEnvironmentSamples = [];
 let orbAuthorityState = {
   state: "human_active",
   eligible: false,
@@ -166,6 +264,11 @@ let orbAuthorityState = {
   lastObservedIdleSeconds: 0,
   thresholdSeconds: 30,
   claimedCommandId: "",
+  activeCommandKind: "",
+  executionPhase: "",
+  executionSummary: "",
+  executionDetail: "",
+  executionTarget: null,
   syntheticCursor: null,
   lastSyntheticAtMs: 0,
   lastHumanActivitySignalAtMs: 0,
@@ -173,6 +276,30 @@ let orbAuthorityState = {
   lastReleaseReason: "",
   lastHumanReturnReason: "",
 };
+let orbSafetyState = {
+  localStopLatchedUntilMs: 0,
+  localStopActive: false,
+  pauseHeld: false,
+  remoteSyncStatus: "current",
+  summary: "",
+  detail: "",
+  degraded: false,
+  disconnected: false,
+  localError: "",
+  remoteError: "",
+  lastAction: "",
+  lastReason: "",
+  lastChangedAtMs: 0,
+};
+let orbPanicStopPending = null;
+let orbPauseAuthorityPending = null;
+let orbRuntimeHealth = buildDefaultOrbRuntimeHealth();
+let hudRecoveryState = buildDefaultHudRecoveryState();
+let hudRestartPromise = null;
+let hudLastRecoverySuppressionKey = "";
+let orbOwnershipSuppressionLogKey = "";
+let trayQuitArmedUntilMs = 0;
+let trayQuitArmTimer = null;
 let quitAfterHudShutdown = false;
 let overlayState = {
   ignoreMouseEvents: false,
@@ -181,6 +308,12 @@ let overlayState = {
 let orbInputState = {
   ignoreMouseEvents: true,
 };
+let orbOwnershipRequest = {
+  mode: ORB_OWNERSHIP_STATES.PASS_THROUGH,
+  reason: "startup",
+  updatedAtMs: 0,
+};
+let orbOwnershipGovernor = buildDefaultOrbOwnershipGovernor();
 let overlayRecovery = {
   needed: false,
   status: "nominal",
@@ -196,6 +329,7 @@ let captureSuspensionState = {
   orbIgnoreMouseEvents: true,
   overlayAlwaysOnTop: true,
 };
+let lensInteractionRestoreIgnoreMouseEvents = null;
 
 function log(message, extra) {
   const prefix = `[francis-overlay] ${message}`;
@@ -205,6 +339,79 @@ function log(message, extra) {
     return;
   }
   writeConsole(console.log, prefix, extra);
+}
+
+function requestAppQuit(reason, details = {}) {
+  const stack = new Error().stack
+    ?.split("\n")
+    .slice(2, 8)
+    .map((line) => line.trim())
+    .join(" | ");
+  log("Quit requested", {
+    reason: String(reason || "unknown"),
+    ...details,
+    stack: stack || "",
+  });
+  app.quit();
+}
+
+function confirmTrayQuit() {
+  const choice = dialog.showMessageBoxSync({
+    type: "question",
+    buttons: ["Cancel", "Quit Francis"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    title: "Quit Francis Overlay",
+    message: "Quit Francis Overlay?",
+    detail: "Francis will shut down the overlay windows and the managed HUD runtime.",
+  });
+  return choice === 1;
+}
+
+function isTrayQuitArmed() {
+  return trayQuitArmedUntilMs > Date.now();
+}
+
+function armTrayQuit() {
+  if (trayQuitArmTimer !== null) {
+    clearTimeout(trayQuitArmTimer);
+    trayQuitArmTimer = null;
+  }
+  trayQuitArmedUntilMs = Date.now() + TRAY_QUIT_ARM_WINDOW_MS;
+  trayQuitArmTimer = setTimeout(() => {
+    trayQuitArmTimer = null;
+    clearTrayQuitArm();
+  }, TRAY_QUIT_ARM_WINDOW_MS);
+  log("Tray quit armed", {
+    expiresInMs: TRAY_QUIT_ARM_WINDOW_MS,
+  });
+  updateTray();
+}
+
+function clearTrayQuitArm() {
+  if (trayQuitArmTimer !== null) {
+    clearTimeout(trayQuitArmTimer);
+    trayQuitArmTimer = null;
+  }
+  if (!trayQuitArmedUntilMs) {
+    return;
+  }
+  trayQuitArmedUntilMs = 0;
+  updateTray();
+}
+
+function handleTrayQuitRequest() {
+  if (!isTrayQuitArmed()) {
+    armTrayQuit();
+    return;
+  }
+  clearTrayQuitArm();
+  if (!confirmTrayQuit()) {
+    log("Tray quit request canceled");
+    return;
+  }
+  requestAppQuit("tray-menu");
 }
 
 function appendMainLogLine(message, extra) {
@@ -269,6 +476,162 @@ function setOverlayRecovery(next = {}) {
   };
 }
 
+function getOrbRuntimeHealthSnapshot() {
+  return {
+    ...orbRuntimeHealth,
+  };
+}
+
+function getCurrentHudGeneration() {
+  return Math.max(
+    0,
+    Number(getHudState()?.generation || hudRecoveryState?.generation || 0),
+  );
+}
+
+function markHudGenerationReady(hudState, { nowMs = Date.now() } = {}) {
+  hudRecoveryState = noteHudGenerationReady(hudRecoveryState, {
+    pid: hudState?.pid ?? null,
+    nowMs,
+  });
+  return hudRecoveryState;
+}
+
+function markHudEndpointSuccess(channel, { generation = getCurrentHudGeneration(), nowMs = Date.now() } = {}) {
+  const result = noteHudEndpointSuccess(hudRecoveryState, {
+    channel,
+    generation,
+    nowMs,
+  });
+  hudRecoveryState = result.state;
+  return result;
+}
+
+function markHudEndpointFailure(channel, {
+  generation = getCurrentHudGeneration(),
+  kind = "unknown",
+  message = "",
+  statusCode = 0,
+  nowMs = Date.now(),
+} = {}) {
+  const result = noteHudEndpointFailure(hudRecoveryState, {
+    channel,
+    generation,
+    kind,
+    message,
+    statusCode,
+    nowMs,
+  });
+  hudRecoveryState = result.state;
+  return result;
+}
+
+function classifyHudFetchFailure(error, statusCode = 0) {
+  return classifyHudReachabilityFailure(error, statusCode);
+}
+
+function buildHudRecoveryDiagnostics(extra = {}) {
+  const hudState = getHudState();
+  const nowMs = Date.now();
+  return {
+    generation: getCurrentHudGeneration(),
+    managed: Boolean(hudState?.managed),
+    mode: hudState?.mode || null,
+    pid: hudState?.pid || null,
+    previousPid: hudRecoveryState?.previousPid || null,
+    childAlive: Boolean(hudState?.childAlive ?? hudRecoveryState?.childAlive),
+    healthUrl: hudState?.healthUrl || null,
+    recoveryAttempt: Number(hudRecoveryState?.recovery?.attempt || 0),
+    recoveryTimerActive: Boolean(hudRecoveryTimer),
+    recoveryInFlight: Boolean(hudRecoveryState?.recovery?.inFlight || hudRestartPromise),
+    recoveryId: Number(hudRecoveryState?.recovery?.id || 0),
+    hudReadyFromState: Boolean(hudState?.ready),
+    staleReadyWindow: Boolean(hudState?.ready && hudHealthFailureCount > 0),
+    lastHealthOkAtMs: Number(hudRecoveryState?.lastHealthOkAtMs || 0),
+    lastHealthOkAgoMs: hudRecoveryState?.lastHealthOkAtMs ? Math.max(0, nowMs - hudRecoveryState.lastHealthOkAtMs) : null,
+    lastPerceptionOkAtMs: Number(hudRecoveryState?.lastPerceptionOkAtMs || 0),
+    lastPerceptionOkAgoMs: hudRecoveryState?.lastPerceptionOkAtMs ? Math.max(0, nowMs - hudRecoveryState.lastPerceptionOkAtMs) : null,
+    lastAuthorityStateOkAtMs: Number(hudRecoveryState?.lastAuthorityStateOkAtMs || 0),
+    lastAuthorityStateOkAgoMs: hudRecoveryState?.lastAuthorityStateOkAtMs ? Math.max(0, nowMs - hudRecoveryState.lastAuthorityStateOkAtMs) : null,
+    orbPerceptionInFlight: Boolean(orbPerceptionSyncPending),
+    orbAuthorityCommandInFlight: Boolean(orbAuthorityCommandPending),
+    orbAuthorityPublishInFlight: Boolean(orbAuthorityPublishPending),
+    ...extra,
+  };
+}
+
+function isStaleHudGenerationError(error) {
+  return Boolean(error && typeof error === "object" && error.name === "HudGenerationStaleError");
+}
+
+function createStaleHudGenerationError(route, requestGeneration, currentGeneration) {
+  const error = new Error(
+    `Ignored stale HUD response for ${String(route || "/")} from generation ${requestGeneration}; current generation is ${currentGeneration}.`,
+  );
+  error.name = "HudGenerationStaleError";
+  error.route = String(route || "/");
+  error.requestGeneration = Number(requestGeneration || 0);
+  error.currentGeneration = Number(currentGeneration || 0);
+  return error;
+}
+
+function setOrbRuntimeHealth(nextState, { notify = true } = {}) {
+  orbRuntimeHealth = {
+    ...buildDefaultOrbRuntimeHealth(),
+    ...(nextState && typeof nextState === "object" ? nextState : {}),
+  };
+  reconcileOrbOwnership("runtime_health_changed", { notify });
+  if (notify) {
+    notifyOverlayState(mainWindow);
+  }
+  return getOrbRuntimeHealthSnapshot();
+}
+
+function recordOrbRuntimeFailure(reason, {
+  source = "hud",
+  nowMs = Date.now(),
+  notify = true,
+} = {}) {
+  return setOrbRuntimeHealth(
+    escalateOrbRuntimeFailure(orbRuntimeHealth, {
+      reason,
+      source,
+      nowMs,
+    }),
+    { notify },
+  );
+}
+
+function markOrbRuntimeRecovering(reason, {
+  source = "hud",
+  nowMs = Date.now(),
+  notify = true,
+} = {}) {
+  return setOrbRuntimeHealth(
+    startOrbRuntimeRecovery(orbRuntimeHealth, {
+      reason,
+      source,
+      nowMs,
+    }),
+    { notify },
+  );
+}
+
+function recordOrbRuntimeHealthyProof(reason, {
+  source = "hud",
+  nowMs = Date.now(),
+  notify = true,
+} = {}) {
+  return setOrbRuntimeHealth(
+    recordOrbRuntimeHealthy(orbRuntimeHealth, {
+      reason,
+      source,
+      nowMs,
+    }),
+    { notify },
+  );
+}
+
 function recordLifecycleHistory(kind, summary, { tone = "low", detail = {} } = {}) {
   if (!app.isReady()) {
     return null;
@@ -330,6 +693,20 @@ function getShellWindows() {
   return [mainWindow, orbWindow].filter((win) => win && !win.isDestroyed());
 }
 
+function getLiveMainWindow() {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+}
+
+function getLiveOrbWindow() {
+  return orbWindow && !orbWindow.isDestroyed() ? orbWindow : null;
+}
+
+function getShellControlWindow({ preferOrb = true } = {}) {
+  const liveMainWindow = getLiveMainWindow();
+  const liveOrbWindow = getLiveOrbWindow();
+  return preferOrb ? liveOrbWindow || liveMainWindow : liveMainWindow || liveOrbWindow;
+}
+
 function getSortedDisplays() {
   return [...screen.getAllDisplays()].sort((left, right) => {
     if (left.bounds.x !== right.bounds.x) {
@@ -342,21 +719,18 @@ function getSortedDisplays() {
   });
 }
 
-function serializeDisplay(display, index) {
-  return {
-    id: display.id,
-    ordinal: index + 1,
-    label: display.primary ? "Primary Display" : `Display ${index + 1}`,
-    primary: Boolean(display.primary),
-    scaleFactor: display.scaleFactor,
-    bounds: display.bounds,
-    workArea: display.workArea,
-    workAreaSize: display.workAreaSize,
-  };
+function getDisplayTopology(displays = getSortedDisplays(), {
+  targetDisplayId = overlayPreferences?.targetDisplayId ?? null,
+  activeDisplayId = null,
+} = {}) {
+  return buildOrbDisplayTopology(displays, {
+    targetDisplayId,
+    activeDisplayId,
+  });
 }
 
 function listDisplays() {
-  return getSortedDisplays().map((display, index) => serializeDisplay(display, index));
+  return getDisplayTopology().displays;
 }
 
 function getDisplayContext() {
@@ -389,23 +763,79 @@ function getActiveDisplay(win = mainWindow) {
 }
 
 function getDisplayInfo(win = mainWindow) {
-  const displays = listDisplays();
-  const primaryDisplay = displays.find((display) => display.primary) || displays[0];
-  const targetDisplay = displays.find((display) => display.id === overlayPreferences?.targetDisplayId) || primaryDisplay;
-  const activeDisplay = displays.find((display) => display.id === getActiveDisplay(win).id) || targetDisplay;
+  const activeDisplayId = getActiveDisplay(win)?.id ?? null;
+  const topology = getDisplayTopology(getSortedDisplays(), {
+    activeDisplayId,
+  });
+  const desktopAuthority = buildDesktopAuthoritySnapshot({
+    displays: topology.displays,
+    targetDisplayId: topology.targetDisplayId,
+    activeDisplayId: topology.activeDisplayId,
+    foregroundWindow: orbForegroundWindow,
+    capabilityProfile: buildWindowsDesktopCapabilityProfile({
+      platform: process.platform,
+      foregroundWindow: orbForegroundWindow,
+    }),
+    orbVisible: Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
+    lensVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+    alwaysOnTop: orbWindow && !orbWindow.isDestroyed() ? orbWindow.isAlwaysOnTop() : true,
+    overlayIgnoreMouseEvents: overlayState.ignoreMouseEvents,
+    orbIgnoreMouseEvents: orbInputState.ignoreMouseEvents,
+    captureSuspended: captureSuspensionState.active,
+  });
 
   return {
-    primaryDisplayId: primaryDisplay.id,
-    targetDisplayId: targetDisplay.id,
-    activeDisplayId: activeDisplay.id,
-    targetDisplay,
-    activeDisplay,
-    displays,
+    primaryDisplayId: topology.primaryDisplayId,
+    targetDisplayId: topology.targetDisplayId,
+    activeDisplayId: topology.activeDisplayId,
+    targetDisplay: topology.targetDisplay,
+    activeDisplay: topology.activeDisplay,
+    displays: topology.displays,
+    virtualBounds: topology.virtualBounds,
+    desktopAuthority,
   };
 }
 
-function getOrbSurfaceBounds() {
-  return buildOrbWindowBounds(getSortedDisplays());
+function getReceiptForegroundWindowSnapshot() {
+  const bounds = orbForegroundWindow?.bounds && typeof orbForegroundWindow.bounds === "object"
+    ? {
+        x: Number.isFinite(Number(orbForegroundWindow.bounds.x)) ? Math.round(Number(orbForegroundWindow.bounds.x)) : null,
+        y: Number.isFinite(Number(orbForegroundWindow.bounds.y)) ? Math.round(Number(orbForegroundWindow.bounds.y)) : null,
+        width: Math.max(0, Math.round(Number(orbForegroundWindow.bounds.width || 0))),
+        height: Math.max(0, Math.round(Number(orbForegroundWindow.bounds.height || 0))),
+      }
+    : null;
+  return {
+    title: String(orbForegroundWindow?.title || "").trim(),
+    process: String(orbForegroundWindow?.process || "").trim(),
+    pid: Number(orbForegroundWindow?.pid || 0) || null,
+    elevated: Boolean(orbForegroundWindow?.elevated),
+    fullscreenLike: Boolean(orbForegroundWindow?.fullscreenLike),
+    hostDisplayLabel: String(orbForegroundWindow?.hostDisplayLabel || "").trim(),
+    bounds,
+  };
+}
+
+function buildOrbReceiptContext(inputState = null) {
+  const safeInput = inputState && typeof inputState === "object" ? inputState : getOverlayInputState();
+  const displayInfo = app.isReady() ? getDisplayInfo(mainWindow) : null;
+  return {
+    authority: getOrbAuthoritySnapshot(safeInput),
+    ownership: getOrbOwnershipSnapshot({ input: safeInput, foregroundWindow: orbForegroundWindow }),
+    desktop_authority: displayInfo?.desktopAuthority || null,
+    foreground_window: getReceiptForegroundWindowSnapshot(),
+    display: displayInfo
+      ? {
+          targetDisplayId: displayInfo.targetDisplayId ?? null,
+          activeDisplayId: displayInfo.activeDisplayId ?? null,
+          summary: String(displayInfo.summary || "").trim(),
+        }
+      : null,
+  };
+}
+
+function getOrbSurfaceBounds(displays = getSortedDisplays()) {
+  return buildOrbWindowBounds(displays);
 }
 
 function getOrbTargetStability(cursorScreen) {
@@ -442,7 +872,9 @@ function getOrbTargetStability(cursorScreen) {
 function getOverlayInputState() {
   const cursorScreen = screen.getCursorScreenPoint();
   const activeDisplay = screen.getDisplayNearestPoint(cursorScreen);
-  const workArea = getOrbSurfaceBounds();
+  const workArea = getDisplayTopology(getSortedDisplays(), {
+    activeDisplayId: activeDisplay?.id ?? null,
+  }).virtualBounds;
   const cursorDisplay = {
     x: cursorScreen.x - Number(workArea.x || 0),
     y: cursorScreen.y - Number(workArea.y || 0),
@@ -463,19 +895,242 @@ function getOverlayInputState() {
   };
 }
 
-function getOrbAuthoritySnapshot() {
+function getOrbSafetySnapshot(nowMs = Date.now()) {
+  const latchedUntilMs = Number(orbSafetyState.localStopLatchedUntilMs || 0);
   return {
-    state: orbAuthorityState.state,
-    eligible: Boolean(orbAuthorityState.eligible),
-    live: Boolean(orbAuthorityState.live),
-    idleSeconds: Number(orbAuthorityState.idleSeconds || 0),
-    lastObservedIdleSeconds: Number(orbAuthorityState.lastObservedIdleSeconds || 0),
-    thresholdSeconds: Number(orbAuthorityState.thresholdSeconds || 30),
-    claimedCommandId: String(orbAuthorityState.claimedCommandId || ""),
-    lastHumanActivitySignalAtMs: Number(orbAuthorityState.lastHumanActivitySignalAtMs || 0),
-    lastHumanActivitySignalSource: String(orbAuthorityState.lastHumanActivitySignalSource || ""),
-    lastReleaseReason: String(orbAuthorityState.lastReleaseReason || ""),
-    lastHumanReturnReason: String(orbAuthorityState.lastHumanReturnReason || ""),
+    ...orbSafetyState,
+    remoteSyncStatus: normalizeRemoteSyncStatus(orbSafetyState.remoteSyncStatus),
+    localStopActive: Boolean(orbSafetyState.localStopActive),
+    localError: cleanSafetyDiagnostic(orbSafetyState.localError),
+    remoteError: cleanSafetyDiagnostic(orbSafetyState.remoteError),
+    localStopped: Boolean(orbSafetyState.localStopActive) || latchedUntilMs > Number(nowMs || Date.now()),
+  };
+}
+
+function cleanSafetyText(value, fallback = "") {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text || fallback;
+}
+
+function cleanSafetyDiagnostic(value, fallback = "") {
+  return cleanSafetyText(value, fallback);
+}
+
+function setOrbSafetyState(patch = {}, { notify = true } = {}) {
+  const nextPatch = patch && typeof patch === "object" ? patch : {};
+  orbSafetyState = {
+    ...orbSafetyState,
+    ...nextPatch,
+    localStopLatchedUntilMs: Object.prototype.hasOwnProperty.call(nextPatch, "localStopLatchedUntilMs")
+      ? Math.max(0, Number(nextPatch.localStopLatchedUntilMs || 0))
+      : Math.max(0, Number(orbSafetyState.localStopLatchedUntilMs || 0)),
+    localStopActive: Object.prototype.hasOwnProperty.call(nextPatch, "localStopActive")
+      ? Boolean(nextPatch.localStopActive)
+      : Boolean(orbSafetyState.localStopActive),
+    pauseHeld: Object.prototype.hasOwnProperty.call(nextPatch, "pauseHeld")
+      ? Boolean(nextPatch.pauseHeld)
+      : Boolean(orbSafetyState.pauseHeld),
+    disconnected: Object.prototype.hasOwnProperty.call(nextPatch, "disconnected")
+      ? Boolean(nextPatch.disconnected)
+      : Boolean(orbSafetyState.disconnected),
+    degraded: Object.prototype.hasOwnProperty.call(nextPatch, "degraded")
+      ? Boolean(nextPatch.degraded)
+      : Boolean(orbSafetyState.degraded),
+    remoteSyncStatus: normalizeRemoteSyncStatus(
+      Object.prototype.hasOwnProperty.call(nextPatch, "remoteSyncStatus")
+        ? nextPatch.remoteSyncStatus
+        : orbSafetyState.remoteSyncStatus,
+    ),
+    summary: Object.prototype.hasOwnProperty.call(nextPatch, "summary")
+      ? cleanSafetyText(nextPatch.summary)
+      : cleanSafetyText(orbSafetyState.summary),
+    detail: Object.prototype.hasOwnProperty.call(nextPatch, "detail")
+      ? cleanSafetyText(nextPatch.detail)
+      : cleanSafetyText(orbSafetyState.detail),
+    lastAction: Object.prototype.hasOwnProperty.call(nextPatch, "lastAction")
+      ? cleanSafetyText(nextPatch.lastAction)
+      : cleanSafetyText(orbSafetyState.lastAction),
+    lastReason: Object.prototype.hasOwnProperty.call(nextPatch, "lastReason")
+      ? cleanSafetyText(nextPatch.lastReason)
+      : cleanSafetyText(orbSafetyState.lastReason),
+    localError: Object.prototype.hasOwnProperty.call(nextPatch, "localError")
+      ? cleanSafetyDiagnostic(nextPatch.localError)
+      : cleanSafetyDiagnostic(orbSafetyState.localError),
+    remoteError: Object.prototype.hasOwnProperty.call(nextPatch, "remoteError")
+      ? cleanSafetyDiagnostic(nextPatch.remoteError)
+      : cleanSafetyDiagnostic(orbSafetyState.remoteError),
+    lastChangedAtMs: Date.now(),
+  };
+  if (notify) {
+    notifyOverlayState(mainWindow);
+  }
+  return getOrbSafetySnapshot();
+}
+
+function setOrbAuthorityExecutionState(nextExecution = {}, { notify = true } = {}) {
+  if (orbAuthorityExecutionClearTimer !== null) {
+    clearTimeout(orbAuthorityExecutionClearTimer);
+    orbAuthorityExecutionClearTimer = null;
+  }
+  const target =
+    nextExecution.target && typeof nextExecution.target === "object"
+      ? {
+          x: Number.isFinite(Number(nextExecution.target.x)) ? Math.round(Number(nextExecution.target.x)) : null,
+          y: Number.isFinite(Number(nextExecution.target.y)) ? Math.round(Number(nextExecution.target.y)) : null,
+          coordinate_space: String(nextExecution.target.coordinate_space || nextExecution.target.coordinateSpace || "screen").trim().toLowerCase() || "screen",
+        }
+      : null;
+  orbAuthorityState = {
+    ...orbAuthorityState,
+    activeCommandKind: String(nextExecution.kind || orbAuthorityState.activeCommandKind || "").trim().toLowerCase(),
+    executionPhase: String(nextExecution.phase || orbAuthorityState.executionPhase || "").trim().toLowerCase(),
+    executionSummary: cleanSafetyText(nextExecution.summary || orbAuthorityState.executionSummary || ""),
+    executionDetail: cleanSafetyText(nextExecution.detail || orbAuthorityState.executionDetail || ""),
+    executionTarget:
+      target && Number.isFinite(Number(target.x)) && Number.isFinite(Number(target.y))
+        ? target
+        : null,
+  };
+  if (notify) {
+    notifyOverlayState(mainWindow);
+  }
+  return getOrbAuthoritySnapshot();
+}
+
+function clearOrbAuthorityExecutionState({ notify = true } = {}) {
+  if (orbAuthorityExecutionClearTimer !== null) {
+    clearTimeout(orbAuthorityExecutionClearTimer);
+    orbAuthorityExecutionClearTimer = null;
+  }
+  orbAuthorityState = {
+    ...orbAuthorityState,
+    activeCommandKind: "",
+    executionPhase: "",
+    executionSummary: "",
+    executionDetail: "",
+    executionTarget: null,
+  };
+  if (notify) {
+    notifyOverlayState(mainWindow);
+  }
+  return getOrbAuthoritySnapshot();
+}
+
+function scheduleOrbAuthorityExecutionClear(phase = "") {
+  if (orbAuthorityExecutionClearTimer !== null) {
+    clearTimeout(orbAuthorityExecutionClearTimer);
+    orbAuthorityExecutionClearTimer = null;
+  }
+  const normalizedPhase = String(phase || "").trim().toLowerCase();
+  const holdMs = normalizedPhase === "click_act"
+    ? 220
+    : normalizedPhase === "drag_act"
+      ? 280
+      : normalizedPhase === "type_hold"
+        ? 260
+        : normalizedPhase === "hover_ready"
+          ? 140
+          : normalizedPhase === "blocked" || normalizedPhase === "interrupted"
+            ? 260
+            : 160;
+  orbAuthorityExecutionClearTimer = setTimeout(() => {
+    orbAuthorityExecutionClearTimer = null;
+    if (!orbAuthorityState.live && !orbAuthorityState.claimedCommandId) {
+      clearOrbAuthorityExecutionState();
+    }
+  }, holdMs);
+}
+
+function stabilizeOrbAuthorityLocally(reason, {
+  localStop = false,
+  localStopActive = null,
+  pauseHold = null,
+  disconnected = null,
+  degraded = null,
+  remoteSyncStatus = null,
+  summary = "",
+  detail = "",
+  localError = "",
+  remoteError = "",
+  humanReturned = false,
+  notify = true,
+} = {}) {
+  const resolvedDetail = cleanSafetyText(detail || reason || "Human control remains primary.", "Human control remains primary.");
+  const resolvedSummary = cleanSafetyText(summary || orbSafetyState.summary || resolvedDetail, "Human control remains primary.");
+  const nextLocalStopActive =
+    localStopActive === null || localStopActive === undefined
+      ? localStop
+        ? true
+        : pauseHold === true
+          ? false
+          : orbSafetyState.localStopActive
+      : Boolean(localStopActive);
+  orbAuthorityState = {
+    ...orbAuthorityState,
+    state: humanReturned ? "handback" : "human_active",
+    live: false,
+    claimedCommandId: "",
+    activeCommandKind: "",
+    executionPhase: "",
+    executionSummary: "",
+    executionDetail: "",
+    executionTarget: null,
+    syntheticCursor: null,
+    lastSyntheticAtMs: 0,
+    lastReleaseReason: resolvedDetail,
+    lastHumanReturnReason: humanReturned ? resolvedDetail : orbAuthorityState.lastHumanReturnReason,
+  };
+  resetOrbOwnershipToSafeFallback(localStop ? "panic_stop" : pauseHold ? "pause_authority" : "authority_local_fallback");
+  applyOrbIgnoreMouseEvents(true);
+  return setOrbSafetyState({
+    localStopLatchedUntilMs: localStop
+      ? Date.now() + ORB_LOCAL_STOP_LATCH_MS
+      : pauseHold === true
+        ? 0
+        : orbSafetyState.localStopLatchedUntilMs,
+    localStopActive: nextLocalStopActive,
+    pauseHeld: pauseHold === null || pauseHold === undefined ? orbSafetyState.pauseHeld : Boolean(pauseHold),
+    disconnected: disconnected === null || disconnected === undefined ? orbSafetyState.disconnected : Boolean(disconnected),
+    degraded: degraded === null || degraded === undefined ? orbSafetyState.degraded : Boolean(degraded),
+    remoteSyncStatus: remoteSyncStatus === null || remoteSyncStatus === undefined ? orbSafetyState.remoteSyncStatus : remoteSyncStatus,
+    summary: resolvedSummary,
+    detail: resolvedDetail,
+    localError,
+    remoteError,
+    lastAction: localStop ? "panic_stop" : pauseHold ? "pause_authority" : orbSafetyState.lastAction,
+    lastReason: resolvedDetail,
+  }, { notify });
+}
+
+function getOrbAuthoritySnapshot(inputState = null) {
+  const safeInput = inputState && typeof inputState === "object" ? inputState : getOverlayInputState();
+  const snapshot = buildOrbControlState({
+    authorityState: orbAuthorityState,
+    hudState: getHudState(),
+    recovery: overlayRecovery,
+    inputState: safeInput,
+    ignoreMouseEvents: orbInputState.ignoreMouseEvents,
+    safetyState: getOrbSafetySnapshot(),
+  });
+  return {
+    ...snapshot,
+    rawState: {
+      state: orbAuthorityState.state,
+      eligible: Boolean(orbAuthorityState.eligible),
+      live: Boolean(orbAuthorityState.live),
+      idleSeconds: Number(orbAuthorityState.idleSeconds || 0),
+      lastObservedIdleSeconds: Number(orbAuthorityState.lastObservedIdleSeconds || 0),
+      thresholdSeconds: Number(orbAuthorityState.thresholdSeconds || 30),
+      claimedCommandId: String(orbAuthorityState.claimedCommandId || ""),
+      activeCommandKind: String(orbAuthorityState.activeCommandKind || ""),
+      executionPhase: String(orbAuthorityState.executionPhase || ""),
+      executionSummary: String(orbAuthorityState.executionSummary || ""),
+      executionDetail: String(orbAuthorityState.executionDetail || ""),
+      executionTarget:
+        orbAuthorityState.executionTarget && typeof orbAuthorityState.executionTarget === "object"
+          ? orbAuthorityState.executionTarget
+          : null,
+    },
   };
 }
 
@@ -540,6 +1195,38 @@ async function getCachedForegroundWindowInfo() {
   return orbForegroundWindow;
 }
 
+async function getCachedFocusedAccessibilityInfo() {
+  const now = Date.now();
+  if (now - Number(orbFocusedAccessibility.updatedAt || 0) < ORB_ACCESSIBILITY_CACHE_MS) {
+    return orbFocusedAccessibility;
+  }
+  const nextInfo = await getOrbFocusedAccessibilitySnapshot();
+  orbFocusedAccessibility = {
+    ...EMPTY_ORB_ACCESSIBILITY,
+    ...(nextInfo && typeof nextInfo === "object" ? nextInfo : {}),
+    updatedAt: now,
+  };
+  return orbFocusedAccessibility;
+}
+
+function appendOrbPerceptionEnvironmentSample(sample = null, nowMs = Date.now()) {
+  const maxAgeMs = 4200;
+  const normalizedSample = sample && typeof sample === "object"
+    ? {
+        key: String(sample.key || "").trim(),
+        at: Number.isFinite(Number(sample.at)) ? Number(sample.at) : Number(nowMs || Date.now()),
+      }
+    : null;
+  orbPerceptionEnvironmentSamples = orbPerceptionEnvironmentSamples
+    .filter((entry) => entry && Number.isFinite(Number(entry.at)) && nowMs - Number(entry.at) <= maxAgeMs)
+    .slice(-8);
+  if (normalizedSample && normalizedSample.key) {
+    orbPerceptionEnvironmentSamples.push(normalizedSample);
+    orbPerceptionEnvironmentSamples = orbPerceptionEnvironmentSamples.slice(-8);
+  }
+  return orbPerceptionEnvironmentSamples;
+}
+
 async function publishOrbAuthorityState(reason = "") {
   const publishPayload = {
     state: orbAuthorityState.state,
@@ -568,10 +1255,35 @@ async function publishOrbAuthorityState(reason = "") {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(publishPayload),
+    }, {
+      generation: getCurrentHudGeneration(),
+      channel: "authority_state",
     });
     orbAuthorityLastPublishedKey = nextKey;
+    if (orbSafetyState.disconnected || (orbSafetyState.degraded && orbSafetyState.remoteSyncStatus === "pending" && !orbSafetyState.pauseHeld)) {
+      setOrbSafetyState({
+        disconnected: false,
+        degraded: Boolean(
+          overlayRecovery.needed
+          || orbSafetyState.pauseHeld
+          || orbSafetyState.localStopActive
+          || orbSafetyState.remoteSyncStatus !== "current"
+        ),
+        localError:
+          orbSafetyState.pauseHeld || orbSafetyState.localStopActive || orbSafetyState.remoteSyncStatus !== "current"
+            ? orbSafetyState.localError
+            : "",
+        remoteError:
+          orbSafetyState.pauseHeld || orbSafetyState.localStopActive || orbSafetyState.remoteSyncStatus !== "current"
+            ? orbSafetyState.remoteError
+            : "",
+      }, { notify: false });
+    }
     return payload;
   } catch (error) {
+    if (isStaleHudGenerationError(error)) {
+      return null;
+    }
     log("Orb authority state publish failed", error instanceof Error ? error.message : String(error));
     return null;
   } finally {
@@ -582,10 +1294,14 @@ async function publishOrbAuthorityState(reason = "") {
 async function cancelOrbAuthorityQueue(reason) {
   const hudState = getHudState();
   if (!hudState?.ready) {
-    return null;
+    return {
+      ok: false,
+      payload: null,
+      error: "HUD is not ready.",
+    };
   }
   try {
-    return await fetchHudJson("/api/orb/authority/cancel", {
+    const payload = await fetchHudJson("/api/orb/authority/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -593,9 +1309,19 @@ async function cancelOrbAuthorityQueue(reason) {
         actor: "electron.orb",
       }),
     });
+    return {
+      ok: true,
+      payload,
+      error: "",
+    };
   } catch (error) {
-    log("Orb authority cancel failed", error instanceof Error ? error.message : String(error));
-    return null;
+    const message = error instanceof Error ? error.message : String(error);
+    log("Orb authority cancel failed", message);
+    return {
+      ok: false,
+      payload: null,
+      error: message,
+    };
   }
 }
 
@@ -604,6 +1330,18 @@ async function completeOrbAuthorityCommand(commandId, status, detail, result = {
     return null;
   }
   try {
+    const receiptContext = buildOrbReceiptContext();
+    const normalizedResult = result && typeof result === "object"
+      ? {
+          ...receiptContext,
+          ...result,
+          desktop_authority: result.desktop_authority || receiptContext.desktop_authority,
+          foreground_window: result.foreground_window || receiptContext.foreground_window,
+          authority: result.authority || receiptContext.authority,
+          ownership: result.ownership || receiptContext.ownership,
+          display: result.display || receiptContext.display,
+        }
+      : receiptContext;
     return await fetchHudJson("/api/orb/authority/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -611,7 +1349,7 @@ async function completeOrbAuthorityCommand(commandId, status, detail, result = {
         command_id: String(commandId),
         status: String(status),
         detail: String(detail || ""),
-        result,
+        result: normalizedResult,
         actor: "electron.orb",
         human_returned: Boolean(humanReturned),
       }),
@@ -639,11 +1377,93 @@ async function releaseOrbAuthority(reason, { humanReturned = false } = {}) {
     state: humanReturned ? "handback" : "human_active",
     live: false,
     claimedCommandId: "",
+    activeCommandKind: "",
+    executionPhase: "",
+    executionSummary: "",
+    executionDetail: "",
+    executionTarget: null,
     lastReleaseReason: detail,
     lastHumanReturnReason: humanReturned ? detail : orbAuthorityState.lastHumanReturnReason,
   };
   await publishOrbAuthorityState(detail);
   notifyOverlayState(mainWindow);
+}
+
+async function pauseOrbAuthorityLocally() {
+  if (orbPauseAuthorityPending) {
+    return orbPauseAuthorityPending;
+  }
+  orbPauseAuthorityPending = (async () => {
+    if (orbAuthorityState.live) {
+      const result = buildPauseAuthorityResult({ activeLive: true });
+      setOrbSafetyState({
+        summary: result.summary,
+        detail: result.detail,
+        lastAction: "pause_authority",
+        lastReason: result.detail,
+      });
+      return result;
+    }
+
+    stabilizeOrbAuthorityLocally(
+      "Pause cleared local authority immediately. Human control remains primary.",
+      {
+        pauseHold: true,
+        localStopActive: false,
+        remoteSyncStatus: "pending",
+        disconnected: !getHudState()?.ready,
+        degraded: true,
+        summary: "Paused locally. Clearing queued authority work.",
+        detail: "Human control remains primary while Francis confirms queued authority work is cleared.",
+        localError: "",
+        remoteError: "",
+      },
+    );
+    resetOrbOwnershipToSafeFallback("pause_authority");
+
+    const remoteResult = await cancelOrbAuthorityQueue("Pause cleared queued Orb authority commands.");
+    const remoteSynced = Boolean(remoteResult?.ok);
+    const remoteSyncStatus = remoteSynced ? "current" : getHudState()?.ready ? "failed" : "pending";
+    const result = buildPauseAuthorityResult({
+      remoteSynced,
+      remoteSyncStatus,
+      summary: remoteSynced
+        ? "Paused. Queued work cleared; human control remains primary."
+        : remoteSyncStatus === "failed"
+          ? "Paused locally. Remote queue clear failed."
+          : "Paused locally. Remote queue clear pending.",
+      detail: remoteSynced
+        ? "Queued authority work was cleared locally and remotely."
+        : remoteSyncStatus === "failed"
+          ? "Human control remains primary, but the queued remote clear did not confirm."
+          : "Human control remains primary while the queued remote clear remains pending.",
+    });
+
+    setOrbSafetyState({
+      localStopLatchedUntilMs: 0,
+      localStopActive: false,
+      pauseHeld: !remoteSynced,
+      disconnected: remoteSyncStatus === "pending" && !getHudState()?.ready,
+      degraded: !remoteSynced || Boolean(overlayRecovery.needed),
+      remoteSyncStatus,
+      summary: result.summary,
+      detail: result.detail,
+      localError: "",
+      remoteError: remoteSynced
+        ? ""
+        : cleanSafetyDiagnostic(remoteResult?.error || "Orb authority queue clear did not confirm."),
+      lastAction: "pause_authority",
+      lastReason: result.detail,
+    });
+    resetOrbOwnershipToSafeFallback("pause_authority");
+
+    return result;
+  })();
+  try {
+    return await orbPauseAuthorityPending;
+  } finally {
+    orbPauseAuthorityPending = null;
+  }
 }
 
 function signalOrbHumanActivity(source = "system_active") {
@@ -656,6 +1476,54 @@ function signalOrbHumanActivity(source = "system_active") {
     `Human input resumed via ${orbAuthorityState.lastHumanActivitySignalSource}. Francis handed control back immediately.`,
     { humanReturned: true },
   );
+}
+
+async function waitForOrbClickTargetLock({
+  timeoutMs = ORB_CLICK_ACTUATION_LOCK_TIMEOUT_MS,
+  pollMs = ORB_CLICK_ACTUATION_LOCK_POLL_MS,
+} = {}) {
+  const deadline = Date.now() + Math.max(120, Number(timeoutMs || ORB_CLICK_ACTUATION_LOCK_TIMEOUT_MS));
+  let lastCue = null;
+  while (Date.now() <= deadline) {
+    const safetySnapshot = getOrbSafetySnapshot();
+    if (safetySnapshot.localStopped || safetySnapshot.pauseHeld || safetySnapshot.disconnected) {
+      return {
+        ready: false,
+        reason: "safety_hold",
+        cue: lastCue,
+      };
+    }
+    try {
+      const orbSurface = await fetchHudJson("/api/orb", {}, {
+        generation: getCurrentHudGeneration(),
+      });
+      const cue = orbSurface?.operator?.target_cue;
+      if (cue && typeof cue === "object") {
+        lastCue = cue;
+      }
+      if (isOrbClickTargetLocked(orbSurface)) {
+        return {
+          ready: true,
+          reason: "target_lock",
+          cue: lastCue,
+        };
+      }
+    } catch (error) {
+      if (!isStaleHudGenerationError(error)) {
+        return {
+          ready: false,
+          reason: "surface_unavailable",
+          cue: lastCue,
+        };
+      }
+    }
+    await delayMs(pollMs);
+  }
+  return {
+    ready: false,
+    reason: "target_lock_timeout",
+    cue: lastCue,
+  };
 }
 
 async function executeOrbAuthorityCommand(command, inputState) {
@@ -677,11 +1545,36 @@ async function executeOrbAuthorityCommand(command, inputState) {
     }
     return { x: pointX, y: pointY };
   };
+  const setExecution = (status, {
+    explicitPhase = "",
+    executionArgs = args,
+    target = null,
+    notify = true,
+  } = {}) => {
+    const execution = buildOrbExecutionSemantics({
+      kind,
+      args: executionArgs,
+      status,
+      explicitPhase,
+      target,
+    });
+    setOrbAuthorityExecutionState(execution, { notify });
+    return execution;
+  };
 
   try {
     if (kind === "mouse.move") {
       const targetPoint = resolveScreenPoint(args.x, args.y);
-      await executeWindowsInputCommand(
+      setExecution("claimed", {
+        executionArgs: {
+          ...args,
+          x: targetPoint.x,
+          y: targetPoint.y,
+          coordinate_space: "screen",
+        },
+        target: targetPoint,
+      });
+      const executionResult = await executeWindowsInputCommand(
         {
           kind,
           args: targetPoint,
@@ -690,16 +1583,56 @@ async function executeOrbAuthorityCommand(command, inputState) {
       );
       orbAuthorityState.syntheticCursor = { x: targetPoint.x, y: targetPoint.y };
       orbAuthorityState.lastSyntheticAtMs = Date.now();
+      const execution = executionResult?.execution && typeof executionResult.execution === "object"
+        ? executionResult.execution
+        : setExecution("completed", {
+            executionArgs: {
+              ...args,
+              x: targetPoint.x,
+              y: targetPoint.y,
+              coordinate_space: "screen",
+            },
+            target: targetPoint,
+            notify: false,
+          });
+      setOrbAuthorityExecutionState(execution, { notify: true });
       await completeOrbAuthorityCommand(commandId, "completed", "Cursor movement executed through Orb authority.", {
         cursor: { x: targetPoint.x, y: targetPoint.y },
         coordinate_space: coordinateSpace,
+        execution,
       });
+      scheduleOrbAuthorityExecutionClear(execution?.phase);
     } else if (kind === "mouse.click") {
-      const targetPoint =
-        Number.isFinite(Number(args.x)) && Number.isFinite(Number(args.y))
-          ? resolveScreenPoint(args.x, args.y)
-          : null;
-      if (targetPoint !== null) {
+      const hasExplicitTarget = Number.isFinite(Number(args.x)) && Number.isFinite(Number(args.y));
+      if (!hasExplicitTarget) {
+        throw new Error("Orb click requires explicit target coordinates from the Orb target lock.");
+      }
+      const targetPoint = resolveScreenPoint(args.x, args.y);
+      const preserveHumanCursor = Boolean(
+        args.preserve_human_cursor !== false
+        && args.preserveHumanCursor !== false,
+      );
+      const clickArgs = {
+        ...args,
+        x: targetPoint.x,
+        y: targetPoint.y,
+        coordinate_space: "screen",
+        preserve_human_cursor: preserveHumanCursor,
+      };
+      setExecution("claimed", {
+        explicitPhase: "target_lock",
+        executionArgs: clickArgs,
+        target: targetPoint,
+      });
+      const targetLock = await waitForOrbClickTargetLock();
+      if (!targetLock.ready) {
+        throw new Error(describeOrbClickTargetLockFailure(targetLock));
+      }
+      setExecution("claimed", {
+        executionArgs: clickArgs,
+        target: targetPoint,
+      });
+      if (!preserveHumanCursor) {
         await executeWindowsInputCommand(
           {
             kind: "mouse.move",
@@ -709,22 +1642,107 @@ async function executeOrbAuthorityCommand(command, inputState) {
         );
         orbAuthorityState.syntheticCursor = { x: targetPoint.x, y: targetPoint.y };
         orbAuthorityState.lastSyntheticAtMs = Date.now();
+        setExecution("hover_ready", {
+          explicitPhase: "hover_ready",
+          executionArgs: clickArgs,
+          target: targetPoint,
+        });
       }
-      await executeWindowsInputCommand(
+      setExecution("claimed", {
+        explicitPhase: "click_act",
+        executionArgs: clickArgs,
+        target: targetPoint,
+      });
+      const executionResult = await executeWindowsInputCommand(
         {
           kind,
-          args,
+          args: clickArgs,
         },
         { platform: process.platform },
       );
+      if (
+        preserveHumanCursor
+        && Number.isFinite(Number(cursorScreen?.x))
+        && Number.isFinite(Number(cursorScreen?.y))
+      ) {
+        orbAuthorityState.syntheticCursor = {
+          x: Math.round(Number(cursorScreen.x)),
+          y: Math.round(Number(cursorScreen.y)),
+        };
+      } else {
+        orbAuthorityState.syntheticCursor = { x: targetPoint.x, y: targetPoint.y };
+      }
       orbAuthorityState.lastSyntheticAtMs = Date.now();
+      const execution = executionResult?.execution && typeof executionResult.execution === "object"
+        ? executionResult.execution
+        : setExecution("completed", {
+            executionArgs: clickArgs,
+            target: targetPoint,
+            notify: false,
+          });
+      setOrbAuthorityExecutionState(execution, { notify: true });
       await completeOrbAuthorityCommand(commandId, "completed", "Mouse click executed through Orb authority.", {
         button: String(args.button || "left"),
         double: Boolean(args.double),
         coordinate_space: coordinateSpace,
+        cursor: { x: targetPoint.x, y: targetPoint.y },
+        preserve_human_cursor: preserveHumanCursor,
+        target_lock: {
+          ready: true,
+          reason: targetLock.reason,
+          attention_state: String(targetLock?.cue?.attention_state || "").trim().toLowerCase(),
+          control_ready: Boolean(targetLock?.cue?.control_ready),
+        },
+        execution,
       });
+      scheduleOrbAuthorityExecutionClear(execution?.phase);
+    } else if (kind === "mouse.drag") {
+      const targetPoint = resolveScreenPoint(args.x, args.y);
+      const startPoint =
+        Number.isFinite(Number(args.start_x)) && Number.isFinite(Number(args.start_y))
+          ? resolveScreenPoint(args.start_x, args.start_y)
+          : null;
+      const dragArgs = {
+        ...args,
+        x: targetPoint.x,
+        y: targetPoint.y,
+        coordinate_space: "screen",
+        ...(startPoint ? {
+          start_x: startPoint.x,
+          start_y: startPoint.y,
+        } : {}),
+      };
+      setExecution("claimed", {
+        executionArgs: dragArgs,
+        target: targetPoint,
+      });
+      const executionResult = await executeWindowsInputCommand(
+        {
+          kind,
+          args: dragArgs,
+        },
+        { platform: process.platform },
+      );
+      orbAuthorityState.syntheticCursor = { x: targetPoint.x, y: targetPoint.y };
+      orbAuthorityState.lastSyntheticAtMs = Date.now();
+      const execution = executionResult?.execution && typeof executionResult.execution === "object"
+        ? executionResult.execution
+        : setExecution("completed", {
+            executionArgs: dragArgs,
+            target: targetPoint,
+            notify: false,
+          });
+      setOrbAuthorityExecutionState(execution, { notify: true });
+      await completeOrbAuthorityCommand(commandId, "completed", "Mouse drag executed through Orb authority.", {
+        button: String(args.button || "left"),
+        coordinate_space: coordinateSpace,
+        cursor: { x: targetPoint.x, y: targetPoint.y },
+        execution,
+      });
+      scheduleOrbAuthorityExecutionClear(execution?.phase);
     } else {
-      await executeWindowsInputCommand(
+      setExecution("claimed");
+      const executionResult = await executeWindowsInputCommand(
         {
           kind,
           args,
@@ -732,19 +1750,35 @@ async function executeOrbAuthorityCommand(command, inputState) {
         { platform: process.platform },
       );
       orbAuthorityState.lastSyntheticAtMs = Date.now();
+      const execution = executionResult?.execution && typeof executionResult.execution === "object"
+        ? executionResult.execution
+        : setExecution("completed", { notify: false });
+      setOrbAuthorityExecutionState(execution, { notify: true });
       await completeOrbAuthorityCommand(commandId, "completed", `${kind} executed through Orb authority.`, {
         kind,
+        execution,
       });
+      scheduleOrbAuthorityExecutionClear(execution?.phase);
     }
   } catch (error) {
+    const failedExecution = buildOrbExecutionSemantics({
+      kind,
+      args,
+      status: "failed",
+    });
+    setOrbAuthorityExecutionState(failedExecution, { notify: true });
     await completeOrbAuthorityCommand(
       commandId,
       "failed",
       `Orb authority command failed: ${error instanceof Error ? error.message : String(error)}`,
-      {},
+      {
+        execution: failedExecution,
+      },
     );
+    scheduleOrbAuthorityExecutionClear(failedExecution?.phase);
   } finally {
     orbAuthorityState.claimedCommandId = "";
+    orbAuthorityState.activeCommandKind = "";
   }
 }
 
@@ -752,9 +1786,42 @@ async function tickOrbAuthorityLoop() {
   if (orbAuthorityCommandPending) {
     return;
   }
+  const nowMs = Date.now();
+  if (isOrbRuntimeProbeDeferred(orbRuntimeHealth, nowMs)) {
+    return;
+  }
   let observedIdleSeconds = Number(orbAuthorityState.lastObservedIdleSeconds || 0);
   const hudState = getHudState();
   if (!hudState?.ready || !orbWindow || orbWindow.isDestroyed()) {
+    const failureHealth = recordOrbRuntimeFailure("Orb authority lost HUD readiness.", {
+      source: "authority",
+      notify: false,
+      nowMs,
+    });
+    if (orbAuthorityState.live || orbAuthorityState.claimedCommandId || !getOrbSafetySnapshot().disconnected) {
+      stabilizeOrbAuthorityLocally(
+        "HUD disconnected. Human control remains primary.",
+        {
+          disconnected: true,
+          degraded: true,
+          pauseHold: getOrbSafetySnapshot().pauseHeld,
+          remoteSyncStatus: "pending",
+          summary: "HUD disconnected. Human control remains primary.",
+          detail: "Francis dropped local authority because the local operator stack is unavailable.",
+        },
+      );
+    }
+    resetOrbOwnershipToSafeFallback("authority_unavailable");
+    if (!orbAuthorityFailureLogged) {
+      orbAuthorityFailureLogged = true;
+      log("Orb authority loop degraded", {
+        status: failureHealth.status,
+        source: failureHealth.source,
+        nextProbeAtMs: failureHealth.nextProbeAtMs,
+        circuitOpenUntilMs: failureHealth.circuitOpenUntilMs,
+      });
+    }
+    notifyOverlayState(mainWindow);
     return;
   }
 
@@ -762,7 +1829,9 @@ async function tickOrbAuthorityLoop() {
   try {
     const [inputState, orbSurface] = await Promise.all([
       Promise.resolve(getOverlayInputState()),
-      fetchHudJson("/api/orb"),
+      fetchHudJson("/api/orb", {}, {
+        generation: getCurrentHudGeneration(),
+      }),
     ]);
     const thresholdSeconds = Math.max(
       1,
@@ -775,6 +1844,30 @@ async function tickOrbAuthorityLoop() {
     orbAuthorityState.eligible = eligible;
     orbAuthorityState.idleSeconds = observedIdleSeconds;
     orbAuthorityState.thresholdSeconds = thresholdSeconds;
+    recordOrbRuntimeHealthyProof("Orb authority sync is healthy.", {
+      source: "authority",
+      notify: false,
+    });
+    orbAuthorityFailureLogged = false;
+    if (orbSafetyState.disconnected || orbSafetyState.degraded) {
+      setOrbSafetyState({
+        disconnected: false,
+        degraded: Boolean(
+          overlayRecovery.needed
+          || orbSafetyState.pauseHeld
+          || orbSafetyState.localStopActive
+          || orbSafetyState.remoteSyncStatus !== "current"
+        ),
+        localError:
+          orbSafetyState.pauseHeld || orbSafetyState.localStopActive || orbSafetyState.remoteSyncStatus !== "current"
+            ? orbSafetyState.localError
+            : "",
+        remoteError:
+          orbSafetyState.pauseHeld || orbSafetyState.localStopActive || orbSafetyState.remoteSyncStatus !== "current"
+            ? orbSafetyState.remoteError
+            : "",
+      }, { notify: false });
+    }
 
     if (
       detectHumanActivitySignal({
@@ -805,6 +1898,14 @@ async function tickOrbAuthorityLoop() {
       })
     ) {
       await releaseOrbAuthority("Human input resumed. Francis handed control back immediately.", { humanReturned: true });
+      resetOrbOwnershipToSafeFallback("human_returned");
+      return;
+    }
+
+    const safetySnapshot = getOrbSafetySnapshot();
+    if (safetySnapshot.localStopped || safetySnapshot.pauseHeld) {
+      resetOrbOwnershipToSafeFallback("safety_hold");
+      notifyOverlayState(mainWindow);
       return;
     }
 
@@ -828,6 +1929,7 @@ async function tickOrbAuthorityLoop() {
           : "Orb authority is not eligible in the current mode and run state.",
     );
     if (!authorityLive) {
+      resetOrbOwnershipToSafeFallback("authority_idle");
       notifyOverlayState(mainWindow);
       return;
     }
@@ -848,11 +1950,51 @@ async function tickOrbAuthorityLoop() {
     }
     orbAuthorityState.claimedCommandId = String(claim.command.id || "");
     orbAuthorityState.state = "francis_authority";
+    setOrbAuthorityExecutionState(
+      claim.command.execution && typeof claim.command.execution === "object"
+        ? claim.command.execution
+        : buildOrbExecutionSemantics({
+            kind: claim.command.kind,
+            args: claim.command.args,
+            status: "claimed",
+          }),
+      { notify: false },
+    );
     await publishOrbAuthorityState("Francis is executing a queued Orb authority command.");
     await executeOrbAuthorityCommand(claim.command, inputState);
     notifyOverlayState(mainWindow);
   } catch (error) {
-    log("Orb authority loop failed", error instanceof Error ? error.message : String(error));
+    if (isStaleHudGenerationError(error)) {
+      return;
+    }
+    const failureHealth = recordOrbRuntimeFailure(`Orb authority sync failed: ${error instanceof Error ? error.message : String(error)}`, {
+      source: "authority",
+      notify: false,
+      nowMs: Date.now(),
+    });
+    stabilizeOrbAuthorityLocally(
+      "Orb authority degraded. Human control remains primary.",
+      {
+        disconnected: !getHudState()?.ready,
+        degraded: true,
+        pauseHold: getOrbSafetySnapshot().pauseHeld,
+        remoteSyncStatus: getHudState()?.ready ? "failed" : "pending",
+        summary: "Orb authority degraded. Human control remains primary.",
+        detail: "Francis released local authority because the authority sync could not be confirmed.",
+        localError: "",
+        remoteError: error instanceof Error ? error.message : String(error),
+      },
+    );
+    resetOrbOwnershipToSafeFallback("authority_failed");
+    if (!orbAuthorityFailureLogged) {
+      orbAuthorityFailureLogged = true;
+      log("Orb authority loop degraded", {
+        status: failureHealth.status,
+        source: failureHealth.source,
+        nextProbeAtMs: failureHealth.nextProbeAtMs,
+        circuitOpenUntilMs: failureHealth.circuitOpenUntilMs,
+      });
+    }
   } finally {
     orbAuthorityState.lastObservedIdleSeconds = observedIdleSeconds;
     orbAuthorityCommandPending = false;
@@ -993,6 +2135,7 @@ function getLifecycleState(inputState = null) {
     migration,
     update,
     recovery: overlayRecovery,
+    runtimeHealth: getOrbRuntimeHealthSnapshot(),
     hud: hudState,
     provider,
     authority,
@@ -1087,6 +2230,8 @@ function getOverlayState(win = mainWindow) {
   const bounds = getWindowOrPreferenceBounds(safeWindow);
   const displayInfo = app.isReady() ? getDisplayInfo(safeWindow) : null;
   const input = app.isReady() ? getOverlayInputState() : null;
+  const authority = getOrbAuthoritySnapshot(input);
+  const ownership = getOrbOwnershipSnapshot({ input, foregroundWindow: orbForegroundWindow });
   const lifecycle = getLifecycleState(input);
   const lensVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
   const orbVisible = Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible());
@@ -1106,15 +2251,17 @@ function getOverlayState(win = mainWindow) {
     preferencesPath: lifecycle.preferencesPath,
     launchOnStartup: lifecycle.launchAtLogin.enabled,
     recovery: overlayRecovery,
+    runtimeHealth: getOrbRuntimeHealthSnapshot(),
     hud: getHudState(),
     ollama: getOllamaState(),
+    ownership,
     lifecycle,
       shortcuts: {
         toggleOverlay: OVERLAY_TOGGLE_SHORTCUT,
         toggleClickThrough: CLICK_THROUGH_TOGGLE_SHORTCUT,
       },
       input,
-      authority: getOrbAuthoritySnapshot(),
+      authority,
     };
   }
 
@@ -1675,6 +2822,7 @@ function updateTray() {
   if (!tray) {
     return;
   }
+  const trayQuitArmed = isTrayQuitArmed();
   const visible = Boolean(
     (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) ||
     (orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
@@ -1694,7 +2842,7 @@ function updateTray() {
       },
       {
         label: overlayState.alwaysOnTop ? "Release Topmost" : "Pin Topmost",
-        click: () => applyAlwaysOnTop(requireWindow(), !overlayState.alwaysOnTop),
+        click: () => applyAlwaysOnTop(getLiveMainWindow(), !overlayState.alwaysOnTop),
       },
       {
         label: loginState?.enabled ? "Disable Start At Login" : "Enable Start At Login",
@@ -1784,7 +2932,7 @@ function updateTray() {
       {
         label: "Restart HUD",
         click: () => {
-          restartHudAndRefreshWindow(requireWindow()).catch((error) => {
+          restartHudAndRefreshWindow(getLiveMainWindow()).catch((error) => {
             log("Tray HUD restart failed", error instanceof Error ? error.message : String(error));
           });
         },
@@ -1797,7 +2945,7 @@ function updateTray() {
         ),
         click: () => {
           try {
-            executeRetainedStateRepair(requireWindow());
+            executeRetainedStateRepair(getLiveMainWindow());
           } catch (error) {
             log("Tray shell repair failed", error instanceof Error ? error.message : String(error));
           }
@@ -1806,7 +2954,7 @@ function updateTray() {
       {
         label: "Export Shell State",
         click: () => {
-          exportShellState(requireWindow()).catch((error) => {
+          exportShellState(getLiveMainWindow()).catch((error) => {
             log("Tray shell export failed", error instanceof Error ? error.message : String(error));
           });
         },
@@ -1814,7 +2962,7 @@ function updateTray() {
       {
         label: "Export Support Bundle",
         click: () => {
-          exportSupportBundle(requireWindow()).catch((error) => {
+          exportSupportBundle(getLiveMainWindow()).catch((error) => {
             log("Tray support bundle export failed", error instanceof Error ? error.message : String(error));
           });
         },
@@ -1822,7 +2970,7 @@ function updateTray() {
       {
         label: "Import Shell State",
         click: () => {
-          importShellState(requireWindow()).catch((error) => {
+          importShellState(getLiveMainWindow()).catch((error) => {
             log("Tray shell import failed", error instanceof Error ? error.message : String(error));
           });
         },
@@ -1842,7 +2990,7 @@ function updateTray() {
         enabled: Boolean(overlaySnapshot.lifecycle?.rollback?.latest?.backupId),
         click: () => {
           try {
-            restoreLatestRollbackSnapshot(requireWindow());
+            restoreLatestRollbackSnapshot(getLiveMainWindow());
           } catch (error) {
             log("Tray rollback restore failed", error instanceof Error ? error.message : String(error));
           }
@@ -1859,8 +3007,8 @@ function updateTray() {
       },
       { type: "separator" },
       {
-        label: "Quit Francis Overlay",
-        click: () => app.quit(),
+        label: trayQuitArmed ? "Confirm Quit Francis Overlay" : "Arm Quit Francis Overlay",
+        click: () => handleTrayQuitRequest(),
       },
     ]),
   );
@@ -1960,15 +3108,14 @@ function schedulePreferenceSave(win = mainWindow, { immediate = false } = {}) {
 
 function resetOverlayPreferences(win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
-  if (!safeWindow) {
-    throw new Error("Overlay window is not available");
-  }
-
   const primaryDisplay = getResolvedTargetDisplay(screen.getPrimaryDisplay().id);
   overlayPreferences = buildDefaultPreferences(primaryDisplay);
-  safeWindow.setBounds(overlayPreferences.windowBounds);
+  if (safeWindow) {
+    safeWindow.setBounds(overlayPreferences.windowBounds);
+  }
   if (orbWindow && !orbWindow.isDestroyed()) {
     orbWindow.setBounds(getOrbSurfaceBounds());
+    reinforceOrbWindowPresence(orbWindow, { reason: "reset_overlay_preferences" });
   }
   applyAlwaysOnTop(safeWindow, overlayPreferences.alwaysOnTop);
   applyIgnoreMouseEvents(safeWindow, overlayPreferences.ignoreMouseEvents);
@@ -1980,17 +3127,18 @@ function resetOverlayPreferences(win = mainWindow) {
 
 function moveOverlayToDisplay(displayId, win = mainWindow) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
-  if (!safeWindow) {
-    throw new Error("Overlay window is not available");
-  }
-
   const targetDisplay = getResolvedTargetDisplay(displayId);
-  const nextBounds = buildCenteredBoundsForDisplay(getWindowOrPreferenceBounds(safeWindow), targetDisplay);
+  const nextBounds = buildCenteredBoundsForDisplay(
+    getWindowOrPreferenceBounds(safeWindow) || overlayPreferences?.windowBounds || buildDefaultPreferences(targetDisplay).windowBounds,
+    targetDisplay,
+  );
 
-  safeWindow.setBounds(nextBounds);
+  if (safeWindow) {
+    safeWindow.setBounds(nextBounds);
+  }
   if (orbWindow && !orbWindow.isDestroyed()) {
     orbWindow.setBounds(getOrbSurfaceBounds());
-    reinforceOrbWindowPresence(orbWindow);
+    reinforceOrbWindowPresence(orbWindow, { reason: "move_overlay_to_display" });
   }
   overlayPreferences = persistOverlayPreferences(safeWindow, {
     targetDisplayId: targetDisplay.id,
@@ -2030,7 +3178,7 @@ function reconcileDisplayTopology(reason) {
       if (!sameBounds(orbWindow.getBounds(), nextOrbBounds)) {
         orbWindow.setBounds(nextOrbBounds);
       }
-      reinforceOrbWindowPresence(orbWindow);
+      reinforceOrbWindowPresence(orbWindow, { reason });
     }
 
     log("Reconciled display topology", {
@@ -2130,10 +3278,10 @@ function buildFallbackHtml(errorText) {
   </head>
   <body>
     <main>
-      <h1>Francis HUD server is not reachable.</h1>
-      <p>The desktop overlay shell started correctly, but the HUD at <code>${escapedTarget}</code> did not respond.</p>
+      <h1>Francis review HUD is not reachable.</h1>
+      <p>The desktop overlay shell started correctly, and the Orb can remain resident, but the review HUD at <code>${escapedTarget}</code> did not respond.</p>
       <p>Managed HUD state: <code>${escapedHudMode}</code></p>
-      <p>If this shell owns the HUD runtime, you can retry startup directly from here.</p>
+      <p>If this shell owns the review runtime, you can retry startup directly from here.</p>
       <button type="button" onclick="retryHudStart()">Retry Managed HUD Startup</button>
       <small id="retry-status">No retry attempted yet.</small>
       <pre>${escapedMessage}\n\n${escapedHudError}</pre>
@@ -2147,7 +3295,7 @@ function buildFallbackHtml(errorText) {
             throw new Error('Desktop bridge is unavailable in this fallback view.');
           }
           await window.FrancisDesktop.restartHud();
-          status.textContent = 'Managed HUD restart completed. Reloading overlay...';
+          status.textContent = 'Managed review HUD restart completed. Reloading overlay...';
           window.location.reload();
         } catch (error) {
           status.textContent = error && error.message ? error.message : String(error);
@@ -2163,8 +3311,9 @@ function fallbackUrl(errorText) {
 }
 
 function applyAlwaysOnTop(win, enabled) {
+  const safeWindow = win && !win.isDestroyed() ? win : null;
   const safeWindows = getShellWindows();
-  if (!safeWindows.length && (!win || win.isDestroyed())) {
+  if (!safeWindows.length && !safeWindow) {
     return overlayState.alwaysOnTop;
   }
   // The Lens shell follows the operator topmost preference, but the Orb stays pinned as a desktop presence object.
@@ -2172,19 +3321,34 @@ function applyAlwaysOnTop(win, enabled) {
     const isOrbShell = shellWindow === orbWindow;
     const nextEnabled = isOrbShell ? true : Boolean(enabled);
     const nextLevel = nextEnabled ? ORB_WINDOW_TOPMOST_LEVEL : "normal";
-    shellWindow.setAlwaysOnTop(nextEnabled, nextLevel, isOrbShell && nextEnabled ? 1 : 0);
+    shellWindow.setAlwaysOnTop(nextEnabled, nextLevel, isOrbShell && nextEnabled ? ORB_WINDOW_TOPMOST_PRIORITY : 0);
   }
   overlayState.alwaysOnTop = Boolean(enabled);
-  schedulePreferenceSave(win);
-  notifyOverlayState(win);
+  overlayPreferences = persistOverlayPreferences(safeWindow, {
+    alwaysOnTop: overlayState.alwaysOnTop,
+  });
+  notifyOverlayState(safeWindow);
   return overlayState.alwaysOnTop;
 }
 
-function reinforceOrbWindowPresence(targetWindow = orbWindow) {
+function reinforceOrbWindowPresence(targetWindow = orbWindow, { reason = "" } = {}) {
   if (!targetWindow || targetWindow.isDestroyed()) {
     return;
   }
-  targetWindow.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL, 1);
+  const nextBounds = getOrbSurfaceBounds();
+  if (!sameBounds(targetWindow.getBounds(), nextBounds)) {
+    targetWindow.setBounds(nextBounds);
+  }
+  targetWindow.setAlwaysOnTop(true, ORB_WINDOW_TOPMOST_LEVEL, ORB_WINDOW_TOPMOST_PRIORITY);
+  if (typeof targetWindow.setVisibleOnAllWorkspaces === "function") {
+    targetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+  if (typeof targetWindow.setSkipTaskbar === "function") {
+    targetWindow.setSkipTaskbar(true);
+  }
+  if (typeof targetWindow.setFocusable === "function") {
+    targetWindow.setFocusable(!orbInputState.ignoreMouseEvents);
+  }
   if (typeof targetWindow.moveTop === "function") {
     try {
       targetWindow.moveTop();
@@ -2192,17 +3356,45 @@ function reinforceOrbWindowPresence(targetWindow = orbWindow) {
       // Older Electron/Windows builds may not expose moveTop reliably.
     }
   }
+  if (reason && !targetWindow.isVisible()) {
+    log("Reinforced orb desktop authority while hidden", { reason, bounds: nextBounds });
+  }
+}
+
+function stopOrbSurfaceAuthorityLoop() {
+  if (orbSurfaceAuthorityTimer) {
+    clearInterval(orbSurfaceAuthorityTimer);
+    orbSurfaceAuthorityTimer = null;
+  }
+}
+
+function ensureOrbSurfaceAuthorityLoop() {
+  stopOrbSurfaceAuthorityLoop();
+  orbSurfaceAuthorityTimer = setInterval(() => {
+    if (!orbWindow || orbWindow.isDestroyed() || !orbWindow.isVisible()) {
+      return;
+    }
+    reinforceOrbWindowPresence(orbWindow, { reason: "interval_reassert" });
+  }, ORB_WINDOW_REINFORCE_INTERVAL_MS);
+  if (typeof orbSurfaceAuthorityTimer?.unref === "function") {
+    orbSurfaceAuthorityTimer.unref();
+  }
 }
 
 function applyIgnoreMouseEvents(win, ignore) {
-  if (!win || win.isDestroyed()) {
-    return overlayState.ignoreMouseEvents;
-  }
+  const safeWindow = win && !win.isDestroyed() ? win : null;
   overlayState.ignoreMouseEvents = Boolean(ignore);
   // Forward mouse-move events while click-through is enabled so the overlay can still react visually.
-  win.setIgnoreMouseEvents(overlayState.ignoreMouseEvents, overlayState.ignoreMouseEvents ? { forward: true } : undefined);
-  schedulePreferenceSave(win);
-  notifyOverlayState(win);
+  if (safeWindow) {
+    safeWindow.setIgnoreMouseEvents(
+      overlayState.ignoreMouseEvents,
+      overlayState.ignoreMouseEvents ? { forward: true } : undefined,
+    );
+  }
+  overlayPreferences = persistOverlayPreferences(safeWindow, {
+    ignoreMouseEvents: overlayState.ignoreMouseEvents,
+  });
+  notifyOverlayState(safeWindow);
   return overlayState.ignoreMouseEvents;
 }
 
@@ -2226,14 +3418,137 @@ function applyOrbIgnoreMouseEvents(ignore) {
   return orbInputState.ignoreMouseEvents;
 }
 
-async function fetchHudJson(route, init = {}) {
-  const target = new URL(String(route || "/"), HUD_URL).toString();
-  const response = await fetch(target, init);
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(String(payload?.detail || payload?.error || `${response.status} ${response.statusText}`));
+function getOrbOwnershipSnapshot({ input = null, foregroundWindow = null } = {}) {
+  return buildOrbOwnershipState({
+    requested: orbOwnershipRequest.mode,
+    authority: getOrbAuthoritySnapshot(input),
+    runtimeHealth: getOrbRuntimeHealthSnapshot(),
+    governor: orbOwnershipGovernor,
+    captureSuspended: Boolean(captureSuspensionState.active),
+    lensVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+    overlayIgnoreMouseEvents: overlayState.ignoreMouseEvents,
+    orbIgnoreMouseEvents: orbInputState.ignoreMouseEvents,
+    foregroundWindow,
+    shellPid: process.pid,
+  });
+}
+
+function reconcileOrbOwnership(reason = "", { notify = true } = {}) {
+  const snapshot = getOrbOwnershipSnapshot();
+  const nextIgnoreMouseEvents = Boolean(snapshot.shouldIgnoreOrbMouseEvents);
+  if (orbInputState.ignoreMouseEvents !== nextIgnoreMouseEvents) {
+    applyOrbIgnoreMouseEvents(nextIgnoreMouseEvents);
+  } else if (notify) {
+    notifyOverlayState(mainWindow);
   }
-  return payload;
+  return {
+    ...snapshot,
+    requestedReason: String(reason || orbOwnershipRequest.reason || "").trim(),
+  };
+}
+
+function setOrbOwnershipMode(mode, reason = "", { notify = true } = {}) {
+  const normalizedMode = normalizeOrbOwnershipRequest(mode);
+  const normalizedReason = String(reason || "").trim();
+  let overrideCleared = false;
+  if (
+    normalizedMode === ORB_OWNERSHIP_STATES.INTERACTABLE_ORB
+    && shouldClearOrbOwnershipUserOverrideForReason(normalizedReason)
+  ) {
+    const nextGovernor = clearOrbOwnershipUserOverride(orbOwnershipGovernor, { nowMs: Date.now() });
+    overrideCleared =
+      nextGovernor.userOverrideUntilMs !== orbOwnershipGovernor.userOverrideUntilMs
+      || nextGovernor.userOverrideReason !== orbOwnershipGovernor.userOverrideReason;
+    orbOwnershipGovernor = nextGovernor;
+  }
+  const unchanged =
+    orbOwnershipRequest.mode === normalizedMode
+    && orbOwnershipRequest.reason === normalizedReason;
+  if (!unchanged) {
+    orbOwnershipRequest = {
+      mode: normalizedMode,
+      reason: normalizedReason,
+      updatedAtMs: Date.now(),
+    };
+  }
+  const snapshot = reconcileOrbOwnership(normalizedReason, { notify: notify && (!unchanged || overrideCleared) });
+  return {
+    ...snapshot,
+    requestUnchanged: unchanged,
+  };
+}
+
+function resetOrbOwnershipToSafeFallback(reason = "", { notify = true } = {}) {
+  let overrideArmed = false;
+  if (isOrbOwnershipUserOverrideReason(reason)) {
+    const nextGovernor = armOrbOwnershipUserOverride(orbOwnershipGovernor, {
+      reason,
+      nowMs: Date.now(),
+    });
+    overrideArmed =
+      nextGovernor.userOverrideUntilMs !== orbOwnershipGovernor.userOverrideUntilMs
+      || nextGovernor.userOverrideReason !== orbOwnershipGovernor.userOverrideReason;
+    orbOwnershipGovernor = nextGovernor;
+  }
+  const snapshot = setOrbOwnershipMode(ORB_OWNERSHIP_STATES.PASS_THROUGH, reason || "safe_fallback", { notify });
+  if (notify && overrideArmed && snapshot.requestUnchanged) {
+    notifyOverlayState(mainWindow);
+  }
+  return snapshot;
+}
+
+async function fetchHudJson(route, init = {}, {
+  generation = getCurrentHudGeneration(),
+  channel = "",
+  ignoreStaleGeneration = true,
+} = {}) {
+  const target = new URL(String(route || "/"), HUD_URL).toString();
+  try {
+    const response = await fetch(target, init);
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const currentGeneration = getCurrentHudGeneration();
+    if (ignoreStaleGeneration && isStaleHudGeneration(hudRecoveryState, generation)) {
+      const staleError = createStaleHudGenerationError(route, generation, currentGeneration);
+      log("Ignored stale HUD response", {
+        route: String(route || "/"),
+        requestGeneration: generation,
+        currentGeneration,
+      });
+      throw staleError;
+    }
+    if (!response.ok) {
+      const classified = classifyHudFetchFailure(null, response.status);
+      if (channel) {
+        markHudEndpointFailure(channel, {
+          generation,
+          kind: classified.kind,
+          message: String(payload?.detail || payload?.error || `${response.status} ${response.statusText}`),
+          statusCode: Number(response.status || 0),
+        });
+      }
+      throw new Error(String(payload?.detail || payload?.error || `${response.status} ${response.statusText}`));
+    }
+    if (channel) {
+      markHudEndpointSuccess(channel, { generation });
+    }
+    return payload;
+  } catch (error) {
+    if (!isStaleHudGenerationError(error) && channel) {
+      const classified = classifyHudFetchFailure(error, 0);
+      markHudEndpointFailure(channel, {
+        generation,
+        kind: classified.kind,
+        message: classified.message,
+        statusCode: classified.statusCode,
+      });
+    }
+    throw error;
+  }
 }
 
 async function pushOrbPerceptionFrame() {
@@ -2250,11 +3565,32 @@ async function pushOrbPerceptionFrame() {
 
   orbPerceptionSyncPending = true;
   try {
-    const [frame, input, foregroundWindow] = await Promise.all([
+    const [frame, input, foregroundWindow, accessibility] = await Promise.all([
       capturePerceptionFrame(),
       Promise.resolve(getOverlayInputState()),
       getCachedForegroundWindowInfo(),
+      getCachedFocusedAccessibilityInfo(),
     ]);
+    const environment = buildOrbEnvironmentGrounding({
+      cursorScreen: input?.cursorScreen || null,
+      displayBounds: input?.displayBounds || null,
+      foregroundWindow,
+      accessibility,
+      targetStability: input?.targetStability || null,
+      focusAttached: Boolean(frame?.focusDataUrl),
+      frameAttached: Boolean(frame?.dataUrl),
+      samples: orbPerceptionEnvironmentSamples,
+    });
+    appendOrbPerceptionEnvironmentSample(environment?.sample || null);
+    if (
+      shouldResetOrbOwnershipForForeground({
+        ownership: getOrbOwnershipSnapshot({ input, foregroundWindow }),
+        foregroundWindow,
+        shellPid: process.pid,
+      })
+    ) {
+      resetOrbOwnershipToSafeFallback("foreground_window_changed");
+    }
     const payload = await fetchHudJson("/api/orb/perception", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2283,11 +3619,44 @@ async function pushOrbPerceptionFrame() {
         target_stability_dwell_ms: Number(input?.targetStability?.dwellMs || 0),
         target_stability_travel_px: Number(input?.targetStability?.travelPx || 0),
         target_stability_sample_count: Number(input?.targetStability?.sampleCount || 0),
+        accessibility: {
+          available: Boolean(accessibility?.available),
+          attached: Boolean(accessibility?.attached),
+          status: String(accessibility?.status || "").trim().toLowerCase() || "unavailable",
+          label: String(accessibility?.label || accessibility?.name || "").trim(),
+          name: String(accessibility?.name || "").trim(),
+          automation_id: String(accessibility?.automationId || "").trim(),
+          control_type: String(accessibility?.controlType || "").trim().toLowerCase(),
+          localized_control_type: String(accessibility?.localizedControlType || "").trim(),
+          class_name: String(accessibility?.className || "").trim(),
+          process_id: Number(accessibility?.processId || 0) || null,
+          has_keyboard_focus: Boolean(accessibility?.hasKeyboardFocus),
+          enabled: Boolean(accessibility?.enabled),
+          offscreen: Boolean(accessibility?.offscreen),
+          bounds: {
+            x: Number.isFinite(accessibility?.bounds?.x) ? Math.round(accessibility.bounds.x) : null,
+            y: Number.isFinite(accessibility?.bounds?.y) ? Math.round(accessibility.bounds.y) : null,
+            width: Number(accessibility?.bounds?.width || 0),
+            height: Number(accessibility?.bounds?.height || 0),
+          },
+        },
+        environment: {
+          source_priority: Array.isArray(environment?.sourcePriority) ? environment.sourcePriority : [],
+          primary_source: String(environment?.primarySource || "").trim(),
+          sources: environment?.sources && typeof environment.sources === "object" ? environment.sources : {},
+          grounding: environment?.grounding && typeof environment.grounding === "object" ? environment.grounding : {},
+        },
       }),
+    }, {
+      generation: getCurrentHudGeneration(),
+      channel: "perception",
     });
     orbPerceptionErrorLogged = false;
     return payload;
   } catch (error) {
+    if (isStaleHudGenerationError(error)) {
+      return null;
+    }
     if (!orbPerceptionErrorLogged) {
       orbPerceptionErrorLogged = true;
       log("Orb perception sync failed", error instanceof Error ? error.message : String(error));
@@ -2352,6 +3721,7 @@ function suspendOverlayForCapture(foregroundWindow) {
     overlayAlwaysOnTop: overlayState.alwaysOnTop,
   };
 
+  resetOrbOwnershipToSafeFallback("capture_mode");
   if (mainWindow && !mainWindow.isDestroyed()) {
     applyIgnoreMouseEvents(mainWindow, true);
     mainWindow.hide();
@@ -2395,6 +3765,11 @@ function restoreOverlayAfterCapture() {
   }
 
   applyOrbIgnoreMouseEvents(restore.orbIgnoreMouseEvents);
+  orbOwnershipRequest = {
+    mode: restore.orbIgnoreMouseEvents ? ORB_OWNERSHIP_STATES.PASS_THROUGH : ORB_OWNERSHIP_STATES.INTERACTABLE_ORB,
+    reason: "capture_restore",
+    updatedAtMs: Date.now(),
+  };
   if (restore.orbVisible && orbWindow && !orbWindow.isDestroyed()) {
     if (orbWindow.isMinimized()) {
       orbWindow.restore();
@@ -2403,6 +3778,7 @@ function restoreOverlayAfterCapture() {
     reinforceOrbWindowPresence(orbWindow);
   }
   log("Restored overlay after capture mode");
+  reconcileOrbOwnership("capture_restore");
   notifyOverlayState(mainWindow);
 }
 
@@ -2444,7 +3820,30 @@ async function reconcileCaptureRecovery() {
 }
 
 function showLensWindow() {
-  const win = requireWindow();
+  if (!REVIEW_HUD_WINDOW_ENABLED) {
+    const existing = getLiveMainWindow();
+    if (existing) {
+      existing.hide();
+    }
+    lensInteractionRestoreIgnoreMouseEvents = null;
+    resetOrbOwnershipToSafeFallback("review_window_disabled");
+    notifyOverlayState(existing);
+    return getOverlayState(existing);
+  }
+  const hadWindow = Boolean(mainWindow && !mainWindow.isDestroyed());
+  const win = hadWindow ? mainWindow : createMainWindow({ showOnReady: true });
+  if (lensInteractionRestoreIgnoreMouseEvents === null) {
+    lensInteractionRestoreIgnoreMouseEvents = Boolean(overlayState.ignoreMouseEvents);
+  }
+  if (overlayState.ignoreMouseEvents) {
+    applyIgnoreMouseEvents(win, false);
+  }
+  resetOrbOwnershipToSafeFallback("lens_open");
+  if (!hadWindow) {
+    mainWindow = win;
+    notifyOverlayState(win);
+    return getOverlayState(win);
+  }
   if (win.isMinimized()) {
     win.restore();
   }
@@ -2454,8 +3853,16 @@ function showLensWindow() {
 }
 
 function hideLensWindow() {
-  const win = requireWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return getOverlayState(mainWindow);
+  }
+  const win = mainWindow;
   win.hide();
+  if (lensInteractionRestoreIgnoreMouseEvents !== null) {
+    applyIgnoreMouseEvents(win, Boolean(lensInteractionRestoreIgnoreMouseEvents));
+    lensInteractionRestoreIgnoreMouseEvents = null;
+  }
+  resetOrbOwnershipToSafeFallback("lens_hidden");
   notifyOverlayState(win);
   return getOverlayState(win);
 }
@@ -2474,6 +3881,10 @@ function showOrbWindow() {
   return getOverlayState(mainWindow);
 }
 
+function shouldAllowWindowClose() {
+  return Boolean(quitAfterHudShutdown);
+}
+
 function hideAllWindows() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.hide();
@@ -2481,6 +3892,8 @@ function hideAllWindows() {
   if (orbWindow && !orbWindow.isDestroyed()) {
     orbWindow.hide();
   }
+  lensInteractionRestoreIgnoreMouseEvents = null;
+  resetOrbOwnershipToSafeFallback("hide_all_windows");
   notifyOverlayState(mainWindow);
   return true;
 }
@@ -2512,21 +3925,51 @@ function clearHudRecovery() {
     hudRecoveryTimer = null;
   }
   hudRecoveryAttempts = 0;
+  hudRecoveryState = finishHudRecoveryAttempt(hudRecoveryState, {
+    recoveryId: hudRecoveryState?.recovery?.id || 0,
+    success: true,
+  });
   setOverlayRecovery({ needed: false, status: "nominal", message: "", lastExitReason: "" });
+  recordOrbRuntimeHealthyProof("HUD recovery completed. Waiting for stable health proofs.", {
+    source: "hud",
+    notify: false,
+  });
 }
 
 function scheduleHudRecovery(reason) {
   if (!hudRuntime || quitAfterHudShutdown) {
     return;
   }
-  if (hudRecoveryTimer || hudRecoveryAttempts >= HUD_MAX_RECOVERY_ATTEMPTS) {
+  const plan = planHudRecovery(hudRecoveryState, {
+    reason,
+    maxAttempts: HUD_MAX_RECOVERY_ATTEMPTS,
+  });
+  hudRecoveryState = plan.state;
+  if (!plan.scheduled) {
+    const suppressionKey = `${reason}|${plan.recoveryId}|${plan.duplicate ? "duplicate" : plan.exhausted ? "exhausted" : "suppressed"}`;
+    if (hudLastRecoverySuppressionKey !== suppressionKey) {
+      hudLastRecoverySuppressionKey = suppressionKey;
+      log("Suppressed duplicate managed HUD recovery scheduling", buildHudRecoveryDiagnostics({
+        reason,
+        duplicate: Boolean(plan.duplicate),
+        exhausted: Boolean(plan.exhausted),
+      }));
+    }
     return;
   }
   hudRecoveryAttempts += 1;
+  const recoveryDelayMs = getOrbRuntimeRetryDelayMs(hudRecoveryAttempts, {
+    baseMs: HUD_RECOVERY_BASE_DELAY_MS,
+    maxMs: HUD_RECOVERY_MAX_DELAY_MS,
+  });
   log("Scheduling managed HUD recovery", {
-    reason,
-    attempt: hudRecoveryAttempts,
-    maxAttempts: HUD_MAX_RECOVERY_ATTEMPTS,
+    ...buildHudRecoveryDiagnostics({
+      reason,
+      attempt: hudRecoveryAttempts,
+      maxAttempts: HUD_MAX_RECOVERY_ATTEMPTS,
+      previousHudPidAliveAtSchedule: Boolean(hudRecoveryState?.childAlive),
+      recoveryDelayMs,
+    }),
   });
   setOverlayRecovery({
     needed: true,
@@ -2534,14 +3977,44 @@ function scheduleHudRecovery(reason) {
     message: "Managed HUD exited unexpectedly. Restarting the local runtime.",
     lastExitReason: reason,
   });
+  markOrbRuntimeRecovering("Managed HUD recovery is in progress. Waiting for stable health proofs.", {
+    source: "hud",
+    notify: false,
+  });
+  stabilizeOrbAuthorityLocally(
+    "Managed HUD recovery is in progress. Human control remains primary.",
+    {
+      disconnected: true,
+      degraded: true,
+      pauseHold: getOrbSafetySnapshot().pauseHeld,
+      remoteSyncStatus: "pending",
+      summary: "HUD disconnected. Human control remains primary.",
+      detail: "Francis dropped local authority while the managed HUD runtime recovers.",
+      notify: false,
+    },
+  );
   notifyOverlayState(mainWindow);
   hudRecoveryTimer = setTimeout(async () => {
     hudRecoveryTimer = null;
+    const recoveryId = plan.recoveryId;
+    const started = beginHudRecoveryAttempt(hudRecoveryState, { recoveryId });
+    hudRecoveryState = started.state;
+    if (!started.started) {
+      log("Ignored stale managed HUD recovery timer", buildHudRecoveryDiagnostics({
+        reason,
+        recoveryId,
+      }));
+      return;
+    }
     try {
-      await restartHudAndRefreshWindow(mainWindow);
+      await restartHudAndRefreshWindow(mainWindow, { recoveryId, reason });
       clearHudRecovery();
       notifyOverlayState(mainWindow);
     } catch (error) {
+      hudRecoveryState = finishHudRecoveryAttempt(hudRecoveryState, {
+        recoveryId,
+        success: false,
+      });
       log("Managed HUD recovery failed", error instanceof Error ? error.message : String(error));
       setOverlayRecovery({
         needed: true,
@@ -2551,7 +4024,7 @@ function scheduleHudRecovery(reason) {
       });
       notifyOverlayState(mainWindow);
     }
-  }, 1500);
+  }, recoveryDelayMs);
 }
 
 async function reconcileHudHealth() {
@@ -2572,34 +4045,62 @@ async function reconcileHudHealth() {
 
   hudHealthCheckPending = true;
   try {
-    const reachable = await isHudReachable(HUD_URL, HUD_HEALTH_TIMEOUT_MS);
-    if (reachable) {
+    const generation = getCurrentHudGeneration();
+    const probe = await probeHudReachability(HUD_URL, HUD_HEALTH_TIMEOUT_MS);
+    if (probe.ok) {
       hudHealthFailureCount = 0;
+      markHudEndpointSuccess("health", { generation });
+      recordOrbRuntimeHealthyProof("HUD health probe passed. Waiting for consecutive healthy proofs.", {
+        source: "hud",
+        notify: false,
+      });
+      if (orbRuntimeHealth.status === "nominal" && overlayRecovery.needed) {
+        clearHudRecovery();
+      } else {
+        notifyOverlayState(mainWindow);
+      }
       return;
     }
 
     hudHealthFailureCount += 1;
+    markHudEndpointFailure("health", {
+      generation,
+      kind: probe.error?.kind || "unknown",
+      message: probe.error?.message || "HUD health probe failed.",
+      statusCode: Number(probe.statusCode || 0),
+    });
+    const failureHealth = recordOrbRuntimeFailure("HUD health probe failed.", {
+      source: "hud",
+      notify: false,
+    });
     if (hudHealthFailureCount < HUD_HEALTH_FAILURES_BEFORE_RECOVERY) {
+      if (failureHealth.status === "degraded") {
+        setOverlayRecovery({
+          needed: true,
+          status: "degraded",
+          message: "The local operator runtime is missing recent healthy HUD proofs.",
+          lastExitReason: "hud-health-missed",
+        });
+      }
       log("HUD probe missed while the shell still considered it ready", {
-        managed: Boolean(hudState?.managed),
-        mode: hudState?.mode || null,
-        pid: hudState?.pid || null,
-        healthUrl: hudState?.healthUrl || null,
-        timeoutMs: HUD_HEALTH_TIMEOUT_MS,
-        failureCount: hudHealthFailureCount,
-        failureThreshold: HUD_HEALTH_FAILURES_BEFORE_RECOVERY,
+        ...buildHudRecoveryDiagnostics({
+          timeoutMs: HUD_HEALTH_TIMEOUT_MS,
+          failureCount: hudHealthFailureCount,
+          failureThreshold: HUD_HEALTH_FAILURES_BEFORE_RECOVERY,
+          probe,
+        }),
       });
+      notifyOverlayState(mainWindow);
       return;
     }
 
     log("HUD runtime became unreachable while the shell still considered it ready", {
-      managed: Boolean(hudState?.managed),
-      mode: hudState?.mode || null,
-      pid: hudState?.pid || null,
-      healthUrl: hudState?.healthUrl || null,
-      timeoutMs: HUD_HEALTH_TIMEOUT_MS,
-      failureCount: hudHealthFailureCount,
-      failureThreshold: HUD_HEALTH_FAILURES_BEFORE_RECOVERY,
+      ...buildHudRecoveryDiagnostics({
+        timeoutMs: HUD_HEALTH_TIMEOUT_MS,
+        failureCount: hudHealthFailureCount,
+        failureThreshold: HUD_HEALTH_FAILURES_BEFORE_RECOVERY,
+        probe,
+      }),
     });
 
     if (hudState?.managed) {
@@ -2613,6 +4114,18 @@ async function reconcileHudHealth() {
       message: "The HUD is unreachable. Restart the local runtime or bring the external HUD back online.",
       lastExitReason: "hud-unreachable",
     });
+    stabilizeOrbAuthorityLocally(
+      "The HUD is unreachable. Human control remains primary.",
+      {
+        disconnected: true,
+        degraded: true,
+        pauseHold: getOrbSafetySnapshot().pauseHeld,
+        remoteSyncStatus: "pending",
+        summary: "HUD disconnected. Human control remains primary.",
+        detail: "Francis dropped local authority because the HUD is unreachable.",
+        notify: false,
+      },
+    );
     notifyOverlayState(mainWindow);
   } finally {
     hudHealthCheckPending = false;
@@ -2768,12 +4281,625 @@ async function loadHud(win) {
   }
 }
 
-function createOrbWindow() {
+function delayMs(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+  });
+}
+
+async function readOrbVerificationState(win) {
+  if (!win || win.isDestroyed()) {
+    return null;
+  }
+  try {
+    return await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const overlay = document.getElementById("orb-overlay");
+        const rect = root ? root.getBoundingClientRect() : null;
+        return {
+          locationHref: String(window.location.href || ""),
+          bodyBoot: String(document.body?.dataset?.boot || ""),
+          bodyOrbSurface: String(document.body?.dataset?.orbSurface || ""),
+          rendererDataset: root?.dataset ? { ...root.dataset } : null,
+          overlayDataset: overlay?.dataset ? { ...overlay.dataset } : null,
+          rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+          transform: root?.style?.transform || "",
+          opacity: root?.style?.opacity || "",
+          className: root?.className || "",
+          title: String(document.title || ""),
+          hasOpenOrbCommandMenu: typeof openOrbCommandMenu === "function",
+          hasSetMenuOpen: typeof setMenuOpen === "function",
+          hasCurrentOrb: typeof currentOrb === "object" && Boolean(currentOrb),
+          hasBodyPresence: typeof orbBodyPresence === "object" && Boolean(orbBodyPresence),
+          animationFrameActive: typeof orbAnimationFrame === "number",
+        };
+      })()`,
+      true,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function waitForOrbVerificationReady(win, timeoutMs = 30000) {
+  const deadline = Date.now() + Math.max(2000, Number(timeoutMs) || 18000);
+  while (Date.now() < deadline) {
+    if (!win || win.isDestroyed()) {
+      return false;
+    }
+    try {
+      const ready = await win.webContents.executeJavaScript(
+        `(() => {
+          const root = document.getElementById("orb-render-root");
+          if (!root || typeof renderOverlayDock !== "function" || typeof renderOrbPresentation !== "function") {
+            return false;
+          }
+          const boot = String(document.body?.dataset?.boot || "");
+          const renderer = String(root.dataset?.renderer || "");
+          const rect = root.getBoundingClientRect();
+          const hasSignals =
+            typeof currentOrb === "object"
+            && currentOrb
+            && typeof orbBodyPresence === "object"
+            && orbBodyPresence
+            && typeof orbAnimationFrame === "number";
+          const visibleRect =
+            Number.isFinite(rect.width)
+            && Number.isFinite(rect.height)
+            && rect.width >= 48
+            && rect.height >= 48
+            && rect.x > -900
+            && rect.y > -900;
+          return boot === "ready" && renderer === "live" && visibleRect && hasSignals;
+        })()`,
+        true,
+      );
+      if (ready) {
+        return true;
+      }
+    } catch {}
+    await delayMs(180);
+  }
+  return false;
+}
+
+async function writeOrbVerificationCapture(win, label) {
+  if (!win || win.isDestroyed()) {
+    return "";
+  }
+  fs.mkdirSync(ORB_VERIFICATION_CAPTURE_DIR, { recursive: true });
+  const image = await win.webContents.capturePage();
+  const filePath = path.join(
+    ORB_VERIFICATION_CAPTURE_DIR,
+    `francis-orb-${String(label || "capture").trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-")}.png`,
+  );
+  fs.writeFileSync(filePath, image.toPNG());
+  log("Captured orb verification snapshot", { label, filePath });
+  return filePath;
+}
+
+async function captureOrbShellVerificationSnapshots(win) {
+  await win.webContents.executeJavaScript(
+    `(() => {
+      document.documentElement.style.background = "#000000";
+      document.body.style.background = "#000000";
+      document.body.dataset.menuOpen = "false";
+      if (typeof setMenuOpen === "function") {
+        setMenuOpen(false);
+      }
+      return Boolean(orbApi && orbApi.orb);
+    })()`,
+    true,
+  );
+  await delayMs(260);
+  await writeOrbVerificationCapture(win, "idle");
+
+  await win.webContents.executeJavaScript(
+    `(() => {
+      if (orbApi?.orb && typeof orbApi.orb.setSignals === "function") {
+        orbApi.orb.setSignals({ state: "attentive", speakingAmplitude: 0.08, confidence: 0.58 });
+      }
+      return true;
+    })()`,
+    true,
+  );
+  await delayMs(220);
+  await writeOrbVerificationCapture(win, "attentive");
+
+  await win.webContents.executeJavaScript(
+    `(() => {
+      if (orbApi?.orb && typeof orbApi.orb.setSignals === "function") {
+        orbApi.orb.setSignals({ state: "investigate", confidence: 0.76 });
+      }
+      return true;
+    })()`,
+    true,
+  );
+  await delayMs(220);
+  await writeOrbVerificationCapture(win, "investigate");
+
+  await win.webContents.executeJavaScript(
+    `(() => {
+      if (orbApi?.orb && typeof orbApi.orb.setSignals === "function") {
+        orbApi.orb.setSignals({ state: "target_lock", confidence: 0.9, actionStrength: 0.56 });
+      }
+      return true;
+    })()`,
+    true,
+  );
+  await delayMs(220);
+  await writeOrbVerificationCapture(win, "lock");
+
+  await win.webContents.executeJavaScript(
+    `(() => {
+      if (orbApi?.orb && typeof orbApi.orb.setSignals === "function") {
+        orbApi.orb.setSignals({ state: "paused", confidence: 0.22 });
+      }
+      return true;
+    })()`,
+    true,
+  );
+  await delayMs(220);
+  await writeOrbVerificationCapture(win, "paused");
+
+  await win.webContents.executeJavaScript(
+    `(() => {
+      if (orbApi?.orb && typeof orbApi.orb.setSignals === "function") {
+        orbApi.orb.setSignals({ state: "interrupted", confidence: 0.18 });
+      }
+      return true;
+    })()`,
+    true,
+  );
+  await delayMs(220);
+  await writeOrbVerificationCapture(win, "yield");
+
+  await win.webContents.executeJavaScript(
+    `(() => {
+      document.documentElement.style.background = "transparent";
+      document.body.style.background = "transparent";
+      if (typeof setMenuOpen === "function") {
+        setMenuOpen(false);
+      }
+      if (typeof syncOrb === "function") {
+        syncOrb().catch(() => {});
+      }
+      return true;
+    })()`,
+    true,
+  );
+}
+
+async function maybeCaptureOrbVerificationSnapshots(win) {
+  if (!ORB_VERIFICATION_CAPTURE_ENABLED || !win || win.isDestroyed()) {
+    return;
+  }
+  try {
+    const ready = await waitForOrbVerificationReady(win);
+    fs.mkdirSync(ORB_VERIFICATION_CAPTURE_DIR, { recursive: true });
+    if (!ready) {
+      const proofState = await readOrbVerificationState(win);
+      if (proofState) {
+        fs.writeFileSync(
+          path.join(ORB_VERIFICATION_CAPTURE_DIR, "proof-state.json"),
+          `${JSON.stringify(proofState, null, 2)}\n`,
+          "utf8",
+        );
+      }
+      log("Skipped orb verification snapshots because the orb window never reported ready state");
+      fs.writeFileSync(
+        path.join(ORB_VERIFICATION_CAPTURE_DIR, "capture-skipped.txt"),
+        "Orb verification snapshots skipped because the orb window never reached ready state.\n",
+        "utf8",
+      );
+      return;
+    }
+    const proofState = await readOrbVerificationState(win);
+    if (proofState) {
+      fs.writeFileSync(
+        path.join(ORB_VERIFICATION_CAPTURE_DIR, "proof-state.json"),
+        `${JSON.stringify(proofState, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const shellCaptureMode = await win.webContents.executeJavaScript(
+      `(() => Boolean(typeof setMenuOpen === "function" && typeof syncOrb === "function" && typeof openOrbCommandMenu !== "function"))()`,
+      true,
+    ).catch(() => false);
+    if (shellCaptureMode) {
+      await captureOrbShellVerificationSnapshots(win);
+      return;
+    }
+    await win.webContents.executeJavaScript(
+      `(() => {
+        document.documentElement.style.background = "#000000";
+        document.body.style.background = "#000000";
+        if (typeof closeOrbCommandMenu === "function") {
+          closeOrbCommandMenu();
+        }
+        if (typeof orbHoverInteraction === "object" && orbHoverInteraction) {
+          orbHoverInteraction.inside = false;
+        }
+        if (typeof orbCommandMenu === "object" && orbCommandMenu) {
+          orbCommandMenu.open = false;
+        }
+        document.body.dataset.orbMenu = "closed";
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(260);
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const fallback = typeof getOrbResidentHomeTarget === "function"
+          ? getOrbResidentHomeTarget(size)
+          : { x: window.innerWidth - 150, y: window.innerHeight - 150 };
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.IDLE_ANCHORED,
+          desiredPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          perchPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          targetPoint: null,
+          anchorLabel: "resident perch",
+          motionLabel: "quiet anchor",
+          summary: "Quiet, compact, and resting in place.",
+          scale: 0.98,
+          stiffness: 0.16,
+          damping: 0.84,
+          holdPerch: true,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = Number(fallback.x);
+          orbMotion.y = Number(fallback.y);
+          orbMotion.targetX = Number(fallback.x);
+          orbMotion.targetY = Number(fallback.y);
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.IDLE_ANCHORED;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "idle");
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const fallback = typeof getOrbResidentHomeTarget === "function"
+          ? getOrbResidentHomeTarget(size)
+          : { x: window.innerWidth - 150, y: window.innerHeight - 150 };
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.ATTENTIVE,
+          desiredPoint: { x: Number(fallback.x) - 8, y: Number(fallback.y) - 4 },
+          perchPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          targetPoint: { x: Number(fallback.x) + 48, y: Number(fallback.y) - 18 },
+          anchorLabel: "resident perch",
+          motionLabel: "quiet wake",
+          summary: "Waking slightly without committing to action.",
+          scale: 0.99,
+          stiffness: 0.18,
+          damping: 0.82,
+          holdPerch: false,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = Number(fallback.x) - 8;
+          orbMotion.y = Number(fallback.y) - 4;
+          orbMotion.targetX = Number(fallback.x) - 8;
+          orbMotion.targetY = Number(fallback.y) - 4;
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.ATTENTIVE;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "attentive");
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const targetX = Math.max(220, window.innerWidth - 320);
+        const targetY = Math.max(220, window.innerHeight - 260);
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.INVESTIGATE,
+          desiredPoint: { x: targetX - 116, y: targetY + 26 },
+          perchPoint: { x: targetX - 160, y: targetY + 58 },
+          targetPoint: { x: targetX, y: targetY },
+          anchorLabel: "verification target",
+          motionLabel: "curious standoff",
+          summary: "Investigating from a respectful side-biased standoff.",
+          scale: 1,
+          stiffness: 0.18,
+          damping: 0.82,
+          holdPerch: false,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = targetX - 116;
+          orbMotion.y = targetY + 26;
+          orbMotion.targetX = targetX - 116;
+          orbMotion.targetY = targetY + 26;
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.INVESTIGATE;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "investigate");
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const targetX = Math.max(240, window.innerWidth - 300);
+        const targetY = Math.max(220, window.innerHeight - 244);
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.TARGET_LOCK,
+          desiredPoint: { x: targetX - 72, y: targetY + 8 },
+          perchPoint: { x: targetX - 104, y: targetY + 20 },
+          targetPoint: { x: targetX, y: targetY },
+          anchorLabel: "verification target",
+          motionLabel: "stable lock",
+          summary: "Holding a tighter, steadier target lock.",
+          scale: 0.98,
+          stiffness: 0.26,
+          damping: 0.8,
+          holdPerch: false,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = targetX - 72;
+          orbMotion.y = targetY + 8;
+          orbMotion.targetX = targetX - 72;
+          orbMotion.targetY = targetY + 8;
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.TARGET_LOCK;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "lock");
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const fallback = typeof getOrbResidentHomeTarget === "function"
+          ? getOrbResidentHomeTarget(size)
+          : { x: window.innerWidth - 150, y: window.innerHeight - 150 };
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.DEGRADED,
+          desiredPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          perchPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          targetPoint: null,
+          anchorLabel: "guarded perch",
+          motionLabel: "reduced authority",
+          summary: "Holding a weaker, flatter degraded posture.",
+          scale: 0.97,
+          stiffness: 0.14,
+          damping: 0.86,
+          holdPerch: true,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = Number(fallback.x);
+          orbMotion.y = Number(fallback.y);
+          orbMotion.targetX = Number(fallback.x);
+          orbMotion.targetY = Number(fallback.y);
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.DEGRADED;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "degraded");
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const fallback = typeof getOrbResidentHomeTarget === "function"
+          ? getOrbResidentHomeTarget(size)
+          : { x: window.innerWidth - 150, y: window.innerHeight - 150 };
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.PAUSED,
+          desiredPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          perchPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          targetPoint: null,
+          anchorLabel: "resident perch",
+          motionLabel: "intentional stillness",
+          summary: "Paused deliberately and holding still.",
+          scale: 0.97,
+          stiffness: 0.12,
+          damping: 0.88,
+          holdPerch: true,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = Number(fallback.x);
+          orbMotion.y = Number(fallback.y);
+          orbMotion.targetX = Number(fallback.x);
+          orbMotion.targetY = Number(fallback.y);
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.PAUSED;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "paused");
+
+    await win.webContents.executeJavaScript(
+      `(() => {
+        const root = document.getElementById("orb-render-root");
+        const size = Number(root?.clientWidth || 160);
+        const fallback = typeof getOrbResidentHomeTarget === "function"
+          ? getOrbResidentHomeTarget(size)
+          : { x: window.innerWidth - 150, y: window.innerHeight - 150 };
+        if (typeof ORB_BODY_STATES !== "object" || !ORB_BODY_STATES || typeof renderOrbPresentation !== "function") {
+          return false;
+        }
+        orbBodyPresence = {
+          ...(orbBodyPresence || {}),
+          state: ORB_BODY_STATES.INTERRUPTED,
+          desiredPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          perchPoint: { x: Number(fallback.x), y: Number(fallback.y) },
+          targetPoint: null,
+          anchorLabel: "resident perch",
+          motionLabel: "graceful retreat",
+          summary: "Backing off cleanly and returning to a safe anchor.",
+          scale: 0.98,
+          stiffness: 0.16,
+          damping: 0.84,
+          holdPerch: true,
+          taskbarIntent: false,
+        };
+        if (typeof orbMotion === "object" && orbMotion) {
+          orbMotion.x = Number(fallback.x);
+          orbMotion.y = Number(fallback.y);
+          orbMotion.targetX = Number(fallback.x);
+          orbMotion.targetY = Number(fallback.y);
+          orbMotion.vx = 0;
+          orbMotion.vy = 0;
+        }
+        if (root) {
+          root.style.width = \`\${size}px\`;
+          root.style.height = \`\${size}px\`;
+          root.dataset.bodyState = ORB_BODY_STATES.INTERRUPTED;
+        }
+        renderOrbPresentation();
+        if (typeof applyOrbSignals === "function") {
+          applyOrbSignals();
+        }
+        return true;
+      })()`,
+      true,
+    );
+    await delayMs(220);
+    await writeOrbVerificationCapture(win, "yield");
+    await win.webContents.executeJavaScript(
+      `(() => {
+        document.documentElement.style.background = "transparent";
+        document.body.style.background = "transparent";
+        return true;
+      })()`,
+      true,
+    );
+  } catch (error) {
+    log("Orb verification snapshot capture failed", error instanceof Error ? error.message : String(error));
+    try {
+      fs.mkdirSync(ORB_VERIFICATION_CAPTURE_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(ORB_VERIFICATION_CAPTURE_DIR, "capture-error.txt"),
+        `${error instanceof Error ? error.stack || error.message : String(error)}\n`,
+        "utf8",
+      );
+    } catch {}
+  }
+}
+
+function createOrbWindow(options = {}) {
   const { displays, primaryDisplayId } = getDisplayContext();
   overlayPreferences = loadPreferences(app.getPath("userData"), displays, primaryDisplayId);
   const preloadPath = path.join(__dirname, "preload.js");
   const targetDisplay = resolveTargetDisplay(displays, overlayPreferences.targetDisplayId, primaryDisplayId);
   const startupProfile = resolveStartupProfile(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
+  const showOnReady = options.showOnReady;
+  const shouldShowOnReady = showOnReady === true ? true : showOnReady === false ? false : startupProfile.visible;
   const orbBounds = buildOrbWindowBounds(displays);
 
   log("Creating orb window", {
@@ -2820,9 +4946,11 @@ function createOrbWindow() {
   if (typeof win.webContents.setBackgroundThrottling === "function") {
     win.webContents.setBackgroundThrottling(false);
   }
-  reinforceOrbWindowPresence(win);
+  reinforceOrbWindowPresence(win, { reason: "create_orb_window" });
+  ensureOrbSurfaceAuthorityLoop();
   win.webContents.once("did-finish-load", () => {
     log("Orb HUD loaded", win.webContents.getURL());
+    void maybeCaptureOrbVerificationSnapshots(win);
   });
   win.webContents.once("did-fail-load", (_event, code, description, validatedUrl, isMainFrame) => {
     if (!isMainFrame) {
@@ -2842,6 +4970,27 @@ function createOrbWindow() {
       sourceId,
     });
   });
+  win.webContents.on("render-process-gone", (_event, details) => {
+    const reason = `orb-renderer-${details.reason || "gone"}`;
+    log("Orb renderer process exited", details);
+    setOverlayRecovery({
+      needed: true,
+      status: "renderer_crash",
+      message: `Orb renderer exited: ${details.reason || "unknown"}. Rebuilding the orb surface.`,
+      lastExitReason: reason,
+    });
+    notifyOverlayState(mainWindow);
+  });
+  win.on("unresponsive", () => {
+    log("Orb window became unresponsive");
+    setOverlayRecovery({
+      needed: true,
+      status: "unresponsive",
+      message: "Orb renderer became unresponsive. Francis will attempt to restore the orb surface.",
+      lastExitReason: "orb-renderer-unresponsive",
+    });
+    notifyOverlayState(mainWindow);
+  });
   const orbUrl = getOrbHudUrl();
   log("Loading orb HUD", orbUrl);
   win.loadURL(orbUrl).catch((error) => {
@@ -2851,12 +5000,12 @@ function createOrbWindow() {
   ensureOrbAuthorityLoop();
 
   win.once("ready-to-show", () => {
-    if (startupProfile.visible) {
+    if (shouldShowOnReady) {
       log("Orb ready; showing window", {
         startupProfile: startupProfile.effective,
       });
       win.showInactive();
-      reinforceOrbWindowPresence(win);
+      reinforceOrbWindowPresence(win, { reason: "orb_ready_show" });
       notifyOverlayState(mainWindow);
       return;
     }
@@ -2867,26 +5016,50 @@ function createOrbWindow() {
   });
 
   win.on("show", () => {
-    reinforceOrbWindowPresence(win);
+    reinforceOrbWindowPresence(win, { reason: "orb_show" });
     notifyOverlayState(mainWindow);
   });
   win.on("blur", () => {
+    resetOrbOwnershipToSafeFallback("orb_blur");
     void checkForCaptureActivation();
+  });
+  win.on("close", (event) => {
+    if (shouldAllowWindowClose()) {
+      return;
+    }
+    event.preventDefault();
+    resetOrbOwnershipToSafeFallback("orb_window_hidden");
+    win.hide();
+    notifyOverlayState(mainWindow);
   });
   win.on("hide", () => notifyOverlayState(mainWindow));
   win.on("closed", () => {
     log("Orb window closed");
     if (orbWindow === win) {
       orbWindow = null;
+      stopOrbSurfaceAuthorityLoop();
       stopOrbPerceptionLoop();
       stopOrbAuthorityLoop();
+    }
+    if (!shouldAllowWindowClose()) {
+      setTimeout(() => {
+        if (quitAfterHudShutdown) {
+          return;
+        }
+        if (orbWindow && !orbWindow.isDestroyed()) {
+          return;
+        }
+        log("Recreating orb window after unexpected close");
+        orbWindow = createOrbWindow();
+      }, 150);
     }
   });
 
   return win;
 }
 
-function createMainWindow() {
+function createMainWindow(options = {}) {
+  const showOnReady = options.showOnReady === true;
   const { displays, primaryDisplayId } = getDisplayContext();
   overlayPreferences = loadPreferences(app.getPath("userData"), displays, primaryDisplayId);
   const preloadPath = path.join(__dirname, "preload.js");
@@ -2917,7 +5090,7 @@ function createMainWindow() {
     skipTaskbar: true, // Hide taskbar presence so the overlay behaves like a layer, not a launched app destination.
     hasShadow: false, // Native shadows create visible edges around transparent windows.
     autoHideMenuBar: true,
-    title: "Francis Overlay",
+    title: "Francis Review HUD",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true, // Keep the page isolated and expose only the preload bridge.
@@ -2966,13 +5139,23 @@ function createMainWindow() {
   });
 
   win.once("ready-to-show", () => {
-    if (typeof win.setOpacity === "function") {
-      win.setOpacity(0);
+    if (showOnReady) {
+      if (typeof win.setOpacity === "function") {
+        win.setOpacity(1);
+      }
+      win.showInactive();
+      log("Lens ready from explicit open request", {
+        startupProfile: startupProfile.effective,
+      });
+    } else {
+      if (typeof win.setOpacity === "function") {
+        win.setOpacity(0);
+      }
+      win.hide();
+      log("Lens ready; keeping the HUD hidden until the Orb opens it", {
+        startupProfile: startupProfile.effective,
+      });
     }
-    win.hide();
-    log("Lens ready; keeping the HUD hidden until the Orb opens it", {
-      startupProfile: startupProfile.effective,
-    });
     notifyOverlayState(win);
   });
 
@@ -2995,12 +5178,23 @@ function createMainWindow() {
   });
   win.on("minimize", () => notifyOverlayState(win));
   win.on("restore", () => notifyOverlayState(win));
+  win.on("close", (event) => {
+    if (shouldAllowWindowClose()) {
+      return;
+    }
+    event.preventDefault();
+    win.hide();
+    lensInteractionRestoreIgnoreMouseEvents = null;
+    resetOrbOwnershipToSafeFallback("overlay_window_hidden");
+    notifyOverlayState(win);
+  });
 
   win.on("closed", () => {
     schedulePreferenceSave(win, { immediate: true });
     log("Overlay window closed");
     if (mainWindow === win) {
       mainWindow = null;
+      lensInteractionRestoreIgnoreMouseEvents = null;
     }
   });
 
@@ -3013,7 +5207,7 @@ function createMainWindow() {
 
 function requireWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    throw new Error("Overlay window is not available");
+    mainWindow = createMainWindow({ showOnReady: false });
   }
   return mainWindow;
 }
@@ -3049,22 +5243,36 @@ async function openLifecyclePath(target) {
   };
 }
 
-async function restartHudAndRefreshWindow(win = mainWindow) {
+async function restartHudAndRefreshWindow(win = mainWindow, { recoveryId = 0, reason = "" } = {}) {
   const safeWindow = win && !win.isDestroyed() ? win : null;
   if (!hudRuntime) {
     throw new Error("HUD runtime is not available");
   }
-
-  await hudRuntime.restart();
-  if (safeWindow) {
-    await loadHud(safeWindow);
-    notifyOverlayState(safeWindow);
+  if (hudRestartPromise) {
+    log("Reused in-flight managed HUD restart", buildHudRecoveryDiagnostics({
+      reason: reason || "restart_reused",
+      recoveryId,
+    }));
+    return hudRestartPromise;
   }
-  recordLifecycleHistory("hud.restart", "Managed HUD restarted from the overlay shell.", {
-    tone: "medium",
-    detail: getHudState() || {},
-  });
-  return getOverlayState(safeWindow);
+
+  hudRestartPromise = (async () => {
+    await hudRuntime.restart();
+    if (safeWindow) {
+      await loadHud(safeWindow);
+      notifyOverlayState(safeWindow);
+    }
+    recordLifecycleHistory("hud.restart", "Managed HUD restarted from the overlay shell.", {
+      tone: "medium",
+      detail: getHudState() || {},
+    });
+    return getOverlayState(safeWindow);
+  })();
+  try {
+    return await hudRestartPromise;
+  } finally {
+    hudRestartPromise = null;
+  }
 }
 
 function registerIpc() {
@@ -3074,19 +5282,48 @@ function registerIpc() {
   ipcRegistered = true;
 
   ipcMain.handle("overlay:set-ignore-mouse-events", (_event, ignore) => {
-    const win = requireWindow();
+    const win = getLiveMainWindow();
     const value = applyIgnoreMouseEvents(win, ignore);
     log("Updated click-through state", value);
     return value;
   });
   ipcMain.handle("overlay:set-orb-ignore-mouse-events", (_event, ignore) => {
-    const value = applyOrbIgnoreMouseEvents(ignore);
-    log("Updated orb pass-through state", value);
-    return value;
+    const snapshot = setOrbOwnershipMode(
+      ignore ? ORB_OWNERSHIP_STATES.PASS_THROUGH : ORB_OWNERSHIP_STATES.INTERACTABLE_ORB,
+      "legacy_orb_mouse_events",
+    );
+    if (!snapshot.requestUnchanged && (snapshot.restricted || snapshot.state === ORB_OWNERSHIP_STATES.INTERACTABLE_LENS)) {
+      log("Updated orb ownership state", snapshot);
+    }
+    return snapshot;
+  });
+  ipcMain.handle("overlay:set-orb-ownership-mode", (_event, mode, reason = "") => {
+    const snapshot = setOrbOwnershipMode(mode, reason || "renderer_ownership");
+    const runtimeHealth = getOrbRuntimeHealthSnapshot();
+    const suppressionKey = [
+      snapshot.requestedMode,
+      snapshot.state,
+      snapshot.reason,
+      runtimeHealth.status,
+      runtimeHealth.source,
+    ].join("|");
+    const loggableReason = !["orb_surface", "legacy_orb_mouse_events", "renderer_interaction", "orb_shell"].includes(
+      String(reason || "").trim(),
+    );
+    if (!snapshot.requestUnchanged && loggableReason) {
+      log("Updated orb ownership state", snapshot);
+    } else if ((snapshot.restricted || !snapshot.canClaimOrbInteraction) && orbOwnershipSuppressionLogKey !== suppressionKey) {
+      orbOwnershipSuppressionLogKey = suppressionKey;
+      log("Suppressed repeated orb ownership request", {
+        ...snapshot,
+        runtimeHealth,
+      });
+    }
+    return snapshot;
   });
 
   ipcMain.handle("overlay:set-always-on-top", (_event, enabled) => {
-    const win = requireWindow();
+    const win = getLiveMainWindow();
     const value = applyAlwaysOnTop(win, enabled);
     log("Updated always-on-top state", value);
     return value;
@@ -3095,30 +5332,47 @@ function registerIpc() {
   ipcMain.handle("overlay:set-launch-at-login", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-launch-on-startup", (_event, enabled) => setLaunchAtLoginEnabled(enabled));
   ipcMain.handle("overlay:set-startup-profile", (_event, profileId) => setStartupProfile(profileId));
-  ipcMain.handle("overlay:set-orb-behavior-mode", (_event, modeId) => setOrbBehaviorMode(modeId));
+  ipcMain.handle("overlay:set-orb-behavior-mode", (event, modeId) => {
+    const senderId = event?.sender?.id;
+    const orbWindowSender = Boolean(
+      orbWindow
+      && !orbWindow.isDestroyed()
+      && orbWindow.webContents
+      && orbWindow.webContents.id === senderId,
+    );
+    if (orbWindowSender) {
+      log("Ignored orb behavior mode request from orb window", {
+        requested: modeId,
+      });
+      return getOverlayState(mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
+    }
+    return setOrbBehaviorMode(modeId);
+  });
   ipcMain.handle("overlay:set-motion-mode", (_event, modeId) => setMotionMode(modeId));
   ipcMain.handle("overlay:set-contrast-mode", (_event, modeId) => setContrastMode(modeId));
   ipcMain.handle("overlay:set-density-mode", (_event, modeId) => setDensityMode(modeId));
   ipcMain.handle("overlay:acknowledge-update-notice", () => dismissUpdateNotice());
-  ipcMain.handle("overlay:export-shell-state", () => exportShellState(requireWindow()));
-  ipcMain.handle("overlay:import-shell-state", () => importShellState(requireWindow()));
-  ipcMain.handle("overlay:reset-shell-state", () => resetRetainedShellState(requireWindow()));
-  ipcMain.handle("overlay:repair-shell-state", () => executeRetainedStateRepair(requireWindow()));
+  ipcMain.handle("overlay:export-shell-state", () => exportShellState(getLiveMainWindow()));
+  ipcMain.handle("overlay:import-shell-state", () => importShellState(getLiveMainWindow()));
+  ipcMain.handle("overlay:reset-shell-state", () => resetRetainedShellState(getLiveMainWindow()));
+  ipcMain.handle("overlay:repair-shell-state", () => executeRetainedStateRepair(getLiveMainWindow()));
   ipcMain.handle("overlay:create-rollback-snapshot", () => createRollbackSnapshot("manual", "Created from the desktop shell."));
-  ipcMain.handle("overlay:restore-latest-rollback", () => restoreLatestRollbackSnapshot(requireWindow()));
-  ipcMain.handle("overlay:export-support-bundle", () => exportSupportBundle(requireWindow()));
-  ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, requireWindow()));
-  ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(requireWindow()));
-  ipcMain.handle("overlay:get-state", () => getOverlayState(requireWindow()));
+  ipcMain.handle("overlay:restore-latest-rollback", () => restoreLatestRollbackSnapshot(getLiveMainWindow()));
+  ipcMain.handle("overlay:export-support-bundle", () => exportSupportBundle(getLiveMainWindow()));
+  ipcMain.handle("overlay:set-target-display", (_event, displayId) => moveOverlayToDisplay(displayId, getLiveMainWindow()));
+  ipcMain.handle("overlay:reset-layout", () => resetOverlayPreferences(getLiveMainWindow()));
+  ipcMain.handle("overlay:get-state", () => getOverlayState(mainWindow));
   ipcMain.handle("overlay:get-input-state", () => getOverlayInputState());
   ipcMain.handle("overlay:capture-perception-frame", () => capturePerceptionFrame());
-  ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(requireWindow()));
-  ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(requireWindow()));
+  ipcMain.handle("overlay:get-display-info", () => getDisplayInfo(mainWindow));
+  ipcMain.handle("overlay:restart-hud", () => restartHudAndRefreshWindow(mainWindow));
+  ipcMain.handle("overlay:pause-authority", () => pauseOrbAuthorityLocally());
   ipcMain.handle("overlay:open-path", (_event, target) => openLifecyclePath(target));
   ipcMain.handle("overlay:get-orb-surface", () => fetchHudJson("/api/orb"));
   ipcMain.handle("overlay:execute-orb-desktop-plan", async (_event, plan) => {
+    const inputState = getOverlayInputState();
     const result = await executeOrbDesktopPlan(plan, {
-      inputState: getOverlayInputState(),
+      inputState,
       executeCommand: (command) => executeWindowsInputCommand(command, { platform: process.platform }),
       onSyntheticCursor: (point) => {
         if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
@@ -3134,65 +5388,118 @@ function registerIpc() {
         orbAuthorityState.lastSyntheticAtMs = Date.now();
       },
     });
+    const enrichedResult = {
+      ...buildOrbReceiptContext(inputState),
+      ...(result && typeof result === "object" ? result : {}),
+    };
     recordLifecycleHistory(
       "orb.desktop_plan",
-      String(result?.status || "").trim().toLowerCase() === "failed"
-        ? `Orb desktop plan failed: ${String(result.title || "Orb desktop plan")}.`
-        : `Orb desktop plan executed: ${String(result.title || "Orb desktop plan")}.`,
+      String(enrichedResult?.status || "").trim().toLowerCase() === "failed"
+        ? `Orb desktop plan failed: ${String(enrichedResult.title || "Orb desktop plan")}.`
+        : `Orb desktop plan executed: ${String(enrichedResult.title || "Orb desktop plan")}.`,
       {
-        tone: String(result?.status || "").trim().toLowerCase() === "failed" ? "high" : "medium",
-        detail: result && typeof result === "object" ? result : {},
+        tone: String(enrichedResult?.status || "").trim().toLowerCase() === "failed" ? "high" : "medium",
+        detail: enrichedResult && typeof enrichedResult === "object" ? enrichedResult : {},
       },
     );
-    return result;
+    return enrichedResult;
   });
   ipcMain.handle("overlay:panic-stop", async () => {
-    let remoteResponse = null;
-    let remoteError = null;
-    let localError = null;
-    let queueCleared = false;
-    let authorityReleased = false;
-
-    try {
-      await cancelOrbAuthorityQueue("Panic stop canceled queued Orb authority commands.");
-      queueCleared = true;
-      await releaseOrbAuthority("Panic stop released Orb authority immediately.");
-      authorityReleased = true;
-    } catch (error) {
-      localError = error instanceof Error ? error.message : String(error);
-      log("Panic stop local release failed", localError);
+    if (orbPanicStopPending) {
+      return orbPanicStopPending;
     }
+    orbPanicStopPending = (async () => {
+      let remoteResponse = null;
+      let remoteError = null;
+      let localError = null;
+      let queueError = "";
+      const localDetail = "Panic stop released local authority immediately. Human control remains primary.";
+      try {
+        stabilizeOrbAuthorityLocally(
+          localDetail,
+          {
+            localStop: true,
+            localStopActive: true,
+            pauseHold: false,
+            disconnected: !getHudState()?.ready,
+            degraded: true,
+            remoteSyncStatus: "pending",
+            summary: "Local stop confirmed. Remote sync pending.",
+            detail: "Francis dropped local authority immediately and is holding a local stop posture while upstream confirmation catches up.",
+            notify: false,
+            localError: "",
+            remoteError: "",
+          },
+        );
+        notifyOverlayState(mainWindow);
+      } catch (error) {
+        localError = error instanceof Error ? error.message : String(error);
+        log("Panic stop local release failed", localError);
+      }
 
-    try {
-      remoteResponse = await fetchHudJson("/api/actions/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "control.panic",
-          args: {},
-          dry_run: false,
-          role: "architect",
-          user: "electron.orb",
-        }),
+      const queueResult = await cancelOrbAuthorityQueue("Panic stop canceled queued Orb authority commands.");
+      const queueSynced = Boolean(queueResult?.ok);
+      queueError = cleanSafetyDiagnostic(queueResult?.error || "");
+      try {
+        remoteResponse = await fetchHudJson("/api/actions/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "control.panic",
+            args: {},
+            dry_run: false,
+            role: "architect",
+            user: "electron.orb",
+          }),
+        });
+      } catch (error) {
+        remoteError = error instanceof Error ? error.message : String(error);
+        log("Panic stop remote sync failed", remoteError);
+      }
+
+      const remoteSynced = queueSynced && !remoteError;
+      const remoteSyncStatus = remoteSynced ? "current" : getHudState()?.ready ? "failed" : "pending";
+      const result = buildPanicStopResult({
+        queueCleared: queueSynced,
+        authorityReleased: !localError,
+        localError,
+        remoteResponse: remoteSynced ? remoteResponse : null,
+        remoteError: remoteSynced
+          ? null
+          : remoteError || queueError || "Orb authority queue clear did not confirm.",
       });
-    } catch (error) {
-      remoteError = error instanceof Error ? error.message : String(error);
-      log("Panic stop remote sync failed", remoteError);
-    }
 
-    return buildPanicStopResult({
-      queueCleared,
-      authorityReleased,
-      localError,
-      remoteResponse,
-      remoteError,
-    });
+      setOrbSafetyState({
+        localStopLatchedUntilMs: result.localStopped ? Date.now() + ORB_LOCAL_STOP_LATCH_MS : 0,
+        localStopActive: Boolean(result.localStopped) && !remoteSynced,
+        pauseHeld: false,
+        disconnected: remoteSyncStatus === "pending" && !getHudState()?.ready,
+        degraded: !remoteSynced || Boolean(overlayRecovery.needed),
+        remoteSyncStatus,
+        summary: String(result.summary || "").trim(),
+        detail: String(result.detail || localDetail).trim(),
+        localError: result.diagnostics?.localError || "",
+        remoteError: result.diagnostics?.remoteError || "",
+        lastAction: "panic_stop",
+        lastReason: String(result.detail || localDetail).trim(),
+      });
+
+      return result;
+    })();
+    try {
+      return await orbPanicStopPending;
+    } finally {
+      orbPanicStopPending = null;
+    }
   });
   ipcMain.handle("overlay:show-lens", () => showLensWindow());
   ipcMain.handle("overlay:hide-lens", () => hideLensWindow());
 
   ipcMain.handle("overlay:minimize", () => {
-    const win = requireWindow();
+    const win = getShellControlWindow();
+    if (!win) {
+      return false;
+    }
     win.minimize();
     notifyOverlayState(win);
     return true;
@@ -3208,14 +5515,18 @@ function registerIpc() {
     return true;
   });
 
-  ipcMain.handle("overlay:quit", () => {
-    log("Quitting overlay from renderer control");
-    app.quit();
+  ipcMain.handle("overlay:quit", (event) => {
+    requestAppQuit("renderer-bridge", {
+      senderUrl: event?.senderFrame?.url || event?.sender?.getURL?.() || "",
+    });
     return true;
   });
 
   ipcMain.handle("overlay:toggle-devtools", () => {
-    const win = requireWindow();
+    const win = getShellControlWindow();
+    if (!win) {
+      return false;
+    }
     if (win.webContents.isDevToolsOpened()) {
       win.webContents.closeDevTools();
       return false;
@@ -3227,6 +5538,8 @@ function registerIpc() {
 
 function toggleOverlayVisibility() {
   if ((!mainWindow || mainWindow.isDestroyed()) && (!orbWindow || orbWindow.isDestroyed())) {
+    log("No live overlay windows were available; recreating orb window");
+    showOrbWindow();
     return;
   }
   const visible = Boolean(
@@ -3243,11 +5556,8 @@ function toggleOverlayVisibility() {
 }
 
 function toggleClickThrough() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return;
-  }
   const nextValue = !overlayState.ignoreMouseEvents;
-  const applied = applyIgnoreMouseEvents(mainWindow, nextValue);
+  const applied = applyIgnoreMouseEvents(getLiveMainWindow(), nextValue);
   log("Toggled click-through via global shortcut", applied);
 }
 
@@ -3304,10 +5614,32 @@ async function initializeHudRuntime() {
     env: buildManagedHudEnv(),
     log,
     onStateChanged: (publicState) => {
+      const previousGeneration = Number(hudRecoveryState?.generation || 0);
+      hudRecoveryState = noteHudProcessState(hudRecoveryState, {
+        pid: publicState?.pid ?? null,
+        alive: Boolean(publicState?.childAlive),
+      });
       if (publicState?.restartSuggested) {
+        recordOrbRuntimeFailure("Managed HUD requested recovery.", {
+          source: "hud",
+          notify: false,
+        });
         scheduleHudRecovery(`hud-${publicState.mode || "crashed"}`);
       } else if (publicState?.ready) {
-        clearHudRecovery();
+        markHudGenerationReady(publicState);
+        if (Number(hudRecoveryState?.generation || 0) !== previousGeneration) {
+          log("Managed HUD generation became ready", buildHudRecoveryDiagnostics({
+            generation: hudRecoveryState.generation,
+            previousGeneration,
+          }));
+        }
+        recordOrbRuntimeHealthyProof("Managed HUD reported ready. Waiting for stable health proofs.", {
+          source: "hud",
+          notify: false,
+        });
+        if (orbRuntimeHealth.status === "nominal") {
+          clearHudRecovery();
+        }
       }
       notifyOverlayState(mainWindow);
     },
@@ -3315,8 +5647,17 @@ async function initializeHudRuntime() {
 
   try {
     const hudState = await hudRuntime.ensureReady();
+    markHudGenerationReady(hudState);
+    recordOrbRuntimeHealthyProof("Managed HUD booted and reported ready.", {
+      source: "hud",
+      notify: false,
+    });
     log("HUD runtime ready", hudState);
   } catch (error) {
+    recordOrbRuntimeFailure(error instanceof Error ? error.message : String(error), {
+      source: "hud",
+      notify: false,
+    });
     log("HUD runtime initialization did not produce a ready server", error instanceof Error ? error.message : String(error));
     const recoveryReason = getScheduledHudRecoveryReason(hudRuntime.getPublicState());
     if (recoveryReason) {
@@ -3350,7 +5691,7 @@ async function initializeOllamaRuntime() {
 }
 
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  requestAppQuit("single-instance-lock");
 } else {
   app.whenReady().then(async () => {
     buildInfo = resolveBuildIdentity(app, __dirname);
@@ -3412,36 +5753,57 @@ if (!app.requestSingleInstanceLock()) {
     ensureOllamaHealthMonitor();
     await initializeHudRuntime();
     ensureHudHealthMonitor();
-    mainWindow = createMainWindow();
-    orbWindow = createOrbWindow();
+    overlayPreferences = loadPreferences(
+      app.getPath("userData"),
+      getDisplayContext().displays,
+      getDisplayContext().primaryDisplayId,
+    );
+    const startupSurface = resolveStartupSurface(overlayPreferences, { recoveryNeeded: overlayRecovery.needed });
+    if (startupSurface.constructLensWindowOnBoot) {
+      mainWindow = createMainWindow({ showOnReady: startupSurface.showLensWindowOnBoot === true });
+    }
+    orbWindow = createOrbWindow({ showOnReady: startupSurface.showOrbWindowOnBoot === true });
     createTray();
     registerShortcuts();
   });
 
   app.on("second-instance", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      mainWindow = createMainWindow();
-    }
-    if (!orbWindow || orbWindow.isDestroyed()) {
+    const startupSurface = resolveOrbFirstSecondInstance({
+      orbVisible: Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
+      lensVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+    });
+    if (startupSurface.ensureOrbWindow && (!orbWindow || orbWindow.isDestroyed())) {
       orbWindow = createOrbWindow();
     }
-    toggleOverlayVisibility();
+    if (startupSurface.showOrbWindow) {
+      showOrbWindow();
+      return;
+    }
+    notifyOverlayState(mainWindow);
   });
 }
 
 app.on("activate", () => {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    mainWindow = createMainWindow();
-  }
-  if (!orbWindow || orbWindow.isDestroyed()) {
+  const startupSurface = resolveOrbFirstAppActivation({
+    orbVisible: Boolean(orbWindow && !orbWindow.isDestroyed() && orbWindow.isVisible()),
+    lensVisible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+  });
+  if (startupSurface.ensureOrbWindow && (!orbWindow || orbWindow.isDestroyed())) {
     orbWindow = createOrbWindow();
   }
-  if (!orbWindow.isVisible()) {
-    orbWindow.showInactive();
+  if (startupSurface.showOrbWindow) {
+    showOrbWindow();
+    return;
   }
+  notifyOverlayState(mainWindow);
 });
 
 app.on("before-quit", (event) => {
+  log("Electron before-quit received", {
+    quitAfterHudShutdown,
+    hudManaged: Boolean(hudRuntime && getHudState()?.managed),
+    ollamaManaged: Boolean(ollamaRuntime && getOllamaState()?.managed),
+  });
   if (quitAfterHudShutdown) {
     return;
   }
@@ -3466,17 +5828,31 @@ app.on("before-quit", (event) => {
       : Promise.resolve(),
   ])
     .finally(() => {
-      app.quit();
+      requestAppQuit("managed-runtime-shutdown");
     });
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
+  log("Electron window-all-closed received", {
+    quitAfterHudShutdown,
+    mainWindowAlive: Boolean(mainWindow && !mainWindow.isDestroyed()),
+    orbWindowAlive: Boolean(orbWindow && !orbWindow.isDestroyed()),
+  });
+  if (shouldAllowWindowClose()) {
+    if (process.platform !== "darwin") {
+      requestAppQuit("window-all-closed");
+    }
+    return;
   }
+  log("All overlay windows closed; keeping Francis resident for tray and shortcut recovery");
 });
 
 app.on("will-quit", () => {
+  log("Electron will-quit received", {
+    quitAfterHudShutdown,
+    mainWindowAlive: Boolean(mainWindow && !mainWindow.isDestroyed()),
+    orbWindowAlive: Boolean(orbWindow && !orbWindow.isDestroyed()),
+  });
   if (preferenceSaveTimer) {
     clearTimeout(preferenceSaveTimer);
     preferenceSaveTimer = null;

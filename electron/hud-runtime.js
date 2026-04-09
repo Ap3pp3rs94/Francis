@@ -12,6 +12,7 @@ const {
 const DEFAULT_HUD_URL = process.env.FRANCIS_HUD_URL || "http://127.0.0.1:8767";
 const DEFAULT_BOOT_TIMEOUT_MS = 25000;
 const DEFAULT_POLL_MS = 350;
+const DEFAULT_MAX_POLL_MS = 1500;
 
 function normalizeHudUrl(raw = DEFAULT_HUD_URL) {
   const url = new URL(String(raw || DEFAULT_HUD_URL));
@@ -23,6 +24,52 @@ function normalizeHudUrl(raw = DEFAULT_HUD_URL) {
 
 function buildHudHealthUrl(hudUrl) {
   return new URL("/health", `${normalizeHudUrl(hudUrl)}/`).toString();
+}
+
+function classifyHudReachabilityFailure(error = null, statusCode = 0) {
+  if (Number.isFinite(Number(statusCode)) && Number(statusCode) >= 400) {
+    return {
+      kind: "non_200",
+      message: `${Number(statusCode)}`,
+      statusCode: Number(statusCode),
+    };
+  }
+  const safeError = error instanceof Error ? error : new Error(String(error || "unknown failure"));
+  const code = String(safeError?.cause?.code || safeError?.code || "").trim().toUpperCase();
+  const message = String(safeError.message || safeError || "").trim();
+  if (safeError.name === "AbortError" || code === "ABORT_ERR") {
+    return {
+      kind: "aborted",
+      message: message || "Request aborted.",
+      statusCode: 0,
+    };
+  }
+  if (code === "ECONNREFUSED") {
+    return {
+      kind: "connection_refused",
+      message: message || "Connection refused.",
+      statusCode: 0,
+    };
+  }
+  if (code === "ECONNRESET") {
+    return {
+      kind: "connection_reset",
+      message: message || "Connection reset.",
+      statusCode: 0,
+    };
+  }
+  if (message.toLowerCase().includes("timed out")) {
+    return {
+      kind: "timeout",
+      message,
+      statusCode: 0,
+    };
+  }
+  return {
+    kind: "network_error",
+    message: message || "Unknown network error.",
+    statusCode: 0,
+  };
 }
 
 function buildHudWorkspaceRoot({ sourceRoot, userDataPath, isPackaged }) {
@@ -137,7 +184,8 @@ function appendEnvPath(existingValue, nextValue) {
   return existingValue ? `${normalizedNext}${path.delimiter}${existingValue}` : normalizedNext;
 }
 
-async function isHudReachable(hudUrl, timeoutMs = 1500) {
+async function probeHudReachability(hudUrl, timeoutMs = 1500) {
+  const startedAtMs = Date.now();
   try {
     const target = new URL(buildHudHealthUrl(hudUrl));
     const transport = target.protocol === "https:" ? https : http;
@@ -157,21 +205,49 @@ async function isHudReachable(hudUrl, timeoutMs = 1500) {
       request.once("error", reject);
       request.end();
     });
-    return statusCode >= 200 && statusCode < 300;
-  } catch {
-    return false;
+    const ok = statusCode >= 200 && statusCode < 300;
+    return {
+      ok,
+      statusCode,
+      elapsedMs: Date.now() - startedAtMs,
+      error: ok ? null : classifyHudReachabilityFailure(null, statusCode),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 0,
+      elapsedMs: Date.now() - startedAtMs,
+      error: classifyHudReachabilityFailure(error, 0),
+    };
   }
+}
+
+async function isHudReachable(hudUrl, timeoutMs = 1500) {
+  const probe = await probeHudReachability(hudUrl, timeoutMs);
+  return Boolean(probe.ok);
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getHudProbeDelayMs(attempt, {
+  baseMs = DEFAULT_POLL_MS,
+  maxMs = DEFAULT_MAX_POLL_MS,
+} = {}) {
+  const safeAttempt = Math.max(0, Number(attempt || 0));
+  const safeBase = Math.max(100, Number(baseMs || DEFAULT_POLL_MS));
+  const safeMax = Math.max(safeBase, Number(maxMs || DEFAULT_MAX_POLL_MS));
+  return Math.min(safeMax, safeBase * Math.max(1, 2 ** Math.min(safeAttempt, 3)));
+}
+
 async function waitForHudReady(hudUrl, child, { timeoutMs = DEFAULT_BOOT_TIMEOUT_MS, pollMs = DEFAULT_POLL_MS } = {}) {
   const deadline = Date.now() + timeoutMs;
+  let attempts = 0;
 
   while (Date.now() < deadline) {
-    if (await isHudReachable(hudUrl, Math.min(1200, pollMs * 3))) {
+    const probe = await probeHudReachability(hudUrl, Math.min(1200, pollMs * 3));
+    if (probe.ok) {
       return true;
     }
 
@@ -179,7 +255,8 @@ async function waitForHudReady(hudUrl, child, { timeoutMs = DEFAULT_BOOT_TIMEOUT
       throw new Error(`Managed HUD process exited with code ${child.exitCode}`);
     }
 
-    await sleep(pollMs);
+    await sleep(getHudProbeDelayMs(attempts, { baseMs: pollMs }));
+    attempts += 1;
   }
 
   throw new Error(`Managed HUD did not become healthy within ${timeoutMs}ms`);
@@ -320,10 +397,19 @@ function createHudRuntimeManager({
     lastExitSignal: null,
     crashCount: 0,
     restartSuggested: false,
+    generation: 0,
+    previousPid: null,
+    childAlive: false,
+    launchInFlight: false,
+    lastStartedAtMs: 0,
+    lastReadyAtMs: 0,
+    lastExitedAtMs: 0,
   };
 
   let child = null;
   let shutdownRequested = false;
+  let ensureReadyPromise = null;
+  let restartPromise = null;
 
   function setState(next) {
     Object.assign(state, next);
@@ -346,6 +432,11 @@ function createHudRuntimeManager({
         return;
       }
       child = null;
+      setState({
+        childAlive: false,
+        previousPid: processRef.pid || state.previousPid || null,
+        lastExitedAtMs: Date.now(),
+      });
       void resolveManagedHudExitUpdate({
           previousState: state,
           code,
@@ -360,6 +451,10 @@ function createHudRuntimeManager({
   }
 
   async function ensureReady() {
+    if (ensureReadyPromise) {
+      return ensureReadyPromise;
+    }
+    ensureReadyPromise = (async () => {
     if (await isHudReachable(normalizedHudUrl)) {
       setState({
         ready: true,
@@ -374,6 +469,9 @@ function createHudRuntimeManager({
         lastExitCode: null,
         lastExitSignal: null,
         restartSuggested: false,
+        childAlive: false,
+        launchInFlight: false,
+        lastReadyAtMs: Date.now(),
       });
       return getPublicState();
     }
@@ -418,6 +516,8 @@ function createHudRuntimeManager({
         lastExitCode: null,
         lastExitSignal: null,
         restartSuggested: false,
+        launchInFlight: true,
+        lastStartedAtMs: Date.now(),
       });
       log(`Starting managed HUD: ${describeLaunchCandidate(candidate)}`);
 
@@ -436,7 +536,12 @@ function createHudRuntimeManager({
       }
 
       attachManagedLogs(child);
-      setState({ pid: child.pid });
+      setState({
+        generation: Number(state.generation || 0) + 1,
+        previousPid: state.pid || state.previousPid || null,
+        pid: child.pid,
+        childAlive: true,
+      });
 
       try {
         await waitForHudReady(normalizedHudUrl, child);
@@ -451,6 +556,9 @@ function createHudRuntimeManager({
           lastExitCode: null,
           lastExitSignal: null,
           restartSuggested: false,
+          childAlive: true,
+          launchInFlight: false,
+          lastReadyAtMs: Date.now(),
         });
         return getPublicState();
       } catch (error) {
@@ -458,6 +566,11 @@ function createHudRuntimeManager({
         log(`Managed HUD did not become ready: ${error instanceof Error ? error.message : String(error)}`);
         await terminateProcessTree(child, { force: true });
         child = null;
+        setState({
+          childAlive: false,
+          launchInFlight: false,
+          lastExitedAtMs: Date.now(),
+        });
       }
     }
 
@@ -471,13 +584,31 @@ function createHudRuntimeManager({
       pid: null,
       lastError: message,
       restartSuggested: false,
+      childAlive: false,
+      launchInFlight: false,
     });
     throw new Error(message);
+    })();
+    try {
+      return await ensureReadyPromise;
+    } finally {
+      ensureReadyPromise = null;
+    }
   }
 
   async function restart() {
-    await shutdown({ force: true });
-    return ensureReady();
+    if (restartPromise) {
+      return restartPromise;
+    }
+    restartPromise = (async () => {
+      await shutdown({ force: true });
+      return ensureReady();
+    })();
+    try {
+      return await restartPromise;
+    } finally {
+      restartPromise = null;
+    }
   }
 
   async function shutdown({ force = true } = {}) {
@@ -496,6 +627,9 @@ function createHudRuntimeManager({
       runtimePath: null,
       pid: null,
       restartSuggested: false,
+      childAlive: false,
+      launchInFlight: false,
+      lastExitedAtMs: Date.now(),
     });
     return getPublicState();
   }
@@ -524,10 +658,13 @@ module.exports = {
   buildHudHealthUrl,
   buildHudLaunchCandidates,
   buildHudWorkspaceRoot,
+  classifyHudReachabilityFailure,
   createHudRuntimeManager,
   isHudReachable,
   normalizeHudUrl,
+  probeHudReachability,
   resolveManagedHudExitUpdate,
   resolveHudSourceRoot,
   waitForHudReady,
+  getHudProbeDelayMs,
 };

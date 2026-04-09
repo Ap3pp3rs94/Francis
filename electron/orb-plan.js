@@ -1,8 +1,15 @@
+const {
+  buildOrbExecutionSemantics,
+} = require("./orb-execution");
+
 const DEFAULT_PLAN_STEP_DELAY_MS = 0;
 const MAX_PLAN_STEP_DELAY_MS = 4000;
+const MAX_DRAG_DURATION_MS = 1800;
+const MAX_DRAG_STEPS = 48;
 const ALLOWED_STEP_KINDS = new Set([
   "mouse.move",
   "mouse.click",
+  "mouse.drag",
   "keyboard.type",
   "keyboard.key",
   "keyboard.shortcut",
@@ -57,6 +64,17 @@ function normalizeDesktopAnchor(value) {
     return "show_desktop_button";
   }
   return ALLOWED_DESKTOP_ANCHORS.has(normalized) ? normalized : "";
+}
+
+function normalizeOptionalPoint(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return Math.round(numeric);
 }
 
 function normalizeOrbPlanStep(row, index = 0) {
@@ -116,6 +134,38 @@ function normalizeOrbPlanStep(row, index = 0) {
       normalizedArgs.x = x;
       normalizedArgs.y = y;
       normalizedArgs.coordinate_space = normalizeCoordinateSpace(args.coordinate_space || args.coordinateSpace);
+    }
+    normalized.args = normalizedArgs;
+    return normalized;
+  }
+
+  if (kind === "mouse.drag") {
+    const anchor = normalizeDesktopAnchor(args.anchor || args.target || args.named_target);
+    const x = normalizePoint(args.x);
+    const y = normalizePoint(args.y);
+    const startAnchor = normalizeDesktopAnchor(args.start_anchor || args.start_target || args.start_named_target);
+    const startX = normalizeOptionalPoint(args.start_x);
+    const startY = normalizeOptionalPoint(args.start_y);
+    if (!anchor && (!Number.isFinite(x) || !Number.isFinite(y))) {
+      throw new Error(`Orb plan step ${index + 1} requires numeric x/y coordinates or a named desktop anchor for mouse.drag.`);
+    }
+    const normalizedArgs = {
+      button: String(args.button || "left").trim().toLowerCase() === "right" ? "right" : "left",
+      duration_ms: clampNumber(Number(args.duration_ms ?? args.durationMs ?? 220) || 220, 60, MAX_DRAG_DURATION_MS),
+      steps: clampNumber(Number(args.steps ?? 12) || 12, 4, MAX_DRAG_STEPS),
+      coordinate_space: normalizeCoordinateSpace(args.coordinate_space || args.coordinateSpace),
+    };
+    if (anchor) {
+      normalizedArgs.anchor = anchor;
+    } else {
+      normalizedArgs.x = x;
+      normalizedArgs.y = y;
+    }
+    if (startAnchor) {
+      normalizedArgs.start_anchor = startAnchor;
+    } else if (Number.isFinite(startX) && Number.isFinite(startY)) {
+      normalizedArgs.start_x = startX;
+      normalizedArgs.start_y = startY;
     }
     normalized.args = normalizedArgs;
     return normalized;
@@ -324,13 +374,21 @@ async function executeOrbDesktopPlan(plan, options = {}) {
       }
       if (step.kind === "mouse.move") {
         const targetPoint = resolveScreenPoint(step.args, inputState);
-        await executeCommand({
+        const commandResult = await executeCommand({
           kind: "mouse.move",
           args: targetPoint,
         });
         if (typeof options.onSyntheticCursor === "function") {
           options.onSyntheticCursor(targetPoint);
         }
+        const execution = commandResult?.execution && typeof commandResult.execution === "object"
+          ? commandResult.execution
+          : buildOrbExecutionSemantics({
+              kind: step.kind,
+              args: targetPoint,
+              status: "completed",
+              target: targetPoint,
+            });
         stepResults.push({
           index,
           kind: step.kind,
@@ -345,6 +403,7 @@ async function executeOrbDesktopPlan(plan, options = {}) {
             y: targetPoint.y,
             coordinate_space: "screen",
           },
+          execution,
         });
       } else if (step.kind === "mouse.click") {
         let targetPoint = null;
@@ -361,7 +420,7 @@ async function executeOrbDesktopPlan(plan, options = {}) {
             options.onSyntheticCursor(targetPoint);
           }
         }
-        await executeCommand({
+        const commandResult = await executeCommand({
           kind: "mouse.click",
           args: {
             button: step.args.button,
@@ -371,6 +430,17 @@ async function executeOrbDesktopPlan(plan, options = {}) {
         if (typeof options.onSyntheticInput === "function") {
           options.onSyntheticInput(step.kind);
         }
+        const execution = commandResult?.execution && typeof commandResult.execution === "object"
+          ? commandResult.execution
+          : buildOrbExecutionSemantics({
+              kind: step.kind,
+              args: {
+                ...step.args,
+                ...(targetPoint ? targetPoint : {}),
+              },
+              status: "completed",
+              target: targetPoint,
+            });
         stepResults.push({
           index,
           kind: step.kind,
@@ -387,15 +457,75 @@ async function executeOrbDesktopPlan(plan, options = {}) {
                 coordinate_space: "screen",
               }
             : { ...step.args },
+          execution,
+        });
+      } else if (step.kind === "mouse.drag") {
+        const endTarget = resolveScreenPoint(step.args, inputState);
+        const startTarget = step.args.start_anchor
+          || (Number.isFinite(Number(step.args.start_x)) && Number.isFinite(Number(step.args.start_y)))
+          ? resolveScreenPoint({
+              anchor: step.args.start_anchor,
+              x: step.args.start_x,
+              y: step.args.start_y,
+              coordinate_space: step.args.coordinate_space,
+            }, inputState)
+          : null;
+        const commandArgs = {
+          button: step.args.button,
+          duration_ms: step.args.duration_ms,
+          steps: step.args.steps,
+          x: endTarget.x,
+          y: endTarget.y,
+          coordinate_space: "screen",
+          ...(startTarget ? {
+            start_x: startTarget.x,
+            start_y: startTarget.y,
+          } : {}),
+        };
+        const commandResult = await executeCommand({
+          kind: "mouse.drag",
+          args: commandArgs,
+        });
+        if (typeof options.onSyntheticCursor === "function") {
+          options.onSyntheticCursor(endTarget);
+        }
+        if (typeof options.onSyntheticInput === "function") {
+          options.onSyntheticInput(step.kind);
+        }
+        const execution = commandResult?.execution && typeof commandResult.execution === "object"
+          ? commandResult.execution
+          : buildOrbExecutionSemantics({
+              kind: step.kind,
+              args: commandArgs,
+              status: "completed",
+              target: endTarget,
+            });
+        stepResults.push({
+          index,
+          kind: step.kind,
+          status: "ok",
+          started_at: stepStartedAt,
+          finished_at: new Date().toISOString(),
+          reason: step.reason,
+          interaction: step.interaction,
+          args: commandArgs,
+          execution,
         });
       } else {
-        await executeCommand({
+        const commandResult = await executeCommand({
           kind: step.kind,
           args: step.args,
         });
         if (typeof options.onSyntheticInput === "function") {
           options.onSyntheticInput(step.kind);
         }
+        const execution = commandResult?.execution && typeof commandResult.execution === "object"
+          ? commandResult.execution
+          : buildOrbExecutionSemantics({
+              kind: step.kind,
+              args: step.args,
+              status: "completed",
+            });
         stepResults.push({
           index,
           kind: step.kind,
@@ -405,6 +535,7 @@ async function executeOrbDesktopPlan(plan, options = {}) {
           reason: step.reason,
           interaction: step.interaction,
           args: { ...step.args },
+          execution,
         });
       }
       if (step.delay_ms > 0) {

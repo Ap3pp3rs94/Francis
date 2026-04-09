@@ -109,8 +109,33 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
         "objective": snapshot["objective"],
         "cards": [
             _card(
+                card_id="surface-role",
+                title="Support Role",
+                tone="neutral",
+                signal="low",
+                summary=(
+                    "The Orb remains the live operator body. This HUD stays focused on receipts, diagnostics, "
+                    "review, and deeper controls."
+                ),
+                evidence=[
+                    f"Orb-first state remains primary while mode is {control['mode']}.",
+                    f"Pending approvals ready for review: {int(approvals['pending_count'])}",
+                    f"Tracked receipts available for replay: {int(runs['ledger_count'])}",
+                ],
+                detail={
+                    "primary_surface": "orb",
+                    "support_surface": "lens_hud",
+                    "responsibilities": [
+                        "receipts",
+                        "diagnostics",
+                        "expanded_controls",
+                        "review",
+                    ],
+                },
+            ),
+            _card(
                 card_id="mission-pressure",
-                title="Mission Pressure",
+                title="Mission Review",
                 tone="primary",
                 signal=mission_signal,
                 summary=(
@@ -130,13 +155,13 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
             ),
             _card(
                 card_id="governance",
-                title="Governance",
+                title="Policy & Control",
                 tone="neutral",
                 signal=governance_signal,
                 summary=(
-                    f"Mode {control['mode']}. "
+                    f"Review posture for mode {control['mode']}. "
                     f"Kill switch {'active' if control.get('kill_switch') else 'clear'}. "
-                    f"{approvals['pending_count']} pending approval(s)."
+                    f"{approvals['pending_count']} approval(s) are waiting."
                 ),
                 evidence=[
                     f"Teaching reviews: {int(apprenticeship.get('review_count', 0))}",
@@ -151,7 +176,7 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
             ),
             _card(
                 card_id="receipts",
-                title="Receipts",
+                title="Receipts & Replay",
                 tone="accent",
                 signal=receipts_signal,
                 summary=(
@@ -177,7 +202,7 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
             ),
             _card(
                 card_id="current-work",
-                title="Current Work",
+                title="Work Review",
                 tone="primary",
                 signal=current_work_signal,
                 summary=str(current_work.get("summary", "Current work context is not available.")),
@@ -195,7 +220,7 @@ def get_dashboard_view(*, snapshot: dict[str, object] | None = None) -> dict[str
             ),
             _card(
                 card_id="next-best-action",
-                title="Next Best Action",
+                title="Expanded Control",
                 tone="neutral",
                 signal=next_action_signal_value,
                 summary=(

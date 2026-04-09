@@ -36,20 +36,28 @@ float noise(vec3 x) {
 }
 
 void main() {
-  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 2.0);
+  float facing = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);
+  float fresnel = pow(1.0 - facing, 4.8);
+  float nucleus = pow(facing, 4.8);
+  float innerHalo = pow(facing, 1.8);
 
   float n1 = noise(vWorldPos * 3.2 + uTime * 0.6);
-  float n2 = noise(vWorldPos * 6.8 - uTime * 0.9);
-  float plasma = mix(n1, n2, 0.5);
+  float n2 = noise(vWorldPos * 7.4 - uTime * 0.78);
+  float plasma = mix(n1, n2, 0.42);
+  float heartbeat = 0.985 + (uPulse - 1.0) * 0.44;
+  float innerGlow = clamp(nucleus * 1.92 + plasma * (0.04 + uDistortion * 0.12), 0.0, 1.0);
+  float veil = clamp(innerHalo * 0.56 + plasma * (0.04 + uDistortion * 0.08), 0.0, 1.0);
+  float corona = clamp(fresnel * 0.16 + plasma * 0.04, 0.0, 1.0);
+  float shimmer = (1.04 + plasma * (0.05 + uDistortion * 0.1)) * heartbeat * uIntensity;
 
-  float brightness = 0.46 + plasma * uDistortion + uPulse * 0.14;
-  brightness *= uIntensity;
+  vec3 cool = vec3(0.86, 0.89, 0.93);
+  vec3 pearl = vec3(0.96, 0.98, 0.995);
+  vec3 silver = vec3(1.0, 1.0, 1.0);
 
-  vec3 base = vec3(0.78, 0.89, 0.97);
-  vec3 hot = vec3(0.96, 0.99, 1.0);
+  vec3 color = mix(cool, pearl, 0.24 + innerGlow * 0.34);
+  color = mix(color, silver, clamp(innerGlow * 0.92 + nucleus * 0.22 + veil * 0.1, 0.0, 1.0));
+  color += pearl * corona * 0.1;
 
-  vec3 color = mix(base, hot, clamp(brightness + fresnel * 0.2, 0.0, 1.0));
-
-  float alpha = 0.78;
-  gl_FragColor = vec4(color * brightness, alpha);
+  float alpha = 0.14 + innerGlow * 0.42 + veil * 0.14 + corona * 0.05;
+  gl_FragColor = vec4(color * shimmer, alpha);
 }

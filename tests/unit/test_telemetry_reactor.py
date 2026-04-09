@@ -6,7 +6,7 @@ from pathlib import Path
 
 from francis_core.workspace_fs import WorkspaceFS
 from services.orchestrator.app.autonomy.decision_engine import build_plan
-from services.orchestrator.app.autonomy.event_reactor import collect_events
+from services.orchestrator.app.autonomy.event_reactor import EVENT_REACTOR_SUMMARY_PATH, collect_events
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -94,6 +94,40 @@ def test_event_reactor_surfaces_runtime_hygiene_signal(tmp_path: Path) -> None:
     assert state["runtime_hygiene_candidate_count"] == 1
     assert state["runtime_hygiene_categories_top"] == [{"key": "inbox", "count": 1}]
     assert any(event.get("type") == "runtime.hygiene_due" for event in state.get("events", []))
+
+
+def test_event_reactor_reuses_cached_summary_until_refresh_boundary(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    fs = WorkspaceFS(roots=[root], journal_path=root / "journals" / "fs.jsonl")
+    first_now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
+    due_at = datetime(2026, 4, 9, 12, 0, 5, tzinfo=timezone.utc)
+    _write_jsonl(
+        root / "queue" / "jobs.jsonl",
+        [
+            {
+                "id": "job-1",
+                "ts": first_now.isoformat(),
+                "run_id": "run-1",
+                "action": "forge.propose",
+                "status": "queued",
+                "next_run_after": due_at.isoformat(),
+            }
+        ],
+    )
+
+    first = collect_events(fs, now=first_now)
+    summary_path = root / EVENT_REACTOR_SUMMARY_PATH
+    before = summary_path.read_text(encoding="utf-8")
+    second = collect_events(fs, now=datetime(2026, 4, 9, 12, 0, 3, tzinfo=timezone.utc))
+    between = summary_path.read_text(encoding="utf-8")
+    third = collect_events(fs, now=datetime(2026, 4, 9, 12, 0, 6, tzinfo=timezone.utc))
+    after = summary_path.read_text(encoding="utf-8")
+
+    assert first["worker_queue_due_count"] == 0
+    assert second["worker_queue_due_count"] == 0
+    assert third["worker_queue_due_count"] == 1
+    assert between == before
+    assert after != before
 
 
 def test_decision_engine_uses_telemetry_to_trigger_scan_and_forge() -> None:

@@ -105,18 +105,25 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert operator["state"] == "approval_ready"
     assert operator["focus_kind"] == "repo.tests"
     assert operator["summary"] == "Run Fast Checks | Terminal failure needs verification."
-    assert operator["meta"] == "Approval approval-1 is ready. The Orb can approve and continue this move."
+    assert operator["meta"] == "Policy hold | risk medium | observation"
     assert operator["receipt_summary"] == "Fast checks failed on the workspace test gate."
+    assert operator["policy"]["state"] == "approval_required"
+    assert operator["policy"]["scope"] == "observation"
+    assert operator["policy"]["summary"] == "Waiting approval"
+    assert operator["policy"]["authority_label"] == "Policy hold"
     assert operator["controls"]["preview_enabled"] is True
     assert operator["controls"]["preview_kind"] == "repo.tests.request_approval"
     assert operator["controls"]["run_mode"] == "approve_and_run"
     assert operator["controls"]["run_kind"] == "repo.tests"
     assert operator["controls"]["approval_id"] == "approval-1"
+    assert operator["controls"]["policy_state"] == "approval_required"
+    assert operator["controls"]["policy_scope"] == "observation"
     assert operator["controls"]["receipt_available"] is True
     assert operator["controls"]["takeover_active"] is True
     assert operator["controls"]["takeover_session_id"] == "session-1"
     assert operator["target_cue"] is None
     assert operator["receipt_cue"]["state"] == "weak"
+    assert operator["receipt_cue"]["attention_state"] == "idle"
     assert operator["receipt_cue"]["title"] == "Receipt Grounding"
     assert "no concrete target cue is grounded now" in operator["receipt_cue"]["summary"].lower()
 
@@ -124,13 +131,102 @@ def test_get_orb_view_builds_canonical_operator_surface(monkeypatch) -> None:
     assert interjection["surface"] == "orb_interjection"
     assert interjection["state"] == "needed_decision"
     assert interjection["level"] == 2
-    assert interjection["reason_kind"] == "approval_ready"
+    assert interjection["reason_kind"] == "policy_approval_required"
     assert interjection["can_defer"] is False
-    assert "Approval approval-1 is ready." in interjection["prompt"]
+    assert "Approval approval-1 is required" in interjection["prompt"]
     assert interjection["target_cue"] is None
     assert interjection["controls"]["primary_action"] == "run"
     assert interjection["controls"]["primary_label"] == "Approve + Run"
     assert interjection["controls"]["secondary_action"] == "preview"
+
+
+def test_get_orb_view_distinguishes_policy_block_from_target_reassessment(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "assist"},
+        "current_work": {},
+        "objective": {},
+        "approvals": {},
+        "runs": {},
+        "takeover": {"active": False, "session_id": ""},
+    }
+
+    monkeypatch.setattr(
+        orb_view,
+        "build_orb_state",
+        lambda **_: {"surface": "orb", "mode": "assist", "posture": "resting", "summary": "Ambient"},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_authority_view",
+        lambda: {"surface": "orb_authority", "pending_count": 0},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_orb_perception_view",
+        lambda include_frame_data=False: {"surface": "orb_perception", "state": "live", "summary": "Live"},
+    )
+    monkeypatch.setattr(orb_view, "resolve_orb_focus_target", lambda: None)
+    monkeypatch.setattr(
+        orb_view,
+        "get_current_work_view",
+        lambda **_: {
+            "surface": "current_work",
+            "focus_action": {
+                "kind": "mouse.click",
+                "execute_kind": "mouse.click",
+                "args": {"x": 440, "y": 320},
+                "enabled": False,
+                "label": "Click Production Control",
+                "reason": "Cross-app production click is outside the current governed scope.",
+                "risk_tier": "high",
+                "state": "blocked",
+            },
+            "next_action": {
+                "kind": "mouse.click",
+                "label": "Click Production Control",
+                "reason": "Cross-app production click is outside the current governed scope.",
+            },
+            "next_action_resume": {},
+            "operator_link": {"action_kind": "mouse.click"},
+        },
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_approval_queue_view",
+        lambda **_: {"surface": "approval_queue", "items": []},
+    )
+    monkeypatch.setattr(
+        orb_view,
+        "get_blocked_actions_view",
+        lambda **_: {
+            "surface": "blocked_actions",
+            "items": [
+                {
+                    "kind": "mouse.click",
+                    "policy_reason": "Cross-app production click is outside the current governed scope.",
+                    "detail_summary": "mouse.click is blocked. Cross-app production click is outside the current governed scope.",
+                    "risk_tier": "high",
+                    "trust_badge": "Blocked",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(orb_view, "get_execution_journal_view", lambda **_: {"surface": "execution_journal", "items": []})
+
+    orb = orb_view.get_orb_view(snapshot=snapshot, actions={"action_chips": [], "blocked_actions": []}, voice={"surface": "voice"})
+
+    operator = orb["operator"]
+    assert operator["state"] == "blocked"
+    assert operator["policy"]["state"] == "policy_blocked"
+    assert operator["policy"]["scope"] == "cross_app_transfer"
+    assert operator["policy"]["summary"] == "Blocked by policy"
+    assert operator["policy"]["authority_label"] == "Policy blocked"
+
+    interjection = orb["interjection"]
+    assert interjection["state"] == "needed_decision"
+    assert interjection["reason_kind"] == "policy_blocked"
+    assert interjection["summary"] == "Blocked by policy"
+    assert "governed scope" in interjection["detail"]
 
 
 def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None:
@@ -210,6 +306,7 @@ def test_get_orb_view_exposes_takeover_desktop_run_contract(monkeypatch) -> None
 
     controls = orb["operator"]["controls"]
     assert orb["operator"]["target_cue"]["state"] == "weak"
+    assert orb["operator"]["target_cue"]["attention_state"] == "reassess"
     assert controls["desktop_run_enabled"] is True
     assert controls["desktop_run_kind"] == "control.takeover.desktop.enqueue"
     assert controls["desktop_run_args"]["commands"][0]["kind"] == "mouse.click"
@@ -341,9 +438,12 @@ def test_get_orb_view_carries_concrete_target_cue_into_interjection(monkeypatch)
     orb = orb_view.get_orb_view(snapshot=snapshot, actions=actions, voice={"surface": "voice"})
 
     assert orb["operator"]["target_cue"]["state"] == "concrete"
+    assert orb["operator"]["target_cue"]["attention_state"] == "target_lock"
     assert orb["operator"]["receipt_cue"]["state"] == "concrete"
+    assert orb["operator"]["receipt_cue"]["attention_state"] == "target_lock"
     assert orb["operator"]["receipt_cue"]["control_ready"] is True
     assert orb["interjection"]["target_cue"]["state"] == "concrete"
+    assert orb["interjection"]["target_cue"]["attention_state"] == "target_lock"
     assert orb["interjection"]["target_cue"]["control_ready"] is True
 
 
@@ -1153,3 +1253,27 @@ def test_build_orb_chat_reply_auto_executes_only_for_explicit_action_turns(monke
     assert payload["execution"]["ready"] is True
     assert payload["execution"]["auto_execute"] is True
     assert payload["plan"]["auto_execute"] is True
+
+
+def test_normalize_orb_desktop_plan_accepts_mouse_drag_steps() -> None:
+    plan = orb_view._normalize_orb_desktop_plan(
+        {
+            "title": "Drag Orb Surface",
+            "summary": "Drag the live target through the visible desktop path.",
+            "mode_requirement": "pilot",
+            "steps": [
+                {
+                    "kind": "mouse.drag",
+                    "args": {"x": 480, "y": 320, "button": "left", "duration_ms": 260, "steps": 9},
+                    "reason": "Drag the target into place through visible anchored contact.",
+                    "pause_ms": 140,
+                }
+            ],
+        },
+        mode="pilot",
+    )
+
+    assert plan is not None
+    assert plan["ready"] is True
+    assert plan["steps"][0]["kind"] == "mouse.drag"
+    assert plan["steps"][0]["args"]["button"] == "left"

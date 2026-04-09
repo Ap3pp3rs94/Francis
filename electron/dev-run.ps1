@@ -39,4 +39,4 @@ if (Test-HudReachable -Url $HudUrl) {
 
 $env:FRANCIS_HUD_URL = $HudUrl
 $env:FRANCIS_OVERLAY_MANAGE_HUD = if ($DisableManagedHud) { "0" } else { "1" }
-npm run overlay:start
+npm run overlay:start:console

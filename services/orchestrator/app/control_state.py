@@ -70,7 +70,13 @@ def _normalize_scope_paths(values: list[str]) -> list[str]:
     return sorted(set(normalized))
 
 
-def _validate_state(state: dict[str, Any], repo_root: Path, workspace_root: Path) -> dict[str, Any]:
+def _validate_state(
+    state: dict[str, Any],
+    repo_root: Path,
+    workspace_root: Path,
+    *,
+    preserve_updated_at: bool = False,
+) -> dict[str, Any]:
     mode = str(state.get("mode", "")).strip().lower()
     if mode not in VALID_MODES:
         raise ValueError(f"Invalid mode: {mode}")
@@ -96,11 +102,12 @@ def _validate_state(state: dict[str, Any], repo_root: Path, workspace_root: Path
     else:
         apps = sorted(set(apps).union(MANDATORY_APPS))
 
+    updated_at = str(state.get("updated_at", "")).strip() if preserve_updated_at else ""
     return {
         "mode": mode,
         "kill_switch": kill_switch,
         "scopes": {"repos": repos, "workspaces": workspaces, "apps": apps},
-        "updated_at": utc_now_iso(),
+        "updated_at": updated_at or utc_now_iso(),
     }
 
 
@@ -109,8 +116,14 @@ def load_or_init_control_state(fs: WorkspaceFS, repo_root: Path, workspace_root:
         raw = fs.read_text(CONTROL_STATE_PATH)
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
-            validated = _validate_state(parsed, repo_root, workspace_root)
-            fs.write_text(CONTROL_STATE_PATH, json.dumps(validated, ensure_ascii=False, indent=2))
+            validated = _validate_state(
+                parsed,
+                repo_root,
+                workspace_root,
+                preserve_updated_at=True,
+            )
+            if validated != parsed:
+                fs.write_text(CONTROL_STATE_PATH, json.dumps(validated, ensure_ascii=False, indent=2))
             return validated
     except Exception:
         pass
@@ -194,6 +207,25 @@ def check_action_allowed(
     mutating: bool,
 ) -> tuple[bool, str, dict[str, Any]]:
     state = load_or_init_control_state(fs, repo_root, workspace_root)
+    return check_action_allowed_for_state(
+        state,
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        app=app,
+        action=action,
+        mutating=mutating,
+    )
+
+
+def check_action_allowed_for_state(
+    state: dict[str, Any],
+    *,
+    repo_root: Path,
+    workspace_root: Path,
+    app: str,
+    action: str,
+    mutating: bool,
+) -> tuple[bool, str, dict[str, Any]]:
     mode = str(state.get("mode", "observe")).lower()
     kill_switch = bool(state.get("kill_switch", False))
     scopes = state.get("scopes", {})

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from francis_core.workspace_fs import WorkspaceFS
@@ -9,9 +10,23 @@ from services.orchestrator.app.runtime_hygiene import (
     count_active_deadletters,
     count_active_inbox_alerts,
     is_open_incident,
-    preview_runtime_hygiene,
     runtime_hygiene_candidate_breakdown,
     runtime_hygiene_candidate_count,
+    summarize_runtime_hygiene_candidates,
+)
+
+EVENT_REACTOR_SUMMARY_VERSION = 1
+EVENT_REACTOR_SUMMARY_PATH = "autonomy/reactor_events_summary.json"
+EVENT_REACTOR_SOURCE_PATHS = (
+    "missions/missions.json",
+    "queue/jobs.jsonl",
+    "queue/deadletter.jsonl",
+    "incidents/incidents.jsonl",
+    "inbox/messages.jsonl",
+    "telemetry/events.jsonl",
+    "runs/last_run.json",
+    "runs/last_worker_run.json",
+    "queue/worker_cycle_gate.json",
 )
 
 
@@ -64,12 +79,122 @@ def _safe_int(value: object, default: int) -> int:
         return default
 
 
+def _resolve_workspace_path(fs: WorkspaceFS, rel_path: str) -> Path:
+    return (fs.roots[0] / rel_path).resolve()
+
+
+def _path_signature(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"exists": False}
+    stat = path.stat()
+    return {
+        "exists": True,
+        "mtime_ns": int(stat.st_mtime_ns),
+        "size": int(stat.st_size),
+    }
+
+
+def _source_signature(fs: WorkspaceFS) -> dict[str, dict[str, Any]]:
+    return {
+        rel_path: _path_signature(_resolve_workspace_path(fs, rel_path))
+        for rel_path in EVENT_REACTOR_SOURCE_PATHS
+    }
+
+
+def _load_summary_doc(fs: WorkspaceFS) -> dict[str, Any] | None:
+    try:
+        raw = fs.read_text(EVENT_REACTOR_SUMMARY_PATH)
+    except Exception:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _write_summary_doc(
+    fs: WorkspaceFS,
+    *,
+    payload: dict[str, Any],
+    source_signature: dict[str, dict[str, Any]],
+    scan_interval_seconds: int,
+    telemetry_horizon_hours: int,
+    refresh_after: datetime | None,
+) -> dict[str, Any]:
+    doc = {
+        "version": EVENT_REACTOR_SUMMARY_VERSION,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "params": {
+            "scan_interval_seconds": int(scan_interval_seconds),
+            "telemetry_horizon_hours": int(telemetry_horizon_hours),
+        },
+        "refresh_after": refresh_after.isoformat() if refresh_after is not None else None,
+        "source_signature": source_signature,
+        "payload": payload,
+    }
+    fs.write_text(EVENT_REACTOR_SUMMARY_PATH, json.dumps(doc, ensure_ascii=False, indent=2))
+    return doc
+
+
+def _summary_is_usable(
+    doc: dict[str, Any] | None,
+    *,
+    source_signature: dict[str, dict[str, Any]],
+    scan_interval_seconds: int,
+    telemetry_horizon_hours: int,
+    now: datetime,
+) -> bool:
+    if not isinstance(doc, dict):
+        return False
+    if int(doc.get("version", 0) or 0) != EVENT_REACTOR_SUMMARY_VERSION:
+        return False
+    params = doc.get("params", {}) if isinstance(doc.get("params"), dict) else {}
+    if int(params.get("scan_interval_seconds", 0) or 0) != int(scan_interval_seconds):
+        return False
+    if int(params.get("telemetry_horizon_hours", 0) or 0) != int(telemetry_horizon_hours):
+        return False
+    if doc.get("source_signature") != source_signature:
+        return False
+    refresh_after = _parse_ts(str(doc.get("refresh_after", "")).strip() or None)
+    if refresh_after is not None and refresh_after <= now:
+        return False
+    return isinstance(doc.get("payload"), dict)
+
+
+def _earliest_future_ts(
+    current: datetime | None,
+    candidate: datetime | None,
+    *,
+    now: datetime,
+) -> datetime | None:
+    if candidate is None or candidate <= now:
+        return current
+    if current is None or candidate < current:
+        return candidate
+    return current
+
+
 def collect_events(
     fs: WorkspaceFS,
     *,
     scan_interval_seconds: int = 300,
     telemetry_horizon_hours: int = 24,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
+    reference_now = now or datetime.now(timezone.utc)
+    signature = _source_signature(fs)
+    cached = _load_summary_doc(fs)
+    if _summary_is_usable(
+        cached,
+        source_signature=signature,
+        scan_interval_seconds=scan_interval_seconds,
+        telemetry_horizon_hours=telemetry_horizon_hours,
+        now=reference_now,
+    ):
+        payload = cached.get("payload", {})
+        return dict(payload) if isinstance(payload, dict) else {}
+
     missions_doc = _read_json(fs, "missions/missions.json", {"missions": []})
     missions = missions_doc.get("missions", []) if isinstance(missions_doc, dict) else []
     inactive = {"completed", "failed", "cancelled", "canceled"}
@@ -82,20 +207,23 @@ def collect_events(
     jobs = _read_jsonl(fs, "queue/jobs.jsonl")
     queued_jobs = [job for job in jobs if str(job.get("status", "")).lower() == "queued"]
     leased_jobs = [job for job in jobs if str(job.get("status", "")).lower() == "leased"]
-    now = datetime.now(timezone.utc)
+    refresh_after: datetime | None = None
     queued_due_jobs: list[dict[str, Any]] = []
     queued_backoff_jobs: list[dict[str, Any]] = []
     leased_expired_jobs: list[dict[str, Any]] = []
     for job in queued_jobs:
         next_run_after = _parse_ts(str(job.get("next_run_after", "")).strip() or None)
-        if next_run_after is None or next_run_after <= now:
+        if next_run_after is None or next_run_after <= reference_now:
             queued_due_jobs.append(job)
         else:
             queued_backoff_jobs.append(job)
+            refresh_after = _earliest_future_ts(refresh_after, next_run_after, now=reference_now)
     for job in leased_jobs:
         lease_expires_at = _parse_ts(str(job.get("lease_expires_at", "")).strip() or None)
-        if lease_expires_at is not None and lease_expires_at <= now:
+        if lease_expires_at is not None and lease_expires_at <= reference_now:
             leased_expired_jobs.append(job)
+        else:
+            refresh_after = _earliest_future_ts(refresh_after, lease_expires_at, now=reference_now)
     leased_expired_classes: dict[str, int] = {}
     for job in leased_expired_jobs:
         action = str(job.get("action", "")).strip().lower()
@@ -127,9 +255,11 @@ def collect_events(
     open_incidents = [i for i in incidents if is_open_incident(i)]
     critical_incidents = [i for i in open_incidents if str(i.get("severity", "")).lower() == "critical"]
 
-    inbox_alert_count = count_active_inbox_alerts(_read_jsonl(fs, "inbox/messages.jsonl"))
+    inbox_rows = _read_jsonl(fs, "inbox/messages.jsonl")
+    inbox_alert_count = count_active_inbox_alerts(inbox_rows)
     telemetry_rows = _read_jsonl(fs, "telemetry/events.jsonl")
-    telemetry_horizon = now - timedelta(hours=max(1, min(168, _safe_int(telemetry_horizon_hours, 24))))
+    horizon_delta = timedelta(hours=max(1, min(168, _safe_int(telemetry_horizon_hours, 24))))
+    telemetry_horizon = reference_now - horizon_delta
     telemetry_in_horizon: list[dict[str, Any]] = []
     telemetry_warn_count = 0
     telemetry_error_count = 0
@@ -140,6 +270,7 @@ def collect_events(
         if ts is not None and ts < telemetry_horizon:
             continue
         telemetry_in_horizon.append(row)
+        refresh_after = _earliest_future_ts(refresh_after, ts + horizon_delta if ts is not None else None, now=reference_now)
         stream = str(row.get("stream", "")).strip().lower()
         if stream:
             telemetry_stream_counts[stream] = telemetry_stream_counts.get(stream, 0) + 1
@@ -157,7 +288,20 @@ def collect_events(
         for stream, count in sorted(telemetry_stream_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]
     ]
     last_telemetry = telemetry_rows[-1] if telemetry_rows else None
-    hygiene_preview = preview_runtime_hygiene(fs)
+    hygiene_preview = summarize_runtime_hygiene_candidates(
+        missions_doc=missions_doc if isinstance(missions_doc, dict) else {"missions": []},
+        jobs=jobs,
+        deadletters=deadletters,
+        incidents=incidents,
+        inbox=inbox_rows,
+        telemetry_events=telemetry_rows,
+        now=reference_now,
+    )
+    refresh_after = _earliest_future_ts(
+        refresh_after,
+        _parse_ts(str(hygiene_preview.get("next_refresh_after", "")).strip() or None),
+        now=reference_now,
+    )
     hygiene_breakdown = runtime_hygiene_candidate_breakdown(hygiene_preview)
     hygiene_candidate_count = runtime_hygiene_candidate_count(hygiene_preview)
     hygiene_categories_top = [
@@ -167,7 +311,13 @@ def collect_events(
 
     last_run = _read_json(fs, "runs/last_run.json", {})
     last_run_ts = _parse_ts(last_run.get("ts")) if isinstance(last_run, dict) else None
-    observer_scan_due = last_run_ts is None or (now - last_run_ts).total_seconds() >= scan_interval_seconds
+    observer_scan_due = last_run_ts is None or (reference_now - last_run_ts).total_seconds() >= scan_interval_seconds
+    if last_run_ts is not None and not observer_scan_due:
+        refresh_after = _earliest_future_ts(
+            refresh_after,
+            last_run_ts + timedelta(seconds=max(1, int(scan_interval_seconds))),
+            now=reference_now,
+        )
     last_worker_run = _read_json(fs, "runs/last_worker_run.json", {})
     if not isinstance(last_worker_run, dict):
         last_worker_run = {}
@@ -220,7 +370,7 @@ def collect_events(
             }
         )
 
-    return {
+    payload = {
         "events": events,
         "active_mission_count": len(active_missions),
         "queued_mission_ids": queued_mission_ids,
@@ -253,3 +403,12 @@ def collect_events(
         "runtime_hygiene_min_age_hours": hygiene_preview.get("min_age_hours", 24),
         "observer_scan_due": observer_scan_due,
     }
+    _write_summary_doc(
+        fs,
+        payload=payload,
+        source_signature=signature,
+        scan_interval_seconds=scan_interval_seconds,
+        telemetry_horizon_hours=telemetry_horizon_hours,
+        refresh_after=refresh_after,
+    )
+    return payload

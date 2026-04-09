@@ -50,6 +50,9 @@ def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None
     assert queued["status"] == "ok"
     assert queued["command"]["status"] == "queued"
     assert queued["command"]["grounding"]["state"] == "concrete"
+    assert queued["command"]["policy"]["state"] == "allowed"
+    assert queued["command"]["policy"]["scope"] == "navigation"
+    assert queued["command"]["execution"]["phase"] == "commit_move"
     assert queued["authority"]["pending_count"] == 1
 
     claimed = orb_authority.claim_next_orb_authority_command(
@@ -60,6 +63,7 @@ def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None
 
     assert claimed["status"] == "ok"
     assert claimed["command"]["status"] == "claimed"
+    assert claimed["command"]["execution"]["phase"] == "commit_move"
     assert claimed["authority"]["state"]["state"] == "francis_authority"
     command_id = claimed["command"]["id"]
 
@@ -67,11 +71,44 @@ def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None
         command_id=command_id,
         status="completed",
         detail="Move completed cleanly.",
-        result={"cursor": {"x": 320, "y": 240}},
+        result={
+            "cursor": {"x": 320, "y": 240},
+            "foreground_window": {
+                "title": "Francis Lens",
+                "process": "electron.exe",
+                "pid": 4242,
+                "elevated": False,
+            },
+            "desktop_authority": {
+                "mode": "desktop_authority_bounded",
+                "summary": "The foreground app is elevated. Non-elevated overlays and input bridges can lose authority on this surface.",
+                "activeLimitations": [
+                    {
+                        "key": "elevated_foreground",
+                        "scope": "elevated_apps",
+                        "severity": "bounded",
+                        "summary": "The foreground app is elevated. Non-elevated overlays and input bridges can lose authority on this surface.",
+                        "fallback": "Francis stays resident and documents the limit honestly.",
+                    }
+                ],
+                "fallbackPosture": {
+                    "mode": "resident_reinforced_hold",
+                    "summary": "Francis stays resident and documents the limit honestly.",
+                },
+            },
+            "execution": {
+                "kind": "mouse.move",
+                "phase": "commit_move",
+                "summary": "Move completed cleanly.",
+                "detail": "Francis is physically travelling to the grounded execution point.",
+                "target": {"x": 320, "y": 240, "coordinate_space": "screen"},
+            },
+        },
     )
 
     assert completed["status"] == "ok"
     assert completed["command"]["status"] == "completed"
+    assert completed["command"]["execution"]["phase"] == "commit_move"
     assert completed["authority"]["state"]["live"] is False
     assert completed["authority"]["pending_count"] == 0
 
@@ -98,13 +135,32 @@ def test_orb_authority_queue_claim_complete(monkeypatch, tmp_path: Path) -> None
     )
     assert queued_summary["grounding_state"] == "concrete"
     assert queued_summary["grounding_control_ready"] is True
+    assert queued_summary["policy_state"] == "allowed"
+    assert queued_summary["policy_scope"] == "navigation"
+    assert queued_summary["execution_phase"] == "commit_move"
     assert any(card["label"] == "Grounding" for card in queued_summary["presentation_cards"])
     assert claimed_summary["grounding_state"] == "concrete"
+    assert claimed_summary["policy_state"] == "allowed"
+    assert claimed_summary["execution_phase"] == "commit_move"
     assert completed_summary["grounding_state"] == "concrete"
+    assert completed_summary["policy_state"] == "allowed"
+    assert completed_summary["execution_phase"] == "commit_move"
+    assert completed_summary["receipt_version"] == 2
+    assert completed_summary["receipt_priority"] >= 700
+    assert completed_summary["review_summary"] == "mouse.move is completed. Move to the current target. Concrete Francis action row target. Focus Click is grounded from the Orb."
+    assert completed_summary["receipt_flags"]["desktop_fallback"] is True
+    assert completed_summary["receipt_context"]["window"]["title"] == "Francis Lens"
+    assert completed_summary["receipt_context"]["desktop_authority"]["active_limitations"][0]["key"] == "elevated_foreground"
+    assert completed_summary["replay"]["step_count"] == 1
+    assert any(card["label"] == "Execution" for card in completed_summary["presentation_cards"])
+    assert any(card["label"] == "Desktop" for card in completed_summary["presentation_cards"])
     authority_view = orb_authority.get_orb_authority_view()
     assert authority_view["recent"]
     assert authority_view["recent"][0]["summary_text"]
     assert authority_view["recent"][0]["grounding_state"] == "concrete"
+    assert authority_view["recent"][0]["policy_scope"] == "navigation"
+    assert authority_view["recent"][0]["execution_phase"] == "commit_move"
+    assert authority_view["recent"][0]["receipt_flags"]["desktop_fallback"] is True
     assert any(card["label"] == "Grounding" for card in authority_view["recent"][0]["presentation_cards"])
 
 
@@ -131,3 +187,28 @@ def test_orb_authority_state_and_cancel(monkeypatch, tmp_path: Path) -> None:
     assert canceled["canceled_count"] == 1
     assert canceled["authority"]["state"]["live"] is False
     assert canceled["authority"]["pending_count"] == 0
+
+
+def test_orb_authority_preserves_explicit_policy_metadata(monkeypatch, tmp_path: Path) -> None:
+    _bind_temp_authority_store(monkeypatch, tmp_path)
+
+    queued = orb_authority.queue_orb_authority_command(
+        kind="keyboard.type",
+        args={"text": "deploy token", "sensitive": True},
+        reason="Sensitive typing requires an operator boundary.",
+        policy={
+            "state": "approval_required",
+            "scope": "sensitive",
+            "risk_tier": "high",
+            "summary": "Waiting approval before sensitive typing.",
+            "detail": "Sensitive typing is held at the policy boundary until approval is granted.",
+            "requires_approval": True,
+        },
+    )
+
+    command = queued["command"]
+    assert command["policy"]["state"] == "approval_required"
+    assert command["policy"]["scope"] == "sensitive"
+    assert command["policy"]["risk_tier"] == "high"
+    assert command["policy"]["requires_approval"] is True
+    assert command["policy"]["summary"] == "Waiting approval before sensitive typing."

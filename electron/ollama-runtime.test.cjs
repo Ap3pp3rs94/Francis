@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
@@ -11,10 +12,13 @@ const {
   buildOllamaHealthUrl,
   buildOllamaLaunchCandidates,
   buildOllamaListenAddress,
+  formatManagedLaunchError,
+  isLaunchCandidateAvailable,
   isOllamaReachable,
   normalizeOllamaUrl,
   parseOllamaModelCatalog,
   probeOllamaHealth,
+  raceChildError,
   resolveOllamaSourceRoot,
   waitForOllamaReady,
 } = require("./ollama-runtime");
@@ -70,6 +74,21 @@ test("buildOllamaLaunchCandidates wires a host-bound managed serve command", () 
   assert.deepEqual(candidates[0].args, ["serve"]);
   assert.equal(candidates[0].env.OLLAMA_HOST, "127.0.0.1:11434");
   assert.equal(candidates[0].serviceUrl, "http://127.0.0.1:11434");
+});
+
+test("absolute launch candidates are rejected when the launcher path is missing", () => {
+  assert.equal(
+    isLaunchCandidateAvailable({
+      command: "C:\\Program Files\\Ollama\\ollama.exe",
+    }),
+    false,
+  );
+  assert.equal(
+    isLaunchCandidateAvailable({
+      command: "ollama",
+    }),
+    true,
+  );
 });
 
 test("buildManagedOllamaEnv strips scheme-bearing inherited host values", () => {
@@ -129,4 +148,35 @@ test("buildManagedExitUpdate marks unexpected managed exits as recoverable crash
   assert.equal(update.restartSuggested, true);
   assert.equal(update.crashCount, 2);
   assert.match(update.lastError, /Managed Ollama exited with code 1/);
+});
+
+test("raceChildError rejects when the child emits an async spawn failure", async () => {
+  const child = new EventEmitter();
+  child.exitCode = null;
+
+  const guarded = raceChildError(
+    child,
+    new Promise((resolve) => setTimeout(resolve, 1000)),
+  );
+
+  setImmediate(() => {
+    const error = new Error("spawn C:\\Program Files\\Ollama\\ollama.exe ENOENT");
+    error.code = "ENOENT";
+    child.emit("error", error);
+  });
+
+  await assert.rejects(guarded, /ENOENT/);
+});
+
+test("formatManagedLaunchError rewrites missing launcher failures into a calm runtime message", () => {
+  const error = new Error("spawn C:\\Program Files\\Ollama\\ollama.exe ENOENT");
+  error.code = "ENOENT";
+
+  const formatted = formatManagedLaunchError(error, {
+    command: "C:\\Program Files\\Ollama\\ollama.exe",
+    runtimePath: "C:\\Program Files\\Ollama\\ollama.exe",
+  });
+
+  assert.match(formatted.message, /Managed Ollama launcher not found/i);
+  assert.match(formatted.message, /C:\\Program Files\\Ollama\\ollama\.exe/i);
 });

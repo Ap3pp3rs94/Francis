@@ -2,18 +2,23 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.orchestrator.app.orb_authority import normalize_operator_receipt_summary
 from services.hud.app.state import build_lens_snapshot
 
 
 def _receipt_summary(row: dict[str, Any]) -> str:
     summary = row.get("summary")
     if isinstance(summary, dict):
+        canonical = normalize_operator_receipt_summary(summary, row=row)
+        review_summary = str(canonical.get("review_summary", "")).strip()
+        if review_summary:
+            return review_summary
         explicit = str(summary.get("summary_text", "")).strip()
         if explicit:
             return explicit
-        action_kind = str(summary.get("action_kind", "")).strip()
-        command_kind = str(summary.get("command_kind", "")).strip()
-        result_status = str(summary.get("result_status", "")).strip()
+        action_kind = str(canonical.get("action_kind", "")).strip()
+        command_kind = str(canonical.get("command_kind", "")).strip()
+        result_status = str(canonical.get("status", "")).strip()
         if action_kind and result_status:
             return f"{action_kind} {result_status}".strip()
         if action_kind:
@@ -40,7 +45,11 @@ def _receipt_cards(row: dict[str, Any] | None) -> list[dict[str, str]]:
     if not isinstance(row, dict):
         return []
     summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
-    presentation_cards = summary.get("presentation_cards", []) if isinstance(summary, dict) else []
+    use_canonical_cards = bool(isinstance(summary, dict) and int(summary.get("receipt_version", 0) or 0) >= 2)
+    canonical = normalize_operator_receipt_summary(summary, row=row) if isinstance(summary, dict) else {}
+    presentation_cards = canonical.get("presentation_cards", []) if use_canonical_cards and isinstance(canonical, dict) else []
+    if not presentation_cards and isinstance(summary, dict):
+        presentation_cards = summary.get("presentation_cards", [])
     cards: list[dict[str, str]] = []
     for item in presentation_cards[:3]:
         if not isinstance(item, dict):

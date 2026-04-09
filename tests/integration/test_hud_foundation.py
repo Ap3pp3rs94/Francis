@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 import subprocess
@@ -95,9 +96,9 @@ def test_hud_root_serves_operator_surface() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Francis Lens" in response.text
-    assert "Operator overlay for live work." in response.text
-    assert "Desktop Shell" in response.text
+    assert "Francis Review HUD" in response.text
+    assert "Expanded review for live operator work." in response.text
+    assert "Desktop Authority" in response.text
     assert "Recovery Briefing" in response.text
     assert "Degraded Mode" in response.text
     assert "Update Discipline" in response.text
@@ -122,9 +123,10 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Restart HUD" in response.text
     assert "Motion, contrast, density, and keyboard posture will render here once the shell bridge is attached." in response.text
     assert "Ctrl+Shift+Alt+C" in response.text
-    assert "When you move, Francis follows your path with a short visible delay." in response.text
-    assert "Right-click the Orb to talk and act in place." in response.text
-    assert "Hold it to panic stop when control exposes that path in scope." in response.text
+    assert "When you move," in response.text
+    assert "short visible delay." in response.text
+    assert "Francis is here when you need it." in response.text
+    assert "Hold the Orb to panic stop when authority is live" in response.text
     assert ">Stop<" in response.text
     assert ">Close<" in response.text
     assert "Away Authority" in response.text
@@ -134,7 +136,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Queue Typed Input" in response.text
     assert "Clear Queue" in response.text
     assert "Current Move" in response.text
-    assert "Motion Control" in response.text
+    assert "Motion Bias" in response.text
     assert "Explore" in response.text
     assert "Trace" in response.text
     assert "Autonomous" in response.text
@@ -209,20 +211,20 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Current Work Focus" in response.text
     assert "Terminal and Next Move" in response.text
     assert "Capability pressure will render from the internal library contract." in response.text
-    assert "Approval Queue" in response.text
-    assert "Approval Detail" in response.text
+    assert "Approval Review" in response.text
+    assert "Policy Review" in response.text
     assert "Approval summary will render from the current workspace queue." in response.text
     assert "Approval state will reflect whether this detail is current or historical." in response.text
     assert "Detail cards will render from the backend contract." in response.text
-    assert "Execution Journal" in response.text
-    assert "Receipt Detail" in response.text
+    assert "Receipt Review" in response.text
+    assert "Replay Detail" in response.text
     assert "Receipt summary will render from the run ledger." in response.text
     assert "Receipt state will reflect whether this detail is current or historical." in response.text
     assert "Repo Drilldown" in response.text
     assert "Repo Status" in response.text
     assert "Local Diff" in response.text
     assert "Ruff Check" in response.text
-    assert "Operator link will resolve from the current Lens action chain." in response.text
+    assert "Operator link will resolve from the current review/control action chain." in response.text
     assert "Link state will resolve from live workspace continuity." in response.text
     assert "Repo drilldown summary will render here." in response.text
     assert "Repo severity will resolve from drilldown results." in response.text
@@ -238,7 +240,7 @@ def test_hud_root_serves_operator_surface() -> None:
     assert "Blocked Actions" in response.text
     assert "Mission detail will render from active or backlog work." in response.text
     assert "Incident detail will render from live workspace posture." in response.text
-    assert "Blocked action detail will render from Lens policy state." in response.text
+    assert "Blocked action detail will render from review-surface policy state." in response.text
     assert "Inbox Surface" in response.text
     assert "Inbox summary will render from the backend contract." in response.text
     assert "Inbox detail will render from the current workspace queue." in response.text
@@ -263,17 +265,29 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     response = client.get("/?orb=window&view=orb_only")
 
     assert response.status_code == 200
-    assert "Motion Control" in response.text
-    assert 'id="overlay-motion-explore"' in response.text
-    assert 'id="overlay-motion-trace"' in response.text
-    assert 'id="overlay-motion-autonomous"' in response.text
+    assert 'data-orb-affordance="hidden"' in response.text
+    assert ">Stop<" in response.text
+    assert ">Pause<" in response.text
+    assert ">Chat<" in response.text
     assert 'const orbWindowMode = orbSurfaceMode === "window";' in response.text
+    assert 'document.title = orbWindowMode ? "Francis Orb" : "Francis Review HUD";' in response.text
     assert 'let currentOrbOperator = {' in response.text
     assert 'target.searchParams.set("orb", "window");' not in response.text
+    assert 'body[data-orb-surface="window"] #overlay-strip {' in response.text
+    assert 'display: none !important;' in response.text
+    assert 'pointer-events: none;' in response.text
+    assert '<div id="overlay-strip"' not in response.text
+    assert 'id="overlay-orb-menu"' in response.text
+    assert 'id="orb-context-open-chat"' in response.text
+    assert 'id="orb-context-pause"' in response.text
+    assert 'id="orb-context-stop"' in response.text
+    assert 'id="orb-context-hide"' in response.text
+    assert 'function resolveOrbAffordanceMode(surfaceState)' in response.text
+    assert 'document.body.dataset.orbAffordance = "hidden";' in response.text
     assert 'function syncOrbWindowPassThrough(clientX = null, clientY = null)' in response.text
     assert 'function syncOrbInputState()' in response.text
     assert 'function syncOrbPerception()' in response.text
-    assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;" in response.text
+    assert "const ORB_HOVER_INTERACTIVE_DELAY_MS = 320;" in response.text
     assert 'const operator = currentOrbOperator && typeof currentOrbOperator === "object"' in response.text
     assert 'function resolveResidentTaskbarEdge(bounds, workArea)' in response.text
     assert 'function resolveOrbResidentPlacement(anchorX, anchorY, width, height)' in response.text
@@ -290,7 +304,11 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'id="orb-trail"' in response.text
     assert 'id="overlay-perception-preview"' in response.text
     assert '.overlay-perception-preview[data-stability="settled"]' in response.text
-    assert '#orb-render-root[data-target-stability="settled"]:not(.orb-hold):not(.orb-handback) canvas' in response.text
+    assert "#orb-render-root::before," in response.text
+    assert "#orb-render-root::after {" in response.text
+    assert "content: none;" in response.text
+    assert "#orb-render-root canvas {" in response.text
+    assert "filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.14));" in response.text
     assert '#orb-overlay[data-target-stability="settled"] .orb-trail-node' in response.text
     assert 'id="overlay-authority-recent"' in response.text
     assert 'class="overlay-authority-recent-item"' in response.text
@@ -316,11 +334,17 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert 'id="orb-chat-plan-run"' in response.text
     assert 'id="overlay-chat-input"' in response.text
     assert 'id="overlay-chat-send"' in response.text
-    assert "width: min(760px, calc(100vw - 36px));" in response.text
+    assert '#overlay-dock[data-surface-mode="menu"] {' in response.text
+    assert 'width: min(220px, calc(100vw - 28px));' in response.text
+    assert 'max-height: min(38vh, 260px);' in response.text
+    assert '#overlay-dock[data-surface-mode="chat"] .orb-console-cards,' in response.text
+    assert '#overlay-dock[data-surface-mode="chat"] #overlay-chat-meta {' in response.text
+    assert "width: min(340px, calc(100vw - 32px));" in response.text
     assert "scrollbar-gutter: stable both-edges;" in response.text
-    assert "Short-term and long-term conversation continuity will appear here once the Orb chat history loads." in response.text
+    assert "Chat opens here when you want Francis to do something." in response.text
+    assert "Ask and Francis replies here." in response.text
     assert "Francis will show the current action plan here before the shell executes anything." in response.text
-    assert "Tell Francis what you want done" in response.text
+    assert "Ask Francis or give a bounded instruction" in response.text
     assert "const ORB_CHAT_AUTO_EXECUTE_DELAY_MS = 180;" in response.text
     assert 'user_message: orbQuickChat.lastUserMessage || ""' in response.text
     assert 'typeof getDesktopBridge().executeOrbDesktopPlan !== "function"' in response.text
@@ -328,17 +352,24 @@ def test_hud_root_supports_standalone_orb_window_mode() -> None:
     assert '&& payload?.execution?.auto_execute' in response.text
     assert 'function postOrbQuickChatMessage(message, { allowRecovery = true } = {})' in response.text
     assert 'Francis lost the local HUD. Restarting the runtime and retrying chat.' in response.text
+    assert 'function resolveOrbChatPlacement(anchorX, anchorY, width, height)' in response.text
+    assert 'return resolveOrbChatPlacement(anchorX, anchorY, safeWidth, safeHeight);' in response.text
+    assert 'function positionOrbCommandSurface(forceAnchor = false)' in response.text
+    assert 'openOrbCommandMenu({ surface: "menu" });' in response.text
+    assert 'openOrbCommandMenu({ surface: "chat", focusComposer: true });' in response.text
+    assert re.search(r"const visible = Boolean\(\s*!orbWindowMode\s*&&\s*thought", response.text)
     assert 'class="overlay-perception-highlight"' in response.text
-    assert 'await bridge.setOrbIgnoreMouseEvents(!nextInteractive);' in response.text
-    assert 'openLensFromOrbSurface().catch(() => {});' in response.text
+    assert 'bridge.setOrbIgnoreMouseEvents(!nextInteractive);' not in response.text
+    assert 'bridge.setOrbOwnershipMode(requestedMode, requestReason)' in response.text
+    assert 'await setOrbWindowInteractive(true, "orb_surface_focus");' in response.text
+    assert 'await setOrbWindowInteractive(true, "orb_surface_hover");' in response.text
     assert "const ORB_HUMAN_TRACE_LAG_MS = 156;" in response.text
     assert "const ORB_HUMAN_TRACE_TRAIL_NODES = 10;" in response.text
     assert 'roamX: window.innerWidth * 0.54' in response.text
     assert 'roamControlX: window.innerWidth * 0.54' in response.text
     assert "function resolveOrbFreeRoamAnchor(timestamp, motionProfile, size = 0)" in response.text
     assert "function chooseOrbRoamTarget(timestamp, motionProfile, size = 0)" in response.text
-    assert "const freeRoamMotion = Boolean(freeRoamAnchor);" in response.text
-    assert "const ambientOffset = freeRoamMotion" in response.text
+    assert "const clampedPoint = clampOrbRoamPoint(orbMotion.roamX, orbMotion.roamY, size);" in response.text
     assert "roamPauseUntil: 0," in response.text
     assert "const easedProgress = 0.5 - Math.cos(Math.PI * rawProgress) / 2;" in response.text
     assert "function resolveOrbHumanTraceTarget(timestamp = performance.now())" in response.text
@@ -632,10 +663,13 @@ def test_hud_dashboard_exposes_mode_and_cards() -> None:
     body = response.json()
     assert body["mode"]["current"] in {"observe", "assist", "pilot", "away"}
     assert "pilot" in body["mode"]["available"]
-    assert len(body["cards"]) == 5
+    assert len(body["cards"]) == 6
     card_ids = {card["id"] for card in body["cards"]}
+    assert "surface-role" in card_ids
     assert "current-work" in card_ids
     assert "next-best-action" in card_ids
+    support_card = next(card for card in body["cards"] if card["id"] == "surface-role")
+    assert "Orb remains the live operator body" in support_card["summary"]
     assert all("summary" in card for card in body["cards"])
     assert all("signal" in card for card in body["cards"])
     assert all("evidence" in card for card in body["cards"])
@@ -731,10 +765,27 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
         "inbox": {"count": 0, "alert_count": 0, "items": []},
     }
 
+    approval_snapshot = object()
+
     def _unexpected_snapshot_build() -> dict[str, object]:
         raise AssertionError("bootstrap should reuse the shared snapshot")
 
-    monkeypatch.setattr(hud_main, "build_lens_snapshot", lambda: snapshot)
+    capability_state_payload = {
+        "library": {"pack_count": 0},
+        "packs": [],
+        "promote_approvals": {},
+        "revoke_approvals": {},
+    }
+
+    def _snapshot_builder(*, approval_snapshot=None, capability_state=None) -> dict[str, object]:
+        assert approval_snapshot is approval_snapshot_payload
+        assert capability_state is capability_state_payload
+        return snapshot
+
+    approval_snapshot_payload = approval_snapshot
+    monkeypatch.setattr(hud_main, "build_lens_snapshot", _snapshot_builder)
+    monkeypatch.setattr(hud_main, "load_approval_snapshot", lambda: approval_snapshot_payload)
+    monkeypatch.setattr(hud_main, "build_capability_state", lambda *args, **kwargs: capability_state_payload)
     monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
@@ -754,15 +805,21 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     monkeypatch.setattr(inbox_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(repo_drilldown_view, "build_lens_snapshot", _unexpected_snapshot_build)
     monkeypatch.setattr(runs_view, "build_lens_snapshot", _unexpected_snapshot_build)
-    monkeypatch.setattr(
-        hud_main,
-        "get_lens_actions",
-        lambda max_actions=8: {
+    def _actions(
+        max_actions: int = 8,
+        snapshot: dict[str, object] | None = None,
+        approval_snapshot=None,
+    ) -> dict[str, object]:
+        assert snapshot is snapshot_payload
+        assert approval_snapshot is approval_snapshot_payload
+        return {
             "status": "ok",
             "action_chips": [{"kind": "control.remote.approvals"}, {"kind": "control.remote.approval.approve"}],
             "blocked_actions": [],
-        },
-    )
+        }
+
+    snapshot_payload = snapshot
+    monkeypatch.setattr(hud_main, "get_lens_actions", _actions)
     monkeypatch.setattr(
         hud_main,
         "build_operator_presence",
@@ -784,6 +841,20 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
         "get_fabric_surface",
         lambda refresh=False, defer_if_missing=False: {"surface": "fabric", "summary": {"artifact_count": 1}},
     )
+
+    def _connector_library_surface(*, snapshot=None, approval_snapshot=None):
+        assert snapshot is snapshot_payload
+        assert approval_snapshot is approval_snapshot_payload
+        return {"surface": "connector_library", "entries": [], "cards": [], "detail": {}}
+
+    monkeypatch.setattr(hud_main, "get_connector_library_view", _connector_library_surface)
+
+    def _dependency_library_surface(*, snapshot=None, approval_snapshot=None):
+        assert snapshot is snapshot_payload
+        assert approval_snapshot is approval_snapshot_payload
+        return {"surface": "dependency_library", "entries": [], "cards": [], "detail": {}}
+
+    monkeypatch.setattr(hud_main, "get_dependency_library_view", _dependency_library_surface)
 
     payload = hud_main._build_bootstrap_payload()
 
@@ -817,6 +888,151 @@ def test_hud_bootstrap_reuses_single_snapshot_for_views(monkeypatch) -> None:
     assert payload["surface_digests"]["federation"]
     assert payload["surface_digests"]["managed_copies"]
     assert payload["surface_digests"]["apprenticeship_surface"]
+
+
+def test_hud_bootstrap_profile_is_opt_in(monkeypatch) -> None:
+    snapshot = {
+        "control": {"mode": "assist", "kill_switch": False},
+        "objective": {"label": "Profiled bootstrap", "definition_of_done": "Expose timing."},
+        "missions": {
+            "active_count": 1,
+            "backlog_count": 0,
+            "completed_count": 0,
+            "active": [{"id": "mission-1", "title": "Profiled bootstrap", "status": "active"}],
+            "backlog": [],
+            "completed": [],
+        },
+        "approvals": {"pending_count": 0},
+        "incidents": {"open_count": 0, "highest_severity": "nominal", "items": [{"summary": "clear"}]},
+        "security": {"quarantine_count": 0, "top_categories": {}, "highest_severity": "nominal"},
+        "runs": {
+            "ledger_count": 1,
+            "last_run": {"run_id": "run-1", "phase": "verify", "summary": "ok"},
+            "recent": [],
+            "ledger_tail": [],
+        },
+        "apprenticeship": {"review_count": 0},
+        "fabric": {
+            "citation_ready_count": 1,
+            "calibration": {"confidence_counts": {"confirmed": 1, "likely": 0, "uncertain": 0}},
+        },
+        "inbox": {"count": 0, "alert_count": 0, "items": []},
+    }
+
+    approval_snapshot = object()
+
+    def _unexpected_snapshot_build() -> dict[str, object]:
+        raise AssertionError("bootstrap should reuse the shared snapshot")
+
+    capability_state_payload = {
+        "library": {"pack_count": 0},
+        "packs": [],
+        "promote_approvals": {},
+        "revoke_approvals": {},
+    }
+
+    def _snapshot_builder(*, approval_snapshot=None, capability_state=None) -> dict[str, object]:
+        assert approval_snapshot is approval_snapshot_payload
+        assert capability_state is capability_state_payload
+        return snapshot
+
+    approval_snapshot_payload = approval_snapshot
+    monkeypatch.setattr(hud_main, "build_lens_snapshot", _snapshot_builder)
+    monkeypatch.setattr(hud_main, "load_approval_snapshot", lambda: approval_snapshot_payload)
+    monkeypatch.setattr(hud_main, "build_capability_state", lambda *args, **kwargs: capability_state_payload)
+    monkeypatch.setattr(dashboard_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(approval_queue_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(action_deck_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(blocked_actions_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(connector_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(dependency_library_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(swarm_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(federation_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(apprenticeship_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(current_work_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(shift_report_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(execution_feed_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(missions_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(incidents_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(inbox_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(repo_drilldown_view, "build_lens_snapshot", _unexpected_snapshot_build)
+    monkeypatch.setattr(runs_view, "build_lens_snapshot", _unexpected_snapshot_build)
+
+    def _actions(
+        max_actions: int = 8,
+        snapshot: dict[str, object] | None = None,
+        approval_snapshot=None,
+    ) -> dict[str, object]:
+        assert max_actions == 8
+        assert snapshot is snapshot_payload
+        assert approval_snapshot is approval_snapshot_payload
+        return {
+            "status": "ok",
+            "action_chips": [{"kind": "control.remote.approvals"}],
+            "blocked_actions": [],
+        }
+
+    snapshot_payload = snapshot
+    monkeypatch.setattr(hud_main, "get_lens_actions", _actions)
+    monkeypatch.setattr(
+        hud_main,
+        "build_operator_presence",
+        lambda **_: {"surface": "voice", "mode": "assist", "headline": "Stable", "lines": [], "actions": []},
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "get_orb_view",
+        lambda **_: {
+            "surface": "orb",
+            "mode": "assist",
+            "posture": "resting",
+            "visual": {"ring_density": 6},
+            "perception": {"surface": "orb_perception", "state": "idle", "frame": {"has_image": False}},
+        },
+    )
+    monkeypatch.setattr(
+        hud_main,
+        "get_fabric_surface",
+        lambda refresh=False, defer_if_missing=False: {"surface": "fabric", "summary": {"artifact_count": 1}},
+    )
+
+    def _capability_library_surface(*, snapshot=None, capability_state=None, approval_snapshot=None):
+        assert snapshot is snapshot_payload
+        assert capability_state is capability_state_payload
+        assert approval_snapshot is approval_snapshot_payload
+        return {"surface": "capability_library", "entries": [], "cards": [], "detail": {}}
+
+    monkeypatch.setattr(hud_main, "get_capability_library_view", _capability_library_surface)
+
+    def _capability_library_surface(*, snapshot=None, capability_state=None, approval_snapshot=None):
+        assert snapshot is snapshot_payload
+        assert capability_state is capability_state_payload
+        assert approval_snapshot is approval_snapshot_payload
+        return {"surface": "capability_library", "entries": [], "cards": [], "detail": {}}
+
+    monkeypatch.setattr(hud_main, "get_capability_library_view", _capability_library_surface)
+
+    default_response = client.get("/api/bootstrap")
+    assert default_response.status_code == 200
+    assert "bootstrap_profile" not in default_response.json()
+
+    profiled_response = client.get("/api/bootstrap", params={"profile": True})
+    assert profiled_response.status_code == 200
+    profiled_payload = profiled_response.json()
+    profile = profiled_payload["bootstrap_profile"]
+    phase_names = {str(phase.get("name", "")) for phase in profile.get("phases", [])}
+
+    assert profile["surface"] == "bootstrap_profile"
+    assert profile["total_ms"] >= 0
+    assert profile["phase_count"] >= len(phase_names) >= 10
+    assert profile["slowest"]
+    assert profile["reused"]["snapshot"] is False
+    assert profile["reused"]["actions"] is False
+    assert profile["reused"]["execution"] is False
+    assert profile["reused"]["approval_snapshot"] is False
+    assert {"approval_snapshot", "snapshot", "actions", "current_work", "execution_feed", "surface_digests"} <= phase_names
 
 
 def test_hud_bootstrap_reads_live_workspace_state(monkeypatch, tmp_path: Path) -> None:
@@ -1942,7 +2158,6 @@ def test_hud_capability_library_view_exposes_focus_and_controls(
         }
 
     monkeypatch.setattr(capability_library_view, "build_lens_snapshot", _snapshot)
-
     payload = capability_library_view.get_capability_library_view()
 
     assert payload["focus_entry_id"] == "cap-promote"
@@ -2055,13 +2270,34 @@ def test_hud_connector_library_view_exposes_focus_and_controls(
         return {"current_work": {"summary": "Connector posture is under review."}}
 
     monkeypatch.setattr(connector_library_view, "build_lens_snapshot", _snapshot)
+    action_calls: list[str] = []
+    approval_snapshot_payload = object()
+
+    def _action_allowed(**kwargs):
+        action_calls.append(str(kwargs.get("action", "")))
+        return True, ""
+
+    monkeypatch.setattr(connector_library_view, "_action_allowed", _action_allowed)
     monkeypatch.setattr(
         connector_library_view,
-        "_action_allowed",
-        lambda **kwargs: (True, ""),
+        "list_requests",
+        lambda fs, *, status=None, action=None, limit=50, snapshot=None: [
+            {
+                "id": "approval-connector-revoke",
+                "ts": "2026-03-13T10:05:00+00:00",
+                "run_id": "run-connector-revoke",
+                "action": "connectors.revoke",
+                "reason": "Revoke vendor connector",
+                "requested_by": "architect",
+                "status": "approved",
+                "metadata": {"connector_id": "vendor-sync", "action_kind": "connectors.revoke"},
+            }
+        ]
+        if snapshot is approval_snapshot_payload
+        else (_ for _ in ()).throw(AssertionError("connector approvals should reuse the shared snapshot")),
     )
 
-    payload = connector_library_view.get_connector_library_view()
+    payload = connector_library_view.get_connector_library_view(approval_snapshot=approval_snapshot_payload)
 
     assert payload["focus_connector_id"] == "vendor-sync"
     assert payload["severity"] == "high"
@@ -2075,6 +2311,7 @@ def test_hud_connector_library_view_exposes_focus_and_controls(
     assert focused["controls"]["request_revoke"]["enabled"] is False
     assert focused["controls"]["revoke"]["enabled"] is True
     assert focused["detail_cards"]
+    assert action_calls == ["connectors.quarantine", "connectors.revoke", "approvals.request"]
     pending = next(row for row in payload["entries"] if row["id"] == "community-sync")
     assert pending["provenance_label"] == "Third-Party"
     assert pending["provenance_tone"] == "high"
@@ -2173,13 +2410,37 @@ def test_hud_dependency_library_view_exposes_focus_and_controls(
         return {"current_work": {"summary": "Dependency posture is under review."}}
 
     monkeypatch.setattr(dependency_library_view, "build_lens_snapshot", _snapshot)
+    action_calls: list[str] = []
+    approval_snapshot_payload = object()
+
+    def _action_allowed(**kwargs):
+        action_calls.append(str(kwargs.get("action", "")))
+        return True, ""
+
+    monkeypatch.setattr(dependency_library_view, "_action_allowed", _action_allowed)
     monkeypatch.setattr(
         dependency_library_view,
-        "_action_allowed",
-        lambda **kwargs: (True, ""),
+        "list_requests",
+        lambda fs, *, status=None, action=None, limit=50, snapshot=None: [
+            {
+                "id": "approval-dependency-revoke",
+                "ts": "2026-03-13T11:05:00+00:00",
+                "run_id": "run-dependency-revoke",
+                "action": "dependencies.revoke",
+                "reason": "Revoke fastapi from governed use",
+                "requested_by": "architect",
+                "status": "approved",
+                "metadata": {
+                    "dependency_id": "python:francis:fastapi",
+                    "action_kind": "dependencies.revoke",
+                },
+            }
+        ]
+        if snapshot is approval_snapshot_payload
+        else (_ for _ in ()).throw(AssertionError("dependency approvals should reuse the shared snapshot")),
     )
 
-    payload = dependency_library_view.get_dependency_library_view()
+    payload = dependency_library_view.get_dependency_library_view(approval_snapshot=approval_snapshot_payload)
 
     assert payload["focus_dependency_id"] == "python:francis:fastapi"
     assert payload["severity"] == "high"
@@ -2192,6 +2453,7 @@ def test_hud_dependency_library_view_exposes_focus_and_controls(
     assert focused["controls"]["quarantine"]["enabled"] is False
     assert focused["controls"]["request_revoke"]["enabled"] is False
     assert focused["controls"]["revoke"]["enabled"] is True
+    assert action_calls == ["dependencies.quarantine", "dependencies.revoke", "approvals.request"]
     pinned = next(row for row in payload["entries"] if row["id"] == "node:francis-overlay-shell:electron")
     assert pinned["provenance_label"] == "Vendor Provided"
     assert pinned["controls"]["request_revoke"]["enabled"] is True
@@ -2814,6 +3076,13 @@ def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path
             ]
         },
     )
+    action_calls: list[str] = []
+
+    def _action_allowed(**kwargs):
+        action_calls.append(str(kwargs.get("action", "")))
+        return True, ""
+
+    monkeypatch.setattr(apprenticeship_view, "_action_allowed", _action_allowed)
 
     payload = apprenticeship_view.get_apprenticeship_view()
 
@@ -2829,6 +3098,7 @@ def test_hud_apprenticeship_view_exposes_teaching_workflow(monkeypatch, tmp_path
     assert payload["sessions"][0]["detail_summary"].endswith("Grounded by 1 cited artifact(s).")
     assert payload["controls"]["create_session"]["enabled"] is True
     assert payload["controls"]["record_step"]["enabled"] is True
+    assert action_calls == ["apprenticeship.write", "apprenticeship.generalize", "apprenticeship.skillize"]
     assert payload["context"]["create_defaults"]["title"] == "Teach Repo Triage"
     assert payload["context"]["record_defaults"]["action"] == "pytest -q tests/integration/test_hud_foundation.py"
     assert payload["controls"]["record_step"]["defaults"]["artifact_path"] == "tests/integration/test_hud_foundation.py"
@@ -3127,6 +3397,83 @@ def test_hud_execution_journal_view_carries_orb_authority_receipts(monkeypatch) 
     assert any(card["label"] == "Grounding" for card in row["detail_cards"])
     assert any(card["label"] == "Target" for card in row["detail_cards"])
     assert row["audit"]["action_kind"] == "mouse.click"
+    assert row["priority"] >= 700
+
+
+def test_hud_execution_journal_view_surfaces_chat_replay_and_priority_highlights(monkeypatch) -> None:
+    def _snapshot() -> dict[str, object]:
+        return {
+            "runs": {
+                "last_run": {
+                    "run_id": "run-orb-chat",
+                    "phase": "execute",
+                    "summary": "Orb chat execution moved through the shell lane.",
+                },
+                "ledger_tail": [
+                    {
+                        "run_id": "run-orb-chat",
+                        "ts": "2026-03-19T10:03:00+00:00",
+                        "kind": "orb.chat.execution.completed",
+                        "summary": {
+                            "receipt_version": 2,
+                            "receipt_priority": 780,
+                            "review_summary": "Open Notepad completed through the Orb shell.",
+                            "review_detail": "Open Notepad completed through the Orb shell. Target: 40, 1040 in Desktop.",
+                            "action_kind": "mouse.click",
+                            "execution_phase": "type_hold",
+                            "receipt_flags": {"desktop_fallback": True},
+                            "receipt_context": {
+                                "window": {"title": "Desktop", "process": "explorer.exe"},
+                                "target": {"label": "40, 1040"},
+                                "desktop_authority": {
+                                    "mode": "desktop_authority_bounded",
+                                    "active_limitations": [
+                                        {
+                                            "key": "elevated_foreground",
+                                            "summary": "The foreground app is elevated.",
+                                        }
+                                    ],
+                                },
+                            },
+                            "replay": {
+                                "step_count": 2,
+                                "completed_steps": 2,
+                                "steps": [
+                                    {"index": 0, "kind": "mouse.click", "status": "ok"},
+                                    {"index": 1, "kind": "keyboard.type", "status": "ok"},
+                                ],
+                            },
+                            "presentation_cards": [
+                                {"label": "Execution", "value": "completed", "tone": "medium"},
+                                {"label": "Desktop", "value": "The foreground app is elevated.", "tone": "medium"},
+                                {"label": "Target", "value": "40, 1040", "tone": "medium"},
+                            ],
+                        },
+                    },
+                    {
+                        "run_id": "run-orb-chat",
+                        "ts": "2026-03-19T10:02:00+00:00",
+                        "kind": "approval.decided",
+                        "summary": {"decision": "approved", "approval_id": "approval-9"},
+                    },
+                ],
+                "recent": [],
+            }
+        }
+
+    monkeypatch.setattr(execution_journal_view, "build_lens_snapshot", _snapshot)
+
+    payload = execution_journal_view.get_execution_journal_view()
+
+    row = next(item for item in payload["items"] if item["kind"] == "orb.chat.execution.completed")
+    assert row["title"] == "Orb Chat Execution Completed"
+    assert row["summary"] == "mouse.click | Open Notepad completed through the Orb shell."
+    assert row["detail_summary"].startswith("Open Notepad completed through the Orb shell.")
+    assert row["priority"] == 780
+    assert row["replay"]["step_count"] == 2
+    assert any(card["label"] == "Desktop" for card in row["detail_cards"])
+    assert row["audit"]["desktop_authority_mode"] == "desktop_authority_bounded"
+    assert payload["highlights"][0]["kind"] == "orb.chat.execution.completed"
 
 
 def test_hud_inbox_view_marks_current_and_historical_messages(monkeypatch) -> None:
@@ -3328,7 +3675,7 @@ def test_hud_orb_surface_reflects_live_presence(monkeypatch, tmp_path: Path) -> 
     assert body["movement"]["cursor_lock"] is True
     assert body["movement"]["lead_style"] == "predictive_commit"
     assert body["movement"]["autonomous_replay_enabled"] is True
-    assert body["movement"]["autonomous_replay_window_ms"] == 880
+    assert body["movement"]["autonomous_replay_window_ms"] == 720
     assert body["movement"]["autonomous_replay_max_snippets"] == 18
     assert body["handback"]["ritual"] == "return_to_ambient"
     assert body["handback"]["return_profile"] == "release_arc"
@@ -3473,6 +3820,7 @@ def test_hud_action_execute_can_mutate_and_refresh_snapshot() -> None:
 
 def test_hud_stream_emits_sse_bootstrap_updates(monkeypatch) -> None:
     calls = {"count": 0}
+    to_thread_calls: list[str] = []
 
     def fake_bootstrap_payload(*, max_actions: int = 8) -> dict[str, object]:
         calls["count"] += 1
@@ -3490,7 +3838,12 @@ def test_hud_stream_emits_sse_bootstrap_updates(monkeypatch) -> None:
             "runs": {"surface": "runs", "active_run": {"run_id": "r1", "phase": "verify"}},
         }
 
+    async def fake_to_thread(func, /, *args, **kwargs):
+        to_thread_calls.append(getattr(func, "__name__", str(func)))
+        return func(*args, **kwargs)
+
     monkeypatch.setattr(hud_main, "_build_bootstrap_payload", fake_bootstrap_payload)
+    monkeypatch.setattr(hud_main.asyncio, "to_thread", fake_to_thread)
 
     response = client.get("/api/stream", params={"max_seconds": 1, "poll_interval_ms": 50})
 
@@ -3499,6 +3852,9 @@ def test_hud_stream_emits_sse_bootstrap_updates(monkeypatch) -> None:
     assert response.text.count("event: bootstrap") == 1
     assert response.text.count("event: surface_update") >= 1
     assert "event: end" in response.text
+    assert "fake_bootstrap_payload" in to_thread_calls
+    assert "_payload_digest" in to_thread_calls
+    assert "_surface_update_payload" in to_thread_calls
 
 
 def test_hud_root_mentions_voice_presence() -> None:
@@ -3506,7 +3862,7 @@ def test_hud_root_mentions_voice_presence() -> None:
 
     assert response.status_code == 200
     assert "Voice Presence" in response.text
-    assert "Orb Chamber" in response.text
+    assert "Voice briefings stay grounded to live review-state and visible receipts." in response.text
 
 
 

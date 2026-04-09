@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.hud.app.state import build_lens_snapshot
+from services.orchestrator.app.orb_authority import normalize_operator_receipt_summary
 
 
 def _normalize_usage_action_kind(value: object) -> str:
@@ -17,6 +18,9 @@ def _summary_text(summary: Any) -> str:
     if isinstance(summary, str):
         return summary.strip()
     if isinstance(summary, dict):
+        explicit_review = str(summary.get("review_summary", "")).strip() or str(summary.get("receipt_brief", "")).strip()
+        if explicit_review:
+            return explicit_review
         explicit = str(summary.get("summary_text", "")).strip()
         if explicit:
             return explicit
@@ -95,6 +99,8 @@ def _title_for_kind(kind: str) -> str:
         "approval.decided": "Approval Decision",
         "approval.requested": "Approval Requested",
         "mission.tick": "Mission Tick",
+        "orb.chat.execution.completed": "Orb Chat Execution Completed",
+        "orb.chat.execution.failed": "Orb Chat Execution Failed",
         "orb.authority.command.queued": "Orb Authority Queued",
         "orb.authority.command.claimed": "Orb Authority Claimed",
         "orb.authority.command.completed": "Orb Authority Completed",
@@ -116,7 +122,11 @@ def _detail_summary(
     approval_id: str,
     decision: str,
     summary_text: str,
+    review_detail: str = "",
 ) -> str:
+    explicit_detail = review_detail.strip()
+    if explicit_detail:
+        return explicit_detail
     compact = summary_text.strip() or "Receipt recorded."
     if decision and approval_id:
         return f"Approval {decision} for {approval_id}. {compact}".strip()
@@ -138,13 +148,17 @@ def _detail_cards(
     kind: str,
     title: str,
     summary: Any,
+    canonical: dict[str, Any],
     action_kind: str,
     approval_id: str,
     decision: str,
     run_id: str,
 ) -> list[dict[str, str]]:
     cards: list[dict[str, str]] = []
-    summary_cards = summary.get("presentation_cards", []) if isinstance(summary, dict) else []
+    use_canonical_cards = bool(isinstance(summary, dict) and int(summary.get("receipt_version", 0) or 0) >= 2)
+    summary_cards = canonical.get("presentation_cards", []) if use_canonical_cards and isinstance(canonical, dict) else []
+    if not summary_cards and isinstance(summary, dict):
+        summary_cards = summary.get("presentation_cards", [])
     for row in summary_cards[:4]:
         if not isinstance(row, dict):
             continue
@@ -153,6 +167,15 @@ def _detail_cards(
         tone = str(row.get("tone", "low")).strip().lower() or "low"
         if label and value:
             cards.append({"label": label, "value": value, "tone": tone})
+    if use_canonical_cards:
+        receipt_context = canonical.get("receipt_context", {}) if isinstance(canonical.get("receipt_context"), dict) else {}
+        target = receipt_context.get("target", {}) if isinstance(receipt_context.get("target"), dict) else {}
+        window = receipt_context.get("window", {}) if isinstance(receipt_context.get("window"), dict) else {}
+        if str(target.get("label", "")).strip() and not any(card["label"] == "Target" for card in cards):
+            cards.append({"label": "Target", "value": str(target.get("label", "")).strip(), "tone": "medium"})
+        window_value = str(window.get("title", "")).strip() or str(window.get("process", "")).strip()
+        if window_value and not any(card["label"] == "Window" for card in cards):
+            cards.append({"label": "Window", "value": window_value, "tone": "low"})
     cards.extend(
         [
         {"label": "Kind", "value": kind, "tone": "low"},
@@ -179,7 +202,11 @@ def _audit(
     run_id: str,
     summary_text: str,
     detail_state: str,
+    canonical: dict[str, Any],
 ) -> dict[str, Any]:
+    receipt_context = canonical.get("receipt_context", {}) if isinstance(canonical.get("receipt_context"), dict) else {}
+    desktop_authority = receipt_context.get("desktop_authority", {}) if isinstance(receipt_context.get("desktop_authority"), dict) else {}
+    interruption = receipt_context.get("interruption", {}) if isinstance(receipt_context.get("interruption"), dict) else {}
     return {
         "kind": kind,
         "action_kind": action_kind,
@@ -188,7 +215,24 @@ def _audit(
         "run_id": run_id,
         "summary": summary_text,
         "detail_state": detail_state,
+        "priority": int(canonical.get("receipt_priority", 0) or 0),
+        "receipt_flags": canonical.get("receipt_flags", {}) if isinstance(canonical.get("receipt_flags"), dict) else {},
+        "desktop_authority_mode": str(desktop_authority.get("mode", "")).strip(),
+        "interruption_state": str(interruption.get("state", "")).strip(),
+        "replay_step_count": int((canonical.get("replay", {}) if isinstance(canonical.get("replay"), dict) else {}).get("step_count", 0) or 0),
     }
+
+
+def _highlight_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked = sorted(
+        [row for row in items if isinstance(row, dict)],
+        key=lambda row: (
+            int(row.get("priority", 0) or 0),
+            str(row.get("ts", "")).strip(),
+        ),
+        reverse=True,
+    )
+    return ranked[:3]
 
 
 def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> dict[str, object]:
@@ -207,12 +251,13 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
             continue
         kind = str(row.get("kind", "")).strip() or "unknown"
         summary = row.get("summary")
-        summary_text = _summary_text(summary)
-        action_kind = _action_kind(summary, row)
-        approval_id = _approval_id(summary, row)
-        decision = _decision(summary, row)
+        canonical = normalize_operator_receipt_summary(summary, row=row)
+        summary_text = _summary_text(summary) or str(canonical.get("review_summary", "")).strip()
+        action_kind = str(canonical.get("action_kind", "")).strip() or _action_kind(summary, row)
+        approval_id = str(canonical.get("approval_id", "")).strip() or _approval_id(summary, row)
+        decision = str(canonical.get("decision", "")).strip().lower() or _decision(summary, row)
         title = _title_for_kind(kind)
-        operator_summary = summary_text or "Receipt captured with no compact summary."
+        operator_summary = str(canonical.get("review_summary", "")).strip() or summary_text or "Receipt captured with no compact summary."
         normalized_action = _normalize_usage_action_kind(action_kind)
         lowered_summary = operator_summary.lower()
         if normalized_action and normalized_action not in lowered_summary:
@@ -231,17 +276,26 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
                 "decision": decision,
                 "title": title,
                 "summary": operator_summary,
+                "review_summary": str(canonical.get("review_summary", "")).strip() or operator_summary,
+                "priority": int(canonical.get("receipt_priority", 0) or 0),
+                "replay": canonical.get("replay", {}) if isinstance(canonical.get("replay"), dict) else {},
                 "detail_summary": _detail_summary(
                     title=title,
                     action_kind=action_kind,
                     approval_id=approval_id,
                     decision=decision,
                     summary_text=operator_summary or "Receipt recorded.",
+                    review_detail=(
+                        str(summary.get("review_detail", "")).strip()
+                        if isinstance(summary, dict)
+                        else ""
+                    ),
                 ),
                 "detail_cards": _detail_cards(
                     kind=kind,
                     title=title,
                     summary=summary,
+                    canonical=canonical,
                     action_kind=action_kind,
                     approval_id=approval_id,
                     decision=decision,
@@ -256,6 +310,7 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
                     run_id=str(row.get("run_id", "")).strip(),
                     summary_text=operator_summary,
                     detail_state=detail_state,
+                    canonical=canonical,
                 ),
                 "detail": row,
             }
@@ -302,5 +357,6 @@ def get_execution_journal_view(*, snapshot: dict[str, object] | None = None) -> 
             "summary": str(last_run.get("summary", "")).strip() or "No active run recorded.",
         },
         "items": items,
+        "highlights": _highlight_items(items),
         "run_groups": run_groups,
     }

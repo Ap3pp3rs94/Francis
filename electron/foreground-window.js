@@ -7,6 +7,7 @@ const EMPTY_FOREGROUND_WINDOW = Object.freeze({
   title: "",
   process: "",
   pid: null,
+  elevated: false,
   bounds: {
     x: null,
     y: null,
@@ -18,6 +19,7 @@ const EMPTY_FOREGROUND_WINDOW = Object.freeze({
 function normalizeForegroundWindowInfo(payload) {
   const record = payload && typeof payload === "object" ? payload : {};
   const pid = Number(record.pid);
+  const elevated = record.elevated === true;
   const rawBounds = record.bounds && typeof record.bounds === "object" ? record.bounds : {};
   const x = Number(rawBounds.x);
   const y = Number(rawBounds.y);
@@ -27,6 +29,7 @@ function normalizeForegroundWindowInfo(payload) {
     title: String(record.title || "").trim(),
     process: String(record.process || "").trim(),
     pid: Number.isFinite(pid) && pid > 0 ? Math.round(pid) : null,
+    elevated,
     bounds: {
       x: Number.isFinite(x) ? Math.round(x) : null,
       y: Number.isFinite(y) ? Math.round(y) : null,
@@ -63,6 +66,22 @@ public static class FrancisForegroundWindow {
 
   [DllImport("user32.dll")]
   public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+  [DllImport("kernel32.dll", SetLastError = true)]
+  public static extern IntPtr OpenProcess(UInt32 desiredAccess, bool inheritHandle, UInt32 processId);
+
+  [DllImport("kernel32.dll", SetLastError = true)]
+  public static extern bool CloseHandle(IntPtr handle);
+
+  [DllImport("advapi32.dll", SetLastError = true)]
+  public static extern bool OpenProcessToken(IntPtr processHandle, UInt32 desiredAccess, out IntPtr tokenHandle);
+
+  [DllImport("advapi32.dll", SetLastError = true)]
+  public static extern bool GetTokenInformation(IntPtr tokenHandle, int tokenInformationClass, out int tokenInformation, int tokenInformationLength, out int returnLength);
+
+  public const UInt32 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+  public const UInt32 TOKEN_QUERY = 0x0008;
+  public const int TokenElevation = 20;
 }
 "@
 
@@ -74,10 +93,32 @@ $titleBuilder = New-Object System.Text.StringBuilder 1024
 [uint32]$processIdValue = 0
 [void][FrancisForegroundWindow]::GetWindowThreadProcessId($windowHandle, [ref]$processIdValue)
 $processName = ""
+$isElevated = $false
 if ($processIdValue -gt 0) {
   $process = Get-Process -Id $processIdValue -ErrorAction SilentlyContinue
   if ($process) {
     $processName = $process.ProcessName
+  }
+  $processHandle = [FrancisForegroundWindow]::OpenProcess([FrancisForegroundWindow]::PROCESS_QUERY_LIMITED_INFORMATION, $false, [uint32]$processIdValue)
+  if ($processHandle -ne [IntPtr]::Zero) {
+    try {
+      $tokenHandle = [IntPtr]::Zero
+      if ([FrancisForegroundWindow]::OpenProcessToken($processHandle, [FrancisForegroundWindow]::TOKEN_QUERY, [ref]$tokenHandle)) {
+        try {
+          [int]$tokenElevation = 0
+          [int]$returnLength = 0
+          if ([FrancisForegroundWindow]::GetTokenInformation($tokenHandle, [FrancisForegroundWindow]::TokenElevation, [ref]$tokenElevation, 4, [ref]$returnLength)) {
+            $isElevated = $tokenElevation -ne 0
+          }
+        } finally {
+          if ($tokenHandle -ne [IntPtr]::Zero) {
+            [void][FrancisForegroundWindow]::CloseHandle($tokenHandle)
+          }
+        }
+      }
+    } finally {
+      [void][FrancisForegroundWindow]::CloseHandle($processHandle)
+    }
   }
 }
 
@@ -85,6 +126,7 @@ if ($processIdValue -gt 0) {
   title = $titleBuilder.ToString()
   process = $processName
   pid = [int]$processIdValue
+  elevated = [bool]$isElevated
   bounds = [pscustomobject]@{
     x = [int]$windowRect.Left
     y = [int]$windowRect.Top

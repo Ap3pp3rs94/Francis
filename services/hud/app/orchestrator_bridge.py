@@ -7,8 +7,21 @@ from services.orchestrator.app.lens_operator import execute_lens_action as execu
 from services.orchestrator.app.lens_operator import get_lens_actions as get_shared_lens_actions
 
 
-def get_lens_actions(*, max_actions: int = 8, role: str = DEFAULT_ROLE, user: str = DEFAULT_USER) -> dict[str, Any]:
-    return get_shared_lens_actions(max_actions=max_actions, role=role, user=user)
+def get_lens_actions(
+    *,
+    max_actions: int = 8,
+    role: str = DEFAULT_ROLE,
+    user: str = DEFAULT_USER,
+    snapshot: dict[str, Any] | None = None,
+    approval_snapshot: Any | None = None,
+) -> dict[str, Any]:
+    return get_shared_lens_actions(
+        max_actions=max_actions,
+        role=role,
+        user=user,
+        snapshot=snapshot,
+        approval_snapshot=approval_snapshot,
+    )
 
 
 def execute_lens_action(

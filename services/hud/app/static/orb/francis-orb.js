@@ -42,153 +42,396 @@ var FrancisOrb = (() => {
     OrbTransitionController: () => OrbTransitionController,
     createFrancisOrb: () => createFrancisOrb,
     elementToOrbTarget: () => elementToOrbTarget,
+    getOrbMotionEnergy: () => getOrbMotionEnergy,
+    getOrbPulseEnergy: () => getOrbPulseEnergy,
+    getOrbSettleEnergy: () => getOrbSettleEnergy,
+    getOrbStateBoost: () => getOrbStateBoost,
+    isOrbActionState: () => isOrbActionState,
     mapHudOrbPayloadToSignals: () => mapHudOrbPayloadToSignals,
-    screenPointToOrbTarget: () => screenPointToOrbTarget
+    normalizeOrbState: () => normalizeOrbState,
+    screenPointToOrbTarget: () => screenPointToOrbTarget,
+    shouldRenderOrbBeam: () => shouldRenderOrbBeam
   });
 
   // core/config.ts
   var ORB_CONFIG = {
     camera: {
-      fov: 38,
+      fov: 36,
       near: 0.1,
       far: 100,
-      z: 7.2
+      z: 5.8
     },
-    coreRadius: 0.54,
-    shellRadius: 1.18,
-    auraRadius: 4.8,
-    filamentCount: 34,
-    filamentSegments: 640,
-    particleCount: 210,
-    profileLerp: 0.08,
-    attentionLerp: 0.06,
+    coreRadius: 0.22,
+    shellRadius: 0.54,
+    auraRadius: 1.35,
+    filamentCount: 60,
+    filamentSegments: 360,
+    particleCount: 0,
+    profileLerp: 0.1,
+    attentionLerp: 0.065,
     beamLerp: 0.12,
-    idleFloatAmp: 0.035,
-    idleFloatSpeed: 0.65
+    idleFloatAmp: 24e-4,
+    idleFloatSpeed: 0.16
   };
 
   // core/state-profiles.ts
+  var IDLE_PROFILE = {
+    pulseSpeed: 0.18,
+    pulseAmplitude: 18e-4,
+    shellOpacity: 14e-4,
+    shellFresnelPower: 5.8,
+    filamentOpacity: 0.82,
+    filamentSpeed: 0.1,
+    filamentTightness: 0.98,
+    filamentContinuity: 0.44,
+    filamentDrift: 0.58,
+    filamentSpread: 0.84,
+    directionalBias: 0.08,
+    particleOpacity: 0,
+    particleSpeed: 0,
+    auraOpacity: 7e-3,
+    auraScale: 0.82,
+    coreIntensity: 0.86,
+    coreDistortion: 0.011,
+    rootStillness: 0.58,
+    compression: 0.98,
+    beamOpacity: 0
+  };
   var ORB_STATE_PROFILES = {
-    idle: {
-      pulseSpeed: 0.75,
-      pulseAmplitude: 0.03,
-      shellOpacity: 0.12,
-      shellFresnelPower: 2.45,
-      filamentOpacity: 0.58,
-      filamentSpeed: 0.42,
-      filamentTightness: 0.76,
-      particleOpacity: 0.2,
-      particleSpeed: 0.18,
-      auraOpacity: 0.18,
-      auraScale: 0.96,
-      coreIntensity: 1.02,
-      coreDistortion: 0.12,
-      compression: 1,
-      beamOpacity: 0
+    idle_anchored: {
+      ...IDLE_PROFILE
     },
-    listening: {
-      pulseSpeed: 1,
-      pulseAmplitude: 0.045,
-      shellOpacity: 0.14,
-      shellFresnelPower: 2.6,
-      filamentOpacity: 0.68,
-      filamentSpeed: 0.68,
-      filamentTightness: 0.78,
-      particleOpacity: 0.23,
-      particleSpeed: 0.28,
-      auraOpacity: 0.21,
-      auraScale: 0.99,
-      coreIntensity: 1.1,
-      coreDistortion: 0.15,
-      compression: 0.975,
-      beamOpacity: 0
-    },
-    thinking: {
-      pulseSpeed: 1.35,
-      pulseAmplitude: 0.06,
-      shellOpacity: 0.18,
-      shellFresnelPower: 2.95,
-      filamentOpacity: 0.78,
-      filamentSpeed: 1.02,
-      filamentTightness: 0.8,
-      particleOpacity: 0.27,
-      particleSpeed: 0.42,
-      auraOpacity: 0.25,
-      auraScale: 1.02,
-      coreIntensity: 1.22,
-      coreDistortion: 0.2,
-      compression: 0.955,
-      beamOpacity: 0
-    },
-    speaking: {
-      pulseSpeed: 1.6,
-      pulseAmplitude: 0.05,
-      shellOpacity: 0.18,
-      shellFresnelPower: 2.8,
-      filamentOpacity: 0.82,
-      filamentSpeed: 0.92,
-      filamentTightness: 0.8,
-      particleOpacity: 0.29,
-      particleSpeed: 0.46,
-      auraOpacity: 0.27,
-      auraScale: 1.04,
-      coreIntensity: 1.28,
-      coreDistortion: 0.17,
-      compression: 0.965,
-      beamOpacity: 0
-    },
-    acting: {
-      pulseSpeed: 1.2,
-      pulseAmplitude: 0.05,
-      shellOpacity: 0.22,
-      shellFresnelPower: 3.2,
+    attentive: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.24,
+      pulseAmplitude: 24e-4,
+      shellOpacity: 16e-4,
+      shellFresnelPower: 5.9,
       filamentOpacity: 0.88,
-      filamentSpeed: 1.18,
-      filamentTightness: 0.78,
-      particleOpacity: 0.34,
-      particleSpeed: 0.58,
-      auraOpacity: 0.3,
-      auraScale: 1.06,
-      coreIntensity: 1.38,
-      coreDistortion: 0.14,
-      compression: 0.94,
-      beamOpacity: 0.62
+      filamentSpeed: 0.13,
+      filamentTightness: 1.04,
+      filamentContinuity: 0.54,
+      filamentDrift: 0.48,
+      filamentSpread: 0.8,
+      directionalBias: 0.12,
+      auraOpacity: 9e-3,
+      auraScale: 0.83,
+      coreIntensity: 0.9,
+      coreDistortion: 0.012,
+      rootStillness: 0.68,
+      compression: 0.972
     },
-    interject: {
-      pulseSpeed: 1.95,
-      pulseAmplitude: 0.07,
-      shellOpacity: 0.24,
-      shellFresnelPower: 3.3,
+    investigate: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.34,
+      pulseAmplitude: 34e-4,
+      shellOpacity: 16e-4,
+      shellFresnelPower: 6,
       filamentOpacity: 0.94,
-      filamentSpeed: 0.9,
-      filamentTightness: 0.76,
-      particleOpacity: 0.3,
-      particleSpeed: 0.35,
-      auraOpacity: 0.32,
-      auraScale: 1.08,
-      coreIntensity: 1.46,
-      coreDistortion: 0.18,
-      compression: 0.91,
-      beamOpacity: 0
+      filamentSpeed: 0.2,
+      filamentTightness: 1.03,
+      filamentContinuity: 0.48,
+      filamentDrift: 0.88,
+      filamentSpread: 0.96,
+      directionalBias: 0.28,
+      auraOpacity: 8e-3,
+      auraScale: 0.84,
+      coreIntensity: 0.9,
+      coreDistortion: 0.013,
+      rootStillness: 0.52,
+      compression: 0.965
     },
-    error: {
-      pulseSpeed: 0.9,
-      pulseAmplitude: 0.03,
-      shellOpacity: 0.19,
-      shellFresnelPower: 2.8,
+    target_lock: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.42,
+      pulseAmplitude: 38e-4,
+      shellOpacity: 18e-4,
+      shellFresnelPower: 6.1,
+      filamentOpacity: 1,
+      filamentSpeed: 0.18,
+      filamentTightness: 1.16,
+      filamentContinuity: 0.68,
+      filamentDrift: 0.26,
+      filamentSpread: 0.72,
+      directionalBias: 0.32,
+      auraOpacity: 7e-3,
+      auraScale: 0.82,
+      coreIntensity: 0.94,
+      coreDistortion: 0.013,
+      rootStillness: 0.82,
+      compression: 0.93,
+      beamOpacity: 0.02
+    },
+    commit_move: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.62,
+      pulseAmplitude: 52e-4,
+      shellOpacity: 19e-4,
+      shellFresnelPower: 6.16,
+      filamentOpacity: 1.04,
+      filamentSpeed: 0.28,
+      filamentTightness: 1.24,
+      filamentContinuity: 0.74,
+      filamentDrift: 0.18,
+      filamentSpread: 0.64,
+      directionalBias: 0.46,
+      auraOpacity: 75e-4,
+      auraScale: 0.82,
+      coreIntensity: 0.96,
+      coreDistortion: 0.014,
+      rootStillness: 0.88,
+      compression: 0.86,
+      beamOpacity: 0.04
+    },
+    hover_ready: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.46,
+      pulseAmplitude: 34e-4,
+      shellOpacity: 17e-4,
+      shellFresnelPower: 6.12,
+      filamentOpacity: 1.01,
+      filamentSpeed: 0.16,
+      filamentTightness: 1.22,
+      filamentContinuity: 0.76,
+      filamentDrift: 0.12,
+      filamentSpread: 0.58,
+      directionalBias: 0.4,
+      auraOpacity: 7e-3,
+      auraScale: 0.81,
+      coreIntensity: 0.94,
+      coreDistortion: 0.013,
+      rootStillness: 0.9,
+      compression: 0.88,
+      beamOpacity: 0.03
+    },
+    click_act: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.74,
+      pulseAmplitude: 58e-4,
+      shellOpacity: 2e-3,
+      shellFresnelPower: 6.2,
+      filamentOpacity: 1.08,
+      filamentSpeed: 0.34,
+      filamentTightness: 1.28,
+      filamentContinuity: 0.8,
+      filamentDrift: 0.12,
+      filamentSpread: 0.52,
+      directionalBias: 0.54,
+      auraOpacity: 8e-3,
+      auraScale: 0.82,
+      coreIntensity: 0.98,
+      coreDistortion: 0.014,
+      rootStillness: 0.94,
+      compression: 0.8,
+      beamOpacity: 0.05
+    },
+    drag_act: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.58,
+      pulseAmplitude: 48e-4,
+      shellOpacity: 19e-4,
+      shellFresnelPower: 6.16,
+      filamentOpacity: 1.04,
+      filamentSpeed: 0.26,
+      filamentTightness: 1.22,
+      filamentContinuity: 0.72,
+      filamentDrift: 0.22,
+      filamentSpread: 0.6,
+      directionalBias: 0.48,
+      auraOpacity: 75e-4,
+      auraScale: 0.82,
+      coreIntensity: 0.95,
+      coreDistortion: 0.014,
+      rootStillness: 0.86,
+      compression: 0.84,
+      beamOpacity: 0.05
+    },
+    type_hold: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.34,
+      pulseAmplitude: 3e-3,
+      shellOpacity: 17e-4,
+      shellFresnelPower: 6,
+      filamentOpacity: 0.96,
+      filamentSpeed: 0.14,
+      filamentTightness: 1.14,
+      filamentContinuity: 0.7,
+      filamentDrift: 0.1,
+      filamentSpread: 0.56,
+      directionalBias: 0.3,
+      auraOpacity: 65e-4,
+      auraScale: 0.8,
+      coreIntensity: 0.9,
+      coreDistortion: 0.013,
+      rootStillness: 0.88,
+      compression: 0.89,
+      beamOpacity: 0.02
+    },
+    waiting_user: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.16,
+      pulseAmplitude: 16e-4,
+      shellOpacity: 12e-4,
+      shellFresnelPower: 5.7,
+      filamentOpacity: 0.78,
+      filamentSpeed: 0.07,
+      filamentTightness: 1.08,
+      filamentContinuity: 0.72,
+      filamentDrift: 0.16,
+      filamentSpread: 0.66,
+      directionalBias: 0.18,
+      auraOpacity: 5e-3,
+      auraScale: 0.78,
+      coreIntensity: 0.82,
+      coreDistortion: 0.011,
+      rootStillness: 0.9,
+      compression: 0.94
+    },
+    blocked: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.14,
+      pulseAmplitude: 14e-4,
+      shellOpacity: 1e-3,
+      shellFresnelPower: 5.6,
+      filamentOpacity: 0.66,
+      filamentSpeed: 0.05,
+      filamentTightness: 1.14,
+      filamentContinuity: 0.38,
+      filamentDrift: 0.08,
+      filamentSpread: 0.48,
+      directionalBias: 0.12,
+      auraOpacity: 4e-3,
+      auraScale: 0.74,
+      coreIntensity: 0.72,
+      coreDistortion: 0.011,
+      rootStillness: 0.95,
+      compression: 0.9
+    },
+    interrupted: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.14,
+      pulseAmplitude: 12e-4,
+      shellOpacity: 8e-4,
+      shellFresnelPower: 5.55,
       filamentOpacity: 0.62,
-      filamentSpeed: 0.25,
+      filamentSpeed: 0.06,
+      filamentTightness: 0.9,
+      filamentContinuity: 0.24,
+      filamentDrift: 0.28,
+      filamentSpread: 0.82,
+      directionalBias: 0.04,
+      auraOpacity: 35e-4,
+      auraScale: 0.74,
+      coreIntensity: 0.66,
+      coreDistortion: 0.01,
+      rootStillness: 0.74,
+      compression: 1.02
+    },
+    degraded: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.12,
+      pulseAmplitude: 12e-4,
+      shellOpacity: 7e-4,
+      shellFresnelPower: 5.5,
+      filamentOpacity: 0.46,
+      filamentSpeed: 0.04,
       filamentTightness: 0.86,
-      particleOpacity: 0.14,
-      particleSpeed: 0.12,
-      auraOpacity: 0.12,
-      auraScale: 0.96,
-      coreIntensity: 0.92,
-      coreDistortion: 0.08,
-      compression: 1.02,
-      beamOpacity: 0
+      filamentContinuity: 0.28,
+      filamentDrift: 0.12,
+      filamentSpread: 0.74,
+      directionalBias: 0.02,
+      auraOpacity: 3e-3,
+      auraScale: 0.72,
+      coreIntensity: 0.62,
+      coreDistortion: 9e-3,
+      rootStillness: 0.62,
+      compression: 0.96
+    },
+    paused: {
+      ...IDLE_PROFILE,
+      pulseSpeed: 0.1,
+      pulseAmplitude: 8e-4,
+      shellOpacity: 8e-4,
+      shellFresnelPower: 5.45,
+      filamentOpacity: 0.52,
+      filamentSpeed: 0.02,
+      filamentTightness: 0.92,
+      filamentContinuity: 0.52,
+      filamentDrift: 0.03,
+      filamentSpread: 0.6,
+      directionalBias: 0,
+      auraOpacity: 28e-4,
+      auraScale: 0.72,
+      coreIntensity: 0.64,
+      coreDistortion: 8e-3,
+      rootStillness: 0.98,
+      compression: 0.97
     }
   };
+
+  // core/state-semantics.ts
+  var ORB_STATE_ORDER = [
+    "idle_anchored",
+    "attentive",
+    "investigate",
+    "target_lock",
+    "commit_move",
+    "hover_ready",
+    "click_act",
+    "drag_act",
+    "type_hold",
+    "waiting_user",
+    "blocked",
+    "interrupted",
+    "degraded",
+    "paused"
+  ];
+  var ORB_STATE_METRICS = {
+    idle_anchored: { settleEnergy: 0.06, stateBoost: 0, pulseEnergy: 0.08, motionEnergy: 0.04, beam: false },
+    attentive: { settleEnergy: 0.18, stateBoost: 0.12, pulseEnergy: 0.2, motionEnergy: 0.18, beam: false },
+    investigate: { settleEnergy: 0.3, stateBoost: 0.18, pulseEnergy: 0.34, motionEnergy: 0.36, beam: false },
+    target_lock: { settleEnergy: 0.54, stateBoost: 0.22, pulseEnergy: 0.46, motionEnergy: 0.48, beam: true },
+    commit_move: { settleEnergy: 0.84, stateBoost: 0.28, pulseEnergy: 0.78, motionEnergy: 0.82, beam: true },
+    hover_ready: { settleEnergy: 0.76, stateBoost: 0.26, pulseEnergy: 0.72, motionEnergy: 0.76, beam: true },
+    click_act: { settleEnergy: 1, stateBoost: 0.34, pulseEnergy: 1, motionEnergy: 1, beam: true },
+    drag_act: { settleEnergy: 0.92, stateBoost: 0.3, pulseEnergy: 0.82, motionEnergy: 0.9, beam: true },
+    type_hold: { settleEnergy: 0.72, stateBoost: 0.24, pulseEnergy: 0.68, motionEnergy: 0.72, beam: true },
+    waiting_user: { settleEnergy: 0.16, stateBoost: 0.1, pulseEnergy: 0.18, motionEnergy: 0.12, beam: false },
+    blocked: { settleEnergy: 0.18, stateBoost: 0.08, pulseEnergy: 0.18, motionEnergy: 0.16, beam: false },
+    interrupted: { settleEnergy: 0.14, stateBoost: 0.06, pulseEnergy: 0.14, motionEnergy: 0.12, beam: false },
+    degraded: { settleEnergy: 0.14, stateBoost: 0.06, pulseEnergy: 0.16, motionEnergy: 0.14, beam: false },
+    paused: { settleEnergy: 0.12, stateBoost: 0.04, pulseEnergy: 0.12, motionEnergy: 0.08, beam: false }
+  };
+  var ACTION_STATES = /* @__PURE__ */ new Set([
+    "target_lock",
+    "commit_move",
+    "hover_ready",
+    "click_act",
+    "drag_act",
+    "type_hold"
+  ]);
+  function normalizeOrbState(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    return ORB_STATE_ORDER.includes(normalized) ? normalized : "idle_anchored";
+  }
+  function isOrbActionState(value) {
+    return ACTION_STATES.has(normalizeOrbState(value));
+  }
+  function getOrbSettleEnergy(state) {
+    return ORB_STATE_METRICS[normalizeOrbState(state)].settleEnergy;
+  }
+  function getOrbStateBoost(state) {
+    return ORB_STATE_METRICS[normalizeOrbState(state)].stateBoost;
+  }
+  function getOrbPulseEnergy(state) {
+    return ORB_STATE_METRICS[normalizeOrbState(state)].pulseEnergy;
+  }
+  function getOrbMotionEnergy(state) {
+    return ORB_STATE_METRICS[normalizeOrbState(state)].motionEnergy;
+  }
+  function shouldRenderOrbBeam(state) {
+    return ORB_STATE_METRICS[normalizeOrbState(state)].beam;
+  }
 
   // core/deterministic-rng.ts
   var DeterministicRng = class {
@@ -15107,343 +15350,6 @@ var FrancisOrb = (() => {
     }
   };
   Loader.DEFAULT_MATERIAL_NAME = "__DEFAULT";
-  var Light = class extends Object3D {
-    /**
-     * Constructs a new light.
-     *
-     * @param {(number|Color|string)} [color=0xffffff] - The light's color.
-     * @param {number} [intensity=1] - The light's strength/intensity.
-     */
-    constructor(color, intensity = 1) {
-      super();
-      this.isLight = true;
-      this.type = "Light";
-      this.color = new Color(color);
-      this.intensity = intensity;
-    }
-    /**
-     * Frees the GPU-related resources allocated by this instance. Call this
-     * method whenever this instance is no longer used in your app.
-     */
-    dispose() {
-    }
-    copy(source, recursive) {
-      super.copy(source, recursive);
-      this.color.copy(source.color);
-      this.intensity = source.intensity;
-      return this;
-    }
-    toJSON(meta) {
-      const data = super.toJSON(meta);
-      data.object.color = this.color.getHex();
-      data.object.intensity = this.intensity;
-      if (this.groundColor !== void 0) data.object.groundColor = this.groundColor.getHex();
-      if (this.distance !== void 0) data.object.distance = this.distance;
-      if (this.angle !== void 0) data.object.angle = this.angle;
-      if (this.decay !== void 0) data.object.decay = this.decay;
-      if (this.penumbra !== void 0) data.object.penumbra = this.penumbra;
-      if (this.shadow !== void 0) data.object.shadow = this.shadow.toJSON();
-      if (this.target !== void 0) data.object.target = this.target.uuid;
-      return data;
-    }
-  };
-  var _projScreenMatrix$1 = /* @__PURE__ */ new Matrix4();
-  var _lightPositionWorld$1 = /* @__PURE__ */ new Vector3();
-  var _lookTarget$1 = /* @__PURE__ */ new Vector3();
-  var LightShadow = class {
-    /**
-     * Constructs a new light shadow.
-     *
-     * @param {Camera} camera - The light's view of the world.
-     */
-    constructor(camera) {
-      this.camera = camera;
-      this.intensity = 1;
-      this.bias = 0;
-      this.normalBias = 0;
-      this.radius = 1;
-      this.blurSamples = 8;
-      this.mapSize = new Vector2(512, 512);
-      this.mapType = UnsignedByteType;
-      this.map = null;
-      this.mapPass = null;
-      this.matrix = new Matrix4();
-      this.autoUpdate = true;
-      this.needsUpdate = false;
-      this._frustum = new Frustum();
-      this._frameExtents = new Vector2(1, 1);
-      this._viewportCount = 1;
-      this._viewports = [
-        new Vector4(0, 0, 1, 1)
-      ];
-    }
-    /**
-     * Used internally by the renderer to get the number of viewports that need
-     * to be rendered for this shadow.
-     *
-     * @return {number} The viewport count.
-     */
-    getViewportCount() {
-      return this._viewportCount;
-    }
-    /**
-     * Gets the shadow cameras frustum. Used internally by the renderer to cull objects.
-     *
-     * @return {Frustum} The shadow camera frustum.
-     */
-    getFrustum() {
-      return this._frustum;
-    }
-    /**
-     * Update the matrices for the camera and shadow, used internally by the renderer.
-     *
-     * @param {Light} light - The light for which the shadow is being rendered.
-     */
-    updateMatrices(light) {
-      const shadowCamera = this.camera;
-      const shadowMatrix = this.matrix;
-      _lightPositionWorld$1.setFromMatrixPosition(light.matrixWorld);
-      shadowCamera.position.copy(_lightPositionWorld$1);
-      _lookTarget$1.setFromMatrixPosition(light.target.matrixWorld);
-      shadowCamera.lookAt(_lookTarget$1);
-      shadowCamera.updateMatrixWorld();
-      _projScreenMatrix$1.multiplyMatrices(shadowCamera.projectionMatrix, shadowCamera.matrixWorldInverse);
-      this._frustum.setFromProjectionMatrix(_projScreenMatrix$1, shadowCamera.coordinateSystem, shadowCamera.reversedDepth);
-      if (shadowCamera.reversedDepth) {
-        shadowMatrix.set(
-          0.5,
-          0,
-          0,
-          0.5,
-          0,
-          0.5,
-          0,
-          0.5,
-          0,
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-          1
-        );
-      } else {
-        shadowMatrix.set(
-          0.5,
-          0,
-          0,
-          0.5,
-          0,
-          0.5,
-          0,
-          0.5,
-          0,
-          0,
-          0.5,
-          0.5,
-          0,
-          0,
-          0,
-          1
-        );
-      }
-      shadowMatrix.multiply(_projScreenMatrix$1);
-    }
-    /**
-     * Returns a viewport definition for the given viewport index.
-     *
-     * @param {number} viewportIndex - The viewport index.
-     * @return {Vector4} The viewport.
-     */
-    getViewport(viewportIndex) {
-      return this._viewports[viewportIndex];
-    }
-    /**
-     * Returns the frame extends.
-     *
-     * @return {Vector2} The frame extends.
-     */
-    getFrameExtents() {
-      return this._frameExtents;
-    }
-    /**
-     * Frees the GPU-related resources allocated by this instance. Call this
-     * method whenever this instance is no longer used in your app.
-     */
-    dispose() {
-      if (this.map) {
-        this.map.dispose();
-      }
-      if (this.mapPass) {
-        this.mapPass.dispose();
-      }
-    }
-    /**
-     * Copies the values of the given light shadow instance to this instance.
-     *
-     * @param {LightShadow} source - The light shadow to copy.
-     * @return {LightShadow} A reference to this light shadow instance.
-     */
-    copy(source) {
-      this.camera = source.camera.clone();
-      this.intensity = source.intensity;
-      this.bias = source.bias;
-      this.radius = source.radius;
-      this.autoUpdate = source.autoUpdate;
-      this.needsUpdate = source.needsUpdate;
-      this.normalBias = source.normalBias;
-      this.blurSamples = source.blurSamples;
-      this.mapSize.copy(source.mapSize);
-      return this;
-    }
-    /**
-     * Returns a new light shadow instance with copied values from this instance.
-     *
-     * @return {LightShadow} A clone of this instance.
-     */
-    clone() {
-      return new this.constructor().copy(this);
-    }
-    /**
-     * Serializes the light shadow into JSON.
-     *
-     * @return {Object} A JSON object representing the serialized light shadow.
-     * @see {@link ObjectLoader#parse}
-     */
-    toJSON() {
-      const object = {};
-      if (this.intensity !== 1) object.intensity = this.intensity;
-      if (this.bias !== 0) object.bias = this.bias;
-      if (this.normalBias !== 0) object.normalBias = this.normalBias;
-      if (this.radius !== 1) object.radius = this.radius;
-      if (this.mapSize.x !== 512 || this.mapSize.y !== 512) object.mapSize = this.mapSize.toArray();
-      object.camera = this.camera.toJSON(false).object;
-      delete object.camera.matrix;
-      return object;
-    }
-  };
-  var _projScreenMatrix = /* @__PURE__ */ new Matrix4();
-  var _lightPositionWorld = /* @__PURE__ */ new Vector3();
-  var _lookTarget = /* @__PURE__ */ new Vector3();
-  var PointLightShadow = class extends LightShadow {
-    /**
-     * Constructs a new point light shadow.
-     */
-    constructor() {
-      super(new PerspectiveCamera(90, 1, 0.5, 500));
-      this.isPointLightShadow = true;
-      this._frameExtents = new Vector2(4, 2);
-      this._viewportCount = 6;
-      this._viewports = [
-        // These viewports map a cube-map onto a 2D texture with the
-        // following orientation:
-        //
-        //  xzXZ
-        //   y Y
-        //
-        // X - Positive x direction
-        // x - Negative x direction
-        // Y - Positive y direction
-        // y - Negative y direction
-        // Z - Positive z direction
-        // z - Negative z direction
-        // positive X
-        new Vector4(2, 1, 1, 1),
-        // negative X
-        new Vector4(0, 1, 1, 1),
-        // positive Z
-        new Vector4(3, 1, 1, 1),
-        // negative Z
-        new Vector4(1, 1, 1, 1),
-        // positive Y
-        new Vector4(3, 0, 1, 1),
-        // negative Y
-        new Vector4(1, 0, 1, 1)
-      ];
-      this._cubeDirections = [
-        new Vector3(1, 0, 0),
-        new Vector3(-1, 0, 0),
-        new Vector3(0, 0, 1),
-        new Vector3(0, 0, -1),
-        new Vector3(0, 1, 0),
-        new Vector3(0, -1, 0)
-      ];
-      this._cubeUps = [
-        new Vector3(0, 1, 0),
-        new Vector3(0, 1, 0),
-        new Vector3(0, 1, 0),
-        new Vector3(0, 1, 0),
-        new Vector3(0, 0, 1),
-        new Vector3(0, 0, -1)
-      ];
-    }
-    /**
-     * Update the matrices for the camera and shadow, used internally by the renderer.
-     *
-     * @param {Light} light - The light for which the shadow is being rendered.
-     * @param {number} [viewportIndex=0] - The viewport index.
-     */
-    updateMatrices(light, viewportIndex = 0) {
-      const camera = this.camera;
-      const shadowMatrix = this.matrix;
-      const far = light.distance || camera.far;
-      if (far !== camera.far) {
-        camera.far = far;
-        camera.updateProjectionMatrix();
-      }
-      _lightPositionWorld.setFromMatrixPosition(light.matrixWorld);
-      camera.position.copy(_lightPositionWorld);
-      _lookTarget.copy(camera.position);
-      _lookTarget.add(this._cubeDirections[viewportIndex]);
-      camera.up.copy(this._cubeUps[viewportIndex]);
-      camera.lookAt(_lookTarget);
-      camera.updateMatrixWorld();
-      shadowMatrix.makeTranslation(-_lightPositionWorld.x, -_lightPositionWorld.y, -_lightPositionWorld.z);
-      _projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      this._frustum.setFromProjectionMatrix(_projScreenMatrix, camera.coordinateSystem, camera.reversedDepth);
-    }
-  };
-  var PointLight = class extends Light {
-    /**
-     * Constructs a new point light.
-     *
-     * @param {(number|Color|string)} [color=0xffffff] - The light's color.
-     * @param {number} [intensity=1] - The light's strength/intensity measured in candela (cd).
-     * @param {number} [distance=0] - Maximum range of the light. `0` means no limit.
-     * @param {number} [decay=2] - The amount the light dims along the distance of the light.
-     */
-    constructor(color, intensity, distance = 0, decay = 2) {
-      super(color, intensity);
-      this.isPointLight = true;
-      this.type = "PointLight";
-      this.distance = distance;
-      this.decay = decay;
-      this.shadow = new PointLightShadow();
-    }
-    /**
-     * The light's power. Power is the luminous power of the light measured in lumens (lm).
-     * Changing the power will also change the light's intensity.
-     *
-     * @type {number}
-     */
-    get power() {
-      return this.intensity * 4 * Math.PI;
-    }
-    set power(power) {
-      this.intensity = power / (4 * Math.PI);
-    }
-    dispose() {
-      this.shadow.dispose();
-    }
-    copy(source, recursive) {
-      super.copy(source, recursive);
-      this.distance = source.distance;
-      this.decay = source.decay;
-      this.shadow = source.shadow.clone();
-      return this;
-    }
-  };
   var OrthographicCamera = class extends Camera {
     /**
      * Constructs a new orthographic camera.
@@ -15558,19 +15464,6 @@ var FrancisOrb = (() => {
       data.object.far = this.far;
       if (this.view !== null) data.object.view = Object.assign({}, this.view);
       return data;
-    }
-  };
-  var AmbientLight = class extends Light {
-    /**
-     * Constructs a new ambient light.
-     *
-     * @param {(number|Color|string)} [color=0xffffff] - The light's color.
-     * @param {number} [intensity=1] - The light's strength/intensity.
-     */
-    constructor(color, intensity) {
-      super(color, intensity);
-      this.isAmbientLight = true;
-      this.type = "AmbientLight";
     }
   };
   var ArrayCamera = class extends PerspectiveCamera {
@@ -24860,7 +24753,7 @@ void main() {
       const _frustum = new Frustum();
       let _clippingEnabled = false;
       let _localClippingEnabled = false;
-      const _projScreenMatrix2 = new Matrix4();
+      const _projScreenMatrix = new Matrix4();
       const _vector3 = new Vector3();
       const _vector4 = new Vector4();
       const _emptyScene = { background: null, fog: null, environment: null, overrideMaterial: null, isScene: true };
@@ -25369,8 +25262,8 @@ void main() {
         currentRenderState = renderStates.get(scene, renderStateStack.length);
         currentRenderState.init(camera);
         renderStateStack.push(currentRenderState);
-        _projScreenMatrix2.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-        _frustum.setFromProjectionMatrix(_projScreenMatrix2, WebGLCoordinateSystem, camera.reversedDepth);
+        _projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        _frustum.setFromProjectionMatrix(_projScreenMatrix, WebGLCoordinateSystem, camera.reversedDepth);
         _localClippingEnabled = this.localClippingEnabled;
         _clippingEnabled = clipping.init(this.clippingPlanes, _localClippingEnabled);
         currentRenderList = renderLists.get(scene, renderListStack.length);
@@ -25456,7 +25349,7 @@ void main() {
           } else if (object.isSprite) {
             if (!object.frustumCulled || _frustum.intersectsSprite(object)) {
               if (sortObjects) {
-                _vector4.setFromMatrixPosition(object.matrixWorld).applyMatrix4(_projScreenMatrix2);
+                _vector4.setFromMatrixPosition(object.matrixWorld).applyMatrix4(_projScreenMatrix);
               }
               const geometry = objects.update(object);
               const material = object.material;
@@ -25476,7 +25369,7 @@ void main() {
                   if (geometry.boundingSphere === null) geometry.computeBoundingSphere();
                   _vector4.copy(geometry.boundingSphere.center);
                 }
-                _vector4.applyMatrix4(object.matrixWorld).applyMatrix4(_projScreenMatrix2);
+                _vector4.applyMatrix4(object.matrixWorld).applyMatrix4(_projScreenMatrix);
               }
               if (Array.isArray(material)) {
                 const groups = geometry.groups;
@@ -27182,10 +27075,10 @@ void main() {
     constructor(renderer, scene, camera, width, height) {
       this.composer = new EffectComposer(renderer);
       this.composer.addPass(new RenderPass(scene, camera));
-      const bloom = new UnrealBloomPass(new Vector2(width, height), 0.72, 0.62, 0.32);
-      bloom.strength = 0.62;
-      bloom.radius = 0.52;
-      bloom.threshold = 0.28;
+      const bloom = new UnrealBloomPass(new Vector2(width, height), 0.32, 0.12, 0.8);
+      bloom.strength = 0.32;
+      bloom.radius = 0.12;
+      bloom.threshold = 0.8;
       this.composer.addPass(bloom);
     }
     setSize(width, height) {
@@ -27216,10 +27109,10 @@ void main() {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Unable to build aura texture");
     const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    g.addColorStop(0, "rgba(255,255,255,1)");
-    g.addColorStop(0.15, "rgba(220,240,255,0.95)");
-    g.addColorStop(0.4, "rgba(120,190,255,0.28)");
-    g.addColorStop(0.75, "rgba(60,140,255,0.08)");
+    g.addColorStop(0, "rgba(255,255,255,0.1)");
+    g.addColorStop(0.08, "rgba(244,247,251,0.05)");
+    g.addColorStop(0.2, "rgba(214,224,236,0.02)");
+    g.addColorStop(0.38, "rgba(150,166,184,0.006)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
@@ -27234,20 +27127,27 @@ void main() {
       this.material = new SpriteMaterial({
         map: createAuraTexture(),
         transparent: true,
-        opacity: 0.16,
+        opacity: 8e-3,
         blending: AdditiveBlending,
         depthWrite: false,
         depthTest: false,
-        color: 12114154
+        color: 16120059
       });
       this.sprite = new Sprite(this.material);
       this.sprite.scale.setScalar(this.baseScale);
     }
     update(frame, profile) {
-      const flicker = 1 + Math.sin(frame.elapsed * 1.7) * 0.03;
-      this.material.opacity = profile.auraOpacity * flicker;
-      const amp = frame.state === "speaking" ? frame.speakingAmplitude * 0.08 : 0;
-      const scale = this.baseScale * profile.auraScale * (1 + amp);
+      const attentionStrength = Math.max(0, Math.min(1, Number(frame.attentionStrength ?? frame.confidence ?? 0.28)));
+      const attentionLock = Math.max(0, Math.min(1, Number(frame.attentionLock ?? 0.18)));
+      const attentionUncertainty = Math.max(0, Math.min(1, Number(frame.attentionUncertainty ?? 0.14)));
+      const haloStrength = Math.max(0, Math.min(1, Number(frame.visualHaloStrength ?? 0.78)));
+      const flicker = 1 + Math.sin(frame.elapsed * (0.82 + attentionStrength * 0.12)) * (8e-3 + attentionUncertainty * 4e-3);
+      this.material.opacity = profile.auraOpacity * flicker * Math.max(
+        0.54,
+        0.82 + attentionStrength * 0.04 + attentionLock * 0.04 - attentionUncertainty * 0.1 + haloStrength * 0.04
+      );
+      const amp = frame.speakingAmplitude > 0 ? frame.speakingAmplitude * 0.012 : 0;
+      const scale = this.baseScale * profile.auraScale * (0.94 + amp + attentionStrength * 4e-3 + attentionLock * 4e-3 - attentionUncertainty * 0.012 + haloStrength * 8e-3 - Math.max(0, Math.min(1, Number(profile.rootStillness ?? 0.62))) * 0.01);
       this.sprite.scale.set(scale, scale, 1);
     }
     dispose() {
@@ -27260,14 +27160,14 @@ void main() {
   var core_vertex_default = "varying vec3 vNormal;\nvarying vec3 vWorldPos;\nvarying vec3 vViewDir;\n\nvoid main() {\n  vec4 worldPos = modelMatrix * vec4(position, 1.0);\n  vWorldPos = worldPos.xyz;\n  vNormal = normalize(normalMatrix * normal);\n\n  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);\n  vViewDir = normalize(-mvPosition.xyz);\n\n  gl_Position = projectionMatrix * mvPosition;\n}\r\n";
 
   // renderer/shaders/core.fragment.glsl
-  var core_fragment_default = "uniform float uTime;\nuniform float uIntensity;\nuniform float uPulse;\nuniform float uDistortion;\n\nvarying vec3 vNormal;\nvarying vec3 vWorldPos;\nvarying vec3 vViewDir;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nvoid main() {\n  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 2.0);\n\n  float n1 = noise(vWorldPos * 3.2 + uTime * 0.6);\n  float n2 = noise(vWorldPos * 6.8 - uTime * 0.9);\n  float plasma = mix(n1, n2, 0.5);\n\n  float brightness = 0.46 + plasma * uDistortion + uPulse * 0.14;\n  brightness *= uIntensity;\n\n  vec3 base = vec3(0.78, 0.89, 0.97);\n  vec3 hot = vec3(0.96, 0.99, 1.0);\n\n  vec3 color = mix(base, hot, clamp(brightness + fresnel * 0.2, 0.0, 1.0));\n\n  float alpha = 0.78;\n  gl_FragColor = vec4(color * brightness, alpha);\n}\n";
+  var core_fragment_default = "uniform float uTime;\nuniform float uIntensity;\nuniform float uPulse;\nuniform float uDistortion;\n\nvarying vec3 vNormal;\nvarying vec3 vWorldPos;\nvarying vec3 vViewDir;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nvoid main() {\n  float facing = clamp(dot(normalize(vNormal), normalize(vViewDir)), 0.0, 1.0);\n  float fresnel = pow(1.0 - facing, 4.8);\n  float nucleus = pow(facing, 4.8);\n  float innerHalo = pow(facing, 1.8);\n\n  float n1 = noise(vWorldPos * 3.2 + uTime * 0.6);\n  float n2 = noise(vWorldPos * 7.4 - uTime * 0.78);\n  float plasma = mix(n1, n2, 0.42);\n  float heartbeat = 0.985 + (uPulse - 1.0) * 0.44;\n  float innerGlow = clamp(nucleus * 1.92 + plasma * (0.04 + uDistortion * 0.12), 0.0, 1.0);\n  float veil = clamp(innerHalo * 0.56 + plasma * (0.04 + uDistortion * 0.08), 0.0, 1.0);\n  float corona = clamp(fresnel * 0.16 + plasma * 0.04, 0.0, 1.0);\n  float shimmer = (1.04 + plasma * (0.05 + uDistortion * 0.1)) * heartbeat * uIntensity;\n\n  vec3 cool = vec3(0.86, 0.89, 0.93);\n  vec3 pearl = vec3(0.96, 0.98, 0.995);\n  vec3 silver = vec3(1.0, 1.0, 1.0);\n\n  vec3 color = mix(cool, pearl, 0.24 + innerGlow * 0.34);\n  color = mix(color, silver, clamp(innerGlow * 0.92 + nucleus * 0.22 + veil * 0.1, 0.0, 1.0));\n  color += pearl * corona * 0.1;\n\n  float alpha = 0.14 + innerGlow * 0.42 + veil * 0.14 + corona * 0.05;\n  gl_FragColor = vec4(color * shimmer, alpha);\n}\n";
 
   // renderer/OrbCore.ts
   var OrbCore = class {
     mesh;
     material;
     constructor(radius) {
-      const geometry = new SphereGeometry(radius, 96, 96);
+      const geometry = new SphereGeometry(radius, 48, 48);
       this.material = new ShaderMaterial({
         vertexShader: core_vertex_default,
         fragmentShader: core_fragment_default,
@@ -27279,18 +27179,26 @@ void main() {
           uDistortion: { value: 0.12 }
         },
         blending: AdditiveBlending,
-        depthWrite: false,
+        depthWrite: true,
+        depthTest: true,
         toneMapped: false
       });
       this.mesh = new Mesh(geometry, this.material);
+      this.mesh.renderOrder = 3;
     }
     update(frame, profile) {
-      const pulse = 1 + Math.sin(frame.elapsed * profile.pulseSpeed * Math.PI * 2) * profile.pulseAmplitude + (frame.state === "speaking" ? frame.speakingAmplitude * 0.08 : 0);
-      this.mesh.scale.setScalar(pulse * profile.compression);
+      const pulseEnergy = getOrbPulseEnergy(frame.state);
+      const attentionStrength = Math.max(0, Math.min(1, Number(frame.attentionStrength ?? frame.confidence ?? 0.28)));
+      const attentionLock = Math.max(0, Math.min(1, Number(frame.attentionLock ?? 0.18)));
+      const attentionUncertainty = Math.max(0, Math.min(1, Number(frame.attentionUncertainty ?? 0.14)));
+      const coreBrightness = Math.max(0, Math.min(1, Number(frame.visualCoreBrightness ?? 0.76)));
+      const pulse = 1 + Math.sin(frame.elapsed * profile.pulseSpeed * Math.PI * 2) * profile.pulseAmplitude * pulseEnergy + (frame.speakingAmplitude > 0 ? frame.speakingAmplitude * 0.018 : 0) + attentionStrength * 4e-3 - attentionUncertainty * 5e-3;
+      const compactness = 0.88 + attentionLock * 0.07 - attentionUncertainty * 0.03 + (1 - Math.max(0, Math.min(1, Number(profile.rootStillness ?? 0.62)))) * 0.02;
+      this.mesh.scale.setScalar(pulse * Math.max(0.82, profile.compression * 0.94) * compactness);
       this.material.uniforms.uTime.value = frame.elapsed;
-      this.material.uniforms.uIntensity.value = profile.coreIntensity + frame.speakingAmplitude * 0.25;
+      this.material.uniforms.uIntensity.value = profile.coreIntensity + frame.speakingAmplitude * 0.04 + attentionStrength * 0.03 + attentionLock * 0.05 - attentionUncertainty * 0.05 + coreBrightness * 0.12;
       this.material.uniforms.uPulse.value = pulse;
-      this.material.uniforms.uDistortion.value = profile.coreDistortion;
+      this.material.uniforms.uDistortion.value = profile.coreDistortion + attentionUncertainty * 6e-3 - attentionLock * 4e-3;
     }
     dispose() {
       this.mesh.geometry.dispose();
@@ -27299,20 +27207,30 @@ void main() {
   };
 
   // renderer/shaders/filament.fragment.glsl
-  var filament_fragment_default = "uniform float uOpacity;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float edgeFade = 1.0 - smoothstep(0.45, 1.0, vAcross);\n  float tipFade = 0.22 + pow(sin(vAlong * 3.14159265), 0.58) * 0.78;\n  float alpha = uOpacity * edgeFade * tipFade * (0.62 + vEnergy * 0.58);\n\n  vec3 base = vec3(0.42, 0.66, 0.86);\n  vec3 hot = vec3(0.84, 0.94, 0.99);\n  vec3 color = mix(base, hot, vEnergy);\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
+  var filament_fragment_default = "uniform float uTime;\nuniform float uOpacity;\nuniform float uContinuity;\nuniform float uArcCenterA;\nuniform float uArcCenterB;\nuniform float uArcCenterC;\nuniform float uArcSpanA;\nuniform float uArcSpanB;\nuniform float uArcSpanC;\nuniform float uArcSoftness;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\nvarying float vDepthCue;\nvarying float vRadial;\nvarying float vBandSeed;\n\nfloat ringDistance(float a, float b) {\n  return abs(fract(a - b + 0.5) - 0.5);\n}\n\nvoid main() {\n  float across = abs(vAcross);\n  float strand = 1.0 - smoothstep(0.08, 0.86, across);\n  float halo = 1.0 - smoothstep(0.18, 1.14, across);\n  float tipFade = 0.16 + pow(sin(vAlong * 3.14159265), 0.82) * 0.84;\n  float frontGain = mix(0.78, 1.34, vDepthCue);\n  float radialGain =\n    0.74 +\n    smoothstep(0.08, 0.54, vRadial) * 0.88 -\n    smoothstep(0.86, 1.0, vRadial) * 0.08;\n  float mist =\n    0.96 +\n    sin(vAlong * 19.0 + uTime * 0.34 + vDepthCue * 2.2) * 0.04 +\n    cos(vAlong * 11.0 - uTime * 0.24 + vRadial * 3.14159265) * 0.03;\n  float continuityWave =\n    sin(\n      vAlong * 6.2831853 * (1.4 + fract(vBandSeed * 0.31) * 3.2) +\n      vBandSeed * 7.0 +\n      uTime * (0.05 + fract(vBandSeed * 0.17) * 0.035)\n    );\n  float continuityMask = mix(\n    1.0,\n    smoothstep(-0.55, 0.28, continuityWave),\n    clamp(1.0 - uContinuity, 0.0, 1.0),\n  );\n  float arcA = 1.0 - smoothstep(uArcSpanA, uArcSpanA + uArcSoftness, ringDistance(vAlong, uArcCenterA));\n  float arcB = 1.0 - smoothstep(uArcSpanB, uArcSpanB + uArcSoftness, ringDistance(vAlong, uArcCenterB));\n  float arcC = 1.0 - smoothstep(uArcSpanC, uArcSpanC + uArcSoftness, ringDistance(vAlong, uArcCenterC));\n  float arcMask = max(arcA, max(arcB * 0.92, arcC * 0.84));\n  float alpha =\n    uOpacity *\n    mix(halo, strand, 0.76) *\n    tipFade *\n    frontGain *\n    radialGain *\n    arcMask *\n    continuityMask *\n    mist *\n    (0.86 + vEnergy * 0.42) *\n    1.55;\n\n  vec3 base = vec3(0.82, 0.85, 0.89);\n  vec3 cool = vec3(0.93, 0.95, 0.98);\n  vec3 hot = vec3(1.0, 1.0, 1.0);\n  vec3 color = mix(base, cool, clamp(vEnergy * 0.52 + (1.0 - vRadial) * 0.24, 0.0, 1.0));\n  color = mix(color, hot, clamp(vEnergy * 0.42 + vDepthCue * 0.38 + (1.0 - vRadial) * 0.18, 0.0, 1.0));\n  color *= (0.98 + mist * 0.06) * (0.94 + arcMask * 0.14);\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
 
   // renderer/shaders/filament.vertex.glsl
-  var filament_vertex_default = "attribute vec3 aSideDir;\nattribute float aSide;\nattribute float aAlong;\nattribute float aSeed;\nattribute float aPhase;\nattribute float aRibbonWidth;\n\nuniform float uTime;\nuniform float uTightness;\nuniform float uSpeed;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\n\nvoid main() {\n  float alongPulse = sin(aAlong * 3.14159265);\n  float widthFalloff = 0.28 + pow(alongPulse, 0.72) * 0.72;\n  float wobble = sin(uTime * uSpeed + aPhase + aAlong * 12.0 + aSeed) * 0.045;\n  float ripple = sin(uTime * (uSpeed * 0.72) + aAlong * 24.0 + aSeed) * 0.018;\n\n  vec3 center = position * mix(1.0, uTightness, 0.84);\n  center += normalize(position) * wobble;\n\n  float width = aRibbonWidth * widthFalloff;\n  vec3 transformed = center + aSideDir * (aSide * width + ripple * aSide);\n\n  vEnergy = 0.58 + 0.42 * sin(uTime * uSpeed + aPhase + aSeed + aAlong * 14.0);\n  vAcross = abs(aSide);\n  vAlong = aAlong;\n\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);\n}\n";
+  var filament_vertex_default = "attribute vec3 aSideDir;\nattribute float aSide;\nattribute float aAlong;\nattribute float aSeed;\nattribute float aPhase;\nattribute float aRibbonWidth;\n\nuniform float uTime;\nuniform float uTightness;\nuniform float uSpeed;\n\nvarying float vEnergy;\nvarying float vAcross;\nvarying float vAlong;\nvarying float vDepthCue;\nvarying float vRadial;\nvarying float vBandSeed;\n\nvoid main() {\n  float alongPulse = sin(aAlong * 3.14159265);\n  float widthFalloff = 0.18 + pow(alongPulse, 0.82) * 0.72;\n  float wobble = sin(uTime * uSpeed + aPhase + aAlong * 9.0 + aSeed) * 0.012;\n  float ripple = sin(uTime * (uSpeed * 0.72) + aAlong * 18.0 + aSeed) * 0.004;\n\n  vec3 center = position * mix(1.0, uTightness, 0.9);\n  center += normalize(position) * wobble;\n\n  float width = aRibbonWidth * widthFalloff;\n  vec3 transformed = center + aSideDir * (aSide * width + ripple * aSide);\n  vec4 centerView = modelViewMatrix * vec4(center, 1.0);\n  vec4 orbCenterView = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);\n\n  vEnergy = 0.64 + 0.36 * sin(uTime * uSpeed + aPhase + aSeed + aAlong * 14.0);\n  vAcross = aSide;\n  vAlong = aAlong;\n  vDepthCue = clamp(0.5 + (centerView.z - orbCenterView.z) * 0.36, 0.0, 1.0);\n  vRadial = clamp(length(center) / 1.25, 0.0, 1.0);\n  vBandSeed = aSeed;\n\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);\n}\n";
 
   // renderer/OrbFilaments.ts
+  function wrapUnit(value) {
+    return value - Math.floor(value);
+  }
+  function randomUnitVector(rng) {
+    const theta = rng.range(0, Math.PI * 2);
+    const z = rng.range(-1, 1);
+    const radius = Math.sqrt(Math.max(0, 1 - z * z));
+    return new Vector3(radius * Math.cos(theta), radius * Math.sin(theta), z).normalize();
+  }
   function buildLoopPoints(radiusX, radiusY, wobble, segments, phase, swirl) {
     const points = [];
     for (let i = 0; i <= segments; i += 1) {
       const t = i / segments * Math.PI * 2;
-      const radialWave = 1 + Math.sin(t * 3 + phase) * swirl + Math.cos(t * 2 - phase * 0.65) * swirl * 0.45;
-      const x = Math.cos(t) * radiusX * radialWave;
-      const y = Math.sin(t) * radiusY * (1 - swirl * 0.14 * Math.cos(t * 2.5 + phase));
-      const z = Math.sin(t * (2.1 + swirl * 1.4) + phase) * wobble + Math.cos(t * 3.2 - phase * 0.4) * wobble * 0.38;
+      const radialWaveA = 1 + Math.sin(t * 1.42 + phase) * swirl * 0.1 + Math.cos(t * 3.1 - phase * 0.5) * swirl * 0.045;
+      const radialWaveB = 1 + Math.cos(t * 1.76 - phase * 0.36) * swirl * 0.08 + Math.sin(t * 2.8 + phase * 0.28) * swirl * 0.03;
+      const x = Math.cos(t) * radiusX * radialWaveA;
+      const y = Math.sin(t) * radiusY * radialWaveB;
+      const z = Math.sin(t * (1.32 + swirl * 0.58) + phase) * wobble + Math.cos(t * 2.6 - phase * 0.42) * wobble * 0.18;
       points.push(new Vector3(x, y, z));
     }
     return points;
@@ -27385,33 +27303,51 @@ void main() {
       fragmentShader: filament_fragment_default,
       transparent: true,
       depthWrite: false,
+      depthTest: true,
       side: DoubleSide,
       blending: AdditiveBlending,
       toneMapped: false,
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.52 },
+        uOpacity: { value: 0.92 },
         uSpeed: { value: 0.5 },
         uTightness: { value: 1 },
-        uRibbonWidth: { value: width }
+        uRibbonWidth: { value: width },
+        uContinuity: { value: 0.7 },
+        uArcCenterA: { value: 0.18 },
+        uArcCenterB: { value: 0.54 },
+        uArcCenterC: { value: 0.82 },
+        uArcSpanA: { value: 0.16 },
+        uArcSpanB: { value: 0.12 },
+        uArcSpanC: { value: 0.08 },
+        uArcSoftness: { value: 0.06 }
       }
     });
   }
   var OrbFilaments = class {
     group = new Group();
     filaments = [];
+    tempQuatA = new Quaternion();
+    tempQuatB = new Quaternion();
+    tempQuatC = new Quaternion();
+    tempDirection = new Vector3();
+    tempLateral = new Vector3();
+    tempBias = new Vector3();
     constructor(count, segments, seed) {
       const rng = new DeterministicRng(seed);
       for (let i = 0; i < count; i += 1) {
+        const layerRatio = i / Math.max(1, count - 1);
+        const layer = layerRatio < 0.42 ? "inner" : layerRatio < 0.84 ? "mid" : "outer";
         const phase = rng.range(0, Math.PI * 2);
-        const width = rng.range(0.05, 0.1);
+        const width = layer === "inner" ? rng.range(0.016, 0.03) : layer === "mid" ? rng.range(0.013, 0.024) : rng.range(0.01, 0.018);
+        const orbitalRadius = layer === "inner" ? rng.range(0.5, 0.78) : layer === "mid" ? rng.range(0.78, 1.08) : rng.range(1.02, 1.28);
         const points = buildLoopPoints(
-          rng.range(0.94, 1.32),
-          rng.range(0.58, 0.98),
-          rng.range(0.02, 0.095),
+          orbitalRadius * rng.range(0.72, 1.06),
+          orbitalRadius * rng.range(0.48, 0.94),
+          layer === "outer" ? rng.range(0.01, 0.026) : rng.range(8e-3, 0.02),
           segments,
           phase,
-          rng.range(0.04, 0.18)
+          layer === "inner" ? rng.range(0.03, 0.07) : rng.range(0.04, 0.1)
         );
         const geometry = buildRibbonGeometry(points, {
           width,
@@ -27420,39 +27356,151 @@ void main() {
         });
         const material = createFilamentMaterial(width);
         const mesh = new Mesh(geometry, material);
+        const group = new Group();
         const baseRotation = new Euler(
-          rng.range(0, Math.PI),
-          rng.range(0, Math.PI),
-          rng.range(0, Math.PI)
+          rng.range(0, Math.PI * 2),
+          rng.range(0, Math.PI * 2),
+          rng.range(0, Math.PI * 2)
         );
-        mesh.rotation.copy(baseRotation);
-        mesh.scale.setScalar(rng.range(0.83, 0.98));
-        this.group.add(mesh);
+        const baseQuaternion = new Quaternion().setFromEuler(baseRotation);
+        const baseScale = layer === "inner" ? rng.range(0.94, 1.04) : layer === "mid" ? rng.range(0.98, 1.08) : rng.range(1, 1.1);
+        group.quaternion.copy(baseQuaternion);
+        group.scale.setScalar(baseScale);
+        mesh.renderOrder = layer === "inner" ? 7 : layer === "mid" ? 6 : 5;
+        mesh.rotation.set(
+          rng.range(-0.1, 0.1),
+          rng.range(-0.1, 0.1),
+          rng.range(-0.1, 0.1)
+        );
+        group.add(mesh);
+        this.group.add(group);
         this.filaments.push({
+          group,
           mesh,
           material,
-          baseRotation,
-          speed: new Vector3(
-            rng.range(0.08, 0.24) * rng.sign(),
-            rng.range(0.08, 0.22) * rng.sign(),
-            rng.range(0.05, 0.16) * rng.sign()
-          )
+          layer,
+          baseQuaternion,
+          orbitAxisPrimary: randomUnitVector(rng),
+          orbitAxisSecondary: randomUnitVector(rng),
+          orbitAxisTertiary: randomUnitVector(rng),
+          orbitRatePrimary: rng.range(0.12, 0.34),
+          orbitRateSecondary: rng.range(0.05, 0.18),
+          orbitRateTertiary: rng.range(0.02, 0.1),
+          orbitPhasePrimary: rng.range(0, Math.PI * 2),
+          orbitPhaseSecondary: rng.range(0, Math.PI * 2),
+          orbitPhaseTertiary: rng.range(0, Math.PI * 2),
+          weaveRate: rng.range(0.16, 0.42),
+          weavePhase: rng.range(0, Math.PI * 2),
+          breatheRate: rng.range(0.12, 0.3),
+          breathePhase: rng.range(0, Math.PI * 2),
+          baseScale,
+          localSpin: new Vector3(
+            rng.range(0.012, 0.05) * rng.sign(),
+            rng.range(0.012, 0.05) * rng.sign(),
+            rng.range(0.01, 0.04) * rng.sign()
+          ),
+          speedScalar: layer === "inner" ? rng.range(0.84, 1.02) : layer === "mid" ? rng.range(0.9, 1.08) : rng.range(0.94, 1.14),
+          continuity: layer === "inner" ? rng.range(0.34, 0.64) : layer === "mid" ? rng.range(0.18, 0.48) : rng.range(0.08, 0.28),
+          opacityScalar: layer === "inner" ? rng.range(1.12, 1.34) : layer === "mid" ? rng.range(0.94, 1.18) : rng.range(0.72, 0.96),
+          arcCenterA: rng.range(0, 1),
+          arcCenterB: rng.range(0, 1),
+          arcCenterC: rng.range(0, 1),
+          arcSpanA: layer === "inner" ? rng.range(0.08, 0.16) : layer === "mid" ? rng.range(0.07, 0.14) : rng.range(0.05, 0.12),
+          arcSpanB: layer === "inner" ? rng.range(0.04, 0.1) : layer === "mid" ? rng.range(0.035, 0.08) : rng.range(0.025, 0.07),
+          arcSpanC: layer === "inner" ? rng.range(0.03, 0.08) : layer === "mid" ? rng.range(0.024, 0.06) : rng.range(0.018, 0.05),
+          arcSoftness: rng.range(0.02, 0.05)
         });
       }
     }
     update(frame, profile) {
+      const motionEnergy = getOrbMotionEnergy(frame.state);
+      const attentionStrength = Math.max(0, Math.min(1, Number(frame.attentionStrength ?? frame.confidence ?? 0.28)));
+      const attentionLock = Math.max(0, Math.min(1, Number(frame.attentionLock ?? 0.18)));
+      const attentionUncertainty = Math.max(0, Math.min(1, Number(frame.attentionUncertainty ?? 0.14)));
+      const ringDensity = Math.max(0, Math.min(1, Number(frame.visualRingDensity ?? 0.72)));
+      const ringTightness = Math.max(0, Math.min(1, Number(frame.visualRingTightness ?? 0.72)));
+      const orbitSpeedBias = Math.max(0, Math.min(1, Number(frame.visualOrbitSpeed ?? 0.68)));
+      const directionalTarget = frame.actionTarget ?? frame.attentionTarget ?? null;
+      const hasDirectionalTarget = Boolean(directionalTarget && directionalTarget.lengthSq() > 1e-4);
+      const biasStrengthBase = frame.actionTarget ? Math.max(0.42, Math.min(1, Number(frame.actionStrength ?? 0.54))) : Math.max(0.14, attentionStrength * 0.54 + attentionLock * 0.34 - attentionUncertainty * 0.12);
+      const directionProfileBias = Math.max(0, profile.directionalBias);
+      if (directionalTarget && directionalTarget.lengthSq() > 1e-4) {
+        this.tempDirection.copy(directionalTarget).normalize();
+        this.tempLateral.set(-this.tempDirection.y, this.tempDirection.x, 0);
+        if (this.tempLateral.lengthSq() < 1e-4) {
+          this.tempLateral.set(0, 1, 0);
+        } else {
+          this.tempLateral.normalize();
+        }
+      } else {
+        this.tempDirection.set(0, 0, 0);
+        this.tempLateral.set(0, 0, 0);
+      }
       for (const filament of this.filaments) {
-        const speed = profile.filamentSpeed;
-        filament.mesh.rotation.x = filament.baseRotation.x + frame.elapsed * filament.speed.x * speed;
-        filament.mesh.rotation.y = filament.baseRotation.y + frame.elapsed * filament.speed.y * speed;
-        filament.mesh.rotation.z = filament.baseRotation.z + frame.elapsed * filament.speed.z * speed;
-        const wobble = 1 + Math.sin(frame.elapsed * 1.65 + filament.speed.x * 10) * 0.018;
-        const tight = profile.filamentTightness * profile.compression;
-        filament.mesh.scale.setScalar(wobble * tight);
+        const layerSpeedBias = filament.layer === "inner" ? 0.92 : filament.layer === "mid" ? 1 : 1.08;
+        const layerBiasScalar = filament.layer === "inner" ? 1 : filament.layer === "mid" ? 0.78 : 0.56;
+        const layerOrbitRange = (filament.layer === "inner" ? 0.18 : filament.layer === "mid" ? 0.28 : 0.38) * Math.max(0.22, profile.filamentDrift);
+        const speed = profile.filamentSpeed * Math.max(
+          0.16,
+          0.7 + motionEnergy * 0.46 + attentionStrength * 0.08 - attentionLock * 0.02 + attentionUncertainty * 0.02 + orbitSpeedBias * 0.12
+        );
+        const ringSpeed = speed * filament.speedScalar * layerSpeedBias;
+        const primaryOrbit = Math.sin(frame.elapsed * filament.orbitRatePrimary * ringSpeed + filament.orbitPhasePrimary) * (layerOrbitRange + attentionStrength * 0.03 + motionEnergy * 0.02 - attentionUncertainty * 0.02);
+        const secondaryOrbit = Math.cos(frame.elapsed * filament.orbitRateSecondary * ringSpeed + filament.orbitPhaseSecondary) * (layerOrbitRange * 0.46 + attentionLock * 0.03 - attentionUncertainty * 0.02);
+        const tertiaryOrbit = Math.sin(frame.elapsed * filament.orbitRateTertiary * ringSpeed + filament.orbitPhaseTertiary) * (layerOrbitRange * 0.22 + attentionUncertainty * 0.03);
+        filament.group.quaternion.copy(filament.baseQuaternion);
+        filament.group.quaternion.multiply(
+          this.tempQuatA.setFromAxisAngle(filament.orbitAxisPrimary, primaryOrbit)
+        );
+        filament.group.quaternion.multiply(
+          this.tempQuatB.setFromAxisAngle(filament.orbitAxisSecondary, secondaryOrbit)
+        );
+        filament.group.quaternion.multiply(
+          this.tempQuatC.setFromAxisAngle(filament.orbitAxisTertiary, tertiaryOrbit)
+        );
+        filament.mesh.rotation.x = Math.sin(frame.elapsed * (filament.weaveRate + filament.localSpin.x * 0.06) * ringSpeed + filament.weavePhase) * (0.055 * Math.max(0.28, profile.filamentDrift));
+        filament.mesh.rotation.y = Math.cos(frame.elapsed * (filament.weaveRate * 0.82 + filament.localSpin.y * 0.05) * ringSpeed + filament.weavePhase * 0.8) * (0.045 * Math.max(0.28, profile.filamentDrift));
+        filament.mesh.rotation.z = Math.sin(frame.elapsed * (filament.weaveRate * 0.54 + Math.abs(filament.localSpin.z) * 0.05) * ringSpeed + filament.weavePhase * 1.2) * (0.035 * Math.max(0.28, profile.filamentDrift));
+        const wobble = 1 + Math.sin(frame.elapsed * filament.breatheRate + filament.breathePhase) * ((0.01 + motionEnergy * (filament.layer === "outer" ? 0.016 : 0.01)) * Math.max(0.22, profile.filamentDrift));
+        const layerTightBias = filament.layer === "inner" ? 1.08 : filament.layer === "mid" ? 1 : 0.92;
+        const tight = profile.filamentTightness * profile.compression * layerTightBias * Math.max(
+          0.84,
+          0.96 + attentionStrength * 0.03 + attentionLock * 0.12 - attentionUncertainty * 0.08 + ringTightness * 0.08
+        );
+        filament.group.scale.setScalar(filament.baseScale * wobble * tight);
+        if (hasDirectionalTarget) {
+          const directionalBias = directionProfileBias * biasStrengthBase * layerBiasScalar;
+          const forwardBias = frame.state === "investigate" ? 0.08 + attentionStrength * 0.04 : frame.state === "target_lock" ? 0.11 + attentionLock * 0.04 : frame.state === "commit_move" || frame.state === "hover_ready" || frame.state === "click_act" || frame.state === "drag_act" || frame.state === "type_hold" ? 0.16 + biasStrengthBase * 0.05 : frame.state === "interrupted" ? -0.05 : 0.04;
+          const lateralBias = frame.state === "investigate" ? 0.09 + attentionUncertainty * 0.04 : frame.state === "blocked" ? -0.016 : frame.state === "interrupted" ? -0.028 : 0.012;
+          this.tempBias.copy(this.tempDirection).multiplyScalar(directionalBias * forwardBias).addScaledVector(this.tempLateral, directionalBias * lateralBias);
+          filament.group.position.copy(this.tempBias);
+        } else {
+          filament.group.position.set(0, 0, 0);
+        }
         filament.material.uniforms.uTime.value = frame.elapsed;
-        filament.material.uniforms.uOpacity.value = profile.filamentOpacity;
-        filament.material.uniforms.uSpeed.value = speed;
+        filament.material.uniforms.uOpacity.value = profile.filamentOpacity * filament.opacityScalar * (0.98 + ringDensity * 0.42) * (filament.layer === "inner" ? 1 : filament.layer === "mid" ? 0.96 : 0.84);
+        filament.material.uniforms.uSpeed.value = ringSpeed;
         filament.material.uniforms.uTightness.value = tight;
+        filament.material.uniforms.uContinuity.value = Math.max(
+          0.04,
+          Math.min(
+            0.82,
+            profile.filamentContinuity + filament.continuity * 0.34 + attentionLock * (filament.layer === "inner" ? 0.18 : 0.1) - attentionUncertainty * 0.1 - Math.max(0, profile.filamentDrift - 0.5) * 0.08
+          )
+        );
+        filament.material.uniforms.uArcCenterA.value = wrapUnit(
+          filament.arcCenterA + Math.sin(frame.elapsed * filament.orbitRateSecondary * 0.2 + filament.weavePhase) * 0.012
+        );
+        filament.material.uniforms.uArcCenterB.value = wrapUnit(
+          filament.arcCenterB + Math.cos(frame.elapsed * filament.orbitRatePrimary * 0.16 + filament.weavePhase * 0.7) * 0.01
+        );
+        filament.material.uniforms.uArcCenterC.value = wrapUnit(
+          filament.arcCenterC + Math.sin(frame.elapsed * filament.orbitRateTertiary * 0.26 + filament.weavePhase * 1.2) * 8e-3
+        );
+        filament.material.uniforms.uArcSpanA.value = filament.arcSpanA * profile.filamentSpread * Math.max(0.74, 1 - attentionLock * 0.12 + attentionUncertainty * 0.08);
+        filament.material.uniforms.uArcSpanB.value = filament.arcSpanB * profile.filamentSpread * Math.max(0.76, 1 - attentionLock * 0.1 + attentionUncertainty * 0.08);
+        filament.material.uniforms.uArcSpanC.value = filament.arcSpanC * profile.filamentSpread * Math.max(0.78, 1 - attentionLock * 0.08 + attentionUncertainty * 0.08);
+        filament.material.uniforms.uArcSoftness.value = filament.arcSoftness * (1 + attentionUncertainty * 0.12 + Math.max(0, profile.filamentDrift - 0.5) * 0.08);
       }
     }
     dispose() {
@@ -27473,7 +27521,7 @@ void main() {
       this.positions = new Float32Array(count * 3);
       this.seeds = new Float32Array(count);
       for (let i = 0; i < count; i += 1) {
-        const r = rng.range(1.4, 2.6);
+        const r = rng.range(0.44, 1.02);
         const theta = rng.range(0, Math.PI * 2);
         const phi = Math.acos(rng.range(-1, 1));
         this.positions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
@@ -27484,10 +27532,10 @@ void main() {
       const geometry = new BufferGeometry();
       geometry.setAttribute("position", new BufferAttribute(this.positions, 3));
       const material = new PointsMaterial({
-        color: 15005183,
-        size: 0.03,
+        color: 15791871,
+        size: 7e-3,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.028,
         blending: AdditiveBlending,
         depthWrite: false
       });
@@ -27500,9 +27548,9 @@ void main() {
         const x = this.positions[ix + 0];
         const y = this.positions[ix + 1];
         const z = this.positions[ix + 2];
-        const angle = Math.atan2(y, x) + frame.dt * 0.16 * profile.particleSpeed;
+        const angle = Math.atan2(y, x) + frame.dt * 0.065 * profile.particleSpeed;
         const radius = Math.sqrt(x * x + y * y);
-        const dz = Math.sin(frame.elapsed * 0.7 + this.seeds[i]) * 18e-4 * profile.particleSpeed;
+        const dz = Math.sin(frame.elapsed * 0.44 + this.seeds[i]) * 65e-5 * profile.particleSpeed;
         this.positions[ix + 0] = Math.cos(angle) * radius;
         this.positions[ix + 1] = Math.sin(angle) * radius;
         this.positions[ix + 2] = z + dz;
@@ -27521,14 +27569,14 @@ void main() {
   var shell_vertex_default = "varying vec3 vNormal;\nvarying vec3 vViewDir;\nvarying vec3 vWorldPos;\nvarying vec3 vObjectPos;\n\nvoid main() {\n  vec4 worldPos = modelMatrix * vec4(position, 1.0);\n  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);\n  vWorldPos = worldPos.xyz;\n  vObjectPos = position;\n  vNormal = normalize(normalMatrix * normal);\n  vViewDir = normalize(-mvPosition.xyz);\n  gl_Position = projectionMatrix * mvPosition;\n}\n";
 
   // renderer/shaders/shell.fragment.glsl
-  var shell_fragment_default = "uniform float uTime;\nuniform float uOpacity;\nuniform float uFresnelPower;\nuniform float uActivity;\nuniform float uPulse;\nuniform float uNoiseDensity;\nuniform float uRefractionStrength;\n\nvarying vec3 vNormal;\nvarying vec3 vViewDir;\nvarying vec3 vWorldPos;\nvarying vec3 vObjectPos;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nfloat fbm(vec3 p) {\n  float value = 0.0;\n  float amplitude = 0.55;\n\n  for (int i = 0; i < 4; i++) {\n    value += noise(p) * amplitude;\n    p = p * 2.03 + vec3(11.7, 5.2, 9.3);\n    amplitude *= 0.5;\n  }\n\n  return value;\n}\n\nvoid main() {\n  vec3 normal = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);\n  vec3 viewDir = normalize(vViewDir);\n  float fresnel = pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), uFresnelPower);\n\n  vec3 basePos = vObjectPos * (2.8 * uNoiseDensity);\n  vec3 slowFlow = vec3(uTime * 0.12, -uTime * 0.08, uTime * 0.18);\n  vec3 fastFlow = vec3(-uTime * 0.21, uTime * 0.15, -uTime * 0.11);\n  vec3 refracted = refract(-viewDir, normal, 1.0 / (1.04 + uRefractionStrength * 0.08));\n\n  vec3 warp = vec3(\n    fbm(basePos + slowFlow),\n    fbm(basePos * 1.7 - fastFlow),\n    fbm(vWorldPos * 1.3 + slowFlow * 0.6)\n  ) - 0.5;\n\n  float coarse = fbm(basePos + slowFlow + refracted * (0.7 + uRefractionStrength * 0.8));\n  float billow = fbm(basePos * 2.05 - fastFlow + warp * 1.8);\n  float grain = fbm(basePos * 3.9 + refracted * 1.35 - slowFlow * 1.4);\n  float filigree = fbm(basePos * 4.6 + warp * 2.4 - fastFlow * 1.6);\n\n  float shellBody = smoothstep(0.26, 0.88, coarse * 0.6 + billow * 0.4);\n  float internalHaze = smoothstep(0.18, 0.92, grain * 0.65 + coarse * 0.35);\n  float fracture = smoothstep(0.5, 0.94, filigree + grain * 0.22);\n  float meshLines = 1.0 - smoothstep(0.08, 0.28, abs(billow - filigree));\n  meshLines *= 0.55 + fracture * 0.45;\n\n  float rim = clamp(fresnel * 1.2 + meshLines * 0.35 + fracture * 0.25, 0.0, 1.0);\n  float shimmer = clamp(0.82 + (uPulse - 1.0) * 2.8, 0.75, 1.1);\n\n  float prismR = fbm(basePos * 2.6 + refracted * 1.4 + vec3(uTime * 0.18, 0.0, 0.0));\n  float prismB = fbm(basePos * 2.6 + refracted * 1.4 - vec3(0.0, uTime * 0.16, 0.0));\n  vec3 prismShift = vec3(prismR - 0.5, internalHaze - 0.5, prismB - 0.5);\n\n  vec3 deepColor = vec3(0.08, 0.19, 0.28);\n  vec3 bodyColor = vec3(0.33, 0.72, 0.94);\n  vec3 rimColor = vec3(0.84, 0.97, 1.0);\n\n  vec3 color = mix(deepColor, bodyColor, shellBody);\n  color = mix(color, rimColor, rim * 0.45 + fracture * 0.2);\n  color += prismShift * (0.09 + uRefractionStrength * 0.06) * (0.35 + rim * 0.65);\n  color += rimColor * meshLines * (0.08 + uActivity * 0.06);\n  color *= (0.62 + internalHaze * 0.25 + rim * 0.45) * shimmer;\n  color = max(color, vec3(0.0));\n\n  float alpha = uOpacity * (0.78 + uActivity * 0.32);\n  alpha *= clamp(fresnel * 1.15 + shellBody * 0.42 + fracture * 0.18, 0.0, 1.1);\n  alpha *= 0.86 + meshLines * 0.22;\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
+  var shell_fragment_default = "uniform float uTime;\nuniform float uOpacity;\nuniform float uFresnelPower;\nuniform float uActivity;\nuniform float uPulse;\nuniform float uNoiseDensity;\nuniform float uRefractionStrength;\n\nvarying vec3 vNormal;\nvarying vec3 vViewDir;\nvarying vec3 vWorldPos;\nvarying vec3 vObjectPos;\n\nfloat hash(vec3 p) {\n  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));\n  p *= 17.0;\n  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));\n}\n\nfloat noise(vec3 x) {\n  vec3 i = floor(x);\n  vec3 f = fract(x);\n\n  float n000 = hash(i + vec3(0.0, 0.0, 0.0));\n  float n100 = hash(i + vec3(1.0, 0.0, 0.0));\n  float n010 = hash(i + vec3(0.0, 1.0, 0.0));\n  float n110 = hash(i + vec3(1.0, 1.0, 0.0));\n  float n001 = hash(i + vec3(0.0, 0.0, 1.0));\n  float n101 = hash(i + vec3(1.0, 0.0, 1.0));\n  float n011 = hash(i + vec3(0.0, 1.0, 1.0));\n  float n111 = hash(i + vec3(1.0, 1.0, 1.0));\n\n  vec3 u = f * f * (3.0 - 2.0 * f);\n\n  return mix(\n    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),\n    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),\n    u.z\n  );\n}\n\nfloat fbm(vec3 p) {\n  float value = 0.0;\n  float amplitude = 0.55;\n\n  for (int i = 0; i < 4; i++) {\n    value += noise(p) * amplitude;\n    p = p * 2.03 + vec3(11.7, 5.2, 9.3);\n    amplitude *= 0.5;\n  }\n\n  return value;\n}\n\nvoid main() {\n  vec3 normal = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);\n  vec3 viewDir = normalize(vViewDir);\n  float facing = clamp(dot(normal, viewDir), 0.0, 1.0);\n  float fresnel = pow(1.0 - facing, uFresnelPower);\n\n  vec3 basePos = normalize(vObjectPos) * (1.32 + uNoiseDensity * 0.08);\n  vec3 slowFlow = vec3(uTime * 0.06, -uTime * 0.04, uTime * 0.08);\n  vec3 fastFlow = vec3(-uTime * 0.09, uTime * 0.06, -uTime * 0.05);\n  vec3 refracted = refract(-viewDir, normal, 1.0 / (1.005 + uRefractionStrength * 0.012));\n\n  float veil = fbm(basePos * 1.9 + slowFlow + refracted * 0.08);\n  float wisps = fbm(basePos * 3.1 - fastFlow + vec3(veil * 0.12));\n  float threads = fbm(basePos * 4.1 + refracted * 0.16 - slowFlow * 0.6);\n\n  float rim = smoothstep(0.4, 1.0, fresnel);\n  float veilMask = smoothstep(0.6, 0.88, veil * 0.68 + wisps * 0.32);\n  float fiber = smoothstep(0.56, 0.84, wisps * 0.44 + threads * 0.56);\n  float innerVeil = (1.0 - facing) * (0.02 + veilMask * 0.04);\n  float shimmer = clamp(0.96 + (uPulse - 1.0) * 0.42, 0.92, 1.02);\n\n  vec3 voidTone = vec3(0.004, 0.006, 0.01);\n  vec3 silver = vec3(0.42, 0.48, 0.56);\n  vec3 ice = vec3(0.86, 0.9, 0.95);\n\n  vec3 color = mix(voidTone, silver, veilMask * 0.05 + fiber * 0.07 + innerVeil * 0.06);\n  color = mix(color, ice, rim * 0.16 + fiber * 0.04);\n  color *= (0.06 + rim * 0.16 + innerVeil * 0.08) * shimmer;\n  color = max(color, vec3(0.0));\n\n  float alpha = uOpacity * (0.56 + uActivity * 0.08);\n  alpha *= clamp(rim * 0.18 + fiber * 0.12 + innerVeil * 0.1, 0.0, 1.0);\n\n  gl_FragColor = vec4(color, alpha);\n}\n";
 
   // renderer/OrbShell.ts
   var OrbShell = class {
     mesh;
     material;
     constructor(radius) {
-      const geometry = new SphereGeometry(radius, 96, 96);
+      const geometry = new SphereGeometry(radius, 40, 40);
       this.material = new ShaderMaterial({
         vertexShader: shell_vertex_default,
         fragmentShader: shell_fragment_default,
@@ -27536,32 +27584,41 @@ void main() {
         side: DoubleSide,
         uniforms: {
           uTime: { value: 0 },
-          uOpacity: { value: 0.1 },
-          uFresnelPower: { value: 2.2 },
+          uOpacity: { value: 0.018 },
+          uFresnelPower: { value: 4.6 },
           uActivity: { value: 0 },
           uPulse: { value: 1 },
-          uNoiseDensity: { value: 1 },
-          uRefractionStrength: { value: 0.45 }
+          uNoiseDensity: { value: 0.6 },
+          uRefractionStrength: { value: 0.02 }
         },
         blending: AdditiveBlending,
         depthWrite: false,
+        depthTest: true,
         toneMapped: false
       });
       this.mesh = new Mesh(geometry, this.material);
+      this.mesh.renderOrder = 2;
     }
     update(frame, profile) {
-      const breathe = 1 + Math.sin(frame.elapsed * 0.7) * 6e-3;
-      const stateBoost = frame.state === "interject" ? 0.33 : frame.state === "acting" ? 0.28 : frame.state === "speaking" ? 0.24 : frame.state === "thinking" ? 0.18 : frame.state === "listening" ? 0.12 : frame.state === "error" ? 0.08 : 0;
-      const activity = Math.min(1, stateBoost + frame.speakingAmplitude * 0.9);
-      const shimmer = 1 + Math.sin(frame.elapsed * (profile.pulseSpeed * Math.PI * 1.5 + 0.5)) * (0.03 + profile.pulseAmplitude * 0.6 + activity * 0.03);
-      this.mesh.scale.setScalar(breathe * profile.compression);
+      const settleEnergy = getOrbSettleEnergy(frame.state);
+      const breathe = 1 + Math.sin(frame.elapsed * 0.48) * (2e-3 * settleEnergy);
+      const stateBoost = getOrbStateBoost(frame.state);
+      const attentionStrength = Math.max(0, Math.min(1, Number(frame.attentionStrength ?? frame.confidence ?? 0.28)));
+      const attentionLock = Math.max(0, Math.min(1, Number(frame.attentionLock ?? 0.18)));
+      const attentionUncertainty = Math.max(0, Math.min(1, Number(frame.attentionUncertainty ?? 0.14)));
+      const activity = Math.min(
+        1,
+        stateBoost + frame.speakingAmplitude * 0.6 + attentionStrength * 0.2 + attentionLock * 0.16 - attentionUncertainty * 0.08
+      );
+      const shimmer = 1 + Math.sin(frame.elapsed * (profile.pulseSpeed * Math.PI * 1.2 + 0.4)) * ((3e-3 + profile.pulseAmplitude * 0.08 + activity * 8e-3) * settleEnergy);
+      this.mesh.scale.setScalar(breathe * Math.max(0.82, profile.compression * 0.9));
       this.material.uniforms.uTime.value = frame.elapsed;
       this.material.uniforms.uOpacity.value = profile.shellOpacity;
       this.material.uniforms.uFresnelPower.value = profile.shellFresnelPower;
       this.material.uniforms.uActivity.value = activity;
       this.material.uniforms.uPulse.value = shimmer;
-      this.material.uniforms.uNoiseDensity.value = 1 + profile.coreDistortion * 1.8 + (1 - profile.compression) * 1.2 + stateBoost * 0.25;
-      this.material.uniforms.uRefractionStrength.value = 0.34 + profile.coreDistortion * 1.45 + activity * 0.18;
+      this.material.uniforms.uNoiseDensity.value = 0.42 + profile.coreDistortion * 0.42 + (1 - profile.compression) * 0.18 + stateBoost * 0.04 + attentionUncertainty * 0.06 - attentionLock * 0.04;
+      this.material.uniforms.uRefractionStrength.value = 8e-3 + profile.coreDistortion * 0.14 + activity * 0.015 + attentionLock * 0.012 - attentionUncertainty * 0.01;
     }
     dispose() {
       this.mesh.geometry.dispose();
@@ -27576,10 +27633,10 @@ void main() {
     temp = new Vector3();
     origin = new Vector3(0, 0, 0);
     constructor() {
-      const geometry = new CylinderGeometry(0.02, 0.08, 1, 12, 1, true);
+      const geometry = new CylinderGeometry(4e-3, 0.014, 1, 10, 1, true);
       geometry.translate(0, 0.5, 0);
       this.material = new MeshBasicMaterial({
-        color: 12576767,
+        color: 15923455,
         transparent: true,
         opacity: 0,
         blending: AdditiveBlending,
@@ -27590,12 +27647,13 @@ void main() {
       this.mesh.visible = false;
     }
     update(frame, profile) {
-      if (frame.state !== "acting" || !frame.actionTarget) {
+      const beamTarget = frame.actionTarget ?? (frame.state === "target_lock" ? frame.attentionTarget : null);
+      if (!shouldRenderOrbBeam(frame.state) || !beamTarget) {
         this.mesh.visible = false;
         this.material.opacity = 0;
         return;
       }
-      const target = frame.actionTarget.clone();
+      const target = beamTarget.clone();
       const direction = target.clone().sub(this.origin);
       const length = direction.length();
       if (length < 1e-3) {
@@ -27608,8 +27666,8 @@ void main() {
       this.mesh.scale.set(1, length, 1);
       this.temp.copy(this.origin).add(target).multiplyScalar(0.5);
       this.mesh.position.copy(this.temp);
-      const strength = frame.actionStrength ?? 1;
-      this.material.opacity = profile.beamOpacity * strength;
+      const strength = frame.actionTarget ? frame.actionStrength ?? 1 : Math.max(0.18, Math.min(0.54, Number(frame.attentionLock ?? frame.attentionStrength ?? 0.24)));
+      this.material.opacity = profile.beamOpacity * strength * 0.54;
     }
     dispose() {
       this.mesh.geometry.dispose();
@@ -27647,17 +27705,19 @@ void main() {
       this.particles = new OrbParticles(ORB_CONFIG.particleCount, options.seed + 99);
       this.root.add(this.aura.sprite);
       this.root.add(this.shell.mesh);
-      this.root.add(this.filaments.group);
-      this.root.add(this.particles.points);
       this.root.add(this.core.mesh);
+      this.root.add(this.filaments.group);
+      if (ORB_CONFIG.particleCount > 0) {
+        this.root.add(this.particles.points);
+      }
       if (options.enableBeam) {
         this.beam = new OrbTargetBeam();
         this.root.add(this.beam.mesh);
       }
-      this.root.rotation.x = 0.18;
-      this.root.rotation.y = -0.35;
+      this.root.scale.setScalar(1.32);
+      this.root.rotation.x = 0.05;
+      this.root.rotation.y = -0.14;
       this.scene.add(this.root);
-      this.buildLighting();
     }
     update(frame, profile) {
       this.core.update(frame, profile);
@@ -27666,7 +27726,7 @@ void main() {
       this.filaments.update(frame, profile);
       this.particles.update(frame, profile);
       this.beam?.update(frame, profile);
-      this.animateRoot(frame);
+      this.animateRoot(frame, profile);
     }
     setSize(width, height) {
       this.camera.aspect = width / height;
@@ -27680,20 +27740,35 @@ void main() {
       this.particles.dispose();
       this.beam?.dispose();
     }
-    buildLighting() {
-      const ambient = new AmbientLight(13165823, 0.5);
-      const point = new PointLight(15267839, 3.2, 18, 2);
-      point.position.set(0, 0, 3.2);
-      this.scene.add(ambient);
-      this.scene.add(point);
-    }
-    animateRoot(frame) {
-      this.root.position.y = Math.sin(frame.elapsed * ORB_CONFIG.idleFloatSpeed) * ORB_CONFIG.idleFloatAmp;
+    animateRoot(frame, profile) {
+      const attentionStrength = Math.max(0, Math.min(1, Number(frame.attentionStrength ?? frame.confidence ?? 0.32)));
+      const attentionLock = Math.max(0, Math.min(1, Number(frame.attentionLock ?? 0.18)));
+      const attentionUncertainty = Math.max(0, Math.min(1, Number(frame.attentionUncertainty ?? 0.14)));
+      const directionalBias = Math.max(0, Number(profile.directionalBias ?? 0));
+      const rootStillness = Math.max(0.22, Math.min(1, Number(profile.rootStillness ?? 0.62)));
+      const floatAmplitude = ORB_CONFIG.idleFloatAmp * Math.max(
+        0.12,
+        (1 - rootStillness * 0.72) * (1 - attentionStrength * 0.36 - attentionLock * 0.24 + attentionUncertainty * 0.18)
+      );
+      this.root.position.y = Math.sin(frame.elapsed * ORB_CONFIG.idleFloatSpeed) * floatAmplitude;
+      this.root.position.x = Math.cos(frame.elapsed * (ORB_CONFIG.idleFloatSpeed * 0.72)) * floatAmplitude * 0.32;
       const target = frame.attentionTarget ?? new Vector3(0, 0, 0);
       const yaw = Math.atan2(target.x, 5);
       const pitch = Math.atan2(target.y, 6);
-      this.root.rotation.y = lerp2(this.root.rotation.y, -0.35 + yaw, 0.03);
-      this.root.rotation.x = lerp2(this.root.rotation.x, 0.18 - pitch, 0.03);
+      const trackingLerp = Math.max(
+        0.02,
+        Math.min(
+          0.1,
+          0.022 + attentionStrength * 0.024 + attentionLock * 0.034 + directionalBias * 0.02 - rootStillness * 0.01 - attentionUncertainty * 0.012
+        )
+      );
+      this.root.rotation.y = lerp2(this.root.rotation.y, -0.12 + yaw, trackingLerp);
+      this.root.rotation.x = lerp2(this.root.rotation.x, 0.05 - pitch, trackingLerp);
+      this.root.rotation.z = lerp2(
+        this.root.rotation.z,
+        Math.sin(frame.elapsed * 0.26) * (0.01 + (1 - rootStillness) * 0.02) + attentionStrength * (4e-3 + directionalBias * 0.01) - attentionLock * 8e-3,
+        Math.max(0.014, trackingLerp * 0.7)
+      );
     }
   };
 
@@ -27740,11 +27815,61 @@ void main() {
   };
 
   // control/OrbAttentionController.ts
+  function clamp3(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function normalizeAttentionState(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "investigate" || normalized === "target_lock" || normalized === "reassess") {
+      return normalized;
+    }
+    return "idle";
+  }
   var OrbAttentionController = class {
     current = new Vector3(0, 0, 0);
-    update(target) {
-      const desired = target ?? new Vector3(0, 0, 0);
-      return vec3Lerp(this.current, desired, ORB_CONFIG.attentionLerp);
+    desired = new Vector3(0, 0, 0);
+    neutral = new Vector3(0, 0, 0);
+    offset = new Vector3(0, 0, 0);
+    update(input = {}) {
+      const state = normalizeAttentionState(input.state);
+      const target = input.target ?? this.neutral;
+      const strength = clamp3(Number(input.strength ?? 0.32), 0, 1);
+      const lock = clamp3(Number(input.lock ?? 0.18), 0, 1);
+      const uncertainty = clamp3(Number(input.uncertainty ?? 0.16), 0, 1);
+      const elapsed = Number(input.elapsed ?? 0);
+      this.desired.copy(target);
+      this.offset.set(0, 0, 0);
+      if (state === "investigate") {
+        const radius = 0.12 + strength * 0.26 + uncertainty * 0.08;
+        this.offset.set(
+          Math.sin(elapsed * 0.92) * radius,
+          Math.cos(elapsed * 1.18) * radius * 0.62,
+          0
+        );
+        this.desired.add(this.offset);
+      } else if (state === "target_lock") {
+        const radius = 0.016 + (1 - lock) * 0.06 + uncertainty * 0.02;
+        this.offset.set(
+          Math.sin(elapsed * 0.44) * radius,
+          Math.cos(elapsed * 0.58) * radius * 0.48,
+          0
+        );
+        this.desired.add(this.offset);
+      } else if (state === "reassess") {
+        const retreat = 0.34 + uncertainty * 0.22;
+        this.desired.multiplyScalar(Math.max(0.18, 1 - retreat));
+        const radius = 0.08 + uncertainty * 0.12;
+        this.offset.set(
+          Math.sin(elapsed * 0.56) * radius,
+          Math.cos(elapsed * 0.76) * radius * 0.52,
+          0
+        );
+        this.desired.add(this.offset);
+      } else if (!input.target) {
+        this.desired.copy(this.neutral);
+      }
+      const lerpAmount = state === "target_lock" ? clamp3(ORB_CONFIG.attentionLerp + 0.03 + lock * 0.08 - uncertainty * 0.02, 0.05, 0.2) : state === "investigate" ? clamp3(ORB_CONFIG.attentionLerp + 0.01 + strength * 0.05 - uncertainty * 0.01, 0.04, 0.14) : state === "reassess" ? clamp3(ORB_CONFIG.attentionLerp + 8e-3 + uncertainty * 0.03, 0.04, 0.12) : ORB_CONFIG.attentionLerp;
+      return vec3Lerp(this.current, this.desired, lerpAmount);
     }
     get value() {
       return this.current;
@@ -27752,16 +27877,64 @@ void main() {
   };
 
   // control/OrbStateController.ts
+  function defaultAttentionStateForOrbState(state) {
+    if (state === "target_lock" || state === "commit_move" || state === "hover_ready" || state === "click_act" || state === "drag_act" || state === "type_hold") {
+      return "target_lock";
+    }
+    if (state === "investigate" || state === "attentive") {
+      return "investigate";
+    }
+    if (state === "blocked" || state === "interrupted") {
+      return "reassess";
+    }
+    return "idle";
+  }
   var OrbStateController = class {
     speech = new OrbSpeechController();
     attention = new OrbAttentionController();
     action = new OrbActionController();
     buildFrame(signals, dt, elapsed) {
       const action = this.action.update(signals.actionTarget, signals.actionStrength ?? 0);
+      const attentionState = signals.attentionState ?? defaultAttentionStateForOrbState(signals.state);
+      const attentionStrength = Math.max(0, Math.min(1, Number(signals.attentionStrength ?? signals.confidence ?? 0.36)));
+      const attentionLock = Math.max(
+        0,
+        Math.min(
+          1,
+          Number(
+            signals.attentionLock ?? (attentionState === "target_lock" ? 0.82 : attentionState === "investigate" ? 0.42 : 0.16)
+          )
+        )
+      );
+      const attentionUncertainty = Math.max(
+        0,
+        Math.min(
+          1,
+          Number(
+            signals.attentionUncertainty ?? (attentionState === "reassess" ? 0.72 : attentionState === "investigate" ? 0.34 : 0.12)
+          )
+        )
+      );
       return {
         state: signals.state,
         speakingAmplitude: this.speech.update(signals.speakingAmplitude ?? 0),
-        attentionTarget: this.attention.update(signals.attentionTarget),
+        visualCoreBrightness: Number(signals.visual?.coreBrightness ?? 0.84),
+        visualHaloStrength: Number(signals.visual?.haloStrength ?? 0.9),
+        visualRingDensity: Number(signals.visual?.ringDensity ?? 0.92),
+        visualRingTightness: Number(signals.visual?.ringTightness ?? 0.82),
+        visualOrbitSpeed: Number(signals.visual?.orbitSpeed ?? 0.74),
+        attentionTarget: this.attention.update({
+          target: signals.attentionTarget,
+          state: attentionState,
+          strength: attentionStrength,
+          lock: attentionLock,
+          uncertainty: attentionUncertainty,
+          elapsed
+        }),
+        attentionState,
+        attentionStrength,
+        attentionLock,
+        attentionUncertainty,
         actionTarget: action.target,
         actionStrength: action.strength,
         confidence: signals.confidence,
@@ -27774,10 +27947,10 @@ void main() {
 
   // control/OrbTransitionController.ts
   var OrbTransitionController = class {
-    currentProfile = { ...ORB_STATE_PROFILES.idle };
-    targetProfile = { ...ORB_STATE_PROFILES.idle };
+    currentProfile = { ...ORB_STATE_PROFILES.idle_anchored };
+    targetProfile = { ...ORB_STATE_PROFILES.idle_anchored };
     setState(state) {
-      this.targetProfile = { ...ORB_STATE_PROFILES[state] };
+      this.targetProfile = { ...ORB_STATE_PROFILES[normalizeOrbState(state)] };
     }
     update() {
       const keys = Object.keys(this.currentProfile);
@@ -27804,7 +27977,7 @@ void main() {
     stateController = new OrbStateController();
     transitionController = new OrbTransitionController();
     composer;
-    signals = { state: "idle" };
+    signals = { state: "idle_anchored" };
     rafId = null;
     disposed = false;
     constructor(options) {
@@ -27821,6 +27994,9 @@ void main() {
       this.renderer.outputColorSpace = SRGBColorSpace;
       this.renderer.setClearColor(0, options.transparentBackground ? 0 : 1);
       this.renderer.domElement.style.background = "transparent";
+      this.container.dataset.renderer = "live";
+      this.container.dataset.rendererOwner = "francis_orb";
+      this.renderer.domElement.dataset.rendererSurface = "orb_canvas";
       this.container.appendChild(this.renderer.domElement);
       this.orbScene = new OrbScene({
         width,
@@ -27870,6 +28046,8 @@ void main() {
       if (this.renderer.domElement.parentElement === this.container) {
         this.container.removeChild(this.renderer.domElement);
       }
+      this.container.dataset.renderer = "fallback";
+      delete this.container.dataset.rendererOwner;
     }
     tick = () => {
       if (this.disposed) {
@@ -27902,11 +28080,17 @@ void main() {
       if (input.missingRequiredField) {
         return { interject: true, reason: "missing_required_field" };
       }
+      if (input.policyBlocked) {
+        return { interject: true, reason: "policy_blocked" };
+      }
       if (input.permissionBlocked) {
         return { interject: true, reason: "permission_blocked" };
       }
       if (input.unsafeAction) {
         return { interject: true, reason: "unsafe_action" };
+      }
+      if (input.approvalRequired) {
+        return { interject: true, reason: "approval_required" };
       }
       if (input.confirmationRequired) {
         return { interject: true, reason: "confirmation_required" };
@@ -27937,10 +28121,10 @@ void main() {
     return {
       orb,
       setIdle() {
-        orb.setSignals({ state: "idle" });
+        orb.setSignals({ state: "idle_anchored" });
       },
       setListening() {
-        orb.setSignals({ state: "listening" });
+        orb.setSignals({ state: "attentive" });
       },
       setThinking(confidence = 1) {
         const decision = policy.decide({
@@ -27952,20 +28136,20 @@ void main() {
           unsafeAction: false
         });
         orb.setSignals({
-          state: decision.interject ? "interject" : "thinking",
+          state: decision.interject ? "waiting_user" : "investigate",
           confidence,
           interjectionIntent: decision.interject
         });
       },
       setSpeaking(amplitude) {
         orb.setSignals({
-          state: "speaking",
+          state: "attentive",
           speakingAmplitude: amplitude
         });
       },
       setActing(target, strength = 1) {
         orb.setSignals({
-          state: "acting",
+          state: "commit_move",
           actionTarget: target,
           actionStrength: strength,
           attentionTarget: target
@@ -27999,46 +28183,184 @@ void main() {
     );
   }
   function mapHudPayloadToState(payload) {
+    const targetCue = payload.operator?.target_cue ?? null;
     const pulseKind = String(payload.visual?.pulse_kind || "steady");
     const severity = String(payload.state?.incident_severity || "nominal").toLowerCase();
+    const pendingApprovals = Number(payload.state?.pending_approvals ?? 0);
+    const blockedActions = Number(payload.state?.blocked_actions ?? 0);
+    const enabledActions = Number(payload.state?.enabled_actions ?? 0);
     if (payload.panic_ready && String(payload.posture || "") === "panic") {
-      return "error";
+      return "degraded";
     }
     if ((payload.state?.security_quarantines ?? 0) > 0 || severity === "critical") {
-      return "error";
+      return "degraded";
+    }
+    if (String(targetCue?.attention_state || "").trim().toLowerCase() === "target_lock") {
+      return "target_lock";
+    }
+    if (String(targetCue?.attention_state || "").trim().toLowerCase() === "reassess") {
+      return "blocked";
     }
     if (payload.operator_cursor || pulseKind === "execution") {
-      return "acting";
+      return "commit_move";
     }
-    if ((payload.interjection_level ?? 0) >= 2 || String(payload.posture || "") === "interjecting") {
-      return "interject";
+    if (blockedActions > 0) {
+      return "blocked";
     }
-    if (payload.voice_channel || pulseKind === "voice_ready") {
-      return "speaking";
+    if (pendingApprovals > 0 || (payload.interjection_level ?? 0) >= 2 || String(payload.posture || "") === "interjecting") {
+      return "waiting_user";
     }
-    if ((payload.state?.enabled_actions ?? 0) > 0 || (payload.state?.pending_approvals ?? 0) > 0) {
-      return "thinking";
+    if (enabledActions > 0 || payload.voice_channel || pulseKind === "voice_ready") {
+      return "investigate";
+    }
+    if (String(payload.posture || "") === "focused") {
+      return "attentive";
+    }
+    return "idle_anchored";
+  }
+  function confidenceTextToScore(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "high" || normalized === "likely") {
+      return 0.92;
+    }
+    if (normalized === "medium") {
+      return 0.64;
+    }
+    if (normalized === "low") {
+      return 0.28;
+    }
+    return 0.18;
+  }
+  function salienceTextToScore(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "high") {
+      return 0.88;
+    }
+    if (normalized === "medium") {
+      return 0.58;
+    }
+    return 0.26;
+  }
+  function stabilityTextToScore(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "settled") {
+      return 0.92;
+    }
+    if (normalized === "tracking") {
+      return 0.6;
+    }
+    if (normalized === "transient") {
+      return 0.18;
+    }
+    return 0.08;
+  }
+  function clamp4(value, min = 0, max = 1) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function normalizeAttentionState2(value, fallback = "idle") {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "investigate" || normalized === "target_lock" || normalized === "reassess") {
+      return normalized;
+    }
+    return fallback;
+  }
+  function defaultAttentionStateForState(state) {
+    if (state === "target_lock" || state === "commit_move" || state === "hover_ready" || state === "click_act" || state === "drag_act" || state === "type_hold") {
+      return "target_lock";
+    }
+    if (state === "investigate" || state === "attentive") {
+      return "investigate";
+    }
+    if (state === "blocked" || state === "interrupted") {
+      return "reassess";
     }
     return "idle";
   }
-  function deriveConfidence(payload) {
+  function deriveAttentionTelemetry(payload, state) {
+    const targetCue = payload.operator?.target_cue ?? null;
+    const perceptionTarget = payload.perception?.target ?? null;
+    const perceptionAttention = perceptionTarget?.attention ?? null;
+    const confidenceText = String(targetCue?.confidence || perceptionTarget?.confidence || "").trim().toLowerCase();
+    const stabilityText = String(targetCue?.stability || perceptionTarget?.stability?.state || "").trim().toLowerCase();
+    const defaultState = defaultAttentionStateForState(state);
+    const requestedState = normalizeAttentionState2(
+      String(targetCue?.attention_state || perceptionAttention?.state || ""),
+      defaultState
+    );
+    const attentionState = state === "paused" || state === "degraded" || state === "interrupted" ? "idle" : state === "blocked" ? "reassess" : requestedState;
+    let rawStrength = Number(
+      targetCue?.attention_strength ?? perceptionAttention?.strength ?? Math.max(confidenceTextToScore(confidenceText), salienceTextToScore(perceptionAttention?.salience || targetCue?.salience))
+    );
+    let rawLock = Number(
+      targetCue?.lock_strength ?? perceptionAttention?.lock_strength ?? Math.max(
+        stabilityTextToScore(stabilityText),
+        attentionState === "target_lock" ? 0.78 : attentionState === "investigate" ? 0.42 : 0.18
+      )
+    );
+    let rawUncertainty = Number(
+      targetCue?.uncertainty ?? perceptionAttention?.uncertainty ?? (attentionState === "reassess" ? 0.72 : attentionState === "investigate" ? 0.34 : 0.12)
+    );
+    if (state === "waiting_user") {
+      rawStrength = Math.max(rawStrength, 0.36);
+      rawLock = Math.max(rawLock, 0.48);
+      rawUncertainty = Math.min(rawUncertainty, 0.24);
+    } else if (state === "blocked") {
+      rawStrength = Math.max(rawStrength, 0.32);
+      rawLock = Math.max(rawLock, 0.46);
+      rawUncertainty = Math.min(rawUncertainty, 0.32);
+    } else if (state === "paused") {
+      rawStrength = Math.min(rawStrength, 0.14);
+      rawLock = Math.max(rawLock, 0.18);
+      rawUncertainty = Math.min(rawUncertainty, 0.12);
+    } else if (state === "degraded") {
+      rawStrength *= 0.52;
+      rawLock *= 0.44;
+      rawUncertainty = Math.max(rawUncertainty, 0.4);
+    } else if (state === "interrupted") {
+      rawStrength = Math.min(rawStrength, 0.18);
+      rawLock = Math.min(rawLock, 0.22);
+      rawUncertainty = Math.max(rawUncertainty, 0.28);
+    }
+    return {
+      state: attentionState,
+      strength: clamp4(rawStrength),
+      lock: clamp4(rawLock),
+      uncertainty: clamp4(rawUncertainty)
+    };
+  }
+  function deriveConfidence(payload, attention) {
     const brightness = Number(payload.visual?.core_brightness ?? 0.72);
     const severity = String(payload.state?.incident_severity || "nominal").toLowerCase();
     const quarantinePenalty = Math.min(0.32, (payload.state?.security_quarantines ?? 0) * 0.18);
     const severityPenalty = severity === "high" ? 0.14 : severity === "critical" ? 0.22 : severity === "medium" ? 0.08 : 0;
-    return Math.max(0.2, Math.min(0.98, brightness - quarantinePenalty - severityPenalty));
+    return Math.max(
+      0.2,
+      Math.min(0.98, brightness - quarantinePenalty - severityPenalty + attention.lock * 0.08 - attention.uncertainty * 0.1)
+    );
   }
   function mapHudOrbPayloadToSignals(payload, overrides = {}) {
     const state = overrides.stateOverride ?? mapHudPayloadToState(payload);
-    const actionTarget = overrides.actionTarget ?? (state === "acting" ? new Vector3(2.1, 0.8, 0) : null);
+    const attention = deriveAttentionTelemetry(payload, state);
+    const actionTarget = overrides.actionTarget ?? (isOrbActionState(state) ? new Vector3(2.1, 0.8, 0) : null);
     return {
       state,
+      visual: {
+        coreBrightness: clamp4(Number(payload.visual?.core_brightness ?? 0.84)),
+        haloStrength: clamp4(Number(payload.visual?.halo_strength ?? 0.9)),
+        ringDensity: clamp4(Number(payload.visual?.ring_density ?? 10) / 10),
+        ringTightness: clamp4(Number(payload.visual?.ring_tightness ?? 0.82)),
+        orbitSpeed: clamp4(Number(payload.visual?.orbit_speed ?? 0.74))
+      },
       speakingAmplitude: overrides.speakingAmplitude ?? Number(payload.visual?.voice_resonance ?? 0),
       attentionTarget: overrides.attentionTarget ?? actionTarget,
+      attentionState: overrides.attentionState ?? attention.state,
+      attentionStrength: overrides.attentionStrength ?? attention.strength,
+      attentionLock: overrides.attentionLock ?? attention.lock,
+      attentionUncertainty: overrides.attentionUncertainty ?? attention.uncertainty,
       actionTarget,
-      actionStrength: overrides.actionStrength ?? (state === "acting" ? Math.max(0.42, Number(payload.visual?.core_brightness ?? 0.68)) : 0),
-      confidence: deriveConfidence(payload),
-      interjectionIntent: state === "interject"
+      actionStrength: overrides.actionStrength ?? (isOrbActionState(state) ? Math.max(0.42, Number(payload.visual?.core_brightness ?? 0.68)) : 0),
+      confidence: overrides.confidence ?? deriveConfidence(payload, attention),
+      interjectionIntent: state === "waiting_user" || state === "blocked"
     };
   }
   return __toCommonJS(index_exports);

@@ -18,7 +18,11 @@ from francis_connectors.library import (
     revoke_connector,
 )
 from francis_policy.rbac import can
-from services.orchestrator.app.approvals_store import create_request, ensure_action_approved, list_requests
+from services.orchestrator.app.approvals_store import (
+    create_request,
+    ensure_action_approved,
+    find_latest_request_by_metadata,
+)
 from services.orchestrator.app.control_state import check_action_allowed
 
 router = APIRouter(tags=["connectors"])
@@ -74,13 +78,12 @@ def _find_connector(connector_id: str) -> dict[str, Any] | None:
 
 def _find_revoke_approval(connector_id: str) -> dict[str, Any] | None:
     normalized = str(connector_id or "").strip()
-    for row in reversed(list_requests(_fs, action="connectors.revoke", limit=100)):
-        if not isinstance(row, dict):
-            continue
-        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        if str(metadata.get("connector_id", "")).strip() == normalized:
-            return row
-    return None
+    return find_latest_request_by_metadata(
+        _fs,
+        action="connectors.revoke",
+        metadata_keys=("connector_id",),
+        metadata_value=normalized,
+    )
 
 
 def _connector_presentation(connector: dict[str, Any]) -> dict[str, Any]:

@@ -16,10 +16,10 @@ export class OrbComposer {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
 
-    const bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.72, 0.62, 0.32);
-    bloom.strength = 0.62;
-    bloom.radius = 0.52;
-    bloom.threshold = 0.28;
+    const bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.32, 0.12, 0.8);
+    bloom.strength = 0.32;
+    bloom.radius = 0.12;
+    bloom.threshold = 0.8;
     this.composer.addPass(bloom);
   }
 

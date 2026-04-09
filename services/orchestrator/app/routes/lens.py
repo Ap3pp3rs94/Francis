@@ -25,7 +25,14 @@ from francis_skills.executor import SkillExecutor
 from services.orchestrator.app.adversarial_guard import assess_untrusted_input, quarantine_untrusted_input
 from services.observer.app.main import run_cycle as run_observer_cycle
 
-from services.orchestrator.app.approvals_store import ensure_action_approved, list_requests, pending_count
+from services.orchestrator.app.approvals_store import (
+    ApprovalSnapshot,
+    ensure_action_approved,
+    find_latest_request_by_metadata,
+    list_requests,
+    load_approval_snapshot,
+    pending_count,
+)
 from services.orchestrator.app.runtime_hygiene import count_active_deadletters
 from services.orchestrator.app.autonomy.action_budget import check_action_budget, load_state as load_budget_state
 from services.orchestrator.app.autonomy.decision_engine import build_plan
@@ -44,6 +51,7 @@ from services.orchestrator.app.autonomy.trust_calibration import trust_badge
 from services.orchestrator.app.control_state import (
     VALID_MODES,
     check_action_allowed,
+    check_action_allowed_for_state,
     load_or_init_control_state,
     set_mode,
 )
@@ -67,6 +75,8 @@ from services.orchestrator.app.routes.control import (
     ControlTakeoverHandbackRequest,
     ControlTakeoverRequest,
     append_takeover_activity,
+    _build_takeover_sessions,
+    _load_or_init_takeover_state,
     control_remote_approval_approve,
     control_remote_approval_reject,
     control_remote_approvals,
@@ -174,6 +184,10 @@ def _normalize_trace_id(trace_id: str | None, *, fallback_run_id: str) -> str:
 
 def _role_from_request(request: Request) -> str:
     return request.headers.get("x-francis-role", "architect").strip().lower()
+
+
+def _user_from_request(request: Request) -> str:
+    return request.headers.get("x-francis-user", "hud.operator").strip() or "hud.operator"
 
 
 def _require_orb_authority_coordinate(args: dict[str, Any], name: str, *, action_kind: str) -> int:
@@ -757,17 +771,19 @@ def _build_repo_presentation(
     }
 
 
-def _find_capability_approval(entry_id: str, *, action: str) -> dict[str, Any] | None:
-    requests = list_requests(_fs, action=action, limit=100)
-    for row in reversed(requests):
-        if not isinstance(row, dict):
-            continue
-        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        target_id = str(metadata.get("entry_id", "")).strip() or str(metadata.get("stage_id", "")).strip()
-        if target_id != entry_id:
-            continue
-        return row
-    return None
+def _find_capability_approval(
+    entry_id: str,
+    *,
+    action: str,
+    snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any] | None:
+    return find_latest_request_by_metadata(
+        _fs,
+        action=action,
+        metadata_keys=("entry_id", "stage_id"),
+        metadata_value=str(entry_id).strip(),
+        snapshot=snapshot,
+    )
 
 
 def _build_capability_presentation(
@@ -961,15 +977,31 @@ def _usage_action_chip(
     return hinted
 
 
-def _check_usage_scope(app: str, action: str, *, mutating: bool = False) -> tuple[bool, str]:
-    allowed, reason, _state = check_action_allowed(
-        _fs,
-        repo_root=_repo_root,
-        workspace_root=_workspace_root,
-        app=app,
-        action=action,
-        mutating=mutating,
-    )
+def _check_usage_scope(
+    app: str,
+    action: str,
+    *,
+    mutating: bool = False,
+    state: dict[str, Any] | None = None,
+) -> tuple[bool, str]:
+    if isinstance(state, dict):
+        allowed, reason, _state = check_action_allowed_for_state(
+            state,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            app=app,
+            action=action,
+            mutating=mutating,
+        )
+    else:
+        allowed, reason, _state = check_action_allowed(
+            _fs,
+            repo_root=_repo_root,
+            workspace_root=_workspace_root,
+            app=app,
+            action=action,
+            mutating=mutating,
+        )
     return (allowed, reason)
 
 
@@ -991,15 +1023,19 @@ def _usage_tool_approval_metadata(*, skill_name: str, args: dict[str, Any]) -> d
     }
 
 
-def _find_usage_tool_approval(*, skill_name: str, args: dict[str, Any]) -> dict[str, Any] | None:
-    signature = _usage_tool_approval_signature(skill_name=skill_name, args=args)
-    requests = list_requests(_fs, action=f"tools.{skill_name}", limit=50)
-    for row in reversed(requests):
-        metadata = row.get("metadata", {}) if isinstance(row.get("metadata"), dict) else {}
-        if str(metadata.get("signature", "")).strip() != signature:
-            continue
-        return row
-    return None
+def _find_usage_tool_approval(
+    *,
+    skill_name: str,
+    args: dict[str, Any],
+    snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any] | None:
+    return find_latest_request_by_metadata(
+        _fs,
+        action=f"tools.{skill_name}",
+        metadata_keys=("signature",),
+        metadata_value=_usage_tool_approval_signature(skill_name=skill_name, args=args),
+        snapshot=snapshot,
+    )
 
 
 def _request_usage_tool_approval(
@@ -2710,10 +2746,11 @@ def lens_state(request: Request) -> dict:
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
 
+    approval_snapshot = load_approval_snapshot(_fs)
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
     telemetry = telemetry_status(_fs)
-    lens_snapshot = build_lens_snapshot(_workspace_root)
+    lens_snapshot = build_lens_snapshot(_workspace_root, approval_snapshot=approval_snapshot)
     current_work = lens_snapshot.get("current_work", {}) if isinstance(lens_snapshot.get("current_work"), dict) else {}
     next_best_action = (
         lens_snapshot.get("next_best_action", {})
@@ -2756,7 +2793,11 @@ def lens_state(request: Request) -> dict:
     autonomy_retry_pressure = int(autonomy_queue.get("queued_retry_count", 0))
     catalog_entries = list_entries(_fs)
     staged_count = sum(1 for entry in catalog_entries if str(entry.get("status", "")).lower() == "staged")
-    pending_approvals = pending_count(_fs) + count_active_deadletters(_read_jsonl("queue/deadletter.jsonl")) + staged_count
+    pending_approvals = (
+        pending_count(_fs, snapshot=approval_snapshot)
+        + count_active_deadletters(_read_jsonl("queue/deadletter.jsonl"))
+        + staged_count
+    )
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
@@ -2950,8 +2991,14 @@ def lens_state(request: Request) -> dict:
     }
 
 
-@router.get("/lens/actions")
-def lens_actions(request: Request, max_actions: int = 6) -> dict:
+def build_lens_actions_payload(
+    *,
+    max_actions: int = 6,
+    role: str = "architect",
+    user: str = "hud.operator",
+    snapshot: dict[str, Any] | None = None,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any]:
     allowed, reason, control = check_action_allowed(
         _fs,
         repo_root=_repo_root,
@@ -2963,10 +3010,14 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Control denied: {reason}")
 
-    role = _role_from_request(request)
+    approvals = approval_snapshot if isinstance(approval_snapshot, ApprovalSnapshot) else load_approval_snapshot(_fs)
     event_state = collect_events(_fs)
     intent_state = collect_intents(_fs)
-    lens_snapshot = build_lens_snapshot(_workspace_root)
+    lens_snapshot = (
+        snapshot
+        if isinstance(snapshot, dict)
+        else build_lens_snapshot(_workspace_root, approval_snapshot=approvals)
+    )
     current_work = lens_snapshot.get("current_work", {}) if isinstance(lens_snapshot.get("current_work"), dict) else {}
     next_best_action = (
         lens_snapshot.get("next_best_action", {})
@@ -3076,32 +3127,56 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         if isinstance(usage_capabilities.get("focus_entry"), dict)
         else {}
     )
-    repo_status_allowed, repo_status_scope_reason = _check_usage_scope("tools", "tools.run.repo.status")
-    repo_diff_allowed, repo_diff_scope_reason = _check_usage_scope("tools", "tools.run.repo.diff")
-    repo_lint_allowed, repo_lint_scope_reason = _check_usage_scope("tools", "tools.run.repo.lint")
-    repo_tests_allowed, repo_tests_scope_reason = _check_usage_scope("tools", "tools.run.repo.tests")
+    repo_status_allowed, repo_status_scope_reason = _check_usage_scope(
+        "tools",
+        "tools.run.repo.status",
+        state=control,
+    )
+    repo_diff_allowed, repo_diff_scope_reason = _check_usage_scope(
+        "tools",
+        "tools.run.repo.diff",
+        state=control,
+    )
+    repo_lint_allowed, repo_lint_scope_reason = _check_usage_scope(
+        "tools",
+        "tools.run.repo.lint",
+        state=control,
+    )
+    repo_tests_allowed, repo_tests_scope_reason = _check_usage_scope(
+        "tools",
+        "tools.run.repo.tests",
+        state=control,
+    )
     forge_promote_allowed, forge_promote_scope_reason = _check_usage_scope(
         "forge",
         "forge.promote",
         mutating=True,
+        state=control,
     )
     forge_quarantine_allowed, forge_quarantine_scope_reason = _check_usage_scope(
         "forge",
         "forge.quarantine",
         mutating=True,
+        state=control,
     )
     forge_revoke_allowed, forge_revoke_scope_reason = _check_usage_scope(
         "forge",
         "forge.revoke",
         mutating=True,
+        state=control,
     )
     approvals_request_allowed, approvals_request_scope_reason = _check_usage_scope(
         "approvals",
         "approvals.request",
         mutating=False,
+        state=control,
     )
     repo_tests_args = {"lane": "fast"}
-    repo_tests_approval = _find_usage_tool_approval(skill_name="repo.tests", args=repo_tests_args)
+    repo_tests_approval = _find_usage_tool_approval(
+        skill_name="repo.tests",
+        args=repo_tests_args,
+        snapshot=approvals,
+    )
     repo_tests_approval_status = (
         str(repo_tests_approval.get("status", "")).strip().lower() if isinstance(repo_tests_approval, dict) else ""
     )
@@ -3380,12 +3455,11 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
 
     mode = str(control.get("mode", "observe")).strip().lower()
     kill_switch = bool(control.get("kill_switch", False))
-    takeover_state = control_takeover_state().get("takeover", {})
+    takeover_state = _load_or_init_takeover_state(control_state=control)
     takeover_status = str(takeover_state.get("status", "idle")).strip().lower() or "idle"
     takeover_session_id = str(takeover_state.get("session_id") or "").strip()
     takeover_last_session_id = str(takeover_state.get("last_session_id") or "").strip()
-    takeover_sessions_payload = control_takeover_sessions(limit=5)
-    takeover_sessions_rows = takeover_sessions_payload.get("sessions", [])
+    takeover_sessions_rows = _build_takeover_sessions(limit=5, state=takeover_state, control_state=control)
     latest_handback_posture = next(
         (
             row.get("handback_fabric_posture", {})
@@ -3401,13 +3475,17 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
     remote_decide_allowed = remote_write_allowed and can(role, "approvals.decide")
     apprenticeship = summarize_apprenticeship(_fs, limit=3)
     remote_pending_rows: list[dict[str, Any]] = []
-    try:
-        remote_approvals = control_remote_approvals(request, status="pending", limit=3)
+    remote_read_scope_allowed, _remote_read_scope_reason = _check_usage_scope(
+        "control",
+        "control.remote.read",
+        state=control,
+    )
+    if remote_read_allowed and remote_read_scope_allowed:
         remote_pending_rows = [
-            row for row in remote_approvals.get("approvals", []) if isinstance(row, dict)
+            row
+            for row in list_requests(_fs, status="pending", limit=3, snapshot=approvals)
+            if isinstance(row, dict)
         ]
-    except HTTPException:
-        remote_pending_rows = []
     action_chips.append(
         _with_execute_hint(
             {
@@ -3910,6 +3988,15 @@ def lens_actions(request: Request, max_actions: int = 6) -> dict:
         "selected_actions": selected_actions,
         "blocked_actions": blocked_actions,
     }
+
+
+@router.get("/lens/actions")
+def lens_actions(request: Request, max_actions: int = 6) -> dict:
+    return build_lens_actions_payload(
+        max_actions=max_actions,
+        role=_role_from_request(request),
+        user=_user_from_request(request),
+    )
 
 
 @router.post("/lens/actions/execute")

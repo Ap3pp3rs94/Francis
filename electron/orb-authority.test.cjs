@@ -3,11 +3,13 @@ const assert = require("node:assert/strict");
 
 const {
   canEngageOrbAuthority,
+  describeOrbClickTargetLockFailure,
   detectHumanActivitySignal,
   detectHumanCursorReturn,
   detectHumanIdleRegression,
   detectHumanKeyboardReturn,
   inferOrbAuthorityState,
+  isOrbClickTargetLocked,
 } = require("./orb-authority");
 
 test("canEngageOrbAuthority requires eligibility and idle threshold", () => {
@@ -92,5 +94,58 @@ test("detectHumanActivitySignal respects real activity after synthetic input", (
       nowMs: 4280,
     }),
     false,
+  );
+});
+
+test("isOrbClickTargetLocked only accepts target_lock cues with control readiness", () => {
+  assert.equal(
+    isOrbClickTargetLocked({
+      operator: {
+        target_cue: {
+          attention_state: "target_lock",
+          control_ready: true,
+        },
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    isOrbClickTargetLocked({
+      operator: {
+        target_cue: {
+          attention_state: "concrete",
+          control_ready: true,
+        },
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    isOrbClickTargetLocked({
+      operator: {
+        target_cue: {
+          attention_state: "target_lock",
+          control_ready: false,
+        },
+      },
+    }),
+    false,
+  );
+});
+
+test("describeOrbClickTargetLockFailure reports clear lock failure diagnostics", () => {
+  assert.equal(
+    describeOrbClickTargetLockFailure({
+      reason: "target_lock_timeout",
+      cue: {
+        attention_state: "concrete",
+        control_ready: false,
+      },
+    }),
+    "Orb click target lock timed out before actuation. Last cue: attention_state=concrete, control_ready=false.",
+  );
+  assert.equal(
+    describeOrbClickTargetLockFailure({ reason: "safety_hold" }),
+    "Orb click target lock was blocked by an active safety hold.",
   );
 });

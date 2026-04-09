@@ -3,14 +3,19 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
+import threading
+import time
+from typing import Any, Callable
 
 from francis_brain.apprenticeship import summarize_apprenticeship
+from francis_brain.ledger import RunLedger
+from francis_brain.memory_store import load_snapshot, summarize_snapshot
 from francis_brain.recall import summarize_fabric
 from francis_core.clock import utc_now_iso
 from francis_core.workspace_fs import WorkspaceFS
 
-from services.orchestrator.app.approvals_store import list_requests, pending_count
+from services.orchestrator.app.approvals_store import ApprovalSnapshot, load_approval_snapshot
+from services.orchestrator.app.capability_state import build_capability_state
 from services.orchestrator.app.control_state import DEFAULT_ALLOWED_APPS
 from services.orchestrator.app.federation_store import load_or_init_topology
 from services.orchestrator.app.managed_copy_store import build_managed_copy_state
@@ -36,6 +41,8 @@ SEVERITY_ORDER = {
     "low": 1,
     "nominal": 0,
 }
+_JSONL_CACHE_LOCK = threading.Lock()
+_JSONL_CACHE: dict[str, tuple[tuple[int, int] | None, tuple[dict[str, Any], ...]]] = {}
 
 
 def get_workspace_root() -> Path:
@@ -50,8 +57,23 @@ def _read_json(path: Path, default: Any) -> Any:
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    resolved_path = path.resolve()
+    cache_key = str(resolved_path)
     try:
-        raw = path.read_text(encoding="utf-8")
+        stat = resolved_path.stat()
+        signature: tuple[int, int] | None = (int(stat.st_mtime_ns), int(stat.st_size))
+    except Exception:
+        signature = None
+    with _JSONL_CACHE_LOCK:
+        cached = _JSONL_CACHE.get(cache_key)
+        if cached is not None and cached[0] == signature:
+            return list(cached[1])
+    if signature is None:
+        with _JSONL_CACHE_LOCK:
+            _JSONL_CACHE[cache_key] = (None, tuple())
+        return []
+    try:
+        raw = resolved_path.read_text(encoding="utf-8")
     except Exception:
         return []
     rows: list[dict[str, Any]] = []
@@ -65,7 +87,10 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
             continue
         if isinstance(parsed, dict):
             rows.append(parsed)
-    return rows
+    cached_rows = tuple(rows)
+    with _JSONL_CACHE_LOCK:
+        _JSONL_CACHE[cache_key] = (signature, cached_rows)
+    return list(cached_rows)
 
 
 def _tail(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -76,6 +101,47 @@ def _tail(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
 def _normalize_mode(raw_mode: Any) -> str:
     normalized = str(raw_mode or "").strip().lower()
     return normalized if normalized in DEFAULT_MODES else "pilot"
+
+
+def _profiled_snapshot_step(
+    timings: list[dict[str, object]] | None,
+    name: str,
+    builder: Callable[[], object],
+) -> object:
+    started = time.perf_counter()
+    result = builder()
+    if isinstance(timings, list):
+        timings.append(
+            {
+                "name": name,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+            }
+        )
+    return result
+
+
+def _build_lens_snapshot_profile(
+    *,
+    phases: list[dict[str, object]],
+    total_ms: float,
+    approval_snapshot_loaded: bool,
+) -> dict[str, Any]:
+    ordered_phases = [dict(phase) for phase in phases]
+    slowest = sorted(
+        ordered_phases,
+        key=lambda phase: float(phase.get("elapsed_ms", 0.0) or 0.0),
+        reverse=True,
+    )[:5]
+    return {
+        "surface": "lens_snapshot_profile",
+        "total_ms": round(total_ms, 3),
+        "phase_count": len(ordered_phases),
+        "phases": ordered_phases,
+        "slowest": slowest,
+        "reused": {
+            "approval_snapshot": not approval_snapshot_loaded,
+        },
+    }
 
 
 def _default_control_state(workspace_root: Path) -> dict[str, Any]:
@@ -108,42 +174,33 @@ def _control_state(workspace_root: Path) -> dict[str, Any]:
     merged["kill_switch"] = bool(merged.get("kill_switch", False))
     return merged
 
-
-def _materialize_approvals(workspace_root: Path) -> dict[str, Any]:
-    requests = _read_jsonl(workspace_root / "approvals" / "requests.jsonl")
-    decisions = _read_jsonl(workspace_root / "journals" / "decisions.jsonl")
-    latest_decisions: dict[str, dict[str, Any]] = {}
-    for row in decisions:
-        if str(row.get("kind", "")).strip().lower() != "approval.decision":
-            continue
-        request_id = str(row.get("request_id", "")).strip()
-        if request_id:
-            latest_decisions[request_id] = row
-
-    materialized: list[dict[str, Any]] = []
-    for row in requests:
-        approval_id = str(row.get("id", "")).strip()
-        status = "pending"
-        if approval_id and approval_id in latest_decisions:
-            decision = str(latest_decisions[approval_id].get("decision", "")).strip().lower()
-            if decision in {"approved", "rejected"}:
-                status = decision
-        materialized.append(
-            {
-                "id": approval_id,
-                "ts": row.get("ts"),
-                "action": str(row.get("action", "")).strip(),
-                "reason": str(row.get("reason", "")).strip(),
-                "requested_by": str(row.get("requested_by", "")).strip(),
-                "status": status,
-            }
-        )
-
+def _materialize_approvals(
+    workspace_root: Path,
+    *,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any]:
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    snapshot = approval_snapshot if isinstance(approval_snapshot, ApprovalSnapshot) else load_approval_snapshot(fs)
+    materialized = [
+        {
+            "id": str(row.get("id", "")).strip(),
+            "ts": row.get("ts"),
+            "action": str(row.get("action", "")).strip(),
+            "reason": str(row.get("reason", "")).strip(),
+            "requested_by": str(row.get("requested_by", "")).strip(),
+            "status": str(row.get("status", "")).strip().lower() or "pending",
+        }
+        for row in snapshot.approvals
+        if isinstance(row, dict)
+    ]
     pending = [row for row in materialized if row["status"] == "pending"]
     pending.sort(key=lambda row: str(row.get("ts", "")))
     return {
         "count": len(materialized),
-        "pending_count": len(pending),
+        "pending_count": snapshot.pending_count,
         "pending": _tail(pending, 5),
     }
 
@@ -344,18 +401,71 @@ def _summarize_runs(events: list[dict[str, Any]], limit: int) -> list[dict[str, 
     return ordered[: max(0, min(limit, 10))]
 
 
+def _merge_run_summaries(*summary_lists: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for rows in summary_lists:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            run_id = str(row.get("run_id", "")).strip()
+            if not run_id:
+                continue
+            bucket = grouped.setdefault(
+                run_id,
+                {
+                    "run_id": run_id,
+                    "first_ts": str(row.get("first_ts", "")).strip(),
+                    "last_ts": str(row.get("last_ts", "")).strip(),
+                    "event_count": 0,
+                    "last_kind": str(row.get("last_kind", "")).strip(),
+                },
+            )
+            event_count = int(row.get("event_count", 0) or 0)
+            bucket["event_count"] = max(0, int(bucket.get("event_count", 0) or 0)) + event_count
+            first_ts = str(row.get("first_ts", "")).strip()
+            if first_ts and (
+                not str(bucket.get("first_ts", "")).strip() or first_ts < str(bucket.get("first_ts", "")).strip()
+            ):
+                bucket["first_ts"] = first_ts
+            last_ts = str(row.get("last_ts", "")).strip()
+            if last_ts and (
+                not str(bucket.get("last_ts", "")).strip() or last_ts >= str(bucket.get("last_ts", "")).strip()
+            ):
+                bucket["last_ts"] = last_ts
+                if str(row.get("last_kind", "")).strip():
+                    bucket["last_kind"] = str(row.get("last_kind", "")).strip()
+    ordered = sorted(grouped.values(), key=lambda row: str(row.get("last_ts", "")), reverse=True)
+    return ordered[: max(0, min(limit, 10))]
+
+
 def _materialize_runs(workspace_root: Path) -> dict[str, Any]:
-    ledger_primary = _read_jsonl(workspace_root / "runs" / "run_ledger.jsonl")
+    fs = WorkspaceFS(
+        roots=[workspace_root],
+        journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
+    )
+    ledger_primary = RunLedger(fs, rel_path="runs/run_ledger.jsonl").summary(recent_limit=10, tail_limit=5)
     ledger_legacy = _read_jsonl(workspace_root / "brain" / "run_ledger.jsonl")
-    ledger = sorted([*ledger_primary, *ledger_legacy], key=lambda row: str(row.get("ts", "")))
     last_run = _read_json(workspace_root / "runs" / "last_run.json", {})
     if not isinstance(last_run, dict):
         last_run = {}
+    legacy_recent = _summarize_runs(ledger_legacy, limit=10)
+    merged_recent = _merge_run_summaries(
+        [row for row in ledger_primary.get("recent", []) if isinstance(row, dict)],
+        legacy_recent,
+        limit=5,
+    )
+    merged_tail = sorted(
+        [
+            *[row for row in ledger_primary.get("tail", []) if isinstance(row, dict)],
+            *_tail(ledger_legacy, 5),
+        ],
+        key=lambda row: str(row.get("ts", "")),
+    )
     return {
         "last_run": last_run,
-        "recent": _summarize_runs(ledger, limit=5),
-        "ledger_tail": _tail(ledger, 5),
-        "ledger_count": len(ledger),
+        "recent": merged_recent,
+        "ledger_tail": _tail(merged_tail, 5),
+        "ledger_count": int(ledger_primary.get("count", 0) or 0) + len(ledger_legacy),
     }
 
 
@@ -367,20 +477,41 @@ def _materialize_apprenticeship(workspace_root: Path) -> dict[str, Any]:
     return summarize_apprenticeship(fs, limit=5)
 
 
+def _deferred_fabric_summary() -> dict[str, Any]:
+    summary = summarize_snapshot(None)
+    summary["pending"] = True
+    summary["note"] = "Fabric summary is deferred until a cached snapshot exists or a full fabric request is made."
+    summary["calibration"] = {
+        "confidence_counts": {"confirmed": 0, "likely": 0, "uncertain": 0},
+        "done_claim_ready_count": 0,
+        "stale_current_state_count": 0,
+        "local_provenance_count": 0,
+        "anchored_provenance_count": 0,
+    }
+    return summary
+
+
 def _materialize_fabric(workspace_root: Path) -> dict[str, Any]:
     fs = WorkspaceFS(
         roots=[workspace_root],
         journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
     )
+    if load_snapshot(fs) is None:
+        return _deferred_fabric_summary()
     return summarize_fabric(fs, refresh=False)
 
 
-def _materialize_federation(workspace_root: Path) -> dict[str, Any]:
+def _materialize_federation(
+    workspace_root: Path,
+    *,
+    approval_snapshot: ApprovalSnapshot | None = None,
+) -> dict[str, Any]:
     repo_root = workspace_root.parent.resolve()
     fs = WorkspaceFS(
         roots=[workspace_root],
         journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
     )
+    snapshot = approval_snapshot if isinstance(approval_snapshot, ApprovalSnapshot) else load_approval_snapshot(fs)
     topology = load_or_init_topology(fs, repo_root=repo_root, workspace_root=workspace_root)
     local_node = topology.get("local_node", {}) if isinstance(topology.get("local_node"), dict) else {}
     paired_nodes = [row for row in topology.get("paired_nodes", []) if isinstance(row, dict)]
@@ -396,8 +527,9 @@ def _materialize_federation(workspace_root: Path) -> dict[str, Any]:
             "run_id": str(row.get("run_id", "")).strip(),
             "status": str(row.get("status", "")).strip(),
         }
-        for row in list_requests(fs, status="pending", limit=3)
+        for row in snapshot.approvals
         if isinstance(row, dict)
+        and str(row.get("status", "")).strip().lower() == "pending"
     ]
     return {
         "local_node": local_node,
@@ -406,8 +538,8 @@ def _materialize_federation(workspace_root: Path) -> dict[str, Any]:
         "active_count": active_count,
         "stale_count": stale_count,
         "revoked_count": revoked_count,
-        "remote_pending_count": pending_count(fs),
-        "remote_pending_preview": remote_pending_preview,
+        "remote_pending_count": snapshot.pending_count,
+        "remote_pending_preview": _tail(remote_pending_preview, 3),
         "summary": (
             f"Local node {str(local_node.get('label', 'Primary Node')).strip() or 'Primary Node'} "
             f"with {len(paired_nodes)} paired node(s), {stale_count} stale, {revoked_count} revoked."
@@ -458,13 +590,56 @@ def _materialize_managed_copies(workspace_root: Path) -> dict[str, Any]:
     }
 
 
-def _materialize_portability(workspace_root: Path) -> dict[str, Any]:
+def _materialize_portability(
+    workspace_root: Path,
+    *,
+    control: dict[str, Any] | None = None,
+    missions: dict[str, Any] | None = None,
+    approvals: dict[str, Any] | None = None,
+    federation: dict[str, Any] | None = None,
+    managed_copies: dict[str, Any] | None = None,
+    swarm: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     repo_root = workspace_root.parent.resolve()
     fs = WorkspaceFS(
         roots=[workspace_root],
         journal_path=(workspace_root / "journals" / "fs.jsonl").resolve(),
     )
-    return build_portability_state(fs, repo_root=repo_root, workspace_root=workspace_root)
+    continuity: dict[str, Any] | None = None
+    if (
+        isinstance(control, dict)
+        and isinstance(missions, dict)
+        and isinstance(approvals, dict)
+        and isinstance(federation, dict)
+        and isinstance(managed_copies, dict)
+        and isinstance(swarm, dict)
+    ):
+        catalog_doc = _read_json(workspace_root / "forge" / "catalog.json", {"entries": []})
+        catalog_entries = catalog_doc.get("entries", []) if isinstance(catalog_doc, dict) else []
+        continuity = {
+            "mode": str(control.get("mode", "assist")).strip().lower() or "assist",
+            "kill_switch": bool(control.get("kill_switch", False)),
+            "mission_count": (
+                int(missions.get("active_count", 0) or 0)
+                + int(missions.get("backlog_count", 0) or 0)
+                + int(missions.get("completed_count", 0) or 0)
+            ),
+            "pending_approvals": int(approvals.get("pending_count", 0) or 0),
+            "capability_count": len(catalog_entries) if isinstance(catalog_entries, list) else 0,
+            "paired_node_count": int(
+                federation.get("paired_count", len(federation.get("paired_nodes", [])))
+                if isinstance(federation.get("paired_nodes", []), list)
+                else federation.get("paired_count", 0)
+            ),
+            "managed_copy_count": int(managed_copies.get("copy_count", 0) or 0),
+            "swarm_unit_count": int(swarm.get("unit_count", 0) or 0),
+        }
+    return build_portability_state(
+        fs,
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        continuity=continuity,
+    )
 
 
 def _materialize_autonomy(workspace_root: Path) -> dict[str, Any]:
@@ -530,35 +705,102 @@ def _materialize_autonomy(workspace_root: Path) -> dict[str, Any]:
     }
 
 
-def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
+def build_lens_snapshot(
+    workspace_root: Path | None = None,
+    *,
+    approval_snapshot: ApprovalSnapshot | None = None,
+    capability_state: dict[str, Any] | None = None,
+    profile: bool = False,
+) -> dict[str, Any]:
+    build_started = time.perf_counter()
+    timings: list[dict[str, object]] | None = [] if profile else None
     resolved_workspace = (workspace_root or get_workspace_root()).resolve()
-    control = _control_state(resolved_workspace)
-    takeover = load_takeover_state(resolved_workspace)
-    missions = _materialize_missions(resolved_workspace)
-    approvals = _materialize_approvals(resolved_workspace)
-    inbox = _materialize_inbox(resolved_workspace)
-    incidents = _materialize_incidents(resolved_workspace)
-    security = _materialize_security(resolved_workspace)
-    runs = _materialize_runs(resolved_workspace)
-    autonomy = _materialize_autonomy(resolved_workspace)
-    swarm = _materialize_swarm(resolved_workspace)
-    federation = _materialize_federation(resolved_workspace)
-    managed_copies = _materialize_managed_copies(resolved_workspace)
-    portability = _materialize_portability(resolved_workspace)
-    apprenticeship = _materialize_apprenticeship(resolved_workspace)
-    fabric = _materialize_fabric(resolved_workspace)
-    current_work = build_current_work(
-        repo_root=resolved_workspace.parent.resolve(),
-        workspace_root=resolved_workspace,
-        control=control,
-        missions=missions,
-        approvals=approvals,
-        incidents=incidents,
-        inbox=inbox,
-        runs=runs,
-        apprenticeship=apprenticeship,
+    approval_fs = WorkspaceFS(
+        roots=[resolved_workspace],
+        journal_path=(resolved_workspace / "journals" / "fs.jsonl").resolve(),
     )
-    next_best_action = build_next_best_action(current_work=current_work, control=control)
+    approval_snapshot_loaded = False
+    if isinstance(approval_snapshot, ApprovalSnapshot):
+        snapshot = approval_snapshot
+    else:
+        snapshot = _profiled_snapshot_step(
+            timings,
+            "approval_snapshot",
+            lambda: load_approval_snapshot(approval_fs),
+        )
+        approval_snapshot_loaded = True
+    control = _profiled_snapshot_step(timings, "control", lambda: _control_state(resolved_workspace))
+    takeover = _profiled_snapshot_step(timings, "takeover", lambda: load_takeover_state(resolved_workspace))
+    missions = _profiled_snapshot_step(timings, "missions", lambda: _materialize_missions(resolved_workspace))
+    approvals = _profiled_snapshot_step(
+        timings,
+        "approvals",
+        lambda: _materialize_approvals(resolved_workspace, approval_snapshot=snapshot),
+    )
+    inbox = _profiled_snapshot_step(timings, "inbox", lambda: _materialize_inbox(resolved_workspace))
+    incidents = _profiled_snapshot_step(timings, "incidents", lambda: _materialize_incidents(resolved_workspace))
+    security = _profiled_snapshot_step(timings, "security", lambda: _materialize_security(resolved_workspace))
+    runs = _profiled_snapshot_step(timings, "runs", lambda: _materialize_runs(resolved_workspace))
+    autonomy = _profiled_snapshot_step(timings, "autonomy", lambda: _materialize_autonomy(resolved_workspace))
+    swarm = _profiled_snapshot_step(timings, "swarm", lambda: _materialize_swarm(resolved_workspace))
+    federation = _profiled_snapshot_step(
+        timings,
+        "federation",
+        lambda: _materialize_federation(resolved_workspace, approval_snapshot=snapshot),
+    )
+    managed_copies = _profiled_snapshot_step(
+        timings,
+        "managed_copies",
+        lambda: _materialize_managed_copies(resolved_workspace),
+    )
+    portability = _profiled_snapshot_step(
+        timings,
+        "portability",
+        lambda: _materialize_portability(
+            resolved_workspace,
+            control=control,
+            missions=missions,
+            approvals=approvals,
+            federation=federation,
+            managed_copies=managed_copies,
+            swarm=swarm,
+        ),
+    )
+    apprenticeship = _profiled_snapshot_step(
+        timings,
+        "apprenticeship",
+        lambda: _materialize_apprenticeship(resolved_workspace),
+    )
+    fabric = _profiled_snapshot_step(timings, "fabric", lambda: _materialize_fabric(resolved_workspace))
+    resolved_capability_state = capability_state
+    if not isinstance(resolved_capability_state, dict):
+        resolved_capability_state = _profiled_snapshot_step(
+            timings,
+            "capability_state",
+            lambda: build_capability_state(resolved_workspace, approval_snapshot=snapshot),
+        )
+    current_work = _profiled_snapshot_step(
+        timings,
+        "current_work",
+        lambda: build_current_work(
+            repo_root=resolved_workspace.parent.resolve(),
+            workspace_root=resolved_workspace,
+            control=control,
+            missions=missions,
+            approvals=approvals,
+            incidents=incidents,
+            inbox=inbox,
+            runs=runs,
+            apprenticeship=apprenticeship,
+            approval_snapshot=snapshot,
+            capability_state=resolved_capability_state,
+        ),
+    )
+    next_best_action = _profiled_snapshot_step(
+        timings,
+        "next_best_action",
+        lambda: build_next_best_action(current_work=current_work, control=control),
+    )
 
     active_mission = missions["active"][0] if missions["active"] else None
     if active_mission is not None:
@@ -566,7 +808,7 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
     else:
         objective_label = "Systematically build Francis"
 
-    return {
+    payload = {
         "generated_at": utc_now_iso(),
         "workspace_root": str(resolved_workspace),
         "control": control,
@@ -589,7 +831,14 @@ def build_lens_snapshot(workspace_root: Path | None = None) -> dict[str, Any]:
         "objective": {
             "label": objective_label,
             "definition_of_done": (
-                "Lens reflects live control, mission, approval, incident, inbox, and receipt state."
-            ),
+            "Lens reflects live control, mission, approval, incident, inbox, and receipt state."
+        ),
         },
     }
+    if isinstance(timings, list):
+        payload["build_profile"] = _build_lens_snapshot_profile(
+            phases=timings,
+            total_ms=(time.perf_counter() - build_started) * 1000.0,
+            approval_snapshot_loaded=approval_snapshot_loaded,
+        )
+    return payload

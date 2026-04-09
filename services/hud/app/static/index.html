@@ -750,18 +750,21 @@
         text-transform: uppercase;
       }
 
-      .overlay-target-cue[data-highlight="concrete"] {
+      .overlay-target-cue[data-highlight="concrete"],
+      .overlay-target-cue[data-highlight="target_lock"] {
         border-color: rgba(35, 104, 74, 0.22);
         background:
           linear-gradient(180deg, rgba(35, 104, 74, 0.065), rgba(255, 255, 255, 0.9));
       }
 
-      .overlay-target-cue[data-highlight="tracking"] {
+      .overlay-target-cue[data-highlight="tracking"],
+      .overlay-target-cue[data-highlight="investigate"] {
         border-color: rgba(182, 128, 37, 0.22);
         background:
           linear-gradient(180deg, rgba(182, 128, 37, 0.065), rgba(255, 255, 255, 0.9));
       }
 
+      .overlay-target-cue[data-highlight="reassess"],
       .overlay-target-cue[data-highlight="weak"],
       .overlay-target-cue[data-highlight="unavailable"] {
         border-color: rgba(15, 23, 35, 0.1);
@@ -820,13 +823,15 @@
         background: rgba(15, 23, 35, 0.04);
       }
 
-      .overlay-authority-recent-item[data-highlight="concrete"] {
+      .overlay-authority-recent-item[data-highlight="concrete"],
+      .overlay-authority-recent-item[data-highlight="target_lock"] {
         border-color: rgba(35, 104, 74, 0.22);
         background:
           linear-gradient(180deg, rgba(35, 104, 74, 0.06), rgba(255, 255, 255, 0.92));
       }
 
-      .overlay-authority-recent-item[data-highlight="tracking"] {
+      .overlay-authority-recent-item[data-highlight="tracking"],
+      .overlay-authority-recent-item[data-highlight="investigate"] {
         border-color: rgba(182, 128, 37, 0.22);
         background:
           linear-gradient(180deg, rgba(182, 128, 37, 0.06), rgba(255, 255, 255, 0.92));
@@ -1040,94 +1045,6 @@
           drop-shadow(0 22px 34px rgba(0, 0, 0, 0.3))
           contrast(1.08)
           saturate(0.9);
-      }
-
-      #orb-render-root[data-target-stability="settled"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 24px 36px rgba(0, 0, 0, 0.32))
-          contrast(1.12)
-          saturate(0.96)
-          brightness(1.03);
-      }
-
-      #orb-render-root[data-target-stability="tracking"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 22px 34px rgba(0, 0, 0, 0.3))
-          contrast(1.06)
-          saturate(0.88)
-          brightness(0.985);
-      }
-
-      #orb-render-root[data-target-stability="transient"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-window-match="weak"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-target-confidence="low"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.24))
-          contrast(1.01)
-          saturate(0.8)
-          brightness(0.95);
-      }
-
-      #orb-render-root[data-body-state="idle_anchored"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.24))
-          contrast(1.04)
-          saturate(0.86)
-          brightness(0.98);
-      }
-
-      #orb-render-root[data-body-state="attentive"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-body-state="waiting_for_user"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 20px 32px rgba(0, 0, 0, 0.28))
-          contrast(1.06)
-          saturate(0.9)
-          brightness(1);
-      }
-
-      #orb-render-root[data-body-state="investigate"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 22px 34px rgba(0, 0, 0, 0.3))
-          contrast(1.08)
-          saturate(0.94)
-          brightness(1.01);
-      }
-
-      #orb-render-root[data-body-state="target_lock"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-body-state="hover_ready"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 25px 38px rgba(0, 0, 0, 0.34))
-          contrast(1.12)
-          saturate(0.98)
-          brightness(1.04);
-      }
-
-      #orb-render-root[data-body-state="commit_move"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-body-state="drag_act"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-body-state="type_hold"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 28px 42px rgba(0, 0, 0, 0.36))
-          contrast(1.12)
-          saturate(1)
-          brightness(1.05);
-      }
-
-      #orb-render-root[data-body-state="click_act"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 0 14px rgba(255, 232, 196, 0.22))
-          drop-shadow(0 28px 42px rgba(0, 0, 0, 0.38))
-          contrast(1.14)
-          saturate(1.04)
-          brightness(1.08);
-      }
-
-      #orb-render-root[data-body-state="blocked_uncertain"]:not(.orb-hold):not(.orb-handback) canvas,
-      #orb-render-root[data-body-state="abort_interrupted"]:not(.orb-hold):not(.orb-handback) canvas {
-        filter:
-          drop-shadow(0 18px 28px rgba(0, 0, 0, 0.24))
-          contrast(1.01)
-          saturate(0.82)
-          brightness(0.96);
       }
 
       #orb-overlay[data-target-stability="settled"] .orb-trail-node {
@@ -1347,10 +1264,11 @@
       }
 
       body[data-orb-surface="window"] #overlay-strip {
-        display: block;
+        display: none !important;
+        pointer-events: none;
       }
 
-      body[data-lens-view="orb_only"] #overlay-strip {
+      body[data-lens-view="orb_only"]:not([data-orb-surface="window"]) #overlay-strip {
         display: block;
       }
 
@@ -1400,6 +1318,81 @@
         font-size: 0.79rem;
         line-height: 1.45;
         min-width: 0;
+      }
+
+      body[data-orb-surface="window"] #overlay-strip {
+        width: min(344px, calc(100vw - 36px));
+      }
+
+      body[data-orb-surface="window"] .orb-strip-shell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at top right, rgba(76, 112, 184, 0.06), transparent 34%),
+          linear-gradient(180deg, rgba(4, 7, 12, 0.78), rgba(3, 6, 11, 0.75));
+        box-shadow:
+          0 10px 24px rgba(0, 0, 0, 0.22),
+          inset 0 1px 0 rgba(255, 255, 255, 0.025);
+      }
+
+      body[data-orb-surface="window"][data-orb-affordance="visible"] .orb-strip-shell {
+        border-color: rgba(178, 197, 255, 0.08);
+      }
+
+      body[data-orb-surface="window"][data-orb-affordance="urgent"] .orb-strip-shell {
+        border-color: rgba(221, 140, 110, 0.24);
+        background:
+          radial-gradient(circle at top right, rgba(158, 90, 72, 0.12), transparent 36%),
+          linear-gradient(180deg, rgba(8, 11, 18, 0.9), rgba(5, 7, 12, 0.88));
+        box-shadow:
+          0 16px 30px rgba(0, 0, 0, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+
+      body[data-orb-surface="window"] .orb-strip-copy {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      body[data-orb-surface="window"] .orb-strip-copy[hidden] {
+        display: none !important;
+      }
+
+      body[data-orb-surface="window"] .orb-strip-topline {
+        gap: 6px;
+      }
+
+      body[data-orb-surface="window"] .orb-strip-state {
+        font-size: 0.76rem;
+        letter-spacing: 0.06em;
+      }
+
+      body[data-orb-surface="window"] .orb-strip-detail,
+      body[data-orb-surface="window"] .orb-strip-meta,
+      body[data-orb-surface="window"] #orb-strip-mode,
+      body[data-orb-surface="window"] #orb-strip-authority {
+        display: none !important;
+      }
+
+      body[data-orb-surface="window"] .orb-mini-chip {
+        padding: 3px 7px;
+        font-size: 0.62rem;
+        letter-spacing: 0.07em;
+      }
+
+      body[data-orb-surface="window"] .orb-strip-actions {
+        gap: 6px;
+        align-items: center;
+      }
+
+      body[data-orb-surface="window"] .orb-strip-actions button {
+        padding: 7px 11px;
+        font-size: 0.76rem;
       }
 
       .orb-mini-chip {
@@ -1468,6 +1461,16 @@
         pointer-events: auto;
       }
 
+      #overlay-dock[data-surface-mode="chat"] {
+        width: min(340px, calc(100vw - 32px));
+        max-height: min(56vh, 470px);
+      }
+
+      #overlay-dock[data-surface-mode="menu"] {
+        width: min(220px, calc(100vw - 28px));
+        max-height: min(38vh, 260px);
+      }
+
       body[data-orb-menu="open"] #overlay-dock {
         display: block;
       }
@@ -1492,6 +1495,66 @@
         backdrop-filter: blur(12px);
         max-height: min(72vh, 680px);
         overflow: hidden;
+      }
+
+      #overlay-dock[data-surface-mode="chat"] .orb-chat-shell {
+        gap: 10px;
+        padding: 14px;
+        border-radius: 22px;
+        box-shadow:
+          0 18px 38px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.035);
+      }
+
+      #overlay-dock[data-surface-mode="menu"] .orb-chat-shell {
+        display: none;
+      }
+
+      #overlay-dock[data-surface-mode="chat"] .orb-context-shell {
+        display: none;
+      }
+
+      .orb-context-shell {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid rgba(178, 197, 255, 0.14);
+        border-radius: 18px;
+        color: #eef4ff;
+        background:
+          radial-gradient(circle at top right, rgba(76, 112, 184, 0.1), transparent 32%),
+          linear-gradient(180deg, rgba(4, 7, 12, 0.97), rgba(2, 4, 8, 0.96));
+        box-shadow:
+          0 18px 34px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.035);
+        backdrop-filter: blur(12px);
+      }
+
+      .orb-context-head {
+        display: grid;
+        gap: 2px;
+      }
+
+      .orb-context-head strong {
+        font-size: 0.88rem;
+        letter-spacing: 0.04em;
+      }
+
+      .orb-context-head span,
+      .orb-context-detail {
+        color: rgba(214, 224, 246, 0.76);
+        font-size: 0.75rem;
+        line-height: 1.4;
+      }
+
+      .orb-context-actions {
+        display: grid;
+        gap: 8px;
+      }
+
+      .orb-context-actions button {
+        width: 100%;
+        justify-content: flex-start;
       }
 
       .orb-chat-head,
@@ -1537,6 +1600,25 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
+      }
+
+      #overlay-dock[data-surface-mode="chat"] .orb-console-cards,
+      #overlay-dock[data-surface-mode="chat"] .orb-chat-modes,
+      #overlay-dock[data-surface-mode="chat"] .orb-chat-plan,
+      #overlay-dock[data-surface-mode="chat"] .orb-diagnostics {
+        display: none !important;
+      }
+
+      #overlay-dock[data-surface-mode="chat"] #overlay-chat-meta {
+        display: none;
+      }
+
+      #overlay-dock[data-surface-mode="chat"] .orb-chat-thread {
+        max-height: min(34vh, 260px);
+      }
+
+      #overlay-dock[data-surface-mode="chat"] .orb-chat-compose textarea {
+        min-height: 76px;
       }
 
       .orb-console-card {
@@ -1817,7 +1899,7 @@
       }
     </style>
   </head>
-  <body data-boot="loading" data-orb-menu="closed">
+  <body data-boot="loading" data-orb-menu="closed" data-orb-affordance="hidden">
     <main class="shell">
       <section class="hero">
         <div class="hero-grid">
@@ -1828,7 +1910,8 @@
             <p class="hero-copy">
               Francis Lens can stay out of the way until you open it. The Orb remains visible,
               calm, and governed while the deeper operator surfaces stay hidden unless you want
-              them. When you move, Francis follows your path with a short visible delay. Away execution is the only path that should take cursor authority.
+              them. When you move, Francis follows your path with a short visible delay. Away
+              execution is the only path that should take cursor authority.
             </p>
             <div class="mode-row" id="mode-row"></div>
           </div>
@@ -2294,7 +2377,7 @@
             No immediate work pressure is visible.
           </p>
           <p class="meta" id="work-link-meta">
-            Operator link will resolve from the current Lens action chain.
+            Operator link will resolve from the current review/control action chain.
           </p>
           <p class="meta tiny" id="work-link-state">
             Link state will resolve from live workspace continuity.
@@ -2364,7 +2447,7 @@
       <section class="split">
         <article class="panel" id="approval-queue-panel">
           <div class="panel-head">
-            <h2>Approval Queue</h2>
+            <h2>Approval Review</h2>
             <span class="meta tiny" id="approval-queue-meta">Waiting for pending approvals</span>
           </div>
           <p id="approval-queue-summary" class="hero-copy">
@@ -2376,7 +2459,7 @@
         </article>
         <article class="panel accent" id="incidents-panel">
           <div class="panel-head">
-            <h2>Approval Detail</h2>
+            <h2>Policy Review</h2>
             <span class="meta tiny" id="approval-detail-meta">Queue idle</span>
           </div>
           <p id="approval-detail-summary" class="hero-copy">
@@ -2395,7 +2478,7 @@
       <section class="split">
         <article class="panel">
           <div class="panel-head">
-            <h2>Execution Journal</h2>
+            <h2>Receipt Review</h2>
             <span class="meta tiny" id="journal-meta">Waiting for receipt history</span>
           </div>
           <p id="journal-summary" class="hero-copy">
@@ -2407,7 +2490,7 @@
         </article>
         <article class="panel accent" id="execution-panel" data-signal="low">
           <div class="panel-head">
-            <h2>Receipt Detail</h2>
+            <h2>Replay Detail</h2>
             <span class="meta tiny" id="journal-detail-meta">Ledger idle</span>
           </div>
           <p id="journal-detail-summary" class="hero-copy">
@@ -2426,14 +2509,14 @@
       <section class="split">
         <article class="panel">
           <div class="panel-head">
-            <h2>Operator Deck</h2>
-            <span class="meta tiny" id="action-summary">Lens action state loading</span>
+            <h2>Expanded Controls</h2>
+            <span class="meta tiny" id="action-summary">Expanded control state loading</span>
           </div>
           <div class="action-grid" id="action-grid"></div>
         </article>
         <article class="panel accent">
           <div class="panel-head">
-            <h2>Execution Feed</h2>
+            <h2>Execution Review</h2>
             <span class="meta tiny" id="execution-meta">No action executed yet</span>
           </div>
           <p id="execution-summary" class="hero-copy">
@@ -2449,7 +2532,7 @@
       <section class="split">
         <article class="panel">
           <div class="panel-head">
-            <h2>Desktop Shell</h2>
+            <h2>Desktop Authority</h2>
             <span class="meta tiny" id="desktop-status">Browser mode | no bridge</span>
           </div>
           <p id="desktop-summary" class="hero-copy">
@@ -2591,7 +2674,7 @@
             <button class="btn-secondary" type="button" onclick="loadVoiceBriefing()">Refresh Briefing</button>
           </div>
           <p id="voice-headline" class="hero-copy">
-            Voice briefings stay grounded to live Lens state and visible receipts.
+            Voice briefings stay grounded to live review-state and visible receipts.
           </p>
           <ul class="list" id="voice-lines">
             <li class="muted-empty">Loading the first live briefing.</li>
@@ -2688,7 +2771,7 @@
           <div class="desktop-grid" id="blocked-detail-cards">
             <div class="desktop-pill"><strong>Blocked</strong><span>Detail cards will render from the backend contract.</span></div>
           </div>
-          <pre class="console" id="blocked-detail">Blocked action detail will render from Lens policy state.</pre>
+          <pre class="console" id="blocked-detail">Blocked action detail will render from review-surface policy state.</pre>
         </article>
       </section>
 
@@ -2742,7 +2825,7 @@
 
     <div id="orb-overlay" aria-hidden="true">
       <div id="orb-trail"></div>
-      <div id="orb-render-root" aria-label="Francis Orb renderer"></div>
+      <div id="orb-render-root" aria-label="Francis Orb renderer" data-renderer="fallback"></div>
       <div id="orb-surface-layer">
         <div id="overlay-thought-bubble" hidden>
           <button class="orb-thought-dismiss" type="button" aria-label="Dismiss Francis thought" onclick="dismissOrbThoughtBubble(event)">×</button>
@@ -2752,31 +2835,26 @@
             <span id="orb-thought-detail">Thoughts will surface here when Francis has something grounded to say.</span>
           </button>
         </div>
-
-        <div id="overlay-strip" role="group" aria-label="Francis operator strip">
-          <div class="orb-strip-shell" data-tone="idle" id="orb-strip-shell">
-            <div class="orb-strip-copy">
-              <div class="orb-strip-topline">
-                <strong class="orb-strip-state" id="orb-strip-state">Idle</strong>
-                <span class="orb-mini-chip" data-tone="idle" id="orb-strip-mode">Observe</span>
-                <span class="orb-mini-chip" data-tone="idle" id="orb-strip-authority">Observe only</span>
-                <span class="orb-mini-chip" data-tone="waiting" id="orb-strip-approval" hidden>Approval needed</span>
-              </div>
-              <div class="orb-strip-detail" id="orb-strip-detail">Perched nearby and out of the way.</div>
-              <div class="orb-strip-meta" id="orb-strip-meta">Target: none</div>
+        <div id="overlay-dock" role="dialog" aria-modal="false" aria-label="Francis chat popup">
+          <div class="orb-context-shell" id="overlay-orb-menu" role="menu" aria-label="Francis orb menu">
+            <div class="orb-context-head">
+              <strong>Francis</strong>
+              <span id="orb-context-state">Idle</span>
             </div>
-            <div class="orb-strip-actions">
-              <button class="btn-danger" type="button" id="orb-strip-stop" onclick="panicStopFromOrbSurface()">Stop</button>
-              <button class="btn-secondary" type="button" id="orb-strip-details" onclick="toggleOrbCommandMenu()">Details</button>
-              <button class="btn-secondary" type="button" id="orb-strip-open-lens" onclick="openLensFromOrbSurface()">Lens</button>
+            <div class="orb-context-detail" id="orb-context-detail">
+              Right-click the orb when you want Francis to act.
+            </div>
+            <div class="orb-context-actions">
+              <button class="btn-primary" type="button" id="orb-context-open-chat" onclick="openOrbCommandMenu({ surface: 'chat', focusComposer: true })">Chat</button>
+              <button class="btn-secondary" type="button" id="orb-context-pause" onclick="pauseOrbFromContextMenu()">Pause</button>
+              <button class="btn-danger" type="button" id="orb-context-stop" onclick="panicStopFromContextMenu()">Stop</button>
+              <button class="btn-secondary" type="button" id="orb-context-hide" onclick="hideOrbFromContextMenu()">Hide</button>
             </div>
           </div>
-        </div>
-        <div id="overlay-dock" role="dialog" aria-modal="false" aria-label="Francis details console">
           <div class="orb-chat-shell">
             <div class="orb-chat-head">
               <div class="orb-chat-head-copy">
-                <strong>Francis Console</strong>
+                <strong>Francis Chat</strong>
                 <span id="overlay-chat-meta">Operator detail is loading.</span>
               </div>
               <div class="orb-chat-head-actions">
@@ -2814,11 +2892,11 @@
               </div>
             </div>
             <div class="orb-chat-status" id="orb-chat-status">
-              Francis is resident and compact. Open details only when you need receipts, diagnostics, or direct command input.
+              Chat opens here when you want Francis to do something.
             </div>
             <div class="orb-chat-thread" id="orb-chat-thread" aria-live="polite">
               <div class="orb-chat-empty">
-                Details stay closed by default. When you open this console, receipts, conversation turns, and operator history resolve here.
+                Ask and Francis replies here.
               </div>
             </div>
             <div class="orb-chat-plan" id="orb-chat-plan" hidden>
@@ -2845,7 +2923,7 @@
                 id="overlay-chat-input"
                 maxlength="1600"
                 rows="3"
-                placeholder="Give Francis a bounded instruction"
+                placeholder="Ask Francis or give a bounded instruction"
               ></textarea>
               <div class="orb-chat-compose-actions">
                 <button class="btn-primary" type="button" id="overlay-chat-send" onclick="sendOrbQuickChat()">Send</button>
@@ -2855,7 +2933,7 @@
             <div hidden aria-hidden="true">
               <div id="overlay-interjection">Interjections stay earned and grounded.</div>
               <div id="overlay-interjection-target">Interjection target quality will surface here when Francis has a grounded control target.</div>
-              <button id="overlay-interjection-primary" type="button">Open Lens</button>
+              <button id="overlay-interjection-primary" type="button">Open Chat</button>
               <div id="overlay-authority-summary">Away Authority</div>
               <div id="overlay-authority-recent"><div class="overlay-authority-recent-item">Grounded authority receipts will appear here after Orb commands move through the governed queue.</div></div>
               <div id="overlay-perception-preview">A cursor-local active-surface crop will appear here when Orb perception is live.</div>
@@ -2885,6 +2963,7 @@
       const externalOrbMode = orbSurfaceMode === "external";
       const orbWindowMode = orbSurfaceMode === "window";
       const requestedViewMode = String(pageUrl.searchParams.get("view") || "").trim().toLowerCase();
+      document.title = orbWindowMode ? "Francis Orb" : "Francis Lens HUD";
       document.body.dataset.orbSurface = orbSurfaceMode || "embedded";
       let currentActions = { action_chips: [], blocked_actions: [] };
       let currentSnapshot = null;
@@ -3013,6 +3092,14 @@
       let orbAnimationFrame = null;
       let orbHoldTimer = null;
       let orbHoldTriggered = false;
+      let orbDragState = {
+        active: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        offsetX: 0,
+        offsetY: 0,
+      };
       let orbInputSyncTimer = null;
       let orbPerceptionSyncTimer = null;
       let hudInteractionsBound = false;
@@ -3031,8 +3118,11 @@
         preferencesPath: null,
         launchOnStartup: false,
         recovery: null,
+        runtimeHealth: null,
         hud: null,
         lifecycle: null,
+        authority: null,
+        ownership: null,
         shortcuts: {
           toggleOverlay: "Ctrl+Shift+Alt+F",
           toggleClickThrough: "Ctrl+Shift+Alt+C",
@@ -3044,20 +3134,23 @@
       let lensViewInitialized = false;
       let orbCommandMenu = {
         open: false,
+        surface: "menu",
         x: 18,
         y: 18,
       };
       let orbHoverInteraction = {
         inside: false,
         enteredAt: 0,
+        lastInsideAt: 0,
       };
+      const ORB_INTERACTION_HIT_RADIUS_RATIO = 0.34;
       const ORB_CHAT_DISMISSED_THOUGHTS_STORAGE_KEY = "francis.orb.dismissedThoughts.v1";
       let orbQuickChat = {
         pending: false,
         loaded: false,
         historyPending: false,
         error: "",
-        status: "Francis is resident. Right-click the Orb to speak in place.",
+        status: "Francis is here when you need it.",
         conversationId: "primary",
         shortTermMemory: {
           message_count: 0,
@@ -3093,9 +3186,44 @@
         humanActive: true,
       };
       let orbWindowInteractive = false;
+      let orbOwnershipRequestState = {
+        pendingMode: "",
+        pendingPromise: null,
+        lastSuppressedKey: "",
+      };
+      function createOrbSyncBucket() {
+        return {
+          failures: 0,
+          nextAllowedAt: 0,
+          circuitOpenUntil: 0,
+          loggedFailure: false,
+          diagnostic: "",
+        };
+      }
+
+      let orbSyncState = {
+        input: createOrbSyncBucket(),
+        perception: createOrbSyncBucket(),
+      };
+      let localOrbRuntimeHealth = {
+        status: "nominal",
+        source: "renderer",
+        summary: "Local operator runtime is nominal.",
+        detail: "Local operator runtime is nominal.",
+        failureCount: 0,
+        consecutiveHealthy: 0,
+        lastFailureAtMs: 0,
+        lastHealthyAtMs: 0,
+        lastChangedAtMs: 0,
+      };
       const ORB_INPUT_SYNC_INTERVAL_MS = 16;
       const ORB_PERCEPTION_SYNC_INTERVAL_MS = 1000;
-      const ORB_HOVER_INTERACTIVE_DELAY_MS = 180;
+      const ORB_INPUT_SYNC_CIRCUIT_THRESHOLD = 4;
+      const ORB_PERCEPTION_SYNC_CIRCUIT_THRESHOLD = 3;
+      const ORB_INPUT_SYNC_CIRCUIT_OPEN_MS = 5000;
+      const ORB_PERCEPTION_SYNC_CIRCUIT_OPEN_MS = 9000;
+      const ORB_HOVER_INTERACTIVE_DELAY_MS = 320;
+      const ORB_HOVER_RELEASE_DELAY_MS = 240;
       const ORB_HUMAN_TRACE_LAG_MS = 156;
       const ORB_CHAT_AUTO_EXECUTE_DELAY_MS = 180;
       const ORB_HUMAN_TRACE_REDUCED_LAG_MS = 88;
@@ -3165,9 +3293,11 @@
         CLICK_ACT: "click_act",
         DRAG_ACT: "drag_act",
         TYPE_HOLD: "type_hold",
-        BLOCKED_UNCERTAIN: "blocked_uncertain",
-        WAITING_FOR_USER: "waiting_for_user",
-        ABORT_INTERRUPTED: "abort_interrupted",
+        WAITING_USER: "waiting_user",
+        BLOCKED: "blocked",
+        INTERRUPTED: "interrupted",
+        DEGRADED: "degraded",
+        PAUSED: "paused",
       };
       let orbBodyPresence = {
         state: ORB_BODY_STATES.IDLE_ANCHORED,
@@ -3212,7 +3342,13 @@
         offsetY: 0,
       };
       const ORB_HUMAN_PROFILE_STORAGE_KEY = "francis.orb.humanMotion.v1";
+      const ORB_MANUAL_PERCH_STORAGE_KEY = "francis.orb.manualPerch.v1";
       let orbBehaviorMode = "autonomous";
+      let orbManualPerch = {
+        active: false,
+        x: null,
+        y: null,
+      };
       let orbHumanMotionProfile = {
         avgSpeed: 4.4,
         avgPauseMs: 180,
@@ -3302,6 +3438,57 @@
         orbBehaviorMode = "autonomous";
       }
 
+      function loadOrbManualPerch() {
+        if (orbWindowMode) {
+          orbManualPerch = { active: false, x: null, y: null };
+          try {
+            window.localStorage?.removeItem(ORB_MANUAL_PERCH_STORAGE_KEY);
+          } catch {}
+          return;
+        }
+        try {
+          const raw = window.localStorage?.getItem(ORB_MANUAL_PERCH_STORAGE_KEY);
+          if (!raw) {
+            orbManualPerch = { active: false, x: null, y: null };
+            return;
+          }
+          const parsed = JSON.parse(raw);
+          if (
+            parsed
+            && parsed.active === true
+            && Number.isFinite(Number(parsed.x))
+            && Number.isFinite(Number(parsed.y))
+          ) {
+            orbManualPerch = {
+              active: true,
+              x: Number(parsed.x),
+              y: Number(parsed.y),
+            };
+            return;
+          }
+        } catch {}
+        orbManualPerch = { active: false, x: null, y: null };
+      }
+
+      function persistOrbManualPerch() {
+        try {
+          if (!orbManualPerch.active || !Number.isFinite(Number(orbManualPerch.x)) || !Number.isFinite(Number(orbManualPerch.y))) {
+            window.localStorage?.removeItem(ORB_MANUAL_PERCH_STORAGE_KEY);
+            return;
+          }
+          window.localStorage?.setItem(
+            ORB_MANUAL_PERCH_STORAGE_KEY,
+            JSON.stringify({
+              active: true,
+              x: Number(orbManualPerch.x.toFixed(3)),
+              y: Number(orbManualPerch.y.toFixed(3)),
+            }),
+          );
+        } catch {
+          // Local persistence is opportunistic; ignore storage failures.
+        }
+      }
+
       function getDesktopOrbBehavior() {
         const behavior = desktopState.lifecycle?.orbBehavior;
         return behavior && typeof behavior === "object" ? behavior : null;
@@ -3318,6 +3505,12 @@
       async function setOrbBehaviorMode(mode) {
         const normalized = normalizeOrbBehaviorMode(mode);
         const bridge = getDesktopBridge();
+        if (orbWindowMode) {
+          orbBehaviorMode = "autonomous";
+          renderOverlayDock();
+          renderOrbPresentation();
+          return;
+        }
         orbBehaviorMode = normalized;
         orbAutonomousReplay.active = false;
         orbAutonomousReplay.nextStartAt = 0;
@@ -3380,7 +3573,7 @@
       function getOrbAutonomousReplayConfig() {
         const movement = currentOrb?.movement || {};
         return {
-          enabled: Boolean(movement.autonomous_replay_enabled ?? true),
+          enabled: !orbWindowMode && Boolean(movement.autonomous_replay_enabled ?? true),
           windowMs: clamp(Number(movement.autonomous_replay_window_ms ?? 720), 280, 1800),
           maxSnippets: Math.max(6, Math.min(24, Math.round(Number(movement.autonomous_replay_max_snippets ?? 18)))),
           minPoints: Math.max(4, Math.min(12, Math.round(Number(movement.autonomous_replay_min_points ?? 5)))),
@@ -3617,15 +3810,23 @@
         humanActive = false,
         investigationPressure = false,
       } = {}) {
+        if (orbWindowMode && !handbackActive && !cursorAuthority) {
+          return {
+            selectedMode: "autonomous",
+            effectiveMode: "autonomous",
+            trace: false,
+            explore: false,
+          };
+        }
         const desktopBehavior = getDesktopOrbBehavior();
         if (desktopBehavior) {
           const selectedMode = normalizeOrbBehaviorMode(desktopBehavior.requested);
           if (selectedMode === "autonomous" && !handbackActive && !cursorAuthority) {
             return {
               selectedMode,
-              effectiveMode: humanActive ? "trace" : investigationPressure ? "investigate" : "autonomous",
-              trace: Boolean(humanActive),
-              explore: Boolean(!humanActive && investigationPressure),
+              effectiveMode: "autonomous",
+              trace: false,
+              explore: false,
             };
           }
           return {
@@ -3670,14 +3871,22 @@
         }
         return {
           selectedMode,
-          effectiveMode: humanActive ? "trace" : investigationPressure ? "investigate" : "autonomous",
-          trace: Boolean(humanActive),
-          explore: Boolean(!humanActive && investigationPressure),
+          effectiveMode: "autonomous",
+          trace: false,
+          explore: false,
         };
       }
 
       function hasOrbGroundedInvestigationPressure() {
         const cue = currentOrbOperator?.target_cue || currentOrb?.operator?.target_cue || null;
+        const attentionState = String(cue?.attention_state || currentOrbPerception?.target?.attention?.state || "").trim().toLowerCase();
+        const attentionStrength = Number(cue?.attention_strength ?? currentOrbPerception?.target?.attention?.strength ?? 0);
+        if (attentionState === "target_lock") {
+          return true;
+        }
+        if (attentionState === "investigate" && Number.isFinite(attentionStrength) && attentionStrength >= 0.34) {
+          return true;
+        }
         const cueSummary = String(cue?.summary || cue?.label || cue?.reason || "").trim();
         if (cueSummary) {
           return true;
@@ -3775,8 +3984,11 @@
                 : null,
           preferencesPath: raw?.preferencesPath ? String(raw.preferencesPath) : null,
           recovery: raw?.recovery && typeof raw.recovery === "object" ? raw.recovery : null,
+          runtimeHealth: raw?.runtimeHealth && typeof raw.runtimeHealth === "object" ? raw.runtimeHealth : null,
           hud: raw?.hud && typeof raw.hud === "object" ? raw.hud : null,
           lifecycle,
+          authority: raw?.authority && typeof raw.authority === "object" ? raw.authority : null,
+          ownership: raw?.ownership && typeof raw.ownership === "object" ? raw.ownership : null,
           shortcuts: {
             toggleOverlay: String(shortcuts.toggleOverlay || "Ctrl+Shift+Alt+F"),
             toggleClickThrough: String(shortcuts.toggleClickThrough || "Ctrl+Shift+Alt+C"),
@@ -3809,7 +4021,30 @@
         return orbWindowMode || lensViewMode === "orb_only";
       }
 
+      function supportsOrbInlineConsole() {
+        return !externalOrbMode;
+      }
+
+      function demoteLegacyOrbConsoleSurface() {
+        if (supportsOrbInlineConsole()) {
+          return;
+        }
+        orbCommandMenu.open = false;
+        document.body.dataset.orbMenu = "closed";
+        const dock = document.getElementById("overlay-dock");
+        if (dock) {
+          dock.hidden = true;
+          dock.style.display = "none";
+          dock.setAttribute("inert", "");
+          dock.dataset.demoted = "true";
+        }
+      }
+
       function toggleOrbCommandMenu() {
+        if (!supportsOrbInlineConsole()) {
+          openLensFromOrbSurface().catch(() => {});
+          return;
+        }
         if (orbCommandMenu.open) {
           closeOrbCommandMenu();
           return;
@@ -3819,10 +4054,16 @@
 
       function closeOrbCommandMenu() {
         orbCommandMenu.open = false;
+        orbCommandMenu.surface = "menu";
         orbHoverInteraction.inside = false;
         orbHoverInteraction.enteredAt = 0;
         orbQuickChat.chatAnchor = null;
         document.body.dataset.orbMenu = "closed";
+        if (!supportsOrbInlineConsole()) {
+          renderOrbOperatorStrip();
+          syncOrbWindowPassThrough().catch(() => {});
+          return;
+        }
         renderOverlayDock();
         syncOrbWindowPassThrough().catch(() => {});
       }
@@ -3836,14 +4077,25 @@
       }
 
       function openOrbCommandMenu(options = {}) {
+        if (!supportsOrbInlineConsole()) {
+          openLensFromOrbSurface().catch(() => {});
+          return;
+        }
         ensureOrbQuickChatState();
+        const surface = String(options?.surface || "menu").trim().toLowerCase() === "chat" ? "chat" : "menu";
+        const anchor = getOrbAnchorPoint();
         orbCommandMenu.open = true;
-        orbQuickChat.chatAnchor = getOrbAnchorPoint();
+        orbCommandMenu.surface = surface;
+        orbCommandMenu.x = anchor.x;
+        orbCommandMenu.y = anchor.y;
+        orbQuickChat.chatAnchor = anchor;
         document.body.dataset.orbMenu = "open";
         renderOverlayDock();
-        ensureOrbQuickChatLoaded().catch(() => {});
-        syncOrbWindowPassThrough(orbQuickChat.chatAnchor.x, orbQuickChat.chatAnchor.y).catch(() => {});
-        if (options?.focusComposer) {
+        if (surface === "chat") {
+          ensureOrbQuickChatLoaded().catch(() => {});
+        }
+        syncOrbWindowPassThrough(anchor.x, anchor.y).catch(() => {});
+        if (surface === "chat" && options?.focusComposer) {
           window.setTimeout(() => {
             const input = document.getElementById("overlay-chat-input");
             if (input && input instanceof HTMLElement) {
@@ -3854,15 +4106,20 @@
       }
 
       async function openLensFromOrbSurface() {
-        closeOrbCommandMenu();
+        if (orbWindowMode && !externalOrbMode) {
+          openOrbCommandMenu({ surface: "chat", focusComposer: true });
+          return;
+        }
+        await resetOrbWindowInteractionOwnership("open-lens");
+        demoteLegacyOrbConsoleSurface();
         if (orbWindowMode) {
           const bridge = getDesktopBridge();
           if (bridge && typeof bridge.showLens === "function") {
             try {
               await bridge.showLens();
-              desktopNotice = "Lens opened from the Orb surface.";
+              desktopNotice = "Review HUD opened from the Orb surface.";
             } catch (error) {
-              desktopNotice = `Open Lens failed: ${error?.message || error}`;
+              desktopNotice = `Open Lens HUD failed: ${error?.message || error}`;
             }
             renderDesktopShell();
             return;
@@ -3872,15 +4129,20 @@
       }
 
       async function hideLensFromOrbSurface() {
-        closeOrbCommandMenu();
+        if (orbWindowMode && !externalOrbMode) {
+          closeOrbCommandMenu();
+          return;
+        }
+        await resetOrbWindowInteractionOwnership("hide-lens");
+        demoteLegacyOrbConsoleSurface();
         if (orbWindowMode) {
           const bridge = getDesktopBridge();
           if (bridge && typeof bridge.hideLens === "function") {
             try {
               await bridge.hideLens();
-              desktopNotice = "Lens hidden.";
+              desktopNotice = "Review HUD hidden.";
             } catch (error) {
-              desktopNotice = `Hide Lens failed: ${error?.message || error}`;
+              desktopNotice = `Hide Lens HUD failed: ${error?.message || error}`;
             }
             renderDesktopShell();
             return;
@@ -3915,13 +4177,11 @@
             status: String(result?.status || "").trim().toLowerCase(),
           };
           orbQuickChat.status = summarizeOrbSurfaceText(result?.summary, "Panic stop engaged.");
-          orbQuickChat.error = [
-            orbLocalPanic?.diagnostics?.localError,
-            orbLocalPanic?.diagnostics?.remoteError,
-          ].filter(Boolean).join(" | ");
+          orbQuickChat.error = "";
+          await refreshOrbSurfaceDesktopState(bridge);
         } catch (error) {
           orbQuickChat.error = `Panic stop failed: ${error?.message || error}`;
-          orbQuickChat.status = summarizeOrbSurfaceText(orbQuickChat.error, "Panic stop degraded.");
+          orbQuickChat.status = "Panic stop degraded. Inspect diagnostics.";
           orbLocalPanic = {
             engaged: false,
             summary: "Panic stop degraded.",
@@ -3933,12 +4193,63 @@
             },
             status: "degraded",
           };
+          await refreshOrbSurfaceDesktopState(bridge);
         } finally {
           orbQuickChat.pending = false;
           setOrbTransientStatus("");
+          await resetOrbWindowInteractionOwnership("panic-stop");
           renderOverlayDock();
           applyOrbSignals();
         }
+      }
+
+      async function panicStopFromContextMenu() {
+        await panicStopFromOrbSurface();
+        if (!orbQuickChat.error) {
+          closeOrbCommandMenu();
+        }
+      }
+
+      async function pauseOrbFromSurface() {
+        const bridge = getDesktopBridge();
+        if (!bridge || typeof bridge.pauseAuthority !== "function") {
+          const unavailable = "Pause is unavailable because the desktop bridge is not attached.";
+          orbQuickChat.error = unavailable;
+          orbQuickChat.status = summarizeOrbSurfaceText(unavailable, "Pause unavailable.");
+          setOrbTransientStatus("Pause unavailable.");
+          renderOverlayDock();
+          return;
+        }
+        try {
+          const result = await bridge.pauseAuthority();
+          const message = summarizeOrbSurfaceText(result?.summary, "Paused.");
+          orbQuickChat.error = "";
+          orbQuickChat.status = message;
+          setOrbTransientStatus(message);
+          if (String(result?.status || "").trim().toLowerCase() !== "use_stop") {
+            await resetOrbWindowInteractionOwnership("pause-authority");
+          }
+          await refreshOrbSurfaceDesktopState(bridge);
+        } catch (error) {
+          const message = `Pause failed: ${error?.message || error}`;
+          orbQuickChat.error = message;
+          orbQuickChat.status = "Pause failed. Inspect diagnostics.";
+          setOrbTransientStatus("Pause failed.");
+          await refreshOrbSurfaceDesktopState(bridge);
+        }
+        renderOverlayDock();
+      }
+
+      async function pauseOrbFromContextMenu() {
+        await pauseOrbFromSurface();
+        if (!orbQuickChat.error) {
+          closeOrbCommandMenu();
+        }
+      }
+
+      async function hideOrbFromContextMenu() {
+        closeOrbCommandMenu();
+        await hideDesktopOverlay();
       }
 
       function renderOrbTargetCue(node, cue, fallbackText) {
@@ -3946,14 +4257,22 @@
           return;
         }
         const targetCue = cue && typeof cue === "object" ? cue : {};
-        const highlight = String(targetCue.state || "unavailable").trim().toLowerCase() || "unavailable";
-        const title = String(targetCue.title || "").trim() || (highlight === "concrete"
-          ? "Concrete Target"
-          : highlight === "tracking"
-            ? "Tracking Target"
-            : "Weak Target");
-        const summary = String(targetCue.summary || fallbackText || "Orb target quality is not attached yet.").trim();
-        const detail = String(targetCue.detail || "").trim();
+        const groundingState = String(targetCue.state || "unavailable").trim().toLowerCase() || "unavailable";
+        const attentionState = String(targetCue.attention_state || "").trim().toLowerCase();
+        const highlight = attentionState || groundingState || "unavailable";
+        const title = String(targetCue.title || "").trim() || (attentionState === "target_lock"
+          ? "Target Lock"
+          : attentionState === "investigate"
+            ? "Investigating Target"
+            : attentionState === "reassess"
+              ? "Reassessing Target"
+              : groundingState === "concrete"
+                ? "Concrete Target"
+                : groundingState === "tracking"
+                  ? "Tracking Target"
+                  : "Weak Target");
+        const summary = String(targetCue.attention_summary || targetCue.summary || fallbackText || "Orb target quality is not attached yet.").trim();
+        const detail = String(targetCue.attention_detail || targetCue.detail || "").trim();
         node.dataset.highlight = highlight;
         node.innerHTML = detail
           ? `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(summary)}</span><span class="meta tiny">${escapeHtml(detail)}</span>`
@@ -3964,10 +4283,10 @@
         const targetCue = cue && typeof cue === "object" ? cue : {};
         const target = targetContract && typeof targetContract === "object" ? targetContract : {};
         const zone = target.zone && typeof target.zone === "object" ? target.zone : {};
-        const cueState = String(targetCue.state || "").trim().toLowerCase();
+        const cueState = String(targetCue.attention_state || targetCue.state || "").trim().toLowerCase();
         const surfaceKind = String(targetCue.surface_kind || "").trim().toLowerCase();
         const zoneKind = String(targetCue.zone_kind || zone.kind || "").trim().toLowerCase();
-        if (cueState !== "concrete" || surfaceKind !== "francis" || !zoneKind.startsWith("francis_")) {
+        if (!["target_lock", "concrete"].includes(cueState) || surfaceKind !== "francis" || !zoneKind.startsWith("francis_")) {
           return "";
         }
         const zoneLabel = String(targetCue.zone_label || zone.label || "Francis control").trim() || "Francis control";
@@ -4157,7 +4476,19 @@
         return [
           ORB_BODY_STATES.IDLE_ANCHORED,
           ORB_BODY_STATES.ATTENTIVE,
-          ORB_BODY_STATES.WAITING_FOR_USER,
+          ORB_BODY_STATES.WAITING_USER,
+          ORB_BODY_STATES.DEGRADED,
+          ORB_BODY_STATES.PAUSED,
+        ].includes(String(state || ""));
+      }
+
+      function isOrbSafetyBodyState(state) {
+        return [
+          ORB_BODY_STATES.INTERRUPTED,
+          ORB_BODY_STATES.DEGRADED,
+          ORB_BODY_STATES.PAUSED,
+          ORB_BODY_STATES.BLOCKED,
+          ORB_BODY_STATES.WAITING_USER,
         ].includes(String(state || ""));
       }
 
@@ -4201,8 +4532,8 @@
         return isOrbRestBodyState(nextState)
           && (
             isOrbCommitBodyState(previousState)
-            || String(previousState || "") === ORB_BODY_STATES.BLOCKED_UNCERTAIN
-            || String(previousState || "") === ORB_BODY_STATES.ABORT_INTERRUPTED
+            || String(previousState || "") === ORB_BODY_STATES.BLOCKED
+            || String(previousState || "") === ORB_BODY_STATES.INTERRUPTED
           );
       }
 
@@ -4220,11 +4551,16 @@
           : currentOrb?.operator && typeof currentOrb.operator === "object"
             ? currentOrb.operator
             : {};
-        const authority = currentOrbAuthority && typeof currentOrbAuthority === "object"
+        const orbAuthority = currentOrbAuthority && typeof currentOrbAuthority === "object"
           ? currentOrbAuthority
           : currentOrb?.authority && typeof currentOrb.authority === "object"
             ? currentOrb.authority
             : {};
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        const authority = {
+          ...orbAuthority,
+          ...(canonicalAuthority && typeof canonicalAuthority === "object" ? canonicalAuthority : {}),
+        };
         const interjection = currentOrbInterjection && typeof currentOrbInterjection === "object"
           ? currentOrbInterjection
           : currentOrb?.interjection && typeof currentOrb.interjection === "object"
@@ -4235,6 +4571,8 @@
           : currentOrb?.perception && typeof currentOrb.perception === "object"
             ? currentOrb.perception
             : {};
+        const runtimeHealth = getEffectiveOrbRuntimeHealth();
+        const runtimeStatus = String(runtimeHealth?.status || "nominal").trim().toLowerCase() || "nominal";
         if (!bundle || !currentOrb) {
           return orbBodyPresence;
         }
@@ -4266,6 +4604,15 @@
           hoverReady: orbBodyPhase.hoverReady,
           clickPulseActive: timestamp < Number(orbBodyPhase.clickPulseUntil || 0),
           blockedActive: timestamp < Number(orbBodyPhase.blockedUntil || 0),
+          pausedActive: Boolean(authority?.pauseHeld),
+          interruptedActive: Boolean(authority?.localStopped),
+          degradedActive: (
+            runtimeStatus === "degraded"
+            || runtimeStatus === "recovering"
+            || runtimeStatus === "disconnected"
+            || Boolean(authority?.degraded)
+            || Boolean(authority?.disconnected)
+          ),
           behaviorMode: getOrbBehaviorMode(),
           holdPerch,
           latchedPerchPoint,
@@ -4273,6 +4620,8 @@
       }
 
       function updateOrbBodyPhases(intent, timestamp = performance.now()) {
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        const activeExecutionPhase = String(canonicalAuthority?.executionPhase || "").trim().toLowerCase();
         const recentReceipt = Array.isArray(currentOrbAuthority?.recent) && currentOrbAuthority.recent.length
           ? currentOrbAuthority.recent[0]
           : null;
@@ -4280,10 +4629,13 @@
         const recentReceiptKind = String(recentReceipt?.kind || "").trim().toLowerCase();
         const recentReceiptStatus = String(recentReceipt?.status || "").trim().toLowerCase();
         if (
+          activeExecutionPhase === "click_act"
+          || (
           recentReceiptId &&
           recentReceiptId !== orbBodyPhase.lastReceiptId &&
           recentReceiptKind === "mouse.click" &&
           recentReceiptStatus === "completed"
+          )
         ) {
           const pulseMs = Math.max(80, Number(intent?.config?.clickPulseMs || 160));
           orbBodyPhase.clickPulseUntil = timestamp + pulseMs;
@@ -4329,29 +4681,24 @@
       }
 
       function resolveOrbVisualStateOverride(bodyState) {
+        const normalizedBodyState = String(bodyState || ORB_BODY_STATES.IDLE_ANCHORED);
         const shellOverride = resolveOrbStateOverride();
-        if (shellOverride) {
-          return shellOverride;
-        }
         if (
-          bodyState === ORB_BODY_STATES.COMMIT_MOVE
-          || bodyState === ORB_BODY_STATES.HOVER_READY
-          || bodyState === ORB_BODY_STATES.CLICK_ACT
-          || bodyState === ORB_BODY_STATES.DRAG_ACT
-          || bodyState === ORB_BODY_STATES.TYPE_HOLD
+          normalizedBodyState === ORB_BODY_STATES.COMMIT_MOVE
+          || normalizedBodyState === ORB_BODY_STATES.HOVER_READY
+          || normalizedBodyState === ORB_BODY_STATES.CLICK_ACT
+          || normalizedBodyState === ORB_BODY_STATES.DRAG_ACT
+          || normalizedBodyState === ORB_BODY_STATES.TYPE_HOLD
+          || normalizedBodyState === ORB_BODY_STATES.TARGET_LOCK
+          || normalizedBodyState === ORB_BODY_STATES.BLOCKED
+          || normalizedBodyState === ORB_BODY_STATES.WAITING_USER
+          || normalizedBodyState === ORB_BODY_STATES.INTERRUPTED
+          || normalizedBodyState === ORB_BODY_STATES.DEGRADED
+          || normalizedBodyState === ORB_BODY_STATES.PAUSED
         ) {
-          return "acting";
+          return normalizedBodyState;
         }
-        if (bodyState === ORB_BODY_STATES.ATTENTIVE || bodyState === ORB_BODY_STATES.WAITING_FOR_USER) {
-          return "listening";
-        }
-        if (bodyState === ORB_BODY_STATES.BLOCKED_UNCERTAIN) {
-          return "thinking";
-        }
-        if (bodyState === ORB_BODY_STATES.INVESTIGATE || bodyState === ORB_BODY_STATES.TARGET_LOCK) {
-          return "thinking";
-        }
-        return null;
+        return shellOverride || normalizedBodyState || null;
       }
 
       function resolveOrbResidentPlacement(anchorX, anchorY, width, height) {
@@ -4387,18 +4734,53 @@
         };
       }
 
+      function resolveOrbChatPlacement(anchorX, anchorY, width, height) {
+        const safeWidth = Math.max(280, Math.min(window.innerWidth - 32, Number(width) || 320));
+        const safeHeight = Math.max(140, Math.min(window.innerHeight - 32, Number(height) || 320));
+        const frame = getResidentDisplayFrame();
+        const workArea = frame.workArea;
+        const margin = 16;
+        const sideBias = anchorX > workArea.x + workArea.width * 0.56 ? "left" : "right";
+        const fallbackSide = sideBias === "left" ? "right" : "left";
+        const offsetX = 78;
+        const offsetY = 18;
+        const workLeft = workArea.x + margin;
+        const workTop = workArea.y + margin;
+        const workRight = workArea.x + workArea.width - safeWidth - margin;
+        const workBottom = workArea.y + workArea.height - safeHeight - margin;
+
+        function buildSidePlacement(side) {
+          const left = side === "left"
+            ? anchorX - safeWidth - offsetX
+            : anchorX + offsetX;
+          const top = clamp(anchorY - safeHeight * 0.42 - offsetY, workTop, workBottom);
+          const fits = left >= workLeft && left <= workRight;
+          return { side, left, top, fits };
+        }
+
+        const preferred = buildSidePlacement(sideBias);
+        const alternate = buildSidePlacement(fallbackSide);
+        const chosen = preferred.fits ? preferred : alternate.fits ? alternate : preferred;
+
+        return {
+          side: chosen.side,
+          left: clamp(chosen.left, workLeft, workRight),
+          top: clamp(chosen.top, workTop, workBottom),
+        };
+      }
+
       function resolveOrbSurfacePlacement(anchorX, anchorY, width, height, bias = "chat") {
         const safeWidth = Math.max(220, Math.min(window.innerWidth - 36, Number(width) || 320));
         const safeHeight = Math.max(90, Math.min(window.innerHeight - 36, Number(height) || 160));
         if (bias === "chat") {
-          return resolveOrbResidentPlacement(anchorX, anchorY, safeWidth, safeHeight);
+          return resolveOrbChatPlacement(anchorX, anchorY, safeWidth, safeHeight);
         }
         const margin = 18;
         const side = anchorX > window.innerWidth * 0.56 ? "left" : "right";
-        const offsetX = bias === "bubble" ? 54 : 66;
-        const offsetY = bias === "bubble" ? 16 : 28;
+        const offsetX = bias === "bubble" ? 54 : bias === "menu" ? 42 : 66;
+        const offsetY = bias === "bubble" ? 16 : bias === "menu" ? 10 : 28;
         let left = side === "left" ? anchorX - safeWidth - offsetX : anchorX + offsetX;
-        let top = anchorY - safeHeight * (bias === "bubble" ? 0.44 : 0.34) - offsetY;
+        let top = anchorY - safeHeight * (bias === "bubble" ? 0.44 : bias === "menu" ? 0.28 : 0.34) - offsetY;
         if (top < margin) {
           top = Math.min(window.innerHeight - safeHeight - margin, anchorY + 24);
         }
@@ -4446,21 +4828,33 @@
         strip.dataset.side = placement.side;
       }
 
-      function positionOrbChatWindow(forceAnchor = false) {
+      function positionOrbCommandSurface(forceAnchor = false) {
         const dock = document.getElementById("overlay-dock");
         if (!dock || !orbCommandMenu.open) {
           return;
         }
-        if (!orbQuickChat.chatAnchor || forceAnchor) {
-          orbQuickChat.chatAnchor = getOrbAnchorPoint();
+        if (!Number.isFinite(orbCommandMenu.x) || !Number.isFinite(orbCommandMenu.y) || forceAnchor) {
+          const anchor = getOrbAnchorPoint();
+          orbCommandMenu.x = anchor.x;
+          orbCommandMenu.y = anchor.y;
+          if (orbCommandMenu.surface === "chat") {
+            orbQuickChat.chatAnchor = anchor;
+          }
         }
-        const anchor = orbQuickChat.chatAnchor || getOrbAnchorPoint();
+        const anchor = {
+          x: Number.isFinite(orbCommandMenu.x) ? orbCommandMenu.x : getOrbAnchorPoint().x,
+          y: Number.isFinite(orbCommandMenu.y) ? orbCommandMenu.y : getOrbAnchorPoint().y,
+        };
+        if (orbCommandMenu.surface === "chat") {
+          orbQuickChat.chatAnchor = anchor;
+        }
+        const surfaceMode = String(dock.dataset.surfaceMode || "menu").trim().toLowerCase();
         const placement = resolveOrbSurfacePlacement(
           anchor.x,
           anchor.y,
-          dock.offsetWidth || 420,
-          dock.offsetHeight || 540,
-          "chat",
+          dock.offsetWidth || (surfaceMode === "chat" ? 340 : 220),
+          dock.offsetHeight || (surfaceMode === "chat" ? 470 : 220),
+          surfaceMode === "chat" ? "chat" : "menu",
         );
         dock.style.left = `${Math.round(placement.left)}px`;
         dock.style.top = `${Math.round(placement.top)}px`;
@@ -4468,9 +4862,8 @@
       }
 
       function positionOrbConversationSurfaces(forceChatAnchor = false) {
-        positionOrbOperatorStrip();
         positionOrbThoughtBubble();
-        positionOrbChatWindow(forceChatAnchor);
+        positionOrbCommandSurface(forceChatAnchor);
       }
 
       function getOrbCurrentThought() {
@@ -4560,6 +4953,9 @@
       }
 
       async function ensureOrbQuickChatLoaded(force = false) {
+        if (!supportsOrbInlineConsole()) {
+          return;
+        }
         ensureOrbQuickChatState();
         if (orbQuickChat.historyPending) {
           return;
@@ -4613,7 +5009,11 @@
           persistDismissedOrbThoughtIds();
           await rememberOrbThoughtInConversation(thought);
         }
-        openOrbCommandMenu();
+        if (!supportsOrbInlineConsole()) {
+          await openLensFromOrbSurface();
+          return;
+        }
+        openOrbCommandMenu({ surface: "chat", focusComposer: true });
       }
 
       function hideOrbChatWindow() {
@@ -4724,7 +5124,12 @@
           return;
         }
         const thought = getOrbCurrentThought();
-        const visible = Boolean(thought && !orbCommandMenu.open && !(orbQuickChat.dismissedThoughtIds || []).includes(thought.id));
+        const visible = Boolean(
+          !orbWindowMode
+          && thought
+          && !orbCommandMenu.open
+          && !(orbQuickChat.dismissedThoughtIds || []).includes(thought.id),
+        );
         bubble.hidden = !visible;
         if (!visible) {
           return;
@@ -4750,41 +5155,83 @@
         node.innerHTML = value;
       }
 
+      function buildOrbOperatorStripMeta(surfaceState) {
+        const targetLabel = String(surfaceState?.targetLabel || "").trim();
+        if (!targetLabel || targetLabel === "Target: none") {
+          return "";
+        }
+        const confidenceLabel = String(surfaceState?.confidenceLabel || "").trim();
+        return [targetLabel, confidenceLabel].filter(Boolean).join(" | ");
+      }
+
+      function resolveOrbAffordanceMode(surfaceState) {
+        if (!orbWindowMode) {
+          return "full";
+        }
+        return "hidden";
+      }
+
       function renderOrbOperatorStrip() {
+        document.body.dataset.orbAffordance = "hidden";
         const strip = document.getElementById("overlay-strip");
+        if (orbWindowMode) {
+          if (strip) {
+            strip.hidden = true;
+            strip.style.display = "none";
+          }
+          return;
+        }
         const shell = document.getElementById("orb-strip-shell");
+        const copyNode = strip?.querySelector(".orb-strip-copy");
         const stateNode = document.getElementById("orb-strip-state");
         const modeNode = document.getElementById("orb-strip-mode");
         const authorityNode = document.getElementById("orb-strip-authority");
         const approvalNode = document.getElementById("orb-strip-approval");
+        const healthNode = document.getElementById("orb-strip-health");
         const detailNode = document.getElementById("orb-strip-detail");
         const metaNode = document.getElementById("orb-strip-meta");
         const stopButton = document.getElementById("orb-strip-stop");
-        const detailsButton = document.getElementById("orb-strip-details");
-        const lensButton = document.getElementById("orb-strip-open-lens");
-        if (!strip || !shell || !stateNode || !modeNode || !authorityNode || !approvalNode || !detailNode || !metaNode || !stopButton || !detailsButton || !lensButton) {
+        const pauseButton = document.getElementById("orb-strip-pause");
+        const chatButton = document.getElementById("orb-strip-open-chat");
+        if (!strip || !shell || !copyNode || !stateNode || !modeNode || !authorityNode || !approvalNode || !healthNode || !detailNode || !metaNode || !stopButton || !pauseButton || !chatButton) {
           return;
         }
         const compactSurface = isCompactOrbSurface() && !externalOrbMode;
-        const stripVisible = compactSurface && !orbCommandMenu.open;
+        const surfaceState = deriveCurrentOrbSurfaceState();
+        const affordanceMode = resolveOrbAffordanceMode(surfaceState);
+        document.body.dataset.orbAffordance = affordanceMode;
+        const stripVisible = compactSurface && !orbCommandMenu.open && (!orbWindowMode || affordanceMode !== "hidden");
         strip.hidden = !stripVisible;
         strip.style.display = stripVisible ? "block" : "none";
-        const surfaceState = deriveCurrentOrbSurfaceState();
+        strip.dataset.affordance = affordanceMode;
         shell.dataset.tone = surfaceState.tone || "idle";
+        const minimalStrip = orbWindowMode && affordanceMode === "visible";
+        const urgentStrip = orbWindowMode && affordanceMode === "urgent";
+        copyNode.hidden = minimalStrip;
+        stateNode.hidden = orbWindowMode && !urgentStrip;
         stateNode.textContent = surfaceState.stateLabel || "Idle";
         modeNode.textContent = surfaceState.modeLabel || "Observe";
         modeNode.dataset.tone = surfaceState.tone || "idle";
         authorityNode.textContent = surfaceState.authorityLabel || "Observe only";
         authorityNode.dataset.tone = surfaceState.tone || "idle";
-        approvalNode.hidden = !surfaceState.approvalNeeded;
+        approvalNode.hidden = !surfaceState.approvalNeeded || (orbWindowMode && !urgentStrip);
         approvalNode.textContent = surfaceState.approvalLabel || "Approval needed";
+        approvalNode.dataset.tone = surfaceState.approvalNeeded ? "waiting" : "idle";
+        healthNode.hidden = !surfaceState.healthDegraded || (orbWindowMode && !urgentStrip);
+        healthNode.textContent = surfaceState.healthLabel || "Degraded";
+        healthNode.dataset.tone = surfaceState.stopped ? "stopped" : "blocked";
         detailNode.textContent = surfaceState.detailLabel || "Francis is ready.";
-        metaNode.textContent = [surfaceState.targetLabel, surfaceState.confidenceLabel].filter(Boolean).join(" | ");
-        stopButton.disabled = !desktopState.available || (!Boolean(currentOrb?.panic_ready) && !surfaceState.stopped);
+        const metaText = buildOrbOperatorStripMeta(surfaceState);
+        metaNode.hidden = orbWindowMode || !metaText;
+        metaNode.textContent = metaText;
+        stopButton.disabled = !desktopState.available || !surfaceState.canStop;
         stopButton.textContent = surfaceState.stopped ? "Stopped" : "Stop";
-        detailsButton.textContent = orbCommandMenu.open ? "Hide" : "Details";
-        detailsButton.className = orbCommandMenu.open ? "btn-primary" : "btn-secondary";
-        lensButton.disabled = !desktopState.available && compactSurface;
+        stopButton.hidden = orbWindowMode && !urgentStrip;
+        pauseButton.disabled = !desktopState.available || !surfaceState.canPause;
+        pauseButton.textContent = surfaceState.pauseLabel || "Pause";
+        pauseButton.hidden = orbWindowMode && !urgentStrip;
+        chatButton.disabled = false;
+        chatButton.textContent = "Chat";
         if (stripVisible) {
           positionOrbOperatorStrip();
         }
@@ -4793,6 +5240,22 @@
       function renderOverlayDock() {
         renderOrbOperatorStrip();
         const dock = document.getElementById("overlay-dock");
+        if (!supportsOrbInlineConsole()) {
+          document.body.dataset.orbMenu = "closed";
+          if (dock) {
+            dock.hidden = true;
+            dock.style.display = "none";
+            dock.setAttribute("inert", "");
+          }
+          return;
+        }
+        const menuShell = document.getElementById("overlay-orb-menu");
+        const menuState = document.getElementById("orb-context-state");
+        const menuDetail = document.getElementById("orb-context-detail");
+        const menuChat = document.getElementById("orb-context-open-chat");
+        const menuPause = document.getElementById("orb-context-pause");
+        const menuStop = document.getElementById("orb-context-stop");
+        const menuHide = document.getElementById("orb-context-hide");
         const chatMeta = document.getElementById("overlay-chat-meta");
         const chatMemory = document.getElementById("orb-chat-memory");
         const chatStatus = document.getElementById("orb-chat-status");
@@ -4813,14 +5276,14 @@
         const continuityNode = document.getElementById("orb-console-continuity");
         const diagnosticsNode = document.getElementById("orb-diagnostics");
         const motionMeta = document.getElementById("overlay-motion-meta");
-        if (!dock || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !panicStop || !closeChat || !motionModes || !motionExplore || !motionTrace || !motionAutonomous || !stateNode || !stateDetailNode || !targetNode || !confidenceNode || !approvalNode || !approvalDetailNode || !continuityNode || !diagnosticsNode || !motionMeta) {
+        if (!dock || !menuShell || !menuState || !menuDetail || !menuChat || !menuPause || !menuStop || !menuHide || !chatMeta || !chatMemory || !chatStatus || !chatInput || !chatSend || !panicStop || !closeChat || !motionModes || !motionExplore || !motionTrace || !motionAutonomous || !stateNode || !stateDetailNode || !targetNode || !confidenceNode || !approvalNode || !approvalDetailNode || !continuityNode || !diagnosticsNode || !motionMeta) {
           return;
         }
         ensureOrbQuickChatState();
-        if (externalOrbMode) {
-          document.body.dataset.orbMenu = "closed";
-          return;
-        }
+        const surfaceState = deriveCurrentOrbSurfaceState();
+        const menuSurfaceMode = orbWindowMode
+          ? (String(orbCommandMenu.surface || "menu").trim().toLowerCase() === "chat" ? "chat" : "menu")
+          : "review";
         const longTerm = orbQuickChat.longTermMemory && typeof orbQuickChat.longTermMemory === "object"
           ? orbQuickChat.longTermMemory
           : {};
@@ -4833,22 +5296,54 @@
           humanActive: orbSystemInput.humanActive,
           investigationPressure: hasOrbGroundedInvestigationPressure(),
         });
-        const surfaceState = deriveCurrentOrbSurfaceState();
         const continuitySummary = String(longTerm.summary || "").trim();
         const selectedMode = String(motionControl.selectedMode || "autonomous").trim().toLowerCase();
         document.body.dataset.orbMenu = orbCommandMenu.open ? "open" : "closed";
+        if (!orbCommandMenu.open) {
+          dock.hidden = true;
+          dock.style.display = "none";
+          dock.setAttribute("inert", "");
+          return;
+        }
+        dock.hidden = false;
+        dock.style.display = "block";
+        dock.removeAttribute("inert");
+        delete dock.dataset.demoted;
+        dock.dataset.surfaceMode = menuSurfaceMode;
+        dock.setAttribute("aria-label", menuSurfaceMode === "chat" ? "Francis chat popup" : "Francis orb menu");
+        const bridge = getDesktopBridge();
+        menuState.textContent = `${surfaceState.stateLabel} | ${surfaceState.modeLabel}`;
+        menuDetail.textContent = compactSurfaceLine(
+          surfaceState.detailLabel || "Right-click the orb when you want Francis to act.",
+          "Right-click the orb when you want Francis to act.",
+        );
+        menuChat.disabled = false;
+        menuPause.disabled = !desktopState.available || !surfaceState.canPause;
+        menuPause.textContent = surfaceState.pauseLabel || "Pause";
+        menuStop.disabled = !desktopState.available || !surfaceState.canStop;
+        menuStop.textContent = surfaceState.stopped ? "Stopped" : "Stop";
+        menuHide.disabled = !(bridge && typeof bridge.hide === "function");
+        if (menuSurfaceMode !== "chat") {
+          positionOrbConversationSurfaces();
+          return;
+        }
+        chatMeta.hidden = orbWindowMode;
         chatMeta.textContent = `${surfaceState.modeLabel} | ${surfaceState.authorityLabel}`;
         stateNode.textContent = surfaceState.stateLabel;
         stateDetailNode.textContent = surfaceState.detailLabel;
         targetNode.textContent = surfaceState.targetLabel;
         confidenceNode.textContent = surfaceState.confidenceLabel;
         approvalNode.textContent = surfaceState.approvalNeeded
-          ? "Approval needed"
+          ? (surfaceState.approvalLabel || "Approval needed")
+          : surfaceState.policyBlocked
+            ? "Policy blocked"
           : surfaceState.stopped
             ? "Stopped"
             : "No approvals";
         approvalDetailNode.textContent = surfaceState.approvalNeeded
-          ? "Francis is paused and waiting for your explicit confirmation."
+          ? (surfaceState.approvalDetail || surfaceState.detailLabel || "Francis is paused and waiting for your explicit confirmation.")
+          : surfaceState.policyBlocked
+            ? (surfaceState.detailLabel || "Francis is holding at a governed policy boundary.")
           : surfaceState.stopped
             ? surfaceState.detailLabel
             : "Francis is not waiting on you.";
@@ -4881,6 +5376,15 @@
             orbTransientStatus || orbQuickChat.status || currentOrbOperator?.summary || currentOrb?.summary,
             surfaceState.detailLabel || "Francis is ready to continue in place from the Orb.",
           );
+        chatStatus.hidden = Boolean(
+          orbWindowMode
+          && !orbQuickChat.pending
+          && !orbQuickChat.error
+          && !surfaceState.stopped
+          && !surfaceState.healthDegraded
+          && !surfaceState.approvalNeeded
+          && !surfaceState.policyBlocked,
+        );
         diagnosticsNode.textContent = buildOrbDiagnosticsText(surfaceState);
         renderOrbChatThread();
         renderOrbChatPlan();
@@ -4893,7 +5397,7 @@
         motionExplore.className = motionControl.selectedMode === "explore" ? "btn-primary" : "btn-secondary";
         motionTrace.className = motionControl.selectedMode === "trace" ? "btn-primary" : "btn-secondary";
         motionAutonomous.className = motionControl.selectedMode === "autonomous" ? "btn-primary" : "btn-secondary";
-        panicStop.disabled = !desktopState.available || (!Boolean(currentOrb?.panic_ready) && !surfaceState.stopped);
+        panicStop.disabled = !desktopState.available || !surfaceState.canStop;
         closeChat.disabled = orbQuickChat.pending;
         positionOrbConversationSurfaces();
         if (thought?.id) {
@@ -4918,82 +5422,176 @@
         if (rect.width <= 0 || rect.height <= 0) {
           return false;
         }
-        const radius = Math.min(rect.width, rect.height) * 0.5;
+        const radius = Math.min(rect.width, rect.height) * ORB_INTERACTION_HIT_RADIUS_RATIO;
         const centerX = rect.left + rect.width * 0.5;
         const centerY = rect.top + rect.height * 0.5;
         return Math.hypot(clientX - centerX, clientY - centerY) <= radius;
       }
 
-      async function setOrbWindowInteractive(interactive) {
+      async function setOrbWindowInteractive(interactive, requestReason = "orb_surface_hover") {
         const nextInteractive = Boolean(interactive);
         if (!orbWindowMode) {
           orbWindowInteractive = nextInteractive;
           return;
         }
+        const ownership = getCanonicalOrbOwnership();
+        const runtimeHealth = getEffectiveOrbRuntimeHealth();
+        const requestedMode = nextInteractive ? "interactable_orb" : "pass_through";
+        const unhealthyRuntime = runtimeHealth.status !== "nominal";
+        if (
+          nextInteractive
+          && (
+            !ownership.canClaimOrbInteraction
+            || ownership.safeFallback
+            || ownership.restricted
+            || ownership.lensInteractive
+            || unhealthyRuntime
+          )
+        ) {
+          noteSuppressedOrbOwnershipRequest("runtime_or_ownership_blocked", {
+            requestedMode,
+          });
+          orbWindowInteractive = false;
+          return;
+        }
         const bridge = getDesktopBridge();
-        if (!bridge || typeof bridge.setOrbIgnoreMouseEvents !== "function") {
+        if (!bridge) {
           orbWindowInteractive = nextInteractive;
           return;
         }
-        if (orbWindowInteractive === nextInteractive) {
+        if (orbWindowInteractive === nextInteractive && ownership.state === requestedMode) {
           return;
         }
+        if (
+          orbOwnershipRequestState.pendingPromise
+          && orbOwnershipRequestState.pendingMode === requestedMode
+        ) {
+          return orbOwnershipRequestState.pendingPromise;
+        }
+        if (typeof bridge.setOrbOwnershipMode === "function") {
+          const requestPromise = bridge.setOrbOwnershipMode(requestedMode, requestReason)
+            .then((snapshot) => {
+              desktopState = normalizeDesktopState({
+                ...desktopState,
+                ownership: snapshot,
+              }, desktopState.displayInfo);
+              orbWindowInteractive = Boolean(snapshot?.orbInteractive);
+              if (!snapshot?.orbInteractive && requestedMode === "interactable_orb") {
+                noteSuppressedOrbOwnershipRequest("canonical_denied", {
+                  requestedMode,
+                });
+              } else {
+                orbOwnershipRequestState.lastSuppressedKey = "";
+              }
+              return snapshot;
+            })
+            .finally(() => {
+              if (orbOwnershipRequestState.pendingPromise === requestPromise) {
+                orbOwnershipRequestState.pendingPromise = null;
+                orbOwnershipRequestState.pendingMode = "";
+              }
+            });
+          orbOwnershipRequestState.pendingMode = requestedMode;
+          orbOwnershipRequestState.pendingPromise = requestPromise;
+          return requestPromise;
+        }
         orbWindowInteractive = nextInteractive;
-        await bridge.setOrbIgnoreMouseEvents(!nextInteractive);
       }
 
       async function syncOrbWindowPassThrough(clientX = null, clientY = null) {
         if (!orbWindowMode) {
           return;
         }
+        const ownership = getCanonicalOrbOwnership();
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        const runtimeHealth = getEffectiveOrbRuntimeHealth();
+        if (
+          ownership.safeFallback
+          || ownership.restricted
+          || ownership.lensInteractive
+          || ownership.userOverrideActive
+          || !ownership.canClaimOrbInteraction
+          || runtimeHealth.status !== "nominal"
+          || canonicalAuthority?.localStopped
+          || canonicalAuthority?.pauseHeld
+          || canonicalAuthority?.disconnected
+        ) {
+          orbHoverInteraction.inside = false;
+          orbHoverInteraction.enteredAt = 0;
+          orbHoverInteraction.lastInsideAt = 0;
+          await setOrbWindowInteractive(false, "orb_surface_release");
+          return;
+        }
         const bubble = document.getElementById("overlay-thought-bubble");
-        const strip = document.getElementById("overlay-strip");
         const dock = document.getElementById("overlay-dock");
         const activeElement = document.activeElement;
         const insideBubble = !bubble?.hidden && isPointInsideElement(bubble, clientX, clientY);
-        const insideStrip = isPointInsideElement(strip, clientX, clientY);
         const insideChat = orbCommandMenu.open && isPointInsideElement(dock, clientX, clientY);
         const chatFocused = Boolean(orbCommandMenu.open && dock && activeElement instanceof Node && dock.contains(activeElement));
-        const stripFocused = Boolean(strip && activeElement instanceof Node && strip.contains(activeElement));
-        if (insideBubble || insideStrip || insideChat || chatFocused || stripFocused) {
+        const now = performance.now();
+        if (insideBubble || insideChat || chatFocused) {
           orbHoverInteraction.inside = false;
           orbHoverInteraction.enteredAt = 0;
-          await setOrbWindowInteractive(true);
+          orbHoverInteraction.lastInsideAt = now;
+          await setOrbWindowInteractive(true, "orb_surface_focus");
           return;
         }
         const insideOrb = isPointerInsideOrb(clientX, clientY);
         if (insideOrb) {
-          const now = performance.now();
           if (!orbHoverInteraction.inside) {
             orbHoverInteraction.inside = true;
             orbHoverInteraction.enteredAt = now;
           }
+          orbHoverInteraction.lastInsideAt = now;
           if (now - orbHoverInteraction.enteredAt >= ORB_HOVER_INTERACTIVE_DELAY_MS) {
-            await setOrbWindowInteractive(true);
+            await setOrbWindowInteractive(true, "orb_surface_hover");
             return;
           }
-          await setOrbWindowInteractive(false);
+          await setOrbWindowInteractive(false, "orb_surface_release");
+          return;
+        }
+        if (
+          orbWindowInteractive
+          && orbHoverInteraction.lastInsideAt > 0
+          && now - orbHoverInteraction.lastInsideAt < ORB_HOVER_RELEASE_DELAY_MS
+        ) {
           return;
         }
         orbHoverInteraction.inside = false;
         orbHoverInteraction.enteredAt = 0;
-        await setOrbWindowInteractive(false);
+        orbHoverInteraction.lastInsideAt = 0;
+        await setOrbWindowInteractive(false, "orb_surface_release");
       }
 
       async function syncOrbInputState() {
         if (!orbWindowMode) {
           return;
         }
+        const syncBucket = orbSyncState.input;
+        if (Date.now() < Number(syncBucket?.nextAllowedAt || 0)) {
+          return;
+        }
+        const requestEpoch = getOrbSyncEpochKey();
         const bridge = getDesktopBridge();
         if (!bridge || typeof bridge.getInputState !== "function") {
           if (!orbBridgeWarningEmitted) {
             orbBridgeWarningEmitted = true;
           }
+          noteOrbSyncFailure("input", "Desktop bridge is unavailable.", {
+            baseDelay: ORB_INPUT_SYNC_INTERVAL_MS * 4,
+            summary: "Desktop bridge unavailable.",
+            disconnected: true,
+          });
+          renderOverlayDock();
           return;
         }
         orbBridgeWarningEmitted = false;
         try {
           const payload = await bridge.getInputState();
+          if (isOrbSyncEpochStale(requestEpoch)) {
+            return;
+          }
+          noteOrbSyncSuccess("input");
           const nextIdleSeconds = Math.max(0, Number(payload?.idleSeconds || 0));
           const nextThresholdSeconds = Math.max(1, Number(payload?.idleThresholdSeconds || 30));
           const cursorDisplay = payload?.cursorDisplay && typeof payload.cursorDisplay === "object"
@@ -5029,17 +5627,20 @@
               !hasEffectiveOrbCursorAuthority(performance.now()) &&
               !isOrbHandbackActive();
             updateOrbPointer(nextX, nextY, performance.now(), shouldLearnFromTrace ? "human" : "system");
+            syncOrbWindowPassThrough(nextX, nextY).catch(() => {});
           }
           if (Math.floor(previousIdleSeconds) !== Math.floor(nextIdleSeconds)) {
             renderOrbPresentation();
           }
         } catch (error) {
-          console.error("Francis Orb input sync failed", error);
-          currentOrbPerception = {
-            ...currentOrbPerception,
-            state: "error",
-            summary: `Orb input sync failed: ${error?.message || error}`,
-          };
+          if (isOrbSyncEpochStale(requestEpoch)) {
+            return;
+          }
+          noteOrbSyncFailure("input", error, {
+            baseDelay: ORB_INPUT_SYNC_INTERVAL_MS * 8,
+            summary: "Input bridge degraded.",
+            disconnected: true,
+          });
           renderOverlayDock();
         }
       }
@@ -5048,26 +5649,37 @@
         if (!orbWindowMode) {
           return;
         }
+        const syncBucket = orbSyncState.perception;
+        if (Date.now() < Number(syncBucket?.nextAllowedAt || 0)) {
+          return;
+        }
+        const requestEpoch = getOrbSyncEpochKey();
         try {
           const response = await fetch("/api/orb/perception");
           const payload = await response.json();
+          if (isOrbSyncEpochStale(requestEpoch)) {
+            return;
+          }
           if (response.ok && payload && typeof payload === "object") {
+            noteOrbSyncSuccess("perception");
             currentOrbPerception = payload;
             renderOverlayDock();
             return;
           }
-          currentOrbPerception = {
-            ...currentOrbPerception,
-            state: "error",
-            summary: `Orb perception update failed: ${payload?.detail || "unknown error"}`,
-          };
+          noteOrbSyncFailure("perception", payload?.detail || "unknown error", {
+            baseDelay: ORB_PERCEPTION_SYNC_INTERVAL_MS,
+            summary: "Perception degraded.",
+            disconnected: true,
+          });
         } catch (error) {
-          console.error("Francis Orb perception sync failed", error);
-          currentOrbPerception = {
-            ...currentOrbPerception,
-            state: "error",
-            summary: `Orb perception update failed: ${error?.message || error}`,
-          };
+          if (isOrbSyncEpochStale(requestEpoch)) {
+            return;
+          }
+          noteOrbSyncFailure("perception", error, {
+            baseDelay: ORB_PERCEPTION_SYNC_INTERVAL_MS,
+            summary: "Perception degraded.",
+            disconnected: true,
+          });
         }
         renderOverlayDock();
       }
@@ -5477,9 +6089,10 @@
           }
           updateOrbAuthority(payload?.execution?.result?.authority || payload?.authority);
           orbQuickChat.error = "";
-          orbQuickChat.reply = "Queued Orb authority commands were cleared. Human control remains primary until Francis is lawfully armed again.";
+          orbQuickChat.status = "Queued Orb authority commands were cleared. Human control remains primary until Francis is lawfully armed again.";
         } catch (error) {
           orbQuickChat.error = `Authority clear failed: ${error?.message || error}`;
+          throw error;
         }
         renderOverlayDock();
       }
@@ -5535,6 +6148,10 @@
       }
 
       async function queueOrbTypeFromInput() {
+        if (!supportsOrbInlineConsole()) {
+          await openLensFromOrbSurface();
+          return;
+        }
         const input = document.getElementById("overlay-chat-input");
         const text = String(input?.value || "").trim();
         if (!text) {
@@ -5731,6 +6348,10 @@
       }
 
       async function sendOrbQuickChat() {
+        if (!supportsOrbInlineConsole()) {
+          await openLensFromOrbSurface();
+          return;
+        }
         const input = document.getElementById("overlay-chat-input");
         const message = String(input?.value || "").trim();
         if (!message) {
@@ -6557,9 +7178,13 @@
       }
 
       function buildDesktopAuthorityCards() {
-        const authority = desktopState.lifecycle?.authority && typeof desktopState.lifecycle.authority === "object"
-          ? desktopState.lifecycle.authority
+        const desktopAuthority = desktopState.displayInfo?.desktopAuthority && typeof desktopState.displayInfo.desktopAuthority === "object"
+          ? desktopState.displayInfo.desktopAuthority
           : null;
+        const authority = desktopAuthority
+          || (desktopState.lifecycle?.authority && typeof desktopState.lifecycle.authority === "object"
+            ? desktopState.lifecycle.authority
+            : null);
 
         if (!authority) {
           return [
@@ -6689,23 +7314,23 @@
               : degradedMode?.mode === "reduced"
                 ? `${String(degradedMode.summary || "The shell is in a reduced degraded mode.")} Treat continuity as review-first until posture returns to current.`
             : hudRuntime?.mode === "managed"
-              ? `The Electron shell started the local HUD itself and is currently running on ${targetDisplayLabel}.`
+              ? `The Electron shell started the local Lens HUD itself and is currently running on ${targetDisplayLabel}.`
               : hudRuntime?.mode === "external"
-                ? `The Electron shell is attached to an already-running HUD on ${targetDisplayLabel}.`
+                ? `The Electron shell is attached to an already-running Lens HUD on ${targetDisplayLabel}.`
                 : recovery?.needed
                   ? `The Electron shell is recovering from ${String(recovery.status || "an unclean exit")}. ${String(recovery.message || "").trim()}`
                   : update?.pendingNotice
                     ? `${String(update.summary || "A new Francis build was detected.")} Review the update discipline surface before treating continuity as settled.`
                   : loginState?.enabled
                     ? `The Electron shell is live on ${targetDisplayLabel}, is configured to start at Windows sign-in, and will boot as ${String(startupProfile?.label || "Operator Overlay")}.`
-                    : `The Electron shell is live on ${targetDisplayLabel}. Startup profile ${String(startupProfile?.label || "Operator Overlay")} keeps boot behavior explicit without changing the HUD architecture.`
+                    : `The Electron shell is live on ${targetDisplayLabel}. Startup profile ${String(startupProfile?.label || "Operator Overlay")} keeps boot behavior explicit without changing the orb-first review architecture.`
           : "Launch the Electron shell to turn this HUD into a real always-on-top desktop overlay.";
 
         grid.innerHTML = [
           ["Mode", desktopState.available ? "desktop" : "browser"],
           ["Build", buildLabel],
           ["Input", inputLabel],
-          ["HUD Runtime", hudRuntimeMode],
+          ["Review Runtime", hudRuntimeMode],
           ["Topmost", topmostLabel],
           ["Visibility", visibilityLabel],
           ["Start At Login", launchAtLoginLabel],
@@ -6843,7 +7468,7 @@
         `;
 
         meta.textContent = desktopState.available
-          ? `${desktopNotice || "Desktop shell bridge connected."} HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | startup ${String(startupProfile?.requested || "operator")} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
+          ? `${desktopNotice || "Desktop shell bridge connected."} Lens HUD ${desktopState.hudUrl} | runtime ${hudRuntimeMode} | build ${buildLabel} | start-at-login ${launchAtLoginLabel} | startup ${String(startupProfile?.requested || "operator")} | target ${targetDisplayLabel} | overlay ${desktopState.shortcuts.toggleOverlay} | click-through ${desktopState.shortcuts.toggleClickThrough} | prefs ${desktopState.preferencesPath || "unavailable"}`
           : "Electron-only bridge. In browser mode there is no desktop shell control surface.";
         renderDetailCards("desktop-recovery-cards", buildDesktopRecoveryCards(), "Recovery");
         renderDetailCards("desktop-accessibility-cards", buildDesktopAccessibilityCards(), "Accessibility");
@@ -6881,7 +7506,9 @@
               )
               .join("")
           : '<li class="muted-empty">Provider posture will render here once the shell bridge is attached.</li>';
-        const authorityItems = Array.isArray(lifecycle?.authority?.items) ? lifecycle.authority.items : [];
+        const authorityItems = Array.isArray(desktopState.displayInfo?.desktopAuthority?.items)
+          ? desktopState.displayInfo.desktopAuthority.items
+          : Array.isArray(lifecycle?.authority?.items) ? lifecycle.authority.items : [];
         authorityList.innerHTML = authorityItems.length
           ? authorityItems
               .map(
@@ -6994,6 +7621,25 @@
           desktopNotice = `Desktop bridge sync failed: ${error?.message || error}`;
         }
         renderDesktopShell();
+      }
+
+      async function refreshOrbSurfaceDesktopState(bridge = getDesktopBridge()) {
+        if (!bridge || typeof bridge.getState !== "function") {
+          return false;
+        }
+        try {
+          const [nextState, nextDisplayInfo] = await Promise.all([
+            bridge.getState(),
+            typeof bridge.getDisplayInfo === "function"
+              ? bridge.getDisplayInfo().catch(() => desktopState.displayInfo)
+              : Promise.resolve(desktopState.displayInfo),
+          ]);
+          desktopState = normalizeDesktopState(nextState, nextDisplayInfo);
+          renderDesktopShell();
+          return true;
+        } catch {
+          return false;
+        }
       }
 
       async function openDesktopLifecyclePath(target, label) {
@@ -7458,10 +8104,33 @@
         }
         if (!window.__francisDesktopBridgeBound && typeof bridge.onStateChanged === "function") {
           bridge.onStateChanged((value) => {
+            const previousHudGeneration = Number(desktopState?.hud?.generation || 0);
             desktopState = normalizeDesktopState(value, desktopState.displayInfo);
+            const nextHudGeneration = Number(desktopState?.hud?.generation || 0);
+            if (nextHudGeneration !== previousHudGeneration) {
+              orbOwnershipRequestState.pendingPromise = null;
+              orbOwnershipRequestState.pendingMode = "";
+              orbOwnershipRequestState.lastSuppressedKey = "";
+            }
+            const canonicalAuthority = getCanonicalOrbAuthority();
+            const canonicalOwnership = getCanonicalOrbOwnership();
+            const runtimeHealth = getEffectiveOrbRuntimeHealth();
             desktopNotice = desktopState.ignoreMouseEvents
               ? `Click-through live. Use ${desktopState.shortcuts.toggleClickThrough} to return to interactive control.`
               : "Desktop shell state updated.";
+            if (
+              canonicalOwnership.safeFallback
+              || canonicalOwnership.restricted
+              || canonicalOwnership.lensInteractive
+              || canonicalOwnership.userOverrideActive
+              || !canonicalOwnership.canClaimOrbInteraction
+              || canonicalAuthority?.localStopped
+              || canonicalAuthority?.pauseHeld
+              || canonicalAuthority?.disconnected
+              || runtimeHealth.status !== "nominal"
+            ) {
+              resetOrbWindowInteractionOwnership("desktop-state-changed").catch(() => {});
+            }
             renderDesktopShell();
             if (typeof bridge.getDisplayInfo === "function") {
               bridge
@@ -7506,6 +8175,291 @@
         return String(message || fallback || "").trim() || fallback;
       }
 
+      function getCanonicalOrbAuthority() {
+        return desktopState.authority && typeof desktopState.authority === "object"
+          ? desktopState.authority
+          : null;
+      }
+
+      function getCanonicalOrbOwnership() {
+        const raw = desktopState.ownership && typeof desktopState.ownership === "object"
+          ? desktopState.ownership
+          : {};
+        const state = String(raw.state || "pass_through").trim().toLowerCase();
+        return {
+          state: [
+            "pass_through",
+            "interactable_orb",
+            "interactable_lens",
+            "restricted",
+          ].includes(state)
+            ? state
+            : "pass_through",
+          governorState: [
+            "observe",
+            "assist",
+            "act",
+            "paused",
+            "degraded",
+            "user_override",
+          ].includes(String(raw.governorState || "").trim().toLowerCase())
+            ? String(raw.governorState).trim().toLowerCase()
+            : "observe",
+          requestedMode: String(raw.requestedMode || "pass_through").trim().toLowerCase() || "pass_through",
+          passThrough: Boolean(raw.passThrough),
+          engaged: Boolean(raw.engaged),
+          nonPassThrough: Boolean(raw.nonPassThrough),
+          orbInteractive: Boolean(raw.orbInteractive),
+          lensInteractive: Boolean(raw.lensInteractive),
+          safeFallback: Boolean(raw.safeFallback),
+          restricted: Boolean(raw.restricted),
+          canClaimOrbInteraction: raw.canClaimOrbInteraction !== false,
+          modeLabel: summarizeOrbSurfaceText(raw.modeLabel, "Observe"),
+          authorityLabel: summarizeOrbSurfaceText(raw.authorityLabel, "Pass-through"),
+          summary: summarizeOrbSurfaceText(raw.summary, "Orb input is passing through to the desktop."),
+          reason: String(raw.reason || "").trim().toLowerCase(),
+          userOverrideActive: Boolean(raw.userOverrideActive),
+          overrideExpiresAtMs: Math.max(0, Number(raw.overrideExpiresAtMs || 0)),
+          overrideReason: String(raw.overrideReason || "").trim().toLowerCase(),
+        };
+      }
+
+      function normalizeRuntimeHealthState(raw = null) {
+        const health = raw && typeof raw === "object" ? raw : {};
+        const status = String(health.status || "nominal").trim().toLowerCase();
+        return {
+          status: ["nominal", "degraded", "disconnected", "recovering"].includes(status) ? status : "nominal",
+          source: String(health.source || "unknown").trim() || "unknown",
+          summary: summarizeOrbSurfaceText(health.summary, "Local operator runtime is nominal."),
+          detail: summarizeOrbSurfaceText(health.detail || health.summary, "Local operator runtime is nominal."),
+          failureCount: Math.max(0, Number(health.failureCount || 0)),
+          consecutiveHealthy: Math.max(0, Number(health.consecutiveHealthy || 0)),
+          lastFailureAtMs: Math.max(0, Number(health.lastFailureAtMs || 0)),
+          lastHealthyAtMs: Math.max(0, Number(health.lastHealthyAtMs || 0)),
+          lastChangedAtMs: Math.max(0, Number(health.lastChangedAtMs || 0)),
+          nextProbeAtMs: Math.max(0, Number(health.nextProbeAtMs || 0)),
+          circuitOpenUntilMs: Math.max(0, Number(health.circuitOpenUntilMs || 0)),
+        };
+      }
+
+      function getRuntimeHealthSeverity(status) {
+        const normalized = String(status || "").trim().toLowerCase();
+        if (normalized === "disconnected") {
+          return 3;
+        }
+        if (normalized === "recovering") {
+          return 2;
+        }
+        if (normalized === "degraded") {
+          return 1;
+        }
+        return 0;
+      }
+
+      function getEffectiveOrbRuntimeHealth() {
+        const canonical = normalizeRuntimeHealthState(desktopState.runtimeHealth);
+        const local = normalizeRuntimeHealthState(localOrbRuntimeHealth);
+        return getRuntimeHealthSeverity(local.status) > getRuntimeHealthSeverity(canonical.status) ? local : canonical;
+      }
+
+      function getOrbSyncEpochKey() {
+        const hudGeneration = Number(desktopState?.hud?.generation || 0);
+        const hudPid = Number(desktopState?.hud?.pid || 0);
+        const runtimeHealth = getEffectiveOrbRuntimeHealth();
+        return [
+          hudGeneration,
+          hudPid,
+          String(runtimeHealth?.status || "nominal"),
+        ].join(":");
+      }
+
+      function isOrbSyncEpochStale(epochKey) {
+        return String(epochKey || "") !== getOrbSyncEpochKey();
+      }
+
+      function noteSuppressedOrbOwnershipRequest(reason, meta = {}) {
+        const runtimeHealth = getEffectiveOrbRuntimeHealth();
+        const ownership = getCanonicalOrbOwnership();
+        const suppressionKey = [
+          String(reason || "suppressed"),
+          String(runtimeHealth?.status || "nominal"),
+          String(ownership?.state || "pass_through"),
+          String(ownership?.reason || ""),
+          String(meta?.requestedMode || ""),
+        ].join("|");
+        if (orbOwnershipRequestState.lastSuppressedKey === suppressionKey) {
+          return;
+        }
+        orbOwnershipRequestState.lastSuppressedKey = suppressionKey;
+      }
+
+      async function resetOrbWindowInteractionOwnership(reason = "") {
+        orbHoverInteraction.inside = false;
+        orbHoverInteraction.enteredAt = 0;
+        orbHoverInteraction.lastInsideAt = 0;
+        orbCommandMenu.open = false;
+        orbQuickChat.chatAnchor = null;
+        orbOwnershipRequestState.lastSuppressedKey = "";
+        if (orbWindowMode) {
+          await setOrbWindowInteractive(false, String(reason || "orb_surface_reset").trim().toLowerCase() || "orb_surface_reset");
+        } else {
+          orbWindowInteractive = false;
+        }
+        renderOverlayDock();
+      }
+
+      function getOrbSyncBackoffDelayMs(failures, baseDelay, channel = "") {
+        const safeFailures = Math.max(0, Number(failures || 0));
+        const safeBaseDelay = Math.max(100, Number(baseDelay || 250));
+        const channelOffset = String(channel || "").trim().toLowerCase() === "input" ? 37 : 79;
+        return Math.min(12000, safeBaseDelay * Math.max(1, 2 ** Math.min(safeFailures, 4)) + channelOffset);
+      }
+
+      function getOrbSyncCircuitConfig(channel = "") {
+        const normalized = String(channel || "").trim().toLowerCase();
+        if (normalized === "input") {
+          return {
+            threshold: ORB_INPUT_SYNC_CIRCUIT_THRESHOLD,
+            holdMs: ORB_INPUT_SYNC_CIRCUIT_OPEN_MS,
+          };
+        }
+        return {
+          threshold: ORB_PERCEPTION_SYNC_CIRCUIT_THRESHOLD,
+          holdMs: ORB_PERCEPTION_SYNC_CIRCUIT_OPEN_MS,
+        };
+      }
+
+      function isOrbSyncCircuitOpen(bucket, nowMs = Date.now()) {
+        return Number(bucket?.circuitOpenUntil || 0) > Number(nowMs || Date.now());
+      }
+
+      function summarizeOrbSyncFailure(channel, {
+        disconnected = false,
+        circuitOpen = false,
+      } = {}) {
+        const normalized = String(channel || "").trim().toLowerCase();
+        if (normalized === "input") {
+          return disconnected || circuitOpen
+            ? "Input updates are paused while Francis waits for the local desktop bridge to respond."
+            : "Input updates are degraded while Francis waits for fresh local desktop proofs.";
+        }
+        return disconnected || circuitOpen
+          ? "Perception updates are paused while Francis waits for the local operator runtime to respond."
+          : "Perception updates are degraded while Francis waits for fresh local proofs.";
+      }
+
+      function noteOrbSyncSuccess(channel) {
+        const bucket = orbSyncState?.[channel];
+        if (!bucket) {
+          return;
+        }
+        bucket.failures = 0;
+        bucket.nextAllowedAt = 0;
+        bucket.circuitOpenUntil = 0;
+        bucket.loggedFailure = false;
+        bucket.diagnostic = "";
+        const pendingFailures =
+          Number(orbSyncState?.input?.failures || 0)
+          + Number(orbSyncState?.perception?.failures || 0);
+        if (pendingFailures > 0) {
+          return;
+        }
+        const current = normalizeRuntimeHealthState(localOrbRuntimeHealth);
+        const nextHealthyCount = current.status === "nominal" && current.failureCount === 0
+          ? 0
+          : current.consecutiveHealthy + 1;
+        localOrbRuntimeHealth = normalizeRuntimeHealthState({
+          ...current,
+          status: nextHealthyCount >= 2 ? "nominal" : "recovering",
+          source: channel,
+          summary: nextHealthyCount >= 2 ? "Local operator runtime is nominal." : "Local operator runtime is recovering.",
+          detail: nextHealthyCount >= 2
+            ? "Fresh local bridge and perception proofs re-established runtime health."
+            : "Fresh local proofs are accumulating before Francis trusts the runtime again.",
+          consecutiveHealthy: nextHealthyCount,
+          failureCount: nextHealthyCount >= 2 ? 0 : current.failureCount,
+          lastHealthyAtMs: Date.now(),
+          lastChangedAtMs: Date.now(),
+          nextProbeAtMs: 0,
+          circuitOpenUntilMs: 0,
+        });
+        if (nextHealthyCount >= 2 && String(currentOrbPerception?.state || "").trim().toLowerCase() === "error") {
+          currentOrbPerception = {
+            ...currentOrbPerception,
+            state: "idle",
+            summary: "Fresh local proofs re-established orb runtime health.",
+          };
+        }
+      }
+
+      function noteOrbSyncFailure(channel, error, {
+        baseDelay = 250,
+        summary = "Orb sync degraded.",
+        disconnected = false,
+      } = {}) {
+        const bucket = orbSyncState?.[channel];
+        if (!bucket) {
+          return;
+        }
+        const nowMs = Date.now();
+        bucket.failures += 1;
+        bucket.diagnostic = String(error?.message || error || "").trim();
+        const circuitConfig = getOrbSyncCircuitConfig(channel);
+        const circuitOpen = bucket.failures >= circuitConfig.threshold;
+        if (circuitOpen) {
+          bucket.circuitOpenUntil = Math.max(
+            Number(bucket.circuitOpenUntil || 0),
+            nowMs + circuitConfig.holdMs,
+          );
+        }
+        bucket.nextAllowedAt = Math.max(
+          nowMs + getOrbSyncBackoffDelayMs(bucket.failures, baseDelay, channel),
+          Number(bucket.circuitOpenUntil || 0),
+        );
+        bucket.loggedFailure = true;
+        const totalFailures =
+          Number(orbSyncState?.input?.failures || 0)
+          + Number(orbSyncState?.perception?.failures || 0);
+        const nextStatus = totalFailures >= 3 ? "disconnected" : "degraded";
+        const detail = summarizeOrbSyncFailure(channel, {
+          disconnected: disconnected || nextStatus === "disconnected",
+          circuitOpen,
+        });
+        localOrbRuntimeHealth = normalizeRuntimeHealthState({
+          ...localOrbRuntimeHealth,
+          status: nextStatus,
+          source: channel,
+          summary: nextStatus === "disconnected" ? "Local operator runtime is disconnected." : "Local operator runtime is degraded.",
+          detail,
+          failureCount: totalFailures,
+          consecutiveHealthy: 0,
+          lastFailureAtMs: nowMs,
+          lastChangedAtMs: nowMs,
+          nextProbeAtMs: bucket.nextAllowedAt,
+          circuitOpenUntilMs: Number(bucket.circuitOpenUntil || 0),
+        });
+        currentOrbPerception = {
+          ...currentOrbPerception,
+          state: "error",
+          summary: detail,
+          target: {},
+        };
+        currentOrbAuthority = {
+          ...currentOrbAuthority,
+          claimed: [],
+          pending: [],
+          state: {
+            ...(currentOrbAuthority?.state && typeof currentOrbAuthority.state === "object" ? currentOrbAuthority.state : {}),
+            live: false,
+            eligible: false,
+          },
+        };
+        orbTransientStatus = "";
+        if (disconnected) {
+          resetOrbWindowInteractionOwnership(`${channel}-sync-failed`).catch(() => {});
+        }
+      }
+
       function getOrbSurfaceTargetCue() {
         const cue = currentOrb?.operator?.target_cue && typeof currentOrb.operator.target_cue === "object"
           ? currentOrb.operator.target_cue
@@ -7517,22 +8471,61 @@
 
       function deriveCurrentOrbSurfaceState() {
         const bridge = getOrbSurfaceStateBridge();
+        const authority = getCanonicalOrbAuthority();
+        const ownership = getCanonicalOrbOwnership();
+        const policy = currentOrbOperator?.policy && typeof currentOrbOperator.policy === "object"
+          ? currentOrbOperator.policy
+          : null;
+        const runtimeHealth = getEffectiveOrbRuntimeHealth();
         const waitingForUser =
-          String(orbBodyPresence?.state || "") === ORB_BODY_STATES.WAITING_FOR_USER
+          String(orbBodyPresence?.state || "") === ORB_BODY_STATES.WAITING_USER
           || Boolean(currentOrbOperator?.controls?.approval_id)
+          || String(policy?.state || "").trim().toLowerCase() === "approval_required"
           || Boolean(currentOrbInterjection?.controls?.primary_action);
         const blocked =
-          String(orbBodyPresence?.state || "") === ORB_BODY_STATES.BLOCKED_UNCERTAIN
-          || String(currentOrbOperator?.state || "").trim().toLowerCase() === "blocked";
-        if (orbLocalPanic?.engaged && hasEffectiveOrbCursorAuthority()) {
+          String(orbBodyPresence?.state || "") === ORB_BODY_STATES.BLOCKED
+          || String(currentOrbOperator?.state || "").trim().toLowerCase() === "blocked"
+          || String(policy?.state || "").trim().toLowerCase() === "policy_blocked";
+        const degradedMode =
+          desktopState.lifecycle?.degradedMode && typeof desktopState.lifecycle.degradedMode === "object"
+            ? desktopState.lifecycle.degradedMode
+            : null;
+        const disconnected = runtimeHealth.status === "disconnected"
+          || authority?.disconnected
+          || !desktopState.available;
+        const recovering = runtimeHealth.status === "recovering";
+        const degraded = runtimeHealth.status === "degraded"
+          || recovering
+          || authority?.degraded
+          || disconnected
+          || (degradedMode && String(degradedMode.mode || "").trim().toLowerCase() !== "nominal");
+        const degradedSummary =
+          runtimeHealth.status !== "nominal"
+            ? runtimeHealth.detail || runtimeHealth.summary
+            : authority?.detail
+            ? summarizeOrbSurfaceText(authority.detail, authority.summary || "Human control remains primary.")
+            : disconnected
+            ? summarizeOrbSurfaceText(
+                currentOrbPerception?.summary || desktopNotice,
+                "Disconnected from the local operator stack.",
+              )
+            : degradedMode?.summary || "";
+        if (orbLocalPanic?.engaged && authority?.cursorLive) {
+          clearOrbLocalPanicState();
+        }
+        if (orbLocalPanic?.engaged && authority && authority.localStopped === false) {
           clearOrbLocalPanicState();
         }
         const localPanic = orbLocalPanic && typeof orbLocalPanic === "object" ? orbLocalPanic : null;
         if (bridge && typeof bridge.deriveOrbSurfaceState === "function") {
           return bridge.deriveOrbSurfaceState({
             bodyState: orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED,
-            cursorAuthority: hasEffectiveOrbCursorAuthority(),
-            cursorEligibility: isOrbCursorEligible(),
+            authority,
+            ownership,
+            policy,
+            runtimeHealth,
+            cursorAuthority: authority?.cursorLive ?? hasEffectiveOrbCursorAuthority(),
+            cursorEligibility: authority?.cursorArmed ?? isOrbCursorEligible(),
             waitingForUser,
             blocked,
             taskbarIntent: Boolean(orbBodyPresence?.taskbarIntent),
@@ -7546,36 +8539,71 @@
             summary: currentOrbOperator?.summary || currentOrb?.summary || "",
             localPanic,
             pending: orbQuickChat.pending,
+            degraded,
+            disconnected,
+            degradedSummary,
           });
         }
         return {
-          stateLabel: localPanic?.engaged ? "Panic stopped" : "Idle",
-          detailLabel: summarizeOrbSurfaceText(orbTransientStatus || orbQuickChat.status, "Francis is ready."),
-          modeLabel: localPanic?.engaged ? "Stopped" : hasEffectiveOrbCursorAuthority() ? "Act" : "Observe",
-          authorityLabel: localPanic?.engaged ? "Local stop" : hasEffectiveOrbCursorAuthority() ? "Cursor live" : "Observe only",
+          stateLabel: localPanic?.engaged ? "Panic stopped" : disconnected ? "Disconnected" : recovering ? "Recovering" : degraded ? "Degraded" : "Idle",
+          detailLabel: disconnected
+            ? degradedSummary
+            : recovering
+              ? degradedSummary || "Recovery is in progress."
+            : degraded
+              ? degradedSummary || "The local operator stack is degraded."
+              : String(policy?.state || "").trim().toLowerCase() === "approval_required"
+                ? summarizeOrbSurfaceText(policy?.detail, "Francis is holding at a governed approval boundary.")
+              : String(policy?.state || "").trim().toLowerCase() === "policy_blocked"
+                ? summarizeOrbSurfaceText(policy?.detail, "Francis is holding at a governed policy boundary.")
+              : ownership?.userOverrideActive
+                ? summarizeOrbSurfaceText(ownership.summary, "User control is active. Francis yielded input.")
+              : summarizeOrbSurfaceText(orbTransientStatus || orbQuickChat.status, "Francis is ready."),
+          modeLabel: localPanic?.engaged ? "Stopped" : ownership?.modeLabel || (authority?.cursorLive ? "Act" : "Observe"),
+          authorityLabel: localPanic?.engaged ? "Local stop" : ownership?.authorityLabel || (disconnected ? "Disconnected" : authority?.cursorLive ? "Cursor live" : "Observe only"),
           targetLabel: "Target: none",
           confidenceLabel: "Low confidence",
           approvalNeeded: waitingForUser,
-          approvalLabel: waitingForUser ? "Approval needed" : "",
-          diagnosticsSummary: "",
+          approvalLabel: waitingForUser ? (String(policy?.state || "").trim().toLowerCase() === "approval_required" ? "Policy hold" : "Approval needed") : "",
+          approvalDetail: waitingForUser ? summarizeOrbSurfaceText(policy?.detail, "Francis is holding at a governed approval boundary.") : "",
+          policyBlocked: String(policy?.state || "").trim().toLowerCase() === "policy_blocked",
+          policyState: String(policy?.state || "").trim().toLowerCase(),
+          healthDegraded: degraded,
+          healthLabel: disconnected ? "Disconnected" : recovering ? "Recovering" : degraded ? "Degraded" : "",
+          diagnosticsSummary: disconnected ? "Local operator stack unreachable" : recovering ? "Recovery in progress" : degraded ? "Runtime degraded" : String(policy?.state || "").trim().toLowerCase() === "policy_blocked" ? "Policy blocked" : String(policy?.state || "").trim().toLowerCase() === "approval_required" ? "Policy hold" : "",
           stopped: Boolean(localPanic?.engaged),
-          tone: localPanic?.engaged ? "stopped" : waitingForUser ? "waiting" : blocked ? "blocked" : "idle",
+          canStop: ownership.safeFallback && ownership.state !== "interactable_lens" ? false : authority?.canStop ?? !localPanic?.engaged,
+          canPause: ownership.safeFallback && ownership.state !== "interactable_lens" ? false : authority?.canPause ?? !authority?.cursorLive,
+          pauseLabel: authority?.cursorLive ? "Use Stop" : "Pause",
+          tone: localPanic?.engaged ? "stopped" : degraded ? "blocked" : waitingForUser ? "waiting" : blocked ? "blocked" : "idle",
         };
       }
 
       function buildOrbDiagnosticsText(surfaceState = deriveCurrentOrbSurfaceState()) {
         const lines = [];
+        const canonicalAuthority = getCanonicalOrbAuthority();
         if (surfaceState?.diagnosticsSummary) {
           lines.push(`status: ${surfaceState.diagnosticsSummary}`);
         }
-        if (orbLocalPanic?.diagnostics?.localError) {
+        if (canonicalAuthority?.diagnostics?.localError) {
+          lines.push(`authority.local: ${canonicalAuthority.diagnostics.localError}`);
+        } else if (orbLocalPanic?.diagnostics?.localError) {
           lines.push(`panic.local: ${orbLocalPanic.diagnostics.localError}`);
         }
-        if (orbLocalPanic?.diagnostics?.remoteError) {
+        if (canonicalAuthority?.diagnostics?.remoteError) {
+          lines.push(`authority.remote: ${canonicalAuthority.diagnostics.remoteError}`);
+        }
+        if (!canonicalAuthority?.diagnostics?.remoteError && orbLocalPanic?.diagnostics?.remoteError) {
           lines.push(`panic.remote: ${orbLocalPanic.diagnostics.remoteError}`);
         }
         if (orbQuickChat.error) {
           lines.push(`orb.error: ${orbQuickChat.error}`);
+        }
+        if (orbSyncState?.input?.diagnostic) {
+          lines.push(`sync.input: ${orbSyncState.input.diagnostic}`);
+        }
+        if (orbSyncState?.perception?.diagnostic) {
+          lines.push(`sync.perception: ${orbSyncState.perception.diagnostic}`);
         }
         if (String(currentOrbPerception?.state || "").trim().toLowerCase() === "error" && currentOrbPerception?.summary) {
           lines.push(`perception: ${currentOrbPerception.summary}`);
@@ -7595,12 +8623,14 @@
         if (!bundle || !root) {
           return null;
         }
+        root.dataset.renderer = "pending";
         orbApi = bundle.createFrancisOrb(root, {
           transparentBackground: true,
           background: 0x000000,
           usePostFX: false,
           enableBeam: true,
         });
+        root.dataset.renderer = "live";
         return orbApi;
       }
 
@@ -7630,14 +8660,23 @@
       }
 
       function getOrbCursorIdleThresholdMs() {
-        return Math.max(1000, Number(currentOrb?.cursor_policy?.threshold_ms || 30000));
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        return Math.max(1000, Number(canonicalAuthority?.thresholdSeconds || currentOrb?.cursor_policy?.threshold_ms || 30000));
       }
 
       function isOrbCursorEligible() {
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        if (canonicalAuthority && typeof canonicalAuthority.cursorArmed === "boolean") {
+          return Boolean(canonicalAuthority.cursorArmed || canonicalAuthority.cursorLive);
+        }
         return Boolean(currentOrb?.cursor_policy?.eligible || currentOrb?.operator_cursor_eligible);
       }
 
       function hasEffectiveOrbCursorAuthority(timestamp = performance.now()) {
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        if (canonicalAuthority && typeof canonicalAuthority.cursorLive === "boolean") {
+          return Boolean(canonicalAuthority.cursorLive);
+        }
         if (!canUseOrbCursor() || !isOrbCursorEligible()) {
           return false;
         }
@@ -7657,6 +8696,16 @@
       }
 
       function resolveOrbAuthorityState(timestamp = performance.now()) {
+        const canonicalAuthority = getCanonicalOrbAuthority();
+        if (canonicalAuthority?.localStopped) {
+          return "stopped";
+        }
+        if (canonicalAuthority?.disconnected) {
+          return "disconnected";
+        }
+        if (canonicalAuthority?.pauseHeld) {
+          return "paused";
+        }
         if (isOrbHandbackActive()) {
           return "handback";
         }
@@ -7842,6 +8891,7 @@
         const cursorAuthority = hasEffectiveOrbCursorAuthority();
         const cursorEligibility = isOrbCursorEligible();
         const authorityState = resolveOrbAuthorityState();
+        const canonicalAuthority = getCanonicalOrbAuthority() || {};
         const idleThresholdSeconds = Math.round(getOrbCursorIdleThresholdMs() / 1000);
         const bodyState = String(orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED);
         const bodyStateLabel = titleCase(bodyState.replaceAll("_", " "));
@@ -7849,20 +8899,47 @@
         const targetStability = titleCase(String(orbBodyPresence?.targetStability || "idle").replaceAll("_", " "));
         const topLayerLabel = orbBodyPresence?.taskbarIntent ? "Taskbar Ready" : "Desktop Top Layer";
         const stateSummary = String(orbBodyPresence?.summary || "").trim();
+        const executionSummary = String(canonicalAuthority?.executionSummary || "").trim();
+        const executionDetail = String(canonicalAuthority?.executionDetail || "").trim();
         setOrbPanelText("orb-title", `${titleCase(currentOrb.posture || "resting")} | ${bodyStateLabel}`);
         setOrbPanelText("orb-status", handbackActive
           ? `L${currentOrb.interjection_level || 0} | handback`
           : `L${currentOrb.interjection_level || 0} | ${cursorAuthority ? "away authority" : cursorEligibility ? "away armed" : authorityState.replaceAll("-", " ")}`);
         setOrbPanelText("orb-summary", handbackActive
           ? "Authority ended cleanly. The Orb is returning to ambient rest in view."
-          : stateSummary || currentOrb.summary || "Ambient presence is standing by.");
+          : executionSummary && (
+            bodyState === ORB_BODY_STATES.COMMIT_MOVE
+            || bodyState === ORB_BODY_STATES.HOVER_READY
+            || bodyState === ORB_BODY_STATES.CLICK_ACT
+            || bodyState === ORB_BODY_STATES.DRAG_ACT
+            || bodyState === ORB_BODY_STATES.TYPE_HOLD
+            || bodyState === ORB_BODY_STATES.INTERRUPTED
+          )
+            ? executionSummary
+            : stateSummary || currentOrb.summary || "Ambient presence is standing by.");
         setOrbPanelText("orb-detail", handbackActive
           ? "Handback is in progress. The return path remains visible so sovereignty transfer stays explicit."
           : (
-            bodyState === ORB_BODY_STATES.BLOCKED_UNCERTAIN
+            executionDetail && (
+              bodyState === ORB_BODY_STATES.COMMIT_MOVE
+              || bodyState === ORB_BODY_STATES.HOVER_READY
+              || bodyState === ORB_BODY_STATES.CLICK_ACT
+              || bodyState === ORB_BODY_STATES.DRAG_ACT
+              || bodyState === ORB_BODY_STATES.TYPE_HOLD
+              || bodyState === ORB_BODY_STATES.INTERRUPTED
+            )
+              ? executionDetail
+              :
+            bodyState === ORB_BODY_STATES.BLOCKED
               ? String(currentOrb?.perception?.target?.summary || currentOrb.detail || "Target confidence dropped and Francis is reassessing.")
-              : bodyState === ORB_BODY_STATES.WAITING_FOR_USER
+              : bodyState === ORB_BODY_STATES.WAITING_USER
                 ? String(currentOrb?.interjection?.detail || currentOrb.detail || "Francis is paused for your confirmation.")
+                : bodyState === ORB_BODY_STATES.DEGRADED
+                  ? String(currentOrbAuthority?.detail || currentOrb.detail || "Francis is holding stable while runtime confidence is reduced.")
+                  : bodyState === ORB_BODY_STATES.PAUSED
+                    ? String(currentOrbAuthority?.detail || currentOrb.detail || "Francis is paused locally and holding position.")
+                    : bodyState === ORB_BODY_STATES.INTERRUPTED
+                      ? String(currentOrb.detail || "Francis yielded cleanly and is returning to a safe anchor.")
                 : currentOrb.detail || "Orb detail is not available."
           ));
         setOrbPanelText("orb-controls", handbackActive
@@ -7876,6 +8953,16 @@
                   ? "Drag tension is live. The Orb stays in contact until the motion resolves."
                 : bodyState === ORB_BODY_STATES.TYPE_HOLD
                     ? "Typing posture is live. The Orb is holding near the insertion context while the action completes."
+                    : bodyState === ORB_BODY_STATES.WAITING_USER
+                      ? "Approval posture is live. The Orb has yielded the control edge and is waiting for you."
+                      : bodyState === ORB_BODY_STATES.BLOCKED
+                        ? "Blocked posture is live. The Orb recoils and reassesses instead of pretending the target still holds."
+                        : bodyState === ORB_BODY_STATES.DEGRADED
+                          ? "Runtime health is degraded. The Orb stays calm, visible, and guarded until trust returns."
+                          : bodyState === ORB_BODY_STATES.PAUSED
+                            ? "Paused posture is live. The Orb is holding steady and will not proceed until resumed."
+                            : bodyState === ORB_BODY_STATES.INTERRUPTED
+                              ? "Interrupted posture is live. The Orb is visibly yielding and returning to a safe perch."
                     : orbControlHint()
           ));
         setOrbPanelText("orb-stage-copy", handbackActive
@@ -7886,10 +8973,16 @@
               ? "Francis has a likely target. The body tightens and settles so focus reads as commitment, not wandering."
               : bodyState === ORB_BODY_STATES.INVESTIGATE
                 ? "Francis is scouting candidate UI regions with short deliberate arcs. This is inspection, not idle wandering."
-                : bodyState === ORB_BODY_STATES.WAITING_FOR_USER
+                : bodyState === ORB_BODY_STATES.WAITING_USER
                   ? "Francis is paused for you. The Orb has moved off the control edge and is holding at a respectful side-anchor."
-                  : bodyState === ORB_BODY_STATES.BLOCKED_UNCERTAIN
+                  : bodyState === ORB_BODY_STATES.BLOCKED
                     ? "Confidence dropped or the surface changed. The Orb recoils slightly, stays visible, and reassesses instead of pretending the target is still valid."
+                    : bodyState === ORB_BODY_STATES.DEGRADED
+                      ? "Runtime confidence dropped. The Orb compresses into a guarded perch so degraded operation stays visible and calm."
+                      : bodyState === ORB_BODY_STATES.PAUSED
+                        ? "Francis is paused explicitly. The Orb holds a stable perch so suspension reads as discipline, not disappearance."
+                        : bodyState === ORB_BODY_STATES.INTERRUPTED
+                          ? "Control was yielded or preempted. The Orb retreats cleanly so interruption stays spatially legible."
                 : cursorAuthority
                       ? "Away execution is live. The Orb is carrying real cursor authority visibly so delegated desktop action stays inspectable and interruptible."
                       : cursorEligibility
@@ -7977,6 +9070,9 @@
       }
 
       function getOrbResidentHomeTarget(size = 0) {
+        if (orbManualPerch.active && Number.isFinite(Number(orbManualPerch.x)) && Number.isFinite(Number(orbManualPerch.y))) {
+          return clampOrbRoamPoint(Number(orbManualPerch.x), Number(orbManualPerch.y), size);
+        }
         const frame = getOrbResidentMotionFrame();
         const workArea = frame.workArea;
         const taskbar = resolveResidentTaskbarEdge(frame.bounds, workArea);
@@ -7993,6 +9089,38 @@
         }
 
         return clampOrbRoamPoint(targetX, targetY, size);
+      }
+
+      function setOrbManualPerch(x, y, size = 0, { persist = true } = {}) {
+        const point = clampOrbRoamPoint(Number(x), Number(y), size);
+        orbManualPerch = {
+          active: true,
+          x: point.x,
+          y: point.y,
+        };
+        if (persist) {
+          persistOrbManualPerch();
+        }
+        orbAutonomousReplay.active = false;
+        orbAutonomousReplay.nextStartAt = 0;
+        orbMotion.x = point.x;
+        orbMotion.y = point.y;
+        orbMotion.targetX = point.x;
+        orbMotion.targetY = point.y;
+        orbMotion.vx = 0;
+        orbMotion.vy = 0;
+        orbMotion.roamX = point.x;
+        orbMotion.roamY = point.y;
+        orbMotion.roamStartX = point.x;
+        orbMotion.roamStartY = point.y;
+        orbMotion.roamControlX = point.x;
+        orbMotion.roamControlY = point.y;
+        orbMotion.roamTargetX = point.x;
+        orbMotion.roamTargetY = point.y;
+        orbMotion.roamSegmentStartedAt = performance.now();
+        orbMotion.roamSegmentArrivesAt = performance.now();
+        orbMotion.roamPauseUntil = 0;
+        holdOrbPerch(point, performance.now(), 2600, "manual_perch");
       }
 
       function getOrbRoamBounds(size = 0) {
@@ -8363,6 +9491,9 @@
       }
 
       function recordOrbMouseTrace({ timestamp, dt, rawVx, rawVy }) {
+        if (orbWindowMode) {
+          return;
+        }
         const safeDt = Math.max(16, Number(dt || 16));
         const speed = Math.hypot(rawVx, rawVy);
         const angle = speed > 0.08 ? Math.atan2(rawVy, rawVx) : orbHumanMotionProfile.lastAngle;
@@ -8415,6 +9546,9 @@
       }
 
       function applyHumanMotionProfile(base) {
+        if (orbWindowMode) {
+          return base;
+        }
         const learned = getOrbHumanMotionAdaptation();
         const blend = base.cursorLock ? 0.82 : 0.18;
         const lerp = (from, to) => from + (to - from) * blend;
@@ -8498,13 +9632,10 @@
       function resolveOrbStateOverride() {
         const now = performance.now();
         if (orbListeningActive) {
-          return "listening";
+          return ORB_BODY_STATES.ATTENTIVE;
         }
         if (now < orbThinkingUntil) {
-          return "thinking";
-        }
-        if (now < orbSpeechBurstUntil) {
-          return "speaking";
+          return ORB_BODY_STATES.INVESTIGATE;
         }
         return null;
       }
@@ -8600,7 +9731,7 @@
             attentionTarget,
             actionTarget,
             actionStrength:
-              isOrbCommitBodyState(orbBodyPresence?.state) || stateOverride === "acting"
+              isOrbCommitBodyState(orbBodyPresence?.state)
                 ? Math.max(0.45, Number(currentOrb.visual?.core_brightness || 0.7))
                 : 0,
           }),
@@ -8627,10 +9758,10 @@
         const level = Number(currentOrb?.interjection_level || 0);
         const size = Math.round(
           Math.max(
-            window.innerWidth < 520 ? 112 : 132,
+            window.innerWidth < 520 ? 320 : 380,
             Math.min(
-              188,
-              136 + level * 8 + (currentOrb?.panic_ready ? 6 : 0),
+              520,
+              380 + level * 16 + (currentOrb?.panic_ready ? 20 : 0),
             ),
           ),
         );
@@ -8648,7 +9779,7 @@
         if (handbackState) {
           orbBodyPresence = {
             ...orbBodyPresence,
-            state: ORB_BODY_STATES.ABORT_INTERRUPTED,
+            state: ORB_BODY_STATES.INTERRUPTED,
             summary: "Backing off cleanly and returning to a safe anchor.",
             anchorLabel: "return path",
             motionLabel: "graceful retreat",
@@ -8675,7 +9806,7 @@
           orbMotion.roamSegmentArrivesAt = timestamp;
           orbMotion.roamPauseUntil = 0;
           if (handbackState.complete) {
-            holdOrbPerch({ x: handbackState.x, y: handbackState.y }, timestamp, 1600, ORB_BODY_STATES.ABORT_INTERRUPTED);
+            holdOrbPerch({ x: handbackState.x, y: handbackState.y }, timestamp, 1600, ORB_BODY_STATES.INTERRUPTED);
             clearOrbHandback();
             renderOrbPresentation();
           }
@@ -8726,29 +9857,87 @@
             holdPerch: Boolean(nextPerchLatchPoint),
             latchedPerchPoint: nextPerchLatchPoint,
           });
-          orbBodyPresence = nextIntent;
-          orbMotion.targetX = Number(nextIntent?.desiredPoint?.x ?? getOrbFallbackTarget().x);
-          orbMotion.targetY = Number(nextIntent?.desiredPoint?.y ?? getOrbFallbackTarget().y);
-          const stiffness = clamp(Number(nextIntent?.stiffness || 0.18), 0.06, 0.92);
-          const damping = clamp(Number(nextIntent?.damping || 0.78), 0.48, 0.96);
+          const orbWindowAnchorPoint = orbWindowMode
+            ? getOrbResidentHomeTarget(size)
+            : null;
+          const anchoredIntent =
+            orbWindowMode
+              ? {
+                  ...nextIntent,
+                  desiredPoint: isOrbSafetyBodyState(nextIntent?.state)
+                    ? {
+                        x: Number(orbWindowAnchorPoint?.x ?? getOrbFallbackTarget().x),
+                        y: Number(orbWindowAnchorPoint?.y ?? getOrbFallbackTarget().y),
+                      }
+                    : nextIntent?.desiredPoint,
+                  perchPoint: isOrbSafetyBodyState(nextIntent?.state)
+                    ? {
+                        x: Number(orbWindowAnchorPoint?.x ?? getOrbFallbackTarget().x),
+                        y: Number(orbWindowAnchorPoint?.y ?? getOrbFallbackTarget().y),
+                      }
+                    : nextIntent?.perchPoint,
+                  targetPoint: isOrbSafetyBodyState(nextIntent?.state)
+                    ? null
+                    : nextIntent?.targetPoint,
+                  anchorLabel: isOrbSafetyBodyState(nextIntent?.state)
+                    ? String(nextIntent?.anchorLabel || "resident perch")
+                    : String(nextIntent?.anchorLabel || (orbManualPerch.active ? "manual perch" : "resident perch")),
+                  motionLabel: isOrbSafetyBodyState(nextIntent?.state)
+                    ? String(nextIntent?.motionLabel || "anchored hold")
+                    : String(nextIntent?.motionLabel || "anchored idle"),
+                  summary: isOrbSafetyBodyState(nextIntent?.state)
+                    ? String(nextIntent?.summary || "Holding a local operator safety posture.")
+                    : String(nextIntent?.summary || (orbManualPerch.active ? "Resting at your chosen perch." : "Resting quietly at its resident perch.")),
+                  stiffness: isOrbSafetyBodyState(nextIntent?.state) ? 0.2 : nextIntent?.stiffness,
+                  damping: isOrbSafetyBodyState(nextIntent?.state) ? 0.82 : nextIntent?.damping,
+                  holdPerch: isOrbSafetyBodyState(nextIntent?.state) ? true : Boolean(nextIntent?.holdPerch),
+                  taskbarIntent: isOrbSafetyBodyState(nextIntent?.state) ? false : Boolean(nextIntent?.taskbarIntent),
+                }
+              : (
+                orbManualPerch.active
+                && motionControl.selectedMode === "autonomous"
+                && isOrbRestBodyState(nextIntent?.state)
+                  ? {
+                      ...nextIntent,
+                      desiredPoint: {
+                        x: Number(orbManualPerch.x),
+                        y: Number(orbManualPerch.y),
+                      },
+                      perchPoint: {
+                        x: Number(orbManualPerch.x),
+                        y: Number(orbManualPerch.y),
+                      },
+                      anchorLabel: "manual perch",
+                      motionLabel: "anchored idle",
+                      summary: "Resting at your chosen perch.",
+                      stiffness: 0.24,
+                      damping: 0.84,
+                    }
+                  : nextIntent
+              );
+          orbBodyPresence = anchoredIntent;
+          orbMotion.targetX = Number(anchoredIntent?.desiredPoint?.x ?? getOrbFallbackTarget().x);
+          orbMotion.targetY = Number(anchoredIntent?.desiredPoint?.y ?? getOrbFallbackTarget().y);
+          const stiffness = clamp(Number(anchoredIntent?.stiffness || 0.18), 0.06, 0.92);
+          const damping = clamp(Number(anchoredIntent?.damping || 0.78), 0.48, 0.96);
           orbMotion.vx += (orbMotion.targetX - orbMotion.x) * stiffness;
           orbMotion.vy += (orbMotion.targetY - orbMotion.y) * stiffness;
           orbMotion.vx *= damping;
           orbMotion.vy *= damping;
           if (
-            nextIntent?.state === ORB_BODY_STATES.TARGET_LOCK
-            || nextIntent?.state === ORB_BODY_STATES.HOVER_READY
-            || nextIntent?.state === ORB_BODY_STATES.TYPE_HOLD
+            anchoredIntent?.state === ORB_BODY_STATES.TARGET_LOCK
+            || anchoredIntent?.state === ORB_BODY_STATES.HOVER_READY
+            || anchoredIntent?.state === ORB_BODY_STATES.TYPE_HOLD
           ) {
             const lockDistance = Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y);
-            const lockRadius = Math.max(6, Number(nextIntent?.config?.lockRadiusPx || 18));
+            const lockRadius = Math.max(6, Number(anchoredIntent?.config?.lockRadiusPx || 18));
             if (lockDistance < lockRadius) {
               orbMotion.vx *= 0.72;
               orbMotion.vy *= 0.72;
             }
           }
-          if (nextIntent?.holdPerch) {
-            const settleRadius = Math.max(1.25, Number(nextIntent?.config?.idleAmplitudePx || 0) * 1.8);
+          if (anchoredIntent?.holdPerch) {
+            const settleRadius = Math.max(1.25, Number(anchoredIntent?.config?.idleAmplitudePx || 0) * 1.8);
             orbMotion.vx *= 0.36;
             orbMotion.vy *= 0.36;
             if (Math.hypot(orbMotion.targetX - orbMotion.x, orbMotion.targetY - orbMotion.y) <= settleRadius) {
@@ -8787,9 +9976,11 @@
         root.dataset.bodyState = String(orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED);
         root.dataset.targetStability = String(orbBodyPresence?.targetStability || "idle");
         root.dataset.targetConfidence = String(orbBodyPresence?.targetConfidence || "low");
+        root.dataset.policyState = String(currentOrbOperator?.policy?.state || "idle").trim().toLowerCase() || "idle";
         root.dataset.windowMatch = targetWindowMatch;
         overlay.dataset.bodyState = String(orbBodyPresence?.state || ORB_BODY_STATES.IDLE_ANCHORED);
         overlay.dataset.targetStability = String(orbBodyPresence?.targetStability || "idle");
+        overlay.dataset.policyState = String(currentOrbOperator?.policy?.state || "idle").trim().toLowerCase() || "idle";
         overlay.dataset.windowMatch = targetWindowMatch;
         overlay.dataset.posture = handbackActive ? "handback" : String(currentOrb.posture || "resting");
         document.body.dataset.orbAuthority = resolveOrbAuthorityState(timestamp);
@@ -8810,17 +10001,30 @@
           event.preventDefault();
         }
         const root = document.getElementById("orb-render-root");
-        if (!root || orbHoldTimer !== null || event?.button !== 0) {
+        if (!root || event?.button !== 0) {
           return;
+        }
+        const fallback = getOrbFallbackTarget();
+        const currentX = Number.isFinite(orbMotion.x) ? orbMotion.x : fallback.x;
+        const currentY = Number.isFinite(orbMotion.y) ? orbMotion.y : fallback.y;
+        orbDragState = {
+          active: false,
+          pointerId: event?.pointerId ?? null,
+          startX: Number(event?.clientX || currentX),
+          startY: Number(event?.clientY || currentY),
+          offsetX: Number(event?.clientX || currentX) - currentX,
+          offsetY: Number(event?.clientY || currentY) - currentY,
+        };
+        if (typeof root.setPointerCapture === "function" && event?.pointerId !== undefined) {
+          try {
+            root.setPointerCapture(event.pointerId);
+          } catch {}
         }
         closeOrbCommandMenu();
         const panicChip = (currentActions.action_chips || []).find(
           (item) => String(item.kind || "") === "control.panic" && Boolean(item.enabled),
         );
         if (!panicChip) {
-          setOrbTransientStatus("Panic stop is unavailable in the current scope or mode.");
-          setOrbPanelText("orb-controls", "Panic stop is unavailable in the current scope or mode.");
-          renderOverlayDock();
           return;
         }
         orbHoldTriggered = false;
@@ -8839,12 +10043,34 @@
 
       function endOrbHold() {
         const root = document.getElementById("orb-render-root");
+        const dragWasActive = Boolean(orbDragState.active);
         if (orbHoldTimer !== null) {
           window.clearTimeout(orbHoldTimer);
           orbHoldTimer = null;
         }
         if (root) {
           root.classList.remove("orb-hold");
+          if (typeof root.releasePointerCapture === "function" && orbDragState.pointerId !== null) {
+            try {
+              root.releasePointerCapture(orbDragState.pointerId);
+            } catch {}
+          }
+        }
+        orbDragState = {
+          active: false,
+          pointerId: null,
+          startX: 0,
+          startY: 0,
+          offsetX: 0,
+          offsetY: 0,
+        };
+        if (dragWasActive) {
+          persistOrbManualPerch();
+          setOrbTransientStatus("Orb perch updated.");
+          setOrbPanelText("orb-anchor", "manual perch");
+          renderOrbPresentation();
+          renderOverlayDock();
+          return;
         }
         if (!orbHoldTriggered) {
           setOrbPanelText("orb-controls", orbControlHint());
@@ -8918,43 +10144,80 @@
         root.dataset.bound = "true";
         const chatInput = document.getElementById("overlay-chat-input");
         root.addEventListener("pointerdown", beginOrbHold);
-        root.addEventListener("pointerup", endOrbHold);
-        root.addEventListener("pointerleave", endOrbHold);
-        root.addEventListener("pointercancel", endOrbHold);
         root.addEventListener("contextmenu", (event) => {
           event.preventDefault();
           endOrbHold();
-          openOrbCommandMenu();
-        });
-        root.addEventListener("dblclick", () => {
-          if (orbWindowMode) {
+          if (!supportsOrbInlineConsole()) {
             openLensFromOrbSurface().catch(() => {});
             return;
           }
-          setLensViewMode("lens");
+          openOrbCommandMenu({ surface: "menu" });
+        });
+        root.addEventListener("dblclick", () => {
+          if (!supportsOrbInlineConsole()) {
+            openLensFromOrbSurface().catch(() => {});
+            return;
+          }
+          openOrbCommandMenu({ surface: "menu" });
         });
 
         window.addEventListener("pointermove", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
+          if (
+            orbDragState.pointerId !== null
+            && (event.pointerId === orbDragState.pointerId || orbDragState.pointerId === undefined)
+          ) {
+            const travel = Math.hypot(
+              Number(event.clientX || 0) - Number(orbDragState.startX || 0),
+              Number(event.clientY || 0) - Number(orbDragState.startY || 0),
+            );
+            if (!orbDragState.active && travel >= 10) {
+              orbDragState.active = true;
+              if (orbHoldTimer !== null) {
+                window.clearTimeout(orbHoldTimer);
+                orbHoldTimer = null;
+              }
+              const rootNode = document.getElementById("orb-render-root");
+              if (rootNode) {
+                rootNode.classList.remove("orb-hold");
+              }
+              orbHoldTriggered = false;
+              orbAutonomousReplay.active = false;
+              orbAutonomousReplay.nextStartAt = 0;
+            }
+            if (orbDragState.active) {
+              const rootNode = document.getElementById("orb-render-root");
+              const currentSize = Math.max(112, Number(rootNode?.offsetWidth || 0) || 144);
+              setOrbManualPerch(
+                Number(event.clientX || 0) - Number(orbDragState.offsetX || 0),
+                Number(event.clientY || 0) - Number(orbDragState.offsetY || 0),
+                currentSize,
+                { persist: false },
+              );
+            }
+          }
           syncOrbWindowPassThrough(event.clientX, event.clientY).catch(() => {});
         });
         window.addEventListener("pointerdown", (event) => {
           updateOrbPointer(event.clientX, event.clientY, performance.now());
           const rootNode = document.getElementById("orb-render-root");
-          const stripNode = document.getElementById("overlay-strip");
           const menuNode = document.getElementById("overlay-dock");
           const thoughtNode = document.getElementById("overlay-thought-bubble");
           const target = event.target;
           const inOrb = Boolean(rootNode && target instanceof Node && rootNode.contains(target));
-          const inStrip = Boolean(stripNode && target instanceof Node && stripNode.contains(target));
           const inMenu = Boolean(menuNode && target instanceof Node && menuNode.contains(target));
           const inThought = Boolean(thoughtNode && target instanceof Node && thoughtNode.contains(target));
-          if (orbCommandMenu.open && !inOrb && !inStrip && !inMenu && !inThought) {
+          if (orbCommandMenu.open && !inOrb && !inMenu && !inThought) {
             closeOrbCommandMenu();
           }
           syncOrbWindowPassThrough(event.clientX, event.clientY).catch(() => {});
         });
         window.addEventListener("resize", () => {
+          if (orbManualPerch.active) {
+            const rootNode = document.getElementById("orb-render-root");
+            const currentSize = Math.max(112, Number(rootNode?.offsetWidth || 0) || 144);
+            setOrbManualPerch(orbManualPerch.x, orbManualPerch.y, currentSize);
+          }
           if (!orbMotion.lastMoveAt) {
             const fallback = getOrbFallbackTarget();
             orbMotion.x = fallback.x;
@@ -8966,6 +10229,11 @@
             positionOrbConversationSurfaces(true);
           }
           syncOrbWindowPassThrough().catch(() => {});
+        });
+        window.addEventListener("pointerup", endOrbHold);
+        window.addEventListener("pointercancel", endOrbHold);
+        window.addEventListener("blur", () => {
+          resetOrbWindowInteractionOwnership("window-blur").catch(() => {});
         });
         window.addEventListener("keydown", (event) => {
           if (event.key !== "Escape") {
@@ -8985,7 +10253,7 @@
           });
         }
         if (orbWindowMode) {
-          setOrbWindowInteractive(false).catch(() => {});
+          setOrbWindowInteractive(false, "orb_surface_release").catch(() => {});
         }
       }
 
@@ -9359,7 +10627,7 @@
                 return `<li>${escapeHtml(match.label || match.kind)} <span class="meta">${escapeHtml(match.kind || "unknown")} | risk ${escapeHtml(match.risk_tier || "low")} | score ${escapeHtml(match.match_score || 0)}${escapeHtml(why)}</span></li>`;
               })
               .join("")
-          : `<li class="muted-empty">No Lens actions matched that utterance.</li>`;
+          : `<li class="muted-empty">No review-surface actions matched that utterance.</li>`;
         applyOrbSignals();
       }
 
@@ -9571,7 +10839,7 @@
         if (focusKind) {
           return `Operator link: following ${focusKind} as the current move.`;
         }
-        return "Operator link is idle. Lens is waiting for the next actionable move.";
+        return "Operator link is idle. The review surface is waiting for the next actionable move.";
       }
 
       function describeOperatorLinkState(snapshot, actions, journal) {
@@ -12266,7 +13534,7 @@
         document.getElementById("approval-queue-meta").textContent =
           `${Number(currentApprovalQueue.pending_count || items.length || 0)} pending | ${currentApprovalQueue.can_approve ? "decision ready" : "read only"}`;
         document.getElementById("approval-queue-summary").textContent = items.length
-          ? "Pending approvals are live. Approve or reject from the same Lens surface."
+          ? "Pending approvals are live. Approve or reject from the same review surface."
           : "No pending approvals are visible in the current workspace.";
         document.getElementById("approval-queue-list").innerHTML = items.length
           ? items
@@ -13055,7 +14323,7 @@
         });
         await executeActionWithArgs(
           "control.remote.approval.approve",
-          { approval_id: approvalId, note: "Approved from HUD approval queue." },
+          { approval_id: approvalId, note: "Approved from review approval queue." },
           false,
         );
       }
@@ -13077,7 +14345,7 @@
         });
         await executeActionWithArgs(
           "control.remote.approval.approve",
-          { approval_id: approvalId, note: "Approved from HUD approval queue." },
+          { approval_id: approvalId, note: "Approved from review approval queue." },
           false,
         );
         await executeActionWithArgs(
@@ -13101,7 +14369,7 @@
         });
         await executeActionWithArgs(
           "control.remote.approval.reject",
-          { approval_id: approvalId, note: "Rejected from HUD approval queue." },
+          { approval_id: approvalId, note: "Rejected from review approval queue." },
           false,
         );
       }
@@ -13127,7 +14395,7 @@
         const input = document.getElementById("voice-command");
         const utterance = String(input?.value || "").trim();
         if (!utterance) {
-          document.getElementById("voice-intent").textContent = "Enter a command to preview against live Lens actions.";
+          document.getElementById("voice-intent").textContent = "Enter a command to preview against live review-surface actions.";
           return;
         }
         orbThinkingUntil = performance.now() + 1400;
@@ -13198,6 +14466,11 @@
       function openStream() {
         if (!window.EventSource) {
           setStreamStatus("offline", "EventSource unavailable");
+          loadSurface().catch((error) => {
+            document.body.dataset.boot = "error";
+            document.body.innerHTML =
+              `<main class="shell"><section class="panel"><h2>HUD bootstrap failed</h2><p>${error}</p></section></main>`;
+          });
           return;
         }
         if (streamSource) {
@@ -13261,7 +14534,9 @@
 
       applyAccessibilityPosture();
       loadOrbBehaviorMode();
+      loadOrbManualPerch();
       loadOrbHumanMotionProfile();
+      demoteLegacyOrbConsoleSurface();
       if (isCompactOrbSurface()) {
         renderOverlayDock();
       }
@@ -13278,35 +14553,27 @@
         persistOrbHumanMotionProfile(true);
       });
 
-      loadSurface()
-        .then(() => {
-          initHudInteractions();
-          initDesktopShell();
-          const queryNode = document.getElementById("fabric-query");
-          if (queryNode) {
-            queryNode.addEventListener("keydown", (event) => {
-              if (event.key === "Enter") {
-                runFabricQuery();
-              }
-            });
+      initHudInteractions();
+      initDesktopShell();
+      const queryNode = document.getElementById("fabric-query");
+      if (queryNode) {
+        queryNode.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            runFabricQuery();
           }
-          if (orbWindowMode) {
-            syncOrbInputState().catch(() => {});
-            syncOrbPerception().catch(() => {});
-            orbInputSyncTimer = window.setInterval(() => {
-              syncOrbInputState().catch(() => {});
-            }, ORB_INPUT_SYNC_INTERVAL_MS);
-            orbPerceptionSyncTimer = window.setInterval(() => {
-              syncOrbPerception().catch(() => {});
-            }, ORB_PERCEPTION_SYNC_INTERVAL_MS);
-          }
-          openStream();
-        })
-        .catch((error) => {
-          document.body.dataset.boot = "error";
-          document.body.innerHTML =
-            `<main class="shell"><section class="panel"><h2>HUD bootstrap failed</h2><p>${error}</p></section></main>`;
         });
+      }
+      if (orbWindowMode) {
+        syncOrbInputState().catch(() => {});
+        syncOrbPerception().catch(() => {});
+        orbInputSyncTimer = window.setInterval(() => {
+          syncOrbInputState().catch(() => {});
+        }, ORB_INPUT_SYNC_INTERVAL_MS);
+        orbPerceptionSyncTimer = window.setInterval(() => {
+          syncOrbPerception().catch(() => {});
+        }, ORB_PERCEPTION_SYNC_INTERVAL_MS);
+      }
+      openStream();
     </script>
   </body>
 </html>
