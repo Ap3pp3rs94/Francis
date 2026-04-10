@@ -1,0 +1,8 @@
+# Base install profile (editable).
+#
+# This repo uses PEP 621 extras defined in pyproject.toml.
+# Keeping this file as an "install profile" makes bootstrap scripts work even
+# when you don't use uv.
+
+-e .[core]
+

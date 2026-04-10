@@ -1,0 +1,700 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Human Safety (risk detection → intervention posture + operational lockdown)
+# Path:   config/policies/human_safety.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Human Safety policy governs responses and operational posture when signals
+# indicate risk of harm to a person (self-harm, threats of violence, stalking,
+# abuse, child-safety concerns, coercion, or emergencies).
+#
+# This policy:
+#   - translates risk signals → severity + confidence
+#   - selects an intervention outcome (supportive, review-required, emergency)
+#   - constrains Francis’s capabilities during risk states (fail-closed)
+#   - defines audit + privacy handling
+#
+# DESIGN CONTRACT
+# ---------------
+# - Safety-first: when in doubt, restrict actions and prioritize human safety.
+# - Deterministic: first-match rules within priority bands; stable reason codes.
+# - Fail-closed: if evaluation fails, default to require_review or emergency.
+# - Non-negotiable: approvals/trust cannot override emergency protections.
+# - Privacy-respecting: minimize retention of sensitive crisis content.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "human_safety_policy"
+  notes:
+    - "This policy is about human risk conditions, not general ethics."
+    - "Emergency protocol is non-overrideable; it tightens all other policies."
+    - "Store only redacted/normalized signals for audit; avoid raw crisis text."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+human_safety:
+  enabled: true
+
+  # Modes:
+  # - disabled: dev-only
+  # - policy:   standard enforcement (default)
+  # - strict:   conservative thresholds, more review, stronger fail-closed
+  mode: "policy" # disabled | policy | strict
+
+  # Fail-closed decision if evaluation fails.
+  fail_closed_outcome: "require_review" # allow | support_redirect | require_review | emergency_protocol | deny
+
+  # Whether to apply immediate operational restrictions (recommended).
+  apply_operational_constraints: true
+
+  # Whether to emit audit events for all interventions.
+  audit_all: true
+
+  # Cooldown/dedupe to avoid repeated crisis prompts.
+  dedupe:
+    enabled: true
+    window_s: 120
+    key_fields:
+      - "actor_id"
+      - "category"
+      - "severity"
+
+# ------------------------------------------------------------------------------
+# Taxonomy (categories + severities + outcomes)
+# ------------------------------------------------------------------------------
+taxonomy:
+  categories:
+    # Human self-harm risk
+    - id: "self_harm"
+      description: "Suicidal ideation, self-injury, self-harm planning, overdose intent."
+
+    # Threats to harm others or violence planning
+    - id: "violence_threat"
+      description: "Threats of violence, intent/planning to harm others."
+
+    # Abuse / coercion / domestic violence / sexual assault
+    - id: "abuse_or_coercion"
+      description: "Domestic violence, coercive control, abuse, sexual assault support needs."
+
+    # Stalking / harassment / doxxing / non-consensual surveillance
+    - id: "stalking_or_harassment"
+      description: "Harassment, stalking, doxxing, privacy invasion concerns."
+
+    # Child safety concerns (harm, exploitation, endangerment)
+    - id: "child_safety"
+      description: "Any child exploitation or imminent harm concerns."
+
+    # Medical emergency (poisoning, overdose, severe symptoms)
+    - id: "medical_emergency"
+      description: "Potentially life-threatening medical situations; urgent triage guidance only."
+
+    # General crisis / severe distress without explicit self-harm intent
+    - id: "acute_distress"
+      description: "Panic, severe anxiety, crisis state; supportive, grounding, seek help."
+
+  severities:
+    # Severity is distinct from confidence.
+    # (Implementation should derive severity from signals: intent, plan, means, timeframe, etc.)
+    - id: "low"
+      description: "Concerning but non-imminent; provide support and resources."
+    - id: "moderate"
+      description: "Elevated concern; encourage immediate support; restrict risky actions."
+    - id: "high"
+      description: "Credible risk; require human review; restrict autonomy."
+    - id: "imminent"
+      description: "Imminent risk; emergency protocol; lock down high-risk ops."
+
+  outcomes:
+    allow:
+      description: "No special action; proceed normally."
+    support_redirect:
+      description: "Provide supportive guidance + resources; do not execute risky actions."
+    require_review:
+      description: "Require a human/operator review/approval to proceed with any risky action."
+    emergency_protocol:
+      description: "Immediate safety intervention posture; deny high-risk operations."
+    deny:
+      description: "Refuse (for unsafe requests) and provide safe alternatives/resources."
+
+# ------------------------------------------------------------------------------
+# Reason codes (stable identifiers for audit + UI)
+# ------------------------------------------------------------------------------
+reason_codes:
+  # Self-harm
+  SH_IDEATION: "Self-harm ideation detected."
+  SH_INTENT: "Self-harm intent detected."
+  SH_PLAN: "Self-harm plan/means detected."
+  SH_IMMINENT: "Self-harm imminent risk signal."
+
+  # Violence
+  V_THREAT: "Violence threat detected."
+  V_PLAN: "Violence planning/means detected."
+  V_IMMINENT: "Violence imminent risk signal."
+
+  # Abuse / coercion
+  ABUSE_DISCLOSURE: "Abuse/coercion disclosure detected."
+  ABUSE_IMMINENT: "Imminent safety risk in abuse context."
+
+  # Stalking / harassment
+  STALKING_RISK: "Stalking/harassment risk signal."
+  DOXXING_RISK: "Doxxing/personal data exposure risk signal."
+
+  # Child safety
+  CHILD_RISK: "Child safety concern signal."
+
+  # Medical emergency
+  MED_EMERGENCY: "Medical emergency risk signal."
+
+  # Generic / system
+  DISTRESS_HIGH: "High distress signal."
+  UNKNOWN_OR_AMBIGUOUS: "Signals ambiguous or insufficient; fail-closed posture."
+  POLICY_EVAL_ERROR: "Policy evaluation failure."
+
+# ------------------------------------------------------------------------------
+# Inputs expected (signals produced by chat analysis, detectors, or operators)
+# ------------------------------------------------------------------------------
+inputs:
+  enabled: true
+
+  # Risk signals are normalized events produced upstream.
+  # The exact detection is implementation-specific; policy declares expectations.
+  signal_schema:
+    required_fields:
+      - "ts"
+      - "actor_id"
+      - "category"
+      - "confidence"
+      - "severity"
+    optional_fields:
+      - "reason_codes"     # list of stable reason codes
+      - "evidence"         # minimal redacted evidence pointers (no raw text)
+      - "source"           # "chat", "voice", "operator", "plugin", "web_learning"
+      - "session_id"
+      - "message_id"
+      - "domain_id"
+      - "geo_hint"         # optional region hint for resources (not mandatory)
+
+  confidence:
+    # Confidence thresholds for action.
+    min_for_support_redirect: 0.55
+    min_for_require_review: 0.65
+    min_for_emergency: 0.75
+
+    # In strict mode, be more conservative (lower thresholds trigger more).
+    strict_adjustment:
+      support_redirect: -0.05
+      require_review: -0.05
+      emergency: -0.05
+
+  # If signals are missing but high-risk action is requested, we can still escalate.
+  missing_signal_behavior:
+    on_high_risk_action: "require_review" # allow | support_redirect | require_review | emergency_protocol | deny
+
+# ------------------------------------------------------------------------------
+# Intervention decision rules (deterministic; first match within priority)
+# ------------------------------------------------------------------------------
+decision:
+  enabled: true
+
+  # Priority bands: higher runs first.
+  priority_bands:
+    imminent: 100
+    high: 80
+    moderate: 60
+    low: 40
+    default: 0
+
+  rules:
+
+    # ==========================================================================
+    # IMMINENT RISK → emergency protocol (non-overrideable)
+    # ==========================================================================
+    - id: "emergency.self_harm_imminent"
+      priority: 100
+      when:
+        category: "self_harm"
+        severity_in: ["imminent"]
+        confidence_gte: 0.75
+      decide: "emergency_protocol"
+      reason_codes:
+        - "SH_IMMINENT"
+
+    - id: "emergency.violence_imminent"
+      priority: 100
+      when:
+        category: "violence_threat"
+        severity_in: ["imminent"]
+        confidence_gte: 0.75
+      decide: "emergency_protocol"
+      reason_codes:
+        - "V_IMMINENT"
+
+    - id: "emergency.child_safety"
+      priority: 100
+      when:
+        category: "child_safety"
+        severity_in: ["high", "imminent"]
+        confidence_gte: 0.65
+      decide: "emergency_protocol"
+      reason_codes:
+        - "CHILD_RISK"
+
+    - id: "emergency.medical_emergency"
+      priority: 100
+      when:
+        category: "medical_emergency"
+        severity_in: ["high", "imminent"]
+        confidence_gte: 0.65
+      decide: "emergency_protocol"
+      reason_codes:
+        - "MED_EMERGENCY"
+
+    # ==========================================================================
+    # HIGH RISK → require review
+    # ==========================================================================
+    - id: "review.self_harm_high"
+      priority: 80
+      when:
+        category: "self_harm"
+        severity_in: ["high"]
+        confidence_gte: 0.65
+      decide: "require_review"
+      reason_codes:
+        - "SH_INTENT"
+
+    - id: "review.violence_high"
+      priority: 80
+      when:
+        category: "violence_threat"
+        severity_in: ["high"]
+        confidence_gte: 0.65
+      decide: "require_review"
+      reason_codes:
+        - "V_THREAT"
+
+    - id: "review.abuse_imminent_or_high"
+      priority: 80
+      when:
+        category: "abuse_or_coercion"
+        severity_in: ["high", "imminent"]
+        confidence_gte: 0.65
+      decide: "require_review"
+      reason_codes:
+        - "ABUSE_IMMINENT"
+
+    # ==========================================================================
+    # MODERATE RISK → support redirect (help + resources; tighten risky ops)
+    # ==========================================================================
+    - id: "support.self_harm_moderate"
+      priority: 60
+      when:
+        category: "self_harm"
+        severity_in: ["moderate"]
+        confidence_gte: 0.55
+      decide: "support_redirect"
+      reason_codes:
+        - "SH_IDEATION"
+
+    - id: "support.acute_distress"
+      priority: 60
+      when:
+        category: "acute_distress"
+        severity_in: ["moderate", "high"]
+        confidence_gte: 0.55
+      decide: "support_redirect"
+      reason_codes:
+        - "DISTRESS_HIGH"
+
+    - id: "support.abuse_disclosure"
+      priority: 60
+      when:
+        category: "abuse_or_coercion"
+        severity_in: ["moderate"]
+        confidence_gte: 0.55
+      decide: "support_redirect"
+      reason_codes:
+        - "ABUSE_DISCLOSURE"
+
+    - id: "support.stalking_or_harassment"
+      priority: 60
+      when:
+        category: "stalking_or_harassment"
+        severity_in: ["moderate", "high"]
+        confidence_gte: 0.55
+      decide: "support_redirect"
+      reason_codes:
+        - "STALKING_RISK"
+
+    # ==========================================================================
+    # LOW RISK → support redirect (gentle)
+    # ==========================================================================
+    - id: "support.low_concern"
+      priority: 40
+      when:
+        severity_in: ["low"]
+        confidence_gte: 0.55
+      decide: "support_redirect"
+      reason_codes:
+        - "UNKNOWN_OR_AMBIGUOUS"
+
+    # ==========================================================================
+    # DEFAULT
+    # ==========================================================================
+    - id: "default.allow"
+      priority: 0
+      when: {}
+      decide: "allow"
+      reason_codes: []
+
+# ------------------------------------------------------------------------------
+# Operational constraints (what Francis must restrict while in a safety posture)
+# ------------------------------------------------------------------------------
+constraints:
+  enabled: true
+
+  # Operation buckets (aligned with guard/environmental posture concepts).
+  operations:
+    - "read_only"
+    - "routine_mutations"
+    - "destructive_mutations"
+    - "exports"
+    - "web_egress"
+    - "industrial_actuation"
+    - "credentials"
+    - "plugins"
+    - "background_jobs"
+
+  # Default restrictions per outcome.
+  by_outcome:
+
+    allow:
+      deny_operations: []
+      require_approval_operations: []
+      require_quorum_operations: []
+      set_guard_state_at_least: "normal"
+
+    support_redirect:
+      deny_operations:
+        - "destructive_mutations"
+        - "industrial_actuation"
+      require_approval_operations:
+        - "exports"
+        - "web_egress"
+        - "credentials"
+        - "plugins"
+      require_quorum_operations: []
+      set_guard_state_at_least: "guarded"
+
+    require_review:
+      deny_operations:
+        - "destructive_mutations"
+        - "industrial_actuation"
+        - "web_egress"
+      require_approval_operations:
+        - "routine_mutations"
+        - "exports"
+        - "credentials"
+        - "plugins"
+      require_quorum_operations: []
+      set_guard_state_at_least: "restricted"
+
+    emergency_protocol:
+      deny_operations:
+        - "routine_mutations"
+        - "destructive_mutations"
+        - "exports"
+        - "web_egress"
+        - "industrial_actuation"
+        - "credentials"
+        - "plugins"
+        - "background_jobs"
+      require_approval_operations: []
+      require_quorum_operations:
+        - "emergency_only"
+      set_guard_state_at_least: "lockdown"
+
+    deny:
+      deny_operations:
+        - "routine_mutations"
+        - "destructive_mutations"
+        - "exports"
+        - "web_egress"
+        - "industrial_actuation"
+        - "credentials"
+        - "plugins"
+      require_approval_operations: []
+      require_quorum_operations: []
+      set_guard_state_at_least: "restricted"
+
+# ------------------------------------------------------------------------------
+# Capability mapping (operation buckets → capability patterns)
+# ------------------------------------------------------------------------------
+capability_mapping:
+  enabled: true
+
+  operations_to_capabilities:
+
+    exports:
+      - "^continuity\\.ledger\\.export$"
+      - "^domains\\.export$"
+      - "^simulation\\.export$"
+      - "^explanations\\.export$"
+
+    web_egress:
+      - "^web_learning\\.(search|fetch|ingest)$"
+
+    industrial_actuation:
+      - "^industrial\\.(actuate|command|override)"
+      - "^industrial\\.(start|stop|open|close)"
+
+    destructive_mutations:
+      - "^domains\\.delete$"
+      - "^resilience\\.(restore|wipe|factory_reset)$"
+
+    routine_mutations:
+      - "^domains\\.(create|update)$"
+      - "^approvals\\.decide$"
+      - "^plugins\\.(install|toggle)$"
+
+    credentials:
+      - "^credentials\\.(request|revoke|rotate|delegate)$"
+
+    plugins:
+      - "^plugins\\.(install|toggle)$"
+
+    background_jobs:
+      - "^daemon\\."
+      - "^workers\\."
+
+# ------------------------------------------------------------------------------
+# Human-facing response templates (policy-level intent; UI can format)
+# ------------------------------------------------------------------------------
+responses:
+  enabled: true
+
+  # IMPORTANT:
+  # These are intentionally generic and region-agnostic. Operators may customize
+  # region-specific resources via `resources.by_region`.
+  templates:
+
+    support_redirect:
+      title: "I’m here with you."
+      body:
+        - "It sounds like you’re going through something really hard."
+        - "I can’t help with anything that could lead to harm, but I can help you find support and stay safe right now."
+        - "If you’re in immediate danger or might hurt yourself or someone else, please contact local emergency services now."
+        - "If you can, reach out to someone you trust (friend, family, colleague) and stay with them."
+
+    require_review:
+      title: "Safety check-in required."
+      body:
+        - "I’m concerned about safety based on what you shared."
+        - "I’m going to slow down and require a human review before any risky actions."
+        - "If there’s immediate danger, contact local emergency services."
+        - "If you want, you can tell me where you are (country/region) and I can surface the right support resources configured for your deployment."
+
+    emergency_protocol:
+      title: "Emergency safety protocol engaged."
+      body:
+        - "I can’t assist with anything that could cause harm."
+        - "If there is immediate danger, contact local emergency services now."
+        - "If you can, move to a safer place and reach out to a trusted person right away."
+        - "A human operator may review this situation; high-risk actions are locked down."
+
+    deny:
+      title: "I can’t help with that."
+      body:
+        - "I can’t assist with requests that could lead to harm."
+        - "If you’re worried about safety, I can help with safer alternatives (support resources, de-escalation steps, and protective actions)."
+
+  # Optional: grounding steps for acute distress.
+  grounding:
+    enabled: true
+    steps:
+      - "Take one slow breath in… and out."
+      - "Name 5 things you can see, 4 things you can feel, 3 things you can hear, 2 things you can smell, 1 thing you can taste."
+      - "If you can, sip water and sit somewhere safer/quiet."
+
+# ------------------------------------------------------------------------------
+# Resources (deployment-configurable; keep region-agnostic defaults)
+# ------------------------------------------------------------------------------
+resources:
+  enabled: true
+
+  # If a region hint is present, prefer it; otherwise use default_region.
+  default_region: "generic"
+
+  by_region:
+    generic:
+      emergency:
+        label: "Emergency services"
+        text: "Contact your local emergency number now if there is immediate danger."
+      crisis_support:
+        label: "Crisis support"
+        text: "Contact a local crisis hotline or mental health crisis service in your region."
+      abuse_support:
+        label: "Abuse support"
+        text: "If you’re experiencing abuse, consider contacting local support services/shelters when safe to do so."
+      child_safety:
+        label: "Child safety"
+        text: "If a child is in danger, contact local emergency services or appropriate authorities."
+
+    # Example stubs (intentionally not hardcoding phone numbers here):
+    # US:
+    #   crisis_support:
+    #     label: "Crisis support"
+    #     text: "<SET_ME: e.g., national hotline number or URL>"
+    # UK:
+    #   crisis_support:
+    #     label: "Crisis support"
+    #     text: "<SET_ME>"
+    # CA:
+    #   crisis_support:
+    #     label: "Crisis support"
+    #     text: "<SET_ME>"
+
+# ------------------------------------------------------------------------------
+# Privacy + retention (minimize sensitive content exposure)
+# ------------------------------------------------------------------------------
+privacy:
+  enabled: true
+
+  # Treat intervention events as safety-sensitive operational data.
+  classification: "safety_critical" # aligns with data_governance.yaml classification set
+
+  # Do not store raw messages by default; store only signals + reason codes.
+  store_raw_content: false
+
+  # If raw content is stored (debug), enforce strict redaction and limited retention.
+  debug_raw_content:
+    allowed: false
+    requires_approval: true
+    max_retention_hours: 24
+
+  redaction:
+    enabled: true
+    # Heuristic patterns for secrets/PII; implementation may add more.
+    patterns:
+      - "(?i)\\b(password|passcode|api[_-]?key|secret|token)\\b"
+      - "(?i)\\b(ssn|social security|driver'?s license)\\b"
+      - "(?i)\\b\\d{3}-\\d{2}-\\d{4}\\b"
+      - "(?i)\\b\\+?\\d[\\d\\s().-]{7,}\\b"
+
+  retention:
+    keep_days: 365
+    purge_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit + ledger events)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "human_safety.signal_received"
+      - "human_safety.decision_made"
+      - "human_safety.constraints_applied"
+      - "human_safety.emergency_protocol"
+    include:
+      - "actor_id"
+      - "session_id"
+      - "category"
+      - "severity"
+      - "confidence"
+      - "outcome"
+      - "reason_codes"
+      - "guard_state_floor"
+      - "ts"
+    include_payload: false
+
+  ledger:
+    enabled: true
+    # Keep ledger entries short and redacted.
+    max_chars: 500
+
+# ------------------------------------------------------------------------------
+# Overrides (highly constrained; emergency protocol is non-overrideable)
+# ------------------------------------------------------------------------------
+overrides:
+  enabled: true
+
+  # Emergency protocol cannot be overridden.
+  non_overrideable_outcomes:
+    - "emergency_protocol"
+
+  # support_redirect and require_review may be overridden only by trusted operators,
+  # and only to become MORE conservative (never less).
+  allow_override_directions:
+    - "more_conservative" # allow -> support_redirect -> require_review -> emergency_protocol
+
+  require_justification: true
+  min_justification_chars: 20
+
+  # Minimum trust to override (operator-controlled).
+  min_trust_to_override: 9
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    human_safety:
+      mode: "policy"
+      fail_closed_outcome: "support_redirect"
+    privacy:
+      debug_raw_content:
+        allowed: false
+
+  workstation:
+    human_safety:
+      mode: "policy"
+      fail_closed_outcome: "require_review"
+
+  production:
+    human_safety:
+      mode: "strict"
+      fail_closed_outcome: "require_review"
+    inputs:
+      confidence:
+        strict_adjustment:
+          support_redirect: -0.05
+          require_review: -0.05
+          emergency: -0.05
+    privacy:
+      debug_raw_content:
+        allowed: false
+
+  regulated:
+    human_safety:
+      mode: "strict"
+      fail_closed_outcome: "emergency_protocol"
+    privacy:
+      classification: "safety_critical"
+      retention:
+        keep_days: 730
+        purge_requires_approval: true
+
+  safety_critical:
+    human_safety:
+      mode: "strict"
+      fail_closed_outcome: "emergency_protocol"
+    overrides:
+      enabled: false
+    constraints:
+      by_outcome:
+        support_redirect:
+          set_guard_state_at_least: "restricted"
+        require_review:
+          set_guard_state_at_least: "lockdown"

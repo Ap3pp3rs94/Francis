@@ -1,0 +1,234 @@
+# ==============================================================================
+# Francis 2.0 — Profile Root
+# Path: config/profile.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical profile selector + composition root for Francis.
+#
+# A "profile" is a named deployment posture that determines:
+#   - which environment overlay is active (config/environments/*.yaml)
+#   - which policy overlays are active (config/policies/*.yaml)
+#   - which model routing/constraints sets are active (config/models/*.yaml)
+#   - which runtime posture knobs apply globally (sandbox strictness, web access, etc.)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deterministic: single declared active profile + ordered overlay list.
+# - Fail-closed: unknown profile or missing required documents => refuse unsafe start.
+# - Minimal by default: prefer explicitly enabled features by profile.
+# - Portable: repo-relative paths; absolute roots allowed via env override in loader.
+# - Observable: expose resolved profile info via /system/health/report.
+#
+# NOTES
+# -----
+# - This file contains no secrets. Secrets belong in environment variables / vault.
+# - Loader MUST treat document lists as ordered and MUST NOT silently reorder.
+# - Loader SHOULD de-duplicate identical policy documents (by path) to prevent
+#   accidental double-application. If strict_config=true, duplicates should be
+#   a startup error unless explicitly allowed.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "profile_root"
+  notes:
+    - "Edit this to switch Francis between dev/production/regulated/safety_critical modes."
+    - "This file is read early during startup; keep it stable and explicit."
+    - "Determinism: document ordering is part of the contract."
+
+# ------------------------------------------------------------------------------
+# Active profile selection
+# ------------------------------------------------------------------------------
+active:
+  # Canonical profile name. Must match a profile key supported by your config docs.
+  name: "dev"
+
+  # Optional additional overlays (applied in order after base profile).
+  # Example: production + federated + high_availability
+  overlays: []
+
+  # If true, refuse to start when a referenced overlay is missing.
+  strict_overlay_resolution: true
+
+# ------------------------------------------------------------------------------
+# Resolution rules (how configuration is layered)
+# ------------------------------------------------------------------------------
+resolution:
+  enabled: true
+
+  # Precedence (highest wins):
+  #   1) CLI flags
+  #   2) OS env vars
+  #   3) .env (repo root)
+  #   4) profile overlays (listed order)
+  #   5) base profile
+  #   6) defaults baked into code
+  precedence: ["cli", "os_env", "dotenv", "overlay", "base", "defaults"]
+
+  # Repo-relative resolution roots (loader should resolve these against repo_root).
+  environment_dir: "./config/environments"
+  policies_dir: "./config/policies"
+  capabilities_dir: "./config/capabilities"
+  models_dir: "./config/models"
+
+  # Optional: local, untracked overrides file (developer machines).
+  local_overrides_file: "./config/profile.local.yaml"
+  local_overrides_optional: true
+
+  # Optional: determinism/attestation hooks (loader may compute these)
+  determinism:
+    enabled: true
+    include_source_paths: true
+    include_source_hashes: true
+    include_resolved_hash: true
+
+# ------------------------------------------------------------------------------
+# Environment bundle (which environment YAMLs to load)
+# ------------------------------------------------------------------------------
+environment_bundle:
+  enabled: true
+
+  # If null, loader derives base from active.name:
+  #   config/environments/{active.name}.yaml
+  base: null
+
+  # If null, loader derives overlays from active.overlays:
+  #   config/environments/{overlay}.yaml
+  overlays: null
+
+  # If true, unknown keys in environment YAMLs cause startup failure.
+  strict_env_schema: true
+
+# ------------------------------------------------------------------------------
+# Policy bundle (which policy YAMLs to load and in what order)
+# ------------------------------------------------------------------------------
+policy_bundle:
+  enabled: true
+
+  # Ordered list of policy documents (load order is semantic).
+  # IMPORTANT:
+  # - Keep list stable.
+  # - Avoid duplicates. Duplicates should be an error in strict mode.
+  documents:
+    # Core safety + governance
+    - "guard.yaml"
+    - "human_safety.yaml"
+    - "industrial_safety.yaml"
+    - "ethical_boundaries.yaml"
+    - "offensive_security.yaml"
+    - "privacy.yaml"
+    - "data_governance.yaml"
+
+    # Execution containment and boundaries
+    - "sandbox.yaml"
+    - "trust_boundaries.yaml"
+    - "filesystem.yaml"
+    - "networks.yaml"
+    - "regulated_domains.yaml"
+    - "web_access.yaml"
+
+    # Approvals + escalation
+    - "approvals.yaml"
+    - "escalation.yaml"
+
+    # API authorization mapping
+    - "api_permissions.yaml"
+
+    # Specialized contexts
+    - "environmental.yaml"
+
+  # If true, missing policy documents are a hard error.
+  strict_policy_load: true
+
+  # If true, policy parse errors fail startup (recommended).
+  fail_on_parse_error: true
+
+  # Allow per-profile policy overlays if policy files define "profiles:" blocks.
+  enable_policy_profile_overlays: true
+
+  # If true, exact duplicate policy entries are a hard error (recommended).
+  deny_duplicate_documents: true
+
+# ------------------------------------------------------------------------------
+# Capability bundle (aliases/catalog/taxonomy/trust maps)
+# ------------------------------------------------------------------------------
+capabilities_bundle:
+  enabled: true
+
+  # Canonical capability files (stable load order).
+  files:
+    - "taxonomy.yaml"
+    - "catalog.yaml"
+    - "aliases.yaml"
+    - "playbooks.yaml"
+    - "schedules.yaml"
+    - "trust_permissions_map.yaml"
+
+  enforce_catalog_references: true
+  deny_alias_collisions: true
+
+# ------------------------------------------------------------------------------
+# Models bundle (routing/constraints/providers/specialized configs)
+# ------------------------------------------------------------------------------
+models_bundle:
+  enabled: true
+
+  files:
+    - "routing.yaml"
+    - "constraints.yaml"
+    - "ensemble.yaml"
+    - "fallbacks.yaml"
+
+  specialized_dir: "./config/models/specialized"
+  providers_dir: "./config/models/providers"
+
+  # Enforce per-profile provider policies:
+  # - dev/workstation: allow local + optional remote
+  # - production/regulated: prefer local; remote gated
+  # - safety_critical/airgapped: local only
+  enforce_provider_policies: true
+
+# ------------------------------------------------------------------------------
+# Runtime posture knobs (system-wide intent)
+# ------------------------------------------------------------------------------
+runtime:
+  enabled: true
+
+  # Strict configuration: refuse unknown config keys or missing required blocks.
+  strict_config: true
+
+  observability:
+    log_level_default: "INFO"
+    audit_enabled: true
+    metrics_enabled: true
+
+  safety:
+    default_guard_state: "normal"
+    fail_closed: true
+
+  sandbox:
+    required: true
+    default_mode: "policy"
+
+  web_access:
+    default_enabled: true
+
+# ------------------------------------------------------------------------------
+# Profile examples (non-executing documentation)
+# ------------------------------------------------------------------------------
+examples:
+  production_federated_ha:
+    name: "production"
+    overlays: ["federated", "high_availability"]
+
+  regulated:
+    name: "regulated"
+    overlays: []
+
+  safety_critical:
+    name: "safety_critical"
+    overlays: []

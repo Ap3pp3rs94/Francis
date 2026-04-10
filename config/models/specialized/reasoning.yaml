@@ -1,0 +1,358 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Reasoning (planning, governance, risk, architecture decisions)
+# Path:   config/models/specialized/reasoning.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Defines the reasoning envelope:
+#   - When to route to reasoning workload vs chat/code/tool_router
+#   - Default sampling/budget posture for high-integrity decisions
+#   - Output structure requirements (facts vs assumptions vs recommendations)
+#   - Tool-use posture for verification (prefer tools over guessing)
+#   - Governance alignment (trust + approvals)
+#   - Observability and explanation hooks
+#
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "reasoning_specialization"
+  notes:
+    - "Reasoning mode must be honest about uncertainty."
+    - "Prefer verification via tools over hallucination."
+    - "No sensitive internal traces; produce structured justifications."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+reasoning:
+  enabled: true
+
+  # The canonical workload for the router to use when this specialization is active.
+  default_workload: "reasoning"
+
+  # If a request is ambiguous, prefer reasoning for governance/risk contexts.
+  unknown_request_policy: "fallback_to_reasoning" # fallback_to_reasoning | fallback_to_chat | deny
+
+  # The system should prefer local-first models unless constraints allow remote.
+  local_first_models: true
+
+# ------------------------------------------------------------------------------
+# Routing hints (classification)
+# ------------------------------------------------------------------------------
+routing:
+  tags:
+    classify_as_reasoning_if_any:
+      - "reasoning"
+      - "plan"
+      - "planning"
+      - "architecture"
+      - "design"
+      - "tradeoffs"
+      - "governance"
+      - "risk_assessment"
+      - "incident"
+      - "postmortem"
+      - "decision"
+      - "root_cause"
+      - "compliance"
+      - "audit"
+      - "safety"
+      - "policy"
+
+    demote_to_chat_if_any:
+      - "smalltalk"
+      - "casual"
+      - "copywriting"
+      - "brainstorm"
+
+    promote_to_tool_router_if_any:
+      - "tool_plan"
+      - "tools"
+      - "schema"
+      - "structured"
+      - "verification_required"
+
+  capability_patterns:
+    classify_as_reasoning_if_any:
+      - "governance.*"
+      - "trust.*"
+      - "approvals.*"
+      - "resilience.*"
+      - "system.*"
+      - "security.*"
+      - "policy.*"
+
+# ------------------------------------------------------------------------------
+# Parameter posture (low-variance, decision-friendly)
+# ------------------------------------------------------------------------------
+parameters:
+  # These are defaults; constraints.yaml and routing budgets still apply.
+  defaults:
+    temperature: 0.25
+    top_p: 0.9
+    max_tokens: 1024
+    stream: true
+
+  # For explicitly requested deep analysis, increase token budget but keep low temp.
+  deep_analysis:
+    temperature: 0.20
+    top_p: 0.9
+    max_tokens: 2048
+
+  # For incident response: keep concise and decisive.
+  incident_mode:
+    temperature: 0.15
+    top_p: 0.85
+    max_tokens: 900
+
+  # Determinism aids (hint-level; adapters may ignore)
+  determinism:
+    prefer_seeded_runs: false
+    seed: null
+
+# ------------------------------------------------------------------------------
+# Output contract (structured, audit-friendly)
+# ------------------------------------------------------------------------------
+output:
+  # The key rule: produce usable reasoning without dumping private internal traces.
+  # The intent is "explain the decision", not "expose raw internal deliberation".
+  reasoning_visibility:
+    allow_private_trace_output: false
+    require_structured_justification: true
+
+  # Canonical structure for reasoning responses (UI friendly, consistent)
+  structure:
+    required_sections:
+      - "problem"
+      - "constraints"
+      - "known_facts"
+      - "assumptions"
+      - "options"
+      - "recommendation"
+      - "risks"
+      - "next_steps"
+
+    optional_sections:
+      - "decision_record"
+      - "verification_needed"
+      - "rollback_plan"
+      - "open_questions"
+
+    style:
+      prefer_bullets: true
+      prefer_short_paragraphs: true
+      avoid_wall_of_text: true
+      use_concrete_language: true
+      separate_fact_from_inference: true
+
+  # Recommendation rules
+  recommendation:
+    require_single_primary_recommendation: true
+    include_rationale: true
+    include_reject_reasons_for_other_options: true
+    include_operator_actions: true
+
+  # Risk framing
+  risk_framing:
+    enabled: true
+    labels:
+      - "low"
+      - "medium"
+      - "high"
+      - "critical"
+    require_mitigations_for:
+      - "high"
+      - "critical"
+
+# ------------------------------------------------------------------------------
+# Fact discipline (verification-first)
+# ------------------------------------------------------------------------------
+facts:
+  # Do not invent facts. If missing, say it's unknown and propose verification.
+  forbid_unverified_factual_claims: true
+
+  # When the request requires current/niche data, the system should prefer tools/web learning.
+  prefer_verification_over_guessing: true
+
+  # Categories that require verification or disclaimers
+  require_verification_for:
+    - "current_events"
+    - "security_vulnerabilities"
+    - "compliance_law_regulation"
+    - "pricing_costs"
+    - "compatibility_versions"
+    - "production_outages"
+
+  # If web learning is disabled, reasoning must explicitly disclaim.
+  web_learning:
+    disallow_web_claims_when_disabled: true
+    require_citations_when_used: true
+
+# ------------------------------------------------------------------------------
+# Tool posture (verification + deterministic checks)
+# ------------------------------------------------------------------------------
+tools:
+  enabled: true
+
+  # Reasoning should prefer tool_router when a structured plan is needed.
+  prefer_tool_router_for:
+    - "verification"
+    - "multi_step_execution"
+    - "schema_generation"
+    - "data_pull_needed"
+
+  # Safe default: use tools to verify, not to mutate, unless explicitly requested & governed.
+  default_tool_intent: "verify" # verify | inspect | mutate
+
+  # If tools are used, require explicit "what tool did" summaries for audit.
+  require_tool_result_summaries: true
+
+  # Guardrails around tool disabling as a fallback (avoid silent behavior changes)
+  tool_required_tags:
+    - "tool_required"
+    - "verification_required"
+
+# ------------------------------------------------------------------------------
+# Governance alignment (trust + approvals)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  # Trust floors (hint-level; enforcement in governance layer).
+  trust:
+    min_trust:
+      # Pure reasoning / read-only assessments
+      assess: 0
+      recommend: 1
+
+      # Tool planning (no execution)
+      plan_tools: 2
+
+      # Tool execution (read-only)
+      execute_tools_read_only: 3
+
+      # Tool execution (mutation)
+      execute_tools_mutating: 5
+
+  approvals:
+    # Reasoning itself doesn't require approval, but actions derived from it might.
+    # This is a hint list of what outcomes should trigger governance.
+    require_approval_if_recommendation_involves:
+      - "mutating_repo"
+      - "credential_actions"
+      - "policy_change"
+      - "security_controls"
+      - "industrial_actuation"
+      - "export_sensitive_data"
+      - "remote_provider_enablement"
+
+  # Risk escalation patterns (used to tag outputs and gate actions downstream)
+  risk_escalation:
+    tag_if_contains_any:
+      critical:
+        - "industrial_control"
+        - "actuation"
+        - "credential_rotation"
+        - "restore_backup"
+        - "disable_security"
+      high:
+        - "delete"
+        - "revoke"
+        - "export"
+        - "web_ingest"
+        - "remote_execution"
+
+# ------------------------------------------------------------------------------
+# Observability (decision trace metadata)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  # Emit a reasoning decision record (metadata-only) for explanation/audit systems.
+  decision_record:
+    enabled: true
+    include:
+      - "workload"
+      - "profile"
+      - "risk"
+      - "tags"
+      - "constraints_summary"
+      - "gates_triggered"
+      - "tools_planned"
+      - "tools_executed"
+      - "fallback_used"
+      - "model_selection"
+      - "budgets_applied"
+
+  # The text explanation should be consistent with config/models/specialized/explanatory.yaml
+  explanation_mode_hint: "standard" # brief | standard | deep | audit
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    parameters:
+      defaults:
+        temperature: 0.3
+        max_tokens: 2048
+    observability:
+      decision_record:
+        include:
+          - "candidate_models_considered"
+
+  workstation:
+    parameters:
+      defaults:
+        temperature: 0.25
+        max_tokens: 1536
+
+  regulated:
+    parameters:
+      defaults:
+        temperature: 0.15
+        max_tokens: 1024
+    output:
+      structure:
+        required_sections:
+          - "problem"
+          - "constraints"
+          - "known_facts"
+          - "assumptions"
+          - "options"
+          - "recommendation"
+          - "risks"
+          - "rollback_plan"
+          - "next_steps"
+    facts:
+      forbid_unverified_factual_claims: true
+    observability:
+      explanation_mode_hint: "audit"
+
+  safety_critical:
+    parameters:
+      defaults:
+        temperature: 0.12
+        max_tokens: 900
+    tools:
+      # In safety-critical contexts, reasoning should be conservative about tool execution.
+      default_tool_intent: "verify"
+    governance:
+      approvals:
+        require_approval_if_recommendation_involves:
+          - "mutating_repo"
+          - "credential_actions"
+          - "policy_change"
+          - "security_controls"
+          - "industrial_actuation"
+          - "export_sensitive_data"
+          - "remote_provider_enablement"
+    observability:
+      explanation_mode_hint: "audit"

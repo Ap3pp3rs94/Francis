@@ -1,0 +1,3 @@
+version: 1
+default_timezone: "UTC"
+schedules: []

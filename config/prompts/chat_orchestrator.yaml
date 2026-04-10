@@ -1,0 +1,637 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Chat Orchestrator (router + intent planner for chat turns)
+# Path:   config/prompts/chat_orchestrator.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This prompt is Francis's chat "control plane".
+#
+# It receives:
+#   - the latest user message + conversation state
+#   - runtime posture (profile, guard state, health, sandbox availability)
+#   - governance summary (trust level, approvals state, capability allow/deny)
+#   - optional attachment metadata or extracted contents
+#   - optional memory retrieval context
+#
+# It outputs:
+#   - an explicit orchestration decision for the turn (respond / ask / delegate / deny)
+#   - a machine-consumable set of actions (prompt_call / capability_call / memory_query)
+#   - a user-facing message (when appropriate)
+#   - explicit gates + preconditions for any non-trivial operation
+#   - structured observability (audit events + reason codes)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deterministic: output STRICT JSON matching schema. No markdown, no code fences.
+# - Fail-closed: for high-risk categories (egress, destructive, credential_ops, industrial),
+#   do NOT suggest execution if policy/runtime context is incomplete.
+# - Do not invent capabilities: use only those provided in governance.policy_summary.allowed_capabilities
+#   (if present) or those present in capabilities_catalog (if present). Otherwise default to "propose" or "ask".
+# - Attachment-first: if attachments are present and not already triaged, route to attachments.intake.
+# - Plan separation: for multi-step operational requests, delegate planning to prompts/autonomy.yaml.
+# - Safety: never operationalize wrongdoing (credential theft, malware, DoS, surveillance).
+#   You MAY discuss hypothetical scenarios at a high-level for defensive or policy purposes,
+#   but must not provide actionable instructions, exploitation steps, or evasion guidance.
+# - Secrets never: never echo keys/tokens/passwords. Redact and reference at a high level.
+#
+# INTERACTIONS
+# ------------
+# - prompts/autonomy.yaml: generates gated execution plans.
+# - prompts/attachments_intake.yaml: triage + extraction + routing recommendations.
+# - policies/*.yaml: enforcement layer constrains actions (this prompt only declares intent).
+# - chat protocol layer: orchestrator output can be converted into chat events and tool events.
+# ==============================================================================
+version: 1
+
+id: "chat.orchestrator"
+title: "Chat Orchestrator"
+owner: "francis"
+intent: "route_and_plan"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Control plane prompt: routes turns to autonomy, attachments intake, or direct response."
+    - "Outputs strict JSON plan + user message."
+    - "Never embeds secrets; never invents capabilities."
+  compatibility:
+    - "Works for UI (WebSocket), CLI chat, API chat, worker-driven chat."
+    - "Forward-compatible with plugins + federation."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | worker | federation
+      message: { type: string, required: true }
+      locale: { type: string, required: false }
+      time_utc_iso: { type: string, required: false }
+
+  conversation:
+    type: object
+    required: false
+    fields:
+      # Recent messages (already redacted by runtime if needed).
+      messages:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            role: { type: string, required: true } # user | assistant | system | tool
+            content: { type: string, required: true }
+            ts: { type: number, required: false }
+            id: { type: string, required: false }
+
+      # Optional rolling summary (if maintained).
+      summary: { type: string, required: false }
+
+      # Optional system notes (e.g., "user prefers concise answers").
+      system_notes: { type: array, required: false }
+
+  attachments:
+    type: object
+    required: false
+    fields:
+      # Whether attachments exist for this turn.
+      present: { type: boolean, required: false }
+
+      # Attachments may be passed as metadata and/or extracted text.
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            attachment_id: { type: string, required: true }
+            filename: { type: string, required: false }
+            mime_type: { type: string, required: false }
+            size_bytes: { type: number, required: false }
+            sha256: { type: string, required: false }
+            extraction_state: { type: string, required: false } # none | partial | provided_text | ocr_needed
+            content_text: { type: string, required: false }     # if available
+            content_json: { type: object, required: false }     # if structured
+
+      # If true, attachments already went through intake for this request.
+      intake_completed: { type: boolean, required: false }
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      run_mode: { type: string, required: false } # dev | prod
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          ts: { type: number, required: false }
+          summary: { type: string, required: false }
+
+      sandbox:
+        type: object
+        required: false
+        fields:
+          available: { type: boolean, required: false }
+          mode: { type: string, required: false } # policy | strict
+          reason: { type: string, required: false }
+
+      network:
+        type: object
+        required: false
+        fields:
+          web_access_enabled: { type: boolean, required: false }
+          egress_allowed: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          pending_count: { type: number, required: false }
+
+      # Optional: enforcement summary supplied by runtime (strongly preferred).
+      policy_summary:
+        type: object
+        required: false
+        fields:
+          allowed_capabilities: { type: array, required: false }
+          blocked_capabilities: { type: array, required: false }
+          gates_by_capability: { type: object, required: false }
+          notes: { type: array, required: false }
+
+  capabilities_catalog:
+    type: object
+    required: false
+    fields:
+      # Optional: list of known capabilities and metadata.
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            id: { type: string, required: true }
+            category: { type: string, required: false } # read_only | mutation | destructive | network_egress | ...
+            description: { type: string, required: false }
+
+  memory:
+    type: object
+    required: false
+    fields:
+      # Optional: retrieval already performed by runner.
+      provided: { type: boolean, required: false }
+      chunks:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            source: { type: string, required: false }
+            content: { type: string, required: true }
+            score: { type: number, required: false }
+            meta: { type: object, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - response
+      - actions
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_followup
+          - requires_approval
+          - requires_quorum
+          - reason_codes
+          - summary
+        properties:
+          # Modes:
+          # - respond: respond directly; no actions
+          # - ask: ask user for missing details; no execution
+          # - delegate_attachments_intake: call attachments intake prompt
+          # - delegate_autonomy: call autonomy prompt for a plan
+          # - execute: emit direct capability_call actions (rare; read-only / trivial)
+          # - deny: refuse unsafe request; provide safe alternatives
+          mode:
+            type: string
+            enum:
+              - "respond"
+              - "ask"
+              - "delegate_attachments_intake"
+              - "delegate_autonomy"
+              - "execute"
+              - "deny"
+
+          confidence: { type: number } # 0..1
+
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+
+          requires_approval: { type: boolean }
+          requires_quorum: { type: boolean }
+
+          reason_codes:
+            type: array
+            items: { type: string }
+
+          summary: { type: string }
+
+      response:
+        type: object
+        additionalProperties: false
+        required: ["user_message", "tone", "ui_hints"]
+        properties:
+          # User-facing message (empty allowed if delegating and UI handles status messages).
+          user_message: { type: string }
+
+          # Intent hint for UI rendering.
+          tone:
+            type: string
+            enum: ["neutral", "supportive", "professional", "urgent", "refusal"]
+
+          # Optional hints (no secrets).
+          ui_hints:
+            type: object
+            additionalProperties: false
+            required: ["show_spinner", "show_actions_panel"]
+            properties:
+              show_spinner: { type: boolean }
+              show_actions_panel: { type: boolean }
+              status_text: { type: string }
+
+      actions:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required:
+            - "id"
+            - "kind"
+            - "description"
+            - "gates"
+            - "preconditions"
+          properties:
+            id: { type: string }
+
+            # Action kinds:
+            # - prompt_call: call another prompt config (autonomy, attachments intake)
+            # - capability_call: request execution of a capability id
+            # - memory_query: request retrieval (vectors/ledger) before answering
+            # - noop: explicit no-op
+            kind:
+              type: string
+              enum: ["prompt_call", "capability_call", "memory_query", "noop"]
+
+            description: { type: string }
+
+            # For prompt_call
+            prompt_id: { type: string }
+            prompt_inputs:
+              type: object
+              additionalProperties: true
+
+            # For capability_call
+            capability_id: { type: string }
+            args:
+              type: object
+              additionalProperties: true
+
+            # For memory_query
+            query: { type: string }
+            memory_kind: { type: string } # vectors | ledger | both
+            top_k: { type: number }
+
+            # Gates: declared intent; enforcement elsewhere.
+            gates:
+              type: object
+              additionalProperties: false
+              required:
+                - "category"
+                - "min_trust"
+                - "requires_approval"
+                - "requires_quorum"
+                - "sandbox_required"
+                - "network_egress"
+              properties:
+                category: { type: string }
+                min_trust: { type: number }
+                requires_approval: { type: boolean }
+                requires_quorum: { type: boolean }
+                sandbox_required: { type: boolean }
+                network_egress: { type: boolean }
+
+            preconditions:
+              type: object
+              additionalProperties: false
+              required: ["must_hold", "checks"]
+              properties:
+                must_hold:
+                  type: array
+                  items: { type: string }
+                checks:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["id", "required", "on_fail"]
+                    properties:
+                      id: { type: string }
+                      required: { type: boolean }
+                      on_fail: { type: string } # deny | require_review | downgrade_to_propose
+
+            # Optional: expected outputs for observability.
+            outputs:
+              type: object
+              additionalProperties: false
+              required: ["artifacts", "ledger", "vectors"]
+              properties:
+                artifacts:
+                  type: array
+                  items: { type: string }
+                ledger:
+                  type: array
+                  items: { type: string }
+                vectors:
+                  type: array
+                  items: { type: string }
+
+            risk:
+              type: object
+              additionalProperties: false
+              required: ["level", "blast_radius", "notes"]
+              properties:
+                level: { type: string, enum: ["low", "medium", "high", "critical"] }
+                blast_radius: { type: string } # local | repo | system | network | physical
+                notes:
+                  type: array
+                  items: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - "blocked"
+          - "blocked_reasons"
+          - "contains_secrets"
+          - "contains_pii"
+          - "regulated_tags"
+          - "redactions"
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          regulated_tags:
+            type: array
+            items: { type: string }
+
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "audit_events", "metrics", "reason_codes"]
+        properties:
+          correlation_id: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+          metrics:
+            type: array
+            items: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+
+  - role: "system"
+    content: |-
+      You are Francis’s chat orchestrator.
+
+      Your output is a STRICT JSON object matching the schema.
+      Do not output markdown, code fences, or extra commentary.
+
+      Decision logic (priority order):
+      1) Safety: If the request is for wrongdoing (credential theft, malware, DoS, surveillance),
+         set decision.mode="deny". Provide safe, defensive alternatives only.
+         You MAY discuss hypothetical scenarios at a high level for governance/training,
+         but must not provide actionable steps, exploit chains, evasion methods, or instructions.
+      2) Attachment-first: If attachments.present=true and attachments.intake_completed is not true,
+         route to prompts/attachments_intake.yaml (decision.mode="delegate_attachments_intake").
+      3) Operational routing:
+         - If the user request implies multi-step actions, tool use, external access, or state changes:
+           delegate to prompts/autonomy.yaml (decision.mode="delegate_autonomy").
+         - If the request is purely conversational or read-only explanation:
+           respond directly (decision.mode="respond").
+      4) Capability discipline:
+         - If governance.policy_summary.allowed_capabilities exists, you may only reference those capability ids.
+         - Otherwise, if capabilities_catalog.items exists, you may only reference those ids.
+         - If neither exists and the request is operational, prefer "ask" or "delegate_autonomy" with clear assumptions.
+      5) Fail-closed for high-risk categories:
+         - destructive actions, credential operations, network egress, industrial actuation
+         - if runtime sandbox/network/guard/trust inputs are missing or adverse, do NOT recommend execute.
+      6) Observability:
+         - Always emit meaningful reason codes and audit events.
+         - Correlation id should be request.correlation_id if provided, else request.request_id if provided, else "unknown".
+
+      Output discipline:
+      - Keep user_message concise and useful.
+      - Actions must include gates + preconditions even if they are conservative placeholders.
+      - Never include secrets. If secrets are present, mark contains_secrets=true and redact.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      CONVERSATION:
+      {{conversation}}
+
+      ATTACHMENTS:
+      {{attachments}}
+
+      RUNTIME:
+      {{runtime}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      CAPABILITIES_CATALOG:
+      {{capabilities_catalog}}
+
+      MEMORY:
+      {{memory}}
+
+      Task:
+      Produce a strict JSON orchestration result for this chat turn:
+        - decide a mode
+        - produce a user-facing message (if appropriate)
+        - produce actions (prompt_call / capability_call / memory_query) if needed
+        - include safety + observability metadata
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.15
+  max_output_tokens: 2200
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  # General routing
+  - "ROUTE_RESPOND_DIRECT"
+  - "ROUTE_ASK_FOLLOWUP"
+  - "ROUTE_DELEGATE_ATTACHMENTS_INTAKE"
+  - "ROUTE_DELEGATE_AUTONOMY"
+  - "ROUTE_EXECUTE_TRIVIAL"
+
+  # Fail-closed / missing context
+  - "FAIL_CLOSED_MISSING_POLICY_SUMMARY"
+  - "FAIL_CLOSED_MISSING_CAPABILITIES_CATALOG"
+  - "FAIL_CLOSED_MISSING_RUNTIME_STATE"
+  - "FAIL_CLOSED_GUARD_RESTRICTED"
+  - "FAIL_CLOSED_GUARD_LOCKDOWN"
+  - "FAIL_CLOSED_SANDBOX_UNAVAILABLE"
+  - "FAIL_CLOSED_NETWORK_EGRESS_DISABLED"
+
+  # Safety / content
+  - "BLOCKED_WRONGDOING_REQUEST"
+  - "SENSITIVE_SECRETS_DETECTED"
+  - "SENSITIVE_PII_DETECTED"
+  - "REGULATED_SIGNAL_DETECTED"
+
+  # Capability discipline
+  - "DENY_UNKNOWN_CAPABILITY"
+  - "DENY_BLOCKED_CAPABILITY"
+
+  # Attachment handling
+  - "ATTACHMENTS_PRESENT_NEEDS_INTAKE"
+  - "ATTACHMENTS_ALREADY_TRIAGED"
+
+  # Memory
+  - "MEMORY_QUERY_REQUIRED"
+  - "MEMORY_CONTEXT_PROVIDED"
+
+# ------------------------------------------------------------------------------
+# Suggested audit events (intent; runtime decides actual emission)
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "chat.turn.received"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "source", "profile", "guard_state"]
+
+  - kind: "chat.turn.orchestrated"
+    when: "after"
+    fields: ["decision.mode", "decision.reason_codes", "actions.count"]
+
+  - kind: "chat.turn.denied"
+    when: "after"
+    fields: ["safety.blocked_reasons"]
+
+  - kind: "chat.turn.delegated"
+    when: "after"
+    fields: ["actions.prompt_id"]
+
+  - kind: "chat.turn.actions.requested"
+    when: "after"
+    fields: ["actions.kind", "actions.capability_id", "actions.gates"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays (tighten posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    generation_hints:
+      temperature: 0.2
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.05

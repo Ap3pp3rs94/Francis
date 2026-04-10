@@ -1,0 +1,457 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Proactive Messaging (operator-grade outbound messages)
+# Path:   config/prompts/proactive_messaging.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Generates outbound proactive messages when Francis has something worth saying:
+#   - health degradations / incidents
+#   - policy gate denials worth surfacing
+#   - approvals backlog
+#   - trust boundary changes
+#   - web learning / egress posture changes
+#   - industrial safety warnings
+#   - scheduled reports / digests
+#
+# It produces:
+#   - message text tailored by channel/audience
+#   - severity/priority classification
+#   - suppression keys (to avoid spam)
+#   - recommended next actions
+#   - observability hooks (audit events, reason codes)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON (schema-compliant). No markdown. No code fences.
+# - Message must be concise by default, but include "details" fields for UI expansion.
+# - Never include secrets (tokens/keys/passwords/private keys) or request them.
+# - Never provide instructions enabling wrongdoing (credential theft, malware, DoS, surveillance).
+# - Avoid alert fatigue:
+#     * include suppression_key and cooldown_s suggestion
+#     * prefer aggregated messages over per-event spam
+# - Forward-minded:
+#     * support multiple channels (console/ui, email, slack/discord-like)
+#     * support acknowledgment workflow (ack_id)
+# ==============================================================================
+version: 1
+
+id: "proactive.messaging"
+title: "Proactive Messaging"
+owner: "francis"
+intent: "compose_outbound_message"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Used by daemon and UI notifications center."
+    - "Designed to reduce noise: suppression + aggregation."
+    - "Outputs can be used directly or rendered by UI templates."
+  compatibility:
+    - "Stable envelope for future message routing systems."
+    - "Does not assume presence of email/slack integrations."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  event:
+    type: object
+    required: true
+    fields:
+      event_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+
+      # kind is the high-level event family
+      kind:
+        type: string
+        required: true
+        enum:
+          - "health"
+          - "policy"
+          - "approvals"
+          - "trust"
+          - "web_learning"
+          - "credentials"
+          - "domains"
+          - "plugins"
+          - "federation"
+          - "industrial"
+          - "simulation"
+          - "operations"
+          - "scheduled_report"
+          - "unknown"
+
+      # Subtype helps render specifics (e.g., health.disk_low, approvals.backlog)
+      subtype: { type: string, required: false }
+
+      # Severity as computed by upstream system (can be adjusted by this prompt)
+      severity_hint: { type: string, required: false } # info | notice | warning | error | critical
+
+      # Human-safe summary + structured details (no secrets)
+      summary: { type: string, required: false }
+      details:
+        type: object
+        required: false
+        additionalProperties: true
+
+      # Optional evidence snippets (already sanitized)
+      evidence:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            title: { type: string, required: false }
+            detail: { type: string, required: false }
+            ref: { type: string, required: false }
+
+  audience:
+    type: object
+    required: false
+    fields:
+      audience_type:
+        type: string
+        required: false
+        enum: ["operator_business", "student_support", "general", "unknown"]
+
+      # The intended recipient identity (optional)
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false }
+
+      # Tone preference
+      tone_hint:
+        type: string
+        required: false
+        enum: ["professional", "supportive", "neutral", "urgent", "refusal"]
+
+  channel:
+    type: object
+    required: false
+    fields:
+      # render target controls formatting length and structure
+      type:
+        type: string
+        required: false
+        enum: ["ui", "console", "email", "chat", "webhook", "unknown"]
+
+      # constraints (max chars, whether markdown allowed, etc.)
+      max_chars: { type: number, required: false }
+      markdown_allowed: { type: boolean, required: false }
+      include_links: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          pending_count: { type: number, required: false }
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          summary: { type: string, required: false }
+
+      endpoints:
+        type: object
+        required: false
+        additionalProperties: true # may include base urls for UI linking (safe)
+
+  history:
+    type: object
+    required: false
+    fields:
+      recent_messages:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            ts_unix_s: { type: number, required: false }
+            suppression_key: { type: string, required: false }
+            severity: { type: string, required: false }
+            title: { type: string, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - event_id
+      - message
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      event_id: { type: string }
+
+      message:
+        type: object
+        additionalProperties: false
+        required:
+          - title
+          - body
+          - severity
+          - priority
+          - category
+          - suppression_key
+          - cooldown_s
+          - ack
+          - details
+          - next_actions
+        properties:
+          title: { type: string }
+
+          # body is the primary message text for the channel.
+          body: { type: string }
+
+          # severity: info | notice | warning | error | critical
+          severity: { type: string }
+
+          # priority: low | medium | high | critical
+          priority: { type: string, enum: ["low", "medium", "high", "critical"] }
+
+          # category is stable classification for filtering in UI.
+          category:
+            type: string
+            enum:
+              - "health"
+              - "policy"
+              - "approvals"
+              - "trust"
+              - "web_learning"
+              - "credentials"
+              - "domains"
+              - "plugins"
+              - "federation"
+              - "industrial"
+              - "simulation"
+              - "operations"
+              - "scheduled_report"
+              - "unknown"
+
+          # suppression_key prevents repeated spam about the same issue.
+          suppression_key: { type: string }
+
+          # recommended cooldown in seconds before re-alerting on same suppression_key
+          cooldown_s: { type: number }
+
+          ack:
+            type: object
+            additionalProperties: false
+            required: ["required", "ack_id", "instructions"]
+            properties:
+              required: { type: boolean }
+              ack_id: { type: string }
+              instructions: { type: string } # how to acknowledge in UI/CLI
+
+          # details is structured supporting info that UI may render in an expanded view.
+          details:
+            type: object
+            additionalProperties: true
+
+          next_actions:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["action", "why", "owner", "urgency"]
+              properties:
+                action: { type: string }
+                why: { type: string }
+                owner: { type: string } # operator | francis | mixed
+                urgency: { type: string, enum: ["low", "medium", "high", "critical"] }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - contains_secrets
+          - contains_pii
+          - wrongdoing_topic
+          - blocked
+          - blocked_reasons
+          - redactions
+        properties:
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          wrongdoing_topic: { type: boolean }
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Proactive Messaging system.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Non-negotiables:
+      - Do not output secrets (keys/tokens/passwords/private keys) or request them.
+      - Do not provide wrongdoing guidance (credential theft, malware, DoS, surveillance).
+        If wrongdoing_topic exists, keep content policy/defense oriented.
+
+      Message principles:
+      - Be actionable: include next_actions.
+      - Be concise: optimize for the given channel constraints (max_chars).
+      - Avoid noise: produce suppression_key + cooldown_s.
+      - If an issue is ongoing and recently messaged (history.recent_messages contains same suppression_key),
+        increase cooldown or aggregate instead of repeating.
+
+      Severity mapping:
+      - If guard_state is "lockdown", prefer severity at least "warning".
+      - Industrial safety signals default to "critical" unless explicitly minor.
+      - Approvals backlog severity depends on count and age, if provided.
+
+      Channel formatting:
+      - ui/console: compact, bullet-like lines OK.
+      - email: include a short intro + structured next steps.
+      - chat: short + clear; avoid long paragraphs.
+      - markdown_allowed controls whether you may use simple bullet formatting; otherwise plain text.
+
+      Acknowledgment:
+      - Set ack.required=true for anything severity=error/critical, or for policy denials needing operator intent.
+      - ack.instructions should mention where to ack (UI notification center) without assuming tool availability.
+
+  - role: "user"
+    content: |-
+      EVENT:
+      {{event}}
+
+      AUDIENCE:
+      {{audience}}
+
+      CHANNEL:
+      {{channel}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      RUNTIME:
+      {{runtime}}
+
+      HISTORY:
+      {{history}}
+
+      Task:
+      Compose the best proactive message for this event, with suppression and next actions.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.22
+  max_output_tokens: 1400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "PROACTIVE_MSG_COMPOSED"
+  - "PROACTIVE_MSG_AGGREGATED"
+  - "PROACTIVE_MSG_SUPPRESSED_RECENT"
+  - "PROACTIVE_MSG_ESCALATED_GUARD"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+  - "WRONGDOING_TOPIC_HIGH_LEVEL_ONLY"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "proactive.message.requested"
+    when: "before"
+    fields: ["event.kind", "event.subtype", "event.severity_hint", "channel.type", "audience.audience_type"]
+
+  - kind: "proactive.message.composed"
+    when: "after"
+    fields: ["message.category", "message.severity", "message.suppression_key", "message.cooldown_s"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.26
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.18
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.16
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14

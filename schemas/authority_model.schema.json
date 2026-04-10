@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/authority_model.schema.json",
+  "title": "Francis Authority Model",
+  "type": "object",
+  "required": ["principal_id", "mode"],
+  "properties": {
+    "principal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["observe", "assist", "pilot", "away"]
+    },
+    "allowed_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "allowed_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_risk_tier": {
+      "type": "string",
+      "enum": ["readonly", "low", "normal", "medium", "high", "critical", "safety_critical"]
+    },
+    "approvals_required": {
+      "type": "boolean"
+    },
+    "trust_level": {
+      "type": "integer"
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

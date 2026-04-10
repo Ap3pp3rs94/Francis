@@ -1,0 +1,686 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Domain Intake (pre-flight triage + routing for domain creation/changes)
+# Path:   config/prompts/domain_intake.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Domain Intake is the "front door" for domain work.
+#
+# It takes a human request and produces a structured intake record:
+#   - normalized intent (create/update/delete/export/etc.)
+#   - suggested domain_id and name
+#   - duplicate / overlap detection against existing domains
+#   - risk classification and governance posture
+#   - missing required information (minimal followups)
+#   - routing recommendation (delegate to domain_induction, attachments intake, deny)
+#
+# This is NOT domain induction:
+#   - Intake does not produce the full domain spec manifest.
+#   - Intake is responsible for clarifying, deconflicting, and gating.
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON (schema-compliant). No markdown, no code fences.
+# - Fail-closed for high-risk actions and unsafe intents.
+# - Ask only high-signal followups (minimum required to proceed safely).
+# - Do not invent capabilities when a catalog/allowlist is provided.
+# - Never emit secrets or request secret values (only references/metadata).
+# - Never enable wrongdoing (credential theft, malware, DoS, surveillance).
+#   If user intent is harmful, deny and offer defensive/policy alternatives.
+#
+# OBSERVABILITY
+# -------------
+# The output is machine-consumable:
+#   - reason codes for routing decisions
+#   - audit event suggestions
+#   - structured intake fields suitable for ledger/explanations
+# ==============================================================================
+version: 1
+
+id: "domain.intake"
+title: "Domain Intake"
+owner: "francis"
+intent: "triage_domain_work"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Pre-flight prompt: clarify, classify, dedupe, route."
+    - "Primary next step is domain_induction.yaml when safe and sufficiently specified."
+    - "Attachment-aware: if domain request depends on attachments, route to attachments intake."
+  compatibility:
+    - "Designed to run with partial context; must label unknowns explicitly."
+    - "Forward-compatible with trust/quorum/federation/industrial expansions."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | worker | federation
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      message: { type: string, required: true }
+      time_utc_iso: { type: string, required: false }
+
+      # Optional: if user explicitly references a domain id/name
+      domain_id_hint: { type: string, required: false }
+      domain_name_hint: { type: string, required: false }
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      sandbox:
+        type: object
+        required: false
+        fields:
+          available: { type: boolean, required: false }
+          mode: { type: string, required: false } # policy | strict
+          reason: { type: string, required: false }
+
+      network:
+        type: object
+        required: false
+        fields:
+          web_access_enabled: { type: boolean, required: false }
+          egress_allowed: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          pending_count: { type: number, required: false }
+          quorum_required_by_default: { type: boolean, required: false }
+
+      policy_summary:
+        type: object
+        required: false
+        fields:
+          allowed_capabilities: { type: array, required: false }
+          blocked_capabilities: { type: array, required: false }
+          notes: { type: array, required: false }
+
+  taxonomy:
+    type: object
+    required: false
+    fields:
+      tags: { type: array, required: false }           # known tags
+      regulated_tags: { type: array, required: false } # known regulated tags
+
+  domains:
+    type: object
+    required: false
+    fields:
+      existing:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            domain_id: { type: string, required: true }
+            name: { type: string, required: false }
+            description: { type: string, required: false }
+            status: { type: string, required: false }
+            tags: { type: array, required: false }
+
+  capabilities_catalog:
+    type: object
+    required: false
+    fields:
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            id: { type: string, required: true }
+            category: { type: string, required: false }
+            description: { type: string, required: false }
+
+  attachments:
+    type: object
+    required: false
+    fields:
+      present: { type: boolean, required: false }
+      intake_completed: { type: boolean, required: false }
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            attachment_id: { type: string, required: true }
+            filename: { type: string, required: false }
+            mime_type: { type: string, required: false }
+            size_bytes: { type: number, required: false }
+            content_text: { type: string, required: false } # if already extracted
+            meta: { type: object, required: false }
+
+  memory:
+    type: object
+    required: false
+    fields:
+      provided: { type: boolean, required: false }
+      chunks:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            source: { type: string, required: false }
+            content: { type: string, required: true }
+            score: { type: number, required: false }
+            meta: { type: object, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - intake
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_followup
+          - requires_approval
+          - requires_quorum
+          - reason_codes
+          - summary
+        properties:
+          # Modes:
+          # - deny: unsafe request (wrongdoing), or disallowed by posture
+          # - ask: missing critical info blocks safe induction
+          # - delegate_attachments_intake: attachments present but not triaged
+          # - delegate_domain_induction: intake complete; proceed to spec draft
+          mode:
+            type: string
+            enum: ["deny", "ask", "delegate_attachments_intake", "delegate_domain_induction"]
+
+          confidence: { type: number } # 0..1
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+
+          requires_approval: { type: boolean }
+          requires_quorum: { type: boolean }
+
+          reason_codes:
+            type: array
+            items: { type: string }
+
+          summary: { type: string }
+
+      intake:
+        type: object
+        additionalProperties: false
+        required:
+          - normalized_intent
+          - suggested_domain
+          - overlap_analysis
+          - governance_recommendation
+          - capability_needs
+          - missing_info
+          - next_prompt
+        properties:
+
+          normalized_intent:
+            type: object
+            additionalProperties: false
+            required: ["primary", "secondary", "entities", "verbs", "constraints"]
+            properties:
+              # primary: create_domain | update_domain | delete_domain | list_domains | design_domain | unknown
+              primary: { type: string }
+
+              # secondary intents like "export", "web learning", "credential usage", etc.
+              secondary:
+                type: array
+                items: { type: string }
+
+              # entities referenced by user (high-level; no secrets)
+              entities:
+                type: array
+                items: { type: string }
+
+              # verbs detected (create/update/delete/export/monitor/ingest/actuate/etc.)
+              verbs:
+                type: array
+                items: { type: string }
+
+              # constraints extracted from text (time, compliance, environment)
+              constraints:
+                type: array
+                items: { type: string }
+
+          suggested_domain:
+            type: object
+            additionalProperties: false
+            required: ["domain_id", "name", "description", "tags", "regulated_tags"]
+            properties:
+              domain_id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              tags:
+                type: array
+                items: { type: string }
+              regulated_tags:
+                type: array
+                items: { type: string }
+
+              # For update/delete intents, this can point at an existing domain match.
+              existing_domain_match:
+                type: object
+                additionalProperties: false
+                required: ["domain_id", "confidence", "why"]
+                properties:
+                  domain_id: { type: string }
+                  confidence: { type: number } # 0..1
+                  why:
+                    type: array
+                    items: { type: string }
+
+          overlap_analysis:
+            type: object
+            additionalProperties: false
+            required: ["likely_duplicates", "related_domains", "recommendation"]
+            properties:
+              likely_duplicates:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["domain_id", "score", "reason"]
+                  properties:
+                    domain_id: { type: string }
+                    score: { type: number } # 0..1 heuristic similarity
+                    reason: { type: string }
+
+              related_domains:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["domain_id", "score", "reason"]
+                  properties:
+                    domain_id: { type: string }
+                    score: { type: number }
+                    reason: { type: string }
+
+              # recommend: reuse_existing | extend_existing | create_new | ask
+              recommendation: { type: string }
+
+          governance_recommendation:
+            type: object
+            additionalProperties: false
+            required:
+              - posture
+              - risk_level
+              - categories_touched
+              - min_trust_suggested
+              - approvals_suggested
+              - quorum_suggested
+              - notes
+            properties:
+              posture: { type: string } # permissive | standard | strict | regulated | safety_critical
+              risk_level: { type: string, enum: ["low", "medium", "high", "critical"] }
+
+              # categories inferred from intent (used to decide fail-closed prompts)
+              categories_touched:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - "read_only"
+                    - "mutation"
+                    - "destructive"
+                    - "network_egress"
+                    - "credential_ops"
+                    - "industrial_actuation"
+                    - "unknown"
+
+              # Suggested minimum trust levels (domain-induction can refine)
+              min_trust_suggested:
+                type: object
+                additionalProperties: false
+                required: ["read_only", "mutation", "destructive", "network_egress", "credential_ops", "industrial_actuation"]
+                properties:
+                  read_only: { type: number }
+                  mutation: { type: number }
+                  destructive: { type: number }
+                  network_egress: { type: number }
+                  credential_ops: { type: number }
+                  industrial_actuation: { type: number }
+
+              approvals_suggested:
+                type: object
+                additionalProperties: false
+                required: ["create", "update", "delete", "export", "egress", "credential_ops", "industrial_actuation"]
+                properties:
+                  create: { type: boolean }
+                  update: { type: boolean }
+                  delete: { type: boolean }
+                  export: { type: boolean }
+                  egress: { type: boolean }
+                  credential_ops: { type: boolean }
+                  industrial_actuation: { type: boolean }
+
+              quorum_suggested:
+                type: object
+                additionalProperties: false
+                required: ["mutation", "destructive", "credential_ops", "industrial_actuation"]
+                properties:
+                  mutation: { type: boolean }
+                  destructive: { type: boolean }
+                  credential_ops: { type: boolean }
+                  industrial_actuation: { type: boolean }
+
+              notes:
+                type: array
+                items: { type: string }
+
+          capability_needs:
+            type: object
+            additionalProperties: false
+            required: ["requested", "mapped_known", "unknown_or_unmapped", "blocked"]
+            properties:
+              # Raw phrases like "export domain", "web ingest", "actuate", etc.
+              requested:
+                type: array
+                items: { type: string }
+
+              # Capability ids (ONLY if allowlist/catalog present)
+              mapped_known:
+                type: array
+                items: { type: string }
+
+              unknown_or_unmapped:
+                type: array
+                items: { type: string }
+
+              # If policy_summary.blocked_capabilities exists and a requested maps to blocked, list them.
+              blocked:
+                type: array
+                items: { type: string }
+
+          missing_info:
+            type: object
+            additionalProperties: false
+            required: ["required_fields", "optional_fields", "blocking"]
+            properties:
+              required_fields:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["field", "why", "status"]
+                  properties:
+                    field: { type: string } # e.g., "objective", "in_scope", "out_of_scope"
+                    why: { type: string }
+                    status: { type: string, enum: ["present", "missing", "ambiguous"] }
+
+              optional_fields:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["field", "why", "status"]
+                  properties:
+                    field: { type: string }
+                    why: { type: string }
+                    status: { type: string, enum: ["present", "missing", "ambiguous"] }
+
+              blocking: { type: boolean }
+
+          next_prompt:
+            type: object
+            additionalProperties: false
+            required: ["prompt_id", "inputs_hint"]
+            properties:
+              prompt_id: { type: string } # "domain.induction" or "attachments.intake"
+              inputs_hint:
+                type: object
+                additionalProperties: true
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - blocked
+          - blocked_reasons
+          - wrongdoing_requested
+          - contains_secrets
+          - contains_pii
+          - regulated_signals
+          - redactions
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+
+          wrongdoing_requested: { type: boolean }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+
+          regulated_signals:
+            type: array
+            items: { type: string }
+
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s domain intake triage system.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Priority order:
+      1) Safety: If the user is requesting wrongdoing enablement (credential theft, malware, DoS, surveillance),
+         set decision.mode="deny". Provide safe reframes: defensive monitoring, policy boundaries, compliance controls.
+         Do NOT provide operational offensive guidance.
+      2) Attachments: If attachments.present=true AND attachments.intake_completed is not true AND the request depends on them,
+         set decision.mode="delegate_attachments_intake" and point next_prompt.prompt_id to "attachments.intake".
+      3) Dedupe: If the request appears to match an existing domain, recommend reuse/extend rather than create-new.
+      4) Fail-closed: For high-risk categories (network_egress, credential_ops, industrial_actuation, destructive),
+         if runtime/governance context is missing or adverse (guard restricted/lockdown, sandbox unavailable),
+         require followups or downgrade to ask/deny as appropriate.
+      5) Capability discipline:
+         - If governance.policy_summary.allowed_capabilities exists, only emit those ids in mapped_known.
+         - Else if capabilities_catalog.items exists, only emit those ids in mapped_known.
+         - Otherwise, keep mapped_known empty and place items into unknown_or_unmapped.
+
+      Quality bar:
+      - suggested_domain.domain_id must be a stable slug: lowercase letters, digits, underscores; no spaces.
+      - Provide minimal followups only if blocking=true.
+      - Provide explicit reason codes for why you routed the request.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      RUNTIME:
+      {{runtime}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      TAXONOMY:
+      {{taxonomy}}
+
+      EXISTING DOMAINS:
+      {{domains}}
+
+      CAPABILITIES_CATALOG:
+      {{capabilities_catalog}}
+
+      ATTACHMENTS:
+      {{attachments}}
+
+      MEMORY:
+      {{memory}}
+
+      Task:
+      Produce a domain intake triage decision + structured intake record.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.22
+  max_output_tokens: 2400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  # Routing
+  - "INTAKE_DELEGATE_DOMAIN_INDUCTION"
+  - "INTAKE_DELEGATE_ATTACHMENTS_INTAKE"
+  - "INTAKE_ASK_MISSING_INFO"
+  - "INTAKE_DENY_UNSAFE"
+
+  # Dedupe/overlap
+  - "INTAKE_DUPLICATE_LIKELY"
+  - "INTAKE_RELATED_DOMAIN_FOUND"
+  - "INTAKE_CREATE_NEW_OK"
+
+  # Risk / fail-closed
+  - "FAIL_CLOSED_HIGH_RISK_CATEGORY"
+  - "FAIL_CLOSED_GUARD_RESTRICTED"
+  - "FAIL_CLOSED_GUARD_LOCKDOWN"
+  - "FAIL_CLOSED_SANDBOX_UNAVAILABLE"
+  - "FAIL_CLOSED_EGRESS_DISABLED"
+  - "FAIL_CLOSED_POLICY_SUMMARY_MISSING"
+
+  # Capability mapping
+  - "CAPABILITIES_ALLOWLIST_ENFORCED"
+  - "CAPABILITIES_CATALOG_USED"
+  - "CAPABILITIES_UNMAPPED_PRESENT"
+  - "CAPABILITIES_BLOCKED_REQUESTED"
+
+  # Sensitivity
+  - "SENSITIVE_SECRETS_DETECTED"
+  - "SENSITIVE_PII_DETECTED"
+  - "REGULATED_SIGNAL_DETECTED"
+
+# ------------------------------------------------------------------------------
+# Audit event templates (intent; runtime decides actual emission)
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "domain.intake.requested"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "actor_role", "source", "profile"]
+
+  - kind: "domain.intake.completed"
+    when: "after"
+    fields: ["decision.mode", "decision.reason_codes", "intake.suggested_domain.domain_id"]
+
+  - kind: "domain.intake.denied"
+    when: "after"
+    fields: ["safety.blocked_reasons"]
+
+  - kind: "domain.intake.delegated"
+    when: "after"
+    fields: ["intake.next_prompt.prompt_id"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays (tighten posture)
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.26
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.18
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.16
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12

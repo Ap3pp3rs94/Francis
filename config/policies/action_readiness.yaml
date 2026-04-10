@@ -1,0 +1,425 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Action Readiness (pre-flight gating for side-effecting actions)
+# Path:   config/policies/action_readiness.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy answers:
+#   "Is Francis allowed to execute actions with side effects right now?"
+#
+# It is evaluated before:
+#   - tool execution (shell, python, filesystem writes beyond safe dirs)
+#   - network egress (web learning fetch/ingest, external APIs)
+#   - mutation actions (config changes, domain updates, credential operations)
+#   - daemon/worker actions that modify state
+#   - industrial control proposals (and especially actuation)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: if a readiness check cannot be evaluated, deny action.
+# - Explainable: produce reason codes and remediation hints.
+# - Profile-aware: dev is permissive, regulated/safety-critical are strict.
+# - Non-invasive: does not implement checks; defines what checks exist and thresholds.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "action_readiness_policy"
+  notes:
+    - "This is the pre-flight checklist for all side effects."
+    - "Implementers should emit a structured readiness report for audit."
+
+# ------------------------------------------------------------------------------
+# Global enablement
+# ------------------------------------------------------------------------------
+action_readiness:
+  enabled: true
+
+  # If true, any unknown check result is treated as failure.
+  fail_closed: true
+
+  # Default behavior if readiness fails.
+  on_not_ready: "deny" # deny | degrade_to_read_only | queue_for_approval
+
+  # If enabled, the system may auto-switch to read-only when not ready.
+  allow_auto_read_only: true
+
+# ------------------------------------------------------------------------------
+# Action categories (coarse mapping)
+# ------------------------------------------------------------------------------
+categories:
+  # Read-only actions: safe to allow with minimal readiness.
+  read_only:
+    requires:
+      - "core.boot_ok"
+      - "logging.ready"
+
+  # Writes limited to safe runtime dirs (data/logs/artifacts) with no external side effects.
+  local_mutation:
+    requires:
+      - "core.boot_ok"
+      - "storage.writable"
+      - "ledger.writable"
+      - "logging.ready"
+
+  # Actions that change configuration, domains, or system state.
+  system_mutation:
+    requires:
+      - "core.boot_ok"
+      - "storage.writable"
+      - "ledger.writable"
+      - "governance.ready"
+      - "logging.ready"
+
+  # Actions that touch credentials or secrets.
+  credential_ops:
+    requires:
+      - "core.boot_ok"
+      - "governance.ready"
+      - "vault.ready"
+      - "logging.ready"
+
+  # Network egress actions (web learning, external APIs).
+  network_egress:
+    requires:
+      - "core.boot_ok"
+      - "governance.ready"
+      - "network.egress_allowed"
+      - "logging.ready"
+
+  # Industrial actuation (highest risk).
+  industrial_actuation:
+    requires:
+      - "core.boot_ok"
+      - "governance.ready"
+      - "industrial.ready"
+      - "safety.locks_ok"
+      - "logging.ready"
+
+# ------------------------------------------------------------------------------
+# Checks registry (what can be evaluated)
+# ------------------------------------------------------------------------------
+checks:
+
+  # ---------------------------------------------------------------------------
+  # Core system readiness
+  # ---------------------------------------------------------------------------
+  core.boot_ok:
+    enabled: true
+    severity: "critical"
+    description: "Core runtime is initialized; config loaded; instance identity resolved."
+    remediation:
+      - "Verify config loading (FRANCIS_CONFIG_DIR / config/ exists)."
+      - "Verify instance id/name environment variables are set."
+      - "Check startup logs for configuration errors."
+
+  core.profile_known:
+    enabled: true
+    severity: "high"
+    description: "Environment profile is recognized and loaded."
+    remediation:
+      - "Set FRANCIS_ENV_PROFILE (dev/workstation/production/regulated/etc.)."
+      - "Ensure config/environments/<profile>.yaml exists."
+
+  core.time_ok:
+    enabled: true
+    severity: "medium"
+    description: "System clock is sane (prevents TLS/cert issues, log ordering issues)."
+    thresholds:
+      max_clock_skew_s: 120
+    remediation:
+      - "Sync system clock (Windows time service)."
+
+  # ---------------------------------------------------------------------------
+  # Observability readiness
+  # ---------------------------------------------------------------------------
+  logging.ready:
+    enabled: true
+    severity: "high"
+    description: "Logging pipeline is configured; logs directory exists and writable."
+    remediation:
+      - "Check FRANCIS_LOG_DIR and permissions."
+      - "Ensure filesystem is not read-only."
+
+  audit.ready:
+    enabled: true
+    severity: "high"
+    description: "Audit sinks are available (ledger, explanation store, approvals log)."
+    remediation:
+      - "Verify continuity ledger path exists and is writable."
+      - "Verify explanation explorer storage configured (if enabled)."
+
+  # ---------------------------------------------------------------------------
+  # Storage readiness
+  # ---------------------------------------------------------------------------
+  storage.writable:
+    enabled: true
+    severity: "critical"
+    description: "Primary data directory is writable."
+    remediation:
+      - "Check FRANCIS_DATA_DIR and disk permissions."
+      - "Ensure antivirus/EDR is not locking files."
+
+  ledger.writable:
+    enabled: true
+    severity: "critical"
+    description: "Continuity ledger can accept writes."
+    remediation:
+      - "Check FRANCIS_LEDGER_PATH and permissions."
+      - "Check ledger rotation settings and free disk."
+
+  # ---------------------------------------------------------------------------
+  # Governance readiness (trust + approvals)
+  # ---------------------------------------------------------------------------
+  governance.ready:
+    enabled: true
+    severity: "critical"
+    description: "Governance subsystem is online (trust state loaded; approvals reachable if required)."
+    remediation:
+      - "Ensure approvals store exists and is writable."
+      - "Ensure trust system state file exists or can be created."
+      - "Check governance configuration in config/environments/<profile>.yaml."
+
+  approvals.ready:
+    enabled: true
+    severity: "high"
+    description: "Approvals subsystem is reachable and consistent."
+    remediation:
+      - "Start API service (python -m francis api)."
+      - "Verify approvals directory exists and permissions are correct."
+
+  trust.ready:
+    enabled: true
+    severity: "high"
+    description: "Trust subsystem state can be loaded and updated."
+    remediation:
+      - "Verify trust state path and permissions."
+      - "Check trust policy configuration."
+
+  # ---------------------------------------------------------------------------
+  # Credential readiness (vault / secret stores)
+  # ---------------------------------------------------------------------------
+  vault.ready:
+    enabled: true
+    severity: "critical"
+    description: "Vault/credential store is reachable; required KDF/master key is present."
+    remediation:
+      - "Verify FRANCIS_VAULT_PATH exists and is writable."
+      - "Ensure master key is provided via secure mechanism (not committed)."
+
+  # ---------------------------------------------------------------------------
+  # Network readiness / egress policy
+  # ---------------------------------------------------------------------------
+  network.egress_allowed:
+    enabled: true
+    severity: "high"
+    description: "Network egress is permitted by profile and runtime policy."
+    remediation:
+      - "Enable web learning/egress only in allowed profiles."
+      - "Check config/models/specialized/research.yaml and safety.yaml posture."
+
+  api.reachable:
+    enabled: true
+    severity: "medium"
+    description: "Local API endpoint is reachable (if required for the action)."
+    thresholds:
+      connect_timeout_ms: 1500
+    remediation:
+      - "Start API service."
+      - "Check port binding and firewall rules."
+
+  # ---------------------------------------------------------------------------
+  # Industrial readiness (only if industrial subsystem is enabled)
+  # ---------------------------------------------------------------------------
+  industrial.ready:
+    enabled: false
+    severity: "critical"
+    description: "Industrial control subsystem is initialized and in safe mode."
+    remediation:
+      - "Ensure industrial subsystem is enabled and connected."
+      - "Verify safety interlocks."
+
+  # ---------------------------------------------------------------------------
+  # Safety locks (kill switch, dry-run, operator presence)
+  # ---------------------------------------------------------------------------
+  safety.locks_ok:
+    enabled: true
+    severity: "critical"
+    description: "Safety locks allow action (no global kill-switch, not forced read-only, approvals ok)."
+    remediation:
+      - "Check for kill-switch env var (FRANCIS_KILL_SWITCH=true)."
+      - "Check read-only mode env var (FRANCIS_READ_ONLY=true)."
+      - "Resolve pending approvals."
+
+# ------------------------------------------------------------------------------
+# Safety locks and overrides (runtime-controlled)
+# ------------------------------------------------------------------------------
+locks:
+  # These are policy-level names; runtime maps to env/config.
+  kill_switch:
+    enabled: true
+    env_var: "FRANCIS_KILL_SWITCH"
+    deny_all_actions_when_true: true
+
+  read_only_mode:
+    enabled: true
+    env_var: "FRANCIS_READ_ONLY"
+    when_true:
+      allow_categories:
+        - "read_only"
+      deny_categories:
+        - "local_mutation"
+        - "system_mutation"
+        - "credential_ops"
+        - "network_egress"
+        - "industrial_actuation"
+
+  dry_run_mode:
+    enabled: true
+    env_var: "FRANCIS_DRY_RUN"
+    when_true:
+      behavior: "simulate_only" # simulate_only | allow_if_read_only
+      notes: "Tools may run in no-op/sandbox mode; mutations prohibited."
+
+# ------------------------------------------------------------------------------
+# Readiness scoring (optional but useful for dashboards)
+# ------------------------------------------------------------------------------
+scoring:
+  enabled: true
+
+  # Compute an aggregate readiness score 0..100 as an operator signal.
+  # Fail-closed still applies; score is informational.
+  weights:
+    critical: 40
+    high: 25
+    medium: 20
+    low: 15
+
+  # If score falls below threshold, recommend read-only mode.
+  thresholds:
+    recommend_read_only_below: 80
+    deny_mutations_below: 70
+
+# ------------------------------------------------------------------------------
+# Output/reporting contract (for API/UI)
+# ------------------------------------------------------------------------------
+reporting:
+  enabled: true
+
+  # Expected report fields (implementers should produce these)
+  fields:
+    - "ready"                 # boolean
+    - "category"              # action category evaluated
+    - "failed_checks"         # array of check ids
+    - "reason_codes"          # stable reason codes
+    - "remediations"          # actionable operator hints
+    - "profile"               # active environment profile
+    - "locks"                 # kill-switch/read-only/dry-run state
+    - "score"                 # optional 0..100 score
+    - "evaluated_at"          # timestamp
+
+  reason_codes:
+    # Canonical reason codes for consistent UI + logging
+    - "NOT_READY_CORE"
+    - "NOT_READY_STORAGE"
+    - "NOT_READY_LEDGER"
+    - "NOT_READY_GOVERNANCE"
+    - "NOT_READY_TRUST"
+    - "NOT_READY_APPROVALS"
+    - "NOT_READY_VAULT"
+    - "NOT_READY_NETWORK"
+    - "NOT_READY_INDUSTRIAL"
+    - "LOCK_KILL_SWITCH"
+    - "LOCK_READ_ONLY"
+    - "LOCK_DRY_RUN"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific strictness)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    action_readiness:
+      fail_closed: false
+      on_not_ready: "degrade_to_read_only"
+      allow_auto_read_only: true
+    categories:
+      network_egress:
+        requires:
+          - "core.boot_ok"
+          - "logging.ready"
+          - "network.egress_allowed"
+
+  workstation:
+    action_readiness:
+      fail_closed: true
+      on_not_ready: "degrade_to_read_only"
+    checks:
+      api.reachable:
+        enabled: true
+
+  production:
+    action_readiness:
+      fail_closed: true
+      on_not_ready: "deny"
+    checks:
+      audit.ready:
+        enabled: true
+      core.profile_known:
+        enabled: true
+      core.time_ok:
+        enabled: true
+
+  regulated:
+    action_readiness:
+      fail_closed: true
+      on_not_ready: "deny"
+    categories:
+      system_mutation:
+        requires:
+          - "core.boot_ok"
+          - "storage.writable"
+          - "ledger.writable"
+          - "audit.ready"
+          - "governance.ready"
+          - "approvals.ready"
+          - "trust.ready"
+          - "logging.ready"
+      network_egress:
+        # Default deny network egress in regulated unless explicitly allowed by policy elsewhere.
+        requires:
+          - "core.boot_ok"
+          - "governance.ready"
+          - "network.egress_allowed"
+          - "approvals.ready"
+          - "trust.ready"
+          - "logging.ready"
+    checks:
+      network.egress_allowed:
+        enabled: true
+
+  safety_critical:
+    action_readiness:
+      fail_closed: true
+      on_not_ready: "deny"
+    categories:
+      industrial_actuation:
+        requires:
+          - "core.boot_ok"
+          - "storage.writable"
+          - "ledger.writable"
+          - "audit.ready"
+          - "governance.ready"
+          - "approvals.ready"
+          - "trust.ready"
+          - "industrial.ready"
+          - "safety.locks_ok"
+          - "logging.ready"
+    locks:
+      dry_run_mode:
+        when_true:
+          behavior: "simulate_only"

@@ -1,0 +1,83 @@
+{
+  "plugin_id": "builtin.echo",
+  "name": "Builtin Echo",
+  "version": "1.0.0",
+  "description": "Reference plugin spec used to validate registry compilation.",
+  "origin": "builtin",
+  "entrypoint": "plugins/builtins/echo.py",
+  "risk_class": "normal",
+  "capabilities": [
+    "echo",
+    "diagnostics"
+  ],
+  "permissions": {
+    "scopes": [
+      "workspace:read"
+    ]
+  },
+  "constraints": {
+    "max_payload_bytes": 4096
+  },
+  "sandbox_profile": "readonly",
+  "telemetry": {
+    "audit_level": "standard",
+    "redaction_rules": [
+      "default"
+    ]
+  },
+  "compatibility": {
+    "min_core_version": "0.3.0"
+  },
+  "attestation": {
+    "publisher": "francis-core"
+  },
+  "tools": [
+    {
+      "tool_name": "builtin.echo.run",
+      "action": "run",
+      "summary": "Echo a payload back to the caller.",
+      "description": "Reference execution tool for plugin contract tests.",
+      "methods": [
+        "execute"
+      ],
+      "resources": [
+        "workspace"
+      ],
+      "policy_tags": [
+        "local_only"
+      ],
+      "requires_approvals": false,
+      "requires_trust_level": 0,
+      "rate_limits": {
+        "burst": 5,
+        "window_seconds": 60
+      },
+      "idempotency": true,
+      "dry_run_supported": true,
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "echo"
+        ],
+        "properties": {
+          "echo": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

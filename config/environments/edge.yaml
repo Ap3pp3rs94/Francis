@@ -1,0 +1,307 @@
+# ==============================================================================
+# Francis Environment Profile: EDGE
+# File: config/environments/edge.yaml
+#
+# INTENT:
+#   Edge / on-prem profile:
+#     - Runs near operations (LAN/OT), often with intermittent WAN
+#     - Local inference preferred, remote providers optional but constrained
+#     - Governance is strict for high/critical actions
+#     - Observability is strong (audit required for impactful events)
+#     - Network policy favors internal allowlists; internet egress is disabled by default
+#
+# SECURITY POSTURE:
+#   - Safer than dev, more permissive than airgapped (when explicitly configured).
+#   - Fail-closed on unclear external egress requests.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: edge
+  name: Edge
+  description: >
+    Edge/on-prem posture: local-first inference and storage, strong audit trails,
+    and explicit allowlist-based network access. Designed for reliability and
+    safety on constrained hardware and semi-trusted networks.
+
+  invariants:
+    - "Local-first operation: API + models should run even if WAN is down."
+    - "No uncontrolled internet egress."
+    - "High/critical actions remain approval-gated."
+    - "Audit is required for operationally impactful actions."
+
+  operator_notes:
+    - "If WAN is required, add explicit allowlists for known endpoints only."
+    - "If deployed on OT networks, keep industrial control approval-gated."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: edge
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+# ------------------------------------------------------------------------------
+# API posture
+# ------------------------------------------------------------------------------
+api:
+  # Edge nodes often serve an internal LAN UI; still bind conservatively by default.
+  host: "0.0.0.0"
+  port: 8000
+
+  security:
+    auth_mode: jwt                 # jwt is preferred for LAN/multi-user
+    allow_anonymous: false
+    trust_proxy_headers: true      # edge often sits behind a reverse proxy
+
+  cors:
+    enabled: true
+    # Prefer explicit LAN origins. Operators can adjust to their subnet/DNS.
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  timeouts:
+    read_s: 45
+    write_s: 60
+    idle_s: 120
+
+# ------------------------------------------------------------------------------
+# Observability (edge = production-ish)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl                  # edge favors machine-parsable logs
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  tracing:
+    enabled: true
+    # Edge nodes can get chatty; sample a bit instead of 100%.
+    sample_rate: 0.35
+
+# ------------------------------------------------------------------------------
+# Governance (edge must be safe)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 2
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 50
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (explicit allowlists)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: true
+
+  # Edge usually needs LAN egress; internet egress is OFF by default.
+  egress:
+    enabled: false
+
+    # Allowlist is used only when enabled=true.
+    allowlist:
+      # Loopback always allowed.
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+
+      # Private RFC1918 ranges are COMMENTED out by default.
+      # Uncomment if you allow LAN egress broadly.
+      # - "10.0.0.0/8"
+      # - "172.16.0.0/12"
+      # - "192.168.0.0/16"
+
+    # Always keep metadata endpoints blocked.
+    denylist:
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (local-first, remote optional)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: false       # edge should be stable; pull via controlled ops
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false                # enable only when WAN allowlist + keys are present
+
+  sampling:
+    temperature: 0.35
+    top_p: 0.9
+    max_tokens: 1536
+
+# ------------------------------------------------------------------------------
+# Memory / vectors (edge: prefer local services, fallback to disk)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+
+    pgvector:
+      enabled: false
+      dsn: ""
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 300
+      max_days: 45
+
+# ------------------------------------------------------------------------------
+# Feature flags (edge-safe defaults)
+# ------------------------------------------------------------------------------
+features:
+  web_learning:
+    # Edge may have WAN sometimes, but ingestion is still risky.
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      url: ""
+    gossip:
+      enabled: false
+
+  industrial:
+    enabled: true
+    # Telemetry is allowed; control actions remain locked down by default.
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  connectors:
+    cloud:
+      enabled: false
+    saas:
+      enabled: false
+    communication:
+      enabled: true
+      # Edge is often offline; keep external comms disabled unless configured.
+      email_enabled: false
+      sms_enabled: false
+      push_enabled: false
+
+# ------------------------------------------------------------------------------
+# External services (edge: typically local docker or local managed services)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: true
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 10
+    pool_timeout_s: 30
+
+  redis:
+    enabled: true
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 10
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Assertions (optional lint/fail-fast checks)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: approvals_strict
+    severity: error
+    expr: "{{governance.approvals.mode == 'strict'}}"
+    message: "Edge profile requires governance.approvals.mode=strict."
+
+  - id: local_models_required
+    severity: error
+    expr: "{{models.default_provider == 'ollama'}}"
+    message: "Edge profile requires local-first models (ollama)."
+
+  - id: egress_off_by_default
+    severity: warn
+    expr: "{{network.egress.enabled == false}}"
+    message: "Edge profile defaults to network.egress.enabled=false. Enable only with explicit allowlist."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "EDGE"
+  banner:
+    enabled: true
+    text: "EDGE MODE — LOCAL-FIRST / STRICT GOVERNANCE"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

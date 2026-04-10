@@ -1,0 +1,590 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+import os
+import re
+import time
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter
+from fastapi.responses import Response
+
+from francis.kernel.paths import data_dir
+
+router = APIRouter()
+_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _slug(value: str) -> str:
+    out = []
+    last_sep = False
+    for ch in value.strip().lower():
+        if ch.isalnum():
+            out.append(ch)
+            last_sep = False
+            continue
+        if ch in {" ", "-", "_", ".", ":"} and not last_sep:
+            out.append("-")
+            last_sep = True
+    slug = "".join(out).strip("-")
+    return slug[:64] or "item"
+
+
+def _new_id(prefix: str, seed: str) -> str:
+    return f"{prefix}_{_slug(seed)}_{uuid.uuid4().hex[:8]}"
+
+
+def _parse_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        candidates = [part.strip() for part in value.split(",")]
+    elif isinstance(value, list):
+        candidates = [_safe_str(item).strip() for item in value]
+    else:
+        return []
+
+    out: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in out:
+            out.append(candidate)
+    return out
+
+
+def _meta(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _validate_id(value: str, field: str = "id") -> str:
+    text = value.strip()
+    if not text:
+        raise ValueError(f"{field} is required")
+    if not _ID_RE.match(text):
+        raise ValueError(f"invalid {field}")
+    return text
+
+
+def _path() -> Path:
+    return data_dir() / "explanations" / "_registry.json"
+
+
+def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _default_registry() -> dict[str, Any]:
+    return {"version": 1, "updated_at": _now_s(), "records": {}}
+
+
+def _normalize_record(record_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    ts = int(raw.get("ts") or raw.get("created_ts") or _now_s())
+    tags = _parse_list(raw.get("tags"))
+    tools_raw = raw.get("tools") if isinstance(raw.get("tools"), list) else []
+    tools = [tool for tool in tools_raw if isinstance(tool, dict)]
+
+    content_raw = raw.get("content")
+    content: dict[str, Any] | str | None
+    if isinstance(content_raw, dict):
+        content = content_raw
+    elif isinstance(content_raw, str):
+        content = content_raw
+    else:
+        content = None
+
+    return {
+        "id": record_id,
+        "ts": ts,
+        "kind": _safe_str(raw.get("kind")).strip() or "audit",
+        "severity": _safe_str(raw.get("severity")).strip(),
+        "title": _safe_str(raw.get("title")).strip(),
+        "summary": _safe_str(raw.get("summary")).strip(),
+        "run_id": _safe_str(raw.get("run_id")).strip(),
+        "domain": _safe_str(raw.get("domain")).strip(),
+        "conversation_id": _safe_str(raw.get("conversation_id") or raw.get("thread_id")).strip(),
+        "approval_id": _safe_str(raw.get("approval_id")).strip(),
+        "plugin_id": _safe_str(raw.get("plugin_id")).strip(),
+        "tags": tags,
+        "content": content,
+        "inputs": _meta(raw.get("inputs")),
+        "outputs": _meta(raw.get("outputs")),
+        "policy": _meta(raw.get("policy")),
+        "tools": tools,
+        "meta": _meta(raw.get("meta")),
+    }
+
+
+def _summary(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": record.get("id"),
+        "ts": record.get("ts"),
+        "kind": record.get("kind"),
+        "severity": record.get("severity"),
+        "title": record.get("title"),
+        "summary": record.get("summary"),
+        "run_id": record.get("run_id"),
+        "domain": record.get("domain"),
+        "conversation_id": record.get("conversation_id"),
+        "approval_id": record.get("approval_id"),
+        "plugin_id": record.get("plugin_id"),
+        "tags": record.get("tags") or [],
+        "meta": record.get("meta") if isinstance(record.get("meta"), dict) else {},
+    }
+
+
+def _load_registry() -> dict[str, Any]:
+    path = _path()
+    if not path.exists():
+        return _default_registry()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return _default_registry()
+    if not isinstance(raw, dict):
+        return _default_registry()
+
+    out = _default_registry()
+    out["version"] = int(raw.get("version") or 1)
+    out["updated_at"] = int(raw.get("updated_at") or _now_s())
+
+    records_obj = raw.get("records")
+    records: dict[str, dict[str, Any]] = {}
+    if isinstance(records_obj, dict):
+        for rid, item in records_obj.items():
+            record_id = _safe_str(rid).strip()
+            if not record_id or not isinstance(item, dict):
+                continue
+            records[record_id] = _normalize_record(record_id, item)
+    elif isinstance(records_obj, list):
+        for item in records_obj:
+            if not isinstance(item, dict):
+                continue
+            record_id = _safe_str(item.get("id")).strip() or _new_id("exp", _safe_str(item.get("title") or item.get("kind")).strip() or "record")
+            records[record_id] = _normalize_record(record_id, item)
+
+    if len(records) > 50_000:
+        keep_ids = sorted(records.keys(), key=lambda rid: (int(records[rid].get("ts") or 0), rid), reverse=True)[:50_000]
+        records = {rid: records[rid] for rid in keep_ids}
+
+    out["records"] = records
+    return out
+
+
+def _save_registry(registry: dict[str, Any]) -> None:
+    records_obj = registry.get("records")
+    records: dict[str, dict[str, Any]] = {}
+    if isinstance(records_obj, dict):
+        for rid, item in records_obj.items():
+            record_id = _safe_str(rid).strip()
+            if not record_id or not isinstance(item, dict):
+                continue
+            records[record_id] = _normalize_record(record_id, item)
+
+    if len(records) > 50_000:
+        keep_ids = sorted(records.keys(), key=lambda rid: (int(records[rid].get("ts") or 0), rid), reverse=True)[:50_000]
+        records = {rid: records[rid] for rid in keep_ids}
+
+    payload = {
+        "version": int(registry.get("version") or 1),
+        "updated_at": _now_s(),
+        "records": records,
+    }
+    _atomic_write(_path(), payload)
+
+
+def _all_records(registry: dict[str, Any]) -> list[dict[str, Any]]:
+    records_obj = registry.get("records")
+    out: list[dict[str, Any]] = []
+    if isinstance(records_obj, dict):
+        for rid, item in records_obj.items():
+            if isinstance(item, dict):
+                out.append(_normalize_record(_safe_str(rid), item))
+    return out
+
+
+def _filter_records(
+    items: list[dict[str, Any]],
+    *,
+    kind: str = "",
+    severity: str = "",
+    domain: str = "",
+    run_id: str = "",
+    conversation_id: str = "",
+    approval_id: str = "",
+    plugin_id: str = "",
+    tags: list[str] | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    search: str = "",
+) -> list[dict[str, Any]]:
+    kind_filter = kind.strip().lower()
+    severity_filter = severity.strip().lower()
+    domain_filter = domain.strip().lower()
+    run_filter = run_id.strip().lower()
+    conversation_filter = conversation_id.strip().lower()
+    approval_filter = approval_id.strip().lower()
+    plugin_filter = plugin_id.strip().lower()
+    search_filter = search.strip().lower()
+    tag_filter = set(tags or [])
+
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if kind_filter and _safe_str(item.get("kind")).strip().lower() != kind_filter:
+            continue
+        if severity_filter and _safe_str(item.get("severity")).strip().lower() != severity_filter:
+            continue
+        if domain_filter and _safe_str(item.get("domain")).strip().lower() != domain_filter:
+            continue
+        if run_filter and _safe_str(item.get("run_id")).strip().lower() != run_filter:
+            continue
+        if conversation_filter and _safe_str(item.get("conversation_id")).strip().lower() != conversation_filter:
+            continue
+        if approval_filter and _safe_str(item.get("approval_id")).strip().lower() != approval_filter:
+            continue
+        if plugin_filter and _safe_str(item.get("plugin_id")).strip().lower() != plugin_filter:
+            continue
+        if tag_filter and not tag_filter.issubset(set(_parse_list(item.get("tags")))):
+            continue
+
+        ts = int(item.get("ts") or 0)
+        if start_ts is not None and ts < int(start_ts):
+            continue
+        if end_ts is not None and ts > int(end_ts):
+            continue
+
+        if search_filter:
+            haystack = json.dumps(item, ensure_ascii=False, default=str).lower()
+            if search_filter not in haystack:
+                continue
+
+        out.append(item)
+
+    return out
+
+
+def _paginate(items: list[dict[str, Any]], limit: int, offset: int) -> tuple[list[dict[str, Any]], int, int, int]:
+    safe_limit = max(1, min(int(limit), 5000))
+    safe_offset = max(0, int(offset))
+    total = len(items)
+    return items[safe_offset : safe_offset + safe_limit], total, safe_limit, safe_offset
+
+
+def _csv(records: list[dict[str, Any]]) -> str:
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "id",
+            "ts",
+            "kind",
+            "severity",
+            "title",
+            "summary",
+            "run_id",
+            "domain",
+            "conversation_id",
+            "approval_id",
+            "plugin_id",
+            "tags",
+            "meta",
+        ],
+    )
+    writer.writeheader()
+    for item in records:
+        writer.writerow(
+            {
+                "id": item.get("id"),
+                "ts": item.get("ts"),
+                "kind": item.get("kind"),
+                "severity": item.get("severity"),
+                "title": item.get("title"),
+                "summary": item.get("summary"),
+                "run_id": item.get("run_id"),
+                "domain": item.get("domain"),
+                "conversation_id": item.get("conversation_id"),
+                "approval_id": item.get("approval_id"),
+                "plugin_id": item.get("plugin_id"),
+                "tags": ",".join(_parse_list(item.get("tags"))),
+                "meta": json.dumps(item.get("meta") if isinstance(item.get("meta"), dict) else {}, ensure_ascii=False),
+            }
+        )
+    return output.getvalue()
+
+
+def _export_filename(fmt: str) -> str:
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    ext = "csv" if fmt == "csv" else "json"
+    return f"francis-explanations-{stamp}.{ext}"
+
+
+def _query_records(
+    *,
+    kind: str | None = None,
+    severity: str | None = None,
+    domain: str | None = None,
+    run_id: str | None = None,
+    conversation_id: str | None = None,
+    approval_id: str | None = None,
+    plugin_id: str | None = None,
+    tags: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    items = _all_records(_load_registry())
+    filtered = _filter_records(
+        items,
+        kind=_safe_str(kind),
+        severity=_safe_str(severity),
+        domain=_safe_str(domain),
+        run_id=_safe_str(run_id),
+        conversation_id=_safe_str(conversation_id),
+        approval_id=_safe_str(approval_id),
+        plugin_id=_safe_str(plugin_id),
+        tags=_parse_list(tags),
+        start_ts=start_ts,
+        end_ts=end_ts,
+        search=_safe_str(search),
+    )
+    filtered.sort(key=lambda item: (int(item.get("ts") or 0), _safe_str(item.get("id"))), reverse=True)
+    return filtered
+
+
+@router.get("/")
+def root_status() -> dict[str, Any]:
+    return status()
+
+
+@router.get("/status")
+def status() -> dict[str, Any]:
+    try:
+        items = _all_records(_load_registry())
+        kinds: dict[str, int] = {}
+        severities: dict[str, int] = {}
+        for item in items:
+            kind = _safe_str(item.get("kind")).strip() or "audit"
+            severity = _safe_str(item.get("severity")).strip() or "unknown"
+            kinds[kind] = kinds.get(kind, 0) + 1
+            severities[severity] = severities.get(severity, 0) + 1
+
+        return {
+            "ok": True,
+            "route": "explanation",
+            "status": "ready",
+            "ts": _now_s(),
+            "counts": {
+                "records": len(items),
+                "kinds": kinds,
+                "severities": severities,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "route": "explanation", "status": "error", "error": str(exc)}
+
+
+@router.get("/health")
+def health() -> dict[str, Any]:
+    body = status()
+    body["route"] = "explanation.health"
+    return body
+
+
+@router.get("/list")
+def list_explanations(
+    limit: int = 200,
+    offset: int = 0,
+    kind: str | None = None,
+    severity: str | None = None,
+    domain: str | None = None,
+    run_id: str | None = None,
+    conversation_id: str | None = None,
+    approval_id: str | None = None,
+    plugin_id: str | None = None,
+    tags: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    try:
+        items = _query_records(
+            kind=kind,
+            severity=severity,
+            domain=domain,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            approval_id=approval_id,
+            plugin_id=plugin_id,
+            tags=tags,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            search=search,
+        )
+        page, total, safe_limit, safe_offset = _paginate(items, limit, offset)
+        summaries = [_summary(item) for item in page]
+        return {"items": summaries, "records": summaries, "total": total, "limit": safe_limit, "offset": safe_offset}
+    except Exception as exc:
+        return {"items": [], "records": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+
+
+@router.get("/get")
+def get_explanation(id: str) -> dict[str, Any]:
+    try:
+        explanation_id = _validate_id(id, "explanation id")
+        registry = _load_registry()
+        records_obj = registry.get("records")
+        if not isinstance(records_obj, dict):
+            records_obj = {}
+        raw = records_obj.get(explanation_id)
+        if not isinstance(raw, dict):
+            return {"ok": False, "error": "not_found", "item": None}
+        item = _normalize_record(explanation_id, raw)
+        return {
+            "ok": True,
+            "item": _summary(item),
+            "content": item.get("content"),
+            "inputs": item.get("inputs") if isinstance(item.get("inputs"), dict) else {},
+            "outputs": item.get("outputs") if isinstance(item.get("outputs"), dict) else {},
+            "policy": item.get("policy") if isinstance(item.get("policy"), dict) else {},
+            "tools": item.get("tools") if isinstance(item.get("tools"), list) else [],
+            "meta": item.get("meta") if isinstance(item.get("meta"), dict) else {},
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "item": None}
+
+
+@router.get("/export")
+def export_explanations(
+    format: str = "json",
+    limit: int = 10_000,
+    offset: int = 0,
+    kind: str | None = None,
+    severity: str | None = None,
+    domain: str | None = None,
+    run_id: str | None = None,
+    conversation_id: str | None = None,
+    approval_id: str | None = None,
+    plugin_id: str | None = None,
+    tags: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    search: str | None = None,
+) -> Response:
+    try:
+        fmt = _safe_str(format).strip().lower() or "json"
+        if fmt not in {"json", "csv"}:
+            return Response(
+                content=json.dumps({"ok": False, "error": "unsupported_format"}, ensure_ascii=False),
+                media_type="application/json",
+                status_code=400,
+            )
+
+        safe_limit = max(1, min(int(limit), 10_000))
+        safe_offset = max(0, int(offset))
+        filtered = _query_records(
+            kind=kind,
+            severity=severity,
+            domain=domain,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            approval_id=approval_id,
+            plugin_id=plugin_id,
+            tags=tags,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            search=search,
+        )
+        summaries = [_summary(item) for item in filtered[safe_offset : safe_offset + safe_limit]]
+
+        if fmt == "csv":
+            content = _csv(summaries)
+            media_type = "text/csv"
+        else:
+            content = json.dumps({"items": summaries}, ensure_ascii=False, indent=2, default=str)
+            media_type = "application/json"
+
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{_export_filename(fmt)}"'},
+        )
+    except Exception as exc:
+        return Response(
+            content=json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False),
+            media_type="application/json",
+            status_code=500,
+        )
+
+
+@router.post("/record")
+@router.post("/create")
+def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        requested_id = _safe_str(payload.get("id")).strip()
+        title = _safe_str(payload.get("title")).strip()
+        kind = _safe_str(payload.get("kind")).strip() or "audit"
+
+        if requested_id:
+            explanation_id = _validate_id(requested_id, "explanation id")
+        else:
+            explanation_id = _new_id("exp", title or kind or "record")
+
+        registry = _load_registry()
+        records_obj = registry.get("records")
+        if not isinstance(records_obj, dict):
+            records_obj = {}
+            registry["records"] = records_obj
+
+        existing = records_obj.get(explanation_id)
+        existing_obj = existing if isinstance(existing, dict) else {}
+        ts = int(payload.get("ts") or existing_obj.get("ts") or _now_s())
+
+        merged = {
+            **existing_obj,
+            "id": explanation_id,
+            "ts": ts,
+            "kind": kind or _safe_str(existing_obj.get("kind")).strip() or "audit",
+            "severity": _safe_str(payload.get("severity")).strip() or _safe_str(existing_obj.get("severity")).strip(),
+            "title": title or _safe_str(existing_obj.get("title")).strip(),
+            "summary": _safe_str(payload.get("summary")).strip() or _safe_str(existing_obj.get("summary")).strip(),
+            "run_id": _safe_str(payload.get("run_id")).strip() or _safe_str(existing_obj.get("run_id")).strip(),
+            "domain": _safe_str(payload.get("domain")).strip() or _safe_str(existing_obj.get("domain")).strip(),
+            "conversation_id": _safe_str(payload.get("conversation_id") or payload.get("thread_id")).strip()
+            or _safe_str(existing_obj.get("conversation_id")).strip(),
+            "approval_id": _safe_str(payload.get("approval_id")).strip() or _safe_str(existing_obj.get("approval_id")).strip(),
+            "plugin_id": _safe_str(payload.get("plugin_id")).strip() or _safe_str(existing_obj.get("plugin_id")).strip(),
+            "tags": _parse_list(payload.get("tags") if "tags" in payload else existing_obj.get("tags")),
+            "content": payload.get("content") if "content" in payload else existing_obj.get("content"),
+            "inputs": _meta(payload.get("inputs") if "inputs" in payload else existing_obj.get("inputs")),
+            "outputs": _meta(payload.get("outputs") if "outputs" in payload else existing_obj.get("outputs")),
+            "policy": _meta(payload.get("policy") if "policy" in payload else existing_obj.get("policy")),
+            "tools": payload.get("tools")
+            if isinstance(payload.get("tools"), list)
+            else (existing_obj.get("tools") if isinstance(existing_obj.get("tools"), list) else []),
+            "meta": {**_meta(existing_obj.get("meta")), **_meta(payload.get("meta"))},
+        }
+        item = _normalize_record(explanation_id, merged)
+        records_obj[explanation_id] = item
+        _save_registry(registry)
+        return {"ok": True, "id": explanation_id, "item": _summary(item)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}

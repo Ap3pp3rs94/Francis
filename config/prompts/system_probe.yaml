@@ -1,0 +1,509 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: System Probe (governed read-only diagnostics & profiling plan)
+# Path:   config/prompts/system_probe.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Produces a structured, bounded system probe plan used by:
+#   - system_intelligence/probe (profiling)
+#   - self_heal (triage prechecks)
+#   - operations (runbooks)
+#
+# The probe plan is designed to be:
+#   - READ-ONLY by default (safe commands only)
+#   - Observable (expected outputs + parsing hints)
+#   - Bounded (timeouts, max commands, scope)
+#   - Redaction-aware (avoid secrets/PII; provide redaction rules)
+#
+# Typical outputs:
+#   - host health snapshot (cpu/mem/disk)
+#   - process/service status (api/daemon/workers)
+#   - port checks (LOCALHOST only unless explicitly approved)
+#   - dependency checks (redis/postgres/qdrant/ollama) with safe pings
+#   - runtime introspection (python/node versions, venv existence)
+#   - log tail suggestions (bounded, no secret files)
+#   - artifact plan (what to store + where)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Fail-closed:
+#     * If platform/constraints missing -> ask minimal followups.
+# - Default to read-only commands:
+#     * NO deletes, NO writes, NO installs, NO service restarts.
+#     * If mutation is requested, mark it as blocked and propose an alternative read-only check.
+# - No secrets:
+#     * Never dump environment variables.
+#     * Never read .env, vault dbs, key material, or credential files.
+# - Network posture:
+#     * Do not scan external networks.
+#     * Localhost-only port checks permitted as read-only.
+#     * Remote endpoint checks allowed only if explicitly provided as known dependency endpoints.
+# - Observability:
+#     * Provide reason codes + audit events.
+#     * Provide parsing hints so results can be normalized into JSON.
+# ==============================================================================
+version: 1
+
+id: "system.probe"
+title: "System Probe"
+owner: "francis"
+intent: "compose_system_probe_plan"
+mode: "strict" # policy | strict
+
+meta:
+  notes:
+    - "Produces read-only diagnostics plan: commands + expected outputs + parsing."
+    - "Used to build system baselines and to support self-heal runbooks."
+    - "Designed for Windows-first execution but supports Linux/macOS outputs."
+  compatibility:
+    - "Stable envelope; consumers may ignore unknown fields."
+    - "Commands are suggestions; executor may translate to native tooling."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+
+      # Why are we probing?
+      goal: { type: string, required: true } # e.g., "api fails to start", "baseline snapshot", "disk pressure"
+      scope_hint:
+        type: string
+        required: false
+        enum: ["minimal", "standard", "deep", "baseline", "incident", "unknown"]
+
+      # Optional: what components are involved
+      components:
+        type: array
+        required: false
+        items:
+          type: string
+          enum:
+            - "api"
+            - "daemon"
+            - "workers"
+            - "chat_ui"
+            - "ledger"
+            - "approvals"
+            - "trust"
+            - "plugins"
+            - "domains"
+            - "memory"
+            - "vectors"
+            - "web_learning"
+            - "industrial"
+            - "federation"
+            - "dependencies"
+            - "unknown"
+
+      # Optional: known service endpoints (safe, non-secret)
+      endpoints:
+        type: object
+        required: false
+        additionalProperties: true # e.g., {"api_base":"http://127.0.0.1:8000", "ollama":"http://127.0.0.1:11434"}
+
+      # Optional: observed errors (sanitized)
+      error_summary: { type: string, required: false }
+      logs_tail:
+        type: array
+        required: false
+        items: { type: string }
+
+  environment:
+    type: object
+    required: false
+    fields:
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | workstation | ...
+      platform: { type: string, required: false } # windows | linux | mac
+      shell_hint: { type: string, required: false } # powershell | bash | zsh | cmd
+      cwd: { type: string, required: false }
+
+      # Safe version hints (no secrets)
+      python_exe: { type: string, required: false }
+      python_version: { type: string, required: false }
+      node_version: { type: string, required: false }
+      npm_version: { type: string, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      trust_level: { type: number, required: false }
+      approvals_enabled: { type: boolean, required: false }
+
+      # If present, the system can mark certain probes as requiring approval (but still not execute here).
+      default_requires_approval_for_mutation: { type: boolean, required: false }
+
+  constraints:
+    type: object
+    required: false
+    fields:
+      # Hard limits to prevent runaway probes
+      max_commands: { type: number, required: false } # default 18
+      max_seconds_total: { type: number, required: false } # default 45
+      per_command_timeout_s: { type: number, required: false } # default 8
+
+      # If true, only allow read-only commands (default true).
+      read_only_only: { type: boolean, required: false }
+
+      # If false, network checks must be skipped (even localhost).
+      allow_localhost_network_checks: { type: boolean, required: false }
+
+      # If false, do not propose reading log files; rely on already-provided logs_tail.
+      allow_log_reads: { type: boolean, required: false }
+
+      # If false, do not propose process listing (privacy posture).
+      allow_process_listing: { type: boolean, required: false }
+
+  storage:
+    type: object
+    required: false
+    fields:
+      # Where an executor would store artifacts (safe paths only)
+      profiles_dir: { type: string, required: false } # e.g., ./data/system/profiles
+      baselines_dir: { type: string, required: false } # e.g., ./data/system/baselines
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - probe
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required: ["mode", "confidence", "needs_followup", "followup_questions", "reason_codes", "summary"]
+        properties:
+          # - ask: missing critical inputs to propose a safe plan
+          # - propose: plan ready
+          # - deny: request is unsafe (e.g., destructive probe demanded in lockdown)
+          mode: { type: string, enum: ["ask", "propose", "deny"] }
+          confidence: { type: number } # 0..1
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          summary: { type: string }
+
+      probe:
+        type: object
+        additionalProperties: false
+        required:
+          - title
+          - scope
+          - posture
+          - commands
+          - parsing
+          - artifacts
+          - expected_findings
+          - redaction_rules
+          - blocked_requests
+        properties:
+          title: { type: string }
+
+          scope:
+            type: object
+            additionalProperties: false
+            required: ["scope_hint", "components", "bounded_by"]
+            properties:
+              scope_hint: { type: string }
+              components:
+                type: array
+                items: { type: string }
+              bounded_by:
+                type: object
+                additionalProperties: false
+                required: ["max_commands", "max_seconds_total", "per_command_timeout_s"]
+                properties:
+                  max_commands: { type: number }
+                  max_seconds_total: { type: number }
+                  per_command_timeout_s: { type: number }
+
+          posture:
+            type: object
+            additionalProperties: false
+            required: ["read_only_only", "network_scope", "notes"]
+            properties:
+              read_only_only: { type: boolean }
+              network_scope: { type: string, enum: ["none", "localhost_only", "known_endpoints_only"] }
+              notes:
+                type: array
+                items: { type: string }
+
+          commands:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+                - platform
+                - shell
+                - command
+                - purpose
+                - category
+                - timeout_s
+                - blocking
+              properties:
+                id: { type: string }
+                # windows | linux | mac | any
+                platform: { type: string }
+                # powershell | bash | cmd | any
+                shell: { type: string }
+                command: { type: string }
+                purpose: { type: string }
+                category:
+                  type: string
+                  enum:
+                    - "host_health"
+                    - "disk"
+                    - "process"
+                    - "ports"
+                    - "dependencies"
+                    - "runtime"
+                    - "filesystem"
+                    - "logs"
+                    - "other"
+                timeout_s: { type: number }
+                blocking: { type: boolean }
+
+          parsing:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["command_id", "output_format", "extraction_notes", "normalize_to"]
+              properties:
+                command_id: { type: string }
+                output_format: { type: string, enum: ["text", "json", "table", "kv", "unknown"] }
+                extraction_notes:
+                  type: array
+                  items: { type: string }
+                # normalize_to is a suggested JSON key path in the system profile object
+                normalize_to: { type: string }
+
+          artifacts:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "name", "path_hint", "notes"]
+              properties:
+                kind: { type: string, enum: ["profile_snapshot", "baseline_candidate", "log_excerpt", "raw_output", "other"] }
+                name: { type: string }
+                path_hint: { type: string }
+                notes: { type: string }
+
+          expected_findings:
+            type: array
+            items: { type: string }
+
+          redaction_rules:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["rule", "applies_to", "notes"]
+              properties:
+                rule: { type: string }
+                applies_to: { type: array, items: { type: string } }
+                notes: { type: string }
+
+          # If the original request asked for unsafe probes, list them here as blocked
+          blocked_requests:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["request", "reason", "safer_alternative"]
+              properties:
+                request: { type: string }
+                reason: { type: string }
+                safer_alternative: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required: ["contains_secrets", "contains_pii", "wrongdoing_topic", "blocked", "blocked_reasons"]
+        properties:
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          wrongdoing_topic: { type: boolean }
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string, enum: ["before", "after", "on_followup", "on_deny"] }
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s System Probe composer.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Non-negotiables:
+      - Propose READ-ONLY commands only (default).
+      - Do NOT propose commands that modify state:
+          * no rm/del, no move, no install, no service restart, no registry edits,
+            no git changes, no package upgrades, no firewall edits.
+      - Do NOT dump environment variables.
+      - Do NOT read .env, vault DBs, key files, or credential stores.
+      - Network checks: LOCALHOST ONLY unless explicitly provided as known dependency endpoints.
+      - If constraints disallow a category (process listing, log reads, network checks), skip it.
+
+      Fail-closed:
+      - If platform/shell is unknown and you cannot safely propose commands, set decision.mode="ask"
+        and request minimal clarifications.
+
+      Plan quality:
+      - Prefer small, high-signal probes first.
+      - Keep commands bounded and time-limited.
+      - Provide parsing hints and normalization targets.
+      - Include redaction rules for usernames, hostnames, IPs, and file paths when needed.
+
+      Governance awareness:
+      - If guard_state is "restricted" or "lockdown", be even more conservative:
+          * no network checks beyond localhost
+          * avoid wide process listings if allow_process_listing is false or unknown
+      - If goal implies destructive validation (e.g., "prove deletion works"), block it and propose a safe alternative.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      ENVIRONMENT:
+      {{environment}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      CONSTRAINTS:
+      {{constraints}}
+
+      STORAGE:
+      {{storage}}
+
+      Task:
+      Compose a bounded, read-only system probe plan.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.12
+  max_output_tokens: 2600
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "PROBE_PROPOSED"
+  - "PROBE_NEEDS_FOLLOWUP"
+  - "PROBE_DENIED_UNSAFE"
+  - "PROBE_READ_ONLY"
+  - "PROBE_LOCALHOST_ONLY"
+  - "PROBE_KNOWN_ENDPOINTS_ONLY"
+  - "PROBE_SKIPPED_BY_CONSTRAINTS"
+  - "GUARD_RESTRICTED"
+  - "GUARD_LOCKDOWN"
+  - "REDACTION_REQUIRED"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "system_probe.requested"
+    when: "before"
+    fields: ["request.goal", "request.scope_hint", "environment.platform", "governance.guard_state"]
+
+  - kind: "system_probe.proposed"
+    when: "after"
+    fields: ["probe.title", "probe.scope.bounded_by.max_commands", "observability.reason_codes"]
+
+  - kind: "system_probe.followup_required"
+    when: "on_followup"
+    fields: ["decision.followup_questions"]
+
+  - kind: "system_probe.denied"
+    when: "on_deny"
+    fields: ["safety.blocked_reasons"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.14
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.08

@@ -1,0 +1,360 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Teaching Curriculum (structured learning plans + coaching)
+# Path:   config/prompts/teaching_curriculum.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Generates a structured curriculum for a learner (human or Francis itself),
+# with:
+#   - clear goals and prerequisites
+#   - lesson modules with estimated time
+#   - practice drills and labs
+#   - checkpoints with rubric-based evaluation
+#   - optional spaced repetition schedule
+#   - progress tracking schema
+#
+# This is used for:
+#   - onboarding operators
+#   - training workflows (e.g., "how to run releases safely")
+#   - teaching technical topics (Python, TypeScript, infra)
+#   - structured coaching and accountability
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Be concrete: measurable outcomes, not motivational text.
+# - Respect the learner’s constraints (time/week, deadline, attention).
+# - Include verification tasks (how to prove learning happened).
+# - Do not provide wrongdoing enablement; keep security topics defensive-only.
+# ==============================================================================
+version: 1
+
+id: "teaching.curriculum"
+title: "Teaching Curriculum"
+owner: "francis"
+intent: "generate_curriculum"
+mode: "strict"
+
+meta:
+  notes:
+    - "Curriculum output is consumable by UI modules and scheduler."
+    - "Supports both student-friendly and operator-technical curricula."
+  compatibility:
+    - "Stable output envelope; consumers ignore unknown fields."
+    - "Supports future lesson types via string escape hatches."
+
+# ------------------------------------------------------------------------------
+# Inputs
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+
+      topic: { type: string, required: true }
+      goal: { type: string, required: true }
+      deadline_ts: { type: number, required: false } # unix seconds
+
+      learner:
+        type: object
+        required: false
+        fields:
+          name: { type: string, required: false }
+          audience_type:
+            type: string
+            required: false
+            enum: ["operator_business", "student_support", "general", "unknown"]
+          level:
+            type: string
+            required: false
+            enum: ["beginner", "intermediate", "advanced", "unknown"]
+          preferred_tone:
+            type: string
+            required: false
+            enum: ["professional", "supportive", "neutral"]
+
+          time_budget:
+            type: object
+            required: false
+            fields:
+              minutes_per_day: { type: number, required: false }
+              days_per_week: { type: number, required: false }
+
+          constraints:
+            type: array
+            required: false
+            items: { type: string } # e.g., "no weekends", "needs accessibility", "no heavy math"
+
+      # Optional: what tools/stack should be used for labs
+      stack:
+        type: object
+        required: false
+        fields:
+          language: { type: string, required: false } # python | typescript | mixed
+          environment: { type: string, required: false } # windows | linux | web
+          repo_context: { type: string, required: false } # "Francis 2.0 repo"
+
+  governance:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      policy_notes:
+        type: array
+        required: false
+        items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Output schema
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - curriculum
+      - evaluation
+      - schedule
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      curriculum:
+        type: object
+        additionalProperties: false
+        required:
+          - title
+          - audience_type
+          - level
+          - outcomes
+          - prerequisites
+          - modules
+          - materials
+        properties:
+          title: { type: string }
+          audience_type: { type: string }
+          level: { type: string }
+
+          outcomes:
+            type: array
+            items: { type: string }
+
+          prerequisites:
+            type: array
+            items: { type: string }
+
+          modules:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+                - title
+                - duration_min
+                - lessons
+                - drills
+                - checkpoint
+              properties:
+                id: { type: string }
+                title: { type: string }
+                duration_min: { type: number }
+
+                lessons:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["title", "content_outline", "key_terms"]
+                    properties:
+                      title: { type: string }
+                      content_outline:
+                        type: array
+                        items: { type: string }
+                      key_terms:
+                        type: array
+                        items: { type: string }
+
+                drills:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["title", "instructions", "deliverable", "difficulty"]
+                    properties:
+                      title: { type: string }
+                      instructions:
+                        type: array
+                        items: { type: string }
+                      deliverable: { type: string }
+                      difficulty: { type: string, enum: ["easy", "medium", "hard"] }
+
+                checkpoint:
+                  type: object
+                  additionalProperties: false
+                  required: ["task", "rubric", "pass_threshold"]
+                  properties:
+                    task: { type: string }
+                    rubric:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        required: ["criterion", "max_points", "notes"]
+                        properties:
+                          criterion: { type: string }
+                          max_points: { type: number }
+                          notes: { type: string }
+                    pass_threshold: { type: number } # points required
+
+          materials:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "title", "notes"]
+              properties:
+                kind: { type: string, enum: ["reading", "video", "tooling", "repo_lab", "worksheet", "other"] }
+                title: { type: string }
+                notes: { type: string }
+
+      evaluation:
+        type: object
+        additionalProperties: false
+        required: ["grading", "progress_tracking", "common_failure_modes"]
+        properties:
+          grading:
+            type: object
+            additionalProperties: false
+            required: ["scale", "notes"]
+            properties:
+              scale: { type: string } # "points" | "pass_fail" | etc.
+              notes: { type: array, items: { type: string } }
+
+          progress_tracking:
+            type: object
+            additionalProperties: false
+            required: ["metrics", "checkins"]
+            properties:
+              metrics:
+                type: array
+                items: { type: string }
+              checkins:
+                type: array
+                items: { type: string }
+
+          common_failure_modes:
+            type: array
+            items: { type: string }
+
+      schedule:
+        type: object
+        additionalProperties: false
+        required: ["recommended_pace", "spaced_repetition", "calendar_notes"]
+        properties:
+          recommended_pace:
+            type: object
+            additionalProperties: false
+            required: ["minutes_per_day", "days_per_week", "estimated_weeks"]
+            properties:
+              minutes_per_day: { type: number }
+              days_per_week: { type: number }
+              estimated_weeks: { type: number }
+
+          spaced_repetition:
+            type: object
+            additionalProperties: false
+            required: ["enabled", "pattern"]
+            properties:
+              enabled: { type: boolean }
+              pattern:
+                type: array
+                items: { type: string } # "Day 1 review", "Day 3 review", etc.
+
+          calendar_notes:
+            type: array
+            items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s curriculum generator.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Requirements:
+      - Produce a curriculum with modules, drills, and checkpoint rubrics.
+      - Keep instructions concrete and measurable.
+      - Respect learner constraints (time, deadline, level).
+      - If topic touches security, keep content defensive-only.
+
+      Tone:
+      - If learner.audience_type="student_support": supportive, plain language, short steps.
+      - If learner.audience_type="operator_business": professional, operational focus, include labs/checklists.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      Task:
+      Generate a structured curriculum plan.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.22
+  max_output_tokens: 3200
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "CURRICULUM_GENERATED"
+  - "CURRICULUM_OPERATOR"
+  - "CURRICULUM_STUDENT"
+  - "CURRICULUM_SECURITY_DEFENSIVE_ONLY"
+
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.24
+
+  regulated:
+    generation_hints:
+      temperature: 0.18
+
+  safety_critical:
+    generation_hints:
+      temperature: 0.16

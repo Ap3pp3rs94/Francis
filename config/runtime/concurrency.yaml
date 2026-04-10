@@ -1,0 +1,524 @@
+# ==============================================================================
+# Francis 2.0 — Runtime Config
+# Config: Concurrency (global concurrency + rate limiting + backpressure)
+# Path:   config/runtime/concurrency.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical concurrency policy for Francis runtime components (api/daemon/workers).
+#
+# This configuration governs:
+#   - task execution concurrency (async slots, thread pools, process pools)
+#   - fairness & prioritization across task classes
+#   - per-capability/category rate limits
+#   - backpressure policy and queue bounds
+#   - time budgets (timeouts, retries, circuit breakers)
+#   - guard-state throttles (restricted/lockdown modes)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deterministic and observable: all limits are explicit and loggable.
+# - Fail-closed: if config is missing/invalid, runtime should default to conservative limits.
+# - Forward-compatible: new task categories and capability ids may be added without breaking.
+# - No secrets in this file.
+#
+# NOTES
+# -----
+# - Values are expressed as integers, seconds, or human-intuitive strings where noted.
+# - "capability categories" should align with config/policies/api_permissions.yaml and
+#   config/capabilities/catalog.yaml (read_only, mutation, destructive, network_egress, etc.).
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "runtime_concurrency_policy"
+  last_reviewed: "2025-12-31"
+  notes:
+    - "Limits are conservative by default; profiles loosen or tighten."
+    - "Guard state overlays can throttle or halt high-risk categories."
+
+# ------------------------------------------------------------------------------
+# Global defaults (apply unless overridden)
+# ------------------------------------------------------------------------------
+defaults:
+
+  # These govern in-process concurrency limits for task execution.
+  # They do NOT implicitly create worker processes; they bound usage if present.
+  execution:
+    # Async tasks (e.g., aiohttp calls, internal async pipelines)
+    max_async_tasks: 64
+
+    # Thread pool sizing for blocking I/O (file/network libraries that are sync)
+    max_thread_workers: 16
+
+    # Process pool sizing for CPU-heavy tasks (parsing, embeddings if local, etc.)
+    max_process_workers: 4
+
+    # Maximum number of concurrent "capability executions" across the system.
+    # Think of this as a global semaphore in the orchestration layer.
+    max_inflight_capabilities: 24
+
+    # Prevent runaway recursion / nested tool calls.
+    max_nested_capability_depth: 6
+
+  # Backpressure and queues (applies to internal queues; not message brokers)
+  backpressure:
+    # Queue bounds (bounded queues prevent OOM failures).
+    # "max_pending" is a hard cap; "soft_limit" triggers warnings/throttling.
+    max_pending_tasks: 2000
+    soft_limit_tasks: 1400
+
+    # When soft limit is exceeded, choose policy:
+    # - "throttle": slow producers (preferred)
+    # - "reject_new": reject new tasks with retryable error
+    # - "drop_low_priority": drop tasks below a priority threshold
+    on_soft_limit: "throttle" # throttle | reject_new | drop_low_priority
+
+    # When hard limit is exceeded:
+    # - "reject_new": fail fast
+    # - "drop_low_priority": preserve critical tasks
+    on_hard_limit: "reject_new" # reject_new | drop_low_priority
+
+    # Low priority definition (used by drop policy)
+    low_priority_threshold: 70 # priority scale: 0 (highest) .. 100 (lowest)
+
+  # Time budgets and retries
+  timing:
+    # Default per-task timeout (seconds). Individual categories override.
+    default_timeout_s: 30
+
+    # Default retry policy for transient failures (network, busy locks).
+    default_retries: 2
+    default_retry_backoff:
+      # Exponential backoff with jitter: min * 2^attempt + random(0..jitter)
+      min_delay_ms: 250
+      max_delay_ms: 10_000
+      jitter_ms: 250
+
+    # Circuit breaker: opens when too many failures occur in a window.
+    circuit_breaker:
+      enabled: true
+      window_s: 60
+      failure_threshold: 12
+      open_for_s: 30
+      half_open_max_trials: 3
+
+  # Fairness and prioritization
+  scheduling:
+    # Priority scale: 0 highest (critical), 100 lowest (background)
+    priority_scale:
+      min: 0
+      max: 100
+
+    # System-wide reserved capacity ensures UI/API responsiveness.
+    reservations:
+      # Percent of global inflight capability slots reserved for interactive traffic.
+      interactive_percent: 35
+      background_percent: 65
+
+    # Starvation protection: ensure low-priority tasks still get time.
+    starvation_protection:
+      enabled: true
+      max_wait_s: 120
+      aging:
+        # Every aging_interval_s, decrease effective priority by aging_step (toward higher priority).
+        aging_interval_s: 20
+        aging_step: 5
+
+  # Observability hooks (what to log and measure)
+  observability:
+    # Emit structured logs for throttling/backpressure decisions
+    log_throttle_events: true
+    log_queue_pressure_events: true
+    log_circuit_breaker_events: true
+
+    # Metrics keys are suggestions for exporters (Prometheus, OTEL, etc.)
+    metrics:
+      enabled: true
+      keys:
+        - "francis.concurrency.inflight_capabilities"
+        - "francis.concurrency.pending_tasks"
+        - "francis.concurrency.throttle_events_total"
+        - "francis.concurrency.rejections_total"
+        - "francis.concurrency.circuit_breaker_open_total"
+        - "francis.concurrency.task_latency_ms"
+        - "francis.concurrency.task_timeouts_total"
+
+# ------------------------------------------------------------------------------
+# Task categories (capability-aligned buckets)
+# ------------------------------------------------------------------------------
+# Categories provide coherent defaults for limits, timeouts, and risk posture.
+categories:
+
+  # --------------------------------------------------------------------------
+  # Read-only: safe inspection, listing, status pages, ledger reads
+  # --------------------------------------------------------------------------
+  read_only:
+    priority_default: 30
+    max_concurrency: 18
+    timeout_s: 15
+    retries: 1
+    rate_limit:
+      enabled: true
+      # tokens-per-second style bucket
+      rps: 25
+      burst: 50
+
+  # --------------------------------------------------------------------------
+  # Mutation: state changes that require approvals/policy gates
+  # --------------------------------------------------------------------------
+  mutation:
+    priority_default: 45
+    max_concurrency: 8
+    timeout_s: 45
+    retries: 1
+    rate_limit:
+      enabled: true
+      rps: 6
+      burst: 12
+
+  # --------------------------------------------------------------------------
+  # Destructive: deletes, irreversible changes; treat as scarce resources
+  # --------------------------------------------------------------------------
+  destructive:
+    priority_default: 20
+    max_concurrency: 2
+    timeout_s: 60
+    retries: 0
+    rate_limit:
+      enabled: true
+      rps: 1
+      burst: 2
+
+  # --------------------------------------------------------------------------
+  # Network egress: web learning fetch/search/ingest; avoid spamming and enforce gates
+  # --------------------------------------------------------------------------
+  network_egress:
+    priority_default: 55
+    max_concurrency: 4
+    timeout_s: 60
+    retries: 2
+    rate_limit:
+      enabled: true
+      rps: 2
+      burst: 4
+    backpressure:
+      # Egress is where queues grow fastest; be conservative.
+      soft_limit_tasks: 200
+      max_pending_tasks: 400
+
+  # --------------------------------------------------------------------------
+  # Credential operations: never many at once; high scrutiny
+  # --------------------------------------------------------------------------
+  credential_ops:
+    priority_default: 25
+    max_concurrency: 2
+    timeout_s: 45
+    retries: 0
+    rate_limit:
+      enabled: true
+      rps: 1
+      burst: 2
+
+  # --------------------------------------------------------------------------
+  # Industrial actuation: extremely conservative; ideally serialized
+  # --------------------------------------------------------------------------
+  industrial_actuation:
+    priority_default: 10
+    max_concurrency: 1
+    timeout_s: 30
+    retries: 0
+    rate_limit:
+      enabled: true
+      rps: 0.2 # 1 per 5 seconds
+      burst: 1
+
+  # --------------------------------------------------------------------------
+  # Simulation workloads: can be heavy; tune for CPU/memory
+  # --------------------------------------------------------------------------
+  simulation:
+    priority_default: 70
+    max_concurrency: 2
+    timeout_s: 120
+    retries: 0
+    rate_limit:
+      enabled: true
+      rps: 0.5
+      burst: 1
+
+  # --------------------------------------------------------------------------
+  # UI interactive tasks: keep snappy (local UI/API)
+  # --------------------------------------------------------------------------
+  interactive_ui:
+    priority_default: 15
+    max_concurrency: 10
+    timeout_s: 10
+    retries: 0
+    rate_limit:
+      enabled: true
+      rps: 50
+      burst: 100
+
+# ------------------------------------------------------------------------------
+# Capability-specific overrides (fine-grained tuning)
+# ------------------------------------------------------------------------------
+# Keys should match capability ids in config/capabilities/catalog.yaml.
+# Use these sparingly; prefer category defaults.
+capability_overrides:
+
+  # Keep ledger reads cheap and fast
+  continuity.ledger.list:
+    category: "read_only"
+    timeout_s: 10
+    max_concurrency: 20
+
+  # Ledger export can be I/O heavy; throttle
+  continuity.ledger.export:
+    category: "mutation"
+    timeout_s: 60
+    max_concurrency: 2
+    rate_limit:
+      enabled: true
+      rps: 0.5
+      burst: 1
+
+  # Approvals list should remain responsive
+  approvals.list:
+    category: "read_only"
+    timeout_s: 10
+    max_concurrency: 18
+
+  # Approval decisions should be serialized-ish under load
+  approvals.decide:
+    category: "mutation"
+    max_concurrency: 3
+    timeout_s: 30
+
+  # Web learning search/fetch/ingest are egress-bound
+  web_learning.search:
+    category: "network_egress"
+  web_learning.fetch:
+    category: "network_egress"
+  web_learning.ingest:
+    category: "network_egress"
+    timeout_s: 90
+
+  # Industrial actuation: always serialize
+  industrial.actuate:
+    category: "industrial_actuation"
+
+  # Simulation run can be heavier than status
+  simulation.run:
+    category: "simulation"
+  simulation.status:
+    category: "read_only"
+    timeout_s: 10
+  simulation.export:
+    category: "mutation"
+    timeout_s: 90
+    max_concurrency: 1
+
+# ------------------------------------------------------------------------------
+# Guard-state overlays (runtime safety throttles)
+# ------------------------------------------------------------------------------
+guard_state_overlays:
+
+  # Normal operation: no overrides
+  normal: {}
+
+  # Restricted: keep system stable, reduce risk surface
+  restricted:
+    defaults:
+      execution:
+        max_inflight_capabilities: 14
+        max_async_tasks: 48
+        max_thread_workers: 12
+        max_process_workers: 2
+    categories:
+      mutation:
+        max_concurrency: 4
+        rate_limit:
+          enabled: true
+          rps: 3
+          burst: 6
+      destructive:
+        max_concurrency: 1
+      network_egress:
+        max_concurrency: 2
+        rate_limit:
+          enabled: true
+          rps: 1
+          burst: 2
+      credential_ops:
+        max_concurrency: 1
+      industrial_actuation:
+        # In restricted mode, industrial actuation should typically be blocked elsewhere,
+        # but concurrency policy still clamps it.
+        max_concurrency: 0
+
+  # Lockdown: prioritize containment and observation; disable high-risk concurrency
+  lockdown:
+    defaults:
+      execution:
+        max_inflight_capabilities: 8
+        max_async_tasks: 24
+        max_thread_workers: 8
+        max_process_workers: 1
+    categories:
+      read_only:
+        max_concurrency: 10
+      interactive_ui:
+        max_concurrency: 8
+      mutation:
+        max_concurrency: 0
+      destructive:
+        max_concurrency: 0
+      network_egress:
+        max_concurrency: 0
+      credential_ops:
+        max_concurrency: 0
+      industrial_actuation:
+        max_concurrency: 0
+      simulation:
+        max_concurrency: 0
+
+# ------------------------------------------------------------------------------
+# Runtime profiles (environment-level defaults)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    defaults:
+      execution:
+        max_inflight_capabilities: 32
+        max_async_tasks: 96
+        max_thread_workers: 24
+        max_process_workers: 6
+    categories:
+      network_egress:
+        max_concurrency: 6
+        rate_limit:
+          enabled: true
+          rps: 3
+          burst: 6
+
+  workstation:
+    defaults:
+      execution:
+        max_inflight_capabilities: 24
+        max_async_tasks: 64
+        max_thread_workers: 16
+        max_process_workers: 4
+
+  production:
+    defaults:
+      execution:
+        max_inflight_capabilities: 20
+        max_async_tasks: 64
+        max_thread_workers: 16
+        max_process_workers: 4
+      backpressure:
+        max_pending_tasks: 1500
+        soft_limit_tasks: 1000
+    categories:
+      network_egress:
+        max_concurrency: 4
+      destructive:
+        max_concurrency: 1
+
+  regulated:
+    defaults:
+      execution:
+        max_inflight_capabilities: 16
+        max_async_tasks: 48
+        max_thread_workers: 12
+        max_process_workers: 3
+      timing:
+        default_retries: 1
+    categories:
+      mutation:
+        max_concurrency: 5
+      destructive:
+        max_concurrency: 1
+        retries: 0
+      network_egress:
+        max_concurrency: 2
+        rate_limit:
+          enabled: true
+          rps: 1
+          burst: 2
+      credential_ops:
+        max_concurrency: 1
+        retries: 0
+      industrial_actuation:
+        max_concurrency: 1
+        rate_limit:
+          enabled: true
+          rps: 0.1
+          burst: 1
+
+  safety_critical:
+    defaults:
+      execution:
+        max_inflight_capabilities: 10
+        max_async_tasks: 24
+        max_thread_workers: 8
+        max_process_workers: 2
+      timing:
+        default_retries: 0
+      backpressure:
+        max_pending_tasks: 800
+        soft_limit_tasks: 500
+        on_soft_limit: "throttle"
+        on_hard_limit: "drop_low_priority"
+        low_priority_threshold: 60
+    categories:
+      read_only:
+        max_concurrency: 8
+      mutation:
+        max_concurrency: 2
+        retries: 0
+      destructive:
+        max_concurrency: 0
+      network_egress:
+        max_concurrency: 0
+      credential_ops:
+        max_concurrency: 0
+      industrial_actuation:
+        max_concurrency: 1
+        rate_limit:
+          enabled: true
+          rps: 0.1
+          burst: 1
+      simulation:
+        max_concurrency: 0
+
+# ------------------------------------------------------------------------------
+# Validation rules (for config loader; declarative hints)
+# ------------------------------------------------------------------------------
+validation:
+  require_categories_present:
+    - "read_only"
+    - "mutation"
+    - "destructive"
+    - "network_egress"
+    - "credential_ops"
+    - "industrial_actuation"
+    - "simulation"
+    - "interactive_ui"
+
+  numeric_bounds:
+    max_inflight_capabilities: { min: 1, max: 256 }
+    max_async_tasks: { min: 1, max: 2048 }
+    max_thread_workers: { min: 1, max: 512 }
+    max_process_workers: { min: 0, max: 128 }
+    max_pending_tasks: { min: 100, max: 100000 }
+    timeout_s: { min: 1, max: 3600 }
+
+  notes:
+    - "If industrial_actuation.max_concurrency > 1, warn (prefer serialized actuation)."
+    - "If network_egress.max_concurrency > 8, warn (risk of rate limiting / abuse)."
+    - "If destructive.retries > 0, warn (destructive actions should not auto-retry)."

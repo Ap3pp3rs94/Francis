@@ -1,0 +1,363 @@
+# ==============================================================================
+# Francis Capability Aliases
+# File: config/capabilities/aliases.yaml
+#
+# Alias → Canonical Capability ID
+# ==============================================================================
+
+# ==============================================================================
+# 0) CORE / SYSTEM
+# ==============================================================================
+"help": "system.help"
+"commands": "system.help"
+"capabilities": "system.capabilities.list"
+"list capabilities": "system.capabilities.list"
+"show capabilities": "system.capabilities.list"
+
+"health": "system.health.report"
+"health check": "system.health.report"
+"status": "system.health.report"
+"system status": "system.health.report"
+"ping": "system.health.ping"
+
+"system info": "system.info.runtime"
+"runtime": "system.info.runtime"
+"runtime info": "system.info.runtime"
+"build info": "system.info.build"
+"version": "system.info.build"
+"about": "system.info.build"
+
+"logs": "system.logs.tail"
+"tail logs": "system.logs.tail"
+"system logs": "system.logs.tail"
+"metrics": "system.metrics.snapshot"
+"system metrics": "system.metrics.snapshot"
+
+# ==============================================================================
+# 1) CHAT
+# ==============================================================================
+"chat": "chat.session.open"
+"open chat": "chat.session.open"
+"new chat": "chat.session.open"
+"reset chat": "chat.session.reset"
+"clear chat": "chat.session.reset"
+
+"send message": "chat.message.send"
+"send": "chat.message.send"
+"message": "chat.message.send"
+"speak": "chat.message.send"
+
+"chat history": "chat.history.list"
+"history": "chat.history.list"
+"conversation history": "chat.history.list"
+
+# ==============================================================================
+# 2) CONTINUITY / LEDGER
+# ==============================================================================
+"continuity": "continuity.ledger.list"
+"ledger": "continuity.ledger.list"
+"show ledger": "continuity.ledger.list"
+"list ledger": "continuity.ledger.list"
+"refresh ledger": "continuity.ledger.list"
+"continuity ledger": "continuity.ledger.list"
+
+"export ledger": "continuity.ledger.export"
+"download ledger": "continuity.ledger.export"
+"ledger export": "continuity.ledger.export"
+
+"summarize": "continuity.summary.generate"
+"summarize conversation": "continuity.summary.generate"
+"conversation summary": "continuity.summary.generate"
+"generate summary": "continuity.summary.generate"
+
+# ==============================================================================
+# 3) APPROVALS
+# ==============================================================================
+"approvals": "approvals.list"
+"list approvals": "approvals.list"
+"show approvals": "approvals.list"
+"pending approvals": "approvals.list.pending"
+"list pending approvals": "approvals.list.pending"
+"refresh approvals": "approvals.list.pending"
+
+"approve": "approvals.decide.approve"
+"approve request": "approvals.decide.approve"
+"approve pending": "approvals.decide.approve"
+
+"reject": "approvals.decide.reject"
+"reject request": "approvals.decide.reject"
+"deny": "approvals.decide.reject"
+
+"emergency approve": "approvals.decide.emergency"
+"emergency": "approvals.decide.emergency"
+"emergency override": "approvals.decide.emergency"
+
+# 🔹 NEW — approvals toggles (governance-aware)
+"enable approvals": "approvals.toggle.enable"
+"disable approvals": "approvals.toggle.disable"
+
+# ==============================================================================
+# 4) CREDENTIAL MANAGER
+# ==============================================================================
+"credentials": "credentials.list"
+"list credentials": "credentials.list"
+"show credentials": "credentials.list"
+"credential inventory": "credentials.list"
+
+"credential scopes": "credentials.scopes.list"
+"list scopes": "credentials.scopes.list"
+"scopes": "credentials.scopes.list"
+
+"delegations": "credentials.delegations.list"
+"credential delegations": "credentials.delegations.list"
+"list delegations": "credentials.delegations.list"
+
+"request credential": "credentials.request"
+"new credential": "credentials.request"
+"provision credential": "credentials.request"
+
+"revoke credential": "credentials.revoke"
+"disable credential": "credentials.revoke"
+"expire credential": "credentials.revoke"
+
+# ==============================================================================
+# 5) DOMAIN WORKBENCH
+# ==============================================================================
+"domains": "domains.list"
+"list domains": "domains.list"
+"show domains": "domains.list"
+"domain registry": "domains.list"
+
+"domain details": "domains.get"
+"get domain": "domains.get"
+"show domain": "domains.get"
+
+"create domain": "domains.create"
+"new domain": "domains.create"
+"add domain": "domains.create"
+
+"update domain": "domains.update"
+"edit domain": "domains.update"
+"modify domain": "domains.update"
+"patch domain": "domains.update"
+
+"delete domain": "domains.delete"
+"remove domain": "domains.delete"
+"retire domain": "domains.delete"
+
+# 🔹 NEW — refresh ergonomics
+"refresh domains": "domains.list"
+
+# ==============================================================================
+# 6) DIGITAL TWIN CENTER
+# ==============================================================================
+"digital twins": "digital_twin.list"
+"digital twin": "digital_twin.list"
+"list digital twins": "digital_twin.list"
+"show digital twins": "digital_twin.list"
+
+"create digital twin": "digital_twin.create"
+"new digital twin": "digital_twin.create"
+"register digital twin": "digital_twin.create"
+
+"update digital twin": "digital_twin.update"
+"edit digital twin": "digital_twin.update"
+
+"delete digital twin": "digital_twin.delete"
+"remove digital twin": "digital_twin.delete"
+
+"digital twin state": "digital_twin.state.get"
+"get twin state": "digital_twin.state.get"
+"set twin state": "digital_twin.state.set"
+
+# 🔹 NEW
+"refresh digital twins": "digital_twin.list"
+
+# ==============================================================================
+# 7) INDUSTRIAL CONTROL
+# ==============================================================================
+"industrial": "industrial.dashboard"
+"industrial control": "industrial.dashboard"
+"industrial dashboard": "industrial.dashboard"
+
+"industrial assets": "industrial.assets.list"
+"list industrial assets": "industrial.assets.list"
+
+"processes": "industrial.processes.list"
+"list processes": "industrial.processes.list"
+
+"run industrial simulation": "industrial.simulation.run"
+"industrial simulation": "industrial.simulation.run"
+"simulate process": "industrial.simulation.run"
+
+"industrial logs": "industrial.logs.tail"
+"tail industrial logs": "industrial.logs.tail"
+
+# 🔹 NEW — industrial toggles (safety-critical, governance enforced)
+"enable industrial control": "industrial.toggle.enable"
+"disable industrial control": "industrial.toggle.disable"
+
+# ==============================================================================
+# 8) OPERATIONS
+# ==============================================================================
+"operations": "operations.list"
+"list operations": "operations.list"
+"show operations": "operations.list"
+"ops": "operations.list"
+
+"operation status": "operations.status"
+"status operation": "operations.status"
+"get operation status": "operations.status"
+
+"run operation": "operations.run"
+"execute operation": "operations.run"
+"start operation": "operations.run"
+
+"cancel operation": "operations.cancel"
+"stop operation": "operations.cancel"
+"abort operation": "operations.cancel"
+
+"operation logs": "operations.logs.tail"
+"tail operation logs": "operations.logs.tail"
+
+# 🔹 NEW
+"refresh operations": "operations.list"
+
+# ==============================================================================
+# 9) PLUGINS
+# ==============================================================================
+"plugins": "plugins.list"
+"list plugins": "plugins.list"
+"show plugins": "plugins.list"
+"plugin browser": "plugins.list"
+
+"plugin details": "plugins.get"
+"describe plugin": "plugins.get"
+"get plugin": "plugins.get"
+
+"run plugin": "plugins.execute"
+"execute plugin": "plugins.execute"
+"invoke plugin": "plugins.execute"
+
+"install plugin": "plugins.install"
+"add plugin": "plugins.install"
+"uninstall plugin": "plugins.uninstall"
+"remove plugin": "plugins.uninstall"
+
+# 🔹 NEW
+"refresh plugins": "plugins.list"
+
+# ==============================================================================
+# 10) TRUST DASHBOARD
+# ==============================================================================
+"trust": "trust.summary"
+"trust status": "trust.summary"
+"trust dashboard": "trust.summary"
+
+"trust history": "trust.history.list"
+"list trust history": "trust.history.list"
+
+"set trust": "trust.level.set"
+"adjust trust": "trust.level.set"
+"raise trust": "trust.level.set"
+"lower trust": "trust.level.set"
+
+# 🔹 NEW — trust toggles
+"enable trust tracking": "trust.toggle.enable"
+"disable trust tracking": "trust.toggle.disable"
+
+# ==============================================================================
+# 11) WEB LEARNING
+# ==============================================================================
+"web learning": "web_learning.status"
+"web monitor": "web_learning.status"
+"web learning monitor": "web_learning.status"
+"web status": "web_learning.status"
+
+"web search": "web_learning.search"
+"search web": "web_learning.search"
+"research web": "web_learning.search"
+
+"fetch url": "web_learning.fetch"
+"web fetch": "web_learning.fetch"
+"ingest url": "web_learning.ingest"
+"web ingest": "web_learning.ingest"
+
+"web learning logs": "web_learning.logs.list"
+"web audit": "web_learning.audit.list"
+"web learning audit": "web_learning.audit.list"
+
+"enable web learning": "web_learning.toggle.enable"
+"disable web learning": "web_learning.toggle.disable"
+
+# ==============================================================================
+# 12) EXPLANATION EXPLORER
+# ==============================================================================
+"explanations": "explanations.list"
+"list explanations": "explanations.list"
+"show explanations": "explanations.list"
+"explanation explorer": "explanations.list"
+
+"get explanation": "explanations.get"
+"explanation detail": "explanations.get"
+
+"search explanations": "explanations.list.search"
+"explanation search": "explanations.list.search"
+
+"export explanations": "explanations.export"
+"download explanations": "explanations.export"
+"export explanations csv": "explanations.export.csv"
+"export explanations json": "explanations.export.json"
+
+"explanations date range": "explanations.list.range"
+"filter explanations by date": "explanations.list.range"
+
+"batch explanations": "explanations.get_many"
+"get many explanations": "explanations.get_many"
+
+# ==============================================================================
+# 13) FEDERATION HUB
+# ==============================================================================
+"federation": "federation.instances.list"
+"federation hub": "federation.instances.list"
+"list instances": "federation.instances.list"
+"show instances": "federation.instances.list"
+
+"get instance": "federation.instances.get"
+"instance details": "federation.instances.get"
+
+"batch instances": "federation.instances.get_many"
+"get instances": "federation.instances.get_many"
+
+"consensus logs": "federation.consensus.logs.list"
+"federation logs": "federation.consensus.logs.list"
+"consensus logs date range": "federation.consensus.logs.range"
+"filter consensus logs": "federation.consensus.logs.range"
+
+"instance health": "federation.instances.health"
+"health check instance": "federation.instances.health"
+
+# ==============================================================================
+# 14) SIMULATION
+# ==============================================================================
+"simulation": "simulation.run"
+"run simulation": "simulation.run"
+"start simulation": "simulation.run"
+
+"simulation status": "simulation.status"
+"get simulation status": "simulation.status"
+
+"export simulation": "simulation.export"
+"download simulation": "simulation.export"
+
+# ==============================================================================
+# 15) RESILIENCE
+# ==============================================================================
+"resilience": "resilience.status"
+"resilience status": "resilience.status"
+
+"backup": "resilience.backup"
+"run backup": "resilience.backup"
+
+"restore": "resilience.restore"
+"run restore": "resilience.restore"

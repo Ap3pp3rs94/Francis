@@ -1,0 +1,590 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Privacy (minimization + redaction + retention + sensitive access controls)
+# Path:   config/policies/privacy.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Privacy policy governs how Francis collects, stores, redacts, retains, exports,
+# and exposes data that may impact user privacy and security:
+#
+#   - secrets handling (never persist, never expose)
+#   - PII handling (minimize, redact, gated exports)
+#   - safe logging posture (no raw body dumps by default)
+#   - retention windows per store (ledger, conversations, audit, artifacts, cache)
+#   - access controls for viewing/exporting sensitive data
+#   - consent/purpose limitation (policy intent, auditable)
+#   - incident escalation hooks (guard integration)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Data minimization: store the minimum required to operate Francis.
+# - Secrets never persist: tokens/keys/passwords/private keys must not be stored.
+# - Redact-by-default: logs/audit/exports must be redacted unless explicitly exempted.
+# - Least privilege: viewing/exporting sensitive data requires trust + approvals.
+# - Deterministic: stable reason codes, first-match rule evaluation where relevant.
+# - Fail-closed: if classification is unknown or detectors fail → deny persistence/export.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "privacy_policy"
+  notes:
+    - "Policy-only. Enforcement occurs in governance, logging, memory, and export layers."
+    - "This file complements data_governance.yaml (classification + storage rules)."
+    - "Secrets are treated as 'should not exist in stores' — deny persistence on detection."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+privacy:
+  enabled: true
+
+  # Modes:
+  # - disabled: dev-only (not recommended)
+  # - policy:   enforce baseline controls (default)
+  # - strict:   conservative; shorter retention; stronger export gates; fewer overrides
+  mode: "policy" # disabled | policy | strict
+
+  # Default outcome if evaluator cannot classify or validate a data operation.
+  fail_closed_decision: "deny" # deny | require_review
+
+  # Default redaction posture.
+  redact_by_default: true
+
+  # Treat exports and shares as sensitive by default.
+  exports_sensitive_by_default: true
+
+  # Deny persistence if secrets are detected (strong default).
+  deny_persistence_on_secrets_detected: true
+
+  # Deny export if secrets are detected (strong default).
+  deny_export_on_secrets_detected: true
+
+# ------------------------------------------------------------------------------
+# Sensitivity taxonomy (privacy-oriented)
+# ------------------------------------------------------------------------------
+taxonomy:
+  enabled: true
+
+  # Sensitivity order is used for threshold comparisons.
+  sensitivity_order: ["low", "medium", "high", "critical"]
+
+  categories:
+    public:
+      sensitivity: "low"
+      description: "Non-sensitive, publishable information."
+
+    internal:
+      sensitivity: "medium"
+      description: "Operational/internal state; not public."
+
+    pii:
+      sensitivity: "high"
+      description: "Personally identifiable information (PII)."
+
+    security_sensitive:
+      sensitivity: "high"
+      description: "Security findings, incident data, access patterns."
+
+    safety_sensitive:
+      sensitivity: "critical"
+      description: "Human safety/care events; extremely sensitive."
+
+    regulated:
+      sensitivity: "critical"
+      description: "Regulated data per environment policy."
+
+    secrets:
+      sensitivity: "critical"
+      description: "Credentials, tokens, private keys, passwords. Must not persist."
+
+# ------------------------------------------------------------------------------
+# Classification defaults (when upstream classification is missing)
+# ------------------------------------------------------------------------------
+classification:
+  enabled: true
+
+  # If upstream layer provides category, accept it; otherwise infer using detectors.
+  infer_when_missing: true
+
+  # If inference fails, treat as sensitive to fail closed.
+  on_unknown_category: "regulated" # public | internal | pii | security_sensitive | safety_sensitive | regulated | secrets
+
+  # Common store defaults (hint layer; store-specific overrides in retention/storage).
+  default_category_by_store:
+    continuity_ledger: "internal"
+    conversations: "internal"
+    audit_logs: "security_sensitive"
+    runtime_logs: "internal"
+    artifacts: "internal"
+    web_learning_cache: "internal"
+    vectors: "internal"
+    credentials_metadata: "security_sensitive"
+    human_safety_events: "safety_sensitive"
+
+# ------------------------------------------------------------------------------
+# Detectors (heuristic identification of secrets/PII in text and structured payloads)
+# ------------------------------------------------------------------------------
+detectors:
+  enabled: true
+
+  # If a detector fails unexpectedly, fail-closed for persistence/export.
+  fail_closed_on_detector_error: true
+
+  # Structured key-based detectors (JSON/YAML-like dictionaries).
+  # If these keys appear, their values are treated as secrets/PII as configured.
+  key_rules:
+    enabled: true
+
+    # Keys treated as secrets (deny persistence/export; redact everywhere).
+    secrets_keys:
+      - "password"
+      - "passcode"
+      - "secret"
+      - "token"
+      - "access_token"
+      - "refresh_token"
+      - "api_key"
+      - "apikey"
+      - "authorization"
+      - "auth"
+      - "cookie"
+      - "set-cookie"
+      - "private_key"
+      - "client_secret"
+      - "session"
+      - "bearer"
+      - "signature"
+
+    # Keys treated as PII (redact, gate exports).
+    pii_keys:
+      - "email"
+      - "phone"
+      - "address"
+      - "ssn"
+      - "dob"
+      - "date_of_birth"
+      - "full_name"
+      - "first_name"
+      - "last_name"
+
+  # Pattern-based detectors (strings/blobs).
+  patterns:
+    enabled: true
+
+    # NOTE: regex heuristics are conservative; implementation may add stricter validators.
+    rules:
+
+      # ---- Secrets -----------------------------------------------------------
+      - id: "private_key_blocks"
+        category: "secrets"
+        regex: "(?s)-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----.*?-----END (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----"
+
+      - id: "generic_secret_keywords"
+        category: "secrets"
+        regex: "(?i)\\b(password|passcode|api[_-]?key|secret|token|bearer)\\b"
+
+      - id: "jwt_like"
+        category: "secrets"
+        regex: "\\beyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\b"
+
+      - id: "aws_access_key_id_like"
+        category: "secrets"
+        regex: "\\bAKIA[0-9A-Z]{16}\\b"
+
+      # ---- PII ---------------------------------------------------------------
+      - id: "email_like"
+        category: "pii"
+        regex: "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"
+
+      - id: "phone_like"
+        category: "pii"
+        regex: "(?i)\\b\\+?\\d[\\d\\s().-]{7,}\\b"
+
+      - id: "us_ssn_like"
+        category: "pii"
+        regex: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+
+# ------------------------------------------------------------------------------
+# Redaction policy (applies to logs/audit/exports/UI)
+# ------------------------------------------------------------------------------
+redaction:
+  enabled: true
+
+  # Where redaction applies by default. Implementation may also apply redaction at sinks.
+  apply_to:
+    - "runtime_logs"
+    - "audit_logs"
+    - "continuity_ledger"
+    - "ui_error_surfaces"
+    - "exports"
+
+  # Strategy semantics (policy intent):
+  # - mask: replace the match entirely with "[REDACTED:<id>]"
+  # - truncate: keep minimal prefix/suffix; hide the middle
+  # - hash: replace with irreversible hash token for correlation
+  strategies:
+    default: "mask"
+
+  # Redaction rules (evaluated top-to-bottom; first match wins when overlap matters).
+  rules:
+
+    # Secrets must always be redacted (and usually cause deny persistence/export).
+    - id: "redact.private_keys"
+      strategy: "mask"
+      regex: "(?s)-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----.*?-----END (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----"
+
+    - id: "redact.jwt"
+      strategy: "truncate"
+      regex: "\\beyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\b"
+      keep_prefix: 8
+      keep_suffix: 8
+
+    - id: "redact.aws_access_key_id"
+      strategy: "truncate"
+      regex: "\\bAKIA[0-9A-Z]{16}\\b"
+      keep_prefix: 4
+      keep_suffix: 4
+
+    # PII redaction (hash to preserve correlation without exposing raw value).
+    - id: "redact.email"
+      strategy: "hash"
+      regex: "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"
+
+    - id: "redact.phone"
+      strategy: "hash"
+      regex: "(?i)\\b\\+?\\d[\\d\\s().-]{7,}\\b"
+
+    - id: "redact.us_ssn"
+      strategy: "mask"
+      regex: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+
+  # Structured payload redaction by key (JSON objects).
+  key_redaction:
+    enabled: true
+    redact_keys:
+      - "password"
+      - "passcode"
+      - "secret"
+      - "token"
+      - "access_token"
+      - "refresh_token"
+      - "api_key"
+      - "authorization"
+      - "cookie"
+      - "set-cookie"
+      - "private_key"
+      - "client_secret"
+
+# ------------------------------------------------------------------------------
+# Safe logging posture (prevents accidental data leaks)
+# ------------------------------------------------------------------------------
+logging:
+  enabled: true
+
+  # Deny logging full request/response bodies by default.
+  deny_full_bodies_by_default: true
+
+  # Allow only structured fields for HTTP logs by default.
+  allow_structured_fields_only: true
+
+  # Debug raw capture is a high-risk exception.
+  debug_raw_capture:
+    enabled: false
+    requires_approval: true
+    min_trust: 9
+    max_retention_hours: 24
+    allowed_profiles: ["dev"]
+    notes:
+      - "Even in dev, raw capture should be rare and auditable."
+
+# ------------------------------------------------------------------------------
+# Persistence controls (what can be written and when)
+# ------------------------------------------------------------------------------
+persistence:
+  enabled: true
+
+  # If true, deny persistence when category is secrets.
+  deny_if_category_secrets: true
+
+  # If true, deny persistence when detectors find secrets patterns/keys.
+  deny_if_secrets_detected: true
+
+  # If true, deny persistence when purpose is unknown.
+  deny_if_purpose_unknown: true
+
+  # If true, allow ephemeral-only operation when persistence denied.
+  on_persistence_denied: "ephemeral_only" # ephemeral_only | deny_all
+
+# ------------------------------------------------------------------------------
+# Retention policy (per store)
+# ------------------------------------------------------------------------------
+retention:
+  enabled: true
+
+  # Default retention for unspecified stores.
+  default_days: 90
+
+  stores:
+    continuity_ledger:
+      category: "internal"
+      days: 365
+
+    conversations:
+      category: "internal"
+      days: 180
+
+    audit_logs:
+      category: "security_sensitive"
+      days: 365
+
+    runtime_logs:
+      category: "internal"
+      days: 90
+
+    artifacts:
+      category: "internal"
+      days: 60
+
+    web_learning_cache:
+      category: "internal"
+      days: 30
+
+    vectors:
+      category: "internal"
+      days: 365
+
+    credentials_metadata:
+      category: "security_sensitive"
+      days: 365
+
+    human_safety_events:
+      category: "safety_sensitive"
+      days: 365
+
+  purge:
+    enabled: true
+    requires_approval: true
+    min_trust: 9
+    record_purge_audit_event: true
+
+# ------------------------------------------------------------------------------
+# Access controls (view/export/share)
+# ------------------------------------------------------------------------------
+access_controls:
+  enabled: true
+
+  # Viewing sensitive categories requires trust.
+  min_trust_to_view:
+    public: 1
+    internal: 2
+    pii: 7
+    security_sensitive: 7
+    safety_sensitive: 9
+    regulated: 9
+    secrets: 999
+
+  # Exporting is more restrictive.
+  min_trust_to_export:
+    public: 2
+    internal: 5
+    pii: 8
+    security_sensitive: 8
+    safety_sensitive: 9
+    regulated: 9
+    secrets: 999
+
+  # Sharing outside the local instance is most restrictive.
+  min_trust_to_share_externally:
+    public: 5
+    internal: 8
+    pii: 9
+    security_sensitive: 9
+    safety_sensitive: 999
+    regulated: 999
+    secrets: 999
+
+  # Export requires approval for high+ sensitivity categories.
+  require_approval_to_export_categories:
+    - "pii"
+    - "security_sensitive"
+    - "safety_sensitive"
+    - "regulated"
+
+  export_redaction:
+    enabled: true
+    always_redact_categories:
+      - "pii"
+      - "security_sensitive"
+      - "safety_sensitive"
+      - "regulated"
+
+    # If true, deny export if redaction fails.
+    fail_closed_on_redaction_error: true
+
+  # Allowed export formats (policy allowlist).
+  allowed_export_formats:
+    - "json"
+    - "jsonl"
+    - "csv"
+    - "txt"
+
+# ------------------------------------------------------------------------------
+# Consent + purpose limitation (policy intent)
+# ------------------------------------------------------------------------------
+consent:
+  enabled: true
+
+  require_consent_for_web_ingest: true
+  require_consent_for_external_to_memory: true
+
+  on_missing_consent: "ephemeral_only" # ephemeral_only | deny
+
+purpose_limitation:
+  enabled: true
+
+  allowed_purposes:
+    - "assist_user"
+    - "operate_system"
+    - "debug"
+    - "security_monitoring"
+    - "compliance"
+
+  on_unknown_purpose:
+    deny_persistence: true
+    deny_exports: true
+
+# ------------------------------------------------------------------------------
+# Data subject actions (requests)
+# ------------------------------------------------------------------------------
+data_subject:
+  enabled: true
+
+  export_request:
+    enabled: true
+    requires_approval: true
+    min_trust: 8
+    default_format: "json"
+
+  deletion_request:
+    enabled: true
+    requires_approval: true
+    min_trust: 9
+    audit_required: true
+
+# ------------------------------------------------------------------------------
+# Guard integration (privacy incidents raise posture)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  on_secret_leak_detected:
+    set_guard_state_at_least: "lockdown"
+    emit_incident_event: true
+
+  on_pii_export_attempt_without_approval:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "privacy.redaction_applied"
+      - "privacy.persistence_denied"
+      - "privacy.export_denied"
+      - "privacy.export_allowed"
+      - "privacy.purge_requested"
+      - "privacy.purge_completed"
+      - "privacy.consent_missing"
+      - "privacy.purpose_unknown"
+    include:
+      - "ts"
+      - "actor_id"
+      - "capability_id"
+      - "store"
+      - "category"
+      - "decision"
+      - "reason"
+      - "approval_id"
+      - "redaction_rule_ids"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "privacy.redactions"
+      - "privacy.denied_persistence"
+      - "privacy.denied_exports"
+      - "privacy.allowed_exports"
+      - "privacy.purges"
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    privacy:
+      mode: "policy"
+      fail_closed_decision: "require_review"
+    retention:
+      default_days: 30
+    logging:
+      debug_raw_capture:
+        enabled: false
+
+  workstation:
+    privacy:
+      mode: "policy"
+      fail_closed_decision: "deny"
+
+  production:
+    privacy:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    retention:
+      default_days: 90
+      stores:
+        web_learning_cache:
+          days: 14
+    logging:
+      debug_raw_capture:
+        enabled: false
+
+  regulated:
+    privacy:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    retention:
+      default_days: 365
+      stores:
+        conversations:
+          days: 365
+        web_learning_cache:
+          days: 0
+        human_safety_events:
+          days: 730
+    consent:
+      require_consent_for_external_to_memory: true
+
+  safety_critical:
+    privacy:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    retention:
+      stores:
+        web_learning_cache:
+          days: 0

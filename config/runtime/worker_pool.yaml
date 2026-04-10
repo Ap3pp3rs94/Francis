@@ -1,0 +1,591 @@
+# ==============================================================================
+# Francis 2.0 — Runtime Config
+# Config: Worker Pool (executors, routing, queueing, lifecycle)
+# Path:   config/runtime/worker_pool.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical worker/executor pool configuration for Francis runtime components.
+#
+# Governs:
+#   - executor pools (asyncio, thread pool, process pool, isolated subprocess)
+#   - routing of work categories/capabilities into pools
+#   - pool-local queue bounds and backpressure behavior
+#   - lifecycle management (startup probes, draining shutdown)
+#   - observability (per-pool metrics, structured events)
+#
+# DESIGN CONTRACT
+# ---------------
+# - This file does NOT define *what* to run (schedules/playbooks). It defines how
+#   work is executed once selected.
+# - Global caps/rate limits live in config/runtime/concurrency.yaml; this file
+#   provides executor topology and pool-specific clamps.
+# - Fail-closed: if unknown pool id is referenced, execution must refuse and log.
+# - Conservative defaults: keep UI/API responsive, protect disk/memory, avoid fork bombs.
+# - No secrets in this file.
+#
+# FORWARD COMPATIBILITY
+# ---------------------
+# - Supports routing by category, explicit pool, and capability override.
+# - Allows future external worker backends (Redis, Celery-like queues) without
+#   breaking the envelope: "backend: local | external".
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "worker_pool_topology"
+  last_reviewed: "2025-12-31"
+  notes:
+    - "Pools are intentionally small + bounded to prevent resource runaway."
+    - "Industrial actuation is always serialized and may be disabled by guard state elsewhere."
+    - "Simulation is process-isolated by default (CPU + safety)."
+
+# ------------------------------------------------------------------------------
+# Defaults (applies unless overridden by profiles/pool overrides)
+# ------------------------------------------------------------------------------
+defaults:
+
+  # Backend indicates whether pools are local in-process (default) or external.
+  # "external" is forward-ready: a future queue/broker could feed workers.
+  backend: "local" # local | external
+
+  # Common queue/backpressure behavior for pools
+  queue:
+    # Hard bound per pool to prevent unbounded memory growth.
+    max_pending: 500
+
+    # Soft threshold: above this, emit warnings and apply producer throttling.
+    soft_limit: 350
+
+    # What to do at soft limit:
+    # - throttle_producers: slow down submitters (preferred)
+    # - reject_new: reject submissions with retryable error
+    # - drop_low_priority: drop low priority tasks (requires priority info)
+    on_soft_limit: "throttle_producers" # throttle_producers | reject_new | drop_low_priority
+
+    # What to do at hard max:
+    on_hard_limit: "reject_new" # reject_new | drop_low_priority
+
+    # Low priority is 70..100 (matches concurrency.yaml guidance)
+    low_priority_threshold: 70
+
+  # Default timeouts at execution layer (category/capability may override elsewhere)
+  timing:
+    # Max time allowed in queue before job becomes stale.
+    max_queue_wait_s: 180
+
+    # Default execution timeout if the caller doesn't provide one.
+    default_exec_timeout_s: 30
+
+    # Heartbeat for long-running tasks (worker reports progress).
+    heartbeat_interval_s: 10
+
+  # What constitutes a "healthy pool"
+  health:
+    enabled: true
+    # If queue depth exceeds this fraction of max_pending, raise warning metric.
+    queue_pressure_warn_ratio: 0.8
+    # If queue depth exceeds this fraction, declare degraded.
+    queue_pressure_degraded_ratio: 0.95
+    # If pool has no worker threads/processes alive, declare unhealthy.
+    require_workers_alive: true
+
+  # Observability configuration (logs + metrics)
+  observability:
+    log_pool_events: true
+    log_task_lifecycle: true
+    log_rejections: true
+    log_backpressure: true
+
+    metrics:
+      enabled: true
+      keys:
+        - "francis.pool.queue_depth"
+        - "francis.pool.queue_pressure_ratio"
+        - "francis.pool.inflight"
+        - "francis.pool.completed_total"
+        - "francis.pool.failed_total"
+        - "francis.pool.rejected_total"
+        - "francis.pool.exec_latency_ms"
+        - "francis.pool.queue_wait_ms"
+        - "francis.pool.worker_restarts_total"
+
+  # Shutdown/drain behavior
+  shutdown:
+    # If true, stop accepting new tasks immediately on shutdown.
+    stop_accepting_on_shutdown: true
+
+    # Drain strategy:
+    # - drain: let in-flight complete up to grace, then cancel
+    # - cancel: cancel in-flight immediately (only for dev/testing)
+    strategy: "drain" # drain | cancel
+
+    # Grace period to let jobs complete.
+    drain_grace_s: 12
+
+    # After grace, cancellation escalation:
+    # - "signal_cancel": request cancellation
+    # - "hard_kill": terminate workers (process pool)
+    after_grace: "signal_cancel" # signal_cancel | hard_kill
+
+# ------------------------------------------------------------------------------
+# Pool topology (executors)
+# ------------------------------------------------------------------------------
+# Each pool is an execution lane. Pools are referenced by routing rules.
+#
+# Supported pool kinds (for local backend):
+# - "asyncio": runs async coroutines (no extra threads/processes)
+# - "threadpool": for blocking I/O (filesystem, sync HTTP libs, DB drivers)
+# - "processpool": CPU-heavy work (parsing, embedding, simulation steps)
+# - "subprocess": isolated tasks that must run out-of-process with strict limits
+#
+pools:
+
+  # --------------------------------------------------------------------------
+  # Interactive pool: UI/API critical tasks
+  # --------------------------------------------------------------------------
+  interactive:
+    kind: "asyncio"
+    enabled: true
+    description: "Interactive tasks; keep UI/API responsive."
+    limits:
+      # Inflight clamp inside this pool (in addition to global concurrency policy).
+      max_inflight: 12
+    queue:
+      max_pending: 300
+      soft_limit: 200
+      on_soft_limit: "throttle_producers"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 10
+      max_queue_wait_s: 60
+
+  # --------------------------------------------------------------------------
+  # IO pool: blocking I/O isolation
+  # --------------------------------------------------------------------------
+  io:
+    kind: "threadpool"
+    enabled: true
+    description: "Blocking IO work (filesystem, sync libs, DB calls)."
+    workers:
+      # Default thread count; profiles override.
+      count: 16
+      # If true, allow dynamic resizing within bounds (executor-dependent).
+      autoscale:
+        enabled: false
+        min: 8
+        max: 32
+    limits:
+      max_inflight: 16
+    queue:
+      max_pending: 500
+      soft_limit: 350
+      on_soft_limit: "throttle_producers"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 30
+      max_queue_wait_s: 180
+
+  # --------------------------------------------------------------------------
+  # CPU pool: CPU-bound jobs
+  # --------------------------------------------------------------------------
+  cpu:
+    kind: "processpool"
+    enabled: true
+    description: "CPU-bound tasks; process isolation."
+    workers:
+      count: 4
+      start_method: "spawn" # spawn | fork | forkserver (spawn is safest on Windows)
+      max_tasks_per_child: 200 # recycle processes to reduce leak accumulation
+    limits:
+      max_inflight: 4
+    queue:
+      max_pending: 200
+      soft_limit: 140
+      on_soft_limit: "throttle_producers"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 60
+      max_queue_wait_s: 300
+    resource_hints:
+      # Hints only; enforcement depends on implementation.
+      memory_soft_mb: 800
+      memory_hard_mb: 1400
+
+  # --------------------------------------------------------------------------
+  # Network egress pool: web learning / fetch operations
+  # --------------------------------------------------------------------------
+  egress:
+    kind: "threadpool"
+    enabled: true
+    description: "Network egress tasks (web learning). Separate lane for governance/throttling."
+    workers:
+      count: 6
+      autoscale:
+        enabled: false
+        min: 2
+        max: 10
+    limits:
+      max_inflight: 4
+    queue:
+      max_pending: 200
+      soft_limit: 140
+      on_soft_limit: "throttle_producers"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 60
+      max_queue_wait_s: 240
+
+  # --------------------------------------------------------------------------
+  # Simulation pool: heavy compute, conservative concurrency
+  # --------------------------------------------------------------------------
+  simulation:
+    kind: "processpool"
+    enabled: true
+    description: "Simulation workloads (digital twin experiments)."
+    workers:
+      count: 2
+      start_method: "spawn"
+      max_tasks_per_child: 50
+    limits:
+      max_inflight: 2
+    queue:
+      max_pending: 100
+      soft_limit: 70
+      on_soft_limit: "reject_new"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 120
+      max_queue_wait_s: 600
+    resource_hints:
+      memory_soft_mb: 1200
+      memory_hard_mb: 2000
+
+  # --------------------------------------------------------------------------
+  # Industrial actuation: serialized (should be further gated by governance)
+  # --------------------------------------------------------------------------
+  industrial:
+    kind: "threadpool"
+    enabled: true
+    description: "Industrial control lane; serialized execution."
+    workers:
+      count: 1
+      autoscale:
+        enabled: false
+        min: 1
+        max: 1
+    limits:
+      max_inflight: 1
+    queue:
+      max_pending: 25
+      soft_limit: 15
+      on_soft_limit: "reject_new"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 30
+      max_queue_wait_s: 60
+
+  # --------------------------------------------------------------------------
+  # Isolated subprocess pool: maximum separation (future-heavy, optional)
+  # --------------------------------------------------------------------------
+  isolated:
+    kind: "subprocess"
+    enabled: false
+    description: "Out-of-process isolated tasks with strict boundaries (optional)."
+    workers:
+      count: 1
+    limits:
+      max_inflight: 1
+    queue:
+      max_pending: 20
+      soft_limit: 12
+      on_soft_limit: "reject_new"
+      on_hard_limit: "reject_new"
+    timing:
+      default_exec_timeout_s: 90
+      max_queue_wait_s: 120
+    sandbox:
+      enabled: true
+      # Policy hint: requires sandbox availability.
+      requires_sandbox_available: true
+
+# ------------------------------------------------------------------------------
+# Routing rules (category / capability -> pool)
+# ------------------------------------------------------------------------------
+# Routing is evaluated in order; first match wins.
+#
+# Rule match precedence:
+#   1) capability exact match
+#   2) capability prefix match (e.g., "web_learning.")
+#   3) category match (read_only, mutation, etc.)
+#   4) default pool fallback
+#
+routing:
+
+  default_pool: "io" # safe default for unknown blocking work
+
+  # Categories should align with concurrency.yaml categories.
+  category_to_pool:
+    read_only: "interactive"
+    interactive_ui: "interactive"
+    mutation: "io"
+    destructive: "io"
+    network_egress: "egress"
+    credential_ops: "io"
+    simulation: "simulation"
+    industrial_actuation: "industrial"
+
+  # Capability-specific overrides
+  capability_overrides:
+
+    # Keep API/UI responsiveness: ledger list and approvals list in interactive lane
+    continuity.ledger.list: { pool: "interactive" }
+    approvals.list: { pool: "interactive" }
+
+    # Exports are IO heavy; route to IO lane
+    continuity.ledger.export: { pool: "io" }
+    domains.export: { pool: "io" }
+    simulation.export: { pool: "io" }
+
+    # Web learning is egress lane
+    web_learning.search: { pool: "egress" }
+    web_learning.fetch: { pool: "egress" }
+    web_learning.ingest: { pool: "egress" }
+
+    # Simulation is simulation lane
+    simulation.run: { pool: "simulation" }
+
+    # Industrial always serialized
+    industrial.actuate: { pool: "industrial" }
+
+# ------------------------------------------------------------------------------
+# Admission control (submit-time checks)
+# ------------------------------------------------------------------------------
+admission:
+
+  enabled: true
+
+  # If true, reject tasks that do not specify category/capability.
+  require_classification: false
+
+  # Reject unknown categories if classification required.
+  reject_unknown_category: true
+
+  # If true, enforce max_queue_wait_s at submission time if already stale.
+  enforce_deadline_on_submit: true
+
+  # Optional: enforce "interactive reservation" behavior by rejecting background
+  # tasks when interactive pressure is high. (Fairness is still handled elsewhere.)
+  protect_interactive:
+    enabled: true
+    trigger_queue_pressure_ratio: 0.9
+    action: "reject_background" # reject_background | throttle_background
+
+# ------------------------------------------------------------------------------
+# Worker lifecycle controls
+# ------------------------------------------------------------------------------
+lifecycle:
+
+  # Startup probe ensures pools are ready before declaring service healthy.
+  startup_probe:
+    enabled: true
+    timeout_s: 10
+    # Pools that must be healthy for startup to succeed
+    required_pools:
+      - "interactive"
+      - "io"
+
+  # Periodic health checks
+  health_checks:
+    enabled: true
+    interval_s: 5
+    # If pool remains degraded for this long, emit escalation event
+    degrade_escalation_s: 30
+    # If pool remains unhealthy for this long, optionally restart it (implementation dependent)
+    unhealthy_restart_s: 60
+    allow_restart:
+      enabled: true
+      max_restarts_per_hour: 6
+
+  # Drain behavior on shutdown
+  shutdown:
+    strategy: "drain"
+    drain_grace_s: 12
+    stop_accepting_on_shutdown: true
+
+# ------------------------------------------------------------------------------
+# Guard-state overlays (throttle/disable pools under restriction)
+# ------------------------------------------------------------------------------
+guard_state_overlays:
+
+  normal: {}
+
+  restricted:
+    pools:
+      egress:
+        enabled: true
+        workers:
+          count: 3
+        limits:
+          max_inflight: 2
+      simulation:
+        enabled: true
+        workers:
+          count: 1
+        limits:
+          max_inflight: 1
+      industrial:
+        enabled: false # actuation should be disabled in restricted mode by default
+
+  lockdown:
+    pools:
+      egress:
+        enabled: false
+      simulation:
+        enabled: false
+      industrial:
+        enabled: false
+      cpu:
+        workers:
+          count: 1
+        limits:
+          max_inflight: 1
+      io:
+        workers:
+          count: 8
+        limits:
+          max_inflight: 8
+      interactive:
+        limits:
+          max_inflight: 10
+
+# ------------------------------------------------------------------------------
+# Profiles (environment-level overrides)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    pools:
+      io:
+        workers:
+          count: 24
+      cpu:
+        workers:
+          count: 6
+      egress:
+        workers:
+          count: 8
+    defaults:
+      queue:
+        max_pending: 800
+        soft_limit: 550
+
+  workstation:
+    pools:
+      io:
+        workers:
+          count: 16
+      cpu:
+        workers:
+          count: 4
+      egress:
+        workers:
+          count: 6
+
+  production:
+    pools:
+      io:
+        workers:
+          count: 16
+      cpu:
+        workers:
+          count: 4
+      egress:
+        workers:
+          count: 6
+      simulation:
+        workers:
+          count: 2
+    defaults:
+      queue:
+        max_pending: 500
+        soft_limit: 350
+
+  regulated:
+    pools:
+      egress:
+        workers:
+          count: 3
+        limits:
+          max_inflight: 2
+      simulation:
+        workers:
+          count: 1
+        limits:
+          max_inflight: 1
+      industrial:
+        enabled: false
+    defaults:
+      queue:
+        max_pending: 300
+        soft_limit: 220
+      shutdown:
+        strategy: "drain"
+        drain_grace_s: 15
+
+  safety_critical:
+    pools:
+      egress:
+        enabled: false
+      simulation:
+        enabled: false
+      industrial:
+        enabled: false
+      cpu:
+        workers:
+          count: 1
+        limits:
+          max_inflight: 1
+      io:
+        workers:
+          count: 8
+        limits:
+          max_inflight: 8
+      interactive:
+        limits:
+          max_inflight: 10
+    defaults:
+      queue:
+        max_pending: 200
+        soft_limit: 140
+      shutdown:
+        strategy: "drain"
+        drain_grace_s: 20
+        after_grace: "hard_kill"
+
+# ------------------------------------------------------------------------------
+# Validation hints (for loader)
+# ------------------------------------------------------------------------------
+validation:
+  require_pools_present:
+    - "interactive"
+    - "io"
+    - "cpu"
+    - "egress"
+    - "simulation"
+    - "industrial"
+
+  numeric_bounds:
+    pool_workers_count: { min: 0, max: 512 }
+    max_inflight: { min: 0, max: 1024 }
+    queue_max_pending: { min: 10, max: 200000 }
+    default_exec_timeout_s: { min: 1, max: 3600 }
+    max_queue_wait_s: { min: 1, max: 86400 }
+
+  notes:
+    - "If industrial.enabled=true then industrial.workers.count must be 1 and max_inflight must be 1."
+    - "If processpool.start_method is not 'spawn' on Windows, warn."
+    - "If unknown pool kind is encountered, refuse to start (fail-closed)."

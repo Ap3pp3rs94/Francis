@@ -1,0 +1,25 @@
+* text=auto eol=lf
+
+# PowerShell scripts: keep CRLF for Windows-native editing.
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Common structured text formats
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+
+# Treat binary assets as binary to avoid line-ending munging.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary

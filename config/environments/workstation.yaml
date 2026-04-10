@@ -1,0 +1,299 @@
+# ==============================================================================
+# Francis Environment Profile: WORKSTATION
+# File: config/environments/workstation.yaml
+#
+# INTENT:
+#   Single-machine daily-driver profile:
+#     - Local-first everything (API/UI/models/state)
+#     - Stable, disciplined defaults (not "dev noisy", not "prod cluster heavy")
+#     - Governance enabled with low-friction reads, strict for high/critical actions
+#     - Web learning allowed but approval-gated for ingest
+#
+# SECURITY NOTE:
+#   - Keep API authenticated even on localhost; avoid training yourself into "none".
+#   - No secrets belong in this file.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: workstation
+  name: Workstation
+  description: >
+    Local workstation profile: stable local-first operation with disciplined
+    governance and optional web learning under approvals.
+
+  invariants:
+    - "Authenticated API access."
+    - "Audit enabled (recommended/required for impactful actions)."
+    - "Local-first model routing."
+    - "Exports and ingest are approval-gated."
+
+  operator_notes:
+    - "If you expose API beyond localhost, switch to home/edge/production profiles."
+    - "If you want faster iteration, use dev profile."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: workstation
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+  concurrency:
+    api_workers: 1
+    worker_threads: 6
+    daemon_concurrency: 3
+
+# ------------------------------------------------------------------------------
+# API posture (localhost-first)
+# ------------------------------------------------------------------------------
+api:
+  host: "127.0.0.1"
+  port: 8000
+
+  security:
+    auth_mode: token               # jwt also fine; token is simpler for single user
+    allow_anonymous: false
+    trust_proxy_headers: false
+
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+      - "http://127.0.0.1:4173"
+      - "http://localhost:4173"
+
+  timeouts:
+    read_s: 45
+    write_s: 60
+    idle_s: 120
+
+  websocket:
+    ping_interval_s: 20
+    ping_timeout_s: 10
+    max_message_kb: 256
+
+# ------------------------------------------------------------------------------
+# Observability (workstation = readable but structured)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    # jsonl is easier to grep and ingest; pretty is easier to eyeball.
+    # Choose jsonl by default for real auditability.
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.35
+
+# ------------------------------------------------------------------------------
+# Governance (balanced)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: policy                   # policy is less friction than strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 1
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 50
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (workstation may have internet; still block footguns)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: false
+
+  egress:
+    enabled: true
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+      - "0.0.0.0/0"
+      - "::/0"
+    denylist:
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (local-first; allow pulls; remote optional but explicit)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: true
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false
+
+  sampling:
+    temperature: 0.4
+    top_p: 0.9
+    max_tokens: 1536
+
+# ------------------------------------------------------------------------------
+# Memory / continuity (local by default, services optional)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: faiss                 # faiss is easiest locally; qdrant optional
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+    qdrant:
+      enabled: false
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+
+    pgvector:
+      enabled: false
+      dsn: ""
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 300
+      max_days: 60
+
+# ------------------------------------------------------------------------------
+# External services (optional on workstation)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: false
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 10
+    pool_timeout_s: 30
+
+  redis:
+    enabled: false
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 10
+
+  qdrant:
+    enabled: false
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Features (workstation operator stance)
+# ------------------------------------------------------------------------------
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: true
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      mode: static
+      static_peers: []
+    consensus:
+      enabled: false
+      algorithm: raft
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  industrial:
+    enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  resilience:
+    enabled: true
+    backup:
+      enabled: true
+      require_approval: true
+      schedule_hint: "weekly"
+    restore:
+      enabled: true
+      require_approval: true
+
+# ------------------------------------------------------------------------------
+# Assertions (intent)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: auth_required
+    severity: error
+    expr: "{{api.security.allow_anonymous == false}}"
+    message: "Workstation profile requires authenticated API access."
+
+  - id: exports_gated
+    severity: warn
+    expr: "{{governance.exports.require_approval == true}}"
+    message: "Workstation profile should keep exports approval-gated."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "WORKSTATION"
+  banner:
+    enabled: true
+    text: "WORKSTATION — LOCAL-FIRST / GOV-GATED INGEST"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

@@ -1,0 +1,457 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Safety-Critical (system posture + non-negotiable invariants)
+# Path:   config/policies/safety_critical.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy defines the system-wide posture for deployments where Francis is
+# allowed to influence safety-relevant systems (industrial control, robotics,
+# physical security, or any workflow where an error can cause harm).
+#
+# This file is intentionally "umbrella policy":
+#   - it does not replace subsystem policies
+#   - it sets non-negotiable invariants and overrides stricter gates
+#
+# It should coordinate with (not duplicate) these policies:
+#   - config/policies/industrial_safety.yaml
+#   - config/policies/human_safety.yaml
+#   - config/policies/networks.yaml
+#   - config/policies/privacy.yaml
+#   - config/policies/data_governance.yaml
+#   - config/policies/guard.yaml
+#   - config/policies/api_permissions.yaml
+#   - config/policies/offensive_security.yaml
+#   - config/policies/regulated_domains.yaml
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: unknown => deny / require review. Never "best guess" execute.
+# - Deny-by-default posture for any non-read-only operation unless explicitly allowed.
+# - Strict egress controls: disable web learning and public internet access.
+# - Two-person rule for destructive / actuation operations (quorum).
+# - Mandatory readiness checks for actuation.
+# - Strong audit requirements for every decision and execution attempt.
+# - Deterministic escalation: violations raise guard posture.
+#
+# IMPORTANT
+# ---------
+# This file is policy-only. It does not store secrets or implement enforcement.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "safety_critical_posture"
+  notes:
+    - "Umbrella policy: defines invariants + overrides for safety-critical operation."
+    - "Prefer explicit allowlists and approvals over dynamic autonomy."
+    - "This policy is intentionally conservative."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+safety_critical:
+  enabled: true
+
+  # Modes:
+  # - policy: baseline safety-critical (default)
+  # - strict: maximum conservatism (higher trust floors, more quorum, fewer exceptions)
+  mode: "policy" # policy | strict
+
+  # Fail closed behavior for any unknown/unclassified scenario.
+  fail_closed:
+    # If a capability/action cannot be categorized (read/mutation/destructive/actuation) -> deny.
+    on_unknown_action_category: "deny" # deny | require_review
+
+    # If destination cannot be normalized/classified (domains/network) -> deny.
+    on_unknown_destination: "deny"
+
+    # If identity missing/unknown -> deny.
+    on_unknown_identity: "deny"
+
+    # If required policy documents cannot be loaded/parsed -> deny high-risk actions.
+    on_policy_load_error: "deny_high_risk" # deny_all | deny_high_risk
+
+  # In safety-critical mode, autonomy is treated as a controlled feature, not default behavior.
+  autonomy:
+    # "none": no autonomous execution (only operator-driven)
+    # "bounded": may execute read-only autonomously; actions require gates
+    mode: "bounded" # none | bounded
+    allow_autonomous_read_only: true
+    allow_autonomous_mutations: false
+    allow_autonomous_actuation: false
+
+# ------------------------------------------------------------------------------
+# Non-negotiable feature disables (hard posture)
+# ------------------------------------------------------------------------------
+feature_disables:
+  enabled: true
+
+  # Network egress learning/research is disabled; do not fetch the internet.
+  web_learning:
+    enabled: false
+    reason: "Safety-critical posture: disable arbitrary egress and content ingestion."
+
+  # Offensive security actions are disabled in safety-critical posture (including simulations).
+  offensive_security:
+    enabled: false
+    reason: "Safety-critical posture: prohibit offensive security tooling."
+
+  # Plugin installation/update from external sources is disabled by default.
+  # (Listing local plugins can remain read-only.)
+  plugins:
+    allow_install: false
+    allow_enable_disable: true
+    reason: "Change control: prevent runtime mutation of executable surface."
+
+  # Model providers: disallow remote inference by default (reduce egress + nondeterminism).
+  models:
+    allow_remote_providers: false
+    allow_local_providers: true
+    reason: "Safety-critical posture: local-only inference by default."
+
+  # Debugging posture: prohibit raw body dumping/capture by default.
+  debug:
+    allow_raw_http_bodies: false
+    allow_raw_prompt_dump: false
+    reason: "Privacy + safety posture: avoid accidental sensitive leakage."
+
+# ------------------------------------------------------------------------------
+# Governance gates (trust + approvals + quorum)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+
+  # Categorization used by governance layer.
+  action_categories:
+    - "read_only"
+    - "mutation"
+    - "destructive"
+    - "network_egress"
+    - "credential_operations"
+    - "industrial_actuation"
+    - "safety_sensitive"
+
+  # Default gates for safety-critical posture.
+  # Subsystem policies (api_permissions, industrial_safety, networks, etc.) may be stricter.
+  # If they are looser, this policy should tighten.
+  gate_templates:
+
+    read_only:
+      category: "read_only"
+      min_trust: 2
+      requires_approval: false
+      requires_quorum: false
+
+    mutation:
+      category: "mutation"
+      min_trust: 6
+      requires_approval: true
+      requires_quorum: false
+
+    destructive:
+      category: "destructive"
+      min_trust: 8
+      requires_approval: true
+      requires_quorum: true
+
+    network_egress:
+      category: "network_egress"
+      min_trust: 8
+      requires_approval: true
+      requires_quorum: true
+
+    credential_operations:
+      category: "credential_operations"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+    industrial_actuation:
+      category: "industrial_actuation"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+    safety_sensitive:
+      category: "safety_sensitive"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+  # Quorum / two-person rule defaults (used when requires_quorum=true).
+  quorum_defaults:
+    min_approvals: 2
+    min_distinct_approvers: 2
+    min_approver_trust: 9
+    allow_same_actor_twice: false
+
+  # Explicit capability tightening overrides (umbrella-level tightening).
+  # These should map to catalog IDs in config/capabilities/catalog.yaml.
+  capability_overrides:
+
+    # Web learning is disabled by feature_disables; keep here as defense-in-depth.
+    web_learning.search:
+      category: "network_egress"
+      decision: "deny"
+      reason: "web_learning disabled in safety-critical posture"
+
+    web_learning.fetch:
+      category: "network_egress"
+      decision: "deny"
+      reason: "web_learning disabled in safety-critical posture"
+
+    web_learning.ingest:
+      category: "network_egress"
+      decision: "deny"
+      reason: "web_learning disabled in safety-critical posture"
+
+    # Industrial actuation must always require quorum + readiness.
+    industrial.actuate:
+      category: "industrial_actuation"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+    # Destructive domain operations are strictly gated.
+    domains.delete:
+      category: "destructive"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+    # Credential ops (metadata listing allowed; mutations are heavily gated)
+    credentials.request:
+      category: "credential_operations"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+    credentials.revoke:
+      category: "credential_operations"
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+# ------------------------------------------------------------------------------
+# Readiness checks (preconditions for high-risk actions)
+# ------------------------------------------------------------------------------
+readiness:
+  enabled: true
+
+  # If readiness cannot be evaluated -> fail closed.
+  fail_closed_on_readiness_error: true
+
+  # Required readiness for action categories.
+  require_for_categories:
+    - "industrial_actuation"
+    - "destructive"
+    - "network_egress"
+    - "credential_operations"
+    - "safety_sensitive"
+
+  # Readiness checks are declared here; implementation should evaluate them.
+  checks:
+
+    # System must be healthy.
+    - id: "system.health.ok"
+      kind: "system_health"
+      required: true
+      params:
+        max_health_report_age_s: 30
+        require_all_critical_ok: true
+      on_fail: "deny"
+
+    # Guard posture must allow action.
+    - id: "guard.state.safe_enough"
+      kind: "guard_state"
+      required: true
+      params:
+        allowed_states: ["normal", "restricted"] # disallow actions in lockdown
+        deny_in_states: ["lockdown"]
+      on_fail: "deny"
+
+    # Must have valid approvals/quorum before execution begins.
+    - id: "governance.approvals.present"
+      kind: "approvals"
+      required: true
+      params:
+        require_quorum_if_needed: true
+        require_not_expired: true
+      on_fail: "deny"
+
+    # Industrial-specific readiness (high level; detailed constraints in industrial_safety.yaml).
+    - id: "industrial.interlocks.ok"
+      kind: "industrial_interlocks"
+      required: true
+      params:
+        require_interlocks: true
+        require_estop_not_active: true
+      on_fail: "deny"
+
+# ------------------------------------------------------------------------------
+# Network posture (defense in depth; complements networks.yaml + regulated_domains.yaml)
+# ------------------------------------------------------------------------------
+network_posture:
+  enabled: true
+
+  # Deny public internet egress by default in safety-critical posture.
+  deny_public_internet_egress: true
+
+  # Require domain registry for any permitted egress (even if web_learning disabled).
+  require_registered_domain_for_any_egress: true
+
+  # Disallow IP-literal egress by default.
+  deny_ip_literal_egress: true
+
+  # Allow only explicit internal destinations (loopback/LAN) by default.
+  allowed_destination_classes:
+    - "internal"
+
+# ------------------------------------------------------------------------------
+# Data + privacy posture (tightening knobs; complements privacy.yaml)
+# ------------------------------------------------------------------------------
+data_privacy_posture:
+  enabled: true
+
+  # In safety-critical posture, exports are sensitive and approval gated.
+  exports:
+    require_approval: true
+    min_trust: 9
+    require_quorum: true
+    enforce_redaction: true
+    fail_closed_on_redaction_error: true
+
+  # In safety-critical posture, prohibit persistence if classification is unknown.
+  persistence:
+    deny_on_unknown_category: true
+    deny_on_secrets_detected: true
+
+  # Retention hints (privacy.yaml remains canonical).
+  retention_hints:
+    web_learning_cache_days: 0
+    safety_events_days: 730
+    audit_days: 730
+
+# ------------------------------------------------------------------------------
+# Emergency handling (explicit, auditable, tightly gated)
+# ------------------------------------------------------------------------------
+emergency:
+  enabled: true
+
+  # Emergency does not mean bypass governance; it means "faster path with stronger audit".
+  allow_bypass_approvals: false
+  allow_bypass_quorum: false
+
+  # If an emergency action is executed, require explicit emergency justification.
+  require_justification: true
+  justification_min_length: 20
+
+  # Emergency actions should elevate audit verbosity and optionally guard posture.
+  on_emergency_execution:
+    emit_incident_event: true
+    set_guard_state_at_least: "restricted"
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics must be strong in safety-critical)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  # Audit everything related to governance and execution.
+  audit:
+    enabled: true
+    include_payload: false
+    include:
+      - "ts"
+      - "actor_id"
+      - "capability_id"
+      - "category"
+      - "decision"
+      - "reason_codes"
+      - "approval_id"
+      - "quorum"
+      - "profile"
+      - "correlation_id"
+      - "readiness_checks"
+      - "guard_state_before"
+      - "guard_state_after"
+
+  metrics:
+    enabled: true
+    counters:
+      - "safety_critical.denied"
+      - "safety_critical.allowed"
+      - "safety_critical.readiness_failed"
+      - "safety_critical.guard_escalations"
+      - "safety_critical.emergency_executions"
+
+# ------------------------------------------------------------------------------
+# Guard integration (deterministic escalation)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  # If a safety-critical readiness check fails, tighten guard posture.
+  on_readiness_failure:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  # If a hard-disabled feature is attempted, treat as violation.
+  on_disabled_feature_attempt:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  # If destructive/actuation is attempted without quorum/approval, escalate.
+  on_governance_violation:
+    set_guard_state_at_least: "lockdown"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_codes:
+  POLICY_DISABLED: "Safety-critical policy disabled."
+  FAIL_CLOSED_UNKNOWN_ACTION: "Action category unknown (fail closed)."
+  FAIL_CLOSED_UNKNOWN_DESTINATION: "Destination unknown/unclassifiable (fail closed)."
+  FAIL_CLOSED_UNKNOWN_IDENTITY: "Identity missing/unknown (fail closed)."
+  FEATURE_DISABLED: "Feature disabled by safety-critical posture."
+  READINESS_FAILED: "Readiness checks failed."
+  GOVERNANCE_APPROVAL_REQUIRED: "Approval required."
+  GOVERNANCE_QUORUM_REQUIRED: "Quorum required."
+  NETWORK_PUBLIC_EGRESS_DENIED: "Public internet egress denied."
+  DOMAIN_REGISTRY_REQUIRED: "Registered domain required."
+  IP_LITERAL_DENIED: "IP-literal egress denied."
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  safety_critical:
+    # This policy file is intended for this profile; keep explicit for clarity.
+    safety_critical:
+      mode: "policy"
+
+  safety_critical_strict:
+    # Optional stricter posture if you ever need it.
+    safety_critical:
+      mode: "strict"
+    governance:
+      gate_templates:
+        mutation:
+          min_trust: 7
+          requires_approval: true
+        destructive:
+          min_trust: 9
+          requires_approval: true
+          requires_quorum: true
+        network_egress:
+          min_trust: 9
+          requires_approval: true
+          requires_quorum: true
+    network_posture:
+      allowed_destination_classes: ["internal"]
+      deny_public_internet_egress: true

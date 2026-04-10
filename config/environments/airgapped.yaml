@@ -1,0 +1,348 @@
+# ==============================================================================
+# Francis Environment Profile: AIRGAPPED
+# File: config/environments/airgapped.yaml
+#
+# INTENT:
+#   A strict offline/airgapped posture:
+#     - No public internet egress
+#     - No remote LLM providers
+#     - Web learning disabled (or forced approval-gated with no egress)
+#     - Governance tightened (audit on, approvals preferred, trust floors elevated)
+#
+# OPERATING ASSUMPTIONS:
+#   - This profile may run on a workstation, edge box, or regulated network.
+#   - "Airgapped" here means: NO outbound access to public internet by default.
+#     Internal LAN access MAY be permitted explicitly.
+#
+# COMPATIBILITY:
+#   - This file is designed to be merged/overlaid with config/profile.yaml and
+#     config/runtime/*.yaml. Unknown keys should be ignored by tolerant loaders.
+#   - Absolutely no secrets belong here.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: airgapped
+  name: Airgapped
+  description: >
+    Strict offline profile for airgapped / no-internet deployments.
+    Disables external egress by default, restricts external connectors, and
+    enforces local-only model routing. Governance is tightened for safety.
+
+  # This is documentation for operators and for future config linting.
+  invariants:
+    - "No public internet egress."
+    - "No remote model providers."
+    - "Web learning ingest/fetch disabled (or strictly gated with no egress)."
+    - "Exports require explicit approval."
+    - "Fail closed on ambiguous network requests."
+
+  # Optional: UI/CLI can display these to explain posture to an operator.
+  operator_notes:
+    - "Prefer loopback-only bindings for API unless explicitly required."
+    - "If LAN access is needed, add explicit allowlists below."
+    - "If you enable federation, ensure discovery URLs are internal-only."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: airgapped
+
+  # Strongly recommended in offline/regulated posture:
+  strict_config: true       # Reject missing/invalid critical settings where supported.
+  debug: false
+
+  # In airgapped posture we bias toward deterministic behavior:
+  deterministic_mode: true  # Hint: reduce non-determinism where practical.
+
+  # Safety posture:
+  fail_fast: true           # Fail early if invariants are violated (where supported).
+  safe_defaults: true       # Hint for subsystems to prefer conservative defaults.
+
+# ------------------------------------------------------------------------------
+# API posture (service boundary)
+# ------------------------------------------------------------------------------
+api:
+  # Prefer loopback in airgapped deployments.
+  host: "127.0.0.1"
+  port: 8000
+
+  # Airgapped does not mean unauthenticated.
+  security:
+    auth_mode: token            # none | token | jwt (token is simplest offline)
+    allow_anonymous: false
+    trust_proxy_headers: false  # avoid implicit trust of upstream proxies by default
+
+  cors:
+    enabled: true
+    # Default to local dev UI; operators may override for internal LAN.
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  # Conservative timeouts.
+  timeouts:
+    read_s: 30
+    write_s: 30
+    idle_s: 60
+
+# ------------------------------------------------------------------------------
+# Observability (logs/audit/explanations)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl              # jsonl recommended for offline audit tooling
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    # "airgapped" often implies stronger local audit, not weaker.
+    level: required            # none | recommended | required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  # Rate limiting / noise control hints:
+  sampling:
+    # Keep high-volume subsystems bounded.
+    web_learning: 0.0          # effectively off; see feature toggles
+    llm: 1.0
+    operations: 1.0
+
+# ------------------------------------------------------------------------------
+# Governance defaults (approvals + trust)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict               # disabled | policy | strict
+    # When strict, prefer explicit approvals on high/critical risk capabilities.
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    # Raise the floor slightly in airgapped posture to prevent “blind automation”.
+    minimum_operational_trust: 2
+    # Optional hint: decays/growth can still run offline.
+    decay_enabled: true
+    growth_enabled: true
+
+  # A practical airgapped stance: exports are always governed.
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 50
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (the core of "airgapped")
+# ------------------------------------------------------------------------------
+network:
+  # Fail-closed is the defining attribute of airgapped posture.
+  deny_by_default: true
+
+  # Explicit allowlists for outbound access.
+  # NOTE: This is policy intent. Enforcement is done by the network/web policy layers.
+  egress:
+    enabled: false
+
+    # Permit internal-only egress if needed by operators (set enabled=true and allowlist).
+    allowlist:
+      # Loopback only (safe defaults).
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+
+      # Private RFC1918 ranges are commented out by default.
+      # Uncomment ONLY if you explicitly allow LAN egress.
+      # - "10.0.0.0/8"
+      # - "172.16.0.0/12"
+      # - "192.168.0.0/16"
+
+    # Denylist is defensive even when allowlist is used.
+    denylist:
+      - "0.0.0.0/0"           # explicit “no internet”
+      - "::/0"
+
+  dns:
+    enabled: false            # Prefer static host allowlists; no external DNS.
+    internal_resolvers: []    # If needed: ["192.168.1.1"] (internal-only)
+
+  tls:
+    # In airgapped LANs you may still have internal TLS. Keep validation on.
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Model routing posture (local-only)
+# ------------------------------------------------------------------------------
+models:
+  # No remote providers in airgapped posture.
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  # Prefer local inference.
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      # Model names are hints; actual mapping lives in config/models/*.
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+      # Airgapped: avoid pulling models automatically unless explicitly allowed.
+      allow_model_pull: false
+
+    openai:
+      enabled: false
+
+  # Conservative sampling defaults (hint-level).
+  sampling:
+    temperature: 0.3
+    top_p: 0.9
+    max_tokens: 1024
+
+# ------------------------------------------------------------------------------
+# Memory / vector posture (offline-first)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: faiss              # faiss | qdrant | pgvector
+    # Prefer local disk indexes for airgapped environments.
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+    # External vector stores are disabled unless explicitly configured.
+    qdrant:
+      enabled: false
+    pgvector:
+      enabled: false
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 200
+      max_days: 30
+
+# ------------------------------------------------------------------------------
+# Feature flags (hard posture)
+# ------------------------------------------------------------------------------
+features:
+  # Web learning is fundamentally an external network surface.
+  # In airgapped posture, it is OFF by default.
+  web_learning:
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+    # Keep audit/logging on even if disabled (helps detect attempts).
+    audit_enabled: true
+    log_enabled: true
+    require_approval: true
+
+  # Federation can be internal-only; keep disabled by default for airgapped.
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      url: ""
+    gossip:
+      enabled: false
+
+  # Industrial control: safety-critical. Leave enabled only if you truly use it.
+  # Airgapped is common for ICS/OT, but governance must be strict.
+  industrial:
+    enabled: true
+    control_actions_enabled: false     # telemetry only by default
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  # Plugins: allow registry browsing locally, block remote installs by default.
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  # External connectors (cloud/saas) disabled by default.
+  connectors:
+    cloud:
+      enabled: false
+    saas:
+      enabled: false
+    communication:
+      enabled: true
+      # NOTE: Email/SMS may be "external" even on LAN; disable if truly airgapped.
+      email_enabled: false
+      sms_enabled: false
+      push_enabled: false
+
+# ------------------------------------------------------------------------------
+# External services posture (disabled by default; airgapped favors local state)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: false
+    dsn: ""                # set only if internal-only DB exists
+    pool_size: 10
+
+  redis:
+    enabled: false
+    url: ""
+    pool_size: 10
+
+  qdrant:
+    enabled: false
+    url: ""
+
+# ------------------------------------------------------------------------------
+# Safety rails / assertions (optional: for config linting + fail-fast boot)
+# ------------------------------------------------------------------------------
+assertions:
+  # These are "should be true" constraints. A strict loader may refuse to boot
+  # if any assertion fails. A tolerant loader may log warnings.
+  - id: no_web_learning
+    severity: error
+    expr: "{{features.web_learning.enabled == false}}"
+    message: "Airgapped profile requires web_learning.enabled=false."
+
+  - id: no_remote_models
+    severity: error
+    expr: "{{models.allow_remote_providers == false}}"
+    message: "Airgapped profile requires models.allow_remote_providers=false."
+
+  - id: no_internet_egress
+    severity: error
+    expr: "{{network.egress.enabled == false}}"
+    message: "Airgapped profile requires network.egress.enabled=false."
+
+  - id: api_not_anonymous
+    severity: warn
+    expr: "{{api.security.allow_anonymous == false}}"
+    message: "Airgapped deployments should not run anonymous API access."
+
+# ------------------------------------------------------------------------------
+# UI hints (non-enforcing; used by chat_ui/settings if desired)
+# ------------------------------------------------------------------------------
+ui:
+  label: "AIRGAPPED"
+  banner:
+    enabled: true
+    text: "AIRGAPPED MODE — NO INTERNET EGRESS"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

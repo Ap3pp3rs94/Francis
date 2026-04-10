@@ -1,0 +1,528 @@
+# ==============================================================================
+# Francis 2.0 — Model Routing Policy
+# File: config/models/routing.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines the runtime routing policy for model selection.
+#
+# It does NOT embed provider credentials or secrets.
+# It does NOT define provider connection details (providers/*.yaml does that).
+# It does NOT define hard allow/deny policy (constraints.yaml does that).
+# It DOES define:
+#   - How requests are classified into workloads
+#   - How candidate providers/models are chosen and ordered
+#   - How constraints and preferences are composed
+#   - How to enforce required capabilities (tools/json/streaming)
+#   - How to apply budgets and defaults deterministically
+#   - How to emit an explainable routing decision for audit/explanations
+#
+# DESIGN CONTRACT
+# ---------------
+# 1) Deterministic:
+#    Same inputs => same selection (modulo live availability and fallback).
+#
+# 2) Observable:
+#    Emit a structured decision record (candidates considered, reasons, denials).
+#
+# 3) Fail-closed by default:
+#    If we cannot prove an option is allowed, we deny selection rather than guess.
+#
+# 4) Forward-compatible:
+#    Unknown keys should be ignored by tolerant loaders.
+#
+# CONFIG COMPOSITION
+# ------------------
+# routing.yaml wires together the other model config files:
+#   - constraints.yaml : what is allowed (policy)
+#   - ensemble.yaml    : what is preferred (candidates)
+#   - fallbacks.yaml   : what to do on failures
+#   - providers/*.yaml : how to talk to providers
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "model_routing_policy"
+  notes:
+    - "Preferences live in ensemble.yaml; constraints live in constraints.yaml."
+    - "This file defines the routing pipeline and composition rules."
+    - "No secrets belong here."
+
+# ------------------------------------------------------------------------------
+# Canonical config locations (for loaders, logging, and validation)
+# ------------------------------------------------------------------------------
+config_sources:
+  providers_dir: "./providers"
+  constraints: "./constraints.yaml"
+  ensemble: "./ensemble.yaml"
+  fallbacks: "./fallbacks.yaml"
+
+  # If your runtime supports optional validation, these hints can be used.
+  validation:
+    enabled: true
+    strict: false
+    warn_on_unknown_keys: true
+
+# ------------------------------------------------------------------------------
+# Environment/profile integration
+# ------------------------------------------------------------------------------
+environment:
+  # The active environment profile is typically chosen elsewhere (CLI/env/config loader).
+  # This router expects to be passed the resolved profile id, but can fall back to env var.
+  profile_env_var: "FRANCIS_ENV_PROFILE"
+  default_profile: "workstation"
+
+  # When true, routing decisions will include the active profile id for auditability.
+  include_profile_in_decision: true
+
+# ------------------------------------------------------------------------------
+# Global routing posture
+# ------------------------------------------------------------------------------
+global:
+  fail_closed: true
+
+  # If true, we will never silently cross providers during initial selection.
+  # Cross-provider behavior (if any) should occur only via fallbacks.yaml and constraints.
+  same_provider_first: true
+
+  # Determinism helpers:
+  deterministic_sorting:
+    enabled: true
+    # Stable ordering tie-breakers for candidates:
+    #   1) explicit candidate order from ensemble
+    #   2) provider preference weight
+    #   3) model id lexical
+    tie_breakers:
+      - "ensemble_order"
+      - "provider_weight"
+      - "model_id"
+
+  # Default behavior if request does not specify workload:
+  default_workload: "chat"
+
+  # If a request arrives with an unknown workload, choose:
+  unknown_workload_policy: "deny" # deny | fallback_to_default
+
+  # Default tool policy when caller doesn't specify:
+  default_tools_policy:
+    enabled: true
+    mode: "prompt_structured" # prompt_structured | native | disabled
+
+  # Default output format preference (router will still check provider capability):
+  default_output:
+    prefer_json: false
+    prefer_streaming: true
+
+# ------------------------------------------------------------------------------
+# Environment variable overrides (safe, explicit, and logged)
+# ------------------------------------------------------------------------------
+overrides:
+  env:
+    enabled: true
+
+    # Provider overrides (rare; should be used carefully and logged)
+    default_provider_env: "FRANCIS_MODEL_PROVIDER"
+
+    # Workload-specific provider overrides (highest precedence if set)
+    provider_env:
+      chat: "FRANCIS_MODEL_PROVIDER_CHAT"
+      reasoning: "FRANCIS_MODEL_PROVIDER_REASONING"
+      code: "FRANCIS_MODEL_PROVIDER_CODE"
+      embeddings: "FRANCIS_MODEL_PROVIDER_EMBEDDINGS"
+      moderation: "FRANCIS_MODEL_PROVIDER_MODERATION"
+      tool_router: "FRANCIS_MODEL_PROVIDER_TOOL_ROUTER"
+
+    # Workload-specific model overrides (provider-local model ids)
+    model_env:
+      chat: "FRANCIS_MODEL_CHAT"
+      reasoning: "FRANCIS_MODEL_REASONING"
+      code: "FRANCIS_MODEL_CODE"
+      embeddings: "FRANCIS_MODEL_EMBEDDINGS"
+      moderation: "FRANCIS_MODEL_MODERATION"
+      tool_router: "FRANCIS_MODEL_TOOL_ROUTER"
+
+    # If true, env overrides are included in routing decision record.
+    include_in_decision: true
+
+    # Safety rail: if true, env overrides are denied in regulated/safety profiles unless approved.
+    restrict_in_profiles:
+      enabled: true
+      deny_in:
+        - "regulated"
+        - "safety_critical"
+      mode: "deny" # deny | require_approval
+
+# ------------------------------------------------------------------------------
+# Workload classification
+# ------------------------------------------------------------------------------
+classification:
+  # How to map incoming requests to workload class.
+  #
+  # Request inputs (expected shape; implementation-defined):
+  #   - explicit_workload (string)
+  #   - capability_id (string)
+  #   - tags (string[])
+  #   - requires_tools (bool)
+  #   - requires_json (bool)
+  #   - requires_embeddings (bool)
+  #   - is_moderation (bool)
+  #
+  # Router should classify with this precedence:
+  precedence:
+    - "explicit_workload"
+    - "explicit_flags"
+    - "capability_id_patterns"
+    - "tag_patterns"
+    - "default"
+
+  explicit_flags:
+    if_requires_embeddings: "embeddings"
+    if_is_moderation: "moderation"
+    if_requires_tools_and_structured: "tool_router"
+
+  # Tag-based heuristics (hint-level, safe defaults)
+  tags:
+    normalize:
+      lowercase: true
+      trim: true
+      dedupe: true
+      max_tags: 32
+
+    map_to_workload:
+      # If any of these tags appear, they strongly suggest a workload.
+      embeddings:
+        any:
+          - "embeddings"
+          - "vectorize"
+          - "memory_write"
+          - "memory_index"
+      code:
+        any:
+          - "code"
+          - "refactor"
+          - "lint"
+          - "typecheck"
+          - "patch"
+      reasoning:
+        any:
+          - "plan"
+          - "governance"
+          - "policy"
+          - "risk_assessment"
+          - "decision"
+      moderation:
+        any:
+          - "safety"
+          - "policy_check"
+          - "moderation"
+      tool_router:
+        any:
+          - "tools"
+          - "tool_plan"
+          - "schema"
+          - "structured"
+
+  # Capability id patterns (hint-level; these should align to your capabilities catalog)
+  # Use glob-like matching semantics: * and ?.
+  capability_patterns:
+    map_to_workload:
+      embeddings:
+        any:
+          - "memory.*"
+          - "vectors.*"
+          - "embeddings.*"
+      moderation:
+        any:
+          - "safety.*"
+          - "policy.*"
+      tool_router:
+        any:
+          - "*.tool_plan"
+          - "tools.*"
+      code:
+        any:
+          - "repo.*"
+          - "patch.*"
+          - "lint.*"
+          - "format.*"
+          - "tests.*"
+      reasoning:
+        any:
+          - "governance.*"
+          - "approvals.*"
+          - "trust.*"
+
+# ------------------------------------------------------------------------------
+# Risk tagging (input to constraints/gates; hint-level classification)
+# ------------------------------------------------------------------------------
+risk:
+  # If an upstream layer already provides risk (preferred), router uses it.
+  # Otherwise it can infer risk from capability_id/tags using these mappings.
+  infer_if_missing: true
+  default_risk: "low"
+
+  capability_patterns:
+    critical:
+      any:
+        - "industrial.control.*"
+        - "resilience.restore*"
+        - "security.*"
+        - "credentials.revoke*"
+        - "policy.change*"
+    high:
+      any:
+        - "approvals.decide.*"
+        - "credentials.request*"
+        - "domains.delete*"
+        - "plugins.install*"
+        - "exports.*"
+        - "web_learning.ingest*"
+    medium:
+      any:
+        - "domains.create*"
+        - "domains.update*"
+        - "plugins.generate*"
+        - "federation.*"
+        - "operations.run*"
+
+  tag_patterns:
+    critical:
+      any:
+        - "actuation"
+        - "critical_risk"
+        - "security_control"
+        - "policy_change"
+    high:
+      any:
+        - "credentials"
+        - "export"
+        - "web_ingest"
+        - "high_risk"
+    medium:
+      any:
+        - "mutation"
+        - "medium_risk"
+
+# ------------------------------------------------------------------------------
+# Candidate assembly (preferences + constraints composition)
+# ------------------------------------------------------------------------------
+candidates:
+  # Provider preference weights (only used as tie-breaker; ensemble order dominates).
+  provider_weights:
+    ollama: 100
+    ollama_openai_compat: 80
+    openai: 50
+    anthropic: 40
+    azure_openai: 40
+
+  # Candidate sources and ordering rules.
+  sources:
+    # Primary: ensemble.yaml (preferred candidates).
+    ensemble:
+      enabled: true
+      include_specialization_selectors: true
+      specialization_match_policy: "first_match_wins" # first_match_wins | merge
+
+    # Secondary: provider roster defaults (providers/*.yaml).
+    # This is used when ensemble is missing a workload or empty.
+    provider_roster_fallback:
+      enabled: true
+
+    # Explicit override: ENV model/provider overrides.
+    env_overrides:
+      enabled: true
+      precedence: "highest" # highest | lowest
+
+  # Canonical model id format used internally by router.
+  # provider:model  (example: ollama:francis-chat)
+  canonical_id:
+    format: "provider:model"
+    separator: ":"
+
+# ------------------------------------------------------------------------------
+# Capability enforcement (tools/json/streaming/embeddings)
+# ------------------------------------------------------------------------------
+capability_enforcement:
+  enabled: true
+
+  # If a request requires a capability the provider cannot satisfy, behavior is:
+  #   - deny: deny candidate (try next)
+  #   - degrade: adjust request (e.g., turn off tools) if allowed and safe
+  #   - require_approval: request approval before degrading
+  default_on_missing: "deny" # deny | degrade | require_approval
+
+  tools:
+    # If request requires tools but provider lacks it:
+    on_missing: "deny"
+    # If we degrade by disabling tools, these tags require approval first.
+    degrade_requires_approval_if_tags_present:
+      - "critical_risk"
+      - "high_risk"
+      - "tool_required"
+
+  json_mode:
+    # If request requires strict JSON output but provider json_mode != strict:
+    on_missing: "deny"
+    # If best_effort is acceptable for some contexts, specify tags:
+    allow_best_effort_if_tags_present:
+      - "ui_render"
+      - "human_review"
+
+  streaming:
+    # If streaming preferred but provider can't stream: allow non-streaming as degrade.
+    on_missing: "degrade"
+
+# ------------------------------------------------------------------------------
+# Budget application (token/latency)
+# ------------------------------------------------------------------------------
+budgets:
+  enabled: true
+
+  # Base budgets are drawn from constraints.yaml workloads.*.
+  source: "constraints"
+
+  # Router can clamp caller-specified budgets to within constraints.
+  clamp:
+    enabled: true
+    behavior: "clamp" # clamp | deny
+
+  # Hard ceilings (defensive) in case upstream budgets are missing.
+  hard_ceiling:
+    max_input_tokens: 20000
+    max_output_tokens: 6000
+    max_total_tokens: 24000
+    latency_budget_ms: 60000
+
+  # Per-risk tightening: reduce max output for high/critical tasks to reduce hallucination surface
+  # and keep operator review more manageable.
+  per_risk_output_multiplier:
+    low: 1.0
+    medium: 0.9
+    high: 0.8
+    critical: 0.7
+
+# ------------------------------------------------------------------------------
+# Selection algorithm (deterministic, explainable)
+# ------------------------------------------------------------------------------
+selection:
+  algorithm: "first_usable" # first_usable | score_based
+  score_based:
+    enabled: false
+
+  first_usable:
+    # Evaluate candidates in order; pick the first that passes constraints & capability checks.
+    include_health_check: true
+    health_check_timeout_ms: 1500
+
+  # When multiple models satisfy constraints, optionally prefer "known_good" lists if present.
+  prefer_known_good: true
+
+# ------------------------------------------------------------------------------
+# Governance integration (approval + trust gates)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+
+  # Router does not *grant* approvals; it can only:
+  #   - annotate the decision with required approval/trust
+  #   - deny selection if policy says fail-closed
+  #
+  # Upstream governance executor decides how to block/queue.
+  behavior_on_gate_trigger:
+    approval_required: "deny" # deny | mark_required
+    trust_insufficient: "deny" # deny | mark_required
+
+  # Tags used to annotate routing decisions for downstream governance.
+  tags:
+    add_on_remote_provider: ["remote_provider"]
+    add_on_tools_enabled: ["tools_enabled"]
+    add_on_json_required: ["json_required"]
+    add_on_streaming: ["streaming"]
+    add_on_fallback: ["fallback_used"]
+
+# ------------------------------------------------------------------------------
+# Fallback wiring (delegates failure handling to fallbacks.yaml)
+# ------------------------------------------------------------------------------
+fallbacks:
+  enabled: true
+
+  # The router should generate a fallback plan reference for auditability.
+  include_plan_in_decision: true
+
+  # If selection fails entirely (no candidates), behavior:
+  on_no_candidates: "deny" # deny | fallback_to_default_provider | error_with_help
+
+  # If provider is down and health_check is enabled:
+  on_provider_unavailable: "try_next_candidate" # try_next_candidate | deny
+
+# ------------------------------------------------------------------------------
+# Observability / explainability (must be production-grade)
+# ------------------------------------------------------------------------------
+observability:
+  decision_record:
+    enabled: true
+    level: "full" # minimal | standard | full
+
+    # Fields to include (safe metadata; no prompt content here).
+    include:
+      - "profile"
+      - "workload"
+      - "risk"
+      - "capability_id"
+      - "tags"
+      - "requires_tools"
+      - "requires_json"
+      - "requires_streaming"
+      - "budgets"
+      - "candidate_count"
+      - "candidates_considered"
+      - "selected_provider"
+      - "selected_model"
+      - "selected_parameters"
+      - "denials"
+      - "gates"
+      - "fallback_plan_ref"
+
+    redact:
+      enabled: true
+      fields:
+        - "prompt"
+        - "messages"
+        - "raw_input"
+
+  # Optional: emit to audit/explanations subsystems if implemented.
+  emit_audit_event: true
+  emit_explanation_event: true
+
+# ------------------------------------------------------------------------------
+# Developer ergonomics (safe)
+# ------------------------------------------------------------------------------
+dev:
+  # If enabled, include additional debug fields in decisions for troubleshooting.
+  # SHOULD be disabled in regulated/safety_critical profiles via environment config.
+  verbose_decision_debug: false
+
+  # If enabled, allow routing without health checks (faster iteration).
+  skip_health_checks: false
+
+# ------------------------------------------------------------------------------
+# Validation assertions (optional, hint-level)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: "must_reference_constraints"
+    severity: warn
+    message: "Router should load constraints.yaml; routing without constraints is unsafe."
+    expr: "{{config_sources.constraints != ''}}"
+
+  - id: "must_reference_ensemble"
+    severity: warn
+    message: "Router should load ensemble.yaml for stable preferences."
+    expr: "{{config_sources.ensemble != ''}}"
+
+  - id: "fail_closed_recommended"
+    severity: warn
+    message: "Fail-closed is recommended for safety; set global.fail_closed=true."
+    expr: "{{global.fail_closed == true}}"

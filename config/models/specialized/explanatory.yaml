@@ -1,0 +1,335 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Explanations (audit-grade reasoning transparency)
+# Path:   config/models/specialized/explanatory.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file governs how Francis produces explanations for:
+#   - Model routing decisions
+#   - Tool selection and tool execution
+#   - Governance gates (trust/approval requirements)
+#   - Operational decisions (daemon actions, scheduling, resilience)
+#   - Web learning ingestion and quarantine decisions
+#
+# It is designed to make explanations:
+#   - CONSISTENT: same structure across subsystems
+#   - AUDITABLE: references concrete artifacts (ledger IDs, config keys, logs)
+#   - SAFE: no secrets, no sensitive raw prompts in production postures
+#   - USEFUL: actionable next steps, not just narrative
+#
+# This is POLICY + CONTRACT (not implementation).
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "explanation_policy"
+  notes:
+    - "Prefer artifact-linked explanations over freeform narratives."
+    - "Explanations should be operator-usable and audit-compatible."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+explanations:
+  enabled: true
+
+  # If false, system may return minimal 'reason codes' only.
+  full_text_enabled: true
+
+  # Default explanation depth if caller doesn't specify.
+  default_mode: "standard" # brief | standard | deep | audit
+
+  # Output format preference (UI can render markdown; API can store JSON).
+  output_format: "markdown" # markdown | json | both
+
+# ------------------------------------------------------------------------------
+# Explanation modes (depth contracts)
+# ------------------------------------------------------------------------------
+modes:
+
+  brief:
+    description: "1–3 bullets. Minimal summary. No deep provenance."
+    max_chars_hint: 700
+    required_sections:
+      - "summary"
+    optional_sections:
+      - "next_steps"
+
+  standard:
+    description: "Operator-friendly. Clear structure with key provenance."
+    max_chars_hint: 2500
+    required_sections:
+      - "summary"
+      - "why"
+      - "checks_and_gates"
+      - "risks"
+      - "next_steps"
+    optional_sections:
+      - "alternatives"
+      - "assumptions"
+      - "evidence"
+
+  deep:
+    description: "Engineering detail. Includes structured provenance and alternatives."
+    max_chars_hint: 6000
+    required_sections:
+      - "summary"
+      - "why"
+      - "checks_and_gates"
+      - "assumptions"
+      - "evidence"
+      - "alternatives"
+      - "risks"
+      - "next_steps"
+    optional_sections:
+      - "costs"
+      - "tradeoffs"
+      - "counterfactuals"
+
+  audit:
+    description: "Compliance-grade. Must be artifact-linked; minimal speculation."
+    max_chars_hint: 9000
+    required_sections:
+      - "summary"
+      - "decision_record"
+      - "inputs"
+      - "policy_basis"
+      - "checks_and_gates"
+      - "actions_taken"
+      - "outputs"
+      - "risks"
+      - "rollback_or_remediation"
+    optional_sections:
+      - "evidence"
+      - "alternatives"
+      - "limitations"
+
+# ------------------------------------------------------------------------------
+# Canonical structure (section templates)
+# ------------------------------------------------------------------------------
+structure:
+  # The system should keep section names consistent so UI can parse/render.
+  section_titles:
+    summary: "Summary"
+    why: "Why"
+    decision_record: "Decision record"
+    inputs: "Inputs"
+    policy_basis: "Policy basis"
+    checks_and_gates: "Checks & gates"
+    actions_taken: "Actions taken"
+    outputs: "Outputs"
+    evidence: "Evidence & provenance"
+    assumptions: "Assumptions"
+    alternatives: "Alternatives considered"
+    risks: "Risks"
+    costs: "Costs / resources"
+    tradeoffs: "Tradeoffs"
+    counterfactuals: "What would change this decision?"
+    next_steps: "Next steps"
+    rollback_or_remediation: "Rollback / remediation"
+    limitations: "Limitations"
+
+  # Order that sections should appear (others may be appended).
+  default_order:
+    - "summary"
+    - "why"
+    - "checks_and_gates"
+    - "assumptions"
+    - "evidence"
+    - "alternatives"
+    - "risks"
+    - "next_steps"
+
+  # Writing constraints for clarity.
+  style:
+    prefer_bullets: true
+    prefer_short_paragraphs: true
+    avoid_wall_of_text: true
+    use_concrete_nouns: true
+    avoid_jargon_when_possible: true
+    no_overconfidence: true
+
+# ------------------------------------------------------------------------------
+# Provenance rules (how to cite internal artifacts)
+# ------------------------------------------------------------------------------
+provenance:
+  enabled: true
+
+  # Explanations should reference internal artifacts by stable identifiers.
+  artifact_refs:
+    # Router decisions
+    routing_decision_id: true
+    provider_id: true
+    model_id: true
+    workload: true
+    budgets: true
+    denials: true
+    fallback_plan_ref: true
+
+    # Governance
+    approval_id: true
+    trust_level_before_after: true
+    policy_rule_id: true
+
+    # Ledger / continuity
+    ledger_entry_id: true
+    ledger_window: true
+
+    # Web learning / quarantine
+    source_url: true
+    quarantine_id: true
+    ingestion_id: true
+
+  # Preferred citation format in markdown.
+  # Example: [ledger:abc123], [approval:rq-7f9], [config:models/constraints.yaml#workloads.chat]
+  format:
+    prefix_brackets: true
+    include_type: true
+
+  # Config key citation hints (helps operators debug).
+  config_refs:
+    enabled: true
+    include_file: true
+    include_yaml_path: true
+    examples:
+      - "config:models/constraints.yaml#workloads.chat.max_total_tokens"
+      - "config:models/routing.yaml#selection.first_usable.include_health_check"
+      - "config:capabilities/catalog.yaml#capabilities.approvals.decide"
+
+# ------------------------------------------------------------------------------
+# Redaction & sensitive content policy
+# ------------------------------------------------------------------------------
+redaction:
+  enabled: true
+
+  # Never include secrets or secret-like strings in explanations.
+  block_patterns:
+    - "(?i)sk-[a-z0-9]{10,}"
+    - "(?i)api[_-]?key\\s*[:=]"
+    - "(?i)password\\s*[:=]"
+    - "(?i)secret\\s*[:=]"
+    - "(?i)BEGIN\\s+PRIVATE\\s+KEY"
+
+  # Prompt logging in explanations is normally disabled.
+  prompts:
+    include_raw_prompts: false
+    include_message_bodies: false
+    include_summaries_only: true
+    max_summary_chars: 400
+
+  # Data minimization for regulated environments.
+  regulated_posture:
+    strip_user_content: true
+    keep_only_metadata: false  # if true, explanations become reason-codes + refs
+
+# ------------------------------------------------------------------------------
+# Accuracy & honesty policy (critical)
+# ------------------------------------------------------------------------------
+accuracy:
+  # Explanations must distinguish facts from assumptions/inferences.
+  require_fact_assumption_separation: true
+
+  # If evidence is missing, the explanation must say so.
+  require_evidence_or_disclaimer: true
+
+  # For claims that depend on web data, require citations if web learning is used.
+  web_claims:
+    require_citations_when_web_used: true
+    disallow_web_claims_when_web_learning_disabled: true
+
+# ------------------------------------------------------------------------------
+# Risk framing (how to talk about risk)
+# ------------------------------------------------------------------------------
+risk_framing:
+  enabled: true
+
+  # Use consistent risk labels across UI.
+  risk_levels:
+    - "low"
+    - "medium"
+    - "high"
+    - "critical"
+
+  # Required content for high/critical explanations.
+  required_for_high_or_critical:
+    include:
+      - "rollback_or_remediation"
+      - "counterfactuals"
+      - "operator_actions_needed"
+
+# ------------------------------------------------------------------------------
+# Integration hooks (who consumes explanations)
+# ------------------------------------------------------------------------------
+integration:
+  consumers:
+    - "ui.explanation_explorer"
+    - "ui.approvals_panel"
+    - "ui.trust_dashboard"
+    - "ui.web_learning_monitor"
+    - "api.audit_endpoints"
+    - "daemon.ledger"
+
+  # Event emission hints (if you have an internal event bus).
+  emit_events:
+    enabled: true
+    event_types:
+      - "explanation.created"
+      - "explanation.updated"
+      - "explanation.denied"  # e.g., stripped due to redaction/policy
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    explanations:
+      default_mode: "deep"
+    redaction:
+      prompts:
+        include_summaries_only: true
+        max_summary_chars: 800
+    accuracy:
+      web_claims:
+        disallow_web_claims_when_web_learning_disabled: true
+
+  workstation:
+    explanations:
+      default_mode: "standard"
+
+  regulated:
+    explanations:
+      default_mode: "audit"
+    redaction:
+      regulated_posture:
+        strip_user_content: true
+        keep_only_metadata: false
+    accuracy:
+      require_evidence_or_disclaimer: true
+    risk_framing:
+      required_for_high_or_critical:
+        include:
+          - "rollback_or_remediation"
+          - "counterfactuals"
+          - "operator_actions_needed"
+
+  safety_critical:
+    explanations:
+      default_mode: "audit"
+    redaction:
+      regulated_posture:
+        strip_user_content: true
+        keep_only_metadata: true
+    accuracy:
+      require_fact_assumption_separation: true
+      require_evidence_or_disclaimer: true
+    risk_framing:
+      required_for_high_or_critical:
+        include:
+          - "rollback_or_remediation"
+          - "counterfactuals"
+          - "operator_actions_needed"

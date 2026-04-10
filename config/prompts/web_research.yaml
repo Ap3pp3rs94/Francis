@@ -1,0 +1,603 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Web Research (governed search/fetch planning + cited synthesis)
+# Path:   config/prompts/web_research.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Produces:
+#   A) a web research plan (queries, targets, freshness, stop conditions)
+#   B) a cited synthesis using already-fetched materials (claim -> source map)
+#
+# It is designed for "web learning" flows:
+#   - web_learning.search (generate queries)
+#   - web_learning.fetch/ingest (collect documents into quarantine + evidence store)
+#   - web_research (this prompt) synthesizes with citations
+#
+# GOVERNANCE & SAFETY
+# -------------------
+# - Network egress is a governed operation. If web fetch is not allowed, this
+#   prompt must fail-closed and provide an offline alternative plan or ask for
+#   approval.
+# - Never provide wrongdoing enablement (credential attacks, malware, DoS,
+#   surveillance), even if described as hypothetical.
+# - Prefer primary sources (official docs, standards, papers) and reputable
+#   secondary sources (major outlets, respected technical orgs).
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Every non-trivial claim must reference one or more source_ids.
+# - Handle contradictions explicitly.
+# - Keep quotes short (<= 25 words per source excerpt).
+# - Be bounded: stop conditions, max sources, max time budget guidance.
+#
+# EXTENSIBILITY
+# -------------
+# - Schema supports future retrieval backends and richer provenance without
+#   breaking consumers. Unknown fields should be ignored by consumers.
+# ==============================================================================
+version: 1
+
+id: "web.research"
+title: "Web Research"
+owner: "francis"
+intent: "web_research_plan_and_synthesis"
+mode: "strict" # policy | strict
+
+meta:
+  notes:
+    - "Generates governed web research plans and cited syntheses."
+    - "Designed to integrate with web_learning quarantine + attribution policies."
+    - "Outputs claim-level citations for auditability."
+  compatibility:
+    - "Stable output envelope; consumers may ignore unknown fields."
+    - "Supports future source kinds via string escape hatches."
+
+# ------------------------------------------------------------------------------
+# Inputs (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+
+      # What the operator wants
+      question: { type: string, required: true }
+      goal: { type: string, required: false } # "decision support", "implementation guidance", "compare options", etc.
+
+      # Optional constraints
+      scope:
+        type: object
+        required: false
+        fields:
+          geography: { type: string, required: false }
+          time_horizon: { type: string, required: false } # "latest", "last 12 months", "historical", etc.
+          audience: { type: string, required: false } # operator_business | student_support | general
+          depth:
+            type: string
+            required: false
+            enum: ["brief", "standard", "deep", "audit_grade"]
+
+      # Freshness / recency guidance (in days)
+      freshness_days: { type: number, required: false } # default derived from time_horizon
+
+      # Output preferences
+      output_format:
+        type: string
+        required: false
+        enum: ["plain", "markdown", "json", "yaml"]
+
+      # Source preferences
+      sources:
+        type: object
+        required: false
+        fields:
+          prefer_primary: { type: boolean, required: false }
+          allowed_domains:
+            type: array
+            required: false
+            items: { type: string }
+          blocked_domains:
+            type: array
+            required: false
+            items: { type: string }
+          max_sources: { type: number, required: false } # default 8 (standard), 16 (audit_grade)
+          min_sources: { type: number, required: false } # default 2
+
+      # If true, require citation per claim (default true)
+      require_claim_citations: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      trust_level: { type: number, required: false }
+      approvals_enabled: { type: boolean, required: false }
+
+      # Whether network egress is allowed right now (policy + runtime state)
+      network_egress_allowed: { type: boolean, required: false }
+
+      # Whether web_learning is enabled right now
+      web_learning_enabled: { type: boolean, required: false }
+
+      # Whether this specific research task has approval to fetch
+      web_fetch_approved: { type: boolean, required: false }
+
+  web_context:
+    type: object
+    required: false
+    fields:
+      # If present, these are already fetched artifacts available for synthesis.
+      # They should be sanitized and stored in quarantine/evidence store.
+      sources:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            source_id: { type: string, required: true }
+            url: { type: string, required: false }
+            title: { type: string, required: false }
+            publisher: { type: string, required: false }
+            retrieved_ts: { type: number, required: false }
+            published_ts: { type: number, required: false }
+
+            kind:
+              type: string
+              required: false
+              enum: ["webpage", "pdf", "doc", "dataset", "repo", "news", "blog", "unknown"]
+
+            # Content snippet or extracted text (sanitized)
+            excerpt: { type: string, required: false }
+
+            # Optional: precomputed quality signals
+            quality:
+              type: object
+              required: false
+              fields:
+                credibility_tier: { type: string, required: false } # primary | reputable_secondary | mixed | low | unknown
+                is_primary_source: { type: boolean, required: false }
+                notes:
+                  type: array
+                  required: false
+                  items: { type: string }
+
+      # Optional: upstream search results before fetch
+      search_results:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            q: { type: string, required: true }
+            results:
+              type: array
+              required: false
+              items:
+                type: object
+                fields:
+                  url: { type: string, required: true }
+                  title: { type: string, required: false }
+                  snippet: { type: string, required: false }
+                  publisher: { type: string, required: false }
+
+  policy_controls:
+    type: object
+    required: false
+    fields:
+      attribution_required: { type: boolean, required: false }
+
+      hard_denies:
+        type: object
+        required: false
+        fields:
+          credential_attack_enablement: { type: boolean, required: false }
+          malware_enablement: { type: boolean, required: false }
+          dos_enablement: { type: boolean, required: false }
+          surveillance_enablement: { type: boolean, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - plan
+      - synthesis
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_fetch
+          - needs_followup
+          - followup_questions
+          - reason_codes
+          - summary
+        properties:
+          # ask: missing critical context; propose: ready plan/synthesis; deny: unsafe/disallowed
+          mode: { type: string, enum: ["ask", "propose", "deny"] }
+          confidence: { type: number } # 0..1
+
+          # whether web fetch/search is required to answer well
+          needs_fetch: { type: boolean }
+
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+
+          reason_codes:
+            type: array
+            items: { type: string }
+
+          summary: { type: string }
+
+      plan:
+        type: object
+        additionalProperties: false
+        required:
+          - research_strategy
+          - constraints
+          - queries
+          - targets
+          - stop_conditions
+          - validation
+        properties:
+          research_strategy:
+            type: array
+            items: { type: string } # high-level steps
+
+          constraints:
+            type: object
+            additionalProperties: false
+            required:
+              - freshness_days
+              - max_sources
+              - prefer_primary
+              - network_scope
+            properties:
+              freshness_days: { type: number }
+              max_sources: { type: number }
+              prefer_primary: { type: boolean }
+              # none | localhost_only | internet
+              network_scope: { type: string, enum: ["none", "localhost_only", "internet"] }
+
+              allowed_domains:
+                type: array
+                items: { type: string }
+
+              blocked_domains:
+                type: array
+                items: { type: string }
+
+          queries:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["id", "q", "purpose", "freshness_days", "priority"]
+              properties:
+                id: { type: string }
+                q: { type: string }
+                purpose: { type: string }
+                freshness_days: { type: number }
+                priority: { type: number } # 1 highest
+
+          targets:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "selector", "purpose", "priority"]
+              properties:
+                # domain | url | publisher | dataset | standard | repo
+                kind: { type: string }
+                selector: { type: string }
+                purpose: { type: string }
+                priority: { type: number }
+
+          stop_conditions:
+            type: array
+            items: { type: string } # ">=3 primary sources", "contradiction resolved", etc.
+
+          validation:
+            type: object
+            additionalProperties: false
+            required: ["credibility_rules", "contradiction_handling", "citation_rules"]
+            properties:
+              credibility_rules:
+                type: array
+                items: { type: string }
+              contradiction_handling:
+                type: array
+                items: { type: string }
+              citation_rules:
+                type: array
+                items: { type: string }
+
+      synthesis:
+        type: object
+        additionalProperties: false
+        required:
+          - has_sources
+          - answer
+          - key_findings
+          - claims
+          - sources_used
+          - contradictions
+          - limitations
+          - next_steps
+        properties:
+          has_sources: { type: boolean }
+
+          answer: { type: string }
+
+          key_findings:
+            type: array
+            items: { type: string }
+
+          claims:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["claim_id", "text", "confidence", "source_ids"]
+              properties:
+                claim_id: { type: string }
+                text: { type: string }
+                confidence: { type: number } # 0..1
+                source_ids:
+                  type: array
+                  items: { type: string }
+
+          sources_used:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["source_id", "url", "title", "publisher", "credibility_tier", "notes"]
+              properties:
+                source_id: { type: string }
+                url: { type: string }
+                title: { type: string }
+                publisher: { type: string }
+                credibility_tier: { type: string } # primary | reputable_secondary | mixed | low | unknown
+                notes:
+                  type: array
+                  items: { type: string }
+
+          contradictions:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["topic", "sides", "resolution"]
+              properties:
+                topic: { type: string }
+                sides:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["position", "source_ids"]
+                    properties:
+                      position: { type: string }
+                      source_ids:
+                        type: array
+                        items: { type: string }
+                resolution: { type: string } # "unresolved", "resolved", "leaning", etc.
+
+          limitations:
+            type: array
+            items: { type: string }
+
+          next_steps:
+            type: array
+            items: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - wrongdoing_topic
+          - enablement_requested
+          - blocked
+          - blocked_reasons
+          - contains_secrets
+          - contains_pii
+          - redactions
+        properties:
+          wrongdoing_topic: { type: boolean }
+          enablement_requested: { type: boolean }
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string, enum: ["before", "after", "on_followup", "on_deny"] }
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Web Research engine.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Non-negotiables:
+      - You do not fetch the web. You propose a plan and/or synthesize from provided sources.
+      - Every non-trivial claim MUST include one or more source_ids.
+      - If sources are not provided and web fetch is not allowed, fail-closed:
+          * decision.mode="ask" (request approval or provide offline-only plan)
+      - Never output secrets. Never request secret material.
+      - Never provide wrongdoing enablement, even if framed as hypothetical:
+          * credential attacks, malware, DoS, surveillance
+        You may discuss defensive posture, governance, detection, and policy.
+
+      Governance handling:
+      - If web_learning_enabled=false OR network_egress_allowed=false OR web_fetch_approved=false:
+          * set plan.constraints.network_scope="none"
+          * decision.needs_fetch may still be true, but you must not propose internet fetching as executable
+          * provide a safe alternative (offline plan, internal logs/docs, local sources)
+      - In guard_state="restricted" or "lockdown":
+          * prefer offline synthesis and ask for explicit approval for any internet research
+
+      Research quality:
+      - Prefer primary sources (official docs, standards, vendor docs, papers).
+      - Use reputable secondary sources when needed; flag bias/limitations.
+      - Explicitly handle contradictions rather than hiding them.
+      - Keep direct quotes short (<= 25 words per source excerpt) and do not include long verbatim passages.
+
+      Boundedness:
+      - Keep queries targeted (<= 6 standard, <= 10 audit_grade).
+      - Provide stop conditions to prevent endless research loops.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      WEB_CONTEXT:
+      {{web_context}}
+
+      POLICY_CONTROLS:
+      {{policy_controls}}
+
+      Task:
+      Produce a web research plan and/or a cited synthesis from provided sources.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.14
+  max_output_tokens: 3400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "WEB_RESEARCH_PROPOSED"
+  - "WEB_RESEARCH_NEEDS_FETCH"
+  - "WEB_RESEARCH_HAS_SOURCES"
+  - "WEB_RESEARCH_NO_SOURCES"
+  - "WEB_RESEARCH_FETCH_BLOCKED"
+  - "WEB_RESEARCH_NEEDS_APPROVAL"
+  - "WEB_RESEARCH_CONTRADICTIONS_PRESENT"
+  - "ATTRIBUTION_REQUIRED"
+  - "GUARD_RESTRICTED"
+  - "GUARD_LOCKDOWN"
+  - "REFUSE_UNSAFE_ENABLEMENT"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+
+# ------------------------------------------------------------------------------
+# Audit events
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "web_research.requested"
+    when: "before"
+    fields: ["request.question", "request.scope.time_horizon", "governance.web_learning_enabled", "governance.network_egress_allowed"]
+
+  - kind: "web_research.proposed"
+    when: "after"
+    fields: ["decision.needs_fetch", "plan.constraints.max_sources", "observability.reason_codes"]
+
+  - kind: "web_research.followup_required"
+    when: "on_followup"
+    fields: ["decision.followup_questions"]
+
+  - kind: "web_research.denied"
+    when: "on_deny"
+    fields: ["safety.blocked_reasons"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    mode: "policy"
+    generation_hints:
+      temperature: 0.16
+      max_output_tokens: 3600
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14
+      max_output_tokens: 3400
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+      max_output_tokens: 3400
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+      max_output_tokens: 3400

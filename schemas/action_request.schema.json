@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/action_request.schema.json",
+  "title": "Francis Action Request",
+  "type": "object",
+  "required": ["action", "reason"],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability": {
+      "type": "string"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "risk_tier": {
+      "type": "string",
+      "enum": ["readonly", "low", "normal", "medium", "high", "critical", "safety_critical"]
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

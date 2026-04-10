@@ -1,0 +1,692 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Offensive Security (authorized testing only; simulation-first; deny-by-default)
+# Path:   config/policies/offensive_security.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy governs ANY capability that could be used for offensive security,
+# penetration testing, scanning, exploitation, credential attacks, malware-like
+# behavior, denial-of-service, or covert surveillance.
+#
+# Key goals:
+#   1) Deny-by-default for real-world offensive actions.
+#   2) Allow controlled "hypothetical scenarios" via SIMULATION HARNESS:
+#        - simulation-only execution
+#        - no network egress
+#        - no payload delivery
+#        - no persistence / no covert monitoring
+#   3) Require explicit authorization + narrow scope for any allowed active recon
+#      (internal-only by default; public internet scanning is denied).
+#   4) Always auditable: allow/deny/review decisions produce structured events.
+#
+# DESIGN CONTRACT
+# ---------------
+# - Safety-first: never allow “turn-key abuse” via config toggles.
+# - Deterministic: first-match rules; stable reason codes; explicit outcomes.
+# - Fail-closed: if classification or scope is unknown → deny or require_review.
+# - Simulation harness is the *only* place to "enable hypotheticals" for
+#   otherwise hard-denied categories.
+#
+# NOTE
+# ----
+# This file is policy-only. It does not create offensive capability.
+# ==============================================================================
+version: 2
+
+meta:
+  owner: "francis"
+  intent: "offensive_security_policy"
+  notes:
+    - "Hard-denied categories remain non-executable in real mode."
+    - "Hypothetical scenarios are supported via simulation harness only."
+    - "Public internet scanning is denied by default."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+offensive_security:
+  enabled: true
+
+  # Modes:
+  # - disabled: deny everything in this policy domain
+  # - policy:   default enforcement
+  # - strict:   conservative; more review; quorum more often
+  mode: "policy" # disabled | policy | strict
+
+  # Default decision if evaluator cannot classify capability or scope.
+  fail_closed_decision: "deny" # deny | require_review
+
+  # Deny-by-default for any governed capability.
+  deny_by_default: true
+
+  # Treat violations as incidents and integrate with guard.yaml (recommended).
+  treat_violations_as_incidents: true
+
+  # Always audit attempts (allowed/denied/review).
+  audit_all: true
+
+# ------------------------------------------------------------------------------
+# Capability classification (what this policy governs)
+# ------------------------------------------------------------------------------
+capability_classification:
+  enabled: true
+
+  governed_capability_patterns:
+    - "^security\\."
+    - "^offsec\\."
+    - "^penetration\\."
+    - "^vuln\\."
+    - "^recon\\."
+    - "^scan\\."
+    - "^network\\.(scan|enumerate|probe)\\."
+    - "^system_intelligence\\.probe\\." # subsystem exists in your tree
+
+  # Category patterns drive gating and enforcement.
+  categories:
+
+    passive_recon:
+      description: "Non-intrusive lookups: metadata, config inspection, local inventory."
+      patterns:
+        - "^security\\.recon\\.passive\\."
+        - "^security\\.inventory\\."
+        - "^system_intelligence\\.probe\\.local\\."
+
+    active_recon:
+      description: "Active enumeration: port scans, banner grabs, service discovery."
+      patterns:
+        - "^security\\.recon\\.active\\."
+        - "^security\\.scan\\.ports$"
+        - "^security\\.scan\\.services$"
+        - "^network\\.scan\\."
+
+    vulnerability_scanning:
+      description: "Vulnerability checks that may send crafted requests."
+      patterns:
+        - "^security\\.scan\\.vuln$"
+        - "^security\\.scan\\.cve\\."
+        - "^vuln\\."
+
+    exploitation:
+      description: "Exploit attempts or payload delivery."
+      patterns:
+        - "^security\\.exploit\\."
+        - "^offsec\\.exploit\\."
+        - "^penetration\\.exploit\\."
+
+    credential_attacks:
+      description: "Password spraying, brute force, phishing automation, token cracking."
+      patterns:
+        - "^security\\.auth\\.(spray|bruteforce|crack)\\."
+        - "^offsec\\.(bruteforce|spray|phish)\\."
+        - "^credential\\.(attack|crack)\\."
+
+    malware_or_persistence:
+      description: "Malware creation, persistence, implants, covert execution."
+      patterns:
+        - "^security\\.malware\\."
+        - "^offsec\\.(implant|persistence)\\."
+        - "^persistence\\."
+
+    denial_of_service:
+      description: "Flooding, disruption, stress that can cause harm."
+      patterns:
+        - "^security\\.(dos|ddos)\\."
+        - "^offsec\\.(dos|ddos)\\."
+        - "^stress\\.(flood|dos)\\."
+
+    surveillance:
+      description: "Covert monitoring, stalking, doxxing, spyware behaviors."
+      patterns:
+        - "^security\\.surveillance\\."
+        - "^offsec\\.surveillance\\."
+        - "^spy\\."
+
+# ------------------------------------------------------------------------------
+# Enforcement controls (THIS is your “control”, safely)
+# ------------------------------------------------------------------------------
+enforcement:
+  enabled: true
+
+  # Enforcement modes:
+  # - hard_deny: never executable in real mode
+  # - gated: allowed only via allowlist rules (still constrained)
+  #
+  # IMPORTANT:
+  # These controls apply to REAL execution. Simulation harness is separate below.
+  category_enforcement_real:
+    passive_recon: "gated"
+    active_recon: "gated"
+    vulnerability_scanning: "gated"
+    exploitation: "hard_deny"
+
+    # The “non-negotiable” categories remain hard-denied for REAL execution.
+    # Your “hypothetical control” is implemented via simulation_harness.
+    credential_attacks: "hard_deny"
+    malware_or_persistence: "hard_deny"
+    denial_of_service: "hard_deny"
+    surveillance: "hard_deny"
+
+  # Policy guardrails that always apply to real execution (even if other rules allow).
+  real_guardrails:
+    deny_public_internet_by_default: true
+    deny_wildcard_scopes_by_default: true
+    deny_unknown_identity: true
+
+# ------------------------------------------------------------------------------
+# Simulation Harness (hypothetical scenarios WITHOUT real-world offensive execution)
+# ------------------------------------------------------------------------------
+simulation_harness:
+  enabled: true
+
+  # Simulation harness is ONLY for capabilities that are explicitly simulation-coded.
+  # Convention: all simulation-only capabilities must match one of these patterns.
+  simulation_capability_patterns:
+    - "^security\\.simulate\\."
+    - "^offsec\\.simulate\\."
+    - "^recon\\.simulate\\."
+    - "^vuln\\.simulate\\."
+    - "^stress\\.simulate\\."
+    - "^credential\\.simulate\\."
+
+  # What simulation is allowed to "represent" (purely hypothetical).
+  # These categories are allowed ONLY in simulation harness (no real execution).
+  allow_simulated_categories:
+    - "credential_attacks"
+    - "malware_or_persistence"
+    - "denial_of_service"
+    - "surveillance"
+    - "exploitation"
+    - "vulnerability_scanning"
+    - "active_recon"
+
+  # Hard constraints of simulation mode (non-bypassable).
+  # Implementation should enforce these regardless of trust/approval.
+  constraints:
+    # No network traffic should be emitted in simulation mode.
+    forbid_network_egress: true
+
+    # No payload delivery or executable artifact generation intended for harm.
+    forbid_payload_generation: true
+
+    # No persistence / no implants / no covert monitoring.
+    forbid_persistence_and_surveillance: true
+
+    # Where outputs MAY be written (optional; keeps artifacts controlled).
+    # If empty, simulation should be "no-write" or only write to in-memory.
+    allowed_write_roots:
+      - "C:\\Francis\\data\\artifacts"
+      - "C:\\Francis\\workspace"
+
+    # Prohibit writing inside source/config trees.
+    denied_write_roots:
+      - "C:\\Francis\\src"
+      - "C:\\Francis\\apps"
+      - "C:\\Francis\\config"
+      - "C:\\Francis\\.git"
+
+  # Governance posture for simulations (your call; safe defaults).
+  governance:
+    require_authorization: true
+    require_scope: true
+    require_approval: true
+    require_quorum_in_strict: true
+    min_trust: 7
+
+    # Default quorum for simulated “critical” scenarios.
+    quorum_defaults:
+      min_approvals: 2
+      min_distinct_approvers: 2
+      min_approver_trust: 8
+      allow_same_actor_twice: false
+
+  # Profiles allowed to run simulations (safe defaults).
+  profiles_allowed:
+    - "dev"
+    - "airgapped"
+
+# ------------------------------------------------------------------------------
+# Authorization + scope model (for real operations AND simulation)
+# ------------------------------------------------------------------------------
+authorization:
+  enabled: true
+
+  # Which categories require explicit authorization evidence.
+  require_authorization_for_categories:
+    - "active_recon"
+    - "vulnerability_scanning"
+    - "exploitation"
+    - "credential_attacks"
+    - "malware_or_persistence"
+    - "denial_of_service"
+    - "surveillance"
+
+  evidence:
+    required_fields:
+      - "engagement_id"
+      - "owner_actor_id"
+      - "purpose"
+      - "authorized_by"
+      - "authorization_ref"
+      - "valid_from_ts"
+      - "valid_to_ts"
+
+    max_validity_window_s: 604800 # 7 days
+    require_explicit_time_window: true
+
+  scope:
+    required: true
+
+    allowed_target_types:
+      - "hostname"
+      - "fqdn"
+      - "ip"
+      - "cidr"
+      - "url"
+
+    allowed_ports_default:
+      - 22
+      - 80
+      - 443
+      - 445
+      - 3389
+      - 5432
+      - 6379
+      - 8000
+      - 8080
+      - 8443
+
+    denied_ports_always:
+      - 0
+      - 1
+      - 7
+      - 9
+      - 19
+      - 25
+      - 53
+      - 123
+      - 161
+      - 1900
+
+    max_targets_per_request: 32
+    max_cidr_prefix_len_min: 24
+    deny_cidr_broader_than_min_prefix: true
+
+# ------------------------------------------------------------------------------
+# Governance gates (trust/approval/quorum)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+
+  gate_templates:
+
+    passive_local:
+      category: "read_only"
+      min_trust: 4
+      requires_approval: false
+      requires_quorum: false
+      notes:
+        - "Local-only reconnaissance, no network egress."
+
+    active_recon:
+      category: "network_egress"
+      min_trust: 7
+      requires_approval: true
+      requires_quorum: false
+      notes:
+        - "Active probing requires approval and explicit scope."
+
+    vuln_scan:
+      category: "network_egress"
+      min_trust: 8
+      requires_approval: true
+      requires_quorum: true
+      notes:
+        - "Vuln scanning is intrusive; quorum required by default."
+
+    simulation:
+      category: "simulation"
+      min_trust: 7
+      requires_approval: true
+      requires_quorum: false
+      notes:
+        - "Simulation harness: hypothetical only; no network/payload/persistence."
+
+  quorum_defaults:
+    min_approvals: 2
+    min_distinct_approvers: 2
+    min_approver_trust: 9
+    allow_same_actor_twice: false
+
+# ------------------------------------------------------------------------------
+# Safety constraints (rate limits, timeouts) — for REAL egress
+# ------------------------------------------------------------------------------
+safety_constraints:
+  enabled: true
+
+  global:
+    max_concurrency: 2
+    max_runtime_s: 60
+    max_requests_per_min: 20
+
+  by_category:
+    passive_recon:
+      max_concurrency: 2
+      max_runtime_s: 15
+      max_requests_per_min: 30
+
+    active_recon:
+      max_concurrency: 1
+      max_runtime_s: 60
+      max_requests_per_min: 10
+
+    vulnerability_scanning:
+      max_concurrency: 1
+      max_runtime_s: 120
+      max_requests_per_min: 6
+
+    exploitation:
+      max_concurrency: 0
+      max_runtime_s: 0
+      max_requests_per_min: 0
+
+    # These are hard-denied for real; keep caps here as defense-in-depth.
+    credential_attacks:
+      max_concurrency: 0
+      max_runtime_s: 0
+      max_requests_per_min: 0
+
+    malware_or_persistence:
+      max_concurrency: 0
+      max_runtime_s: 0
+      max_requests_per_min: 0
+
+    denial_of_service:
+      max_concurrency: 0
+      max_runtime_s: 0
+      max_requests_per_min: 0
+
+    surveillance:
+      max_concurrency: 0
+      max_runtime_s: 0
+      max_requests_per_min: 0
+
+# ------------------------------------------------------------------------------
+# Reason codes (stable identifiers used in audit + UI)
+# ------------------------------------------------------------------------------
+reason_codes:
+  HARD_DENY_CATEGORY: "Category is hard-denied for real execution."
+  PUBLIC_INTERNET_DENIED: "Public internet targets denied by default."
+  WILDCARD_SCOPE_DENIED: "Wildcard/broad scope denied by default."
+  IDENTITY_REQUIRED: "Caller identity required."
+  AUTH_REQUIRED: "Authorization evidence required."
+  SCOPE_REQUIRED: "Explicit scope required."
+  SCOPE_TOO_BROAD: "Scope exceeds policy limits."
+  SIMULATION_ONLY_ALLOWED: "Allowed only as simulation; no real execution."
+  SIMULATION_PROFILE_DENIED: "Simulation not permitted in this profile."
+  SIMULATION_CONSTRAINT_VIOLATION: "Simulation constraints violated (egress/payload/persistence)."
+
+# ------------------------------------------------------------------------------
+# Decision rules (deterministic; first match wins)
+# ------------------------------------------------------------------------------
+rules:
+  enabled: true
+
+  allowlist_rules:
+
+    # --------------------------------------------------------------------------
+    # 0) Policy disabled → deny all governed operations
+    # --------------------------------------------------------------------------
+    - id: "deny.policy_disabled"
+      when:
+        policy_enabled: false
+      decision: "deny"
+      gates: null
+      reasons:
+        - "POLICY_DISABLED"
+
+    # --------------------------------------------------------------------------
+    # 1) Simulation harness path (hypotheticals)
+    # --------------------------------------------------------------------------
+    - id: "allow.simulation_harness"
+      when:
+        is_simulation_capability: true
+        simulation_enabled: true
+        profile_in_allowed_simulation_profiles: true
+        simulated_category_allowed: true
+        authorization_present: true
+        scope_present: true
+        scope_within_limits: true
+        simulation_constraints_satisfied: true
+      decision: "allow"
+      gates: "simulation"
+      reasons:
+        - "SIMULATION_ONLY_ALLOWED"
+
+    - id: "deny.simulation_profile_not_allowed"
+      when:
+        is_simulation_capability: true
+        simulation_enabled: true
+        profile_in_allowed_simulation_profiles: false
+      decision: "deny"
+      gates: null
+      reasons:
+        - "SIMULATION_PROFILE_DENIED"
+
+    # --------------------------------------------------------------------------
+    # 2) Real execution hard-denies (by enforcement table)
+    # --------------------------------------------------------------------------
+    - id: "deny.real_hard_deny_categories"
+      when:
+        is_simulation_capability: false
+        category_enforcement_is_hard_deny: true
+      decision: "deny"
+      gates: null
+      reasons:
+        - "HARD_DENY_CATEGORY"
+
+    # --------------------------------------------------------------------------
+    # 3) Global guardrails for real execution
+    # --------------------------------------------------------------------------
+    - id: "deny.unknown_identity"
+      when:
+        is_simulation_capability: false
+        identity_unknown: true
+      decision: "deny"
+      gates: null
+      reasons:
+        - "IDENTITY_REQUIRED"
+
+    - id: "deny.public_internet"
+      when:
+        is_simulation_capability: false
+        destination_is_public_internet: true
+      decision: "deny"
+      gates: null
+      reasons:
+        - "PUBLIC_INTERNET_DENIED"
+
+    - id: "deny.wildcard_scope"
+      when:
+        is_simulation_capability: false
+        target_scope_is_wildcard: true
+      decision: "deny"
+      gates: null
+      reasons:
+        - "WILDCARD_SCOPE_DENIED"
+
+    # --------------------------------------------------------------------------
+    # 4) Passive recon (local)
+    # --------------------------------------------------------------------------
+    - id: "allow.passive_local"
+      when:
+        category: "passive_recon"
+        destination_is_local: true
+      decision: "allow"
+      gates: "passive_local"
+      reasons: []
+
+    # --------------------------------------------------------------------------
+    # 5) Active recon (scoped + authorized, non-public)
+    # --------------------------------------------------------------------------
+    - id: "allow.active_recon_scoped"
+      when:
+        category: "active_recon"
+        authorization_present: true
+        scope_present: true
+        scope_within_limits: true
+        destination_is_public_internet: false
+      decision: "allow"
+      gates: "active_recon"
+      reasons: []
+
+    # --------------------------------------------------------------------------
+    # 6) Vulnerability scanning (scoped + authorized, non-public)
+    # --------------------------------------------------------------------------
+    - id: "allow.vuln_scan_scoped"
+      when:
+        category: "vulnerability_scanning"
+        authorization_present: true
+        scope_present: true
+        scope_within_limits: true
+        destination_is_public_internet: false
+      decision: "allow"
+      gates: "vuln_scan"
+      reasons: []
+
+  on_unmatched: "deny"
+
+# ------------------------------------------------------------------------------
+# Storage policy for results/artifacts (classification-aware)
+# ------------------------------------------------------------------------------
+storage:
+  enabled: true
+
+  classification: "security_sensitive"
+
+  allowed_write_roots:
+    - "C:\\Francis\\data\\artifacts"
+    - "C:\\Francis\\data\\exports"
+    - "C:\\Francis\\workspace"
+
+  denied_write_roots:
+    - "C:\\Francis\\src"
+    - "C:\\Francis\\apps"
+    - "C:\\Francis\\config"
+    - "C:\\Francis\\.git"
+
+  retention_days: 30
+
+  require_redaction:
+    enabled: true
+    deny_patterns:
+      - "(?i)\\b(password|passcode|api[_-]?key|secret|token)\\b"
+      - "(?i)\\bBEGIN (RSA|OPENSSH|EC) PRIVATE KEY\\b"
+
+# ------------------------------------------------------------------------------
+# Guard integration (violations escalate posture)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  on_violation:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  on_hard_deny_attempt:
+    set_guard_state_at_least: "lockdown"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "offsec.attempt"
+      - "offsec.allowed"
+      - "offsec.denied"
+      - "offsec.review_required"
+      - "offsec.violation"
+      - "offsec.simulation.allowed"
+      - "offsec.simulation.denied"
+    include:
+      - "ts"
+      - "actor_id"
+      - "capability_id"
+      - "category"
+      - "is_simulation"
+      - "decision"
+      - "gates"
+      - "authorization_ref"
+      - "engagement_id"
+      - "targets_redacted"
+      - "limits"
+      - "reasons"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "offsec.allowed"
+      - "offsec.denied"
+      - "offsec.review_required"
+      - "offsec.violations"
+      - "offsec.simulation.allowed"
+      - "offsec.simulation.denied"
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    offensive_security:
+      mode: "policy"
+      deny_by_default: true
+    simulation_harness:
+      profiles_allowed: ["dev"]
+    # Keep public internet denied even in dev by default.
+    enforcement:
+      real_guardrails:
+        deny_public_internet_by_default: true
+
+  airgapped:
+    offensive_security:
+      mode: "policy"
+    simulation_harness:
+      profiles_allowed: ["airgapped"]
+    enforcement:
+      real_guardrails:
+        deny_public_internet_by_default: true
+
+  workstation:
+    offensive_security:
+      mode: "policy"
+      deny_by_default: true
+    simulation_harness:
+      profiles_allowed: ["dev"] # workstation not allowed by default
+
+  production:
+    offensive_security:
+      mode: "disabled"
+    simulation_harness:
+      enabled: false
+
+  regulated:
+    offensive_security:
+      mode: "disabled"
+    simulation_harness:
+      enabled: false
+    storage:
+      retention_days: 7
+
+  safety_critical:
+    offensive_security:
+      mode: "disabled"
+    simulation_harness:
+      enabled: false

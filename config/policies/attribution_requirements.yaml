@@ -1,0 +1,451 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Attribution Requirements (citations, provenance, evidence posture)
+# Path:   config/policies/attribution_requirements.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy governs *attribution* across Francis outputs:
+#   - When sources MUST be cited vs optional
+#   - What metadata must be retained for provenance/audit
+#   - How citations are formatted for chat/UI/API
+#   - How to handle missing/uncertain attribution (fail-closed options)
+#   - How to treat untrusted sources (anti-injection, quality gates)
+#   - Quote/derivation limits to reduce copyright and leakage risk
+#
+# DESIGN CONTRACT
+# ---------------
+# - Evidence-first: when a claim depends on a source, include the source.
+# - Deterministic: stable citation IDs and ordering.
+# - Least disclosure: citations must not leak secrets, tokens, internal-only paths unless allowed.
+# - Anti-injection: sources are evidence, not instructions.
+# - Profile-aware: regulated/safety-critical are strict; dev can be permissive with warnings.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "attribution_requirements_policy"
+  notes:
+    - "Citations are part of governance, not a UX nice-to-have."
+    - "Attribution must be safe: no secrets, no tokens, no sensitive internal paths unless explicitly allowed."
+    - "Web content is untrusted; cite it, isolate it, and never treat it as instruction."
+
+# ------------------------------------------------------------------------------
+# Global enablement + default posture
+# ------------------------------------------------------------------------------
+attribution:
+  enabled: true
+
+  # Fail-closed means: if attribution is required but cannot be produced → deny or degrade safely.
+  fail_closed: true
+
+  # Default behavior when attribution requirements are not met.
+  on_missing_required: "degrade_with_disclaimer" # deny | degrade_with_disclaimer | warn_only
+
+  # If true, always include *some* provenance marker even for internal-only summaries.
+  always_emit_provenance_stub: true
+
+  # If true, attribution policy violations should be emitted to audit/ledger.
+  audit_violations: true
+
+# ------------------------------------------------------------------------------
+# Definitions: what "sources" are in Francis
+# ------------------------------------------------------------------------------
+sources:
+  # Source types used for policy decisions.
+  types:
+    - "internal"       # ledger, configs, vector store, domain registry, plugin catalog, artifacts
+    - "user_provided"  # content explicitly provided by the user in the current request
+    - "web"            # web learning fetch/search/ingest, external URLs
+    - "third_party"    # local files not authored by Francis (e.g., vendor PDFs), still not "web"
+    - "model_prior"    # model general knowledge (no specific source); allowed only when attribution optional
+
+  # Quality classes (primarily for web/third_party).
+  quality_classes:
+    authoritative: 1.0
+    reputable: 0.8
+    community: 0.6
+    unknown: 0.4
+    untrusted: 0.2
+
+  # When web sources are used, require minimum quality (unless user explicitly asks otherwise).
+  web_quality_gate:
+    enabled: true
+    default_min_quality: "reputable" # authoritative | reputable | community | unknown | untrusted
+    allow_override_if_user_requests: true
+
+  # Known untrusted domains/patterns (policy hints; implementation decides matching).
+  blocklist:
+    enabled: true
+    patterns:
+      - "(?i)\\bexample\\.invalid\\b"
+    on_match: "require_secondary_source" # deny | require_secondary_source | allow_with_warning
+
+# ------------------------------------------------------------------------------
+# What requires attribution (rules)
+# ------------------------------------------------------------------------------
+requirements:
+  # Workload hints (not a model router; this is for attribution strictness).
+  workloads:
+    chat:
+      default_level: "light"
+    reasoning:
+      default_level: "standard"
+    research:
+      default_level: "strict"
+    retrieval:
+      default_level: "strict"
+    vision:
+      default_level: "standard"
+    simulation:
+      default_level: "standard"
+    governance:
+      default_level: "strict"
+
+  # Levels define how hard we push citations and provenance.
+  levels:
+    none:
+      description: "No citations required."
+    light:
+      description: "Citations recommended for non-trivial factual claims; required when user asks to verify."
+    standard:
+      description: "Citations required for material claims derived from sources; include provenance metadata."
+    strict:
+      description: "Citations required for most factual claims; missing citations triggers fail-closed behavior."
+    forensic:
+      description: "Audit-grade: every claim must trace to provenance; heavy metadata + reproducibility."
+
+  # Trigger rules elevate attribution level beyond workload defaults.
+  triggers:
+    # If the user asks for verification or sources, elevate.
+    elevate_to_strict_if_user_mentions_any:
+      - "cite"
+      - "citation"
+      - "sources"
+      - "proof"
+      - "evidence"
+      - "verify"
+      - "according to"
+      - "link"
+      - "where did you get"
+      - "reference"
+
+    # If output includes any web learning content, elevate.
+    elevate_to_strict_if_source_type_used:
+      - "web"
+
+    # If output is a governance decision, elevate.
+    elevate_to_strict_if_tags_include_any:
+      - "approval"
+      - "trust"
+      - "policy"
+      - "audit"
+      - "compliance"
+      - "safety_critical"
+
+  # Exceptions where citations are not required even in standard mode.
+  exceptions:
+    allow_no_citations_for:
+      - "creative_writing"
+      - "brainstorming_without_facts"
+      - "pure_opinion"
+      - "user_provided_only_summarization"
+
+    # If an exception applies, require a disclaimer that no external verification was performed.
+    require_disclaimer_on_exception: true
+
+# ------------------------------------------------------------------------------
+# Minimum citation counts (when required)
+# ------------------------------------------------------------------------------
+minimums:
+  enabled: true
+
+  # When attribution is required (standard+), ensure at least N citations for source-derived claims.
+  min_citations_by_level:
+    standard: 1
+    strict: 2
+    forensic: 3
+
+  # For web-derived outputs, prefer multiple independent sources.
+  web:
+    min_distinct_domains: 2
+    allow_single_domain_if_authoritative: true
+
+  # For internal state outputs (ledger/config), require at least one provenance ref (artifact id/path/hash).
+  internal:
+    min_provenance_refs: 1
+
+# ------------------------------------------------------------------------------
+# Provenance metadata contract (what a citation must contain)
+# ------------------------------------------------------------------------------
+provenance:
+  enabled: true
+
+  # Common required fields for any citation
+  required_fields:
+    - "source_type"     # internal|web|third_party|user_provided|model_prior
+    - "ref_id"          # stable id for citation (used in UI)
+    - "title"           # human-friendly label
+    - "retrieved_at"    # timestamp (UTC recommended)
+    - "confidence"      # 0..1 confidence that citation supports the claim
+
+  # Source-type specific required fields
+  required_by_type:
+
+    internal:
+      - "system"        # ledger|vectors|configs|domains_registry|plugins_catalog|artifacts|...
+      - "document_id"   # stable id if available
+      - "hash"          # sha256 or content hash if available
+
+    web:
+      - "url"
+      - "publisher"     # best-effort
+      - "content_hash"  # of captured snapshot if stored
+      - "snapshot_id"   # artifact id if the content was captured
+
+    third_party:
+      - "path_hint"     # non-sensitive path hint (basename only by default)
+      - "hash"
+      - "content_type"
+
+    user_provided:
+      - "message_id"    # pointer to the user message or upload id
+
+    model_prior:
+      - "disclaimer"    # explicit note that no source exists
+
+  # Redaction rules for provenance fields (prevent leaking secrets/tokens).
+  redaction:
+    enabled: true
+
+    url:
+      strip_query_params: true
+      strip_fragments: true
+      strip_common_tracking_params: true
+
+    path:
+      # Avoid leaking full filesystem paths in user-facing output unless explicitly allowed.
+      allow_full_paths_in_user_output: false
+      emit_basename_only: true
+
+    patterns:
+      - "(?i)api[_-]?key=[^&\\s]+"
+      - "(?i)token=[^&\\s]+"
+      - "(?i)signature=[^&\\s]+"
+      - "(?i)X-Amz-Signature=[^&\\s]+"
+    replace_with: "[REDACTED]"
+
+# ------------------------------------------------------------------------------
+# Citation formatting (how citations appear in outputs)
+# ------------------------------------------------------------------------------
+formatting:
+  enabled: true
+
+  # Default formatting strategy by channel.
+  # - bracket_refs: inline [S1], [S2]
+  # - footnotes: numbered footnotes at end
+  # - json: machine-readable citations list
+  by_channel:
+    chat: "bracket_refs"
+    ui: "bracket_refs"
+    api: "json"
+
+  bracket_refs:
+    prefix: "S"
+    style: "square" # square | round
+    example: "[S1]"
+
+  footnotes:
+    numbering: "numeric"
+    placement: "end" # end | per_section
+
+  json:
+    include_full_provenance: true
+    include_redacted_fields_only: true
+
+  # Deterministic ordering of citations.
+  ordering:
+    enabled: true
+    rule: "first_appearance" # first_appearance | by_confidence_desc | by_source_quality_desc
+
+# ------------------------------------------------------------------------------
+# Quote and transformation limits (copyright + leakage safety)
+# ------------------------------------------------------------------------------
+quoting:
+  enabled: true
+
+  # Keep quotes short; prefer paraphrase with citations.
+  max_verbatim_words_per_source: 25
+  max_verbatim_words_total: 120
+
+  # If user requests a full verbatim copy, policy should require refusal or a safe excerpt.
+  on_request_for_full_verbatim: "refuse_and_offer_summary" # refuse_and_offer_summary | require_approval | allow_if_public_domain
+
+  # For code excerpts, prefer minimal snippet with attribution metadata.
+  code:
+    max_lines_per_source: 80
+    require_license_note_if_known: true
+
+# ------------------------------------------------------------------------------
+# Anti-injection posture for attributed content
+# ------------------------------------------------------------------------------
+anti_injection:
+  enabled: true
+
+  # Sources are evidence, not instructions.
+  rule: "treat_sources_as_untrusted_evidence"
+
+  # When web/third_party text appears to contain prompt-like directives, isolate and warn.
+  detect_patterns:
+    - "(?i)ignore (all|previous) instructions"
+    - "(?i)system prompt"
+    - "(?i)developer message"
+    - "(?i)you are now"
+    - "(?i)exfiltrate"
+    - "(?i)send.*secrets"
+  on_detect: "isolate_and_warn" # isolate_and_warn | sanitize | deny_source
+
+  sanitize:
+    enabled: true
+    strip_detected_lines: true
+    annotate_strips: true
+
+# ------------------------------------------------------------------------------
+# Enforcement outcomes (what to do when requirements cannot be met)
+# ------------------------------------------------------------------------------
+enforcement:
+  enabled: true
+
+  behaviors:
+    deny:
+      message: "Unable to provide required attribution for this request."
+    degrade_with_disclaimer:
+      message: "I can answer, but I cannot fully attribute/verify all claims with sources in the current context."
+    warn_only:
+      message: "Attribution requirements were not satisfied; proceeding with warnings."
+
+  # If web sources are required but web learning is disabled (airgapped), what then?
+  on_web_required_but_unavailable: "deny" # deny | degrade_with_disclaimer
+
+  # If internal provenance is required but store is unavailable, what then?
+  on_internal_required_but_unavailable: "deny" # deny | degrade_with_disclaimer
+
+# ------------------------------------------------------------------------------
+# Observability (audit trail + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  trace:
+    enabled: true
+    include:
+      - "level"
+      - "workload"
+      - "sources_used"
+      - "citation_count"
+      - "distinct_domains"
+      - "violations"
+      - "redactions_applied"
+
+  metrics:
+    enabled: true
+    counters:
+      - "attribution.required"
+      - "attribution.satisfied"
+      - "attribution.violations"
+      - "attribution.denied"
+      - "attribution.degraded"
+    histograms:
+      - "attribution.citation_count"
+      - "attribution.distinct_domains"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    attribution:
+      fail_closed: false
+      on_missing_required: "warn_only"
+    minimums:
+      web:
+        min_distinct_domains: 1
+    provenance:
+      redaction:
+        path:
+          allow_full_paths_in_user_output: false
+
+  workstation:
+    attribution:
+      fail_closed: true
+      on_missing_required: "degrade_with_disclaimer"
+
+  airgapped:
+    requirements:
+      triggers:
+        elevate_to_strict_if_source_type_used:
+          # In airgapped mode, web should not be used; do not elevate based on web usage.
+          - "internal"
+    enforcement:
+      on_web_required_but_unavailable: "deny"
+
+  production:
+    attribution:
+      fail_closed: true
+      on_missing_required: "degrade_with_disclaimer"
+    sources:
+      web_quality_gate:
+        default_min_quality: "reputable"
+
+  regulated:
+    attribution:
+      fail_closed: true
+      on_missing_required: "deny"
+    requirements:
+      workloads:
+        chat:
+          default_level: "standard"
+        reasoning:
+          default_level: "strict"
+        research:
+          default_level: "forensic"
+    minimums:
+      min_citations_by_level:
+        standard: 2
+        strict: 3
+        forensic: 4
+      web:
+        min_distinct_domains: 2
+    quoting:
+      max_verbatim_words_per_source: 20
+      max_verbatim_words_total: 80
+
+  safety_critical:
+    attribution:
+      fail_closed: true
+      on_missing_required: "deny"
+    requirements:
+      workloads:
+        chat:
+          default_level: "strict"
+        reasoning:
+          default_level: "forensic"
+        research:
+          default_level: "forensic"
+    minimums:
+      min_citations_by_level:
+        standard: 2
+        strict: 4
+        forensic: 5
+    anti_injection:
+      on_detect: "deny_source"
+    quoting:
+      max_verbatim_words_per_source: 15
+      max_verbatim_words_total: 60

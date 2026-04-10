@@ -1,0 +1,756 @@
+# ==============================================================================
+#  FRANCIS — meta/value_functions.yaml
+#  Value & utility model: multi-objective optimization, tradeoffs, and gating
+# ==============================================================================
+#
+#  Purpose
+#  -------
+#  This file defines how FRANCIS evaluates "what is good" when selecting plans,
+#  tools, policies, and actions — under uncertainty and risk.
+#
+#  It provides:
+#    - A normalized set of value dimensions (benefits, costs, risks)
+#    - Hard constraints vs soft objectives (safety/compliance are constraints)
+#    - Aggregation methods (lexicographic + constrained weighted utility)
+#    - Environment overrides (regulated / safety_critical / airgapped / dev)
+#    - Action-type overrides (destructive actions, credential actions, etc.)
+#    - Confidence and uncertainty penalties (fail-closed bias under uncertainty)
+#    - Decision thresholds for execute vs dry-run vs require-approval vs block
+#
+#  Read alongside:
+#    - meta/axioms.yaml
+#    - meta/risk_model.yaml
+#    - meta/trust_model.yaml
+#    - meta/governance_principles.yaml
+#    - meta/action_taxonomy.yaml
+#    - meta/evidence_model.yaml
+#    - meta/internet_safety_model.yaml
+#    - docs/GOVERNANCE.md
+#    - docs/TRUST_MODEL.md
+#    - docs/API_PERMISSIONS.md
+#    - docs/POLICIES.md
+#
+#  Implementation pointers:
+#    - src/francis/economy/value_optimization/*
+#    - src/francis/governance/policy_engine.py
+#    - src/francis/governance/action_readiness.py
+#    - src/francis/trust/calculator.py
+#    - src/francis/agent/task.py, executor.py
+#
+#  Design stance:
+#    - Safety, legality, and policy compliance are NOT "just another weight":
+#      they are constraints. If violated → block/require approval.
+#    - Under uncertainty: prefer reversible actions, dry-runs, and human review.
+#    - The value model must be auditable: every score should explain its inputs.
+#
+# ==============================================================================
+
+meta:
+  model_id: francis.value_functions
+  version: 1
+  stability: stable
+  owner: governance_and_economy
+  description: >
+    Canonical value model for decision-making. Defines dimensions, constraints,
+    aggregation, thresholds, and environment overrides.
+
+# ------------------------------------------------------------------------------
+# Core concepts and conventions
+# ------------------------------------------------------------------------------
+conventions:
+  normalization:
+    # All dimension scores are normalized to [0, 1] where possible.
+    # For "cost" dimensions, higher means worse unless otherwise specified.
+    score_range: [0.0, 1.0]
+    missing_data_default:
+      # When a metric cannot be measured, be conservative:
+      # assume higher risk and lower benefit unless explicitly allowed.
+      benefit: 0.3
+      cost: 0.7
+      risk: 0.7
+  confidence:
+    # Confidence range: [0, 1]. 1 = fully verified (tool outputs, controlled tests).
+    # Used to reduce expected utility when evidence quality is low.
+    range: [0.0, 1.0]
+  time:
+    # All time units referenced in scoring should be explicit.
+    default_unit: seconds
+  auditability:
+    require_traceable_inputs: true
+    require_policy_refs_for_constraints: true
+
+# ------------------------------------------------------------------------------
+# Hard constraints (non-negotiable). If any fail → block or require explicit
+# emergency approvals (policy-dependent).
+# ------------------------------------------------------------------------------
+hard_constraints:
+
+  - id: HC_SAFETY_HUMAN
+    description: "Human safety must not be jeopardized."
+    enforced_by:
+      - "config/policies/human_safety.yaml"
+      - "meta/governance_principles.yaml"
+    default_action_on_violation: block
+
+  - id: HC_LEGAL_COMPLIANCE
+    description: "Illegal actions or actions that likely violate law/regulation are forbidden."
+    enforced_by:
+      - "config/policies/regulated_domains.yaml"
+      - "config/policies/privacy.yaml"
+      - "config/policies/data_governance.yaml"
+    default_action_on_violation: block
+
+  - id: HC_PRIVACY_PII
+    description: "PII/regulated data must not be mishandled or exfiltrated."
+    enforced_by:
+      - "config/policies/privacy.yaml"
+      - "config/policies/data_governance.yaml"
+    default_action_on_violation: block
+
+  - id: HC_CREDENTIALS_NO_LEAK
+    description: "Secrets/tokens/keys must never be revealed, logged, or exported."
+    enforced_by:
+      - "config/policies/credential_usage.yaml"
+      - "config/policies/filesystem.yaml"
+    default_action_on_violation: block
+
+  - id: HC_OFFENSIVE_SECURITY_BOUNDARIES
+    description: "Offensive security actions are governed and restricted by policy."
+    enforced_by:
+      - "config/policies/offensive_security.yaml"
+      - "meta/internet_safety_model.yaml"
+    default_action_on_violation: block
+
+  - id: HC_AUTHZ_DEFAULT_DENY
+    description: "If identity, delegation, or scope cannot be validated → deny."
+    enforced_by:
+      - "config/policies/api_permissions.yaml"
+      - "src/francis/governance/api_permission_gate.py"
+    default_action_on_violation: block
+
+  - id: HC_EXECUTION_REQUIRES_GATING
+    description: "Tool execution requires Governance + Identity passes."
+    enforced_by:
+      - "meta/plane_map.yaml"
+      - "src/francis/agent/executor.py"
+      - "src/francis/governance/action_readiness.py"
+    default_action_on_violation: block
+
+# ------------------------------------------------------------------------------
+# Value dimensions
+# Each dimension includes: how to measure, what it represents, and default weight
+# for soft optimization (only after hard constraints pass).
+# ------------------------------------------------------------------------------
+dimensions:
+
+  # -----------------------
+  # BENEFIT dimensions
+  # -----------------------
+  - id: DV_USER_GOAL_PROGRESS
+    kind: benefit
+    description: "Degree to which the action advances the user’s stated goal(s)."
+    default_weight: 0.22
+    measurement:
+      sources:
+        - "plan evaluation (planner)"
+        - "task outcome tracking"
+      method: "semantic_goal_alignment_score"
+    notes:
+      - "Should be anchored to explicit constraints and acceptance criteria."
+
+  - id: DV_QUALITY_CORRECTNESS
+    kind: benefit
+    description: "Expected correctness/validity of the outcome (not just plausibility)."
+    default_weight: 0.18
+    measurement:
+      sources:
+        - "tests (unit/integration/e2e) if applicable"
+        - "tool outputs (authoritative sources)"
+        - "cross-source evidence agreement"
+      method: "evidence_weighted_correctness"
+    notes:
+      - "Penalize solutions relying on unverified web claims for factual tasks."
+
+  - id: DV_EXPLAINABILITY
+    kind: benefit
+    description: "How explainable and auditable the decision and outputs are."
+    default_weight: 0.08
+    measurement:
+      sources:
+        - "presence of decision artifact"
+        - "citations/provenance completeness"
+        - "trace coverage"
+      method: "auditability_score"
+
+  - id: DV_REUSABILITY
+    kind: benefit
+    description: "How reusable/templatizable the output is for future tasks."
+    default_weight: 0.05
+    measurement:
+      sources:
+        - "artifact metadata"
+        - "runbook/template generation"
+      method: "reusability_heuristic"
+
+  - id: DV_VALUE_OF_INFORMATION
+    kind: benefit
+    description: "Expected value gained by learning (research, probing) before acting."
+    default_weight: 0.07
+    measurement:
+      sources:
+        - "uncertainty model"
+        - "decision sensitivity analysis"
+      method: "voi_estimate"
+    notes:
+      - "Can dominate when uncertainty is high and action is high-impact."
+
+  # -----------------------
+  # COST dimensions
+  # (Higher score = more cost)
+  # -----------------------
+  - id: DV_TIME_COST
+    kind: cost
+    description: "Time/latency cost to user/system."
+    default_weight: 0.06
+    measurement:
+      sources:
+        - "runtime scheduler estimates"
+        - "historical telemetry"
+      method: "normalized_latency"
+
+  - id: DV_COMPUTE_COST
+    kind: cost
+    description: "Compute cost (tokens, CPU/GPU time, storage churn)."
+    default_weight: 0.05
+    measurement:
+      sources:
+        - "provider usage estimates"
+        - "telemetry metrics"
+      method: "normalized_compute_cost"
+
+  - id: DV_OPERATIONAL_COMPLEXITY
+    kind: cost
+    description: "Operational complexity: maintenance burden, moving parts, fragility."
+    default_weight: 0.05
+    measurement:
+      sources:
+        - "dependency graph analysis"
+        - "runbook length and required steps"
+      method: "complexity_score"
+
+  # -----------------------
+  # RISK dimensions
+  # (Higher score = more risk)
+  # -----------------------
+  - id: DV_SAFETY_RISK
+    kind: risk
+    description: "Risk to human safety / physical systems."
+    default_weight: 0.0
+    # Note: This is mainly a constraint; used as soft signal only after policy pass.
+    measurement:
+      sources:
+        - "risk_model"
+        - "industrial_safety policy checks"
+      method: "safety_risk_score"
+
+  - id: DV_SECURITY_RISK
+    kind: risk
+    description: "Cybersecurity risk: exposure, privilege escalation, attack surface."
+    default_weight: 0.06
+    measurement:
+      sources:
+        - "threat model mapping"
+        - "sandbox / permission boundary analysis"
+      method: "security_risk_score"
+
+  - id: DV_PRIVACY_RISK
+    kind: risk
+    description: "Privacy and data governance risk (PII/regulated content handling)."
+    default_weight: 0.07
+    measurement:
+      sources:
+        - "data classification"
+        - "redaction and retention checks"
+      method: "privacy_risk_score"
+
+  - id: DV_COMPLIANCE_RISK
+    kind: risk
+    description: "Policy/compliance drift risk (including audit failure probability)."
+    default_weight: 0.06
+    measurement:
+      sources:
+        - "policy engine results"
+        - "missing approvals"
+        - "uncertainty in classification"
+      method: "compliance_risk_score"
+
+  - id: DV_IRREVERSIBILITY
+    kind: risk
+    description: "Irreversibility risk: difficulty/cost to undo if wrong."
+    default_weight: 0.07
+    measurement:
+      sources:
+        - "action taxonomy (destructive vs reversible)"
+        - "tool operation metadata"
+      method: "irreversibility_score"
+    notes:
+      - "Destructive ops should have near-1 irreversibility unless proven reversible."
+
+  - id: DV_REPUTATION_RISK
+    kind: risk
+    description: "Risk of reputational harm to operator/org (e.g., incorrect public comms)."
+    default_weight: 0.03
+    measurement:
+      sources:
+        - "audience scope"
+        - "factuality confidence"
+      method: "reputation_risk_score"
+
+# ------------------------------------------------------------------------------
+# Aggregation strategy: constrained optimization + lexicographic ordering
+# ------------------------------------------------------------------------------
+aggregation:
+
+  # Lexicographic priority order:
+  #   1) satisfy hard constraints (block if violated)
+  #   2) satisfy "approval and readiness" requirements (otherwise require approval)
+  #   3) maximize utility among remaining candidates
+  lexicographic_priorities:
+    - "hard_constraints"
+    - "required_approvals_and_readiness"
+    - "maximize_expected_utility"
+
+  utility:
+    # Utility is computed after hard constraints pass.
+    #
+    # Conceptual form (informative):
+    #   U_raw = Σ(w_b * benefit)  -  Σ(w_c * cost)  -  Σ(w_r * risk)
+    #   U_adj = U_raw * confidence_adjustment * trust_adjustment
+    #
+    # Where confidence_adjustment decreases utility when evidence is weak.
+    method: weighted_sum
+
+    default_weights:
+      # These weights apply to dimensions if not overridden by environment/action type.
+      # NOTE: Dimensions themselves also carry default_weight; the effective weight is:
+      #   w_effective = dimension.default_weight * profile_multiplier
+      profile_multiplier_default: 1.0
+
+    adjustments:
+      confidence_adjustment:
+        enabled: true
+        method: "linear_downweight"
+        parameters:
+          # U_adj = U_raw * (min_factor + (1-min_factor)*confidence)
+          min_factor: 0.55
+        notes:
+          - "Even with low confidence, non-execution outcomes (e.g., propose plan) can still be valuable."
+
+      trust_adjustment:
+        enabled: true
+        method: "gated_multiplier"
+        parameters:
+          # Trust gates can clamp or scale utility in high-risk categories.
+          min_multiplier: 0.0
+          max_multiplier: 1.0
+        notes:
+          - "Trust interacts with readiness; in safety_critical contexts trust is stricter."
+
+      uncertainty_penalty:
+        enabled: true
+        method: "risk_bias"
+        parameters:
+          # Additional penalty applied to risks when uncertainty is high.
+          # effective_risk = base_risk + k * uncertainty
+          k: 0.35
+
+  pareto:
+    # Optional: used when comparing long-lived architectural choices.
+    enabled: true
+    method: "pareto_frontier_then_tiebreak"
+    tiebreak:
+      # If multiple Pareto-optimal candidates exist, choose the one with:
+      # (a) lowest irreversibility, then (b) lowest compliance risk, then (c) highest goal progress.
+      order:
+        - DV_IRREVERSIBILITY
+        - DV_COMPLIANCE_RISK
+        - DV_USER_GOAL_PROGRESS
+
+# ------------------------------------------------------------------------------
+# Environment profiles (override weights and thresholds)
+# These map to config/environments/*.yaml conceptual modes.
+# ------------------------------------------------------------------------------
+environment_profiles:
+
+  dev:
+    description: "Developer mode: faster iteration, still safe."
+    weight_multipliers:
+      DV_TIME_COST: 1.15
+      DV_COMPUTE_COST: 1.10
+      DV_OPERATIONAL_COMPLEXITY: 1.10
+      DV_COMPLIANCE_RISK: 1.00
+      DV_SECURITY_RISK: 1.00
+      DV_PRIVACY_RISK: 1.00
+      DV_IRREVERSIBILITY: 1.10
+      DV_USER_GOAL_PROGRESS: 1.05
+      DV_QUALITY_CORRECTNESS: 1.05
+      DV_VALUE_OF_INFORMATION: 1.00
+    readiness:
+      require_dry_run_for_high_impact: true
+
+  production:
+    description: "Production mode: stability and correctness dominate."
+    weight_multipliers:
+      DV_QUALITY_CORRECTNESS: 1.20
+      DV_OPERATIONAL_COMPLEXITY: 1.15
+      DV_COMPLIANCE_RISK: 1.15
+      DV_SECURITY_RISK: 1.15
+      DV_IRREVERSIBILITY: 1.20
+      DV_TIME_COST: 1.00
+    readiness:
+      require_dry_run_for_high_impact: true
+
+  regulated:
+    description: "Regulated environment: privacy/compliance dominate; execution is conservative."
+    weight_multipliers:
+      DV_PRIVACY_RISK: 1.35
+      DV_COMPLIANCE_RISK: 1.40
+      DV_SECURITY_RISK: 1.20
+      DV_IRREVERSIBILITY: 1.25
+      DV_EXPLAINABILITY: 1.20
+      DV_QUALITY_CORRECTNESS: 1.15
+      DV_USER_GOAL_PROGRESS: 1.00
+    readiness:
+      require_approvals_for_writes: true
+      require_two_person_review_for_irreversible: true
+
+  safety_critical:
+    description: "Safety-critical environment: minimize risk and irreversibility; prefer simulation."
+    weight_multipliers:
+      DV_SAFETY_RISK: 1.50
+      DV_SECURITY_RISK: 1.25
+      DV_COMPLIANCE_RISK: 1.25
+      DV_IRREVERSIBILITY: 1.50
+      DV_VALUE_OF_INFORMATION: 1.25
+      DV_EXPLAINABILITY: 1.25
+      DV_USER_GOAL_PROGRESS: 0.95
+    readiness:
+      require_simulation_before_execution: true
+      require_approvals_for_any_execution: true
+
+  airgapped:
+    description: "Airgapped environment: no external access; maximize local correctness and auditability."
+    constraints:
+      web_access: false
+    weight_multipliers:
+      DV_VALUE_OF_INFORMATION: 0.85
+      DV_OPERATIONAL_COMPLEXITY: 1.10
+      DV_EXPLAINABILITY: 1.20
+
+  home:
+    description: "Home/personal environment: still safe, but lighter governance by default."
+    weight_multipliers:
+      DV_TIME_COST: 1.10
+      DV_USER_GOAL_PROGRESS: 1.10
+      DV_EXPLAINABILITY: 0.95
+
+# ------------------------------------------------------------------------------
+# Action-type overrides (based on action taxonomy)
+# These overrides bias scoring and require stricter readiness on risky classes.
+# ------------------------------------------------------------------------------
+action_type_overrides:
+
+  # Destructive / irreversible actions
+  destructive:
+    description: "Delete/purge/irreversible operations."
+    weight_multipliers:
+      DV_IRREVERSIBILITY: 1.60
+      DV_COMPLIANCE_RISK: 1.35
+      DV_SECURITY_RISK: 1.20
+    readiness:
+      require_approvals: true
+      require_dry_run: true
+      require_post_checks: true
+
+  credential:
+    description: "Credential operations: retrieve/rotate/revoke/grant."
+    weight_multipliers:
+      DV_SECURITY_RISK: 1.60
+      DV_PRIVACY_RISK: 1.30
+      DV_COMPLIANCE_RISK: 1.30
+      DV_EXPLAINABILITY: 1.20
+    readiness:
+      require_approvals: true
+      require_two_person_review_for_irreversible: true
+
+  external_write:
+    description: "Writing to external systems (email, Slack, GitHub write, DB write)."
+    weight_multipliers:
+      DV_REPUTATION_RISK: 1.40
+      DV_QUALITY_CORRECTNESS: 1.20
+      DV_COMPLIANCE_RISK: 1.20
+      DV_IRREVERSIBILITY: 1.10
+    readiness:
+      require_approvals_in_regulated: true
+      require_preview: true
+
+  web_access:
+    description: "Accessing external web sources."
+    weight_multipliers:
+      DV_SECURITY_RISK: 1.20
+      DV_COMPLIANCE_RISK: 1.15
+      DV_VALUE_OF_INFORMATION: 1.10
+    readiness:
+      require_content_sanitization: true
+      require_citations_for_claims: true
+
+  industrial_actuation:
+    description: "Industrial control actions (actuators, setpoints)."
+    weight_multipliers:
+      DV_SAFETY_RISK: 1.80
+      DV_IRREVERSIBILITY: 1.60
+      DV_EXPLAINABILITY: 1.30
+      DV_QUALITY_CORRECTNESS: 1.30
+    readiness:
+      require_simulation_before_execution: true
+      require_approvals: true
+      require_two_person_review_for_irreversible: true
+
+  federation_export:
+    description: "Export/share knowledge to federated peers."
+    weight_multipliers:
+      DV_PRIVACY_RISK: 1.60
+      DV_COMPLIANCE_RISK: 1.50
+      DV_SECURITY_RISK: 1.25
+      DV_EXPLAINABILITY: 1.25
+    readiness:
+      require_sanitization_pipeline: true
+      require_operator_approval_if_sensitive: true
+
+# ------------------------------------------------------------------------------
+# Canonical value functions (named for logging and explainability)
+# Each function defines what it optimizes and how it composes dimensions.
+# These are declarative definitions; code can interpret them.
+# ------------------------------------------------------------------------------
+value_functions:
+
+  - id: VF_DEFAULT
+    name: Default Utility
+    description: "General-purpose risk-aware utility used for most actions."
+    dimensions_used:
+      benefits:
+        - DV_USER_GOAL_PROGRESS
+        - DV_QUALITY_CORRECTNESS
+        - DV_EXPLAINABILITY
+        - DV_REUSABILITY
+        - DV_VALUE_OF_INFORMATION
+      costs:
+        - DV_TIME_COST
+        - DV_COMPUTE_COST
+        - DV_OPERATIONAL_COMPLEXITY
+      risks:
+        - DV_SECURITY_RISK
+        - DV_PRIVACY_RISK
+        - DV_COMPLIANCE_RISK
+        - DV_IRREVERSIBILITY
+        - DV_REPUTATION_RISK
+    aggregation_ref: aggregation.utility
+    notes:
+      - "Safety risk is primarily handled as a constraint, plus soft signal where applicable."
+
+  - id: VF_RESEARCH
+    name: Research / Evidence Gathering
+    description: "Optimizes learning quality and provenance under safe web policies."
+    dimensions_used:
+      benefits:
+        - DV_VALUE_OF_INFORMATION
+        - DV_QUALITY_CORRECTNESS
+        - DV_EXPLAINABILITY
+      costs:
+        - DV_TIME_COST
+        - DV_COMPUTE_COST
+      risks:
+        - DV_SECURITY_RISK
+        - DV_COMPLIANCE_RISK
+        - DV_PRIVACY_RISK
+    custom_rules:
+      - "Require citations for factual claims above low-risk threshold."
+      - "Penalize sources with low credibility or unknown provenance."
+
+  - id: VF_EXECUTION_WRITE
+    name: External Write Utility
+    description: "Used for actions that modify external systems; heavily penalizes risk/irreversibility."
+    dimensions_used:
+      benefits:
+        - DV_USER_GOAL_PROGRESS
+        - DV_QUALITY_CORRECTNESS
+        - DV_EXPLAINABILITY
+      costs:
+        - DV_TIME_COST
+        - DV_OPERATIONAL_COMPLEXITY
+      risks:
+        - DV_SECURITY_RISK
+        - DV_PRIVACY_RISK
+        - DV_COMPLIANCE_RISK
+        - DV_IRREVERSIBILITY
+        - DV_REPUTATION_RISK
+    custom_rules:
+      - "Prefer preview/dry-run modes when available."
+      - "If confidence < threshold, route to approval/review instead of execute."
+
+  - id: VF_ARCHITECTURE_CHOICE
+    name: Architectural Selection Utility
+    description: "Long-horizon choice utility; uses Pareto first, then conservative tiebreak."
+    aggregation_ref: aggregation.pareto
+    dimensions_used:
+      benefits:
+        - DV_QUALITY_CORRECTNESS
+        - DV_REUSABILITY
+        - DV_EXPLAINABILITY
+      costs:
+        - DV_OPERATIONAL_COMPLEXITY
+        - DV_COMPUTE_COST
+      risks:
+        - DV_SECURITY_RISK
+        - DV_COMPLIANCE_RISK
+        - DV_IRREVERSIBILITY
+    notes:
+      - "Used for platform choices, connector designs, default configurations."
+
+# ------------------------------------------------------------------------------
+# Decision thresholds and outcomes
+# ------------------------------------------------------------------------------
+decision_thresholds:
+  # These thresholds decide whether to:
+  #   - execute now
+  #   - execute dry-run / simulation
+  #   - require approval
+  #   - block
+  #
+  # Inputs:
+  #   - U_adj (adjusted utility) in [-inf, +inf] but typically normalized later
+  #   - confidence in [0,1]
+  #   - trust_level in [0,1] (from trust model)
+  #   - risk_score in [0,1] aggregated from relevant risk dimensions
+  #
+  # Conservative defaults: do not execute uncertain high-risk actions.
+
+  confidence_min_for_execution: 0.70
+  trust_min_for_execution: 0.70
+  risk_max_for_auto_execution: 0.45
+
+  # Interpreting utility: map U_adj to [0,1] with a squashing function if desired.
+  utility_execute_min: 0.55
+
+  outcomes:
+    - id: OUT_BLOCK
+      when:
+        any_hard_constraint_failed: true
+      action: block
+      reason: "Hard constraint failed."
+
+    - id: OUT_REQUIRE_APPROVAL
+      when:
+        approvals_required: true
+      action: require_approval
+      reason: "Policy requires approvals for this action type or environment."
+
+    - id: OUT_DRY_RUN_OR_SIM
+      when:
+        any:
+          - "confidence < confidence_min_for_execution"
+          - "risk_score > risk_max_for_auto_execution"
+          - "trust_level < trust_min_for_execution"
+      action: dry_run_or_simulation
+      reason: "Uncertainty/risk/trust thresholds require safer preflight."
+
+    - id: OUT_EXECUTE
+      when:
+        all:
+          - "confidence >= confidence_min_for_execution"
+          - "trust_level >= trust_min_for_execution"
+          - "risk_score <= risk_max_for_auto_execution"
+          - "utility >= utility_execute_min"
+          - "approvals_required == false"
+      action: execute
+      reason: "Meets thresholds for safe autonomous execution."
+
+# ------------------------------------------------------------------------------
+# Logging and explainability requirements
+# ------------------------------------------------------------------------------
+logging:
+  required_fields_per_scoring_event:
+    - "timestamp"
+    - "session_id"
+    - "request_id"
+    - "plan_id"
+    - "value_function_id"
+    - "environment_profile"
+    - "action_type_tags"
+    - "dimension_scores"
+    - "dimension_weights_effective"
+    - "confidence"
+    - "trust_level"
+    - "risk_score"
+    - "utility_raw"
+    - "utility_adjusted"
+    - "decision_outcome"
+    - "policy_refs"
+  redaction:
+    never_log:
+      - "secrets"
+      - "raw_tokens"
+      - "credential_material"
+      - "pii_payloads"
+    log_hashes_instead: true
+  storage_targets:
+    - "data/logs/decisions"
+    - "data/logs/audit"
+
+# ------------------------------------------------------------------------------
+# Calibration guidance (how to tune over time)
+# ------------------------------------------------------------------------------
+calibration:
+  strategy: "start_conservative_then_relax_with_evidence"
+  update_signals:
+    - "post_action_success_rates"
+    - "incident_reports"
+    - "blocked_actions_count"
+    - "approval_latency"
+    - "false_positive_blocks"
+    - "false_negative_allows"
+  guardrails:
+    - "never reduce hard constraints to weights"
+    - "any reduction in risk weights requires audit + changelog"
+  recommended_process:
+    - "run evaluation suite on historical traces"
+    - "perform A/B tests in dev environment only"
+    - "promote changes after review and approval in governed environments"
+
+# ------------------------------------------------------------------------------
+# Validation invariants (CI/runtime tests)
+# ------------------------------------------------------------------------------
+validation:
+  invariants:
+    - id: VF_INV_001
+      statement: "Hard constraints must be evaluated before utility optimization."
+    - id: VF_INV_002
+      statement: "Confidence and trust adjustments must never increase utility."
+    - id: VF_INV_003
+      statement: "Destructive/credential actions must never default to auto-execute in regulated/safety_critical."
+    - id: VF_INV_004
+      statement: "Any action requiring approvals must be routed to OUT_REQUIRE_APPROVAL."
+    - id: VF_INV_005
+      statement: "Missing metrics must bias toward higher risk, not lower."
+
+  suggested_tests:
+    - name: "test_missing_metrics_conservative"
+      expected: "risk increases, utility decreases"
+    - name: "test_regulated_external_write_requires_approval"
+      expected: "OUT_REQUIRE_APPROVAL"
+    - name: "test_high_risk_low_confidence_routes_dry_run"
+      expected: "OUT_DRY_RUN_OR_SIM"
+    - name: "test_hard_constraint_blocks"
+      expected: "OUT_BLOCK"
+
+# End of meta/value_functions.yaml

@@ -1,0 +1,372 @@
+# ==============================================================================
+#  FRANCIS — .editorconfig
+#  Cone Layer 0: Foundation Formatting Contract
+# ==============================================================================
+#
+#  Objectives:
+#    - Deterministic diffs: eliminate whitespace/EOL churn across editors.
+#    - Cross-platform parity: Windows dev ↔ Linux containers ↔ CI environments.
+#    - Tooling harmony: complements formatters (ruff/black/prettier/rustfmt),
+#      never attempts to replace them.
+#    - Defensive safety: protect binary/artifact formats from "helpful" edits.
+#
+#  Policy model:
+#    1) Define global invariants first.
+#    2) Override only where ecosystems demand differences.
+#    3) Add targeted exceptions for semantic whitespace formats (Markdown/diff).
+#    4) Keep patterns explicit; prefer clarity over cleverness.
+#
+#  EditorConfig notes:
+#    - Unknown properties are ignored by clients that don't support them.
+#    - Globs support ** and {a,b} alternation in most modern implementations.
+#    - Ordering matters: later sections override earlier sections when matched.
+#
+#  Reference:
+#    - https://editorconfig.org/
+# ==============================================================================
+
+root = true
+
+
+# ------------------------------------------------------------------------------
+# GLOBAL INVARIANTS (apply to everything unless overridden)
+# ------------------------------------------------------------------------------
+[*]
+charset = utf-8
+
+# Default to LF for repo-wide stability (CI/containers typically assume LF).
+# Override where Windows-native CRLF is the correct operational default.
+end_of_line = lf
+
+# Enforce canonical newline & whitespace behavior.
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Repo baseline indentation: 4 spaces.
+# Ecosystem overrides (TS/JSON/YAML/etc.) appear below.
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# Editor hint only (formatters remain source-of-truth).
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# PYTHON (core services, api, daemon, libraries)
+# ------------------------------------------------------------------------------
+[*.{py,pyi}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# Align with typical ruff/black conventions (commonly 88–100). This is a hint.
+max_line_length = 100
+
+
+# ------------------------------------------------------------------------------
+# JAVASCRIPT / TYPESCRIPT (UI + web tooling)
+# ------------------------------------------------------------------------------
+[*.{js,jsx,mjs,cjs,ts,tsx}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# HTML (UI)
+# ------------------------------------------------------------------------------
+[*.html]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# CSS FAMILY (UI styling: tailwind, css modules, scss pipelines, etc.)
+# ------------------------------------------------------------------------------
+[*.{css,scss,sass,less}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# XML / SVG (configs, diagrams, generated artifacts)
+# ------------------------------------------------------------------------------
+[*.{xml,svg}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+# Keep trimming enabled (default) — whitespace is rarely semantic in these files.
+trim_trailing_whitespace = true
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# SQL (migrations, seed data, reporting scripts)
+# ------------------------------------------------------------------------------
+[*.sql]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# PROTOBUF (gRPC / connector schemas)
+# ------------------------------------------------------------------------------
+[*.proto]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# RUST (future runtime modules)
+# ------------------------------------------------------------------------------
+[*.rs]
+indent_style = space
+indent_size = 4
+tab_width = 4
+# rustfmt default max width is commonly 100; treat as an editor hint.
+max_line_length = 100
+
+
+# ------------------------------------------------------------------------------
+# C / C++ (future runtime modules / native bindings)
+# ------------------------------------------------------------------------------
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# WEBASSEMBLY TEXT FORMAT (WAT)
+# ------------------------------------------------------------------------------
+# .wat is text; .wasm is binary and is protected later in the binary block.
+[*.wat]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# JSON FAMILY (configs, schemas, UI manifests)
+# ------------------------------------------------------------------------------
+[*.json]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+[*.jsonl]
+# JSON Lines is line-oriented; indentation is mostly irrelevant but editors may
+# auto-indent. Keep consistent behavior.
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+[*.jsonc]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# YAML (configs, docker compose, pipeline configs)
+# ------------------------------------------------------------------------------
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# TOML (pyproject, ruff config, tool configs)
+# ------------------------------------------------------------------------------
+[*.toml]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# INI (tooling configs)
+# ------------------------------------------------------------------------------
+[*.ini]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# TEXT-LIKE CONFIGS (requirements, .env, pins)
+# ------------------------------------------------------------------------------
+[*.txt]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 120
+
+[requirements/*.txt]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+[.python-version]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+[{.env,.env.*}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# MARKDOWN (docs, READMEs)
+# ------------------------------------------------------------------------------
+[*.md]
+# Markdown can use trailing spaces intentionally (hard line breaks).
+trim_trailing_whitespace = false
+
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 120
+
+
+# ------------------------------------------------------------------------------
+# DIFF / PATCH (semantic whitespace)
+# ------------------------------------------------------------------------------
+[*.{diff,patch}]
+trim_trailing_whitespace = false
+insert_final_newline = true
+end_of_line = lf
+
+
+# ------------------------------------------------------------------------------
+# SHELL (Unix scripts)
+# ------------------------------------------------------------------------------
+[*.sh]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = lf
+
+
+# ------------------------------------------------------------------------------
+# POWERSHELL (Windows-native scripts)
+# ------------------------------------------------------------------------------
+# CRLF is intentional here to reduce Windows tooling surprises.
+[*.{ps1,psm1,psd1}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+end_of_line = crlf
+
+
+# ------------------------------------------------------------------------------
+# WINDOWS BATCH (if introduced)
+# ------------------------------------------------------------------------------
+[*.{bat,cmd}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = crlf
+
+
+# ------------------------------------------------------------------------------
+# TEMPLATES / MODELFILES
+# ------------------------------------------------------------------------------
+[*.tpl]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = lf
+
+# Ollama model files may appear as *.Modelfile (mixed case).
+[*.{Modelfile,modelfile}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = lf
+
+
+# ------------------------------------------------------------------------------
+# LOCKFILES (tool-managed; keep stable)
+# ------------------------------------------------------------------------------
+# Match package-lock.json anywhere (root or nested under apps/).
+[**/package-lock.json]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+[*.lock]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+
+# ------------------------------------------------------------------------------
+# TERRAFORM (infra-as-code)
+# ------------------------------------------------------------------------------
+[*.{tf,tfvars}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = lf
+
+
+# ------------------------------------------------------------------------------
+# MAKEFILES (tabs are required in many recipe contexts)
+# ------------------------------------------------------------------------------
+[Makefile]
+indent_style = tab
+tab_width = 4
+
+[makefile]
+indent_style = tab
+tab_width = 4
+
+[*.mk]
+indent_style = tab
+tab_width = 4
+
+
+# ------------------------------------------------------------------------------
+# GIT META FILES
+# ------------------------------------------------------------------------------
+[.gitignore]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = lf
+
+[.gitattributes]
+indent_style = space
+indent_size = 2
+tab_width = 2
+end_of_line = lf
+
+
+# ------------------------------------------------------------------------------
+# BINARY / NON-TEXT ARTIFACT PROTECTION (DEFENSE IN DEPTH)
+# ------------------------------------------------------------------------------
+# Goal: prevent editors from applying whitespace/EOL normalization to binary
+# payloads and common artifacts (which can silently corrupt them).
+#
+# Mechanism:
+#   - Disable trimming/newline enforcement.
+#   - Leave end_of_line unset to avoid normalization attempts.
+#
+# NOTE: This block intentionally appears last so it overrides earlier matches.
+[*.{db,sqlite,sqlite3,bin,exe,dll,so,dylib,jar,zip,7z,tar,gz,bz2,xz,wasm,png,jpg,jpeg,gif,webp,ico,pdf,woff,woff2,ttf,otf,mp3,wav,flac,mp4,mov,avi,mkv}]
+insert_final_newline = false
+trim_trailing_whitespace = false

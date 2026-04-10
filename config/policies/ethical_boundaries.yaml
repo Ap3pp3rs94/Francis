@@ -1,0 +1,509 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Ethical Boundaries (ethical governor / safety constraints)
+# Path:   config/policies/ethical_boundaries.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Ethical Boundaries define what Francis is allowed to:
+#   - generate (content)
+#   - advise (recommendations)
+#   - execute (actions/capabilities)
+#
+# This policy must override:
+#   - caller intent
+#   - approvals (approvals cannot legalize prohibited actions)
+#   - trust (high trust cannot bypass ethical constraints)
+#
+# It provides:
+#   - deny/allow decisions
+#   - required safeguards for restricted topics
+#   - redirection guidance (safe alternatives)
+#   - audit reason codes
+#
+# DESIGN CONTRACT
+# ---------------
+# - Safety-first and fail-closed for high harm categories.
+# - Deterministic, auditable, and explicit.
+# - Human review can be required for "restricted" categories.
+# - "Prohibited" means deny always (no override).
+# - "Restricted" means allow only with safeguards and/or approvals.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "ethical_boundaries_policy"
+  notes:
+    - "Prohibited categories are non-overrideable."
+    - "Restricted categories require safeguards + clear disclaimers."
+    - "Industrial safety is governed here in addition to approvals/trust."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+ethical_boundaries:
+  enabled: true
+
+  # Modes:
+  # - disabled: do not enforce (dev-only)
+  # - policy:   enforce with standard strictness (default)
+  # - strict:   conservative; more topics become restricted/deny
+  mode: "policy" # disabled | policy | strict
+
+  # Fail-closed behavior if policy evaluation fails.
+  fail_closed_decision: "deny" # allow | require_review | deny
+
+  # If enabled, all denies/reviews produce audit events.
+  audit_all: true
+
+  # Approval/trust can never override prohibited decisions.
+  approvals_cannot_override_prohibited: true
+  trust_cannot_override_prohibited: true
+
+# ------------------------------------------------------------------------------
+# Decision outcomes
+# ------------------------------------------------------------------------------
+outcomes:
+  allow:
+    description: "Allowed to proceed."
+  require_review:
+    description: "Allowed only with additional safeguards/human review/approval."
+  deny:
+    description: "Not allowed. Provide safe alternative guidance."
+
+# ------------------------------------------------------------------------------
+# Reason codes (stable identifiers for audit + UX messaging)
+# ------------------------------------------------------------------------------
+reason_codes:
+  PROHIBITED_VIOLENCE_WRONGDOING: "Instructions enabling violence or harm."
+  PROHIBITED_WEAPONIZATION: "Weapon construction, modification, or acquisition guidance."
+  PROHIBITED_ILLEGAL_ACTIVITY: "Facilitation of illegal wrongdoing."
+  PROHIBITED_SELF_HARM_FACILITATION: "Self-harm facilitation or encouragement."
+  PROHIBITED_CYBER_ABUSE: "Malicious hacking, malware, credential theft, or exploitation."
+  PROHIBITED_SURVEILLANCE: "Covert surveillance, spyware, stalking, or doxxing."
+  PROHIBITED_FRAUD: "Fraud, scams, forgery, or deception for harm."
+  PROHIBITED_CHILD_SAFETY: "Child sexual content or exploitation."
+  PROHIBITED_HATE_EXTREMISM: "Extremist propaganda or hateful violence."
+  PROHIBITED_PRIVACY_INVASION: "Requests to identify private individuals or reveal private data."
+  RESTRICTED_MEDICAL: "Medical guidance requires caution; cannot replace professionals."
+  RESTRICTED_LEGAL: "Legal guidance requires caution; cannot replace lawyers."
+  RESTRICTED_FINANCIAL: "Financial guidance requires caution; avoid personalized high-stakes advice."
+  RESTRICTED_REGULATED_INDUSTRY: "Regulated industries require compliance posture."
+  RESTRICTED_INDUSTRIAL_ACTUATION: "Physical actuation requires safety gates."
+  RESTRICTED_DUAL_USE_RESEARCH: "Dual-use research requires safeguards."
+  RESTRICTED_SEXUAL_CONTENT: "Adult sexual content constrained; avoid explicit content."
+  RESTRICTED_IMPERSONATION: "Impersonation / identity deception constrained."
+  RESTRICTED_DATA_EXFILTRATION: "Data export/exfiltration risk."
+  RESTRICTED_SECRET_HANDLING: "Secrets handling requires strict redaction and containment."
+
+# ------------------------------------------------------------------------------
+# Category definitions (policy-level taxonomy)
+# ------------------------------------------------------------------------------
+categories:
+  # Each category has:
+  # - outcome: allow | require_review | deny
+  # - overrideable: whether governance can override (never for deny)
+  # - guidance: safe alternative / redirect hints
+  # - action_constraints: capability patterns to restrict if category applies
+  #
+  # NOTE: Detection is implementation-specific; policy declares the boundaries.
+
+  prohibited:
+
+    violence_wrongdoing:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_VIOLENCE_WRONGDOING"
+      guidance:
+        - "Refuse and provide non-violent alternatives."
+        - "If user is at risk, encourage contacting local emergency services."
+      action_constraints:
+        deny_capabilities:
+          - ".*" # Any action execution forbidden if intent is violent wrongdoing.
+
+    weaponization:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_WEAPONIZATION"
+      guidance:
+        - "Refuse weapon-building or weapon-modification instructions."
+        - "Offer safety education and legal, non-harmful alternatives."
+      action_constraints:
+        deny_capabilities:
+          - ".*"
+
+    cyber_abuse:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_CYBER_ABUSE"
+      guidance:
+        - "Refuse hacking/exploitation instructions."
+        - "Offer defensive security best practices and compliance-safe guidance."
+      action_constraints:
+        deny_capabilities:
+          - "^web_learning\\.(search|fetch|ingest)$"
+          - "^credentials\\.(request|revoke|rotate|delegate)$"
+          - "^plugins\\.(install|toggle)$"
+
+    surveillance_doxxing:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_SURVEILLANCE"
+      guidance:
+        - "Refuse doxxing/stalking/spyware requests."
+        - "Offer privacy-protecting alternatives."
+      action_constraints:
+        deny_capabilities:
+          - "^web_learning\\.(search|fetch|ingest)$"
+          - "^plugins\\.(install|toggle)$"
+
+    fraud_scams:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_FRAUD"
+      guidance:
+        - "Refuse scam facilitation."
+        - "Provide anti-fraud awareness and legitimate alternatives."
+      action_constraints:
+        deny_capabilities:
+          - "^web_learning\\.(search|fetch|ingest)$"
+
+    self_harm_facilitation:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_SELF_HARM_FACILITATION"
+      guidance:
+        - "Refuse and provide crisis resources."
+        - "Encourage seeking immediate help from trusted people/professionals."
+      action_constraints:
+        deny_capabilities:
+          - ".*"
+
+    child_safety:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_CHILD_SAFETY"
+      guidance:
+        - "Refuse. Escalate to safety protocols."
+      action_constraints:
+        deny_capabilities:
+          - ".*"
+
+    hate_extremism:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_HATE_EXTREMISM"
+      guidance:
+        - "Refuse hate propaganda or violent extremist support."
+        - "Offer factual, non-promotional context if needed."
+      action_constraints:
+        deny_capabilities:
+          - ".*"
+
+    illegal_activity:
+      outcome: "deny"
+      overrideable: false
+      reason_code: "PROHIBITED_ILLEGAL_ACTIVITY"
+      guidance:
+        - "Refuse illegal facilitation."
+        - "Offer lawful alternatives."
+      action_constraints:
+        deny_capabilities:
+          - ".*"
+
+  restricted:
+
+    medical:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_MEDICAL"
+      safeguards:
+        require_disclaimer: true
+        forbid_diagnosis: true
+        require_sources_for_claims: true
+        encourage_professional_help: true
+      action_constraints:
+        deny_capabilities:
+          - "^credentials\\.(request|revoke|rotate|delegate)$" # no creds needed for medical advice
+      guidance:
+        - "Provide general information, not diagnosis."
+        - "Advise consulting a qualified clinician for decisions."
+
+    legal:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_LEGAL"
+      safeguards:
+        require_disclaimer: true
+        require_jurisdiction: true
+        require_sources_for_claims: true
+      guidance:
+        - "Provide general legal information, not legal advice."
+        - "Advise consulting a licensed attorney."
+
+    financial:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_FINANCIAL"
+      safeguards:
+        require_disclaimer: true
+        avoid_personalized_investment_orders: true
+        require_risk_disclosure: true
+      guidance:
+        - "Provide general financial education."
+        - "Encourage professional advice for major decisions."
+
+    regulated_industry:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_REGULATED_INDUSTRY"
+      safeguards:
+        require_compliance_posture: true
+        require_audit_logging: true
+      guidance:
+        - "Proceed with compliance-first controls."
+
+    industrial_actuation:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_INDUSTRIAL_ACTUATION"
+      safeguards:
+        require_environment_ok: true
+        require_operator_confirmation: true
+        require_approval: true
+        require_quorum_when_degraded: true
+        require_simulation_or_dry_run_when_available: true
+      action_constraints:
+        deny_capabilities_unless:
+          capability_patterns:
+            - "^industrial\\.(actuate|command|override)"
+          conditions:
+            - "environment_state == normal"
+            - "approval_present == true"
+            - "actor_trust >= 9"
+      guidance:
+        - "Prefer read-only monitoring unless explicitly approved and safe."
+
+    dual_use_research:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_DUAL_USE_RESEARCH"
+      safeguards:
+        require_non_operational_detail: true
+        focus_on_defensive_or_beneficial_use: true
+        require_sources_for_claims: true
+      guidance:
+        - "Provide high-level, safety-conscious information."
+        - "Avoid actionable harm-enabling details."
+
+    data_exfiltration:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_DATA_EXFILTRATION"
+      safeguards:
+        require_data_governance_check: true
+        require_export_approval_for_non_public: true
+        require_destination_allowlist: true
+      action_constraints:
+        deny_capabilities_unless:
+          capability_patterns:
+            - "^web_learning\\.(fetch|ingest|search)$"
+            - "^continuity\\.ledger\\.export$"
+            - "^domains\\.export$"
+            - "^simulation\\.export$"
+          conditions:
+            - "approval_present == true"
+            - "destination_allowlisted == true"
+            - "data_classification_max in {public, internal} OR approval_present == true"
+      guidance:
+        - "Prefer local-only handling; avoid external export."
+
+    secret_handling:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_SECRET_HANDLING"
+      safeguards:
+        require_redaction: true
+        forbid_secret_echo: true
+        forbid_storage_in_logs_or_vectors: true
+      guidance:
+        - "Never display or persist secrets."
+        - "Rotate/revoke compromised secrets."
+
+    impersonation:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_IMPERSONATION"
+      safeguards:
+        forbid_deceptive_impersonation: true
+        allow_roleplay_if_clearly_fictional: true
+      guidance:
+        - "Avoid deception; require clear disclosure."
+
+    sexual_content:
+      outcome: "require_review"
+      overrideable: true
+      reason_code: "RESTRICTED_SEXUAL_CONTENT"
+      safeguards:
+        forbid_explicit_content: true
+        forbid_underage: true
+      guidance:
+        - "Keep content non-explicit and safe."
+
+# ------------------------------------------------------------------------------
+# Capability-level enforcement hooks (maps categories to capability patterns)
+# ------------------------------------------------------------------------------
+capability_enforcement:
+  enabled: true
+
+  # Hard deny these capabilities if any prohibited category is detected.
+  prohibited_deny_patterns:
+    - ".*"
+
+  # Additional per-capability ethical constraints (even without category detection).
+  per_capability:
+
+    # Web learning is inherently egress; require strong controls.
+    web_learning.search:
+      outcome: "require_review"
+      reason_code: "RESTRICTED_DATA_EXFILTRATION"
+      required_safeguards:
+        - "destination_allowlist"
+        - "attribution_required"
+        - "prompt_injection_scan"
+
+    web_learning.fetch:
+      outcome: "require_review"
+      reason_code: "RESTRICTED_DATA_EXFILTRATION"
+      required_safeguards:
+        - "destination_allowlist"
+        - "attribution_required"
+        - "prompt_injection_scan"
+
+    web_learning.ingest:
+      outcome: "require_review"
+      reason_code: "RESTRICTED_DATA_EXFILTRATION"
+      required_safeguards:
+        - "destination_allowlist"
+        - "attribution_required"
+        - "quarantine_unknown_provenance"
+
+    credentials.request:
+      outcome: "require_review"
+      reason_code: "RESTRICTED_SECRET_HANDLING"
+      required_safeguards:
+        - "approval_required"
+        - "scope_binding_required"
+        - "audit_required"
+
+    industrial.actuate:
+      outcome: "require_review"
+      reason_code: "RESTRICTED_INDUSTRIAL_ACTUATION"
+      required_safeguards:
+        - "environment_ok"
+        - "approval_required"
+        - "operator_confirmation"
+        - "audit_required"
+
+# ------------------------------------------------------------------------------
+# Override policy (restricted topics only)
+# ------------------------------------------------------------------------------
+overrides:
+  enabled: true
+
+  # Prohibited cannot be overridden.
+  allow_override_for_outcomes:
+    - "require_review"
+
+  deny_override_for_outcomes:
+    - "deny"
+
+  require_justification: true
+  min_justification_chars: 20
+
+  # Trust requirements to override restricted safeguards.
+  min_trust_to_override: 8
+
+  # Even when overridden, audit is mandatory.
+  audit_override: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit trail)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "ethics.allowed"
+      - "ethics.review_required"
+      - "ethics.denied"
+      - "ethics.override_requested"
+      - "ethics.override_granted"
+      - "ethics.override_denied"
+    include:
+      - "actor_id"
+      - "capability_id"
+      - "decision"
+      - "category"
+      - "reason_code"
+      - "safeguards_required"
+      - "override"
+      - "ts"
+    include_payload: false
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific strictness)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    ethical_boundaries:
+      mode: "policy"
+      fail_closed_decision: "require_review"
+
+  workstation:
+    ethical_boundaries:
+      mode: "policy"
+      fail_closed_decision: "deny"
+
+  production:
+    ethical_boundaries:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    overrides:
+      min_trust_to_override: 9
+
+  regulated:
+    ethical_boundaries:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    categories:
+      restricted:
+        regulated_industry:
+          safeguards:
+            require_audit_logging: true
+            require_compliance_posture: true
+    overrides:
+      enabled: true
+      min_trust_to_override: 9
+
+  safety_critical:
+    ethical_boundaries:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    overrides:
+      enabled: false
+    categories:
+      restricted:
+        industrial_actuation:
+          safeguards:
+            require_quorum_when_degraded: true
+            require_simulation_or_dry_run_when_available: true

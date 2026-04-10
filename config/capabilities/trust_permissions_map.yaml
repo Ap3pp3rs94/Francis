@@ -1,0 +1,581 @@
+# ==============================================================================
+# Francis Capability Trust ↔ Permission Map (Canonical)
+# ------------------------------------------------------------------------------
+# WHAT THIS IS:
+#   A policy file used by the governance layer to decide whether a capability
+#   can execute based on the caller's trust level.
+#
+# WHAT THIS IS NOT:
+#   - It is NOT a substitute for domain safety policies (see config/policies/*).
+#   - It is NOT a catalog (see catalog.yaml).
+#   - It is NOT an alias map (see aliases.yaml).
+#
+# CORE DECISION MODEL:
+#   For a resolved capability_id:
+#     1) Find the first rule whose `pattern` matches capability_id (glob).
+#     2) If no rule matches, use `defaults`.
+#     3) If allow=false -> deny
+#     4) Else if trust < min_trust -> deny
+#     5) Else if requires_approval=true -> require approval gate
+#     6) Else -> allow
+#
+# MATCHING:
+#   - `pattern` uses glob semantics (fnmatch-style):
+#       * matches any characters (including dots)
+#       ? matches single character
+#   - Rules are evaluated TOP → BOTTOM; FIRST match wins.
+#
+# TRUST SCALE (canonical guidance; your engine may compute this differently):
+#   0  = observer   (read-only introspection)
+#   2  = operator   (bounded reads, limited network)
+#   4  = builder    (state changes, typically approval-gated)
+#   6  = commander  (sensitive changes, approval-gated)
+#   8  = autonomous (broad operations; critical ops still approval-gated)
+#   10 = root       (emergency lane; rare; should still be approval-gated)
+#
+# MAINTENANCE RULES:
+#   - Prefer explicit rules for dangerous operations.
+#   - Keep defaults conservative: unknown capabilities should not run silently.
+#   - Keep "deny list" patterns at the very top.
+# ==============================================================================
+
+version: 1
+
+defaults:
+  # Default stance for unknown / newly added capabilities:
+  # - Not blocked forever, but HIGH trust + approval required.
+  # - This is your forward-compatible safety net.
+  allow: true
+  min_trust: 9
+  requires_approval: true
+
+rules:
+  # ============================================================================
+  # 0) NON-NEGOTIABLE DENY LIST (even high trust should not execute these)
+  # ----------------------------------------------------------------------------
+  # These names are intentionally broad; they act as a guardrail against
+  # accidentally wiring dangerous capability namespaces into the registry.
+  # ============================================================================
+  - pattern: "offensive_security.*"
+    allow: false
+    min_trust: 0
+    requires_approval: true
+
+  - pattern: "malware.*"
+    allow: false
+    min_trust: 0
+    requires_approval: true
+
+  - pattern: "exploit.*"
+    allow: false
+    min_trust: 0
+    requires_approval: true
+
+  - pattern: "self_harm.*"
+    allow: false
+    min_trust: 0
+    requires_approval: true
+
+  # ============================================================================
+  # 1) SAFE SYSTEM INTROSPECTION (read-only, low risk)
+  # ============================================================================
+  - pattern: "system.health.*"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  - pattern: "system.status.*"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  - pattern: "system.version.*"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  - pattern: "system.metrics.*"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  # Logs can contain sensitive material; require at least operator-level trust.
+  - pattern: "system.logs.*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  # System probing/profiling can be expensive and reveal details; still read-only.
+  - pattern: "system.probe.*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "system.profile.*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  # Capability registry introspection should be universally safe.
+  - pattern: "capabilities.*"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  # ============================================================================
+  # 2) CONTINUITY / LEDGER (primarily read-only; destructive operations gated)
+  # ============================================================================
+  - pattern: "continuity.ledger.list"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  - pattern: "continuity.ledger.tail"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  - pattern: "continuity.ledger.get"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  # Exports can leak sensitive content; require builder-level trust + approval.
+  - pattern: "continuity.ledger.export"
+    allow: true
+    min_trust: 4
+    requires_approval: true
+
+  # Anything that mutates or truncates continuity is high risk.
+  - pattern: "continuity.ledger.purge"
+    allow: true
+    min_trust: 8
+    requires_approval: true
+
+  - pattern: "continuity.ledger.delete*"
+    allow: true
+    min_trust: 8
+    requires_approval: true
+
+  # ============================================================================
+  # 3) CHAT (transport-level; does not imply privilege escalation)
+  # ============================================================================
+  - pattern: "chat.send"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  - pattern: "chat.ws.*"
+    allow: true
+    min_trust: 0
+    requires_approval: false
+
+  # ============================================================================
+  # 4) EXPLANATIONS / AUDIT ARTIFACTS (read-mostly; exporting is governed)
+  # ============================================================================
+  - pattern: "explanations.list"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "explanations.get"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "explanations.export*"
+    allow: true
+    min_trust: 4
+    requires_approval: true
+
+  # ============================================================================
+  # 5) TRUST SYSTEM (read is safe; modifications are sensitive)
+  # ============================================================================
+  - pattern: "trust.status"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "trust.history*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "trust.assess*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  # Trust toggles / overrides are governance-critical.
+  - pattern: "trust.toggle.*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "trust.override*"
+    allow: true
+    min_trust: 10
+    requires_approval: true
+
+  # ============================================================================
+  # 6) APPROVALS (listing is safe; decisions are high-impact)
+  # ----------------------------------------------------------------------------
+  # NOTE:
+  #   We intentionally do NOT make approvals.decide.* "requires_approval",
+  #   because that creates an approval-to-approve recursion.
+  #   Instead we gate by trust level.
+  # ============================================================================
+  - pattern: "approvals.list*"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "approvals.get*"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "approvals.decide.approve"
+    allow: true
+    min_trust: 7
+    requires_approval: false
+
+  - pattern: "approvals.decide.reject"
+    allow: true
+    min_trust: 7
+    requires_approval: false
+
+  - pattern: "approvals.decide.emergency"
+    allow: true
+    min_trust: 10
+    requires_approval: false
+
+  # ============================================================================
+  # 7) DOMAIN WORKBENCH (CRUD + export; destructive is tighter)
+  # ============================================================================
+  - pattern: "domains.list"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "domains.get"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "domains.search*"
+    allow: true
+    min_trust: 1
+    requires_approval: false
+
+  - pattern: "domains.create"
+    allow: true
+    min_trust: 4
+    requires_approval: true
+
+  - pattern: "domains.update"
+    allow: true
+    min_trust: 4
+    requires_approval: true
+
+  - pattern: "domains.delete"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "domains.export*"
+    allow: true
+    min_trust: 4
+    requires_approval: true
+
+  - pattern: "domains.import*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  # ============================================================================
+  # 8) CREDENTIAL MANAGER (metadata is sensitive; provisioning/revocation is high)
+  # ============================================================================
+  - pattern: "credentials.list*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "credentials.scopes*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "credentials.delegations*"
+    allow: true
+    min_trust: 4
+    requires_approval: false
+
+  - pattern: "credentials.request*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "credentials.revoke*"
+    allow: true
+    min_trust: 8
+    requires_approval: true
+
+  - pattern: "credentials.delegate*"
+    allow: true
+    min_trust: 8
+    requires_approval: true
+
+  # ============================================================================
+  # 9) PLUGINS (read is safe; install/build/enable are governed)
+  # ============================================================================
+  - pattern: "plugins.list"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "plugins.get*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "plugins.search*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "plugins.build*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "plugins.install*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "plugins.update*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "plugins.enable*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "plugins.disable*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "plugins.uninstall*"
+    allow: true
+    min_trust: 8
+    requires_approval: true
+
+  # ============================================================================
+  # 10) OPERATIONS (planning vs execution; execution is governed)
+  # ============================================================================
+  - pattern: "operations.list*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "operations.get*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "operations.plan*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "operations.run*"
+    allow: true
+    min_trust: 5
+    requires_approval: true
+
+  - pattern: "operations.cancel*"
+    allow: true
+    min_trust: 5
+    requires_approval: true
+
+  - pattern: "operations.schedule*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  # ============================================================================
+  # 11) WEB LEARNING (network + ingestion; ingestion/toggles are governed)
+  # ============================================================================
+  - pattern: "web_learning.status"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "web_learning.logs.*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "web_learning.audit.*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  # Queries/fetches generate outbound requests; allow at operator-level.
+  - pattern: "web_learning.search"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "web_learning.fetch"
+    allow: true
+    min_trust: 4
+    requires_approval: false
+
+  # Ingestion persists content into the system; govern it.
+  - pattern: "web_learning.ingest"
+    allow: true
+    min_trust: 5
+    requires_approval: true
+
+  - pattern: "web_learning.toggle.*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "web_learning.export*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  # ============================================================================
+  # 12) DIGITAL TWINS / SIMULATION (model mutation + runs are governed)
+  # ============================================================================
+  - pattern: "digital_twin.list*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "digital_twin.get*"
+    allow: true
+    min_trust: 2
+    requires_approval: false
+
+  - pattern: "digital_twin.create*"
+    allow: true
+    min_trust: 5
+    requires_approval: true
+
+  - pattern: "digital_twin.update*"
+    allow: true
+    min_trust: 5
+    requires_approval: true
+
+  - pattern: "digital_twin.delete*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "simulation.run*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  - pattern: "simulation.status*"
+    allow: true
+    min_trust: 4
+    requires_approval: false
+
+  - pattern: "simulation.export*"
+    allow: true
+    min_trust: 6
+    requires_approval: true
+
+  # ============================================================================
+  # 13) FEDERATION (read-only vs coordination changes)
+  # ============================================================================
+  - pattern: "federation.status*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "federation.instances.list*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "federation.instances.get*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "federation.consensus.logs.*"
+    allow: true
+    min_trust: 4
+    requires_approval: false
+
+  - pattern: "federation.join*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "federation.leave*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "federation.command*"
+    allow: true
+    min_trust: 8
+    requires_approval: true
+
+  # ============================================================================
+  # 14) INDUSTRIAL CONTROL (safety-critical: telemetry ok, control is strict)
+  # ============================================================================
+  - pattern: "industrial.status*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  - pattern: "industrial.telemetry.*"
+    allow: true
+    min_trust: 3
+    requires_approval: false
+
+  # Any actuation/control must be treated as safety-critical.
+  - pattern: "industrial.control.*"
+    allow: true
+    min_trust: 10
+    requires_approval: true
+
+  - pattern: "industrial.emergency_stop*"
+    allow: true
+    min_trust: 10
+    requires_approval: true
+
+  # ============================================================================
+  # 15) RESILIENCE (backup/restore) — high impact operations
+  # ============================================================================
+  - pattern: "resilience.status*"
+    allow: true
+    min_trust: 4
+    requires_approval: false
+
+  - pattern: "resilience.backup*"
+    allow: true
+    min_trust: 7
+    requires_approval: true
+
+  - pattern: "resilience.restore*"
+    allow: true
+    min_trust: 10
+    requires_approval: true
+
+  - pattern: "resilience.purge*"
+    allow: true
+    min_trust: 10
+    requires_approval: true

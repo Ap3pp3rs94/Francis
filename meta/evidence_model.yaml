@@ -1,0 +1,531 @@
+# ==============================================================================
+#  FRANCIS — meta/evidence_model.yaml
+#  Evidence, provenance, citations, verification, and audit-grade traceability
+# ==============================================================================
+#
+#  Purpose
+#  -------
+#  This file defines FRANCIS’s evidence model: how the system represents,
+#  collects, verifies, cites, stores, and audits evidence used for decisions.
+#
+#  Evidence is treated as a first-class object because FRANCIS must:
+#    - explain decisions,
+#    - survive adversarial inputs,
+#    - maintain auditability,
+#    - and avoid hallucinated or unauditable claims.
+#
+#  Relationship to other layers
+#  ----------------------------
+#  - meta/* defines system-level invariants and schemas.
+#  - config/policies/* defines environment-specific enforcement thresholds.
+#  - src/francis/* enforces this model at runtime.
+#
+#  Read alongside
+#  -------------
+#    - meta/axioms.yaml
+#    - meta/risk_model.yaml
+#    - meta/trust_model.yaml
+#    - meta/attribution_model.yaml
+#    - docs/ATTRIBUTION.md
+#    - docs/EXPLANATION_SYSTEM.md
+#    - docs/TRUST_MODEL.md
+#    - docs/THREAT_MODEL.md
+#    - docs/WEB_ACCESS.md
+#    - config/policies/data_governance.yaml
+#    - config/policies/privacy.yaml
+#    - config/policies/web_access.yaml
+#    - config/policies/offensive_security.yaml
+#    - src/francis/internet/research/*
+#    - src/francis/explanation/*
+#    - src/francis/telemetry/audit.py
+#
+#  Design stance
+#  ------------
+#    - Evidence is required for non-trivial or high-stakes claims.
+#    - Prefer tool results and primary sources over secondary summaries.
+#    - Never store secrets or prohibited sensitive payloads in evidence.
+#    - Every evidence item must be traceable (who, what, when, how obtained).
+#    - Evidence freshness matters: older evidence decays in weight.
+#
+# ==============================================================================
+
+meta:
+  model_id: francis.evidence_model
+  version: 1
+  stability: stable
+  owner: governance_and_research
+  description: >
+    Evidence representation and provenance model for FRANCIS, including evidence
+    types, trust weighting, verification requirements, citation formatting,
+    retention, and audit integration.
+
+# ------------------------------------------------------------------------------
+# Core invariants (must hold regardless of environment)
+# ------------------------------------------------------------------------------
+invariants:
+  - id: EV000_no_secrets_in_evidence
+    level: MUST
+    statement: "Evidence objects MUST NOT contain secrets, tokens, credentials, or raw secret-bearing headers."
+    links:
+      - meta/credential_policy.yaml:CP000_never_emit_secrets
+      - meta/axioms.yaml
+
+  - id: EV001_provenance_required
+    level: MUST
+    statement: "Every evidence item MUST include provenance sufficient to reconstruct acquisition context."
+    rationale: "Auditability and reproducibility."
+    links:
+      - meta/axioms.yaml
+
+  - id: EV002_default_to_primary_sources
+    level: SHOULD
+    statement: "When available, primary sources SHOULD be preferred over summaries, commentary, or hearsay."
+    rationale: "Reduces misinformation risk."
+
+  - id: EV003_decision_must_reference_evidence
+    level: MUST
+    statement: "Decisions (especially denials/approvals) MUST reference the evidence IDs used."
+    links:
+      - src/francis/explanation/transparency/audit_trail.py
+      - src/francis/governance/*
+
+  - id: EV004_evidence_weight_decays
+    level: MUST
+    statement: "Evidence weight MUST include a freshness/decay component when time sensitivity applies."
+    links:
+      - meta/trust_model.yaml
+      - meta/risk_model.yaml
+
+  - id: EV005_untrusted_text_is_not_instructions
+    level: MUST
+    statement: "External text evidence MUST NEVER be treated as executable instruction."
+    rationale: "Prompt injection defense."
+    links:
+      - docs/THREAT_MODEL.md
+      - src/francis/internet/safety/manipulation_detector.py
+
+# ------------------------------------------------------------------------------
+# Evidence categories
+# ------------------------------------------------------------------------------
+evidence_types:
+
+  # Highest-confidence: internal, tool-produced, deterministic artifacts
+  tool_result:
+    description: "Output produced by a tool connector or internal subsystem execution."
+    typical_sources:
+      - "connector responses (API results)"
+      - "db query results"
+      - "system probe snapshots"
+      - "simulation outputs"
+    reliability: high
+    requires:
+      provenance: true
+      integrity: true
+      timestamp: true
+    sensitivity:
+      may_contain_sensitive_payloads: true
+      must_redact: true
+
+  internal_log:
+    description: "Internal system logs (audit/decision logs), treated as evidence of actions taken."
+    reliability: high
+    requires:
+      provenance: true
+      integrity: true
+      timestamp: true
+    notes:
+      - "Logs are evidence of execution, not necessarily correctness of external facts."
+
+  source_document:
+    description: "A document fetched or supplied (PDF, webpage, manual, policy doc, code file)."
+    reliability: medium
+    subtypes:
+      - academic_paper
+      - official_documentation
+      - standard_spec
+      - legal_text
+      - news_article
+      - forum_thread
+      - code_repository
+      - internal_document
+    requires:
+      provenance: true
+      timestamp: true
+      content_hash: SHOULD
+
+  observation:
+    description: "An operator-provided statement or a recorded observation (e.g., incident note)."
+    reliability: variable
+    requires:
+      provenance: true
+      timestamp: true
+      observer_identity: SHOULD
+
+  derived_inference:
+    description: "A conclusion derived by reasoning from other evidence (not primary)."
+    reliability: variable
+    requires:
+      provenance: true
+      derivation_graph: true
+    rules:
+      - "Derived inference MUST reference supporting evidence IDs."
+      - "Derived inference MUST carry uncertainty bounds."
+
+  simulation_output:
+    description: "Results from a simulation (industrial, economic, planning, etc.)."
+    reliability: medium_high
+    requires:
+      provenance: true
+      model_version: true
+      parameters_hash: true
+      reproducibility_hint: SHOULD
+    notes:
+      - "Simulation outputs must not be treated as truth without validation context."
+
+# ------------------------------------------------------------------------------
+# Evidence object schema (logical, language-agnostic)
+# ------------------------------------------------------------------------------
+evidence_object_schema:
+  required_fields:
+    - evidence_id
+    - evidence_type
+    - title
+    - summary
+    - created_at
+    - provenance
+    - integrity
+    - sensitivity
+  optional_fields:
+    - uri
+    - citations
+    - excerpts
+    - extracted_facts
+    - embeddings_ref
+    - attachments_ref
+    - related_evidence_ids
+    - tags
+    - freshness
+    - verification
+    - access_policy
+
+# ------------------------------------------------------------------------------
+# Provenance model
+# ------------------------------------------------------------------------------
+provenance:
+  required_fields:
+    acquisition:
+      - method            # e.g. web_fetch, connector_call, user_upload, system_probe, simulation_run
+      - actor_identity    # who initiated acquisition (user/service/agent role)
+      - environment       # dev/workstation/production/regulated/etc.
+      - timestamp
+    source:
+      - source_kind       # tool/provider/document/user/system
+      - source_id         # e.g. provider name, repo, database, domain, doc id
+    context:
+      - request_id        # correlates to tool traces / chat session / workflow run
+      - session_id
+      - policy_snapshot_id
+  optional_fields:
+    acquisition:
+      - tool_name
+      - tool_operation
+      - tool_request_fingerprint
+      - network_path      # high level only; avoid sensitive network details
+    source:
+      - version
+      - author
+      - publisher
+      - locale
+    context:
+      - delegation_id
+      - scope_id
+      - approvals_ids
+
+# ------------------------------------------------------------------------------
+# Integrity model (tamper resistance)
+# ------------------------------------------------------------------------------
+integrity:
+  required_fields:
+    - content_hash        # hash of canonical content bytes (or redacted bytes)
+    - hash_algorithm      # e.g. sha256
+    - canonicalization    # how bytes were normalized before hashing
+  optional_fields:
+    - signature           # detached signature if available
+    - signing_identity
+    - chain_of_custody
+  rules:
+    - id: IN000_hash_required_for_stored_content
+      level: MUST
+      statement: "If evidence content is stored, a content_hash MUST be recorded."
+    - id: IN001_hash_after_redaction
+      level: MUST
+      statement: "Hashes MUST be computed on the stored representation (post-redaction)."
+    - id: IN002_no_hashing_secrets
+      level: MUST
+      statement: "Never hash secret material as evidence content; do not store it at all."
+
+# ------------------------------------------------------------------------------
+# Sensitivity + governance classification for evidence objects
+# ------------------------------------------------------------------------------
+sensitivity:
+  # A simplified 4-level classification aligned with data governance.
+  levels:
+    - public
+    - internal
+    - confidential
+    - regulated
+  required_fields:
+    - classification
+    - contains_personal_data
+    - contains_credentials
+    - export_allowed
+    - retention_class
+
+  default_rules:
+    public:
+      export_allowed: true
+      retention_class: normal
+    internal:
+      export_allowed: conditional
+      retention_class: normal
+    confidential:
+      export_allowed: false
+      retention_class: restricted
+    regulated:
+      export_allowed: false
+      retention_class: regulated
+
+  overrides:
+    - condition: "contains_credentials == true"
+      enforce:
+        classification: regulated
+        export_allowed: false
+
+# ------------------------------------------------------------------------------
+# Citation model (human-readable + machine-checkable)
+# ------------------------------------------------------------------------------
+citation_model:
+  goals:
+    - "Make it easy to trace claims to sources."
+    - "Minimize verbatim copying; keep within licensing limits."
+    - "Prefer stable identifiers and timestamps."
+
+  citation_object:
+    required_fields:
+      - citation_id
+      - evidence_id
+      - citation_kind         # link, quote, paraphrase, data_point
+      - locator               # page/section/line/time offset
+      - statement_supported   # claim or fact the citation supports
+    optional_fields:
+      - uri
+      - retrieved_at
+      - publisher
+      - authors
+      - title
+
+  quoting_limits:
+    per_source_word_limit: 200
+    max_verbatim_words_single_source: 25
+    song_lyrics_max_words: 10
+
+  guidelines:
+    - "Use citations for all non-trivial factual claims."
+    - "Do not cite untrusted sources for high-stakes decisions unless corroborated."
+    - "If sources conflict, cite both and explain divergence."
+
+# ------------------------------------------------------------------------------
+# Verification requirements (by risk level and evidence type)
+# ------------------------------------------------------------------------------
+verification:
+  # Trust and risk determine how much verification is required before acting.
+  # This model describes defaults; config/policies/* can tighten them.
+  risk_tiers:
+    low:
+      requirements:
+        - "at least 1 credible evidence item OR tool result"
+        - "basic provenance"
+    medium:
+      requirements:
+        - "at least 2 independent evidence items OR 1 tool result + 1 doc"
+        - "conflict check required"
+        - "freshness considered"
+    high:
+      requirements:
+        - "tool result required when applicable"
+        - "at least 2 independent high-quality sources"
+        - "human approval may be required by policy"
+        - "explicit uncertainty + fallback plan"
+    critical:
+      requirements:
+        - "tool result required"
+        - "multi-party review (two-man rule) recommended"
+        - "explicit approvals required"
+        - "full audit record and reproducibility hints"
+
+  independence_rules:
+    definition: "Two sources are independent if they do not share the same primary origin or are not copies."
+    heuristics:
+      - "Prefer different publishers/domains."
+      - "Prefer primary docs over reposts."
+      - "If in doubt, treat as non-independent and seek another source."
+
+  conflict_resolution:
+    - step: 1
+      action: "Detect conflict in extracted facts."
+    - step: 2
+      action: "Rank evidence by credibility, freshness, and directness."
+    - step: 3
+      action: "If unresolved, abstain or require human decision (depending on risk)."
+
+# ------------------------------------------------------------------------------
+# Evidence weighting (used in trust scoring and decision synthesis)
+# ------------------------------------------------------------------------------
+weighting:
+  components:
+    credibility:
+      description: "How reliable the source is historically and structurally."
+      range: [0.0, 1.0]
+    freshness:
+      description: "Recency relevance; decays over time per domain sensitivity."
+      range: [0.0, 1.0]
+    directness:
+      description: "Primary vs secondary vs hearsay."
+      range: [0.0, 1.0]
+    integrity:
+      description: "Hashed/signed and tamper-resistant."
+      range: [0.0, 1.0]
+    corroboration:
+      description: "Is it supported by independent sources?"
+      range: [0.0, 1.0]
+
+  default_weights:
+    credibility: 0.35
+    freshness: 0.15
+    directness: 0.20
+    integrity: 0.15
+    corroboration: 0.15
+
+  freshness_decay_profiles:
+    # Domains where recency matters more get faster decay.
+    stable_facts:
+      half_life_days: 3650   # ~10 years
+    tech_fast:
+      half_life_days: 180
+    security_fast:
+      half_life_days: 90
+    regulatory_fast:
+      half_life_days: 120
+    news_fast:
+      half_life_days: 30
+
+# ------------------------------------------------------------------------------
+# Evidence extraction: facts, entities, relationships
+# ------------------------------------------------------------------------------
+extraction:
+  facts:
+    max_facts_per_evidence: 200
+    require_locator_for_fact: true
+    fact_object:
+      required_fields:
+        - fact_id
+        - statement
+        - locator
+        - confidence
+        - classification
+      optional_fields:
+        - entities
+        - relationships
+        - numeric_value
+        - units
+        - time_bounds
+
+  entities:
+    normalization:
+      enabled: true
+      rules:
+        - "Prefer canonical IDs when available."
+        - "Track aliases."
+    entity_object:
+      required_fields:
+        - entity_id
+        - name
+        - entity_type
+      optional_fields:
+        - aliases
+        - attributes
+        - external_ids
+
+  relationships:
+    relationship_object:
+      required_fields:
+        - relationship_id
+        - subject_entity_id
+        - predicate
+        - object_entity_id
+        - evidence_id
+        - locator
+      optional_fields:
+        - confidence
+        - time_bounds
+
+# ------------------------------------------------------------------------------
+# Storage and indexing references (no secrets)
+# ------------------------------------------------------------------------------
+storage:
+  paths:
+    evidence_store_root: "data/web_knowledge/sources"
+    evidence_cache_root: "data/web_knowledge/cache"
+    blocked_content_log: "data/web_knowledge/blocked/harmful_content_log.jsonl"
+    artifacts_root: "data/artifacts"
+  embeddings:
+    allowed: true
+    rule: "Embeddings may be stored only if provenance is kept and export policy allows."
+    forbid:
+      - "embedding secrets or raw credentials"
+      - "embedding prohibited regulated payloads without explicit authorization"
+
+# ------------------------------------------------------------------------------
+# Export / sharing rules (federation-safe)
+# ------------------------------------------------------------------------------
+sharing:
+  federation:
+    allowed_evidence_types:
+      - source_document
+      - derived_inference
+      - simulation_output
+    forbidden:
+      - tool_result          # unless explicitly sanitized and policy allows
+      - internal_log         # generally local-only
+    export_requirements:
+      - "sanitize and redact"
+      - "attach provenance (no secrets)"
+      - "record export audit event"
+      - "enforce classification export_allowed == true"
+  human_exports:
+    allow:
+      - public
+      - internal
+    conditional:
+      - confidential   # only if policy + approvals allow
+    forbid:
+      - regulated
+
+# ------------------------------------------------------------------------------
+# Runtime enforcement hooks (logical integration points)
+# ------------------------------------------------------------------------------
+enforcement_hooks:
+  where_to_enforce:
+    - "internet intake pipeline (block/allow, sanitize, hash)"
+    - "tool trace logger (redaction, forbid fields)"
+    - "explanation generator (citations + uncertainty)"
+    - "governance decision engine (evidence requirements by risk tier)"
+    - "federation exporter/importer (sanitize + provenance)"
+  key_modules:
+    - "src/francis/internet/research/citation_tracker.py"
+    - "src/francis/internet/research/fact_checker.py"
+    - "src/francis/internet/validation/fact_verification.py"
+    - "src/francis/explanation/transparency/evidence_citation.py"
+    - "src/francis/telemetry/audit.py"
+
+# End of meta/evidence_model.yaml

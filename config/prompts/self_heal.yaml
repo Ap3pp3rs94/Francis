@@ -1,0 +1,588 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Self Heal (bounded incident triage + governed remediation runbooks)
+# Path:   config/prompts/self_heal.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Generates operational recovery runbooks for incidents and degradations:
+#   - service won't start (api/daemon/workers)
+#   - repeated exceptions / crash loops
+#   - dependency failures (redis/postgres/qdrant)
+#   - stuck approvals / ledger growth / disk pressure
+#   - UI build/runtime failures
+#   - network egress blocked / web_learning failures
+#   - policy denial cascades (guard_state restricted/lockdown)
+#
+# It outputs:
+#   - a prioritized set of remediation actions
+#   - each action includes prechecks, commands, expected results, and rollback
+#   - governance gates (trust, approval, quorum) per action
+#   - risk + blast radius per action
+#   - optional "degraded mode" recommendation
+#
+# NON-GOALS
+# ---------
+# - Does not execute commands.
+# - Does not modify repo code (that's self_evolve).
+# - Does not request or emit secrets.
+# - Does not provide wrongdoing enablement (credential theft, malware, DoS, surveillance).
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Fail-closed:
+#     * If core info missing → ask targeted questions (minimal).
+#     * If proposed actions are unsafe given guard_state/trust → deny or downgrade to safe read-only steps.
+# - Observability-first:
+#     * include clear expected outcomes
+#     * include rollback steps
+#     * include when to escalate to human
+# - Forward-minded:
+#     * supports multi-instance / federation contexts without assuming it exists
+# ==============================================================================
+version: 1
+
+id: "self.heal"
+title: "Self Heal"
+owner: "francis"
+intent: "compile_runbook"
+mode: "strict" # policy | strict
+
+meta:
+  notes:
+    - "Used by daemon for recovery suggestions and by UI Operations center."
+    - "Produces bounded remediation actions with prechecks + rollback."
+    - "Default posture is conservative; never executes."
+  compatibility:
+    - "Actions are declarative; execution engine may translate to platform-specific invocations."
+    - "Consumers should ignore unknown fields."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  incident:
+    type: object
+    required: true
+    fields:
+      incident_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+
+      # Freeform description of what is broken
+      summary: { type: string, required: true }
+
+      # Classification hints (optional)
+      kind:
+        type: string
+        required: false
+        enum:
+          - "api_failure"
+          - "daemon_failure"
+          - "worker_failure"
+          - "ui_failure"
+          - "dependency_failure"
+          - "policy_block"
+          - "resource_pressure"
+          - "data_corruption_suspected"
+          - "unknown"
+
+      severity_hint: { type: string, required: false } # info | warning | error | critical
+
+      # Evidence (already sanitized)
+      error_messages:
+        type: array
+        required: false
+        items: { type: string }
+
+      logs_tail:
+        type: array
+        required: false
+        items: { type: string }
+
+      # Affected components (optional)
+      components:
+        type: array
+        required: false
+        items:
+          type: string
+          enum:
+            - "api"
+            - "daemon"
+            - "workers"
+            - "chat_ui"
+            - "ledger"
+            - "approvals"
+            - "trust"
+            - "plugins"
+            - "domains"
+            - "web_learning"
+            - "memory"
+            - "vectors"
+            - "industrial"
+            - "federation"
+            - "unknown"
+
+  environment:
+    type: object
+    required: false
+    fields:
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | workstation | ...
+      platform: { type: string, required: false } # windows | linux | mac
+      cwd: { type: string, required: false }
+      python_exe: { type: string, required: false }
+      node_version: { type: string, required: false }
+      npm_version: { type: string, required: false }
+
+      # Optional: service ports
+      api_url: { type: string, required: false }
+      ui_url: { type: string, required: false }
+
+  runtime_state:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          pending_count: { type: number, required: false }
+
+      health:
+        type: object
+        required: false
+        additionalProperties: true # cpu/disk/mem snapshots, etc.
+
+      dependencies:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            name: { type: string, required: true } # postgres/redis/qdrant/ollama/...
+            status: { type: string, required: false } # ok | degraded | down | unknown
+            endpoint: { type: string, required: false }
+            notes: { type: string, required: false }
+
+  policy_controls:
+    type: object
+    required: false
+    fields:
+      posture:
+        type: string
+        required: false
+        enum: ["dev", "workstation", "production", "regulated", "safety_critical", "unknown"]
+
+      # If true, prefer safe degraded mode over aggressive repairs
+      prefer_degraded_mode: { type: boolean, required: false }
+
+      # Require approvals for all mutation/destructive actions
+      require_approvals_for_mutations: { type: boolean, required: false }
+
+      # Hard deny enablement requests (always default true).
+      hard_denies:
+        type: object
+        required: false
+        fields:
+          credential_attack_enablement: { type: boolean, required: false }
+          malware_enablement: { type: boolean, required: false }
+          dos_enablement: { type: boolean, required: false }
+          surveillance_enablement: { type: boolean, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - incident_id
+      - decision
+      - diagnosis
+      - runbook
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      incident_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_followup
+          - followup_questions
+          - reason_codes
+          - summary
+        properties:
+          # - deny: unsafe or disallowed
+          # - ask: missing critical info blocks a safe runbook
+          # - propose: runbook ready for review/approval
+          mode:
+            type: string
+            enum: ["deny", "ask", "propose"]
+          confidence: { type: number } # 0..1
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          summary: { type: string }
+
+      diagnosis:
+        type: object
+        additionalProperties: false
+        required:
+          - likely_causes
+          - ruled_out
+          - assumptions
+          - risk_level
+        properties:
+          likely_causes:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["cause", "confidence", "evidence"]
+              properties:
+                cause: { type: string }
+                confidence: { type: number }
+                evidence:
+                  type: array
+                  items: { type: string }
+
+          ruled_out:
+            type: array
+            items: { type: string }
+
+          assumptions:
+            type: array
+            items: { type: string }
+
+          risk_level: { type: string, enum: ["low", "medium", "high", "critical", "unknown"] }
+
+      runbook:
+        type: object
+        additionalProperties: false
+        required:
+          - title
+          - posture
+          - actions
+          - degraded_mode
+          - success_criteria
+          - escalation
+        properties:
+          title: { type: string }
+          posture: { type: string } # derived from environment/profile/policy_controls
+
+          actions:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+                - category
+                - priority
+                - risk
+                - blast_radius
+                - prechecks
+                - steps
+                - expected_outcomes
+                - rollback
+                - gates
+              properties:
+                id: { type: string }
+                category:
+                  type: string
+                  enum:
+                    - "read_only"
+                    - "mutation"
+                    - "destructive"
+                    - "network_egress"
+                    - "credential_ops"
+                    - "industrial_actuation"
+                    - "unknown"
+                priority: { type: number } # 1 is highest
+                risk: { type: string, enum: ["low", "medium", "high", "critical"] }
+                blast_radius: { type: string } # "api only", "all services", "data loss risk", etc.
+
+                prechecks:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["name", "command", "notes", "blocking"]
+                    properties:
+                      name: { type: string }
+                      command: { type: string }
+                      notes: { type: string }
+                      blocking: { type: boolean }
+
+                steps:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["name", "command", "notes", "blocking"]
+                    properties:
+                      name: { type: string }
+                      command: { type: string }
+                      notes: { type: string }
+                      blocking: { type: boolean }
+
+                expected_outcomes:
+                  type: array
+                  items: { type: string }
+
+                rollback:
+                  type: object
+                  additionalProperties: false
+                  required: ["strategy", "steps", "notes"]
+                  properties:
+                    strategy: { type: string }
+                    steps:
+                      type: array
+                      items: { type: string }
+                    notes:
+                      type: array
+                      items: { type: string }
+
+                gates:
+                  type: object
+                  additionalProperties: false
+                  required: ["min_trust", "requires_approval", "requires_quorum", "notes"]
+                  properties:
+                    min_trust: { type: number }
+                    requires_approval: { type: boolean }
+                    requires_quorum: { type: boolean }
+                    notes:
+                      type: array
+                      items: { type: string }
+
+          degraded_mode:
+            type: object
+            additionalProperties: false
+            required: ["recommended", "description", "changes", "rollback"]
+            properties:
+              recommended: { type: boolean }
+              description: { type: string }
+              changes:
+                type: array
+                items: { type: string } # "disable web_learning", "read-only approvals", etc.
+              rollback:
+                type: array
+                items: { type: string }
+
+          success_criteria:
+            type: array
+            items: { type: string }
+
+          escalation:
+            type: object
+            additionalProperties: false
+            required: ["when", "who", "what_to_include"]
+            properties:
+              when:
+                type: array
+                items: { type: string }
+              who: { type: string }
+              what_to_include:
+                type: array
+                items: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - blocked
+          - blocked_reasons
+          - wrongdoing_topic
+          - contains_secrets
+          - contains_pii
+          - redactions
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          wrongdoing_topic: { type: boolean }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_followup | on_deny
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Self-Heal runbook generator.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Non-negotiables:
+      - Do NOT execute commands. You only propose steps.
+      - Do NOT request or emit secrets.
+      - Do NOT provide wrongdoing enablement (credential theft, malware, DoS, surveillance).
+      - Respect guard_state:
+          * normal: propose actions with appropriate gates
+          * restricted: prefer read-only checks and safe degraded mode
+          * lockdown: only read-only checks and reversible safe steps unless explicitly approved
+
+      Engineering quality bar:
+      - Prefer minimal, reversible actions first.
+      - Include prechecks before mutation/destructive actions.
+      - Every action must include rollback.
+      - Provide explicit success criteria.
+      - Use platform-appropriate commands where possible; if platform unknown, provide neutral commands.
+
+      Governance defaults:
+      - read_only: min_trust=1, requires_approval=false
+      - mutation: min_trust=3, requires_approval=true (unless dev profile and policy allows)
+      - destructive: min_trust=6, requires_approval=true, requires_quorum=true in regulated/safety_critical
+      - network_egress: min_trust=4, requires_approval=true
+      - credential_ops: min_trust=6, requires_approval=true
+      - industrial_actuation: min_trust=8, requires_approval=true, requires_quorum=true in safety_critical
+
+      If critical context is missing (platform, error logs, affected component), choose decision.mode="ask"
+      and ask only the minimum targeted questions.
+
+  - role: "user"
+    content: |-
+      INCIDENT:
+      {{incident}}
+
+      ENVIRONMENT:
+      {{environment}}
+
+      RUNTIME_STATE:
+      {{runtime_state}}
+
+      POLICY_CONTROLS:
+      {{policy_controls}}
+
+      Task:
+      Provide a safe, bounded runbook to triage and recover.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.14
+  max_output_tokens: 3200
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "HEAL_PROPOSED"
+  - "HEAL_NEEDS_FOLLOWUP"
+  - "HEAL_DENIED_UNSAFE"
+  - "HEAL_FAIL_CLOSED"
+  - "HEAL_DEGRADED_MODE_RECOMMENDED"
+  - "GUARD_RESTRICTED"
+  - "GUARD_LOCKDOWN"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "self_heal.requested"
+    when: "before"
+    fields: ["incident.kind", "incident.severity_hint", "environment.profile", "runtime_state.guard_state"]
+
+  - kind: "self_heal.proposed"
+    when: "after"
+    fields: ["runbook.title", "runbook.posture", "observability.reason_codes", "runbook.degraded_mode.recommended"]
+
+  - kind: "self_heal.followup_required"
+    when: "on_followup"
+    fields: ["decision.followup_questions"]
+
+  - kind: "self_heal.denied"
+    when: "on_deny"
+    fields: ["safety.blocked_reasons"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    mode: "policy"
+    generation_hints:
+      temperature: 0.18
+      max_output_tokens: 3600
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14
+      max_output_tokens: 3200
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+      max_output_tokens: 3200
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+      max_output_tokens: 3200

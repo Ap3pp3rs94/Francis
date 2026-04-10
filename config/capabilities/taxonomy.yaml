@@ -1,0 +1,561 @@
+# ==============================================================================
+# Francis Capability Taxonomy
+# File: config/capabilities/taxonomy.yaml
+#
+# ROLE:
+#   Canonical taxonomy for capability classification:
+#     - layers (cone order)
+#     - domains (subsystems)
+#     - kinds (action semantics)
+#     - risk levels (governance posture semantics)
+#     - audit expectations (observability posture)
+#     - naming conventions (capability id grammar)
+#
+# THIS FILE IS A "DICTIONARY", NOT A POLICY ENGINE:
+#   - Taxonomy defines meaning + allowed values.
+#   - Enforcement happens in governance + trust permissions maps.
+#
+# WHY THIS MATTERS:
+#   - Makes capability catalog consistent and lintable.
+#   - Keeps UI grouping stable as new systems get added.
+#   - Gives governance a shared language (risk/kind/layer semantics).
+# ==============================================================================
+
+version: 1
+
+taxonomy:
+
+  # ---------------------------------------------------------------------------
+  # Cone Layers (conical dependency order)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - "order" is the canonical progression. Lower layers should not depend
+  #     on higher layers (enforced by engineering discipline and optional linting).
+  #   - "invariants" describe the *intent* of the layer.
+  # ---------------------------------------------------------------------------
+  layers:
+    - id: foundation
+      order: 0
+      name: Foundation
+      summary: Repo invariants, formatting, boot contracts, and meta tooling.
+      invariants:
+        - No runtime state mutations required.
+        - No external service dependency assumed.
+        - Must remain safe to run in any environment.
+      examples:
+        - system.help
+        - system.capabilities.list
+
+    - id: kernel
+      order: 1
+      name: Kernel
+      summary: Core runtime health, logs, metrics, daemon infrastructure.
+      invariants:
+        - Minimal dependency surface.
+        - Must remain observable and diagnosable.
+        - Prefer read-only operations; writes require explicit governance posture.
+
+    - id: memory
+      order: 2
+      name: Memory
+      summary: Continuity ledger, memory stores, timeline, summarization artifacts.
+      invariants:
+        - Data integrity first (append-only ledgers preferred).
+        - Export is governed (audited, bounded, redacted).
+        - Must be resilient to partial failures.
+
+    - id: governance
+      order: 3
+      name: Governance
+      summary: Approvals, trust, credentials metadata, explanations/audit.
+      invariants:
+        - Never bypass trust/approval gates.
+        - Enforce least privilege and audit trails.
+        - Must tolerate backend evolution safely (defensive schemas).
+
+    - id: llm
+      order: 4
+      name: LLM
+      summary: Model routing, prompts, tool calling, safety adapters.
+      invariants:
+        - Must be deterministic where possible (same inputs → predictable behavior).
+        - Always audit model decisions in a minimally sufficient way.
+        - No direct side effects without governance approval.
+
+    - id: chat
+      order: 5
+      name: Chat
+      summary: Chat sessions, message streaming, conversation lifecycle.
+      invariants:
+        - Transport/protocol is separate from UI state.
+        - Supports reconnect, resumability, and observability hooks.
+        - Treat inbound payloads as untrusted.
+
+    - id: plugins
+      order: 6
+      name: Plugins
+      summary: Plugin discovery, execution, install/uninstall, sandbox boundary.
+      invariants:
+        - Execution is governed (approval required for high-risk actions).
+        - Plugin outputs are treated as untrusted.
+        - Prefer capability-based invocation over bespoke endpoints.
+
+    - id: higher
+      order: 7
+      name: Higher Systems
+      summary: Digital twins, industrial control, federation, simulations, resilience.
+      invariants:
+        - Governance-heavy by default.
+        - Safety posture must be explicit.
+        - Assume future expansion (new subsystems) without breaking taxonomy.
+
+  # ---------------------------------------------------------------------------
+  # Domains (subsystems)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - "id" should match catalog.yaml "domain" field.
+  #   - "ui_group" is a hint for navigation grouping (UI may override).
+  #   - "default_risk" is a starting point; catalog entries may override.
+  # ---------------------------------------------------------------------------
+  domains:
+    - id: system
+      name: System
+      summary: Core runtime, diagnostics, logs, metrics, build/runtime info.
+      ui_group: Core
+      default_risk: low
+      owned_by: francis.kernel
+
+    - id: chat
+      name: Chat
+      summary: Chat sessions, streaming, protocol, history.
+      ui_group: Core
+      default_risk: low
+      owned_by: francis.chat
+
+    - id: continuity
+      name: Continuity
+      summary: Ledger and continuity artifacts (summaries/exports).
+      ui_group: Memory
+      default_risk: medium
+      owned_by: francis.memory
+
+    - id: approvals
+      name: Approvals
+      summary: Approval items, pending queues, decision actions, toggles.
+      ui_group: Governance
+      default_risk: high
+      owned_by: francis.governance.approvals
+
+    - id: trust
+      name: Trust
+      summary: Trust state, trust history, trust toggles, trust adjustments.
+      ui_group: Governance
+      default_risk: high
+      owned_by: francis.governance.trust
+
+    - id: credentials
+      name: Credentials
+      summary: Credential references and metadata; never secrets in UI.
+      ui_group: Governance
+      default_risk: high
+      owned_by: francis.governance.credentials
+
+    - id: explanations
+      name: Explanations
+      summary: Explanation/audit records for decisions and actions.
+      ui_group: Governance
+      default_risk: medium
+      owned_by: francis.governance.explanations
+
+    - id: domains
+      name: Domains
+      summary: Domain registry, lifecycle, policies, relationships.
+      ui_group: Workbench
+      default_risk: medium
+      owned_by: francis.higher.domains
+
+    - id: plugins
+      name: Plugins
+      summary: Plugin registry, execution, lifecycle.
+      ui_group: Extensibility
+      default_risk: high
+      owned_by: francis.plugins
+
+    - id: operations
+      name: Operations
+      summary: Operation records, queues, execution status, logs.
+      ui_group: Operations
+      default_risk: high
+      owned_by: francis.kernel.operations
+
+    - id: web_learning
+      name: Web Learning
+      summary: Governed web fetch/ingest/search + audit trail.
+      ui_group: Intelligence
+      default_risk: critical
+      owned_by: francis.higher.web_learning
+
+    - id: digital_twin
+      name: Digital Twins
+      summary: Digital twin registry, state snapshots, model metadata.
+      ui_group: Industrial
+      default_risk: high
+      owned_by: francis.higher.digital_twin
+
+    - id: industrial
+      name: Industrial Control
+      summary: Industrial assets/processes/simulations and control surfaces.
+      ui_group: Industrial
+      default_risk: critical
+      owned_by: francis.higher.industrial
+
+    - id: federation
+      name: Federation
+      summary: Multi-instance coordination, consensus logs, instance views.
+      ui_group: Federation
+      default_risk: high
+      owned_by: francis.higher.federation
+
+    - id: simulation
+      name: Simulation
+      summary: General simulation runner/status/export.
+      ui_group: Industrial
+      default_risk: high
+      owned_by: francis.higher.simulation
+
+    - id: resilience
+      name: Resilience
+      summary: Backup/restore/status and operational continuity posture.
+      ui_group: Operations
+      default_risk: critical
+      owned_by: francis.higher.resilience
+
+  # ---------------------------------------------------------------------------
+  # Kinds (action semantics)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - "kind" is NOT "HTTP method".
+  #   - It describes the semantic category of action for governance/logging.
+  # ---------------------------------------------------------------------------
+  kinds:
+    - id: read
+      name: Read
+      summary: Non-mutating access to state or metadata (bounded).
+      typical_risk_floor: low
+      side_effects: none
+      audit_default: none
+
+    - id: write
+      name: Write
+      summary: Mutations of persisted state (create/update/delete/decide).
+      typical_risk_floor: medium
+      side_effects: state_mutation
+      audit_default: required
+
+    - id: execute
+      name: Execute
+      summary: Initiate work (may enqueue jobs, start processes, trigger actions).
+      typical_risk_floor: high
+      side_effects: operational_side_effect
+      audit_default: required
+
+    - id: export
+      name: Export
+      summary: Produce portable outputs from internal state (privacy-sensitive).
+      typical_risk_floor: medium
+      side_effects: data_exfiltration_risk
+      audit_default: required
+
+    - id: toggle
+      name: Toggle
+      summary: Enable/disable subsystem behavior (high impact).
+      typical_risk_floor: high
+      side_effects: policy_boundary_change
+      audit_default: required
+
+    - id: admin
+      name: Admin
+      summary: Emergency or privileged actions with broad impact.
+      typical_risk_floor: critical
+      side_effects: high_privilege_action
+      audit_default: required
+
+  # ---------------------------------------------------------------------------
+  # Risk Levels (semantic meaning)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - This defines meaning and recommended posture.
+  #   - The real enforcement is done by governance/trust mappings.
+  # ---------------------------------------------------------------------------
+  risk_levels:
+    - id: low
+      name: Low
+      summary: Read-only or safe operations; minimal privacy/safety impact.
+      recommended_min_trust_level: 0
+      recommended_requires_approval: false
+      audit_default: none
+      examples:
+        - system.health.ping
+        - system.info.build
+
+    - id: medium
+      name: Medium
+      summary: Sensitive reads or bounded exports; limited operational impact.
+      recommended_min_trust_level: 1
+      recommended_requires_approval: false
+      audit_default: recommended
+      examples:
+        - system.logs.tail
+        - continuity.ledger.list
+        - explanations.list
+
+    - id: high
+      name: High
+      summary: Mutations or executions with real operational effects.
+      recommended_min_trust_level: 3
+      recommended_requires_approval: true
+      audit_default: required
+      examples:
+        - operations.run
+        - plugins.execute
+        - domains.update
+
+    - id: critical
+      name: Critical
+      summary: Destructive, boundary-changing, or external-ingest actions.
+      recommended_min_trust_level: 4
+      recommended_requires_approval: true
+      audit_default: required
+      examples:
+        - domains.delete
+        - web_learning.ingest
+        - resilience.restore
+        - approvals.decide.emergency
+
+  # ---------------------------------------------------------------------------
+  # Audit Posture (observability semantics)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - "audit" here refers to event-level traceability:
+  #       ledger events, explanation records, and structured logs.
+  # ---------------------------------------------------------------------------
+  audit_levels:
+    - id: none
+      name: None
+      summary: No audit required; logs may still exist.
+    - id: recommended
+      name: Recommended
+      summary: Should emit audit events where available.
+    - id: required
+      name: Required
+      summary: Must emit audit events; failures should be surfaced.
+
+  # ---------------------------------------------------------------------------
+  # UI Grouping Hints
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - UI may use this for left-nav grouping and ordering.
+  #   - Keep stable; users learn navigation patterns.
+  # ---------------------------------------------------------------------------
+  ui_groups:
+    - id: Core
+      order: 10
+      name: Core
+      includes_domains: [system, chat]
+    - id: Memory
+      order: 20
+      name: Memory
+      includes_domains: [continuity]
+    - id: Governance
+      order: 30
+      name: Governance
+      includes_domains: [approvals, trust, credentials, explanations]
+    - id: Workbench
+      order: 40
+      name: Workbench
+      includes_domains: [domains]
+    - id: Operations
+      order: 50
+      name: Operations
+      includes_domains: [operations, resilience]
+    - id: Intelligence
+      order: 60
+      name: Intelligence
+      includes_domains: [web_learning]
+    - id: Extensibility
+      order: 70
+      name: Extensibility
+      includes_domains: [plugins]
+    - id: Industrial
+      order: 80
+      name: Industrial
+      includes_domains: [digital_twin, industrial, simulation]
+    - id: Federation
+      order: 90
+      name: Federation
+      includes_domains: [federation]
+
+  # ---------------------------------------------------------------------------
+  # Capability ID Naming Conventions (grammar + patterns)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - This is intentionally strict enough to prevent drift, but permissive
+  #     enough to allow new subsystems.
+  #   - Catalog entries should conform; optional linting can enforce this.
+  # ---------------------------------------------------------------------------
+  conventions:
+
+    capability_id:
+      separator: "."
+      allowed_characters: "lowercase letters, numbers, underscore"
+      requirements:
+        - "IDs must be lowercase."
+        - "Segments separated by '.'"
+        - "Verb segment typically near the end: list/get/create/update/delete/run/status/export/toggle/decide"
+        - "Avoid ambiguous verbs (do/thing/action). Prefer explicit verbs."
+
+      reserved_verbs:
+        # Read
+        - list
+        - get
+        - status
+        - health
+        - snapshot
+        - tail
+        - search
+        - history
+        # Write / mutate
+        - create
+        - update
+        - delete
+        - set
+        - adjust
+        - revoke
+        - install
+        - uninstall
+        # Execute / run
+        - run
+        - execute
+        - ingest
+        - fetch
+        - cancel
+        # Export / packaging
+        - export
+        # Governance-specific
+        - decide
+        - approve
+        - reject
+        - emergency
+        - toggle
+
+      canonical_suffix_patterns:
+        # These patterns should be used consistently.
+        list:
+          preferred: "<domain>.<resource>.list"
+          examples:
+            - approvals.list
+            - federation.instances.list
+        get:
+          preferred: "<domain>.<resource>.get"
+          examples:
+            - plugins.get
+            - domains.get
+        create_update_delete:
+          preferred:
+            - "<domain>.<resource>.create"
+            - "<domain>.<resource>.update"
+            - "<domain>.<resource>.delete"
+          examples:
+            - domains.create
+            - domains.update
+            - domains.delete
+        toggle:
+          preferred:
+            - "<domain>.toggle.enable"
+            - "<domain>.toggle.disable"
+          examples:
+            - approvals.toggle.enable
+            - trust.toggle.disable
+        export:
+          preferred: "<domain>.<resource>.export OR <domain>.export"
+          examples:
+            - continuity.ledger.export
+            - simulation.export
+        decide:
+          preferred:
+            - "approvals.decide.approve"
+            - "approvals.decide.reject"
+            - "approvals.decide.emergency"
+
+      reserved_namespaces:
+        # Helps avoid collisions and keeps future growth clean.
+        - system
+        - chat
+        - continuity
+        - approvals
+        - trust
+        - credentials
+        - explanations
+        - domains
+        - plugins
+        - operations
+        - web_learning
+        - digital_twin
+        - industrial
+        - federation
+        - simulation
+        - resilience
+
+  # ---------------------------------------------------------------------------
+  # Suggested Defaults (non-enforcing guidance)
+  # ---------------------------------------------------------------------------
+  # NOTE:
+  #   - These are recommendations for authors of catalog entries.
+  #   - Governance may enforce stronger requirements.
+  # ---------------------------------------------------------------------------
+  suggested_defaults:
+    trust_floor_by_risk:
+      low: 0
+      medium: 1
+      high: 3
+      critical: 4
+
+    approval_expectation_by_kind:
+      read: false
+      write: true
+      execute: true
+      export: true
+      toggle: true
+      admin: true
+
+    audit_expectation_by_risk:
+      low: none
+      medium: recommended
+      high: required
+      critical: required
+
+    bounded_read_guidance:
+      # Useful for list/tail/search operations.
+      max_default_limit: 200
+      require_limit_parameter_for:
+        - system.logs.tail
+        - continuity.ledger.list
+        - approvals.list
+        - explanations.list
+        - web_learning.logs.list
+        - web_learning.audit.list
+        - federation.consensus.logs.list
+
+  # ---------------------------------------------------------------------------
+  # Compatibility Notes (so the taxonomy can evolve safely)
+  # ---------------------------------------------------------------------------
+  compatibility:
+    forwards_compatible_fields:
+      # Taxonomy consumers should ignore unknown keys and prefer safe defaults.
+      - "Any additional 'domains' fields"
+      - "Any additional 'kinds' fields"
+      - "Any additional 'risk_levels' fields"
+    migration_notes:
+      - "If adding a new domain, also consider adding a ui_group mapping."
+      - "If adding a new kind, update governance policies and UI affordances."
+      - "If changing layer ordering, treat as a breaking semantic change."

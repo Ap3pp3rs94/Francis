@@ -1,0 +1,1277 @@
+# ==============================================================================
+# Francis Capability Catalog
+# File: config/capabilities/catalog.yaml
+#
+# WHAT THIS IS:
+#   The authoritative registry of canonical capability IDs.
+#
+# WHAT THIS IS NOT:
+#   - Not an alias file (see aliases.yaml).
+#   - Not a permission grant (see trust_permissions_map.yaml).
+#   - Not a schedule definition (see schedules.yaml).
+#
+# CORE PRINCIPLES:
+#   1) Canonical IDs are stable and should not be renamed casually.
+#   2) Capabilities declare risk + default governance posture.
+#   3) Permissions/trust decide whether a caller MAY execute.
+#   4) Approvals decide whether execution MUST be confirmed.
+#
+# SCHEMA (per capability):
+#   id: <string>                              # canonical id
+#   name: <string>                            # display name
+#   summary: <string>                         # short description
+#   layer: <foundation|kernel|memory|governance|llm|chat|plugins|higher>
+#   domain: <system|chat|continuity|approvals|credentials|domains|...>
+#   kind: <read|write|execute|toggle|export|admin>   # high-level action kind
+#   risk: <low|medium|high|critical>
+#   requires_approval: <bool>                 # default posture (can be overridden by policy)
+#   min_trust_level: <number>                 # default trust gate (policy can override)
+#   handler:                                  # routing hint for backend
+#     type: <api|daemon|worker|ui_only|composite>
+#     target: <string>                        # e.g., "francis.api.handlers.continuity:ledger_list"
+#   observability:
+#     audit: <required|recommended|none>
+#     log_level: <DEBUG|INFO|WARNING|ERROR>
+#   tags: [ ... ]                             # discoverability
+#
+# NOTES:
+#   - min_trust_level is intentionally numeric and scale-agnostic.
+#     Your trust calculator decides meaning; this is a default.
+#   - requires_approval describes default governance posture.
+#     trust_permissions_map and policy engine determine reality.
+# ==============================================================================
+
+version: 1
+
+capabilities:
+
+  # ============================================================================
+  # SYSTEM / CORE
+  # ============================================================================
+  - id: system.help
+    name: Help
+    summary: Show available commands/capabilities and usage hints.
+    layer: foundation
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: ui_only, target: "ui.help" }
+    observability: { audit: none, log_level: INFO }
+    tags: [system, help, ui]
+
+  - id: system.capabilities.list
+    name: List Capabilities
+    summary: List known canonical capabilities and metadata.
+    layer: foundation
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.capabilities:list_capabilities" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [system, capabilities, catalog]
+
+  - id: system.health.ping
+    name: Ping
+    summary: Lightweight liveness check (no deep dependencies).
+    layer: kernel
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.health:ping" }
+    observability: { audit: none, log_level: DEBUG }
+    tags: [system, health]
+
+  - id: system.health.report
+    name: Health Report
+    summary: System health check with component status and diagnostics.
+    layer: kernel
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.health:report" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [system, health, diagnostics]
+
+  - id: system.info.runtime
+    name: Runtime Info
+    summary: Report runtime profile, process info, and environment metadata.
+    layer: kernel
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.system:runtime_info" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [system, runtime, diagnostics]
+
+  - id: system.info.build
+    name: Build Info
+    summary: Report build/version metadata for traceability.
+    layer: kernel
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.system:build_info" }
+    observability: { audit: none, log_level: INFO }
+    tags: [system, build, version]
+
+  - id: system.logs.tail
+    name: Tail Logs
+    summary: Tail recent system logs (redacted; operator view).
+    layer: kernel
+    domain: system
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.logs:tail" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [system, logs, observability]
+
+  - id: system.metrics.snapshot
+    name: Metrics Snapshot
+    summary: Return a point-in-time metrics snapshot for operators.
+    layer: kernel
+    domain: system
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.metrics:snapshot" }
+    observability: { audit: none, log_level: DEBUG }
+    tags: [system, metrics, observability]
+
+  # ============================================================================
+  # CHAT
+  # ============================================================================
+  - id: chat.session.open
+    name: Open Chat Session
+    summary: Initialize a new chat session context.
+    layer: chat
+    domain: chat
+    kind: execute
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.chat:open_session" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [chat, session]
+
+  - id: chat.session.reset
+    name: Reset Chat Session
+    summary: Reset local UI session and/or server-side session state (if supported).
+    layer: chat
+    domain: chat
+    kind: write
+    risk: medium
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.chat:reset_session" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [chat, session]
+
+  - id: chat.message.send
+    name: Send Chat Message
+    summary: Send a message into the chat stream (WS/HTTP).
+    layer: chat
+    domain: chat
+    kind: execute
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.chat:send_message" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [chat]
+
+  - id: chat.history.list
+    name: List Chat History
+    summary: List chat messages or conversation history (bounded).
+    layer: chat
+    domain: chat
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.chat:list_history" }
+    observability: { audit: none, log_level: DEBUG }
+    tags: [chat, history]
+
+  # ============================================================================
+  # CONTINUITY / LEDGER
+  # ============================================================================
+  - id: continuity.ledger.list
+    name: List Ledger Entries
+    summary: List recent continuity ledger entries (bounded, redacted if needed).
+    layer: memory
+    domain: continuity
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 0
+    handler: { type: api, target: "francis.api.continuity:ledger_list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [continuity, ledger]
+
+  - id: continuity.ledger.export
+    name: Export Ledger
+    summary: Export continuity ledger in a portable format (governed/redacted).
+    layer: memory
+    domain: continuity
+    kind: export
+    risk: medium
+    requires_approval: true
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.continuity:ledger_export" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [continuity, ledger, export]
+
+  - id: continuity.summary.generate
+    name: Generate Summary
+    summary: Generate a conversation continuity summary artifact.
+    layer: memory
+    domain: continuity
+    kind: execute
+    risk: medium
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.continuity:summary_generate" }
+    observability: { audit: required, log_level: INFO }
+    tags: [continuity, summary]
+
+  # ============================================================================
+  # APPROVALS
+  # ============================================================================
+  - id: approvals.list
+    name: List Approvals
+    summary: List approval items (bounded).
+    layer: governance
+    domain: approvals
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.approvals:list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [governance, approvals]
+
+  - id: approvals.list.pending
+    name: List Pending Approvals
+    summary: List pending approval items (bounded).
+    layer: governance
+    domain: approvals
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.approvals:list_pending" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [governance, approvals]
+
+  - id: approvals.decide.approve
+    name: Approve Request
+    summary: Approve a pending governed action.
+    layer: governance
+    domain: approvals
+    kind: write
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.approvals:approve" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [governance, approvals, decision]
+
+  - id: approvals.decide.reject
+    name: Reject Request
+    summary: Reject a pending governed action.
+    layer: governance
+    domain: approvals
+    kind: write
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.approvals:reject" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [governance, approvals, decision]
+
+  - id: approvals.decide.emergency
+    name: Emergency Override
+    summary: Emergency approve/override for critical operations (audited).
+    layer: governance
+    domain: approvals
+    kind: admin
+    risk: critical
+    requires_approval: false
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.approvals:emergency" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [governance, approvals, emergency]
+
+  - id: approvals.toggle.enable
+    name: Enable Approvals System
+    summary: Enable approval gating (policy-controlled).
+    layer: governance
+    domain: approvals
+    kind: toggle
+    risk: high
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.approvals:toggle_enable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [governance, approvals, toggle]
+
+  - id: approvals.toggle.disable
+    name: Disable Approvals System
+    summary: Disable approval gating (policy-controlled, highly risky).
+    layer: governance
+    domain: approvals
+    kind: toggle
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.approvals:toggle_disable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [governance, approvals, toggle]
+
+  # ============================================================================
+  # CREDENTIALS (metadata-only)
+  # ============================================================================
+  - id: credentials.list
+    name: List Credentials (Metadata)
+    summary: List credential references and metadata (never secrets).
+    layer: governance
+    domain: credentials
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.credentials:list" }
+    observability: { audit: required, log_level: INFO }
+    tags: [governance, credentials]
+
+  - id: credentials.scopes.list
+    name: List Credential Scopes
+    summary: List credential scopes and risk classification.
+    layer: governance
+    domain: credentials
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.credentials:list_scopes" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [governance, credentials, scopes]
+
+  - id: credentials.delegations.list
+    name: List Credential Delegations
+    summary: List delegation records (audit trail).
+    layer: governance
+    domain: credentials
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.credentials:list_delegations" }
+    observability: { audit: required, log_level: INFO }
+    tags: [governance, credentials, delegations]
+
+  - id: credentials.request
+    name: Request Credential
+    summary: Request provisioning of a credential (approval-gated).
+    layer: governance
+    domain: credentials
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.credentials:request" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [governance, credentials, request]
+
+  - id: credentials.revoke
+    name: Revoke Credential
+    summary: Revoke a credential reference (approval-gated, audited).
+    layer: governance
+    domain: credentials
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.credentials:revoke" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [governance, credentials, revoke]
+
+  # ============================================================================
+  # DOMAINS
+  # ============================================================================
+  - id: domains.list
+    name: List Domains
+    summary: List domain registry entries (bounded).
+    layer: higher
+    domain: domains
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.domains:list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [domains, registry]
+
+  - id: domains.list.paged
+    name: List Domains (Paged)
+    summary: List domains with explicit pagination controls.
+    layer: higher
+    domain: domains
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.domains:list" }
+    observability: { audit: recommended, log_level: DEBUG }
+    tags: [domains, registry, pagination]
+
+  - id: domains.list.filter
+    name: Filter Domains
+    summary: List domains filtered by status/tags.
+    layer: higher
+    domain: domains
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.domains:list" }
+    observability: { audit: recommended, log_level: DEBUG }
+    tags: [domains, registry, filter]
+
+  - id: domains.list.search
+    name: Search Domains
+    summary: Search domains by keyword.
+    layer: higher
+    domain: domains
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.domains:list" }
+    observability: { audit: recommended, log_level: DEBUG }
+    tags: [domains, registry, search]
+
+  - id: domains.get
+    name: Get Domain
+    summary: Get a domain registry entry by id.
+    layer: higher
+    domain: domains
+    kind: read
+    risk: low
+    requires_approval: false
+    min_trust_level: 1
+    handler: { type: api, target: "francis.api.domains:get" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [domains, registry]
+
+  - id: domains.create
+    name: Create Domain
+    summary: Create a new domain (governed).
+    layer: higher
+    domain: domains
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.domains:create" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [domains, registry, create]
+
+  - id: domains.update
+    name: Update Domain
+    summary: Update an existing domain (governed).
+    layer: higher
+    domain: domains
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.domains:update" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [domains, registry, update]
+
+  - id: domains.delete
+    name: Delete Domain
+    summary: Delete/retire a domain (governed, usually destructive).
+    layer: higher
+    domain: domains
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.domains:delete" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [domains, registry, delete]
+
+  # ============================================================================
+  # DIGITAL TWIN CENTER
+  # ============================================================================
+  - id: digital_twin.list
+    name: List Digital Twins
+    summary: List digital twin models/instances (metadata only).
+    layer: higher
+    domain: digital_twin
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.digital_twin:list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [digital_twin, industrial]
+
+  - id: digital_twin.create
+    name: Create Digital Twin
+    summary: Register a digital twin (governed).
+    layer: higher
+    domain: digital_twin
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.digital_twin:create" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [digital_twin, industrial]
+
+  - id: digital_twin.update
+    name: Update Digital Twin
+    summary: Update a digital twin model/metadata (governed).
+    layer: higher
+    domain: digital_twin
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.digital_twin:update" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [digital_twin, industrial]
+
+  - id: digital_twin.delete
+    name: Delete Digital Twin
+    summary: Remove a digital twin (governed).
+    layer: higher
+    domain: digital_twin
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.digital_twin:delete" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [digital_twin, industrial]
+
+  - id: digital_twin.state.get
+    name: Get Digital Twin State
+    summary: Read state snapshot for a digital twin.
+    layer: higher
+    domain: digital_twin
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.digital_twin:get_state" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [digital_twin, state]
+
+  - id: digital_twin.state.set
+    name: Set Digital Twin State
+    summary: Update state snapshot for a digital twin (governed).
+    layer: higher
+    domain: digital_twin
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.digital_twin:set_state" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [digital_twin, state]
+
+  # ============================================================================
+  # INDUSTRIAL CONTROL
+  # ============================================================================
+  - id: industrial.dashboard
+    name: Industrial Dashboard
+    summary: Open industrial observability dashboard view.
+    layer: higher
+    domain: industrial
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: ui_only, target: "ui.industrial.dashboard" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [industrial, dashboard]
+
+  - id: industrial.assets.list
+    name: List Industrial Assets
+    summary: List industrial assets (metadata).
+    layer: higher
+    domain: industrial
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.industrial:list_assets" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [industrial, assets]
+
+  - id: industrial.processes.list
+    name: List Industrial Processes
+    summary: List industrial processes (metadata).
+    layer: higher
+    domain: industrial
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.industrial:list_processes" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [industrial, processes]
+
+  - id: industrial.simulation.run
+    name: Run Industrial Simulation
+    summary: Request a simulation run (governed; may be approval-gated).
+    layer: higher
+    domain: industrial
+    kind: execute
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.industrial:run_simulation" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [industrial, simulation, run]
+
+  - id: industrial.logs.tail
+    name: Tail Industrial Logs
+    summary: Tail industrial ops logs (redacted).
+    layer: higher
+    domain: industrial
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.industrial:tail_logs" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [industrial, logs]
+
+  - id: industrial.toggle.enable
+    name: Enable Industrial Control
+    summary: Enable industrial control surfaces (policy-gated).
+    layer: higher
+    domain: industrial
+    kind: toggle
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.industrial:toggle_enable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [industrial, toggle]
+
+  - id: industrial.toggle.disable
+    name: Disable Industrial Control
+    summary: Disable industrial control surfaces (policy-gated).
+    layer: higher
+    domain: industrial
+    kind: toggle
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.industrial:toggle_disable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [industrial, toggle]
+
+  # ============================================================================
+  # OPERATIONS
+  # ============================================================================
+  - id: operations.list
+    name: List Operations
+    summary: List operational records/events (bounded).
+    layer: kernel
+    domain: operations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.operations:list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [operations, audit]
+
+  - id: operations.status
+    name: Get Operation Status
+    summary: Get operation status by id.
+    layer: kernel
+    domain: operations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.operations:get" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [operations, status]
+
+  - id: operations.run
+    name: Run Operation
+    summary: Start an operation (governed; may enqueue work).
+    layer: kernel
+    domain: operations
+    kind: execute
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.operations:create" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [operations, run]
+
+  - id: operations.cancel
+    name: Cancel Operation
+    summary: Cancel a running operation (governed).
+    layer: kernel
+    domain: operations
+    kind: write
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.operations:cancel" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [operations, cancel]
+
+  - id: operations.logs.tail
+    name: Tail Operation Logs
+    summary: Tail logs for an operation (redacted).
+    layer: kernel
+    domain: operations
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.operations:tail_logs" }
+    observability: { audit: required, log_level: INFO }
+    tags: [operations, logs]
+
+  # ============================================================================
+  # PLUGINS
+  # ============================================================================
+  - id: plugins.list
+    name: List Plugins
+    summary: List plugins and status (bounded).
+    layer: plugins
+    domain: plugins
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.plugins:list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [plugins, registry]
+
+  - id: plugins.get
+    name: Get Plugin
+    summary: Get plugin detail/manifest (metadata only).
+    layer: plugins
+    domain: plugins
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.plugins:get" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [plugins, registry]
+
+  - id: plugins.execute
+    name: Execute Plugin
+    summary: Run a plugin action (governed; may enqueue work).
+    layer: plugins
+    domain: plugins
+    kind: execute
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.plugins:run" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [plugins, execute]
+
+  - id: plugins.install
+    name: Install Plugin
+    summary: Install a plugin (governed; may require approval).
+    layer: plugins
+    domain: plugins
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.plugins:install" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [plugins, install]
+
+  - id: plugins.uninstall
+    name: Uninstall Plugin
+    summary: Uninstall a plugin (governed; may require approval).
+    layer: plugins
+    domain: plugins
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.plugins:uninstall" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [plugins, uninstall]
+
+  # ============================================================================
+  # TRUST
+  # ============================================================================
+  - id: trust.summary
+    name: Trust Summary
+    summary: View current trust state and posture.
+    layer: governance
+    domain: trust
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.trust:get_state" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [trust, governance]
+
+  - id: trust.history.list
+    name: Trust History
+    summary: View trust history timeline.
+    layer: governance
+    domain: trust
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.trust:history" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [trust, history]
+
+  - id: trust.level.set
+    name: Adjust Trust Level
+    summary: Request a trust adjustment (approval-gated).
+    layer: governance
+    domain: trust
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.trust:adjust" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [trust, governance, mutate]
+
+  - id: trust.toggle.enable
+    name: Enable Trust Tracking
+    summary: Enable trust tracking/evaluation (policy-gated).
+    layer: governance
+    domain: trust
+    kind: toggle
+    risk: high
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.trust:toggle_enable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [trust, toggle]
+
+  - id: trust.toggle.disable
+    name: Disable Trust Tracking
+    summary: Disable trust tracking/evaluation (policy-gated).
+    layer: governance
+    domain: trust
+    kind: toggle
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.trust:toggle_disable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [trust, toggle]
+
+  # ============================================================================
+  # WEB LEARNING
+  # ============================================================================
+  - id: web_learning.status
+    name: Web Learning Status
+    summary: View web learning monitor status.
+    layer: higher
+    domain: web_learning
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.web_learning:status" }
+    observability: { audit: required, log_level: INFO }
+    tags: [web_learning, monitor]
+
+  - id: web_learning.search
+    name: Web Learning Search
+    summary: Search web learning records (metadata only).
+    layer: higher
+    domain: web_learning
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.web_learning:search" }
+    observability: { audit: required, log_level: INFO }
+    tags: [web_learning, search]
+
+  - id: web_learning.fetch
+    name: Web Fetch
+    summary: Request fetch of a URL (governed; usually approval-gated).
+    layer: higher
+    domain: web_learning
+    kind: execute
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.web_learning:fetch" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [web_learning, fetch]
+
+  - id: web_learning.ingest
+    name: Web Ingest
+    summary: Ingest a URL or document into learning store (governed).
+    layer: higher
+    domain: web_learning
+    kind: write
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.web_learning:ingest" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [web_learning, ingest]
+
+  - id: web_learning.logs.list
+    name: Web Learning Logs
+    summary: List web learning logs/events (bounded).
+    layer: higher
+    domain: web_learning
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.web_learning:logs" }
+    observability: { audit: required, log_level: INFO }
+    tags: [web_learning, logs]
+
+  - id: web_learning.audit.list
+    name: Web Learning Audit
+    summary: List web learning audit trail (bounded).
+    layer: higher
+    domain: web_learning
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.web_learning:audit" }
+    observability: { audit: required, log_level: INFO }
+    tags: [web_learning, audit]
+
+  - id: web_learning.toggle.enable
+    name: Enable Web Learning
+    summary: Enable web learning system (policy-gated).
+    layer: higher
+    domain: web_learning
+    kind: toggle
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.web_learning:toggle_enable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [web_learning, toggle]
+
+  - id: web_learning.toggle.disable
+    name: Disable Web Learning
+    summary: Disable web learning system (policy-gated).
+    layer: higher
+    domain: web_learning
+    kind: toggle
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.web_learning:toggle_disable" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [web_learning, toggle]
+
+  # ============================================================================
+  # EXPLANATIONS
+  # ============================================================================
+  - id: explanations.list
+    name: List Explanations
+    summary: List explanation/audit records (bounded).
+    layer: governance
+    domain: explanations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.explanations:list" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [explanations, audit]
+
+  - id: explanations.get
+    name: Get Explanation
+    summary: Get explanation detail by id.
+    layer: governance
+    domain: explanations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.explanations:get" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [explanations, audit]
+
+  - id: explanations.list.search
+    name: Search Explanations
+    summary: Search explanations by keyword.
+    layer: governance
+    domain: explanations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.explanations:list" }
+    observability: { audit: recommended, log_level: DEBUG }
+    tags: [explanations, search]
+
+  - id: explanations.list.range
+    name: Explanations Date Range
+    summary: List explanations filtered by date range.
+    layer: governance
+    domain: explanations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.explanations:list" }
+    observability: { audit: recommended, log_level: DEBUG }
+    tags: [explanations, range]
+
+  - id: explanations.get_many
+    name: Batch Get Explanations
+    summary: Batch-get multiple explanation details (client-side or server-side).
+    layer: governance
+    domain: explanations
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.explanations:get_many" }
+    observability: { audit: recommended, log_level: DEBUG }
+    tags: [explanations, batch]
+
+  - id: explanations.export
+    name: Export Explanations
+    summary: Export explanations for audit/compliance (governed).
+    layer: governance
+    domain: explanations
+    kind: export
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.explanations:export" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [explanations, export]
+
+  - id: explanations.export.csv
+    name: Export Explanations (CSV)
+    summary: Export explanations as CSV (governed).
+    layer: governance
+    domain: explanations
+    kind: export
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.explanations:export_csv" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [explanations, export, csv]
+
+  - id: explanations.export.json
+    name: Export Explanations (JSON)
+    summary: Export explanations as JSON (governed).
+    layer: governance
+    domain: explanations
+    kind: export
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.explanations:export_json" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [explanations, export, json]
+
+  # ============================================================================
+  # FEDERATION
+  # ============================================================================
+  - id: federation.instances.list
+    name: List Federation Instances
+    summary: List federation instances (metadata).
+    layer: higher
+    domain: federation
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.federation:list_instances" }
+    observability: { audit: required, log_level: INFO }
+    tags: [federation, instances]
+
+  - id: federation.instances.get
+    name: Get Federation Instance
+    summary: Get a federation instance detail (metadata/health as reported).
+    layer: higher
+    domain: federation
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.federation:get_instance" }
+    observability: { audit: required, log_level: INFO }
+    tags: [federation, instances]
+
+  - id: federation.instances.get_many
+    name: Batch Get Federation Instances
+    summary: Batch-get multiple instance details.
+    layer: higher
+    domain: federation
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.federation:get_instances" }
+    observability: { audit: required, log_level: DEBUG }
+    tags: [federation, instances, batch]
+
+  - id: federation.consensus.logs.list
+    name: Federation Consensus Logs
+    summary: List federation consensus/audit logs (bounded).
+    layer: higher
+    domain: federation
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.federation:list_consensus_logs" }
+    observability: { audit: required, log_level: INFO }
+    tags: [federation, logs]
+
+  - id: federation.consensus.logs.range
+    name: Federation Consensus Logs (Date Range)
+    summary: List federation logs filtered by date range.
+    layer: higher
+    domain: federation
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.federation:list_consensus_logs" }
+    observability: { audit: required, log_level: DEBUG }
+    tags: [federation, logs, range]
+
+  - id: federation.instances.health
+    name: Federation Instance Health
+    summary: Read health metadata for a federation instance (server-reported).
+    layer: higher
+    domain: federation
+    kind: read
+    risk: high
+    requires_approval: false
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.federation:get_instance_health" }
+    observability: { audit: required, log_level: INFO }
+    tags: [federation, health]
+
+  # ============================================================================
+  # SIMULATION (general runner; referenced by aliases.yaml)
+  # ============================================================================
+  - id: simulation.run
+    name: Run Simulation
+    summary: Start a general simulation run (governed; may enqueue work).
+    layer: higher
+    domain: simulation
+    kind: execute
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.simulation:run" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [simulation, run]
+
+  - id: simulation.status
+    name: Simulation Status
+    summary: Get status for a simulation run by id.
+    layer: higher
+    domain: simulation
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.simulation:status" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [simulation, status]
+
+  - id: simulation.export
+    name: Export Simulation
+    summary: Export simulation results/artifacts (governed).
+    layer: higher
+    domain: simulation
+    kind: export
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.simulation:export" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [simulation, export]
+
+  # ============================================================================
+  # RESILIENCE (backup/restore; referenced by aliases.yaml)
+  # ============================================================================
+  - id: resilience.status
+    name: Resilience Status
+    summary: Report resilience posture (backup state, last backup, restore readiness).
+    layer: higher
+    domain: resilience
+    kind: read
+    risk: medium
+    requires_approval: false
+    min_trust_level: 2
+    handler: { type: api, target: "francis.api.resilience:status" }
+    observability: { audit: recommended, log_level: INFO }
+    tags: [resilience, status, backup, restore]
+
+  - id: resilience.backup
+    name: Run Backup
+    summary: Start a backup job (governed; can be resource intensive).
+    layer: higher
+    domain: resilience
+    kind: execute
+    risk: high
+    requires_approval: true
+    min_trust_level: 3
+    handler: { type: api, target: "francis.api.resilience:backup" }
+    observability: { audit: required, log_level: WARNING }
+    tags: [resilience, backup]
+
+  - id: resilience.restore
+    name: Run Restore
+    summary: Start a restore job (governed; destructive if misused).
+    layer: higher
+    domain: resilience
+    kind: execute
+    risk: critical
+    requires_approval: true
+    min_trust_level: 4
+    handler: { type: api, target: "francis.api.resilience:restore" }
+    observability: { audit: required, log_level: ERROR }
+    tags: [resilience, restore]

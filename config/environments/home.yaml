@@ -1,0 +1,366 @@
+# ==============================================================================
+# Francis Environment Profile: HOME
+# File: config/environments/home.yaml
+#
+# INTENT:
+#   A balanced profile for home operation:
+#     - LAN-friendly API/UI access
+#     - Local-first inference and storage
+#     - Optional internet features with explicit guardrails
+#     - Strong governance for safety-impacting actions (security/IoT/export/creds)
+#     - High observability (audit + explanations) to support "why did it do that?"
+#
+# SECURITY PRINCIPLES:
+#   - Default-deny for "actuation" (unlock/open/arm/disarm/critical toggles).
+#   - Never store or expose secrets in UI/browser; secrets come from env/vault.
+#   - Prefer token/jwt auth even on LAN.
+#
+# COMPATIBILITY:
+#   - This is an overlay config. Unknown keys should be ignored by tolerant loaders.
+#   - No secrets should ever be placed in this file.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: home
+  name: Home
+  description: >
+    Home operations profile: LAN-friendly access with strong governance for
+    safety-impacting actions. Local-first models and storage by default, with
+    optional internet features enabled explicitly and audited.
+
+  invariants:
+    - "Auth enabled for API access."
+    - "Audit + explanations enabled (recommended/required for key actions)."
+    - "IoT/smart-home actuation is approval-gated by default."
+    - "Web learning ingest is approval-gated."
+
+  operator_notes:
+    - "Expose API/UI to LAN only; do not expose directly to the public internet."
+    - "If remote access is needed, use a reverse proxy/VPN with TLS and strong auth."
+    - "Keep approvals enabled so household-impacting actions are intentional."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: home
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+  # Practical home node defaults; adjust if you run on a small box.
+  concurrency:
+    api_workers: 1
+    worker_threads: 6
+    daemon_concurrency: 3
+
+# ------------------------------------------------------------------------------
+# API posture (LAN-friendly but secure)
+# ------------------------------------------------------------------------------
+api:
+  # LAN-friendly default:
+  # - If you want localhost-only: set host to 127.0.0.1
+  host: "0.0.0.0"
+  port: 8000
+
+  security:
+    # token is simpler; jwt is better for multi-user / longer-lived sessions.
+    auth_mode: token                # none | token | jwt
+    allow_anonymous: false
+    trust_proxy_headers: false
+
+  cors:
+    enabled: true
+    # Keep this tight. Add your LAN UI origin(s) explicitly if you host UI elsewhere.
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  timeouts:
+    read_s: 45
+    write_s: 60
+    idle_s: 120
+
+  websocket:
+    ping_interval_s: 20
+    ping_timeout_s: 10
+    max_message_kb: 256
+
+# ------------------------------------------------------------------------------
+# Observability (home needs "explainability" more than anything)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    # jsonl is best for searching and long-running systems.
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    # Home operations benefit from strong audit trails.
+    level: required                 # none | recommended | required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.35
+
+# ------------------------------------------------------------------------------
+# Governance (balanced for home: low friction for reads, strict for actions)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict                    # disabled | policy | strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 1
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 50
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (home has internet, but we still protect against footguns)
+# ------------------------------------------------------------------------------
+network:
+  # Home is not airgapped; allow egress but keep guardrails.
+  deny_by_default: false
+
+  egress:
+    enabled: true
+    allowlist:
+      # Always allow loopback:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+
+      # Allow private LAN ranges (typical home networks):
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+      # Public internet is allowed by default in "home", but the web-learning
+      # subsystem must still enforce approvals/policy for ingestion.
+      - "0.0.0.0/0"
+      - "::/0"
+
+    # Defensive denylist: block common metadata endpoints and unsafe patterns.
+    denylist:
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (local-first; remote optional but explicit)
+# ------------------------------------------------------------------------------
+models:
+  # Home may choose to enable remote providers, but keep it explicit.
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: true
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      # Enable only if you intentionally want it and have credentials in env/vault.
+      enabled: false
+
+  sampling:
+    temperature: 0.4
+    top_p: 0.9
+    max_tokens: 1536
+
+# ------------------------------------------------------------------------------
+# Memory / continuity (home: durable local + optional external services)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant                 # qdrant | faiss | pgvector
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+
+    pgvector:
+      enabled: false
+      dsn: ""
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 300
+      max_days: 60
+
+# ------------------------------------------------------------------------------
+# Feature flags (home operator stance)
+# ------------------------------------------------------------------------------
+features:
+
+  # Web learning: useful at home, but ingestion must stay governed.
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: true
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  # Federation: typically off at home unless you run multiple nodes.
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      mode: static
+      static_peers: []
+    consensus:
+      enabled: false
+      algorithm: raft
+
+  # Plugins: enabled, but remote installs are governed.
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  # Industrial control: usually not used at home; keep safe defaults if present.
+  industrial:
+    enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  # Smart home / IoT posture (telemetry-first, actuation gated)
+  smart_home:
+    enabled: true
+
+    # Telemetry is safe; actuation is governed.
+    telemetry_enabled: true
+    actuation_enabled: false
+
+    # If true, any actuation attempt requires approvals regardless of trust.
+    require_approval_for_actuation: true
+
+    # Optional integrations (implementation-dependent; safe as hints)
+    home_assistant:
+      enabled: false
+      base_url: "http://127.0.0.1:8123"
+      # Token comes from env/vault. Never place it here.
+      # token_env: "FRANCIS_HOME_ASSISTANT_TOKEN"
+
+    mqtt:
+      enabled: false
+      broker_url: "mqtt://127.0.0.1:1883"
+      # username/password come from env/vault.
+      # username_env: "FRANCIS_MQTT_USER"
+      # password_env: "FRANCIS_MQTT_PASSWORD"
+
+    cameras:
+      enabled: false
+      # Camera RTSP/credentials must be env/vault-gated, not here.
+      sources: []
+
+  # Communication connectors (home may want notifications)
+  connectors:
+    communication:
+      enabled: true
+      email_enabled: false
+      sms_enabled: false
+      push_enabled: false
+    cloud:
+      enabled: false
+    saas:
+      enabled: false
+
+# ------------------------------------------------------------------------------
+# External services (optional; home can be local-only or docker-backed)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: false
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 10
+    pool_timeout_s: 30
+
+  redis:
+    enabled: false
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 10
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Assertions (lint/fail-fast intent)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: api_not_anonymous
+    severity: error
+    expr: "{{api.security.allow_anonymous == false}}"
+    message: "Home profile requires authenticated API access."
+
+  - id: audit_required
+    severity: warn
+    expr: "{{observability.audit.level == 'required'}}"
+    message: "Home profile strongly recommends required audit for safety traceability."
+
+  - id: smart_home_actuation_gated
+    severity: error
+    expr: "{{features.smart_home.require_approval_for_actuation == true}}"
+    message: "Home profile requires approval gating for smart home actuation."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "HOME"
+  banner:
+    enabled: true
+    text: "HOME MODE — LAN ACCESS / SAFETY-GATED ACTUATION"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

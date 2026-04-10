@@ -1,0 +1,62 @@
+taxonomy:
+  impact: [Low, Medium, High, Catastrophic]
+  reversibility: [Reversible, Partially reversible, Irreversible]
+  authority_confidence: [Certain, Probable, Uncertain]
+  evidence_grade: [Instrumented, Primary, Multi-source, Single, Unverified]
+  data_sensitivity: [Public, Internal, Confidential, Regulated]
+
+gating_rules:
+  reference: "PHILOSOPHY.md#gating-rules"
+
+tiers:
+  - id: low
+    name: Low
+    description: Reversible, non-sensitive, instrumented or primary evidence.
+    triggers:
+      impact: ["Low"]
+      reversibility: ["Reversible"]
+      data_sensitivity: ["Public"]
+      evidence_grade: ["Instrumented", "Primary"]
+    required_gate: allow
+    approval: none
+    audit: minimal
+  - id: medium
+    name: Medium
+    description: Partially reversible or internal data, primary or multi-source evidence; requires rollback plan.
+    triggers:
+      impact: ["Medium"]
+      reversibility: ["Partially reversible"]
+      data_sensitivity: ["Internal"]
+      evidence_grade: ["Primary", "Multi-source"]
+    required_gate: allow_with_rollback
+    approval: none
+    audit: standard
+  - id: high
+    name: High
+    description: Irreversible or confidential data, evidence below primary; requires explicit human approval and dry-run/preview.
+    triggers:
+      impact: ["High"]
+      reversibility: ["Irreversible"]
+      data_sensitivity: ["Confidential"]
+      evidence_grade: ["Multi-source", "Single", "Unverified"]
+    required_gate: require_approval
+    approval: human_explicit
+    audit: full
+    execution_constraints:
+      dry_run: true
+      rollback_plan: true
+  - id: catastrophic
+    name: Catastrophic
+    description: Irreversible with regulated data or uncertain authority; blocked unless break-glass is invoked.
+    triggers:
+      impact: ["Catastrophic"]
+      reversibility: ["Irreversible"]
+      data_sensitivity: ["Regulated"]
+      authority_confidence: ["Uncertain"]
+    required_gate: block
+    approval: break_glass_only
+    audit: maximal
+    stop_conditions:
+      - block unless break_glass_token_present
+      - require postmortem
+

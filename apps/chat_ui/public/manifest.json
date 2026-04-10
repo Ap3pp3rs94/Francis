@@ -1,0 +1,23 @@
+{
+  "name": "Francis",
+  "short_name": "Francis",
+  "description": "Francis — autonomous digital colleague: chat, operations, approvals, trust, memory, and system controls.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#0b0f1a",
+  "theme_color": "#0b0f1a",
+  "categories": ["productivity", "utilities", "developer-tools"],
+  "orientation": "any",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cdefs%3E%3CradialGradient id='g' cx='50%25' cy='45%25' r='70%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff' stop-opacity='0.20'/%3E%3Cstop offset='65%25' stop-color='%230b0f1a' stop-opacity='1'/%3E%3Cstop offset='100%25' stop-color='%23050710' stop-opacity='1'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='128' height='128' rx='28' fill='url(%23g)'/%3E%3Cpath d='M38 88V40h40c7.7 0 14 6.3 14 14 0 6.2-4.1 11.4-9.8 13.2 3.1 2.6 5.1 6.5 5.1 10.8 0 7.7-6.3 14-14 14H38zm16-30h18c2.2 0 4-1.8 4-4s-1.8-4-4-4H54v8zm0 22h18c2.2 0 4-1.8 4-4s-1.8-4-4-4H54v8z' fill='%23ffffff' fill-opacity='0.92'/%3E%3C/svg%3E",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,793 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Industrial Safety (actuation envelope + interlocks + LOTO + E-Stop)
+# Path:   config/policies/industrial_safety.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy governs ANY action that can affect the physical world or industrial
+# processes (including power switching, motion, pressure, flow, heat, chemical,
+# robotics, and building automation).
+#
+# It provides:
+#   - an explicit safety posture state machine
+#   - interlocks that must be satisfied to actuate
+#   - validation rules for commands and parameters
+#   - Lockout/Tagout (maintenance safety)
+#   - emergency stop behavior and containment
+#   - approval/quorum floors independent of API permissions
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deny-by-default for actuation.
+# - Fail-closed: if inputs are missing or cannot be verified → no actuation.
+# - Deterministic: first-match rules, stable reason codes, explicit outcomes.
+# - Safety dominates: approvals/trust cannot bypass E-Stop/LOTO or hard interlocks.
+# - Observable: every actuation attempt is auditable with structured metadata.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "industrial_safety_policy"
+  notes:
+    - "Applies to any capability matching industrial.* and any plugin flagged as actuation."
+    - "Separates read-only monitoring from actuation."
+    - "Supports forward expansion to device registries and digital twin validation."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+industrial_safety:
+  enabled: true
+
+  # Modes:
+  # - disabled: dev-only (never use on real equipment)
+  # - policy:   enforce safety envelope (default)
+  # - strict:   conservative thresholds, quorum more often, fewer overrides
+  mode: "policy" # disabled | policy | strict
+
+  # Fail-closed outcome if policy evaluation fails or required signals are missing.
+  fail_closed_decision: "deny_actuation" # allow | require_review | deny_actuation
+
+  # Always audit actuation attempts (including denied).
+  audit_all: true
+
+  # Deny-by-default for actuation commands unless explicitly allowed by rules.
+  deny_by_default: true
+
+  # Whether approvals/trust can override *some* restrictions.
+  # Hard interlocks (E-Stop, LOTO, environment critical) are never overrideable.
+  allow_limited_overrides: true
+
+# ------------------------------------------------------------------------------
+# Safety posture state machine
+# ------------------------------------------------------------------------------
+posture:
+  enabled: true
+
+  # Posture is the operative safety mode for industrial operations.
+  # It may be derived from environment + guard + operator mode selection.
+  #
+  # Order is from least restrictive to most restrictive.
+  order:
+    - "monitor_only"    # read-only; no actuation
+    - "armed"           # actuation allowed only when all interlocks satisfied
+    - "maintenance"     # controlled actuation allowed for maintenance only (LOTO aware)
+    - "restricted"      # heightened constraints; approvals/quorum more often
+    - "lockdown"        # no actuation; emergency-only diagnostics
+
+  definitions:
+    monitor_only:
+      description: "Telemetry and status reads only. No actuation permitted."
+    armed:
+      description: "Actuation permitted only with full interlock satisfaction."
+    maintenance:
+      description: "Maintenance posture: actuation only on explicitly scoped devices, LOTO enforced."
+    restricted:
+      description: "Elevated caution: approvals/quorum required broadly; limited actuation."
+    lockdown:
+      description: "Emergency safe-mode: deny actuation; allow read-only diagnostics."
+
+  # Default posture per environment/profile if not explicitly set.
+  defaults:
+    workstation: "monitor_only"
+    dev: "armed"
+    production: "monitor_only"
+    regulated: "monitor_only"
+    safety_critical: "monitor_only"
+    home: "armed"
+    edge: "monitor_only"
+
+# ------------------------------------------------------------------------------
+# Inputs expected (signals from other subsystems)
+# ------------------------------------------------------------------------------
+inputs:
+  enabled: true
+
+  required_signals:
+    # Environmental posture from environmental policy.
+    environmental_state: true
+    # Guard state from guard policy (normal/guarded/restricted/lockdown).
+    guard_state: true
+    # Human safety posture from human_safety policy (allow/support/review/emergency).
+    human_safety_outcome: true
+
+  optional_signals:
+    # Digital twin availability/validation status.
+    digital_twin_status: false
+    # Simulation/dry-run engine availability.
+    simulation_status: false
+    # Operator presence / session binding (deadman).
+    operator_presence: false
+    # Device-specific telemetry for interlocks (pressure, temp, door closed, etc.).
+    device_telemetry: false
+
+  missing_signal_behavior:
+    # If required signals missing → deny actuation.
+    on_missing_required: "deny_actuation"
+    # If optional signals missing → require review in strict mode, else allow if safe.
+    on_missing_optional_in_strict: "require_review"
+
+# ------------------------------------------------------------------------------
+# Reason codes (stable identifiers used in audit + UI)
+# ------------------------------------------------------------------------------
+reason_codes:
+  # Posture / environment / guard
+  POSTURE_MONITOR_ONLY: "Industrial posture is monitor_only."
+  POSTURE_LOCKDOWN: "Industrial posture is lockdown."
+  ENV_NOT_NORMAL: "Environmental state not normal."
+  GUARD_RESTRICTED: "Guard state is restricted/lockdown."
+  HUMAN_SAFETY_ACTIVE: "Human safety protocol active (support/review/emergency)."
+
+  # Interlocks
+  INTERLOCK_ESTOP_ACTIVE: "Emergency stop is active."
+  INTERLOCK_LOTO_ACTIVE: "Lockout/Tagout is active for device/scope."
+  INTERLOCK_OPERATOR_NOT_PRESENT: "Operator presence/deadman not satisfied."
+  INTERLOCK_TELEMETRY_INVALID: "Required telemetry missing/invalid."
+  INTERLOCK_PRECONDITION_FAILED: "One or more device preconditions failed."
+
+  # Governance
+  TRUST_INSUFFICIENT: "Actor trust below required threshold for actuation."
+  APPROVAL_REQUIRED: "Approval required for actuation."
+  QUORUM_REQUIRED: "Quorum required for high-risk actuation."
+  OVERRIDE_NOT_ALLOWED: "Requested override is not allowed."
+
+  # Command validation
+  COMMAND_UNKNOWN: "Unknown/unsupported command."
+  PARAM_INVALID: "Command parameters invalid."
+  PARAM_OUT_OF_RANGE: "Command parameter out of allowed bounds."
+  RATE_LIMITED: "Actuation throttled by rate limits."
+  REPLAY_DETECTED: "Potential replay/out-of-order command detected."
+  UNSAFE_SEQUENCE: "Unsafe command sequence (requires prior step)."
+
+  # Device class
+  DEVICE_NOT_ALLOWLISTED: "Device not in allowlist."
+  DEVICE_STATE_DISALLOWS: "Device state disallows actuation (fault/maintenance/disabled)."
+
+# ------------------------------------------------------------------------------
+# Device model (policy-level schema)
+# ------------------------------------------------------------------------------
+devices:
+  enabled: true
+
+  # Policy can work with or without a live device registry.
+  # If registry is absent, actuation should be treated as high risk.
+  require_device_registry_for_actuation_in_profiles:
+    - "production"
+    - "regulated"
+    - "safety_critical"
+
+  # Device identity fields expected by policy evaluators.
+  identity_fields:
+    - "device_id"
+    - "device_class"
+    - "zone"
+    - "criticality"
+    - "capabilities" # list of supported commands
+
+  # Device classes (policy taxonomy).
+  classes:
+    - id: "power_switching"
+      description: "Breakers, relays, contactors, ATS, generator switching."
+      base_risk: "critical"
+    - id: "motion"
+      description: "Motors, actuators, robotics, conveyors."
+      base_risk: "high"
+    - id: "fluid"
+      description: "Pumps, valves, compressors, flow control."
+      base_risk: "high"
+    - id: "thermal"
+      description: "HVAC, heaters, chillers."
+      base_risk: "medium"
+    - id: "chemical"
+      description: "Dosing, mixing, chemical handling."
+      base_risk: "critical"
+    - id: "sensors_only"
+      description: "Read-only sensors; no actuation."
+      base_risk: "low"
+
+  # Criticality labels are used to raise gates.
+  criticality_order:
+    - "low"
+    - "medium"
+    - "high"
+    - "critical"
+
+# ------------------------------------------------------------------------------
+# Industrial zones (policy grouping for physical segmentation)
+# ------------------------------------------------------------------------------
+zones:
+  enabled: true
+
+  # Zones let you apply stricter rules to certain areas (e.g., generator room).
+  # Keep minimal now; expand when you have a real plant map.
+  definitions:
+    - id: "default"
+      description: "Default zone."
+      max_actuation_risk: "high"
+
+    - id: "power_room"
+      description: "Power distribution / switching area."
+      max_actuation_risk: "medium" # strict by default
+
+    - id: "lab"
+      description: "Lab / sensitive processes."
+      max_actuation_risk: "medium"
+
+    - id: "robotics_cell"
+      description: "Robotics / motion hazards."
+      max_actuation_risk: "medium"
+
+# ------------------------------------------------------------------------------
+# Risk model (how decisions map to gates)
+# ------------------------------------------------------------------------------
+risk_model:
+  enabled: true
+
+  # Risk buckets.
+  risk_levels:
+    - "low"
+    - "medium"
+    - "high"
+    - "critical"
+
+  # Default mapping from device base risk + command category to overall risk.
+  # (Implementation may compute overall risk; policy provides defaults.)
+  command_categories:
+    read:
+      risk_delta: "low"
+    setpoint:
+      risk_delta: "medium"
+    actuation:
+      risk_delta: "high"
+    destructive:
+      risk_delta: "critical"
+    emergency:
+      risk_delta: "critical"
+
+  # Gate floors by overall risk.
+  gates_by_risk:
+    low:
+      min_trust: 6
+      requires_approval: false
+      requires_quorum: false
+    medium:
+      min_trust: 7
+      requires_approval: true
+      requires_quorum: false
+    high:
+      min_trust: 8
+      requires_approval: true
+      requires_quorum: true
+    critical:
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+
+# ------------------------------------------------------------------------------
+# Interlocks (hard checks that must be satisfied)
+# ------------------------------------------------------------------------------
+interlocks:
+  enabled: true
+
+  # Hard interlocks are never overrideable.
+  hard:
+    - id: "estop"
+      description: "Emergency stop active must prevent actuation."
+      overrideable: false
+
+    - id: "loto"
+      description: "Lockout/Tagout active must prevent non-maintenance actuation."
+      overrideable: false
+
+    - id: "env_critical"
+      description: "Environmental critical/degraded prevents actuation unless emergency diagnostics."
+      overrideable: false
+
+    - id: "guard_lockdown"
+      description: "Guard restricted/lockdown prevents actuation."
+      overrideable: false
+
+    - id: "human_safety_emergency"
+      description: "Human safety emergency protocol prevents actuation."
+      overrideable: false
+
+  # Soft interlocks may be overrideable in non-strict profiles with justification.
+  soft:
+    - id: "operator_presence"
+      description: "Operator presence / deadman required for actuation."
+      overrideable: true
+
+    - id: "telemetry_valid"
+      description: "Required telemetry must be present and within sanity bounds."
+      overrideable: true
+
+    - id: "digital_twin_validated"
+      description: "Digital twin validation required for certain devices/commands."
+      overrideable: true
+
+# ------------------------------------------------------------------------------
+# Lockout / Tagout (LOTO) policy
+# ------------------------------------------------------------------------------
+loto:
+  enabled: true
+
+  # LOTO is a hard stop for non-maintenance actions.
+  enforce: true
+
+  # LOTO scope types:
+  # - device: a single device id
+  # - zone: entire zone
+  # - class: device class
+  scope_types: ["device", "zone", "class"]
+
+  # Who can place/remove LOTO locks (trust thresholds).
+  min_trust_to_apply: 8
+  min_trust_to_remove: 9
+
+  # Removing LOTO requires quorum in strict profiles and in high/critical devices.
+  remove_requires_quorum: true
+
+  # LOTO requires an audit reason.
+  require_reason: true
+  min_reason_chars: 20
+
+  # Maintenance posture constraints:
+  maintenance_only_allowlist_required: true
+  maintenance_max_duration_s: 28_800 # 8 hours (policy hint)
+  auto_expire_enabled: true
+
+# ------------------------------------------------------------------------------
+# Emergency stop (E-Stop) policy
+# ------------------------------------------------------------------------------
+emergency_stop:
+  enabled: true
+
+  # If E-Stop is active, deny all actuation except emergency diagnostics explicitly allowlisted.
+  deny_actuation_when_active: true
+
+  # When E-Stop triggers, force posture floor and suggest guard lockdown.
+  on_trigger:
+    set_posture_at_least: "lockdown"
+    recommend_guard_state_at_least: "lockdown"
+    emit_audit_event: true
+
+  # Allow emergency diagnostics capabilities (read-only) even when E-Stop active.
+  allow_diagnostics_capability_patterns:
+    - "^industrial\\.status$"
+    - "^industrial\\.diagnostics\\..+$"
+    - "^system\\.(health|metrics)\\..+$"
+
+# ------------------------------------------------------------------------------
+# Command validation (parameters, bounds, units, sequencing)
+# ------------------------------------------------------------------------------
+command_validation:
+  enabled: true
+
+  # Deny unknown commands by default.
+  deny_unknown_commands: true
+
+  # Require an idempotency key / nonce for actuation to reduce replay risk.
+  require_idempotency_key_for_actuation: true
+  idempotency_window_s: 30
+
+  # Rate limiting for actuation attempts (global + per device).
+  rate_limits:
+    enabled: true
+    global:
+      max_actuations_per_min: 10
+      burst: 3
+    per_device:
+      max_actuations_per_min: 4
+      burst: 2
+
+  # Default parameter bounds (used when device-specific bounds are absent).
+  default_bounds:
+    setpoint:
+      # Generic setpoint bounds; real devices should override.
+      min: 0.0
+      max: 100.0
+    duration_s:
+      min: 0
+      max: 3_600
+    percent:
+      min: 0
+      max: 100
+
+  # Sequence safety: enforce prerequisites for hazardous commands.
+  sequences:
+    enabled: true
+    rules:
+      - id: "power_switch_requires_confirmed_status"
+        applies_to:
+          device_class_in: ["power_switching"]
+          command_in: ["open", "close", "switch", "transfer"]
+        requires_prior_observations:
+          - "device_status_recent"
+        status_recency_s: 10
+
+      - id: "motion_requires_zone_clear"
+        applies_to:
+          device_class_in: ["motion", "robotics"]
+          command_in: ["start", "enable", "move", "home"]
+        requires_interlocks:
+          - "operator_presence"
+          - "telemetry_valid"
+
+# ------------------------------------------------------------------------------
+# Actuation policy rules (deterministic evaluation)
+# ------------------------------------------------------------------------------
+actuation:
+  enabled: true
+
+  # Capability patterns treated as actuation.
+  actuation_capability_patterns:
+    - "^industrial\\.(actuate|command|override)$"
+    - "^industrial\\.(start|stop|open|close|enable|disable|setpoint|transfer)$"
+
+  # Read-only industrial capabilities.
+  readonly_capability_patterns:
+    - "^industrial\\.status$"
+    - "^industrial\\.telemetry\\..+$"
+    - "^industrial\\.diagnostics\\..+$"
+
+  # Default decision for industrial.* if not matched:
+  default_for_industrial: "deny_actuation" # allow_readonly | deny_actuation | require_review
+
+  # Base gates for any actuation attempt (even before risk-based gates).
+  base_gates:
+    min_trust: 7
+    requires_approval: true
+    requires_quorum: false
+
+  # Additional gates for high-risk/critical devices.
+  high_risk_gates:
+    min_trust: 8
+    requires_approval: true
+    requires_quorum: true
+
+  critical_risk_gates:
+    min_trust: 9
+    requires_approval: true
+    requires_quorum: true
+
+  # Dry-run / simulation requirement (when available).
+  dry_run:
+    enabled: true
+    require_dry_run_for_device_classes:
+      - "power_switching"
+      - "chemical"
+      - "motion"
+      - "fluid"
+    allow_skip_dry_run_only_if:
+      # Must still have approval/quorum; this is for emergency field ops.
+      - "explicit_emergency_flag == true"
+      - "actor_trust >= 9"
+      - "approval_present == true"
+
+  # Deterministic evaluation rules (first match wins).
+  rules:
+
+    # --------------------------------------------------------------------------
+    # 1) HARD BLOCKS
+    # --------------------------------------------------------------------------
+    - id: "deny.posture_monitor_only"
+      when:
+        posture_in: ["monitor_only"]
+        is_actuation: true
+      decide: "deny_actuation"
+      reasons: ["POSTURE_MONITOR_ONLY"]
+
+    - id: "deny.posture_lockdown"
+      when:
+        posture_in: ["lockdown"]
+        is_actuation: true
+      decide: "deny_actuation"
+      reasons: ["POSTURE_LOCKDOWN"]
+
+    - id: "deny.env_not_normal"
+      when:
+        is_actuation: true
+        environmental_state_in: ["caution", "degraded", "critical"]
+      decide: "deny_actuation"
+      reasons: ["ENV_NOT_NORMAL"]
+
+    - id: "deny.guard_restricted_or_lockdown"
+      when:
+        is_actuation: true
+        guard_state_in: ["restricted", "lockdown"]
+      decide: "deny_actuation"
+      reasons: ["GUARD_RESTRICTED"]
+
+    - id: "deny.human_safety_active"
+      when:
+        is_actuation: true
+        human_safety_outcome_in: ["support_redirect", "require_review", "emergency_protocol"]
+      decide: "deny_actuation"
+      reasons: ["HUMAN_SAFETY_ACTIVE"]
+
+    - id: "deny.estop_active"
+      when:
+        is_actuation: true
+        estop_active: true
+      decide: "deny_actuation"
+      reasons: ["INTERLOCK_ESTOP_ACTIVE"]
+
+    - id: "deny.loto_active_non_maintenance"
+      when:
+        is_actuation: true
+        loto_active: true
+        posture_not_in: ["maintenance"]
+      decide: "deny_actuation"
+      reasons: ["INTERLOCK_LOTO_ACTIVE"]
+
+    # --------------------------------------------------------------------------
+    # 2) REQUIRE REVIEW (when posture allows but verification incomplete)
+    # --------------------------------------------------------------------------
+    - id: "review.missing_optional_signals_strict"
+      when:
+        is_actuation: true
+        mode_in: ["strict"]
+        missing_optional_signals: true
+      decide: "require_review"
+      reasons: ["INTERLOCK_TELEMETRY_INVALID"]
+
+    - id: "review.no_device_registry"
+      when:
+        is_actuation: true
+        profile_in: ["production", "regulated", "safety_critical"]
+        device_registry_present: false
+      decide: "require_review"
+      reasons: ["DEVICE_NOT_ALLOWLISTED"]
+
+    # --------------------------------------------------------------------------
+    # 3) ALLOW WITH GATES (armed/maintenance/restricted with approvals/quorum)
+    # --------------------------------------------------------------------------
+    - id: "allow.readonly_industrial"
+      when:
+        is_readonly: true
+      decide: "allow"
+      reasons: []
+
+    - id: "allow.actuation_armed_with_gates"
+      when:
+        posture_in: ["armed", "maintenance", "restricted"]
+        is_actuation: true
+        device_allowlisted: true
+        command_validated: true
+        interlocks_satisfied: true
+      decide: "allow"
+      reasons: []
+
+# ------------------------------------------------------------------------------
+# Approval / quorum semantics for industrial operations
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+
+  # Floors: industrial safety may raise approval/quorum above api_permissions.
+  approval_floor:
+    enabled: true
+    default_requires_approval: true
+
+  quorum:
+    enabled: true
+
+    # Default quorum requirements for high-risk actuation (two-person rule).
+    defaults:
+      min_approvals: 2
+      min_distinct_approvers: 2
+      min_approver_trust: 8
+      allow_same_actor_twice: false
+
+    # Overrides by device class or criticality.
+    overrides:
+      power_switching:
+        min_approvals: 3
+        min_distinct_approvers: 3
+        min_approver_trust: 9
+      chemical:
+        min_approvals: 3
+        min_distinct_approvers: 3
+        min_approver_trust: 9
+      critical_device:
+        min_approvals: 3
+        min_distinct_approvers: 3
+        min_approver_trust: 9
+
+  # Override mechanics for soft interlocks only.
+  overrides:
+    enabled: true
+    allow_override_soft_interlocks_only: true
+    require_justification: true
+    min_justification_chars: 20
+    min_trust_to_override: 9
+
+    # Overrides always require approval, and in strict mode require quorum.
+    override_requires_approval: true
+    override_requires_quorum_in_strict: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit, metrics, operator UX hints)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "industrial.actuation_attempt"
+      - "industrial.actuation_allowed"
+      - "industrial.actuation_denied"
+      - "industrial.actuation_review_required"
+      - "industrial.estop_triggered"
+      - "industrial.loto_applied"
+      - "industrial.loto_removed"
+      - "industrial.override_requested"
+      - "industrial.override_granted"
+      - "industrial.override_denied"
+    include:
+      - "ts"
+      - "actor_id"
+      - "session_id"
+      - "capability_id"
+      - "device_id"
+      - "device_class"
+      - "zone"
+      - "criticality"
+      - "command"
+      - "parameters_redacted"
+      - "posture"
+      - "environmental_state"
+      - "guard_state"
+      - "human_safety_outcome"
+      - "decision"
+      - "reasons"
+      - "approval_id"
+      - "quorum_status"
+      - "idempotency_key"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "industrial.actuation.attempt"
+      - "industrial.actuation.allowed"
+      - "industrial.actuation.denied"
+      - "industrial.actuation.review_required"
+      - "industrial.estop.triggered"
+      - "industrial.loto.applied"
+      - "industrial.loto.removed"
+    histograms:
+      - "industrial.actuation.latency_ms"
+
+  operator_ui:
+    enabled: true
+    show_posture_banner: true
+    show_estop_indicator: true
+    show_loto_indicator: true
+    show_last_denial_reason: true
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific strictness)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    industrial_safety:
+      mode: "policy"
+      fail_closed_decision: "require_review"
+    posture:
+      defaults:
+        dev: "armed"
+    governance:
+      quorum:
+        enabled: false
+
+  workstation:
+    industrial_safety:
+      mode: "policy"
+      fail_closed_decision: "deny_actuation"
+    posture:
+      defaults:
+        workstation: "monitor_only"
+
+  home:
+    industrial_safety:
+      mode: "policy"
+      fail_closed_decision: "deny_actuation"
+    posture:
+      defaults:
+        home: "armed"
+    governance:
+      quorum:
+        enabled: true
+        defaults:
+          min_approvals: 2
+          min_distinct_approvers: 1
+          min_approver_trust: 8
+
+  edge:
+    industrial_safety:
+      mode: "strict"
+      fail_closed_decision: "deny_actuation"
+    posture:
+      defaults:
+        edge: "monitor_only"
+    command_validation:
+      rate_limits:
+        global:
+          max_actuations_per_min: 6
+
+  production:
+    industrial_safety:
+      mode: "strict"
+      fail_closed_decision: "deny_actuation"
+    posture:
+      defaults:
+        production: "monitor_only"
+    governance:
+      quorum:
+        enabled: true
+
+  regulated:
+    industrial_safety:
+      mode: "strict"
+      fail_closed_decision: "deny_actuation"
+    posture:
+      defaults:
+        regulated: "monitor_only"
+    governance:
+      quorum:
+        enabled: true
+        defaults:
+          min_approvals: 3
+          min_distinct_approvers: 3
+          min_approver_trust: 9
+    loto:
+      remove_requires_quorum: true
+
+  safety_critical:
+    industrial_safety:
+      mode: "strict"
+      fail_closed_decision: "deny_actuation"
+    posture:
+      defaults:
+        safety_critical: "monitor_only"
+    governance:
+      overrides:
+        enabled: false
+      quorum:
+        enabled: true
+        defaults:
+          min_approvals: 3
+          min_distinct_approvers: 3
+          min_approver_trust: 9
+    emergency_stop:
+      deny_actuation_when_active: true

@@ -1,0 +1,685 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Environmental (physical + infrastructure conditions → operational posture)
+# Path:   config/policies/environmental.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Environmental policy converts ambient/host/infrastructure signals into a
+# deterministic operational posture:
+#   - "normal"   → full operations
+#   - "caution"  → warn + soft throttles
+#   - "degraded" → restrict high-risk activities, prefer read-only, require approvals
+#   - "critical" → safe-mode; deny dangerous actions; emergency-only with strong audit
+#
+# This policy governs:
+#   - Sensor classes, units, normalization rules
+#   - Thresholds and hysteresis (avoid flapping)
+#   - Severity evaluation + aggregation across sensors
+#   - Automatic safety responses (throttle/deny/lockdown)
+#   - Approval/trust requirements for actuation under unsafe conditions
+#   - Audit + retention posture for environmental events
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed for safety: if a safety-critical sensor is missing/unreliable, restrict actuation.
+# - Deterministic: given the same sensor readings, the same severity is produced.
+# - Observable: every state transition emits an audit event + reason codes.
+# - Separation: this file declares policy; implementation performs sensing + actioning.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "environmental_policy"
+  notes:
+    - "Environmental signals gate physical/egress/destructive actions."
+    - "Avoid oscillation via hysteresis, debounce, and minimum dwell times."
+    - "Safety-critical profiles prefer fail-closed restrictions."
+
+# ------------------------------------------------------------------------------
+# Global enablement + posture
+# ------------------------------------------------------------------------------
+environmental:
+  enabled: true
+
+  # Modes:
+  # - disabled: do not enforce (dev-only)
+  # - policy:   enforce thresholds and posture (default)
+  # - strict:   conservative thresholds, stronger fail-closed behavior
+  mode: "policy" # disabled | policy | strict
+
+  # If true: when safety-critical sensors are missing/unreliable, deny actuation.
+  fail_closed_for_actuation: true
+
+  # If true: unknown or malformed sensor values are treated as "unavailable".
+  treat_parse_fail_as_unavailable: true
+
+  # Evaluation cadence hint for the daemon/system probe.
+  evaluation:
+    interval_s: 5
+    # Minimum time between posture changes (prevents chatter).
+    min_transition_interval_s: 10
+    # Minimum time to remain in a state before relaxing (prevents bounce-back).
+    min_dwell_s:
+      caution: 30
+      degraded: 120
+      critical: 300
+
+# ------------------------------------------------------------------------------
+# Environmental state model (what the system produces)
+# ------------------------------------------------------------------------------
+state_model:
+  enabled: true
+
+  states:
+    - "normal"
+    - "caution"
+    - "degraded"
+    - "critical"
+
+  # Aggregation strategy across sensors.
+  # - max_severity: highest severity wins (safety-oriented)
+  # - weighted: weighted score across sensor groups (requires careful tuning)
+  aggregation: "max_severity" # max_severity | weighted
+
+  # How to handle missing sensors by group.
+  # - ignore: do not affect aggregation
+  # - caution: missing elevates to caution
+  # - degraded: missing elevates to degraded
+  # - critical: missing elevates to critical
+  missing_sensor_behavior_by_group:
+    safety: "degraded"
+    infrastructure: "caution"
+    host: "ignore"
+
+  # How long before a "missing sensor" is considered stale/unavailable.
+  stale_after_s: 30
+
+# ------------------------------------------------------------------------------
+# Sensor inputs (policy declarations; implementation binds actual sources)
+# ------------------------------------------------------------------------------
+sensors:
+  enabled: true
+
+  # Sensor groups drive aggregation and fail-closed behavior.
+  groups:
+    safety:
+      description: "Physical safety sensors: smoke/CO, leak, intrusion, vibration, etc."
+      priority: 100
+    infrastructure:
+      description: "Power/UPS/network/ISP/backhaul conditions."
+      priority: 70
+    host:
+      description: "Compute host conditions: CPU temp, disk, memory pressure."
+      priority: 50
+
+  # Normalization rules (units and canonical names).
+  normalization:
+    enabled: true
+    # Canonical timestamp expectation: unix seconds preferred.
+    timestamps:
+      unit: "seconds" # seconds | milliseconds
+      prefer_utc: true
+
+    # Canonical units used by policy comparisons.
+    units:
+      temperature: "celsius"
+      humidity: "percent"
+      co_ppm: "ppm"
+      smoke: "boolean"
+      water_leak: "boolean"
+      vibration: "boolean"
+      power_w: "watts"
+      battery_percent: "percent"
+      disk_percent_used: "percent"
+      cpu_percent: "percent"
+      mem_percent_used: "percent"
+      packet_loss_percent: "percent"
+      latency_ms: "ms"
+
+  # Declared sensors (IDs are policy-level; implementation maps them to actual telemetry keys).
+  #
+  # Fields:
+  #   - id: stable sensor identifier
+  #   - group: safety|infrastructure|host
+  #   - type: numeric|boolean|enum
+  #   - unit: canonical unit (for numeric)
+  #   - required_for: optional list of operations that require this sensor to be available
+  #   - reliability: optional minimum reliability score required (0..1)
+  declared:
+
+    # -------------------------
+    # SAFETY SENSORS (physical)
+    # -------------------------
+    - id: "safety.smoke_detected"
+      group: "safety"
+      type: "boolean"
+      required_for:
+        - "industrial_actuation"
+        - "high_power_compute"
+
+    - id: "safety.co_ppm"
+      group: "safety"
+      type: "numeric"
+      unit: "co_ppm"
+      required_for:
+        - "industrial_actuation"
+
+    - id: "safety.water_leak_detected"
+      group: "safety"
+      type: "boolean"
+      required_for:
+        - "industrial_actuation"
+        - "power_ops"
+
+    - id: "safety.vibration_detected"
+      group: "safety"
+      type: "boolean"
+
+    # -------------------------
+    # INFRASTRUCTURE SENSORS
+    # -------------------------
+    - id: "infra.ups_on_battery"
+      group: "infrastructure"
+      type: "boolean"
+      required_for:
+        - "industrial_actuation"
+        - "exports"
+        - "web_egress"
+
+    - id: "infra.ups_battery_percent"
+      group: "infrastructure"
+      type: "numeric"
+      unit: "battery_percent"
+
+    - id: "infra.power_draw_w"
+      group: "infrastructure"
+      type: "numeric"
+      unit: "power_w"
+
+    - id: "infra.network_latency_ms"
+      group: "infrastructure"
+      type: "numeric"
+      unit: "latency_ms"
+
+    - id: "infra.packet_loss_percent"
+      group: "infrastructure"
+      type: "numeric"
+      unit: "packet_loss_percent"
+
+    # -------------------------
+    # HOST SENSORS (compute box)
+    # -------------------------
+    - id: "host.cpu_temp_c"
+      group: "host"
+      type: "numeric"
+      unit: "temperature"
+
+    - id: "host.cpu_percent"
+      group: "host"
+      type: "numeric"
+      unit: "cpu_percent"
+
+    - id: "host.mem_percent_used"
+      group: "host"
+      type: "numeric"
+      unit: "mem_percent_used"
+
+    - id: "host.disk_percent_used"
+      group: "host"
+      type: "numeric"
+      unit: "disk_percent_used"
+
+# ------------------------------------------------------------------------------
+# Thresholds (sensor values → severity)
+# ------------------------------------------------------------------------------
+thresholds:
+  enabled: true
+
+  # Hysteresis reduces flapping:
+  # - enter: threshold to enter a worse state
+  # - exit:  threshold to recover to a better state
+  #
+  # Severity mapping:
+  # - caution < degraded < critical
+  #
+  # For booleans: true usually means degraded/critical depending on sensor.
+  rules:
+
+    # =========================
+    # SAFETY
+    # =========================
+    - id: "thr.smoke"
+      sensor_id: "safety.smoke_detected"
+      when:
+        equals: true
+      severity: "critical"
+      reason_code: "SMOKE_DETECTED"
+
+    - id: "thr.water_leak"
+      sensor_id: "safety.water_leak_detected"
+      when:
+        equals: true
+      severity: "critical"
+      reason_code: "WATER_LEAK_DETECTED"
+
+    - id: "thr.vibration"
+      sensor_id: "safety.vibration_detected"
+      when:
+        equals: true
+      severity: "degraded"
+      reason_code: "VIBRATION_DETECTED"
+
+    - id: "thr.co_ppm"
+      sensor_id: "safety.co_ppm"
+      when:
+        # Conservative defaults; can be tuned per environment.
+        numeric:
+          caution_enter: 20
+          caution_exit: 10
+          degraded_enter: 50
+          degraded_exit: 35
+          critical_enter: 100
+          critical_exit: 70
+      reason_code: "CO_ELEVATED"
+
+    # =========================
+    # INFRASTRUCTURE
+    # =========================
+    - id: "thr.ups_on_battery"
+      sensor_id: "infra.ups_on_battery"
+      when:
+        equals: true
+      severity: "degraded"
+      reason_code: "UPS_ON_BATTERY"
+
+    - id: "thr.ups_battery"
+      sensor_id: "infra.ups_battery_percent"
+      when:
+        numeric:
+          # Lower is worse here.
+          caution_enter_below: 50
+          caution_exit_above: 60
+          degraded_enter_below: 25
+          degraded_exit_above: 35
+          critical_enter_below: 10
+          critical_exit_above: 15
+      reason_code: "UPS_BATTERY_LOW"
+
+    - id: "thr.packet_loss"
+      sensor_id: "infra.packet_loss_percent"
+      when:
+        numeric:
+          caution_enter: 2
+          caution_exit: 1
+          degraded_enter: 5
+          degraded_exit: 3
+          critical_enter: 15
+          critical_exit: 10
+      reason_code: "NETWORK_PACKET_LOSS"
+
+    - id: "thr.latency"
+      sensor_id: "infra.network_latency_ms"
+      when:
+        numeric:
+          caution_enter: 150
+          caution_exit: 120
+          degraded_enter: 400
+          degraded_exit: 250
+          critical_enter: 1200
+          critical_exit: 800
+      reason_code: "NETWORK_LATENCY_HIGH"
+
+    # =========================
+    # HOST
+    # =========================
+    - id: "thr.cpu_temp"
+      sensor_id: "host.cpu_temp_c"
+      when:
+        numeric:
+          caution_enter: 80
+          caution_exit: 75
+          degraded_enter: 90
+          degraded_exit: 85
+          critical_enter: 95
+          critical_exit: 90
+      reason_code: "CPU_TEMP_HIGH"
+
+    - id: "thr.disk_pressure"
+      sensor_id: "host.disk_percent_used"
+      when:
+        numeric:
+          caution_enter: 85
+          caution_exit: 80
+          degraded_enter: 92
+          degraded_exit: 88
+          critical_enter: 97
+          critical_exit: 95
+      reason_code: "DISK_PRESSURE"
+
+    - id: "thr.mem_pressure"
+      sensor_id: "host.mem_percent_used"
+      when:
+        numeric:
+          caution_enter: 85
+          caution_exit: 80
+          degraded_enter: 92
+          degraded_exit: 88
+          critical_enter: 97
+          critical_exit: 95
+      reason_code: "MEM_PRESSURE"
+
+# ------------------------------------------------------------------------------
+# Operational posture (what Francis is allowed to do under each state)
+# ------------------------------------------------------------------------------
+posture:
+  enabled: true
+
+  # Operations are conceptual buckets that downstream layers can map to capabilities.
+  # This prevents policy churn when capability IDs evolve.
+  operations:
+    - "read_only"
+    - "routine_mutations"
+    - "destructive_mutations"
+    - "exports"
+    - "web_egress"
+    - "industrial_actuation"
+    - "high_power_compute"
+    - "background_jobs"
+
+  by_state:
+
+    normal:
+      allow:
+        - "read_only"
+        - "routine_mutations"
+        - "destructive_mutations"
+        - "exports"
+        - "web_egress"
+        - "industrial_actuation"
+        - "high_power_compute"
+        - "background_jobs"
+      require_approval_for: []
+      throttle:
+        enabled: false
+
+    caution:
+      allow:
+        - "read_only"
+        - "routine_mutations"
+        - "exports"
+        - "web_egress"
+        - "background_jobs"
+      deny:
+        - "industrial_actuation"
+        - "destructive_mutations"
+      require_approval_for:
+        - "exports"
+      throttle:
+        enabled: true
+        # Hints: implementation can reduce polling frequency, reduce concurrency, etc.
+        max_concurrency_factor: 0.75
+        background_tick_factor: 1.5
+
+    degraded:
+      allow:
+        - "read_only"
+        - "background_jobs"
+      deny:
+        - "routine_mutations"
+        - "destructive_mutations"
+        - "exports"
+        - "web_egress"
+        - "industrial_actuation"
+        - "high_power_compute"
+      require_approval_for:
+        # If an operator insists, degrade can allow via emergency/strict approval.
+        - "routine_mutations"
+        - "exports"
+        - "web_egress"
+      throttle:
+        enabled: true
+        max_concurrency_factor: 0.5
+        background_tick_factor: 2.0
+
+    critical:
+      allow:
+        - "read_only"
+      deny:
+        - "routine_mutations"
+        - "destructive_mutations"
+        - "exports"
+        - "web_egress"
+        - "industrial_actuation"
+        - "high_power_compute"
+        - "background_jobs"
+      require_approval_for:
+        # Only emergency approvals should pass (enforced by approvals + trust policy).
+        - "routine_mutations"
+        - "exports"
+        - "web_egress"
+        - "industrial_actuation"
+      throttle:
+        enabled: true
+        max_concurrency_factor: 0.25
+        background_tick_factor: 5.0
+
+# ------------------------------------------------------------------------------
+# Mapping from operations → capability patterns (used by governance layer)
+# ------------------------------------------------------------------------------
+capability_mapping:
+  enabled: true
+
+  # Regex patterns (first match wins). This layer lets you gate future capabilities
+  # without rewriting the environmental policy.
+  #
+  # NOTE: capability IDs should align with config/capabilities/catalog.yaml.
+  operations_to_capabilities:
+
+    read_only:
+      - "^system\\."
+      - "^continuity\\."
+      - "^approvals\\.list"
+      - "^domains\\.(list|get)"
+      - "^plugins\\.list"
+      - "^web_learning\\.(status|logs\\.list)"
+      - "^federation\\.(status|instances\\.list|instances\\.get)"
+      - "^industrial\\.(status)"
+      - "^credentials\\.(list|scopes\\.list|delegations\\.list)"
+
+    routine_mutations:
+      - "^domains\\.(create|update)"
+      - "^plugins\\.(install|toggle)"
+      - "^approvals\\.decide"
+      - "^simulation\\.(run)"
+      - "^web_learning\\.(toggle)"
+      - "^credentials\\.(request|revoke)"
+
+    destructive_mutations:
+      - "^domains\\.delete"
+      - "^resilience\\.(restore)"
+      - "^resilience\\.(backup)" # can be high-risk depending on environment
+
+    exports:
+      - "^continuity\\.ledger\\.export"
+      - "^domains\\.export"
+      - "^simulation\\.export"
+      - "^explanations\\.export"
+
+    web_egress:
+      - "^web_learning\\.(search|fetch|ingest)"
+
+    industrial_actuation:
+      - "^industrial\\.(actuate|command|override)"
+      - "^industrial\\.(start|stop|open|close)" # future verbs
+
+    high_power_compute:
+      - "^simulation\\."
+      - "^training\\."
+      - "^mining\\."
+      - "^indexing\\.(rebuild|full)"
+
+    background_jobs:
+      - "^daemon\\."
+      - "^workers\\."
+      - "^system\\.metrics\\."
+      - "^system\\.logs\\."
+
+# ------------------------------------------------------------------------------
+# Approval + trust escalation under unsafe conditions
+# ------------------------------------------------------------------------------
+governance_escalation:
+  enabled: true
+
+  # Under degraded/critical, require higher trust for overridden actions.
+  min_trust_overrides:
+    degraded:
+      routine_mutations: 6
+      exports: 7
+      web_egress: 7
+      industrial_actuation: 9
+    critical:
+      routine_mutations: 7
+      exports: 8
+      web_egress: 8
+      industrial_actuation: 10
+
+  # Under degraded/critical, require emergency approvals for certain operations.
+  require_emergency_approval_for:
+    degraded:
+      - "industrial_actuation"
+    critical:
+      - "routine_mutations"
+      - "exports"
+      - "web_egress"
+      - "industrial_actuation"
+
+  # If a safety sensor is critical (smoke/leak), actuation is hard-denied unless
+  # an explicit emergency policy override exists elsewhere.
+  hard_deny_reason_codes:
+    - "SMOKE_DETECTED"
+    - "WATER_LEAK_DETECTED"
+
+# ------------------------------------------------------------------------------
+# Data governance alignment (classification + retention for environmental events)
+# ------------------------------------------------------------------------------
+data_handling:
+  enabled: true
+
+  # Environmental events are operationally sensitive but not secrets.
+  classification: "confidential" # public|internal|confidential|regulated|secret|safety_critical
+
+  # Persist posture transitions and threshold breaches to:
+  # - logs (redacted)
+  # - ledger (audit)
+  sinks:
+    logs: true
+    ledger: true
+    artifacts: false
+
+  retention:
+    keep_days: 180
+    purge_requires_approval: true
+
+  # Never store raw sensor payloads if they can contain secrets; store normalized values only.
+  store_raw_payloads: false
+
+# ------------------------------------------------------------------------------
+# Notifications (policy-level intent; implementation decides channels)
+# ------------------------------------------------------------------------------
+notifications:
+  enabled: true
+
+  # When a state transition occurs, notify.
+  on_state_transition: true
+
+  # When critical, escalate.
+  on_critical: true
+
+  # Default channels (implementation may map to UI toast + logs now, email/sms later).
+  channels:
+    - "ui"
+    - "logs"
+    - "ledger"
+
+  # Optional: suppress repeated notifications within a window.
+  dedupe_window_s: 60
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific tuning)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    environmental:
+      mode: "policy"
+      fail_closed_for_actuation: false
+    state_model:
+      missing_sensor_behavior_by_group:
+        safety: "caution"
+
+  workstation:
+    environmental:
+      mode: "policy"
+      fail_closed_for_actuation: true
+
+  production:
+    environmental:
+      mode: "strict"
+      fail_closed_for_actuation: true
+    thresholds:
+      # Production can be slightly more conservative; keep defaults unless needed.
+      enabled: true
+
+  regulated:
+    environmental:
+      mode: "strict"
+      fail_closed_for_actuation: true
+    data_handling:
+      classification: "regulated"
+      retention:
+        keep_days: 365
+        purge_requires_approval: true
+
+  safety_critical:
+    environmental:
+      mode: "strict"
+      fail_closed_for_actuation: true
+    state_model:
+      aggregation: "max_severity"
+      missing_sensor_behavior_by_group:
+        safety: "critical"
+        infrastructure: "degraded"
+        host: "caution"
+    posture:
+      by_state:
+        caution:
+          deny:
+            - "industrial_actuation"
+            - "destructive_mutations"
+            - "high_power_compute"
+        degraded:
+          deny:
+            - "industrial_actuation"
+            - "routine_mutations"
+            - "exports"
+            - "web_egress"
+            - "high_power_compute"
+            - "background_jobs"
+        critical:
+          allow:
+            - "read_only"
+          deny:
+            - "industrial_actuation"
+            - "routine_mutations"
+            - "destructive_mutations"
+            - "exports"
+            - "web_egress"
+            - "high_power_compute"
+            - "background_jobs"

@@ -1,0 +1,619 @@
+# ==============================================================================
+#  FRANCIS — meta/internet_safety_model.yaml
+#  Internet access safety constitution: sourcing, filtering, manipulation defense
+# ==============================================================================
+#
+#  Purpose
+#  -------
+#  This file defines the *meta-level* safety model for any INTERNET-derived input:
+#    - web pages
+#    - forums / Q&A
+#    - documentation sites
+#    - code snippets
+#    - academic papers
+#    - syndicated feeds
+#
+#  It is intentionally stricter than “normal prompt safety” because internet
+#  content is adversarial by default:
+#    - prompt injection & manipulation
+#    - misinformation
+#    - poisoned data for learning
+#    - malicious code / payloads
+#    - privacy hazards and secret exfiltration traps
+#
+#  This model is a constitutional reference. Concrete enforcement lives in:
+#    - config/policies/web_access.yaml
+#    - config/policies/privacy.yaml
+#    - config/policies/data_governance.yaml
+#    - config/policies/offensive_security.yaml
+#    - src/francis/internet/*
+#    - src/francis/governance/*
+#
+#  Read alongside
+#  -------------
+#    - meta/evidence_model.yaml
+#    - meta/attribution_model.yaml
+#    - meta/risk_model.yaml
+#    - meta/trust_model.yaml
+#    - meta/governance_principles.yaml
+#    - docs/WEB_ACCESS.md
+#    - docs/THREAT_MODEL.md
+#    - docs/POLICIES.md
+#
+# ==============================================================================
+
+meta:
+  model_id: francis.internet_safety_model
+  version: 1
+  stability: stable
+  owner: internet_safety
+  description: >
+    Defines the threat model, classification, gating, redaction, and provenance
+    requirements for all internet-sourced content and any actions derived from it.
+
+# ------------------------------------------------------------------------------
+# High-level stance
+# ------------------------------------------------------------------------------
+stance:
+  default_assumption: "internet_content_is_untrusted"
+  priority_order:
+    - safety
+    - privacy
+    - compliance
+    - correctness
+    - completeness
+    - latency
+  principles_alignment:
+    - "GP010_safety_over_completion"
+    - "GP011_conservative_defaults_under_uncertainty"
+    - "GP012_no_execution_from_untrusted_text"
+    - "GP020_data_minimization"
+    - "GP021_no_secrets_in_prompts_or_logs"
+    - "GP030_evidence_first_class"
+
+# ------------------------------------------------------------------------------
+# Threat model (what we defend against)
+# ------------------------------------------------------------------------------
+threat_model:
+  adversary_profiles:
+    - id: A1_prompt_injector
+      description: "Attempts to override system policies via embedded instructions."
+      typical_vectors:
+        - "invisible / CSS-hidden instructions"
+        - "roleplay / authority claims"
+        - "credential harvesting prompts"
+        - "tool-call suggestions disguised as 'requirements'"
+    - id: A2_misinformation_operator
+      description: "Spreads falsehoods, propaganda, or strategic narratives."
+      typical_vectors:
+        - "SEO spam"
+        - "fabricated citations"
+        - "impersonated institutions"
+        - "quote mining"
+    - id: A3_data_poisoner
+      description: "Poisons learning corpora to shape future behavior."
+      typical_vectors:
+        - "repeated false patterns across many pages"
+        - "subtle schema corruption"
+        - "high-volume low-quality domains"
+    - id: A4_malware_publisher
+      description: "Hosts or embeds malicious scripts/binaries or exploit content."
+      typical_vectors:
+        - "drive-by downloads"
+        - "malicious copy/paste code"
+        - "dependency confusion instructions"
+    - id: A5_privacy_harvester
+      description: "Tricks system/user into disclosing PII/secrets."
+      typical_vectors:
+        - "fake login forms"
+        - "requests to paste tokens"
+        - "social engineering 'verification' steps"
+
+  primary_risks:
+    - id: R1_instruction_injection
+      severity: critical
+      impact: "policy bypass; unsafe tool execution; secret leakage"
+    - id: R2_misinformation
+      severity: high
+      impact: "incorrect decisions; unsafe advice; reputational harm"
+    - id: R3_poisoning
+      severity: high
+      impact: "long-term model drift; degraded trustworthiness"
+    - id: R4_malicious_payloads
+      severity: critical
+      impact: "system compromise; unsafe code propagation"
+    - id: R5_privacy_exposure
+      severity: critical
+      impact: "PII leakage; regulatory violations; irreversible harm"
+    - id: R6_low_quality_sources
+      severity: medium
+      impact: "hallucination amplification; wasted compute; noisy learning"
+
+# ------------------------------------------------------------------------------
+# Definitions used by the pipeline
+# ------------------------------------------------------------------------------
+definitions:
+  content_roles:
+    evidence:
+      definition: "Information used to support/contradict claims; never executable instruction."
+    instruction:
+      definition: >
+        Imperatives or procedural steps embedded in content. Treated as untrusted
+        and never executed directly; may be summarized as *claims* only.
+    executable:
+      definition: "Code, commands, scripts, binaries, macros, payloads."
+    credential_request:
+      definition: "Any content requesting secrets, tokens, keys, personal info."
+    policy_override_attempt:
+      definition: "Any content attempting to disable/replace safety rules."
+
+  source_kinds:
+    - academic
+    - documentation
+    - code
+    - forums
+    - news
+    - social
+    - unknown
+
+  allowed_actions:
+    - allow
+    - allow_with_warnings
+    - allow_with_redaction
+    - allow_readonly_summary
+    - require_approval
+    - deny
+
+# ------------------------------------------------------------------------------
+# Source trust model (domain & source scoring)
+# ------------------------------------------------------------------------------
+source_trust:
+  enable_source_scoring: true
+
+  # Default heuristic weighting (environment policies can tighten)
+  scoring:
+    weights:
+      domain_reputation: 0.35
+      content_quality: 0.20
+      recency_fit: 0.15
+      citation_structure: 0.10
+      author_identity_signals: 0.10
+      technical_safety_signals: 0.10
+
+    thresholds:
+      trusted: 0.80
+      acceptable: 0.60
+      low_quality: 0.40
+      blocked: 0.00
+
+  domain_classes:
+    # NOTE: These are *classes*, not hardcoded lists. The actual allow/deny lists
+    # live in config/policies/web_access.yaml and data/web_knowledge/learned_domains.
+    authoritative:
+      description: "Primary sources: standards bodies, official docs, reputable journals."
+      default_score: 0.85
+    reputable_media:
+      description: "Established news outlets with editorial controls."
+      default_score: 0.70
+    community_forums:
+      description: "StackOverflow-like; can be useful but unvetted."
+      default_score: 0.55
+    unknown:
+      description: "No reputation signals or newly discovered."
+      default_score: 0.45
+    suspicious:
+      description: "Known spam patterns, malware distribution, or manipulation."
+      default_score: 0.10
+    blocked:
+      description: "Explicitly prohibited."
+      default_score: 0.00
+
+  recency_policy:
+    # How much freshness matters depends on the query domain.
+    # Concrete values are enforced by src/francis/internet/validation/recency_validator.py
+    modes:
+      evergreen:
+        max_age_days_soft: 3650
+        max_age_days_hard: 36500
+      normal:
+        max_age_days_soft: 365
+        max_age_days_hard: 1095
+      fast_moving:
+        max_age_days_soft: 90
+        max_age_days_hard: 365
+      critical_current:
+        max_age_days_soft: 30
+        max_age_days_hard: 90
+
+# ------------------------------------------------------------------------------
+# Safety pipeline (end-to-end flow for web content)
+# ------------------------------------------------------------------------------
+pipeline:
+  enabled: true
+  stages:
+
+    - id: STAGE_00_intent_classification
+      name: Intent classification
+      description: >
+        Classify user intent and requested information sensitivity before any fetch.
+        Determine if web access is needed or disallowed for the task category.
+      outputs:
+        - intent_tags
+        - sensitivity_classification
+        - required_recency_mode
+      enforcement_modules:
+        - "src/francis/internet/validation/recency_validator.py"
+        - "src/francis/governance/policy_engine.py"
+
+    - id: STAGE_01_url_policy_check
+      name: URL policy check
+      description: >
+        Validate URL/domain against allowlists/denylists, protocol rules, and
+        environment mode restrictions. Block known bad domains early.
+      checks:
+        - allow_protocols: ["https"]
+        - deny_protocols: ["http", "file", "ftp", "smb"]
+        - deny_ip_literals: true
+        - deny_localhost: true
+        - deny_private_network_ranges: true
+      enforcement_modules:
+        - "src/francis/internet/research/search_engine.py"
+        - "src/francis/governance/policy_engine.py"
+        - "config/policies/web_access.yaml"
+
+    - id: STAGE_02_fetch_limits
+      name: Fetch limits and sanitization
+      description: >
+        Enforce size/time limits. Strip active content. Do not execute scripts.
+      limits:
+        max_bytes: 5000000
+        max_redirects: 5
+        timeout_seconds: 20
+        user_agent_policy: "francis_safe_fetch"
+      sanitization:
+        strip_scripts: true
+        strip_iframes: true
+        strip_embeds: true
+        strip_forms: true
+        normalize_text: true
+      enforcement_modules:
+        - "src/francis/internet/research/content_extractor.py"
+
+    - id: STAGE_03_content_classification
+      name: Content classification
+      description: >
+        Classify content for safety categories, injection signals, data sensitivity,
+        and whether the content is safe to quote/store.
+      outputs:
+        - content_roles_detected
+        - safety_categories
+        - injection_signals
+        - pii_signals
+        - executable_signals
+      enforcement_modules:
+        - "src/francis/internet/safety/content_filter.py"
+        - "src/francis/internet/safety/manipulation_detector.py"
+        - "src/francis/internet/safety/misinformation_detector.py"
+        - "src/francis/internet/safety/poisoned_data_detector.py"
+        - "src/francis/internet/understanding/concept_extractor.py"
+
+    - id: STAGE_04_harmful_knowledge_block
+      name: Harmful knowledge blocker
+      description: >
+        Detect and block/limit content that would constitute disallowed assistance
+        or unsafe operational guidance. This includes prohibited wrongdoing and
+        dangerous instructions.
+      enforcement_modules:
+        - "src/francis/internet/safety/harmful_knowledge_blocker.py"
+      outputs:
+        - block_decision
+        - redaction_plan
+        - safe_summary_plan
+
+    - id: STAGE_05_evidence_packaging
+      name: Evidence packaging & provenance
+      description: >
+        Package accepted content into evidence objects with provenance, hashes,
+        timestamps, and a clear separation between evidence and instructions.
+      requirements:
+        include:
+          - source_url
+          - retrieved_at
+          - content_hash
+          - extraction_method
+          - domain_reputation_score
+          - classification
+        exclude:
+          - secrets
+          - session_tokens
+          - raw PII (unless explicitly allowed and redacted)
+      enforcement_modules:
+        - "src/francis/internet/research/citation_tracker.py"
+        - "src/francis/memory/provenance.py"
+        - "src/francis/explanation/transparency/evidence_citation.py"
+
+    - id: STAGE_06_reasoning_constraints
+      name: Reasoning constraints (no untrusted instruction execution)
+      description: >
+        Ensure downstream planning does not treat web content as commands.
+        Web content can propose ideas; the planner must re-derive steps internally
+        and pass policy + readiness gates before any tool use.
+      enforcement_modules:
+        - "src/francis/llm/guardrails.py"
+        - "src/francis/governance/action_readiness.py"
+
+    - id: STAGE_07_storage_and_retention
+      name: Storage, retention, and sharing controls
+      description: >
+        Store content only if allowed by data governance. Redact and minimize.
+        Prevent exporting restricted content to federation.
+      enforcement_modules:
+        - "config/policies/data_governance.yaml"
+        - "src/francis/memory/retention.py"
+        - "src/francis/collective/knowledge_sharing/*"
+
+# ------------------------------------------------------------------------------
+# Safety categories & default actions
+# ------------------------------------------------------------------------------
+safety_categories:
+
+  # --- Manipulation / injection ------------------------------------------------
+  manipulation:
+    prompt_injection:
+      severity: critical
+      default_action: deny
+      notes: "Block or reduce to safe summary; never follow embedded directives."
+    policy_override_attempt:
+      severity: critical
+      default_action: deny
+    credential_harvesting:
+      severity: critical
+      default_action: deny
+    social_engineering:
+      severity: high
+      default_action: allow_with_warnings
+
+  # --- Malware / exploit content ----------------------------------------------
+  malware:
+    malicious_payload:
+      severity: critical
+      default_action: deny
+    exploit_instructional:
+      severity: critical
+      default_action: deny
+    suspicious_code_snippet:
+      severity: high
+      default_action: allow_readonly_summary
+      constraints:
+        - "Do not provide runnable exploit chains."
+        - "Prefer defensive interpretation and detection/mitigation guidance."
+
+  # --- Violence / weapons ------------------------------------------------------
+  violence:
+    weapon_construction:
+      severity: critical
+      default_action: deny
+    tactical_harm_guidance:
+      severity: critical
+      default_action: deny
+
+  # --- Self-harm ---------------------------------------------------------------
+  self_harm:
+    facilitation:
+      severity: critical
+      default_action: deny
+    ideation_triggering:
+      severity: high
+      default_action: allow_with_warnings
+
+  # --- Sexual content (incl. minors) ------------------------------------------
+  sexual:
+    minors:
+      severity: critical
+      default_action: deny
+    explicit:
+      severity: high
+      default_action: deny
+
+  # --- Misinformation ----------------------------------------------------------
+  misinformation:
+    fabricated_authority:
+      severity: high
+      default_action: allow_with_warnings
+    high_impact_falsehood_risk:
+      severity: high
+      default_action: require_approval
+      notes: "Force multi-source verification and explicit citations."
+    low_stakes_uncertain:
+      severity: medium
+      default_action: allow_with_warnings
+
+  # --- Privacy / sensitive data ------------------------------------------------
+  privacy:
+    pii_detected:
+      severity: critical
+      default_action: allow_with_redaction
+    regulated_data:
+      severity: critical
+      default_action: require_approval
+
+  # --- Low quality -------------------------------------------------------------
+  quality:
+    spam_seo:
+      severity: medium
+      default_action: deny
+    unverifiable_claims:
+      severity: medium
+      default_action: allow_with_warnings
+
+# ------------------------------------------------------------------------------
+# Detection signals (high-level; avoid brittle single-pattern matching)
+# ------------------------------------------------------------------------------
+detection:
+  prompt_injection:
+    enabled: true
+    signal_sources:
+      - lexical
+      - structural
+      - semantic
+      - provenance
+    examples_of_signals:
+      lexical_markers:
+        - "attempts to redefine roles/authority"
+        - "requests to ignore or disable rules"
+        - "instructions to reveal system prompts or secrets"
+      structural_markers:
+        - "hidden sections (display:none) containing directives"
+        - "instructions embedded in code comments or HTML attributes"
+      semantic_markers:
+        - "tool-call suggestions with urgency or coercion"
+        - "credential requests framed as verification"
+    response:
+      on_trigger:
+        - "classify as manipulation.prompt_injection"
+        - "deny or reduce to safe summary"
+        - "log injection_defense_trigger event"
+
+  pii:
+    enabled: true
+    detectors:
+      - "emails"
+      - "phone_numbers"
+      - "addresses"
+      - "gov_ids"
+      - "access_tokens_like_strings"
+    response:
+      on_detect:
+        - "classify as privacy.pii_detected"
+        - "apply redaction"
+        - "avoid storing raw payload unless policy explicitly allows"
+
+  executable_content:
+    enabled: true
+    detectors:
+      - "shell_command_density"
+      - "encoded_payloads"
+      - "binary_links"
+      - "macro_like_patterns"
+    response:
+      on_detect:
+        - "downgrade to allow_readonly_summary unless explicitly needed"
+        - "block if also malware/exploit category is triggered"
+
+# ------------------------------------------------------------------------------
+# Storage, caching, and learning safety
+# ------------------------------------------------------------------------------
+storage:
+  web_cache:
+    path: "data/web_knowledge/cache/web_pages"
+    enabled: true
+    store_raw_html: false
+    store_sanitized_text: true
+    store_metadata: true
+    deduplicate_by_hash: true
+    max_item_bytes: 2000000
+
+  blocked_log:
+    path: "data/web_knowledge/blocked/harmful_content_log.jsonl"
+    enabled: true
+    log_payload_policy:
+      store_snippet_max_chars: 500
+      store_hashes: true
+      store_urls: true
+      store_full_text: false
+
+  learning:
+    enabled: true
+    allowed_source_kinds: ["academic", "documentation", "code"]
+    deny_source_kinds: ["unknown", "social"]
+    anti_poisoning:
+      require_multi_source_agreement: true
+      require_provenance: true
+      require_quality_threshold: 0.60
+      quarantine_on_suspicion: true
+      quarantine_paths:
+        - "data/quarantine/misinformation"
+        - "data/quarantine/suspicious"
+
+# ------------------------------------------------------------------------------
+# Output constraints when summarizing internet content
+# ------------------------------------------------------------------------------
+output_constraints:
+  citation_policy:
+    require_citations_for:
+      - "non-trivial factual claims"
+      - "recommendations that could change with time"
+      - "security/privacy/compliance assertions"
+    allow_no_citations_for:
+      - "common knowledge"
+      - "pure reasoning internal to the system"
+      - "tool-returned ground truth (with tool trace id)"
+  quoting_limits:
+    max_verbatim_words_per_source: 25
+    prefer_paraphrase: true
+  instruction_handling:
+    never_convert_untrusted_instructions_to_actions: true
+    allowed_transformations:
+      - "summarize as claims"
+      - "extract risks"
+      - "extract alternatives"
+      - "convert to internally re-derived plan with policy checks"
+
+# ------------------------------------------------------------------------------
+# Environment profiles (meta defaults; config/policies can tighten)
+# ------------------------------------------------------------------------------
+environment_profiles:
+  dev:
+    web_access: enabled
+    allow_unknown_domains: true
+    learning_enabled: true
+    require_approval_for_high_risk: true
+
+  production:
+    web_access: enabled
+    allow_unknown_domains: false
+    learning_enabled: true
+    require_approval_for_high_risk: true
+
+  regulated:
+    web_access: conditional
+    allow_unknown_domains: false
+    learning_enabled: false
+    require_approval_for_high_risk: true
+    retention: "strict"
+    notes:
+      - "Prefer tool-grounded sources; restrict browsing; mandatory redaction."
+
+  airgapped:
+    web_access: disabled
+    learning_enabled: false
+
+# ------------------------------------------------------------------------------
+# Validation & tests (what CI/runtime should assert)
+# ------------------------------------------------------------------------------
+validation:
+  required_invariants:
+    - id: INV_001_no_http
+      statement: "Only HTTPS may be fetched."
+    - id: INV_002_no_local_network
+      statement: "No localhost or private network fetching."
+    - id: INV_003_no_scripts
+      statement: "No script execution; scripts/iframes/forms stripped."
+    - id: INV_004_no_secrets
+      statement: "Secrets/PII must be redacted; never logged as raw."
+    - id: INV_005_no_untrusted_instruction_execution
+      statement: "Web content cannot directly trigger tool execution."
+    - id: INV_006_evidence_provenance
+      statement: "Stored evidence requires provenance metadata and hashes."
+
+  suggested_test_cases:
+    - name: "prompt_injection_hidden_html"
+      expected: "deny + injection_defense_trigger log"
+    - name: "seo_spam_article"
+      expected: "deny or allow_with_warnings depending on quality score"
+    - name: "academic_pdf_safe"
+      expected: "allow + evidence packaging + citation readiness"
+    - name: "page_contains_api_keys"
+      expected: "allow_with_redaction + redaction_applied log"
+
+# End of meta/internet_safety_model.yaml

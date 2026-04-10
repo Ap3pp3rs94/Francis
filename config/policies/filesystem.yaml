@@ -1,0 +1,445 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Filesystem (read/write/delete/move controls + safeguards)
+# Path:   config/policies/filesystem.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy governs all filesystem access performed by Francis:
+#   - allowed roots for reads/writes
+#   - denied zones (secrets, system directories, repo internals)
+#   - destructive operation gating (delete/move/overwrite)
+#   - path normalization rules (Windows-safe + traversal resistant)
+#   - classification-aware storage rules (ties to data_governance.yaml)
+#   - audit + approval requirements for sensitive paths/actions
+#
+# DESIGN CONTRACT
+# ---------------
+# - Allowlist-first: define allowed roots, deny everything else.
+# - Fail-closed: if path cannot be normalized or classified → deny.
+# - No path traversal: block "..", junction tricks (best-effort), device paths.
+# - Destructive operations require stronger gates and explicit intent.
+# - Never write secrets into repo or logs; align with data_governance policy.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "filesystem_policy"
+  notes:
+    - "This policy is the single source of truth for disk access permissions."
+    - "Deny-by-default with explicit allowlist roots."
+    - "Windows paths are primary; portable semantics preserved."
+
+# ------------------------------------------------------------------------------
+# Global enablement + posture
+# ------------------------------------------------------------------------------
+filesystem:
+  enabled: true
+
+  # Modes:
+  # - disabled: do not enforce (dev-only)
+  # - policy:   enforce allowlists and gates (default)
+  # - strict:   extra conservative (deny more; require approvals for more)
+  mode: "policy" # disabled | policy | strict
+
+  # If policy evaluation fails, deny.
+  fail_closed: true
+
+  # If true, every filesystem operation is audited.
+  audit_all_ops: true
+
+# ------------------------------------------------------------------------------
+# Path normalization + safety rules
+# ------------------------------------------------------------------------------
+path_safety:
+  enabled: true
+
+  # Normalize to absolute paths before evaluation.
+  require_absolute_after_normalization: true
+
+  # Reject Windows device paths and UNC unless explicitly allowed.
+  deny_device_paths: true          # \\.\ , \\?\ , CON:, NUL:, etc.
+  deny_unc_paths_by_default: true  # \\server\share
+  allow_unc_roots: []              # explicit UNC allowlist (empty by default)
+
+  # Block traversal patterns even before normalization (defense-in-depth).
+  deny_traversal_segments: true
+  traversal_denied_segments:
+    - ".."
+    - "~"        # home expansion should be explicit, not implicit
+    - "$HOME"    # avoid implicit env expansions in policy evaluation
+
+  # Symlink/junction posture (best-effort):
+  # - deny: deny ops if path crosses symlink/junction boundary (if detectable)
+  # - warn: allow but audit
+  # - allow: no special handling
+  symlink_boundary: "warn" # deny | warn | allow
+
+  # Normalize separators for matching (implementation-defined).
+  normalize_separators: true
+
+  # Strip trailing dots/spaces (Windows path quirks) before matching.
+  normalize_windows_quirks: true
+
+# ------------------------------------------------------------------------------
+# Allowed roots (allowlist)
+# ------------------------------------------------------------------------------
+roots:
+  enabled: true
+
+  # Repo root is assumed to be C:\Francis (this policy file lives under it).
+  repo_root: "C:\\Francis"
+
+  # Read roots: where Francis may read from without special approval.
+  # Keep narrow, add only what you truly need.
+  read_allowlist:
+
+    # Core repo sources/configs (read-only in practice)
+    - "C:\\Francis\\config"
+    - "C:\\Francis\\src"
+    - "C:\\Francis\\apps"
+    - "C:\\Francis\\meta"
+    - "C:\\Francis\\docs"
+
+    # Runtime state (read)
+    - "C:\\Francis\\data"
+
+  # Write roots: where Francis may create/modify files.
+  # IMPORTANT: repo source tree is NOT write-allowed by default.
+  write_allowlist:
+
+    # Runtime state + artifacts are allowed.
+    - "C:\\Francis\\data"
+    - "C:\\Francis\\data\\artifacts"
+    - "C:\\Francis\\data\\logs"
+    - "C:\\Francis\\data\\quarantine"
+    - "C:\\Francis\\data\\exports"
+
+    # Optional: allow writing to a dedicated workspace directory.
+    - "C:\\Francis\\workspace"
+
+  # Delete roots: where delete operations are allowed (still gated).
+  delete_allowlist:
+    - "C:\\Francis\\data\\quarantine"
+    - "C:\\Francis\\data\\exports"
+    - "C:\\Francis\\workspace"
+
+  # Move/rename roots: where move/rename is allowed.
+  move_allowlist:
+    - "C:\\Francis\\data"
+    - "C:\\Francis\\workspace"
+
+# ------------------------------------------------------------------------------
+# Deny zones (absolute deny, regardless of allowlist overlap)
+# ------------------------------------------------------------------------------
+deny_zones:
+  enabled: true
+
+  # Never touch Windows/system directories.
+  absolute_deny:
+    - "C:\\Windows"
+    - "C:\\Program Files"
+    - "C:\\Program Files (x86)"
+    - "C:\\ProgramData"
+    - "C:\\Users\\Default"
+    - "C:\\System Volume Information"
+
+  # Repo-sensitive zones: source control internals and secrets.
+  repo_deny:
+    - "C:\\Francis\\.git"
+    - "C:\\Francis\\.venv"          # venv is generated; do not mutate via agent
+    - "C:\\Francis\\node_modules"   # generated; do not mutate via agent
+
+  # Secrets deny patterns: never read or write secret material into these areas.
+  secret_files_deny_patterns:
+    - "(?i)\\.env$"
+    - "(?i)\\.env\\..+$"
+    - "(?i)secrets?\\.ya?ml$"
+    - "(?i)id_rsa$"
+    - "(?i)id_ed25519$"
+    - "(?i)\\.pem$"
+    - "(?i)\\.pfx$"
+    - "(?i)\\.p12$"
+    - "(?i)\\.jks$"
+    - "(?i)\\.kdbx$"
+    - "(?i)vault\\.db$"
+
+  # Binary protection: avoid accidental corruption. Writes allowed only if explicitly intended.
+  binary_extensions_guard:
+    enabled: true
+    protected_extensions:
+      - ".exe"
+      - ".dll"
+      - ".pyd"
+      - ".so"
+      - ".dylib"
+      - ".bin"
+      - ".dat"
+      - ".db"
+      - ".sqlite"
+      - ".sqlite3"
+      - ".jpg"
+      - ".jpeg"
+      - ".png"
+      - ".gif"
+      - ".webp"
+      - ".pdf"
+      - ".zip"
+      - ".7z"
+      - ".tar"
+      - ".gz"
+      - ".rar"
+      - ".wasm"
+    on_write:
+      default: "deny" # deny | require_approval | allow
+      allow_if_under_roots:
+        - "C:\\Francis\\data\\artifacts"
+        - "C:\\Francis\\data\\exports"
+        - "C:\\Francis\\workspace"
+
+# ------------------------------------------------------------------------------
+# Operation classes and gating
+# ------------------------------------------------------------------------------
+operations:
+  enabled: true
+
+  # Define operation classes for uniform gating.
+  classes:
+    read:
+      category: "read_only"
+      min_trust: 1
+      requires_approval: false
+      audit: true
+
+    write:
+      category: "mutation"
+      min_trust: 3
+      requires_approval: false
+      audit: true
+
+    overwrite:
+      category: "mutation"
+      min_trust: 4
+      requires_approval: true
+      audit: true
+
+    delete:
+      category: "destructive"
+      min_trust: 6
+      requires_approval: true
+      audit: true
+
+    move:
+      category: "mutation"
+      min_trust: 4
+      requires_approval: true
+      audit: true
+
+    chmod_acl:
+      category: "destructive"
+      min_trust: 7
+      requires_approval: true
+      audit: true
+
+  # Additional safety requirements for destructive ops.
+  destructive_safeguards:
+    require_explicit_reason: true
+    min_reason_chars: 12
+    require_dry_run_support: true
+    require_preflight_stat: true
+    require_backup_before_delete_for:
+      # Patterns under workspace may skip backups; runtime exports should keep backups.
+      - "C:\\Francis\\data\\exports"
+      - "C:\\Francis\\data\\artifacts"
+
+# ------------------------------------------------------------------------------
+# Classification-aware constraints (align with data_governance.yaml)
+# ------------------------------------------------------------------------------
+classification_constraints:
+  enabled: true
+
+  # If classified as "secret", only allow ephemeral handling; never persist.
+  secret:
+    allow_persistent_write: false
+    allow_write_roots: []
+    force_store: "ephemeral"
+    require_redaction: true
+
+  regulated:
+    allow_write_roots:
+      - "C:\\Francis\\data"
+      - "C:\\Francis\\data\\artifacts"
+      - "C:\\Francis\\data\\exports"
+    require_approval_for_export: true
+    require_audit: true
+
+  safety_critical:
+    allow_write_roots:
+      - "C:\\Francis\\data"
+      - "C:\\Francis\\data\\artifacts"
+      - "C:\\Francis\\data\\exports"
+    require_approval_for_export: true
+    require_audit: true
+
+# ------------------------------------------------------------------------------
+# Export path policy (prevents “export to unsafe location”)
+# ------------------------------------------------------------------------------
+exports:
+  enabled: true
+
+  # Where exports may be written.
+  export_roots:
+    - "C:\\Francis\\data\\exports"
+    - "C:\\Francis\\workspace"
+
+  # Disallow exporting directly into repo source/config trees.
+  deny_export_roots:
+    - "C:\\Francis\\src"
+    - "C:\\Francis\\apps"
+    - "C:\\Francis\\config"
+    - "C:\\Francis\\meta"
+
+  # Default naming rules for export files (policy hints).
+  naming:
+    require_timestamp_suffix: true
+    safe_chars_regex: "^[a-zA-Z0-9._\\-]+$"
+    max_filename_len: 180
+
+  # Optional: require zipping for multi-file export (reduces partial exports).
+  require_archive_for_multi_file: true
+
+# ------------------------------------------------------------------------------
+# Quarantine policy (untrusted or policy-denied writes)
+# ------------------------------------------------------------------------------
+quarantine:
+  enabled: true
+
+  root: "C:\\Francis\\data\\quarantine"
+
+  # If a write is denied due to provenance or classification, optionally quarantine.
+  on_denied_write: "quarantine" # quarantine | deny
+  require_approval_for_release: true
+
+  # Keep quarantined data isolated from normal pipelines until released.
+  deny_reads_by_default: false
+  deny_exports: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit events)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "fs.read"
+      - "fs.write"
+      - "fs.overwrite"
+      - "fs.delete"
+      - "fs.move"
+      - "fs.denied"
+      - "fs.quarantined"
+    include:
+      - "actor_id"
+      - "capability_id"
+      - "operation"
+      - "path"
+      - "normalized_path"
+      - "store"
+      - "classification"
+      - "byte_size"
+      - "result"
+      - "reason"
+      - "ts"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "fs.ops"
+      - "fs.denied"
+      - "fs.quarantined"
+    histograms:
+      - "fs.bytes_written"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    filesystem:
+      mode: "policy"
+      fail_closed: false
+    operations:
+      classes:
+        overwrite:
+          requires_approval: false
+        move:
+          requires_approval: false
+
+  workstation:
+    filesystem:
+      mode: "policy"
+      fail_closed: true
+
+  production:
+    filesystem:
+      mode: "strict"
+      fail_closed: true
+    operations:
+      classes:
+        write:
+          requires_approval: false
+        overwrite:
+          requires_approval: true
+        move:
+          requires_approval: true
+        delete:
+          requires_approval: true
+
+  regulated:
+    filesystem:
+      mode: "strict"
+      fail_closed: true
+    operations:
+      classes:
+        write:
+          min_trust: 5
+        overwrite:
+          min_trust: 6
+        delete:
+          min_trust: 7
+    exports:
+      naming:
+        require_timestamp_suffix: true
+
+  safety_critical:
+    filesystem:
+      mode: "strict"
+      fail_closed: true
+    operations:
+      classes:
+        write:
+          min_trust: 6
+          requires_approval: true
+        overwrite:
+          min_trust: 7
+          requires_approval: true
+        move:
+          min_trust: 7
+          requires_approval: true
+        delete:
+          min_trust: 9
+          requires_approval: true
+    deny_zones:
+      binary_extensions_guard:
+        on_write:
+          default: "deny"

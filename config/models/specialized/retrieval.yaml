@@ -1,0 +1,600 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Retrieval (RAG, memory search, hybrid ranking, context packaging)
+# Path:   config/models/specialized/retrieval.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines the retrieval policy envelope for Francis:
+#   - Where retrieval can pull from (sources)
+#   - How queries are normalized, rewritten, expanded, and embedded
+#   - How candidates are gathered (vector/keyword/structured)
+#   - How candidates are merged, deduplicated, ranked, and reranked
+#   - How context is packaged (chunking, budgets, citations/provenance)
+#   - How governance gates apply (trust/approvals/sensitivity)
+#   - How retrieval is observed (trace records, metrics, audit hooks)
+#
+# DESIGN CONTRACT
+# ---------------
+# 1) Deterministic: stable ordering; tie-breakers explicit.
+# 2) Evidence-first: prefer sourced context; cite provenance.
+# 3) Fail-closed: if a source is sensitive/unknown, gate or deny by policy.
+# 4) Forward-compatible: unknown keys ignored by tolerant loaders.
+#
+# SECURITY
+# --------
+# No secrets belong here. DSNs/keys live in env/vault; this file only expresses policy.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "retrieval_specialization"
+  notes:
+    - "Retrieval is a security boundary: it controls what the model is allowed to see."
+    - "Prefer fewer, higher-quality chunks over large low-signal dumps."
+    - "Always preserve provenance for audit/explanations."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+retrieval:
+  enabled: true
+
+  # Default retrieval posture for the system:
+  # - Use retrieval when asked for facts, system state, history, configs, or when tools ask for context.
+  default_enabled_for_requests: true
+
+  # If retrieval fails, choose conservative behavior.
+  on_failure: "continue_without_context" # continue_without_context | deny | fallback_to_summary_only
+
+  # Local-first posture: prefer local stores (ledger/vectors/artifacts) over remote.
+  local_first: true
+
+# ------------------------------------------------------------------------------
+# Workload alignment (how retrieval integrates with model routing)
+# ------------------------------------------------------------------------------
+routing:
+  # Retrieval is not a model; it’s a pipeline feeding model context.
+  # These are hints for when to trigger retrieval and how to choose LLM workload.
+  prefer_workload_when_retrieval_used:
+    synthesis: "reasoning"
+    interactive: "chat"
+    tool_planning: "tool_router"
+    code_context: "code"
+
+  tags:
+    trigger_retrieval_if_any:
+      - "memory"
+      - "history"
+      - "ledger"
+      - "logs"
+      - "config"
+      - "domains"
+      - "plugins"
+      - "artifacts"
+      - "web_learning"
+      - "evidence"
+      - "citations"
+      - "verify"
+      - "incident"
+
+    suppress_retrieval_if_any:
+      - "creative_freeform"
+      - "smalltalk"
+
+# ------------------------------------------------------------------------------
+# Sources (what retrieval can pull from)
+# ------------------------------------------------------------------------------
+sources:
+  # Source registry is policy-level; actual file paths come from runtime config/env.
+  # The runtime should treat disabled sources as non-existent.
+  registry:
+
+    ledger:
+      enabled: true
+      kind: "append_log"
+      sensitivity: "medium"
+      default_weight: 1.0
+      notes: "Continuity ledger entries (auditable)."
+
+    conversations:
+      enabled: true
+      kind: "conversation_store"
+      sensitivity: "medium"
+      default_weight: 0.9
+      notes: "Recent conversation context (may be summarized)."
+
+    vectors:
+      enabled: true
+      kind: "vector_store"
+      sensitivity: "medium"
+      default_weight: 1.0
+      notes: "Embeddings-backed retrieval for memories, docs, and artifacts."
+
+    domains_registry:
+      enabled: true
+      kind: "structured_store"
+      sensitivity: "low"
+      default_weight: 0.8
+      notes: "Domain definitions, metadata, and registry entries."
+
+    plugins_catalog:
+      enabled: true
+      kind: "structured_store"
+      sensitivity: "low"
+      default_weight: 0.7
+      notes: "Installed plugins, capabilities, and descriptors."
+
+    configs:
+      enabled: true
+      kind: "filesystem"
+      sensitivity: "medium"
+      default_weight: 0.8
+      notes: "Config files (YAML/TOML/JSON) for policy references."
+
+    web_learning_snapshots:
+      enabled: true
+      kind: "artifact_store"
+      sensitivity: "high"
+      default_weight: 0.6
+      notes: "Captured web artifacts; must remain provenance-linked and governed."
+
+    industrial:
+      enabled: false
+      kind: "structured_store"
+      sensitivity: "critical"
+      default_weight: 0.5
+      notes: "Industrial/control state is gated; enable only when subsystem is live."
+
+  # Global source selection rules
+  selection:
+    # Default set for normal queries (can be overridden per request).
+    default_enabled_sources:
+      - "ledger"
+      - "conversations"
+      - "vectors"
+      - "domains_registry"
+      - "plugins_catalog"
+      - "configs"
+
+    # For verification-heavy tasks
+    verification_sources:
+      - "ledger"
+      - "configs"
+      - "domains_registry"
+      - "vectors"
+      - "web_learning_snapshots"
+
+    # For code-context tasks (e.g., patch planning)
+    code_sources:
+      - "configs"
+      - "vectors"
+
+# ------------------------------------------------------------------------------
+# Query processing (normalize -> rewrite -> expand -> embed)
+# ------------------------------------------------------------------------------
+query:
+  normalize:
+    enabled: true
+    lowercase: false
+    trim: true
+    collapse_whitespace: true
+    max_chars: 2000
+
+    # Remove obviously useless tokens but keep identifiers (ids, hashes, paths).
+    stopwords:
+      enabled: true
+      language: "en"
+      # Keep technical tokens:
+      preserve_patterns:
+        - "(?i)[a-f0-9]{7,}"         # hashes/ids
+        - "(?i)[a-z0-9_\\-]+\\.[a-z0-9_\\-]+"  # filenames
+        - "(?i)(C:\\\\|/)[^\\s]+"    # paths
+
+  rewrite:
+    enabled: true
+    # Query rewrite is a powerful lever; keep controlled.
+    # This is typically performed by a small local model or rule-based approach.
+    mode: "conservative" # off | conservative | aggressive
+    max_rewrites: 2
+    require_equivalence: true
+    notes: "Rewrite should preserve intent; do not broaden scope silently."
+
+  expand:
+    enabled: true
+    # Expansion adds synonyms/aliases (domains, capability aliases, etc.)
+    # Keep bounded to prevent recall explosion.
+    max_terms: 12
+    include_aliases: true
+    include_acronym_expansion: true
+    include_identifier_variants: true
+
+  embedding:
+    enabled: true
+    # Embedding model selection is handled by routing + providers;
+    # this section defines retrieval-side constraints and budgets.
+    max_embedding_input_chars: 6000
+    cache:
+      enabled: true
+      ttl_s: 86400
+      max_entries_hint: 50_000
+
+# ------------------------------------------------------------------------------
+# Candidate gathering (vector + keyword + structured)
+# ------------------------------------------------------------------------------
+gather:
+  enabled: true
+
+  # Latency budget for the whole retrieval pipeline.
+  latency_budget_ms: 2500
+
+  vector_search:
+    enabled: true
+    default_top_k: 24
+    max_top_k: 80
+
+    # Optional filters applied at query time (if backend supports).
+    filters:
+      # Examples:
+      #  - source: ledger/vectors/web_learning_snapshots
+      #  - domain: <domain_id>
+      #  - sensitivity: low/medium/high/critical
+      enabled: true
+
+    # Similarity thresholds (hint-level)
+    similarity:
+      min_score: 0.0
+      # If set > 0, low-signal matches are dropped early.
+      drop_below: 0.15
+
+  keyword_search:
+    enabled: true
+    # Keyword/BM25 style retrieval for exact identifiers, filenames, error strings.
+    default_top_k: 18
+    max_top_k: 60
+    boosting:
+      exact_match_boost: 2.0
+      title_boost: 1.4
+      path_boost: 1.2
+
+  structured_lookup:
+    enabled: true
+    # For known entity types (approval_id, ledger_id, domain_id, etc.)
+    # the runtime may do direct lookups before fuzzy search.
+    detect_identifiers: true
+    identifier_patterns:
+      - "(?i)approval[-_ ]?id[:= ]+([a-z0-9\\-]+)"
+      - "(?i)ledger[-_ ]?id[:= ]+([a-z0-9\\-]+)"
+      - "(?i)domain[-_ ]?id[:= ]+([a-z0-9\\-]+)"
+
+# ------------------------------------------------------------------------------
+# Hybrid merge + ranking (deterministic, explainable)
+# ------------------------------------------------------------------------------
+rank:
+  enabled: true
+
+  # Merge strategy for candidates from multiple retrievers.
+  merge:
+    strategy: "weighted_union" # weighted_union | interleave | prioritize_vector | prioritize_keyword
+
+    # Normalized weights by retriever type.
+    weights:
+      vector_search: 1.0
+      keyword_search: 0.8
+      structured_lookup: 1.2
+
+    # Prevent duplicate chunks/docs from flooding context.
+    dedupe:
+      enabled: true
+      # Dedupe keys (first match wins, stable)
+      keys:
+        - "source_id"
+        - "document_id"
+        - "chunk_hash"
+      # If content hashes match, keep the highest-ranked.
+      by_content_hash: true
+
+  # Scoring model (simple, controlled)
+  scoring:
+    # Primary ranking weights
+    weights:
+      relevance: 0.65
+      source_weight: 0.15
+      recency: 0.10
+      trust: 0.10
+
+    # Recency bias (unix seconds). Applies mainly to ledger/conversations/logs.
+    recency:
+      enabled: true
+      half_life_days: 14
+      max_boost: 0.25
+
+    # Trust weighting integrates with trust_permissions_map or trust scoring if available.
+    trust:
+      enabled: true
+      default_trust_score: 0.5
+      # Sensitivity reduces score unless trust is high.
+      sensitivity_penalty:
+        low: 0.0
+        medium: 0.05
+        high: 0.15
+        critical: 0.30
+
+    # Source default weights defined in sources.registry.*.default_weight
+    source_weight:
+      enabled: true
+
+  # Tie-breakers for deterministic ordering
+  deterministic_order:
+    enabled: true
+    tie_breakers:
+      - "score_desc"
+      - "ts_desc"         # if timestamps exist
+      - "source_id_asc"
+      - "document_id_asc"
+      - "chunk_index_asc"
+
+# ------------------------------------------------------------------------------
+# Reranking (optional, bounded)
+# ------------------------------------------------------------------------------
+rerank:
+  enabled: true
+
+  # Reranking can be expensive; keep bounded and deterministic.
+  mode: "light" # off | light | heavy
+  max_candidates: 40
+  output_top_k: 18
+
+  # If you have a local reranker model or heuristic reranker, this config governs its use.
+  method:
+    type: "heuristic" # heuristic | model
+    heuristic:
+      boost_exact_identifier_hits: true
+      boost_config_refs: true
+      boost_error_stack_traces: true
+      penalize_low_signal_chunks: true
+
+  # If using a reranker model (later), define the contract here (no implementation required now).
+  model:
+    provider_preference:
+      - "ollama"
+    model_role: "reasoning" # reuse reasoning model unless you add a reranker role later
+    max_input_tokens_hint: 2048
+
+# ------------------------------------------------------------------------------
+# Context packaging (chunking, token budgets, citation blocks)
+# ------------------------------------------------------------------------------
+context:
+  enabled: true
+
+  # Global limits to prevent context stuffing.
+  limits:
+    max_chunks: 18
+    max_documents: 12
+    max_total_chars: 45_000
+    # Token budget is enforced by runtime tokenizer; this is a hint clamp.
+    max_total_tokens_hint: 6000
+
+  # Chunk formatting rules (for LLM consumption)
+  format:
+    include_headers: true
+    header_template: "[{source}] {title} ({ref})"
+    include_timestamps: true
+    timestamp_format: "iso8601_or_locale"
+    include_source_path_if_present: true
+
+  # Citation/provenance formatting (integrates with explanatory.yaml)
+  citations:
+    enabled: true
+    format: "bracket_refs"  # bracket_refs | footnotes | json
+    ref_template: "[{type}:{id}]"
+    include_retrieved_at: true
+    include_source_url_if_present: true
+    include_hash_if_present: true
+
+  # Redaction rules applied at packaging time (content-level minimization)
+  redaction:
+    enabled: true
+    # These are conservative heuristics; enforcement belongs to a redaction component.
+    patterns:
+      - "(?i)sk-[a-z0-9]{10,}"
+      - "(?i)api[_-]?key\\s*[:=]"
+      - "(?i)password\\s*[:=]"
+      - "(?i)BEGIN\\s+PRIVATE\\s+KEY"
+    on_match: "mask" # mask | drop_chunk | require_approval
+    mask_with: "[REDACTED]"
+
+# ------------------------------------------------------------------------------
+# Governance gates (trust + approvals + sensitivity controls)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  # Sensitivity classification used for gating retrieval sources/chunks.
+  sensitivity_levels: ["low", "medium", "high", "critical"]
+
+  # Default source sensitivity fallback if unknown.
+  default_sensitivity: "medium"
+
+  # Trust floors for retrieving sensitive context.
+  trust:
+    min_trust_by_sensitivity:
+      low: 0
+      medium: 2
+      high: 4
+      critical: 6
+
+  approvals:
+    # Pulling high/critical content into model context can require approvals in governed profiles.
+    require_approval_by_sensitivity:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+    # Exporting retrieved context (e.g., to file/download) should be gated.
+    export_requires_approval: true
+
+  # Source-level gating (strong control)
+  source_gates:
+    web_learning_snapshots:
+      # Web snapshots are high-sensitivity by default.
+      min_trust: 4
+      requires_approval: true
+
+    industrial:
+      min_trust: 6
+      requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Caching (performance + determinism)
+# ------------------------------------------------------------------------------
+cache:
+  enabled: true
+
+  query_result_cache:
+    enabled: true
+    ttl_s: 30
+    max_entries_hint: 5000
+    key_includes:
+      - "normalized_query"
+      - "enabled_sources"
+      - "filters"
+      - "profile"
+      - "risk"
+
+  document_cache:
+    enabled: true
+    ttl_s: 300
+    max_entries_hint: 10_000
+
+# ------------------------------------------------------------------------------
+# Observability (retrieval trace + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  # Emit a structured retrieval trace suitable for explanation/audit UIs.
+  trace:
+    enabled: true
+    level: "full" # minimal | standard | full
+
+    include:
+      - "profile"
+      - "workload"
+      - "risk"
+      - "sources_enabled"
+      - "normalized_query"
+      - "rewrite_applied"
+      - "expansion_applied"
+      - "retrievers_used"
+      - "candidate_counts"
+      - "ranking_weights"
+      - "rerank_mode"
+      - "selected_count"
+      - "packaging_limits"
+      - "denied_chunks"
+      - "gates_triggered"
+      - "latency_ms"
+
+    # Do not log raw chunk content by default.
+    redact_content: true
+
+  metrics:
+    enabled: true
+    counters:
+      - "retrieval.requests"
+      - "retrieval.failures"
+      - "retrieval.gated"
+      - "retrieval.cache_hits"
+      - "retrieval.cache_misses"
+    histograms:
+      - "retrieval.latency_ms"
+      - "retrieval.candidate_count"
+      - "retrieval.selected_count"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    gather:
+      latency_budget_ms: 5000
+    rerank:
+      enabled: true
+      mode: "light"
+    observability:
+      trace:
+        level: "full"
+        include:
+          - "candidates_considered"
+
+  workstation:
+    gather:
+      latency_budget_ms: 2500
+    rerank:
+      enabled: true
+      mode: "light"
+    cache:
+      query_result_cache:
+        ttl_s: 60
+
+  airgapped:
+    sources:
+      registry:
+        web_learning_snapshots:
+          enabled: false
+    governance:
+      source_gates:
+        web_learning_snapshots:
+          requires_approval: true
+
+  regulated:
+    governance:
+      approvals:
+        require_approval_by_sensitivity:
+          low: false
+          medium: true
+          high: true
+          critical: true
+    context:
+      redaction:
+        on_match: "drop_chunk"
+    observability:
+      trace:
+        # In regulated environments, keep trace metadata but never store raw content.
+        redact_content: true
+
+  safety_critical:
+    gather:
+      latency_budget_ms: 2000
+    rerank:
+      enabled: true
+      mode: "light"
+    governance:
+      trust:
+        min_trust_by_sensitivity:
+          low: 1
+          medium: 3
+          high: 5
+          critical: 7
+      approvals:
+        require_approval_by_sensitivity:
+          low: true
+          medium: true
+          high: true
+          critical: true
+    context:
+      limits:
+        max_chunks: 12
+        max_total_tokens_hint: 4000
+      redaction:
+        on_match: "drop_chunk"
+    observability:
+      trace:
+        level: "standard"

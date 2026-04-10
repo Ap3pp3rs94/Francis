@@ -1,0 +1,327 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Cross-Domain Synthesis (systems-level convergence + trade-offs)
+# Path:   config/prompts/cross_domain_synthesis.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Produces a coherent synthesis across multiple Francis subsystems:
+#   - policy + governance
+#   - memory + ledger
+#   - API + daemon/workers
+#   - UI + protocol
+#   - models/routing
+#   - industrial / federation / simulation (when relevant)
+#
+# This is used when:
+#   - the user request is multi-domain and benefits from a "systems thinking" pass
+#   - there are competing constraints and you need trade-offs and a convergence plan
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON (schema-compliant). No markdown.
+# - Be explicit about assumptions and evidence sources.
+# - Prefer stable, forward-compatible recommendations (no speculative overengineering).
+# - Do not redesign the directory structure or introduce new files unless asked.
+# - Stay policy-safe: do not enable wrongdoing; redact secrets/PII.
+# ==============================================================================
+version: 1
+
+id: "cross_domain.synthesis"
+title: "Cross-Domain Synthesis"
+owner: "francis"
+intent: "synthesize_and_converge"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Use for multi-domain convergence decisions with explicit trade-offs."
+    - "Outputs a ranked plan with rationale and risks."
+  compatibility:
+    - "Works with partial context; must mark uncertainty explicitly."
+
+# ------------------------------------------------------------------------------
+# Input contract
+# ------------------------------------------------------------------------------
+inputs:
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      profile: { type: string, required: false }
+      prompt: { type: string, required: true } # synthesis question / objective
+      success_criteria: { type: string, required: false }
+
+  sources:
+    type: array
+    required: false
+    items:
+      type: object
+      fields:
+        source_id: { type: string, required: true }
+        kind: { type: string, required: false } # ledger | logs | config | code | memory | metrics | attachment | other
+        summary: { type: string, required: false }
+        content: { type: string, required: false }
+        meta: { type: object, required: false }
+
+  context:
+    type: object
+    required: false
+    fields:
+      constraints: { type: object, required: false }
+      known_capabilities: { type: array, required: false }
+      runtime_posture: { type: object, required: false }
+      governance_posture: { type: object, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - synthesis
+      - tradeoffs
+      - plan
+      - assumptions
+      - evidence
+      - risks
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      synthesis:
+        type: object
+        additionalProperties: false
+        required: ["one_liner", "narrative", "key_constraints", "recommended_direction"]
+        properties:
+          one_liner: { type: string }
+          narrative:
+            type: array
+            items: { type: string }
+          key_constraints:
+            type: array
+            items: { type: string }
+          recommended_direction: { type: string }
+
+      tradeoffs:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: ["decision", "options", "winner", "why", "cost_of_change"]
+          properties:
+            decision: { type: string }
+            options:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: ["id", "description", "pros", "cons"]
+                properties:
+                  id: { type: string }
+                  description: { type: string }
+                  pros:
+                    type: array
+                    items: { type: string }
+                  cons:
+                    type: array
+                    items: { type: string }
+            winner: { type: string }
+            why:
+              type: array
+              items: { type: string }
+            cost_of_change: { type: string, enum: ["low", "medium", "high", "unknown"] }
+
+      plan:
+        type: object
+        additionalProperties: false
+        required: ["phases", "milestones", "next_actions"]
+        properties:
+          phases:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["name", "goals", "deliverables", "out_of_scope"]
+              properties:
+                name: { type: string }
+                goals:
+                  type: array
+                  items: { type: string }
+                deliverables:
+                  type: array
+                  items: { type: string }
+                out_of_scope:
+                  type: array
+                  items: { type: string }
+
+          milestones:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["milestone", "definition_of_done", "risks"]
+              properties:
+                milestone: { type: string }
+                definition_of_done:
+                  type: array
+                  items: { type: string }
+                risks:
+                  type: array
+                  items: { type: string }
+
+          next_actions:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["action", "owner", "priority", "notes"]
+              properties:
+                action: { type: string }
+                owner: { type: string } # operator | francis | mixed
+                priority: { type: string, enum: ["low", "medium", "high", "critical"] }
+                notes: { type: string }
+
+      assumptions:
+        type: array
+        items: { type: string }
+
+      evidence:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: ["source_id", "used_for", "confidence"]
+          properties:
+            source_id: { type: string }
+            used_for: { type: string }
+            confidence: { type: number } # 0..1
+
+      risks:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: ["kind", "severity", "message", "mitigation"]
+          properties:
+            kind: { type: string } # security | compliance | technical | schedule | ops | unknown
+            severity: { type: string, enum: ["low", "medium", "high", "critical"] }
+            message: { type: string }
+            mitigation: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s cross-domain synthesis engine.
+
+      Output MUST be strict JSON matching the schema. No markdown.
+
+      Synthesis principles:
+      - Use evidence: tie claims to provided sources; mark uncertainty explicitly.
+      - Identify cross-cutting constraints (security, governance, performance, maintainability).
+      - Provide trade-offs with a clear winner and explicit cost-of-change.
+      - Produce a phased plan with out-of-scope boundaries (avoid overengineering).
+      - Do not redesign the directory structure or propose new files unless asked.
+      - Never include secrets; redact if present.
+      - Never enable wrongdoing (credential theft, malware, DoS, surveillance); if present, pivot to defense.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      SOURCES:
+      {{sources}}
+
+      CONTEXT:
+      {{context}}
+
+      Task:
+      Synthesize across domains, provide trade-offs and a convergence plan.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.3
+  max_output_tokens: 2400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "SYNTHESIS_COMPLETED"
+  - "TRADEOFFS_EVALUATED"
+  - "PLAN_PHASED"
+  - "ASSUMPTIONS_STATED"
+  - "EVIDENCE_LINKED"
+  - "BLOCKED_UNSAFE_TOPIC"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "cross_domain.synthesis.requested"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "profile"]
+
+  - kind: "cross_domain.synthesis.generated"
+    when: "after"
+    fields: ["tradeoffs.count", "plan.phases.count", "observability.reason_codes"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.25
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.2
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.15

@@ -1,0 +1,618 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Explanation Generator (audit-grade reasoning + trace narrative)
+# Path:   config/prompts/explanation_generator.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Produces a structured explanation record for:
+#   - Explanation Explorer UI (list + detail views)
+#   - Ledger/audit trails
+#   - Operator troubleshooting ("why did it do/deny this?")
+#   - Compliance export (when regulated posture is enabled)
+#
+# The generator converts execution context into:
+#   - a crisp summary (what happened)
+#   - rationale (why it happened)
+#   - gate evaluation (trust/approval/policy)
+#   - timeline steps (what changed, in what order)
+#   - evidence + citations (if provided)
+#   - remediation/next actions (what to do next)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching the schema. No markdown, no code fences.
+# - Evidence discipline:
+#     * Only reference facts present in inputs.
+#     * If unknown, mark unknown explicitly (do not invent).
+# - Safety discipline:
+#     * Never output secrets (keys/tokens/passwords/private keys).
+#     * Never output sensitive exploit/wrongdoing instructions.
+# - Observability:
+#     * Include reason codes and suggested audit events.
+# - Forward-minded:
+#     * Stable envelope supports UI expansion without breaking older readers.
+#     * Optional fields may be omitted by callers; generator must degrade gracefully.
+# ==============================================================================
+version: 1
+
+id: "explanation.generator"
+title: "Explanation Generator"
+owner: "francis"
+intent: "generate_explanation_record"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Used by explanation_explorer and audit/reporting surfaces."
+    - "Safe-by-default: redaction + no speculation."
+    - "Supports denial explanations and successful execution explanations."
+  compatibility:
+    - "Consumers should ignore unknown fields."
+    - "Stable keys for list views: explanation_id, kind, ts, title, summary.severity."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | daemon | worker | federation
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      audience_hint:
+        type: string
+        required: false
+        enum: ["operator_business", "student_support", "general", "unknown"]
+
+      message: { type: string, required: false } # original user prompt/message (optional)
+      time_utc_iso: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+
+  classification:
+    type: object
+    required: false
+    fields:
+      intent: { type: string, required: false } # conversational | operational | policy | unknown
+      capability_id: { type: string, required: false } # resolved capability, if any
+      domain_id: { type: string, required: false }
+      risk_category: { type: string, required: false } # read_only | mutation | destructive | credential_ops | network_egress | industrial_actuation | unknown
+      requires_approval: { type: boolean, required: false }
+      requires_quorum: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          required: { type: boolean, required: false }
+          approval_id: { type: string, required: false }
+          status: { type: string, required: false } # pending | approved | rejected | emergency | unknown
+          quorum_required: { type: boolean, required: false }
+          quorum_status: { type: string, required: false } # satisfied | not_satisfied | unknown
+
+      policy_gates:
+        type: object
+        required: false
+        fields:
+          # Optional: policy evaluation summary emitted by governance layer.
+          allowed: { type: boolean, required: false }
+          denied_reason: { type: string, required: false }
+          matched_rule_id: { type: string, required: false }
+          min_trust_required: { type: number, required: false }
+          scopes_required: { type: array, required: false }
+          scopes_present: { type: array, required: false }
+          notes: { type: array, required: false }
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          summary: { type: string, required: false }
+
+      environment:
+        type: object
+        required: false
+        fields:
+          hostname: { type: string, required: false }
+          platform: { type: string, required: false }
+          python: { type: string, required: false }
+          node: { type: string, required: false }
+
+  execution:
+    type: object
+    required: false
+    fields:
+      status:
+        type: string
+        required: false
+        enum: ["not_run", "denied", "queued", "running", "succeeded", "failed", "partial", "unknown"]
+
+      started_ts_unix_s: { type: number, required: false }
+      finished_ts_unix_s: { type: number, required: false }
+      duration_ms: { type: number, required: false }
+
+      # Human-safe error summary (no secrets).
+      error:
+        type: object
+        required: false
+        fields:
+          message: { type: string, required: false }
+          kind: { type: string, required: false } # validation | policy | network | filesystem | tool | unknown
+          code: { type: string, required: false }
+          retryable: { type: boolean, required: false }
+
+      # Timeline of steps emitted by orchestrator/tool runners (optional).
+      steps:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            step_id: { type: string, required: false }
+            ts_unix_s: { type: number, required: false }
+            kind: { type: string, required: false } # classify | gate | tool_call | tool_result | write | read | note | warning | error
+            title: { type: string, required: false }
+            detail: { type: string, required: false }
+            fields: { type: object, required: false } # non-secret structured payload
+
+      # Tool calls/results sanitized for UI (optional).
+      tool_events:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            tool: { type: string, required: true }
+            ts_unix_s: { type: number, required: false }
+            phase: { type: string, required: false } # before | after
+            ok: { type: boolean, required: false }
+            summary: { type: string, required: false }
+            redacted_fields: { type: array, required: false }
+
+  evidence:
+    type: object
+    required: false
+    fields:
+      # If web learning / retrieval produced citations, they can be passed in.
+      citations:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            citation_id: { type: string, required: false }
+            title: { type: string, required: false }
+            source: { type: string, required: false } # url, doc id, ledger id, etc. (do not include secrets)
+            excerpt: { type: string, required: false } # keep short; may be empty
+            used_for: { type: string, required: false }
+            confidence: { type: number, required: false } # 0..1
+
+      # Memory chunks included in prompt context (optional).
+      memory_chunks:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            source: { type: string, required: false }
+            content: { type: string, required: true }
+            score: { type: number, required: false }
+            meta: { type: object, required: false }
+
+  redaction_context:
+    type: object
+    required: false
+    fields:
+      # Runner may provide patterns/ids known to be sensitive so explanations never leak them.
+      known_secret_markers: { type: array, required: false } # e.g., ["sk-", "-----BEGIN", "Bearer "]
+      known_pii_markers: { type: array, required: false }    # e.g., emails/domains/ids
+      notes: { type: array, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - explanation
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      explanation:
+        type: object
+        additionalProperties: false
+        required:
+          - explanation_id
+          - kind
+          - ts_unix_s
+          - title
+          - summary
+          - narrative
+          - gates
+          - timeline
+          - outcomes
+          - next_actions
+          - followups
+          - rendering_hints
+        properties:
+          explanation_id: { type: string } # stable id; can be derived from request_id + ts
+          kind:
+            type: string
+            enum: ["decision", "execution", "denial", "error", "audit", "unknown"]
+
+          ts_unix_s: { type: number }
+          title: { type: string }
+
+          summary:
+            type: object
+            additionalProperties: false
+            required: ["what_happened", "severity", "status", "domain_id", "capability_id"]
+            properties:
+              what_happened: { type: string }
+              severity: { type: string, enum: ["info", "notice", "warning", "error", "critical"] }
+              status: { type: string } # mirrors execution.status when possible
+              domain_id: { type: string }
+              capability_id: { type: string }
+
+              # Short “why” snippet for list views.
+              why_short: { type: string }
+
+              # Operator safe: no secrets, no raw tokens.
+              safe_context:
+                type: array
+                items: { type: string }
+
+          narrative:
+            type: array
+            items: { type: string } # readable paragraphs or bullet-like sentences
+
+          gates:
+            type: object
+            additionalProperties: false
+            required: ["trust", "approvals", "policy", "safety_flags"]
+            properties:
+              trust:
+                type: object
+                additionalProperties: false
+                required: ["present", "level", "min_required", "ok", "notes"]
+                properties:
+                  present: { type: boolean }
+                  level: { type: number }
+                  min_required: { type: number }
+                  ok: { type: boolean }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              approvals:
+                type: object
+                additionalProperties: false
+                required: ["enabled", "required", "approval_id", "status", "quorum_required", "quorum_status", "ok", "notes"]
+                properties:
+                  enabled: { type: boolean }
+                  required: { type: boolean }
+                  approval_id: { type: string }
+                  status: { type: string }
+                  quorum_required: { type: boolean }
+                  quorum_status: { type: string }
+                  ok: { type: boolean }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              policy:
+                type: object
+                additionalProperties: false
+                required: ["evaluated", "allowed", "matched_rule_id", "denied_reason", "scopes_required", "scopes_present", "notes"]
+                properties:
+                  evaluated: { type: boolean }
+                  allowed: { type: boolean }
+                  matched_rule_id: { type: string }
+                  denied_reason: { type: string }
+                  scopes_required:
+                    type: array
+                    items: { type: string }
+                  scopes_present:
+                    type: array
+                    items: { type: string }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              # High-level safety flags: no enabling detail, just classification.
+              safety_flags:
+                type: array
+                items: { type: string } # e.g., "network_egress", "credential_ops", "regulated_domain"
+
+          timeline:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["ts_unix_s", "kind", "title", "detail", "fields"]
+              properties:
+                ts_unix_s: { type: number }
+                kind: { type: string }
+                title: { type: string }
+                detail: { type: string }
+                fields: { type: object } # must be non-secret; safe structured view
+
+          outcomes:
+            type: object
+            additionalProperties: false
+            required: ["status", "duration_ms", "artifacts", "citations", "errors"]
+            properties:
+              status: { type: string }
+              duration_ms: { type: number }
+
+              artifacts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["kind", "ref", "notes"]
+                  properties:
+                    kind: { type: string } # ledger_ref | file_ref | export_ref | plugin_ref | other
+                    ref: { type: string }
+                    notes: { type: string }
+
+              citations:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["citation_id", "title", "source", "used_for", "confidence"]
+                  properties:
+                    citation_id: { type: string }
+                    title: { type: string }
+                    source: { type: string }
+                    used_for: { type: string }
+                    confidence: { type: number }
+
+              errors:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["kind", "message", "retryable"]
+                  properties:
+                    kind: { type: string }
+                    message: { type: string }
+                    retryable: { type: boolean }
+
+          next_actions:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["action", "priority", "owner", "why"]
+              properties:
+                action: { type: string }
+                priority: { type: string, enum: ["low", "medium", "high", "critical"] }
+                owner: { type: string } # operator | francis | mixed
+                why: { type: string }
+
+          followups:
+            type: array
+            items: { type: string } # only if clarification is genuinely needed
+
+          rendering_hints:
+            type: object
+            additionalProperties: false
+            required: ["tone", "show_gates", "show_timeline", "show_citations", "collapse_long_sections"]
+            properties:
+              tone:
+                type: string
+                enum: ["professional", "supportive", "neutral", "urgent", "refusal"]
+              show_gates: { type: boolean }
+              show_timeline: { type: boolean }
+              show_citations: { type: boolean }
+              collapse_long_sections: { type: boolean }
+              badge_text: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - contains_secrets
+          - contains_pii
+          - wrongdoing_topic
+          - blocked
+          - blocked_reasons
+          - redactions
+        properties:
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+
+          # “wrongdoing_topic” is classification only; never include operational details.
+          wrongdoing_topic: { type: boolean }
+
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Explanation Generator.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Non-negotiables:
+      - Evidence discipline: Do not invent facts. If input is missing, label unknown.
+      - Secret discipline: Never output secrets (keys/tokens/passwords/private keys).
+        If any appear in inputs, redact and note in safety.redactions.
+      - Wrongdoing discipline: If the underlying request involves credential attacks, malware, DoS, or surveillance,
+        your explanation must remain high-level and policy/defense-oriented. Do not include steps, methods, or evasion.
+
+      Explanation quality bar:
+      - Make it useful for operators: what happened, why, which gates applied, what to do next.
+      - Keep the timeline step descriptions succinct and non-secret.
+      - Summaries must be safe for list views (no sensitive data).
+      - Use rendering_hints to help UI pick tone and collapsed sections.
+
+      Guidance for kind:
+      - denial: policy/trust/approval blocked
+      - execution: ran and succeeded/partial
+      - error: failed unexpectedly
+      - decision: classified and routed but did not run
+      - audit: compliance-style explanation (export, regulated posture)
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      CLASSIFICATION:
+      {{classification}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      RUNTIME:
+      {{runtime}}
+
+      EXECUTION:
+      {{execution}}
+
+      EVIDENCE:
+      {{evidence}}
+
+      REDACTION_CONTEXT:
+      {{redaction_context}}
+
+      Task:
+      Produce an audit-grade explanation record for the event described.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.18
+  max_output_tokens: 2600
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "EXPLAIN_DECISION"
+  - "EXPLAIN_EXECUTION"
+  - "EXPLAIN_DENIAL"
+  - "EXPLAIN_ERROR"
+  - "EXPLAIN_AUDIT"
+  - "EVIDENCE_MISSING_UNKNOWN_MARKED"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+  - "WRONGDOING_TOPIC_HIGH_LEVEL_ONLY"
+  - "PROFILE_STRICT_POSTURE"
+  - "GUARD_RESTRICTED_TONE"
+  - "GUARD_LOCKDOWN_TONE"
+
+# ------------------------------------------------------------------------------
+# Audit event templates (intent; runtime decides actual emission)
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "explanation.generate.requested"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "source", "profile", "guard_state"]
+
+  - kind: "explanation.generate.completed"
+    when: "after"
+    fields: ["explanation.kind", "explanation.summary.status", "observability.reason_codes"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.22
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1

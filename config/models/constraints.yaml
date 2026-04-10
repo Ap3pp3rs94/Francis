@@ -1,0 +1,397 @@
+# ==============================================================================
+# Model Constraints & Governance Envelope
+# File: config/models/constraints.yaml
+#
+# GOAL:
+#   Provide a declarative constraint layer for all model usage:
+#     - Provider allow/deny rules by environment profile
+#     - Token/latency budgets by workload class
+#     - Safety & governance gates for high-risk actions
+#     - Routing defaults and fallback behavior
+#
+# DESIGN PRINCIPLES:
+#   - Fail closed on ambiguity (unknown provider/model => deny unless explicitly allowed)
+#   - Keep secrets out of config (API keys belong in env/vault)
+#   - Prefer explicit "allowlists" over implicit permissiveness
+#   - Make constraints observable (reasons, tags, severity)
+#
+# NOTE:
+#   This file is a config contract; enforcement occurs in the model router / governance
+#   layer. Unknown keys should be ignored by tolerant loaders.
+# ==============================================================================
+
+version: 1
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+global:
+  fail_closed: true
+  default_workload_class: chat
+
+  # Use these tags in logs/audit trails to understand "why" a decision happened.
+  audit_tags:
+    - models
+    - routing
+    - governance
+
+  # Central switch for allowing any network-dependent provider (remote).
+  # Profiles like airgapped/safety_critical should keep this false.
+  allow_remote_providers_default: false
+
+# ------------------------------------------------------------------------------
+# Workload classes (budgets + behavior)
+# ------------------------------------------------------------------------------
+workloads:
+  chat:
+    description: "Interactive chat (UI, CLI)."
+    max_input_tokens: 8192
+    max_output_tokens: 2048
+    max_total_tokens: 10240
+    latency_budget_ms: 15000
+    streaming_preferred: true
+    allow_tools: true
+    allow_web: false
+
+  code:
+    description: "Code generation/refactor/analysis."
+    max_input_tokens: 16384
+    max_output_tokens: 4096
+    max_total_tokens: 20480
+    latency_budget_ms: 30000
+    streaming_preferred: true
+    allow_tools: true
+    allow_web: false
+
+  reasoning:
+    description: "Higher-depth reasoning tasks; may be slower."
+    max_input_tokens: 16384
+    max_output_tokens: 2048
+    max_total_tokens: 18432
+    latency_budget_ms: 45000
+    streaming_preferred: true
+    allow_tools: true
+    allow_web: false
+
+  embeddings:
+    description: "Embedding generation for memory/vectors."
+    max_input_tokens: 8192
+    max_output_tokens: 0
+    max_total_tokens: 8192
+    latency_budget_ms: 10000
+    streaming_preferred: false
+    allow_tools: false
+    allow_web: false
+
+  moderation:
+    description: "Safety classification / policy checks."
+    max_input_tokens: 4096
+    max_output_tokens: 512
+    max_total_tokens: 4608
+    latency_budget_ms: 8000
+    streaming_preferred: false
+    allow_tools: false
+    allow_web: false
+
+  tool_router:
+    description: "Tool selection and schema-driven routing."
+    max_input_tokens: 8192
+    max_output_tokens: 1024
+    max_total_tokens: 9216
+    latency_budget_ms: 12000
+    streaming_preferred: true
+    allow_tools: true
+    allow_web: false
+
+# ------------------------------------------------------------------------------
+# Provider policy (allow/deny + environment-specific overrides)
+# ------------------------------------------------------------------------------
+providers:
+  # Local-first provider (expected to exist in most profiles)
+  ollama:
+    kind: local
+    enabled_by_default: true
+    risk: low
+    notes: "Local inference provider. Preferred in edge/airgapped/safety-critical."
+
+  # Remote providers are defined but disabled by default; profiles may enable.
+  openai:
+    kind: remote
+    enabled_by_default: false
+    risk: medium
+    notes: "Remote inference. Requires explicit allow + credentials."
+    requires:
+      - credentials.openai
+      - network.egress
+
+  anthropic:
+    kind: remote
+    enabled_by_default: false
+    risk: medium
+    notes: "Remote inference. Requires explicit allow + credentials."
+    requires:
+      - credentials.anthropic
+      - network.egress
+
+  azure_openai:
+    kind: remote
+    enabled_by_default: false
+    risk: medium
+    notes: "Remote inference via Azure endpoint. Requires explicit allow + credentials."
+    requires:
+      - credentials.azure_openai
+      - network.egress
+
+# ------------------------------------------------------------------------------
+# Environment routing constraints (profile overlays)
+# ------------------------------------------------------------------------------
+environments:
+
+  dev:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: []
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  workstation:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: []
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  home:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: []
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  edge:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: [openai, anthropic, azure_openai]
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  airgapped:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: [openai, anthropic, azure_openai]
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  regulated:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: [openai, anthropic, azure_openai]
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  safety_critical:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: [openai, anthropic, azure_openai]
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+      moderation: { provider: ollama }
+
+  production:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: []
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  high_availability:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: []
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+  federated:
+    allow_remote_providers: false
+    allow_internet_fallback: false
+    provider_allowlist: [ollama]
+    provider_denylist: []
+    defaults:
+      chat: { provider: ollama }
+      code: { provider: ollama }
+      reasoning: { provider: ollama }
+      embeddings: { provider: ollama }
+
+# ------------------------------------------------------------------------------
+# Model allow/deny rules (names/families)
+# ------------------------------------------------------------------------------
+models:
+  # Global allowlist. If non-empty, only these are allowed (unless overridden).
+  # Keeping this empty means "provider policy governs" (more flexible).
+  global_allowlist: []
+
+  # Explicit denylist (always deny).
+  global_denylist:
+    - "*:insecure"
+    - "*:unknown"
+
+  # Recommended “known-safe” defaults by workload class.
+  # IMPORTANT:
+  # - These should match real installed tags if you want strict routing without surprises.
+  recommended:
+    chat:
+      - "ollama:qwen2.5:14b"
+      - "ollama:llama3.1:8b"
+      - "ollama:llama3.2:3b"
+    code:
+      - "ollama:qwen2.5-coder:32b"
+      - "ollama:qwen2.5-coder:32b-instruct"
+      - "ollama:qwen2.5-coder:7b"
+      - "ollama:francis-coder:latest"
+    reasoning:
+      - "ollama:qwen2.5:14b"
+      - "ollama:llama3.1:8b"
+    embeddings:
+      # If you want embeddings, install an embed model and update this to match its real tag.
+      # Example commonly used in Ollama:
+      - "ollama:nomic-embed-text"
+    moderation:
+      - "ollama:llama3.1:8b"
+
+# ------------------------------------------------------------------------------
+# Governance gates for model usage (risk-aware)
+# ------------------------------------------------------------------------------
+gates:
+  approval_required_for_risk:
+    medium: false
+    high: true
+    critical: true
+
+  trust_minimums:
+    chat: 0
+    code: 1
+    reasoning: 1
+    embeddings: 0
+    moderation: 2
+    tool_router: 2
+
+  tools:
+    allow_model_suggest_tools: true
+    require_approval_for_tools_with_risk:
+      high: true
+      critical: true
+
+  web_access:
+    allow_web_via_model: false
+    require_approval_if_requested: true
+
+  sensitive_intent:
+    enabled: true
+    actions:
+      on_detect:
+        - "force_approval"
+        - "emit_audit_event"
+    patterns:
+      - "dump .* key"
+      - "show .* secret"
+      - "export .* credentials"
+      - "exfiltrate"
+      - "bypass approval"
+      - "disable logging"
+      - "turn off audit"
+
+# ------------------------------------------------------------------------------
+# Fallback behavior
+# ------------------------------------------------------------------------------
+fallback:
+  enabled: true
+  allow_cross_provider_fallback: false
+
+  per_workload:
+    chat:
+      fallback_models:
+        - "ollama:llama3.1:8b"
+        - "ollama:llama3.2:3b"
+    code:
+      fallback_models:
+        - "ollama:qwen2.5-coder:7b"
+        - "ollama:qwen2.5-coder:32b"
+        - "ollama:francis-coder:latest"
+    embeddings:
+      fallback_models:
+        - "ollama:nomic-embed-text"
+
+# ------------------------------------------------------------------------------
+# Rate/throughput hints (resource protection)
+# ------------------------------------------------------------------------------
+limits:
+  per_minute:
+    chat: 60
+    code: 30
+    reasoning: 20
+    embeddings: 120
+    moderation: 120
+
+  concurrency:
+    chat: 4
+    code: 2
+    reasoning: 2
+    embeddings: 6
+    moderation: 4
+
+# ------------------------------------------------------------------------------
+# Observability hooks (what to log per request)
+# ------------------------------------------------------------------------------
+telemetry:
+  log_provider: true
+  log_model: true
+  log_workload: true
+  log_tokens: true
+  log_latency_ms: true
+  log_cache_hits: true
+
+  prompt_logging:
+    enabled: false
+    allowed_in_profiles: [dev]
+    max_chars: 1024
+    redact_patterns:
+      - "(?i)sk-[a-z0-9]{10,}"
+      - "(?i)api[_-]?key\\s*[:=]"
+      - "(?i)password\\s*[:=]"
+      - "(?i)secret\\s*[:=]"

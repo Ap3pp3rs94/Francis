@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/action_result.schema.json",
+  "title": "Francis Action Result",
+  "type": "object",
+  "required": ["status", "ok"],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "pending", "success", "error", "denied", "timeout", "canceled", "blocked", "unknown"]
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "artifact_dir": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "output": {
+      "description": "Action-specific payload.",
+      "type": ["object", "array", "string", "number", "boolean", "null"]
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

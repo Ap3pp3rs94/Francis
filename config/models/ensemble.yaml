@@ -1,0 +1,385 @@
+# ==============================================================================
+# Model Ensemble & Routing Preferences
+# File: config/models/ensemble.yaml
+#
+# GOAL:
+#   Define the preferred model ensemble for Francis across workloads.
+#   This file expresses "what we want" (preferences, specialization, fallbacks).
+#   Hard constraints (allow/deny, egress policy) are handled in constraints.yaml.
+#
+# DESIGN PRINCIPLES:
+#   - Prefer local-first models unless explicitly overridden by environment.
+#   - Provide multiple candidates per workload for resilience.
+#   - Keep configuration forward-compatible (unknown keys ignored).
+#   - Make routing decisions explainable (tags + reasons).
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "routing_preferences"
+  notes:
+    - "Preferences only; constraints.yaml enforces what is allowed."
+    - "Use provider:model notation for clarity."
+    - "Candidates are ordered: first usable wins (after constraints)."
+
+# ------------------------------------------------------------------------------
+# Default ensemble (applies unless an environment override exists)
+# ------------------------------------------------------------------------------
+defaults:
+  # Workload classes align with constraints.yaml workloads.*
+  workloads:
+
+    chat:
+      description: "Interactive chat (UI/CLI)."
+      candidates:
+        - id: "ollama:qwen2.5:14b-instruct"
+          tags: ["local", "balanced", "primary"]
+          notes: "General-purpose chat/reasoning model (local)."
+        - id: "ollama:llama3.1:8b-instruct"
+          tags: ["local", "fallback", "fast"]
+          notes: "Faster fallback for low-latency interactive responses."
+      parameters:
+        temperature: 0.4
+        top_p: 0.9
+        max_tokens: 1536
+        stream: true
+
+    reasoning:
+      description: "Higher-depth reasoning for planning, governance, and analysis."
+      candidates:
+        - id: "ollama:qwen2.5:14b-instruct"
+          tags: ["local", "reasoning", "primary"]
+        - id: "ollama:llama3.1:8b-instruct"
+          tags: ["local", "fallback"]
+      parameters:
+        temperature: 0.25
+        top_p: 0.9
+        max_tokens: 1024
+        stream: true
+
+    code:
+      description: "Code generation and refactors."
+      candidates:
+        - id: "ollama:qwen2.5-coder:14b"
+          tags: ["local", "code", "primary"]
+          notes: "Preferred code model (local)."
+        - id: "ollama:qwen2.5:14b-instruct"
+          tags: ["local", "fallback"]
+      parameters:
+        temperature: 0.2
+        top_p: 0.9
+        max_tokens: 2048
+        stream: true
+
+    embeddings:
+      description: "Embedding generation for memory/vectors."
+      candidates:
+        - id: "ollama:nomic-embed-text"
+          tags: ["local", "embeddings", "primary"]
+      parameters:
+        # Embeddings usually ignore these, but keep consistent contract.
+        temperature: 0.0
+        top_p: 1.0
+        max_tokens: 0
+        stream: false
+
+    moderation:
+      description: "Safety classification / policy checks."
+      candidates:
+        - id: "ollama:llama3.1:8b-instruct"
+          tags: ["local", "safety", "primary"]
+          notes: "Local safety reasoning model; replace with dedicated classifier later if desired."
+      parameters:
+        temperature: 0.1
+        top_p: 0.9
+        max_tokens: 512
+        stream: false
+
+    tool_router:
+      description: "Tool selection / structured planning."
+      candidates:
+        - id: "ollama:qwen2.5:14b-instruct"
+          tags: ["local", "tools", "primary"]
+        - id: "ollama:llama3.1:8b-instruct"
+          tags: ["local", "fallback"]
+      parameters:
+        temperature: 0.2
+        top_p: 0.9
+        max_tokens: 1024
+        stream: true
+
+# ------------------------------------------------------------------------------
+# Specialization map (tag-driven overrides)
+# ------------------------------------------------------------------------------
+specialization:
+  # When a task is tagged with one of these selectors, prefer alternate candidates.
+  # Tags can come from:
+  #   - capability metadata
+  #   - governance classification
+  #   - router heuristics
+  #
+  # Matching is hint-level; enforcement depends on router implementation.
+
+  selectors:
+
+    safety_check:
+      applies_to: ["chat", "reasoning", "tool_router"]
+      prefer:
+        - "ollama:llama3.1:8b-instruct"
+      parameters:
+        temperature: 0.15
+        max_tokens: 512
+      notes: "Used for safety/policy validation passes."
+
+    fast_path:
+      applies_to: ["chat"]
+      prefer:
+        - "ollama:llama3.1:8b-instruct"
+      parameters:
+        temperature: 0.5
+        max_tokens: 1024
+      notes: "Latency-optimized responses (status pages, simple Q&A)."
+
+    deep_code_review:
+      applies_to: ["code", "reasoning"]
+      prefer:
+        - "ollama:qwen2.5-coder:14b"
+        - "ollama:qwen2.5:14b-instruct"
+      parameters:
+        temperature: 0.15
+        max_tokens: 3072
+      notes: "Deeper reasoning budget for code analysis/refactor planning."
+
+    embeddings_high_quality:
+      applies_to: ["embeddings"]
+      prefer:
+        - "ollama:nomic-embed-text"
+      parameters:
+        temperature: 0.0
+      notes: "Placeholder for future alternate embedding models."
+
+# ------------------------------------------------------------------------------
+# Multi-pass orchestration (optional)
+# ------------------------------------------------------------------------------
+orchestration:
+  enabled: true
+
+  # A safe default: allow a "safety pass" after tool plans in higher-risk contexts.
+  post_tool_plan_safety_check:
+    enabled: true
+    trigger_when:
+      # Hint-level: the router can set these tags on a request.
+      any_tags:
+        - "high_risk"
+        - "critical_risk"
+        - "actuation"
+        - "credentials"
+        - "export"
+        - "web_ingest"
+    workload: moderation
+    action: "annotate_and_gate"
+    notes: >
+      Run a short safety/policy check after the tool plan is generated.
+      The router can then force approval or block execution based on output.
+
+  # Optional: second-pass refinement for long answers.
+  refine_long_response:
+    enabled: false
+    trigger_when:
+      min_output_tokens: 1200
+    workload: reasoning
+    action: "refine"
+    notes: "Disabled by default to avoid extra latency."
+
+# ------------------------------------------------------------------------------
+# Environment overrides (preferences only; constraints still apply)
+# ------------------------------------------------------------------------------
+environments:
+
+  dev:
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.6
+          max_tokens: 2048
+      code:
+        parameters:
+          max_tokens: 4096
+      tool_router:
+        parameters:
+          temperature: 0.3
+
+  workstation:
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.4
+          max_tokens: 1536
+      embeddings:
+        candidates:
+          - id: "ollama:nomic-embed-text"
+            tags: ["local", "primary"]
+
+  home:
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.35
+          max_tokens: 1536
+      moderation:
+        parameters:
+          temperature: 0.1
+          max_tokens: 512
+
+  edge:
+    # Edge: stability + predictable latency. Keep candidates but prefer smaller fallback early.
+    workloads:
+      chat:
+        candidates:
+          - id: "ollama:qwen2.5:14b-instruct"
+            tags: ["local", "primary"]
+          - id: "ollama:llama3.1:8b-instruct"
+            tags: ["local", "fast", "fallback"]
+        parameters:
+          temperature: 0.3
+          max_tokens: 1024
+
+      code:
+        parameters:
+          max_tokens: 2048
+
+  airgapped:
+    # Airgapped: purely local; tighten budgets a bit.
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.3
+          max_tokens: 1024
+      reasoning:
+        parameters:
+          max_tokens: 768
+
+  regulated:
+    # Regulated: conservative outputs and stronger safety pass usage.
+    orchestration:
+      post_tool_plan_safety_check:
+        enabled: true
+        trigger_when:
+          any_tags: ["medium_risk", "high_risk", "critical_risk", "export", "credentials"]
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.25
+          max_tokens: 1024
+      code:
+        parameters:
+          temperature: 0.15
+          max_tokens: 2048
+
+  safety_critical:
+    # Safety-critical: strongest conservatism and always safety-check plans for risky tags.
+    orchestration:
+      post_tool_plan_safety_check:
+        enabled: true
+        trigger_when:
+          any_tags:
+            - "medium_risk"
+            - "high_risk"
+            - "critical_risk"
+            - "actuation"
+            - "credentials"
+            - "export"
+            - "web_ingest"
+            - "policy_change"
+            - "security_control"
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.15
+          max_tokens: 768
+      reasoning:
+        parameters:
+          temperature: 0.15
+          max_tokens: 768
+      tool_router:
+        parameters:
+          temperature: 0.15
+          max_tokens: 768
+
+  production:
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.25
+          max_tokens: 1024
+      reasoning:
+        parameters:
+          temperature: 0.2
+          max_tokens: 1024
+      code:
+        parameters:
+          temperature: 0.15
+          max_tokens: 2048
+
+  high_availability:
+    # HA: lower per-request budgets to keep tail latencies in check.
+    workloads:
+      chat:
+        parameters:
+          temperature: 0.25
+          max_tokens: 900
+      reasoning:
+        parameters:
+          max_tokens: 900
+      tool_router:
+        parameters:
+          max_tokens: 900
+
+  federated:
+    # Federated: prefer deterministic tool routing; safety checks enabled by default.
+    orchestration:
+      post_tool_plan_safety_check:
+        enabled: true
+        trigger_when:
+          any_tags: ["high_risk", "critical_risk", "remote_execution"]
+    workloads:
+      tool_router:
+        parameters:
+          temperature: 0.15
+          max_tokens: 900
+
+# ------------------------------------------------------------------------------
+# Fallback strategy (preference hints)
+# ------------------------------------------------------------------------------
+fallback:
+  enabled: true
+
+  # Prefer same-provider fallback first.
+  same_provider_first: true
+
+  # Cross-provider fallback is only a preference; constraints.yaml must allow it.
+  allow_cross_provider: false
+
+  # If a workload’s primary model fails, try these additional candidates (ordered).
+  per_workload:
+    chat:
+      extra_candidates:
+        - "ollama:llama3.1:8b-instruct"
+    code:
+      extra_candidates:
+        - "ollama:qwen2.5:14b-instruct"
+    reasoning:
+      extra_candidates:
+        - "ollama:llama3.1:8b-instruct"
+
+# ------------------------------------------------------------------------------
+# Routing explanation (for audit/explanation systems)
+# ------------------------------------------------------------------------------
+explainability:
+  enabled: true
+  include_candidates_considered: true
+  include_constraints_summary: true
+  include_final_parameters: true
+  redact_sensitive: true

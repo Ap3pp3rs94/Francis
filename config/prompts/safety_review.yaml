@@ -1,0 +1,620 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Safety Review (policy adjudication + non-enabling safety gating)
+# Path:   config/prompts/safety_review.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical safety reviewer for:
+#   - incoming user requests (chat/api/cli)
+#   - operation plans prior to execution
+#   - tool calls / plugin builds prior to application
+#   - draft assistant responses prior to display
+#
+# Produces an auditable, structured safety decision:
+#   - allow | allow_with_conditions | rewrite_required | ask | deny
+# Along with:
+#   - classification (risk categories, wrongdoing-topic flags, regulated-domain flags)
+#   - governance requirements (trust, approvals, quorum, sandbox-only posture)
+#   - redaction instructions (no secrets/PII; remove enabling details)
+#   - response-mode guidance (how to communicate safely to the operator/user)
+#   - observability hooks (reason codes + audit events)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Fail-closed:
+#     * If the request/plan is unclear at high risk → ask minimal followups.
+#     * If it involves wrongdoing enablement → deny (or rewrite to defensive framing).
+# - Non-enabling:
+#     * Even for "hypothetical" or "research" contexts, do not generate actionable
+#       instructions for credential attacks, malware, DoS, or surveillance.
+#     * You may provide defensive guidance (hardening, detection, monitoring),
+#       policy language, and high-level threat modeling.
+# - Secret discipline:
+#     * Never output secrets. If secrets appear in inputs, require redaction and
+#       note it in safety.redactions.
+# - Forward compatibility:
+#     * Keep envelope stable; consumers should ignore unknown fields.
+# ==============================================================================
+version: 1
+
+id: "safety.review"
+title: "Safety Review"
+owner: "francis"
+intent: "safety_adjudication"
+mode: "strict" # policy | strict
+
+meta:
+  notes:
+    - "Runs before execution/display to prevent unsafe or policy-violating actions."
+    - "Designed for governance integration: trust/approvals/sandbox posture."
+    - "Non-enabling by construction: supports defensive-only handling of sensitive topics."
+  compatibility:
+    - "Stable output envelope for logging + Explanation Explorer ingestion."
+    - "Optional sections may be omitted by callers; reviewer must degrade gracefully."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | daemon | worker | federation
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      ts_unix_s: { type: number, required: false }
+
+      # subject kind indicates what we are reviewing
+      subject_kind:
+        type: string
+        required: true
+        enum:
+          - "user_message"
+          - "operation_plan"
+          - "tool_call"
+          - "plugin_package"
+          - "draft_response"
+          - "unknown"
+
+      # The natural-language user prompt or operator instruction
+      message: { type: string, required: false }
+
+      # Optional: intent framing provided by upstream classifier
+      intent_hint: { type: string, required: false } # conversational | operational | policy | unknown
+
+  # Optional: operation plan (as structured JSON from operation_planner)
+  plan:
+    type: object
+    required: false
+    additionalProperties: true
+
+  # Optional: tool call proposal (sanitized)
+  tool_call:
+    type: object
+    required: false
+    additionalProperties: true
+
+  # Optional: plugin package proposal (structured)
+  plugin_package:
+    type: object
+    required: false
+    additionalProperties: true
+
+  # Optional: draft response text the system intends to show to the user
+  draft_response:
+    type: object
+    required: false
+    fields:
+      text: { type: string, required: false }
+      format: { type: string, required: false } # plain | markdown | json | yaml | other
+
+  governance:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          quorum_required_by_default: { type: boolean, required: false }
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          summary: { type: string, required: false }
+
+      network:
+        type: object
+        required: false
+        fields:
+          web_access_enabled: { type: boolean, required: false }
+          egress_allowed: { type: boolean, required: false }
+
+  # Policy knobs / overlays (declarative). This is *not* an authorization bypass.
+  # It controls how strictly the reviewer insists on sandboxing, approvals, etc.
+  policy_controls:
+    type: object
+    required: false
+    fields:
+      # Primary posture (defaults should be strict in production/regulated)
+      posture:
+        type: string
+        required: false
+        enum: ["dev", "workstation", "production", "regulated", "safety_critical", "unknown"]
+
+      # If true, the reviewer can allow discussion of sensitive topics only in
+      # defensive/high-level terms. Never enables actionable harm.
+      allow_hypothetical_discussion:
+        type: boolean
+        required: false
+
+      # When true, any non-read-only plan touching network egress or credentials
+      # must be gated to sandbox-only or denied if sandbox is unavailable.
+      require_sandbox_for_sensitive_ops:
+        type: boolean
+        required: false
+
+      # Hard-deny switches (non-negotiable in safe operation).
+      # These classify and block enabling content/actions.
+      hard_denies:
+        type: object
+        required: false
+        fields:
+          credential_attack_enablement: { type: boolean, required: false }
+          malware_enablement: { type: boolean, required: false }
+          dos_enablement: { type: boolean, required: false }
+          surveillance_enablement: { type: boolean, required: false }
+
+      # Optional: allowlist domains for network egress (hostnames only).
+      allowed_egress_domains:
+        type: array
+        required: false
+
+  redaction_context:
+    type: object
+    required: false
+    fields:
+      known_secret_markers: { type: array, required: false } # ["sk-", "-----BEGIN", "Bearer ", ...]
+      known_pii_markers: { type: array, required: false }
+      notes: { type: array, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - review
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      review:
+        type: object
+        additionalProperties: false
+        required:
+          - review_id
+          - ts_unix_s
+          - decision
+          - summary
+          - classification
+          - conditions
+          - rewrite_guidance
+          - followups
+          - rendering_hints
+        properties:
+          review_id: { type: string }
+          ts_unix_s: { type: number }
+
+          decision:
+            type: object
+            additionalProperties: false
+            required: ["action", "confidence", "reason_codes"]
+            properties:
+              # action:
+              # - allow: safe to proceed as-is
+              # - allow_with_conditions: proceed only if conditions are enforced
+              # - rewrite_required: proceed only after rewriting/sanitizing
+              # - ask: missing critical info; request followups
+              # - deny: do not proceed
+              action:
+                type: string
+                enum: ["allow", "allow_with_conditions", "rewrite_required", "ask", "deny"]
+
+              confidence: { type: number } # 0..1
+              reason_codes:
+                type: array
+                items: { type: string }
+
+          summary:
+            type: object
+            additionalProperties: false
+            required: ["verdict", "why_short", "risk_level"]
+            properties:
+              verdict: { type: string }
+              why_short: { type: string }
+              risk_level: { type: string, enum: ["low", "medium", "high", "critical", "unknown"] }
+
+          classification:
+            type: object
+            additionalProperties: false
+            required:
+              - subject_kind
+              - categories
+              - wrongdoing_topic
+              - regulated_domain
+              - sensitive_ops
+              - notes
+            properties:
+              subject_kind: { type: string }
+
+              categories:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - "read_only"
+                    - "mutation"
+                    - "destructive"
+                    - "network_egress"
+                    - "credential_ops"
+                    - "industrial_actuation"
+                    - "data_export_sensitive"
+                    - "unknown"
+
+              wrongdoing_topic: { type: boolean }
+              regulated_domain: { type: boolean } # if policy indicates regulated workflows
+              sensitive_ops:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - "credential_attack_enablement"
+                    - "malware_enablement"
+                    - "dos_enablement"
+                    - "surveillance_enablement"
+                    - "physical_harm_enablement"
+                    - "none"
+              notes:
+                type: array
+                items: { type: string }
+
+          conditions:
+            type: object
+            additionalProperties: false
+            required:
+              - required_trust_min
+              - requires_approval
+              - requires_quorum
+              - sandbox_only
+              - network_egress
+              - credential_handling
+              - filesystem_handling
+              - redactions_required
+              - audit_events_required
+            properties:
+              required_trust_min: { type: number }
+              requires_approval: { type: boolean }
+              requires_quorum: { type: boolean }
+              sandbox_only: { type: boolean }
+
+              network_egress:
+                type: object
+                additionalProperties: false
+                required: ["allowed", "allowed_domains", "notes"]
+                properties:
+                  allowed: { type: boolean }
+                  allowed_domains:
+                    type: array
+                    items: { type: string }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              credential_handling:
+                type: object
+                additionalProperties: false
+                required: ["reference_only", "never_request_secrets", "notes"]
+                properties:
+                  reference_only: { type: boolean }
+                  never_request_secrets: { type: boolean }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              filesystem_handling:
+                type: object
+                additionalProperties: false
+                required: ["allowed", "notes"]
+                properties:
+                  allowed: { type: boolean }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              redactions_required:
+                type: array
+                items: { type: string } # "remove_tokens", "remove_pii", "remove_exploit_steps", ...
+
+              audit_events_required:
+                type: array
+                items: { type: string } # event kinds expected downstream
+
+          # If rewrite is required, provide safe rewrite instructions (non-enabling).
+          rewrite_guidance:
+            type: object
+            additionalProperties: false
+            required: ["required", "instructions", "safe_response_mode"]
+            properties:
+              required: { type: boolean }
+              instructions:
+                type: array
+                items: { type: string }
+              # safe_response_mode informs the chat orchestrator how to reply.
+              safe_response_mode:
+                type: string
+                enum:
+                  - "normal"
+                  - "defensive_only"
+                  - "refuse_and_redirect"
+                  - "ask_clarifying_questions"
+
+          followups:
+            type: array
+            items: { type: string } # only if action=ask
+
+          rendering_hints:
+            type: object
+            additionalProperties: false
+            required: ["tone", "badge_text", "collapse_details"]
+            properties:
+              tone:
+                type: string
+                enum: ["professional", "supportive", "neutral", "urgent", "refusal"]
+              badge_text: { type: string }
+              collapse_details: { type: boolean }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - contains_secrets
+          - contains_pii
+          - wrongdoing_topic
+          - blocked
+          - blocked_reasons
+          - redactions
+        properties:
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          wrongdoing_topic: { type: boolean }
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_deny | on_rewrite
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Safety Reviewer.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Core invariants:
+      1) Non-enabling safety:
+         - Never produce actionable instructions for credential attacks, malware, DoS, or surveillance.
+         - You may discuss these topics only in defensive/high-level terms: risk, policy, detection, hardening.
+      2) Fail-closed:
+         - If uncertainty exists and risk is high, choose action="ask" (minimal followups) or "deny".
+      3) Secret/PII discipline:
+         - Never output secrets (keys/tokens/passwords/private keys).
+         - If secrets/PII appear in inputs, require redaction and mark safety.redactions accordingly.
+      4) Governance-aware:
+         - If a plan touches mutation/destructive/egress/credential/industrial categories, raise trust + approvals expectations.
+         - If guard_state is "restricted" or "lockdown", escalate conservatism.
+
+      Handling "hypothetical scenarios":
+      - If policy_controls.allow_hypothetical_discussion is true:
+          You may allow high-level discussion, but still must not output operational enablement.
+          Prefer rewrite_required with safe_response_mode="defensive_only" when the raw request is unsafe.
+      - If false or missing:
+          Deny or redirect when wrongdoing topics appear.
+
+      Hard deny switches:
+      - If any policy_controls.hard_denies.* is true (or unspecified), treat enablement requests as blocked.
+        (Classification is allowed, enablement is not.)
+
+      Use explicit reasons:
+      - Always include reason_codes and blocked_reasons that are stable and machine-readable.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      PLAN:
+      {{plan}}
+
+      TOOL_CALL:
+      {{tool_call}}
+
+      PLUGIN_PACKAGE:
+      {{plugin_package}}
+
+      DRAFT_RESPONSE:
+      {{draft_response}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      RUNTIME:
+      {{runtime}}
+
+      POLICY_CONTROLS:
+      {{policy_controls}}
+
+      REDACTION_CONTEXT:
+      {{redaction_context}}
+
+      Task:
+      Review the subject for safety and policy compliance.
+      Produce a decision + conditions + redaction/response guidance.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.12
+  max_output_tokens: 2200
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  # General
+  - "SAFETY_ALLOW"
+  - "SAFETY_ALLOW_WITH_CONDITIONS"
+  - "SAFETY_REWRITE_REQUIRED"
+  - "SAFETY_ASK_FOLLOWUPS"
+  - "SAFETY_DENY"
+
+  # Content/intent classification
+  - "CLASS_WRONGDOING_TOPIC"
+  - "CLASS_REGULATED_DOMAIN"
+  - "CLASS_SENSITIVE_OPS_PRESENT"
+
+  # Hard denies (enablement)
+  - "DENY_CREDENTIAL_ATTACK_ENABLEMENT"
+  - "DENY_MALWARE_ENABLEMENT"
+  - "DENY_DOS_ENABLEMENT"
+  - "DENY_SURVEILLANCE_ENABLEMENT"
+  - "DENY_PHYSICAL_HARM_ENABLEMENT"
+
+  # Governance posture
+  - "GUARD_RESTRICTED"
+  - "GUARD_LOCKDOWN"
+  - "REQUIRES_APPROVAL"
+  - "REQUIRES_QUORUM"
+  - "TRUST_TOO_LOW"
+
+  # Redaction
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+  - "REDACT_ENABLING_DETAILS"
+
+  # Runtime constraints
+  - "EGRESS_DISABLED"
+  - "SANDBOX_REQUIRED"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "safety.review.requested"
+    when: "before"
+    fields: ["request.subject_kind", "request.source", "request.profile", "governance.guard_state"]
+
+  - kind: "safety.review.completed"
+    when: "after"
+    fields: ["review.decision.action", "review.summary.risk_level", "observability.reason_codes"]
+
+  - kind: "safety.review.denied"
+    when: "on_deny"
+    fields: ["safety.blocked_reasons"]
+
+  - kind: "safety.review.rewrite_required"
+    when: "on_rewrite"
+    fields: ["review.rewrite_guidance.safe_response_mode", "review.conditions.redactions_required"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays (tighten posture)
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.14
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.08

@@ -1,0 +1,9 @@
+# Dev install profile (editable).
+#
+# Includes:
+# - core: CLI + settings + common utilities
+# - web:  FastAPI/uvicorn API server dependencies
+# - dev:  pytest/ruff/mypy/pre-commit tooling
+
+-e .[core,web,dev]
+

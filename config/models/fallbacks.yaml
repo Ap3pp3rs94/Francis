@@ -1,0 +1,331 @@
+# ==============================================================================
+# Model Fallback & Failure Handling Policy
+# File: config/models/fallbacks.yaml
+#
+# GOAL:
+#   Define deterministic, observable fallback behavior when model execution fails:
+#     - Retry policy (when/how)
+#     - Degradation policy (smaller models, fewer tokens, disable tools)
+#     - Cross-provider failover rules (usually disabled; constraints enforce)
+#     - Stop conditions (fail-closed triggers)
+#
+# IMPORTANT:
+#   - This file defines behavior. constraints.yaml defines what is allowed.
+#   - The router should emit an audit/explanation entry when fallback triggers.
+# ==============================================================================
+
+version: 1
+
+global:
+  enabled: true
+  fail_closed: true
+
+  # Prevent cascading failure loops.
+  max_total_attempts: 4
+  max_total_duration_ms: 60000
+
+  # Always log fallback decisions (even if request ultimately fails).
+  observability:
+    audit_enabled: true
+    include_error_class: true
+    include_attempt_history: true
+    redact_sensitive: true
+
+  # A conservative default: do not cross providers unless explicitly allowed.
+  cross_provider_failover_default: false
+
+# ------------------------------------------------------------------------------
+# Error classification (router maps exceptions -> classes)
+# ------------------------------------------------------------------------------
+errors:
+  # These are symbolic classes used by the fallback engine.
+  classes:
+
+    timeout:
+      description: "Request exceeded latency budget / timed out."
+      retryable: true
+
+    rate_limited:
+      description: "Provider rejected due to rate limits."
+      retryable: true
+
+    transient_network:
+      description: "Temporary network failure (DNS, reset, temporary unavailable)."
+      retryable: true
+
+    provider_unavailable:
+      description: "Provider service down/unreachable."
+      retryable: true
+
+    invalid_request:
+      description: "Bad request schema / invalid params / model not found."
+      retryable: false
+
+    auth_failed:
+      description: "Credentials invalid/missing."
+      retryable: false
+
+    safety_block:
+      description: "Safety system blocked the request."
+      retryable: false
+
+    policy_denied:
+      description: "Constraints/governance denied request."
+      retryable: false
+
+    unknown:
+      description: "Unclassified failure."
+      retryable: false
+
+# ------------------------------------------------------------------------------
+# Retry strategy
+# ------------------------------------------------------------------------------
+retry:
+  enabled: true
+
+  # Exponential backoff with jitter (ms).
+  base_delay_ms: 250
+  max_delay_ms: 8000
+  multiplier: 2.0
+  jitter_ms: 250
+
+  # Retry only for retryable error classes.
+  retryable_classes:
+    - timeout
+    - rate_limited
+    - transient_network
+    - provider_unavailable
+
+  # If a call was streaming and failed mid-stream, retrying may cause duplication.
+  # Default: do not retry partial streams; require caller to request retry.
+  retry_partial_streams: false
+
+# ------------------------------------------------------------------------------
+# Degradation steps (what changes between attempts)
+# ------------------------------------------------------------------------------
+degradation:
+  # Each attempt may apply additional degradation steps.
+  # Router should stop once success occurs or stop conditions trigger.
+  steps:
+
+    # Attempt 1 is original request (no degradation).
+    - id: attempt_1_original
+      attempt: 1
+      changes: {}
+
+    # Attempt 2: reduce token budget; optionally disable tools if error indicates instability.
+    - id: attempt_2_budget_reduce
+      attempt: 2
+      changes:
+        max_tokens_multiplier: 0.75
+        # Tool usage can create more points of failure; disable on transient failures if needed.
+        tools:
+          disable_if_error_class_in:
+            - timeout
+            - transient_network
+            - provider_unavailable
+
+    # Attempt 3: switch to fallback model (same provider) + smaller budgets.
+    - id: attempt_3_same_provider_fallback
+      attempt: 3
+      changes:
+        max_tokens_multiplier: 0.6
+        temperature_override: 0.25
+        model_switch:
+          strategy: same_provider_fallback
+
+    # Attempt 4: “last resort” within constraints: minimal budgets + safest fallback.
+    - id: attempt_4_last_resort
+      attempt: 4
+      changes:
+        max_tokens_multiplier: 0.45
+        temperature_override: 0.2
+        model_switch:
+          strategy: safest_available
+
+# ------------------------------------------------------------------------------
+# Workload-specific fallback chains
+# ------------------------------------------------------------------------------
+workloads:
+  # Fallback chains are ordered candidates.
+  # Format: provider:model
+  # The router should consider ensemble preferences first, then these fallback chains
+  # when the preferred candidate fails.
+
+  chat:
+    same_provider_fallback:
+      - "ollama:llama3.1:8b-instruct"
+    safest_available:
+      - "ollama:llama3.1:8b-instruct"
+
+  reasoning:
+    same_provider_fallback:
+      - "ollama:llama3.1:8b-instruct"
+    safest_available:
+      - "ollama:llama3.1:8b-instruct"
+
+  code:
+    same_provider_fallback:
+      - "ollama:qwen2.5:14b-instruct"
+      - "ollama:llama3.1:8b-instruct"
+    safest_available:
+      - "ollama:llama3.1:8b-instruct"
+
+  embeddings:
+    same_provider_fallback:
+      - "ollama:nomic-embed-text"
+    safest_available:
+      - "ollama:nomic-embed-text"
+
+  moderation:
+    same_provider_fallback:
+      - "ollama:llama3.1:8b-instruct"
+    safest_available:
+      - "ollama:llama3.1:8b-instruct"
+
+  tool_router:
+    same_provider_fallback:
+      - "ollama:llama3.1:8b-instruct"
+    safest_available:
+      - "ollama:llama3.1:8b-instruct"
+
+# ------------------------------------------------------------------------------
+# Cross-provider failover rules (preference layer; constraints.yaml must allow)
+# ------------------------------------------------------------------------------
+cross_provider:
+  enabled: false
+
+  # If enabled, only allow cross-provider for specific workloads and only after
+  # same-provider fallbacks are exhausted.
+  allow_for_workloads:
+    - chat
+    - reasoning
+
+  strategy:
+    order:
+      # Example (disabled by default):
+      # - "openai:gpt-4o-mini"
+      # - "anthropic:claude-3-5-sonnet"
+      - "ollama:llama3.1:8b-instruct"
+
+# ------------------------------------------------------------------------------
+# Stop conditions (fail-closed triggers)
+# ------------------------------------------------------------------------------
+stop:
+  # Always stop on non-retryable errors.
+  stop_on_non_retryable: true
+
+  # Hard stop on these classes (even if otherwise retryable).
+  stop_classes:
+    - auth_failed
+    - invalid_request
+    - safety_block
+    - policy_denied
+
+  # Stop if governance indicates the action is too risky to degrade silently.
+  stop_if_tags_present:
+    - "critical_risk"
+    - "actuation"
+    - "credentials"
+    - "export"
+    - "policy_change"
+    - "security_control"
+
+  # If the request requires tools for correctness (e.g., tool-only workflows),
+  # do not silently disable tools without approval.
+  tools:
+    require_approval_to_disable_if_tags_present:
+      - "tool_required"
+      - "critical_risk"
+
+# ------------------------------------------------------------------------------
+# Environment overrides
+# ------------------------------------------------------------------------------
+environments:
+
+  dev:
+    retry:
+      # More permissive retries in dev for smoother iteration.
+      enabled: true
+    cross_provider:
+      enabled: false
+
+  workstation:
+    retry:
+      enabled: true
+    cross_provider:
+      enabled: false
+
+  home:
+    retry:
+      enabled: true
+    cross_provider:
+      enabled: false
+
+  edge:
+    retry:
+      enabled: true
+      max_delay_ms: 6000
+    cross_provider:
+      enabled: false
+
+  airgapped:
+    retry:
+      enabled: true
+    cross_provider:
+      enabled: false
+
+  regulated:
+    retry:
+      enabled: true
+    cross_provider:
+      enabled: false
+    stop:
+      # In regulated posture, be even more conservative about silent degradation.
+      stop_if_tags_present:
+        - "medium_risk"
+        - "high_risk"
+        - "critical_risk"
+        - "actuation"
+        - "credentials"
+        - "export"
+        - "policy_change"
+        - "security_control"
+
+  safety_critical:
+    retry:
+      enabled: true
+      max_total_attempts: 3
+    cross_provider:
+      enabled: false
+    stop:
+      stop_if_tags_present:
+        - "medium_risk"
+        - "high_risk"
+        - "critical_risk"
+        - "actuation"
+        - "credentials"
+        - "export"
+        - "policy_change"
+        - "security_control"
+
+  production:
+    retry:
+      enabled: true
+    cross_provider:
+      enabled: false
+
+  high_availability:
+    retry:
+      enabled: true
+      max_total_attempts: 3
+      max_total_duration_ms: 45000
+    cross_provider:
+      enabled: false
+
+  federated:
+    retry:
+      enabled: true
+      max_total_attempts: 3
+    cross_provider:
+      enabled: false

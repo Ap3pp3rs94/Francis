@@ -1,0 +1,694 @@
+# ==============================================================================
+#  FRANCIS — meta/action_taxonomy.yaml
+#  Canonical action taxonomy used by governance, trust, approvals, and telemetry
+# ==============================================================================
+#
+#  What this file is:
+#    - The authoritative vocabulary for "what kind of action is this?"
+#    - A stable, versioned taxonomy that other configs map into:
+#        * config/capabilities/taxonomy.yaml (capability → action_id mapping)
+#        * config/policies/action_readiness.yaml (risk/readiness rules)
+#        * config/policies/approvals.yaml (approval requirements)
+#        * config/policies/api_permissions.yaml (permission boundaries)
+#        * docs/ACTION_READINESS.md, docs/GOVERNANCE.md, docs/POLICIES.md
+#
+#  What this file is NOT:
+#    - A tool registry (tools live in config/capabilities/catalog.yaml)
+#    - A provider list (providers live in config/models/providers/* and connectors/*)
+#
+#  Design stance:
+#    - Stable IDs: action_id values are API-like and must not change once shipped.
+#    - Default-deny posture: risky actions require explicit mapping + explicit allow.
+#    - Auditable by design: every action_id implies the minimum required controls.
+#
+# ==============================================================================
+
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 1
+  stability: stable
+  owner: governance
+  description: >
+    Canonical action taxonomy. Provides a shared language for classifying requested
+    operations (tool calls, plans, automation steps) into action types with default
+    controls, risk posture, and approval expectations.
+  references:
+    docs:
+      - docs/ACTION_READINESS.md
+      - docs/API_PERMISSIONS.md
+      - docs/TRUST_MODEL.md
+      - docs/THREAT_MODEL.md
+      - docs/GOVERNANCE.md
+    policies:
+      - config/policies/action_readiness.yaml
+      - config/policies/approvals.yaml
+      - config/policies/api_permissions.yaml
+      - config/policies/data_governance.yaml
+      - config/policies/privacy.yaml
+      - config/policies/offensive_security.yaml
+    schemas:
+      - schemas/action_request.schema.json
+      - schemas/action_result.schema.json
+      - schemas/action_readiness.schema.json
+
+# ------------------------------------------------------------------------------
+# Risk levels
+# ------------------------------------------------------------------------------
+# Risk levels are used as defaults. Policy + context may raise (or rarely lower)
+# the effective risk. Treat these as "minimum implied risk" for the action type.
+risk_levels:
+  - id: none
+    score_min: 0
+    score_max: 9
+    description: No side effects, no data movement, no sensitive exposure.
+  - id: low
+    score_min: 10
+    score_max: 29
+    description: Minimal side effects; low likelihood of harm if mis-executed.
+  - id: medium
+    score_min: 30
+    score_max: 59
+    description: Meaningful side effects and/or sensitive handling; requires care.
+  - id: high
+    score_min: 60
+    score_max: 84
+    description: Potentially harmful, irreversible, or exfiltration-prone.
+  - id: critical
+    score_min: 85
+    score_max: 100
+    description: Safety-critical, destructive, credential-bearing, or high-impact.
+
+# ------------------------------------------------------------------------------
+# Control catalog
+# ------------------------------------------------------------------------------
+# Controls are the "minimum guardrails" implied by an action type. The runtime
+# may add more controls based on environment mode and policies.
+controls:
+  - id: permission_gate
+    description: Validate identity, scope, delegation, and operation allowlist.
+  - id: trust_gate
+    description: Evaluate trust/readiness thresholds for the action and context.
+  - id: approvals_gate
+    description: Require approvals per policy (category or action hash) before execute.
+  - id: audit_log
+    description: Emit auditable decision + execution traces with redaction.
+  - id: redaction
+    description: Apply redaction rules to inputs/outputs/logs and artifact exports.
+  - id: sandbox_execute
+    description: Execute in sandboxed environment with FS/network/resource limits.
+  - id: rate_limit
+    description: Apply per-scope/per-connector rate limiting.
+  - id: dry_run_preferred
+    description: Prefer dry-run/simulation; require explicit opt-in for live execution.
+  - id: reversible_change_required
+    description: Require a rollback plan or make the change reversible by construction.
+  - id: two_person_rule
+    description: Require two independent approvals/reviews for high-impact/irreversible actions.
+  - id: evidence_required
+    description: Require explicit evidence/provenance references before execution.
+  - id: policy_snapshot_pin
+    description: Pin policy snapshot for the session; detect and surface policy drift.
+
+# ------------------------------------------------------------------------------
+# Approval classes (canonical names)
+# ------------------------------------------------------------------------------
+# Approvals policy may define additional routing; these are the stable categories.
+approval_classes:
+  - id: none
+    description: No approval required by default.
+  - id: human_review
+    description: Single human approval required (operator confirmation).
+  - id: peer_review
+    description: Independent reviewer validation required (non-operator).
+  - id: two_person_review
+    description: Two independent humans must approve (two-person rule).
+  - id: emergency_override
+    description: Emergency approval channel; heavily audited; time-bounded.
+
+# ------------------------------------------------------------------------------
+# Data movement classes
+# ------------------------------------------------------------------------------
+data_movement:
+  - id: none
+    description: No data leaves the local process beyond standard logs (redacted).
+  - id: internal
+    description: Data moves within the system boundary (stores, indexes, artifacts).
+  - id: external
+    description: Data is sent to external system/provider (potential exfiltration vector).
+  - id: export
+    description: Data packaged for export/sharing (requires provenance + sanitization).
+
+# ------------------------------------------------------------------------------
+# Reversibility classes
+# ------------------------------------------------------------------------------
+reversibility:
+  - id: reversible
+    description: Can be rolled back deterministically.
+  - id: partially_reversible
+    description: Some effects reversible; some persistent side effects possible.
+  - id: irreversible
+    description: Destructive or cannot be fully undone.
+  - id: unknown
+    description: Reversibility cannot be guaranteed; treat as higher risk.
+
+# ------------------------------------------------------------------------------
+# Canonical action types
+# ------------------------------------------------------------------------------
+# action_id MUST be stable. Do not rename. Deprecate instead.
+#
+# Fields:
+#   - default_risk_level: minimum implied risk
+#   - controls: minimum required controls
+#   - default_approval: baseline approval class (policy may override)
+#   - data_movement: implied class (policy may refine)
+#   - reversibility: implied class
+#   - examples: illustrative only; not a tool registry
+action_types:
+  # --- Pure interpretation / analysis (no tool side effects) -------------------
+  - action_id: interpret.text
+    category: interpret
+    label: Interpret text
+    description: >
+      Pure reasoning/interpretation over provided content with no tool calls.
+      Includes summarization, classification, transformation, and explanation.
+    default_risk_level: none
+    controls:
+      - audit_log
+      - redaction
+    default_approval: none
+    data_movement: none
+    reversibility: reversible
+    examples:
+      - Summarize a meeting transcript provided by the user.
+      - Classify a ticket into a queue.
+      - Rewrite documentation for clarity.
+
+  - action_id: interpret.code
+    category: interpret
+    label: Interpret code
+    description: >
+      Analyze code without executing it. Safe-by-default; still requires redaction
+      if code contains secrets or sensitive strings.
+    default_risk_level: low
+    controls:
+      - audit_log
+      - redaction
+    default_approval: none
+    data_movement: none
+    reversibility: reversible
+    examples:
+      - Review a diff for correctness.
+      - Explain a stack trace.
+      - Identify potential bugs from a snippet.
+
+  # --- Read-only information retrieval ----------------------------------------
+  - action_id: retrieve.local_readonly
+    category: retrieve
+    label: Local read-only retrieval
+    description: >
+      Read-only access to local system artifacts allowed by policy (files, indexes,
+      logs) without modification. Risk depends on sensitivity and export vectors.
+    default_risk_level: low
+    controls:
+      - permission_gate
+      - trust_gate
+      - audit_log
+      - redaction
+      - policy_snapshot_pin
+    default_approval: none
+    data_movement: internal
+    reversibility: reversible
+    examples:
+      - Read a configuration file allowed by filesystem policy.
+      - Query internal indexes for a conversation summary.
+
+  - action_id: retrieve.saas_readonly
+    category: retrieve
+    label: SaaS read-only retrieval
+    description: >
+      Read-only operations against external providers (GitHub/Jira/Notion/etc.).
+      Even read-only can be sensitive due to data exposure and side effects (audit trails).
+    default_risk_level: medium
+    controls:
+      - permission_gate
+      - trust_gate
+      - audit_log
+      - redaction
+      - rate_limit
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: none
+    data_movement: external
+    reversibility: partially_reversible
+    examples:
+      - List issues in a repository.
+      - Read a Jira ticket description.
+      - Fetch a Slack message thread (read scope only).
+
+  - action_id: retrieve.web
+    category: retrieve
+    label: Web retrieval
+    description: >
+      Access the open web (fetch pages, download documents) subject to web access
+      policies, allowed domains, and content safety filters.
+    default_risk_level: medium
+    controls:
+      - permission_gate
+      - trust_gate
+      - audit_log
+      - redaction
+      - rate_limit
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: none
+    data_movement: external
+    reversibility: partially_reversible
+    examples:
+      - Fetch documentation page from an allowlisted domain.
+      - Retrieve a paper PDF for citation (subject to policy).
+
+  # --- Communication (outbound) ------------------------------------------------
+  - action_id: communicate.outbound_message
+    category: communicate
+    label: Send outbound message
+    description: >
+      Send messages to external parties (email, SMS, chat). High risk due to
+      irreversibility, reputation impact, and data leakage potential.
+    default_risk_level: high
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: human_review
+    data_movement: external
+    reversibility: irreversible
+    examples:
+      - Send an email to a customer.
+      - Post an announcement to a company-wide channel.
+
+  # --- Write operations (non-destructive) -------------------------------------
+  - action_id: write.saas_mutation
+    category: write
+    label: SaaS write/update
+    description: >
+      Create/update objects in external systems (issues, tickets, pages, comments).
+      Requires stricter control due to state mutation and audit trails.
+    default_risk_level: high
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - reversible_change_required
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: human_review
+    data_movement: external
+    reversibility: partially_reversible
+    examples:
+      - Create a GitHub issue.
+      - Update a Notion page.
+      - Add a Jira comment.
+
+  - action_id: write.code_change
+    category: write
+    label: Code/config change
+    description: >
+      Modify code or configuration tracked in version control. Requires diffability,
+      rollbacks, and often CI validation. Not necessarily external, but high impact.
+    default_risk_level: high
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - reversible_change_required
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: peer_review
+    data_movement: internal
+    reversibility: reversible
+    examples:
+      - Apply a patch to config/policies/*.yaml.
+      - Update a connector implementation.
+      - Generate a plugin spec and commit.
+
+  - action_id: write.data_persist
+    category: write
+    label: Write persistent data
+    description: >
+      Write to persistent stores (DB, vector store, knowledge graph). High risk due
+      to integrity and long-lived effects; may require validation and migrations.
+    default_risk_level: high
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - reversible_change_required
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: peer_review
+    data_movement: internal
+    reversibility: partially_reversible
+    examples:
+      - Insert a record in a system database.
+      - Update embeddings cache or indexes.
+      - Write a domain knowledge artifact.
+
+  # --- Destructive operations --------------------------------------------------
+  - action_id: destructive.delete_data
+    category: destructive
+    label: Delete data
+    description: >
+      Delete or purge data. Irreversible by default. Requires explicit approvals,
+      two-person rule, and strong audit trails.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - dry_run_preferred
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: internal
+    reversibility: irreversible
+    examples:
+      - Purge an artifact store.
+      - Delete records from a database.
+      - Wipe logs beyond retention policy.
+
+  - action_id: destructive.system_mutation
+    category: destructive
+    label: System-level destructive action
+    description: >
+      System mutations with potential to cause downtime or data loss:
+      stopping services, resetting state, removing workers, wiping caches, etc.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - dry_run_preferred
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: internal
+    reversibility: partially_reversible
+    examples:
+      - Emergency shutdown.
+      - Reset local state.
+      - Remove a service install.
+
+  # --- Credentials and secrets -------------------------------------------------
+  - action_id: credential.read_secret
+    category: credential
+    label: Read secret material
+    description: >
+      Access secret material (tokens, keys). In many modes this is prohibited and
+      replaced with scoped execution proxies. If allowed, it is critical risk.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: internal
+    reversibility: irreversible
+    examples:
+      - Decrypt a vault entry for a connector.
+      - Export a credential for debugging (usually forbidden).
+
+  - action_id: credential.rotate
+    category: credential
+    label: Rotate/revoke credentials
+    description: >
+      Rotate, revoke, or modify credential material or delegations. High operational
+      impact; must be deliberate, audited, and often staged.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - dry_run_preferred
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: internal
+    reversibility: partially_reversible
+    examples:
+      - Rotate Slack token.
+      - Revoke a delegation.
+      - Change vault encryption key (if supported).
+
+  # --- Execution of code/commands ---------------------------------------------
+  - action_id: execute.sandboxed
+    category: execute
+    label: Execute in sandbox
+    description: >
+      Execute code/commands in an isolated sandbox with constrained resources and
+      restricted I/O. Still risky due to side effects and supply-chain concerns.
+    default_risk_level: high
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - sandbox_execute
+      - rate_limit
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: human_review
+    data_movement: internal
+    reversibility: partially_reversible
+    examples:
+      - Run a lint/test command in CI-like environment.
+      - Execute a safe analysis script on artifacts.
+
+  - action_id: execute.host
+    category: execute
+    label: Execute on host
+    description: >
+      Execute code/commands with host-level access. Typically restricted to tightly
+      controlled environments. Treat as critical unless explicitly constrained.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - sandbox_execute
+      - two_person_rule
+      - dry_run_preferred
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: internal
+    reversibility: partially_reversible
+    examples:
+      - System service management.
+      - Host filesystem mutations beyond safe paths.
+
+  # --- Network changes ---------------------------------------------------------
+  - action_id: network.change
+    category: network
+    label: Network configuration change
+    description: >
+      Modify network policy, firewall rules, routing, DNS, or connectivity.
+      High blast radius; requires strong approvals and rollback planning.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - reversible_change_required
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: internal
+    reversibility: partially_reversible
+    examples:
+      - Apply a firewall rule update.
+      - Change allowlisted domains for web access.
+
+  # --- Security (defensive) ----------------------------------------------------
+  - action_id: security.defensive_scan
+    category: security
+    label: Defensive scanning and validation
+    description: >
+      Defensive security actions (vuln scanning, malware scanning, integrity checks)
+      intended to reduce risk. Can still be sensitive and operationally impactful.
+    default_risk_level: medium
+    controls:
+      - permission_gate
+      - trust_gate
+      - audit_log
+      - redaction
+      - rate_limit
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: none
+    data_movement: internal
+    reversibility: reversible
+    examples:
+      - Scan an uploaded file for malware.
+      - Validate dependency integrity.
+
+  - action_id: security.offensive
+    category: security
+    label: Offensive security action
+    description: >
+      Offensive/active exploitation behaviors. Default-deny unless explicitly
+      permitted by policy and environment mode (e.g., authorized internal testing).
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: external
+    reversibility: unknown
+    examples:
+      - Attempt an exploit.
+      - Perform unauthorized credential testing.
+      - Generate weaponized payloads (typically prohibited).
+
+  # --- Industrial / physical world --------------------------------------------
+  - action_id: industrial.simulate
+    category: industrial
+    label: Industrial simulation
+    description: >
+      Run simulations/digital twin evaluations. No direct actuator control. Used
+      as a safety layer before any real-world action.
+    default_risk_level: medium
+    controls:
+      - permission_gate
+      - trust_gate
+      - audit_log
+      - redaction
+      - sandbox_execute
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: none
+    data_movement: internal
+    reversibility: reversible
+    examples:
+      - Validate a control strategy in a digital twin.
+      - Run physics accuracy evaluation.
+
+  - action_id: industrial.control
+    category: industrial
+    label: Industrial control / actuation
+    description: >
+      Commands that can influence physical processes (actuators, PLCs, Modbus/MQTT control).
+      Always safety-critical; require validation, approvals, and emergency stop controls.
+    default_risk_level: critical
+    controls:
+      - permission_gate
+      - trust_gate
+      - approvals_gate
+      - audit_log
+      - redaction
+      - two_person_rule
+      - dry_run_preferred
+      - evidence_required
+      - policy_snapshot_pin
+    default_approval: two_person_review
+    data_movement: external
+    reversibility: unknown
+    examples:
+      - Send a setpoint to a controller.
+      - Trigger a valve open/close.
+
+# ------------------------------------------------------------------------------
+# Contextual escalation rules
+# ------------------------------------------------------------------------------
+# These are cross-cutting minimum escalations applied during classification.
+# They should be mirrored/enforced by config/policies/* (runtime truth).
+escalation_rules:
+  - id: escalate_if_regulated_data
+    when:
+      any_data_classification_in:
+        - regulated
+        - pii
+        - phi
+        - financial
+        - secrets
+    then:
+      min_risk_level: high
+      add_controls:
+        - approvals_gate
+        - evidence_required
+        - policy_snapshot_pin
+      default_approval: human_review
+
+  - id: escalate_if_external_export
+    when:
+      data_movement_in:
+        - external
+        - export
+    then:
+      min_risk_level: high
+      add_controls:
+        - redaction
+        - evidence_required
+      notes: >
+        Any external movement is an exfiltration vector. Prefer summaries, redact
+        aggressively, and never include secrets.
+
+  - id: escalate_if_irreversible
+    when:
+      reversibility_in:
+        - irreversible
+        - unknown
+    then:
+      min_risk_level: high
+      add_controls:
+        - dry_run_preferred
+        - reversible_change_required
+      notes: >
+        Unknown reversibility is treated as dangerous until proven otherwise.
+
+  - id: escalate_if_policy_changed_mid_session
+    when:
+      policy_snapshot_mismatch: true
+    then:
+      min_risk_level: high
+      add_controls:
+        - policy_snapshot_pin
+        - approvals_gate
+      notes: >
+        If relevant policy changed since session start, require re-check and possibly
+        re-approval before executing sensitive actions.
+
+# ------------------------------------------------------------------------------
+# Deprecations
+# ------------------------------------------------------------------------------
+# Keep old IDs listed here if they were ever shipped and later replaced.
+deprecated_action_types: []

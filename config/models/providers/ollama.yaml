@@ -1,0 +1,292 @@
+# ==============================================================================
+# Francis 2.0 — Model Provider Definition
+# Provider: Ollama (native HTTP API)
+# Path:    config/models/providers/ollama.yaml
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This is the authoritative configuration contract for communicating with Ollama.
+# Francis should be able to:
+#   - Discover connectivity details (base_url + health checks)
+#   - Know which endpoints to call for chat/generate/embeddings
+#   - Apply consistent operational guardrails (timeouts/retries/concurrency)
+#   - Select models by *role* (chat/reasoning/coder/embed/reflex) without hard-coding
+#
+# SECURITY CONTRACT
+# -----------------
+# - This file must contain NO secrets.
+# - Environment variables may override URLs and model names.
+#
+# OPERATIONAL PHILOSOPHY
+# ----------------------
+# - Local-first, low latency, deterministic defaults where possible
+# - Fail clearly, log richly (metadata), and do not retry forever
+# - Treat "tools" as an orchestration feature (structured prompting) unless a
+#   model/runtime explicitly supports native tool calling semantics
+# ==============================================================================
+
+version: 1
+
+provider:
+  id: ollama
+  kind: ollama
+  enabled: true
+
+  display_name: "Ollama (Local)"
+  description: >
+    Local inference via Ollama native HTTP API. Preferred provider for
+    workstation/home/edge/airgapped/safety-critical profiles.
+
+  classification: local
+
+  # Risk here is "provider risk" (not task risk). Local generally reduces data egress risk.
+  risk: low
+
+  policy_hints:
+    network_egress_required: false
+    secrets_required: false
+
+    # These are policy hints only; Francis governance decides what content is allowed.
+    may_process_pii: true
+    may_process_regulated_data: true
+
+connection:
+  # Base URL for the Ollama server.
+  # Recommended default for local operation.
+  base_url: "http://127.0.0.1:11434"
+
+  # Environment override for base_url (preferred in production/containers).
+  base_url_env: "FRANCIS_OLLAMA_URL"
+
+  # If running behind TLS locally (rare), set verify_tls=true and use system trust store.
+  verify_tls: false
+
+  # Optional: if your runtime supports it, use this for friendly naming in logs.
+  instance_label: "local"
+
+  # Health-check strategy:
+  # - /api/version is a fast sanity check when available.
+  # - /api/tags can validate the server is responsive and return model list.
+  health:
+    enabled: true
+    # First attempt version; if it fails, the runtime can fall back to tags.
+    primary_endpoint: "/api/version"
+    secondary_endpoint: "/api/tags"
+    timeout_ms: 1500
+    fail_open: false
+
+  headers:
+    # Safe defaults. Do not add credentials.
+    default:
+      User-Agent: "Francis/2.0 (+ollama-native)"
+      Accept: "application/json"
+
+api:
+  # Native Ollama endpoints (paths only; base_url prepended at runtime).
+  # These reflect common Ollama API surfaces and give Francis a stable vocabulary.
+  endpoints:
+    chat: "/api/chat"
+    generate: "/api/generate"
+    embeddings: "/api/embeddings"
+
+    # Introspection
+    tags: "/api/tags"
+    show: "/api/show"
+    version: "/api/version"
+
+    # Optional model lifecycle endpoints (safe to declare; runtime may ignore if unused)
+    pull: "/api/pull"
+    create: "/api/create"
+    delete: "/api/delete"
+    copy: "/api/copy"
+    ps: "/api/ps"
+
+  streaming:
+    # Ollama supports streamed responses for chat/generate with NDJSON chunks.
+    enabled: true
+    mode: ndjson
+    # Router can treat stream chunk boundaries as "event" boundaries.
+    emit_partial_events: true
+
+transport:
+  # Timeouts are conservative but practical for local inference with larger models.
+  # total_ms should always be >= connect + read + write; use it as a "global guardrail".
+  timeouts_ms:
+    connect: 2500
+    read: 120000
+    write: 30000
+    total: 180000
+
+  retries:
+    enabled: true
+
+    # Local provider retries should be limited; repeated failure usually indicates
+    # the server is down or the model isn't present.
+    max_attempts: 2
+
+    # Retry triggers are expressed as high-level classes; the runtime maps exceptions.
+    retry_on_error_classes:
+      - transient_network
+      - provider_unavailable
+      - timeout
+
+    backoff_ms:
+      initial: 250
+      max: 2000
+      multiplier: 2.0
+      jitter: true
+
+  # Circuit breaker hints: keeps Francis from thrashing a dead local server.
+  circuit_breaker:
+    enabled: true
+    window_s: 30
+    open_after_consecutive_failures: 5
+    half_open_after_s: 10
+    # In half-open, allow a single probe request (health check) before closing.
+    probe_requests: 1
+
+  concurrency:
+    # Client-side rails (defensive). Server may still accept more, but we won't pile on.
+    max_in_flight_requests: 4
+
+    per_endpoint:
+      chat: 2
+      generate: 2
+      embeddings: 2
+
+capabilities:
+  # Provider capability surface used by the router for deterministic selection.
+  chat: true
+  completions: true
+  embeddings: true
+
+  # "tools" here means: suitable for structured tool orchestration prompts.
+  # Native Ollama API does not guarantee OpenAI-style tool call semantics, so we
+  # declare a mode.
+  tools:
+    supported: true
+    mode: "prompt_structured"   # prompt_structured | native | unsupported
+    notes: >
+      Tool calls are orchestrated via structured prompting and post-parse, unless
+      an adapter provides native tool semantics.
+
+  # JSON output: best-effort unless your runtime enforces schemas strictly.
+  json_mode: best_effort         # strict | best_effort | unsupported
+
+  # Multimodal capabilities (only enable when explicitly configured).
+  vision: false
+  audio: false
+
+models:
+  # Canonical role-to-model mapping for this provider.
+  # These names are intentionally aligned with the Francis "model roster" concept.
+  #
+  # Override precedence recommendation:
+  #   ENV (FRANCIS_OLLAMA_MODEL_*) > environment profile override > this file
+  roster:
+    chat: "francis-chat"
+    reasoning: "francis-deliberate"
+    coder: "francis-coder"
+    embed: "francis-embed"
+    reflex: "francis-reflex"
+
+  roster_env:
+    chat: "FRANCIS_OLLAMA_MODEL_CHAT"
+    reasoning: "FRANCIS_OLLAMA_MODEL_REASONING"
+    coder: "FRANCIS_OLLAMA_MODEL_CODER"
+    embed: "FRANCIS_OLLAMA_MODEL_EMBED"
+    reflex: "FRANCIS_OLLAMA_MODEL_REFLEX"
+
+  # Optional allowlist to prevent accidental use of unknown local models.
+  # Leave empty to allow any installed model; fill to lock down.
+  allowlist: []
+
+  # Optional denylist patterns (glob-like). Useful if you keep experiments installed.
+  denylist:
+    - "*:insecure"
+    - "*:broken"
+
+  # Default options for Ollama (passed as the "options" field).
+  # These are baseline-safe. Specialization layers may override per workload.
+  defaults:
+    # Determinism / sampling
+    seed: null
+    temperature: 0.6
+    top_p: 0.9
+    top_k: 40
+
+    # Repetition control
+    repeat_penalty: 1.10
+    repeat_last_n: 256
+
+    # Context + prediction budget (tokens)
+    num_ctx: 8192
+    num_predict: 1024
+
+    # Stop sequences are best-effort; keep conservative to avoid truncation surprises.
+    stop:
+      - "</final>"
+      - "### END"
+
+    # Performance knobs (leave null unless you want to pin behavior)
+    num_thread: null
+    num_gpu: null
+
+  # Per-role overrides (kept minimal; do not duplicate full defaults unless needed)
+  per_role:
+    embed:
+      # Embedding calls generally ignore generation settings, but num_ctx can matter.
+      num_ctx: 8192
+      num_predict: 0
+      temperature: 0.0
+
+embeddings:
+  # Embedding behavior hints for the memory subsystem.
+  # Enforcement depends on the embedding adapter.
+  defaults:
+    batch_size: 32
+    normalize: true
+    # If your adapter supports caching:
+    cache:
+      enabled: true
+      ttl_s: 86400
+
+model_management:
+  # These are operational hints for a future model lifecycle manager.
+  # They are safe to ignore if unimplemented.
+  allow_pull: true
+  allow_create: true
+  allow_delete: false
+
+  # Prewarm can reduce first-token latency after boot.
+  prewarm:
+    enabled: true
+    roles:
+      - chat
+      - embed
+    timeout_ms: 60000
+
+observability:
+  # Provider-level logging policy (metadata only by default).
+  log_policy:
+    include_prompts: false
+    include_responses: false
+    include_request_ids: true
+    include_model: true
+    include_endpoint: true
+    include_timings: true
+    include_token_estimates: true
+
+  # Event emission (if your runtime has an internal event bus).
+  emit_events: true
+
+  # Optional structured fields to include when emitting provider events.
+  event_fields:
+    - provider_id
+    - instance_label
+    - endpoint
+    - model
+    - duration_ms
+    - ok
+    - error_class
+    - attempt

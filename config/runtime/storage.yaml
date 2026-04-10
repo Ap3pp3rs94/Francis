@@ -1,0 +1,403 @@
+# ==============================================================================
+# Francis 2.0 — Runtime Config
+# Config: Scheduler (daemon tick + job selection + execution policy)
+# Path:   config/runtime/scheduler.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical scheduling policy for the Francis daemon.
+#
+# This configuration governs:
+#   - tick/heartbeat timing and jitter
+#   - job discovery (schedules/playbooks/capabilities)
+#   - priority, fairness, starvation prevention
+#   - idempotency / deduplication windows
+#   - execution timeouts, retry budgets, and circuit breakers
+#   - failure handling posture (fail-fast vs degrade)
+#   - observability and audit emission
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deterministic: scheduling decisions should be reproducible given same inputs.
+# - Safe: never "accidentally" execute destructive/high-risk work due to ambiguity.
+# - Observable: every decision path should be loggable and auditable.
+# - Compatible: integrates with config/runtime/concurrency.yaml for concurrency caps.
+#
+# NOTES
+# -----
+# - The scheduler should interpret this file alongside:
+#     * config/runtime/concurrency.yaml
+#     * config/capabilities/schedules.yaml
+#     * config/capabilities/playbooks.yaml
+#     * config/policies/* (especially approvals + trust)
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "daemon_scheduler_policy"
+  last_reviewed: "2025-12-31"
+  notes:
+    - "Jitter prevents thundering herd when multiple instances run."
+    - "Idempotency windows prevent accidental repeated actions."
+    - "Guard state overlays can pause high-risk schedules."
+
+# ------------------------------------------------------------------------------
+# Core timing / tick policy
+# ------------------------------------------------------------------------------
+timing:
+
+  # Base scheduler tick (seconds). The daemon wakes and evaluates runnable work.
+  tick_interval_s: 1.0
+
+  # Add random jitter per tick to reduce synchronized behavior across instances.
+  # Effective tick delay is: tick_interval_s + rand(0..jitter_s)
+  jitter_s: 0.25
+
+  # Drift control: avoid drift accumulation if work takes longer than tick.
+  # - "catch_up": immediately schedule next tick if behind
+  # - "skip": skip missed ticks and resume on next interval
+  drift_policy: "catch_up" # catch_up | skip
+
+  # Minimum delay between scheduling cycles when system is under pressure.
+  # Helps prevent the scheduler from becoming a busy loop during overload.
+  min_cycle_sleep_s: 0.05
+
+  # Heartbeat emission (seconds). Used for liveness monitoring.
+  heartbeat_interval_s: 5
+
+# ------------------------------------------------------------------------------
+# Work discovery
+# ------------------------------------------------------------------------------
+discovery:
+
+  # Where to load schedules/playbooks from (paths are repo-relative).
+  schedules_path: "./config/capabilities/schedules.yaml"
+  playbooks_path: "./config/capabilities/playbooks.yaml"
+
+  # If true, scheduler reloads these files periodically for hot updates.
+  # This should be used carefully in production; config reload should be audited.
+  hot_reload:
+    enabled: true
+    interval_s: 10
+    require_approval: false # in regulated/safety_critical overlays, set true
+    audit_event_kind: "scheduler.config_reload"
+
+  # If true, scheduler will validate schema/structure at load time.
+  validate_on_load: true
+
+# ------------------------------------------------------------------------------
+# Selection policy (which jobs run when multiple are eligible)
+# ------------------------------------------------------------------------------
+selection:
+
+  # Priority scale: 0 highest .. 100 lowest
+  priority_scale:
+    min: 0
+    max: 100
+
+  # Base selection algorithm
+  # - "priority_fifo": highest priority first, then FIFO by enqueue time
+  # - "fair_queue": weighted fair scheduling across classes
+  algorithm: "fair_queue" # priority_fifo | fair_queue
+
+  # Define classes for fair scheduling.
+  # The scheduler should assign each job to a class based on:
+  #   - explicit job.class (if present)
+  #   - else capability category (read_only/mutation/etc.)
+  #   - else default_class
+  classes:
+    # Interactive class keeps the system responsive.
+    interactive:
+      weight: 4
+      max_parallel: 8
+      default_priority: 15
+
+    # Standard background jobs (health probes, logs, indexing).
+    background:
+      weight: 2
+      max_parallel: 8
+      default_priority: 60
+
+    # Heavy jobs (simulation, large exports, embeddings).
+    heavy:
+      weight: 1
+      max_parallel: 2
+      default_priority: 75
+
+    # High-risk jobs (mutation/destructive). Keep strict and scarce.
+    high_risk:
+      weight: 1
+      max_parallel: 2
+      default_priority: 30
+      require_approval: true
+
+  default_class: "background"
+
+  # Starvation protection ensures low priority work eventually executes.
+  starvation_protection:
+    enabled: true
+    max_wait_s: 180
+    aging:
+      interval_s: 30
+      priority_step: 5
+
+  # Maximum number of runnable jobs to consider per tick.
+  # Prevents O(N) work on huge queues.
+  scan_limit: 500
+
+# ------------------------------------------------------------------------------
+# Execution policy (timeouts, retries, idempotency)
+# ------------------------------------------------------------------------------
+execution:
+
+  # The scheduler should obey global concurrency caps from config/runtime/concurrency.yaml.
+  # These values are additional scheduler-side clamps.
+  max_inflight_jobs: 16
+
+  # Default per-job timeout if not specified by job or category.
+  default_timeout_s: 30
+
+  # Default retry policy for transient failures.
+  retries:
+    enabled: true
+    default_retries: 1
+    backoff:
+      min_delay_ms: 250
+      max_delay_ms: 10_000
+      jitter_ms: 250
+
+  # Idempotency / dedupe windows
+  # The scheduler uses these to avoid launching equivalent work too frequently.
+  idempotency:
+    enabled: true
+
+    # If a job defines an idempotency_key, the scheduler should not run another job
+    # with the same key within this window unless force=true.
+    dedupe_window_s: 60
+
+    # For schedule-driven jobs, prevent duplicate runs if tick overlaps.
+    schedule_run_lock_s: 30
+
+    # How to behave when dedupe triggers:
+    # - "skip": do not run; record skip reason
+    # - "delay": re-enqueue for later (bounded)
+    on_dedupe: "skip" # skip | delay
+
+  # Job-level cancellation behavior
+  cancellation:
+    # If true, scheduler will attempt to cancel/abort jobs on shutdown.
+    cancel_on_shutdown: true
+
+    # Grace period before hard kill (executor-dependent).
+    shutdown_grace_s: 10
+
+# ------------------------------------------------------------------------------
+# Failure handling posture
+# ------------------------------------------------------------------------------
+failure_handling:
+
+  # Global posture:
+  # - "degrade": keep running, skip failing jobs, isolate failures
+  # - "fail_fast": stop scheduler on repeated critical failures
+  posture: "degrade" # degrade | fail_fast
+
+  # Circuit breaker at the scheduler/job level
+  circuit_breaker:
+    enabled: true
+    window_s: 120
+    failure_threshold: 8
+    open_for_s: 60
+    half_open_max_trials: 2
+
+  # If a job fails repeatedly, what to do:
+  # - "pause_job": stop scheduling that job temporarily
+  # - "pause_class": stop scheduling that class temporarily
+  # - "escalate": create an approval/escalation item
+  on_repeated_failure: "escalate" # pause_job | pause_class | escalate
+
+  # Escalation behavior
+  escalation:
+    enabled: true
+    create_approval_item: true
+    capability_id: "approvals.create" # future-ready; governance layer may map this
+    severity_map:
+      read_only: "low"
+      mutation: "medium"
+      destructive: "high"
+      network_egress: "medium"
+      credential_ops: "high"
+      industrial_actuation: "critical"
+      simulation: "medium"
+
+# ------------------------------------------------------------------------------
+# Guard-state overlays (runtime safety)
+# ------------------------------------------------------------------------------
+guard_state_overlays:
+
+  normal: {}
+
+  restricted:
+    timing:
+      tick_interval_s: 1.5
+      jitter_s: 0.5
+    execution:
+      max_inflight_jobs: 10
+      default_timeout_s: 25
+    selection:
+      classes:
+        high_risk:
+          max_parallel: 1
+    discovery:
+      hot_reload:
+        require_approval: true
+
+  lockdown:
+    timing:
+      tick_interval_s: 2.0
+      jitter_s: 0.75
+    execution:
+      max_inflight_jobs: 6
+      default_timeout_s: 20
+      retries:
+        enabled: false
+    selection:
+      # In lockdown, only interactive + read-only background should run.
+      classes:
+        interactive:
+          max_parallel: 6
+        background:
+          max_parallel: 4
+        heavy:
+          max_parallel: 0
+        high_risk:
+          max_parallel: 0
+    discovery:
+      hot_reload:
+        enabled: false
+
+# ------------------------------------------------------------------------------
+# Observability and audit
+# ------------------------------------------------------------------------------
+observability:
+
+  # Emit structured scheduling decision logs (why did job run/skip?)
+  log_decisions: true
+
+  # Emit metrics for inflight, queue depth, latency
+  metrics:
+    enabled: true
+    keys:
+      - "francis.scheduler.tick_latency_ms"
+      - "francis.scheduler.runnable_jobs"
+      - "francis.scheduler.inflight_jobs"
+      - "francis.scheduler.job_started_total"
+      - "francis.scheduler.job_completed_total"
+      - "francis.scheduler.job_failed_total"
+      - "francis.scheduler.job_skipped_total"
+      - "francis.scheduler.dedupe_skips_total"
+      - "francis.scheduler.circuit_breaker_open_total"
+
+  # Audit events (append-only log sink)
+  audit:
+    enabled: true
+    logger: "francis.audit"
+    event_kinds:
+      - "scheduler.tick"
+      - "scheduler.job_selected"
+      - "scheduler.job_started"
+      - "scheduler.job_completed"
+      - "scheduler.job_failed"
+      - "scheduler.job_skipped"
+      - "scheduler.config_reload"
+
+# ------------------------------------------------------------------------------
+# Profiles (environment-level defaults)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    timing:
+      tick_interval_s: 0.75
+      jitter_s: 0.15
+    execution:
+      max_inflight_jobs: 24
+      retries:
+        enabled: true
+        default_retries: 2
+    discovery:
+      hot_reload:
+        enabled: true
+        interval_s: 5
+        require_approval: false
+
+  workstation:
+    timing:
+      tick_interval_s: 1.0
+      jitter_s: 0.25
+    execution:
+      max_inflight_jobs: 16
+
+  production:
+    timing:
+      tick_interval_s: 1.0
+      jitter_s: 0.35
+    execution:
+      max_inflight_jobs: 14
+    discovery:
+      hot_reload:
+        enabled: true
+        interval_s: 15
+        require_approval: false
+
+  regulated:
+    failure_handling:
+      posture: "degrade"
+      on_repeated_failure: "escalate"
+    discovery:
+      hot_reload:
+        enabled: true
+        interval_s: 30
+        require_approval: true
+    execution:
+      max_inflight_jobs: 12
+      retries:
+        enabled: true
+        default_retries: 1
+
+  safety_critical:
+    failure_handling:
+      posture: "fail_fast"
+      on_repeated_failure: "pause_class"
+    discovery:
+      hot_reload:
+        enabled: false
+    execution:
+      max_inflight_jobs: 8
+      retries:
+        enabled: false
+    selection:
+      algorithm: "priority_fifo"
+      classes:
+        high_risk:
+          max_parallel: 0
+        heavy:
+          max_parallel: 0
+
+# ------------------------------------------------------------------------------
+# Validation hints (for loader)
+# ------------------------------------------------------------------------------
+validation:
+  numeric_bounds:
+    tick_interval_s: { min: 0.1, max: 10.0 }
+    jitter_s: { min: 0.0, max: 5.0 }
+    max_inflight_jobs: { min: 1, max: 512 }
+    default_timeout_s: { min: 1, max: 3600 }
+    scan_limit: { min: 10, max: 10000 }
+
+  notes:
+    - "If selection.algorithm=fair_queue, classes must define weight and max_parallel."
+    - "If guard_state=lockdown, ensure heavy/high_risk max_parallel=0 to prevent unsafe work."
+    - "If discovery.hot_reload.require_approval=true, scheduler must emit audit and request approval workflow."

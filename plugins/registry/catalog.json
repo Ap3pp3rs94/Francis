@@ -1,0 +1,108 @@
+{
+  "plugins": [
+    {
+      "attestation": {
+        "publisher": "francis-core"
+      },
+      "capabilities": [
+        "echo",
+        "diagnostics"
+      ],
+      "compatibility": {
+        "min_core_version": "0.3.0"
+      },
+      "constraints": {
+        "max_payload_bytes": 4096
+      },
+      "description": "Reference plugin spec used to validate registry compilation.",
+      "entrypoint": "plugins/builtins/echo.py",
+      "metadata": {},
+      "name": "Builtin Echo",
+      "origin": "builtin",
+      "permissions": {
+        "scopes": [
+          "workspace:read"
+        ]
+      },
+      "plugin_id": "builtin.echo",
+      "risk_class": "normal",
+      "sandbox_profile": "readonly",
+      "source_path": "C:\\Francis\\plugins\\spec\\builtin_echo.json",
+      "telemetry": {
+        "audit_level": "standard",
+        "redaction_rules": [
+          "default"
+        ]
+      },
+      "tools": [
+        {
+          "action": "run",
+          "description": "Reference execution tool for plugin contract tests.",
+          "dry_run_supported": true,
+          "idempotency": true,
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "metadata": {},
+          "methods": [
+            "execute"
+          ],
+          "output_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "echo": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "echo"
+            ],
+            "type": "object"
+          },
+          "policy_tags": [
+            "local_only"
+          ],
+          "rate_limits": {
+            "burst": 5,
+            "window_seconds": 60
+          },
+          "requires_approvals": false,
+          "requires_trust_level": 0,
+          "resources": [
+            "workspace"
+          ],
+          "risk_class": "normal",
+          "summary": "Echo a payload back to the caller.",
+          "tool_name": "builtin.echo.run"
+        }
+      ],
+      "version": "1.0.0"
+    }
+  ],
+  "tool_index": [
+    {
+      "action": "run",
+      "plugin_id": "builtin.echo",
+      "plugin_name": "Builtin Echo",
+      "policy_tags": [
+        "local_only"
+      ],
+      "requires_approvals": false,
+      "requires_trust_level": 0,
+      "risk_class": "normal",
+      "tool_name": "builtin.echo.run"
+    }
+  ],
+  "total_plugins": 1,
+  "total_tools": 1,
+  "version": 1
+}

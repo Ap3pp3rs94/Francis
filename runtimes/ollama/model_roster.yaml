@@ -1,0 +1,7 @@
+models:
+  - name: francis-chat
+    base: qwen2.5:7b
+    role: chat
+  - name: francis-deliberate
+    base: qwen2.5:14b
+    role: deliberation

@@ -1,0 +1,113 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "francis"
+version = "0.3.1"
+description = "Local-first, policy-guarded, auditable autonomous colleague."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+francis = "francis.__main__:main"
+
+[project.optional-dependencies]
+core = [
+  "pydantic",
+  "pydantic-settings",
+  "python-dotenv",
+  "pyyaml",
+  "typer",
+  "rich",
+  "structlog",
+  "tenacity",
+  "orjson",
+  "python-dateutil",
+]
+ops = [
+  "apscheduler",
+  "prefect",
+  "redis",
+  "rq",
+  "psutil",
+  "watchdog",
+]
+web = [
+  "fastapi",
+  "uvicorn",
+  "httpx",
+  "websockets",
+  "jinja2",
+  "python-multipart",
+]
+data = [
+  "sqlalchemy",
+  "alembic",
+  "duckdb",
+  "pandas",
+  "pyarrow",
+  "redis",
+]
+scraping = [
+  "beautifulsoup4",
+  "lxml",
+  "selectolax",
+  "playwright",
+]
+llm = [
+  "llama-index",
+  "qdrant-client",
+  "sentence-transformers",
+  "tiktoken",
+  "numpy",
+]
+security = [
+  "cryptography",
+  "argon2-cffi",
+  "pyjwt",
+  "keyring",
+  "paramiko",
+  "requests",
+  "pip-audit",
+  "safety",
+  "cyclonedx-bom",
+]
+observability = [
+  "sentry-sdk",
+  "prometheus-client",
+  "opentelemetry-api",
+  "opentelemetry-sdk",
+  "opentelemetry-instrumentation-fastapi",
+  "opentelemetry-exporter-otlp",
+]
+comms = [
+  "google-api-python-client",
+  "google-auth",
+  "google-auth-oauthlib",
+  "python-telegram-bot",
+  "discord.py",
+  "twilio",
+]
+iot = [
+  "paho-mqtt",
+  "bleak",
+  "zeroconf",
+  "pyserial",
+]
+reports = [
+  "openpyxl",
+  "python-docx",
+  "pypdf",
+  "reportlab",
+  "pillow",
+  "rapidfuzz",
+]
+dev = [
+  "pytest",
+  "pytest-asyncio",
+  "ruff",
+  "mypy",
+  "pre-commit",
+]

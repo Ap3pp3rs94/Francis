@@ -1,0 +1,528 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Guard (runtime tripwires + containment + emergency brake)
+# Path:   config/policies/guard.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Guard is the runtime safety net:
+#   - Detect dangerous conditions (security, stability, policy violations)
+#   - Trigger containment responses (throttle, deny, quarantine, safe mode)
+#   - Escalate governance requirements (approvals/quorum)
+#   - Provide deterministic incident posture transitions
+#
+# Guard coordinates across:
+#   - escalation.yaml (decision level)
+#   - environmental.yaml (physical/infrastructure posture)
+#   - data_governance.yaml (classification, export, provenance)
+#   - filesystem.yaml (disk safety)
+#   - ethical_boundaries.yaml (hard safety boundaries)
+#   - collaborative_trust.yaml (actor trust)
+#   - approvals.yaml (human gates)
+#   - credential_usage.yaml (secret handling)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed for high impact actions:
+#     if guard state is uncertain → deny actuation/egress/destructive ops
+# - Deterministic:
+#     triggers evaluate into a single guard_state with reason codes
+# - Observable:
+#     every transition emits audit + ledger event
+# - Composable:
+#     guard does not replace other policies; it tightens them when needed
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "guard_policy"
+  notes:
+    - "Guard is a cross-cutting governor: it can override other policies by tightening gates."
+    - "Containment actions must be safe, reversible, and auditable."
+    - "Prefer throttling and quarantine over silent failure."
+
+# ------------------------------------------------------------------------------
+# Global enablement + state model
+# ------------------------------------------------------------------------------
+guard:
+  enabled: true
+
+  # Modes:
+  # - disabled: do not enforce (dev-only)
+  # - policy:   enforce tripwires + containment (default)
+  # - strict:   conservative; more triggers lead to lockdown
+  mode: "policy" # disabled | policy | strict
+
+  # Fail-closed if evaluation fails.
+  fail_closed_state: "guarded" # normal | guarded | restricted | lockdown
+
+  # When enabled, guard can apply "policy tightening overlays" to other policies.
+  apply_overlays: true
+
+  # Prevent flapping: minimum time between state transitions.
+  min_transition_interval_s: 15
+
+  # If true, guard remembers recent incidents for burst detection.
+  incident_memory:
+    enabled: true
+    window_s: 600
+    max_events: 500
+
+# ------------------------------------------------------------------------------
+# Guard states (output)
+# ------------------------------------------------------------------------------
+states:
+  order:
+    - "normal"      # baseline
+    - "guarded"     # warn + mild throttles
+    - "restricted"  # deny high-risk categories; approvals required for many actions
+    - "lockdown"    # safe-mode: read-only + minimal operations; emergency/quorum only
+
+  definitions:
+    normal:
+      description: "Full operations. Baseline gates apply."
+    guarded:
+      description: "Elevated caution. Throttle background jobs; extra audits; warn operator."
+    restricted:
+      description: "Restrict egress/destructive/actuation; force approvals for risky actions."
+    lockdown:
+      description: "Hard safe-mode. Deny most actions; allow read-only health/status only."
+
+# ------------------------------------------------------------------------------
+# Signals consumed (expected upstream inputs)
+# ------------------------------------------------------------------------------
+signals:
+  enabled: true
+
+  expected:
+    environmental_state: ["normal", "caution", "degraded", "critical"]
+    escalation_level: ["none", "warn", "require_approval", "require_quorum", "deny"]
+    trust_state_fields:
+      - "actor_id"
+      - "trust_level"
+      - "quarantined"
+      - "revoked"
+
+  # If signals missing:
+  on_missing:
+    environmental_state: "guarded"
+    escalation_level: "guarded"
+    trust_state: "restricted"
+
+# ------------------------------------------------------------------------------
+# Tripwires (trigger conditions → guard state)
+# ------------------------------------------------------------------------------
+tripwires:
+  enabled: true
+
+  # Evaluation order: highest priority first.
+  # First matching trigger may set a minimum state; aggregation takes max(state).
+  triggers:
+
+    # ==========================================================================
+    # SAFETY / ENVIRONMENTAL
+    # ==========================================================================
+    - id: "tw.env_critical"
+      priority: 100
+      when:
+        environmental:
+          state_in: ["critical"]
+      set_state_at_least: "lockdown"
+      reasons:
+        - "ENVIRONMENT_CRITICAL"
+
+    - id: "tw.env_degraded"
+      priority: 90
+      when:
+        environmental:
+          state_in: ["degraded"]
+      set_state_at_least: "restricted"
+      reasons:
+        - "ENVIRONMENT_DEGRADED"
+
+    - id: "tw.env_caution"
+      priority: 60
+      when:
+        environmental:
+          state_in: ["caution"]
+      set_state_at_least: "guarded"
+      reasons:
+        - "ENVIRONMENT_CAUTION"
+
+    # ==========================================================================
+    # TRUST / IDENTITY
+    # ==========================================================================
+    - id: "tw.actor_revoked"
+      priority: 100
+      when:
+        trust:
+          revoked: true
+      set_state_at_least: "lockdown"
+      reasons:
+        - "ACTOR_REVOKED"
+
+    - id: "tw.actor_quarantined"
+      priority: 90
+      when:
+        trust:
+          quarantined: true
+      set_state_at_least: "restricted"
+      reasons:
+        - "ACTOR_QUARANTINED"
+
+    - id: "tw.trust_low"
+      priority: 70
+      when:
+        trust:
+          trust_level_below: 3
+      set_state_at_least: "guarded"
+      reasons:
+        - "TRUST_LOW"
+
+    # ==========================================================================
+    # POLICY VIOLATIONS / SECURITY ANOMALIES
+    # ==========================================================================
+    - id: "tw.policy_violation_burst"
+      priority: 90
+      when:
+        anomaly:
+          policy_denies_in_window_gte: 10
+          window_s: 300
+      set_state_at_least: "restricted"
+      reasons:
+        - "POLICY_VIOLATION_BURST"
+
+    - id: "tw.secret_leak_detected"
+      priority: 100
+      when:
+        anomaly:
+          secret_redaction_events_in_window_gte: 3
+          window_s: 300
+      set_state_at_least: "lockdown"
+      reasons:
+        - "SECRET_LEAK_PATTERN"
+
+    - id: "tw.suspicious_egress"
+      priority: 90
+      when:
+        anomaly:
+          egress_denies_in_window_gte: 5
+          window_s: 300
+      set_state_at_least: "restricted"
+      reasons:
+        - "SUSPICIOUS_EGRESS"
+
+    - id: "tw.auth_fail_burst"
+      priority: 90
+      when:
+        anomaly:
+          auth_failures_in_window_gte: 8
+          window_s: 300
+      set_state_at_least: "restricted"
+      reasons:
+        - "AUTH_FAILURE_BURST"
+
+    # ==========================================================================
+    # STABILITY / HEALTH
+    # ==========================================================================
+    - id: "tw.failure_burst"
+      priority: 70
+      when:
+        anomaly:
+          capability_failures_in_window_gte: 12
+          window_s: 300
+      set_state_at_least: "guarded"
+      reasons:
+        - "FAILURE_BURST"
+
+    - id: "tw.disk_pressure_critical"
+      priority: 80
+      when:
+        system:
+          disk_percent_used_gte: 97
+      set_state_at_least: "restricted"
+      reasons:
+        - "DISK_PRESSURE_CRITICAL"
+
+    - id: "tw.disk_pressure_degraded"
+      priority: 60
+      when:
+        system:
+          disk_percent_used_gte: 92
+      set_state_at_least: "guarded"
+      reasons:
+        - "DISK_PRESSURE_HIGH"
+
+    - id: "tw.memory_pressure_critical"
+      priority: 80
+      when:
+        system:
+          mem_percent_used_gte: 97
+      set_state_at_least: "restricted"
+      reasons:
+        - "MEM_PRESSURE_CRITICAL"
+
+    - id: "tw.cpu_temp_critical"
+      priority: 80
+      when:
+        system:
+          cpu_temp_c_gte: 95
+      set_state_at_least: "restricted"
+      reasons:
+        - "CPU_TEMP_CRITICAL"
+
+    # ==========================================================================
+    # GOVERNANCE SIGNALS
+    # ==========================================================================
+    - id: "tw.escalation_deny"
+      priority: 90
+      when:
+        escalation:
+          level_in: ["deny"]
+      set_state_at_least: "restricted"
+      reasons:
+        - "ESCALATION_DENY"
+
+    - id: "tw.escalation_quorum"
+      priority: 80
+      when:
+        escalation:
+          level_in: ["require_quorum"]
+      set_state_at_least: "restricted"
+      reasons:
+        - "ESCALATION_QUORUM"
+
+# ------------------------------------------------------------------------------
+# Containment responses (guard state → operational controls)
+# ------------------------------------------------------------------------------
+containment:
+  enabled: true
+
+  by_state:
+
+    normal:
+      throttles:
+        enabled: false
+      restrictions:
+        deny_operations: []
+        require_approval_operations: []
+        require_quorum_operations: []
+      messaging:
+        operator_banner: null
+
+    guarded:
+      throttles:
+        enabled: true
+        max_concurrency_factor: 0.75
+        daemon_tick_factor: 1.5
+        web_learning_rate_limit_factor: 0.75
+      restrictions:
+        deny_operations: []
+        require_approval_operations:
+          - "exports"
+          - "web_egress"
+        require_quorum_operations: []
+      messaging:
+        operator_banner: "Guarded mode: elevated caution. Some actions may require approval."
+
+    restricted:
+      throttles:
+        enabled: true
+        max_concurrency_factor: 0.5
+        daemon_tick_factor: 2.0
+        web_learning_rate_limit_factor: 0.5
+      restrictions:
+        deny_operations:
+          - "destructive_mutations"
+          - "industrial_actuation"
+        require_approval_operations:
+          - "routine_mutations"
+          - "exports"
+          - "web_egress"
+        require_quorum_operations:
+          - "regulated_exports"
+          - "safety_critical_actions"
+      messaging:
+        operator_banner: "Restricted mode: high-risk operations denied; approvals required for most mutations/egress."
+
+    lockdown:
+      throttles:
+        enabled: true
+        max_concurrency_factor: 0.25
+        daemon_tick_factor: 5.0
+        web_learning_rate_limit_factor: 0.0
+      restrictions:
+        deny_operations:
+          - "routine_mutations"
+          - "destructive_mutations"
+          - "exports"
+          - "web_egress"
+          - "industrial_actuation"
+          - "high_power_compute"
+          - "background_jobs"
+        require_approval_operations: []
+        require_quorum_operations:
+          - "emergency_only"
+      messaging:
+        operator_banner: "LOCKDOWN: safe mode. Read-only health/status only. Emergency/quorum required for overrides."
+
+# ------------------------------------------------------------------------------
+# Policy overlays (tighten other policies while guard is elevated)
+# ------------------------------------------------------------------------------
+overlays:
+  enabled: true
+
+  # These are high-level knobs other policy evaluators can consult.
+  by_state:
+
+    guarded:
+      approvals:
+        force_for_exports: true
+      data_governance:
+        quarantine_unknown_provenance_writes: true
+      filesystem:
+        require_approval_for_overwrite: true
+
+    restricted:
+      approvals:
+        force_for_mutations: true
+        force_for_exports: true
+        force_for_web_egress: true
+      data_governance:
+        approvals_required_for_non_public_egress: true
+        quarantine_unknown_provenance_writes: true
+      filesystem:
+        require_approval_for_move: true
+        require_approval_for_overwrite: true
+        require_approval_for_delete: true
+
+    lockdown:
+      approvals:
+        disable_auto_approvals: true
+      data_governance:
+        deny_exports: true
+        deny_persistent_writes: true
+      filesystem:
+        deny_writes_outside_quarantine: true
+        deny_delete: true
+
+# ------------------------------------------------------------------------------
+# Emergency actions (manual operator triggers)
+# ------------------------------------------------------------------------------
+emergency:
+  enabled: true
+
+  # Manual operator commands can force guard state.
+  # Implementation should require:
+  #   - high trust
+  #   - explicit justification
+  #   - audit event
+  allow_manual_state_change: true
+
+  min_trust_to_force_state:
+    guarded: 6
+    restricted: 8
+    lockdown: 9
+
+  require_justification: true
+  min_justification_chars: 20
+
+  # Emergency un-lockdown may require quorum.
+  require_quorum_to_exit_lockdown: true
+  exit_lockdown_quorum:
+    min_approvals: 2
+    min_distinct_approvers: 2
+    min_approver_trust: 9
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "guard.state_evaluated"
+      - "guard.state_transition"
+      - "guard.containment_applied"
+      - "guard.manual_override_requested"
+      - "guard.manual_override_applied"
+    include:
+      - "prev_state"
+      - "next_state"
+      - "reasons"
+      - "signals"
+      - "ts"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "guard.normal"
+      - "guard.guarded"
+      - "guard.restricted"
+      - "guard.lockdown"
+      - "guard.transitions"
+      - "guard.manual_overrides"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    guard:
+      mode: "policy"
+      fail_closed_state: "guarded"
+    emergency:
+      require_quorum_to_exit_lockdown: false
+
+  workstation:
+    guard:
+      mode: "policy"
+      fail_closed_state: "restricted"
+
+  production:
+    guard:
+      mode: "strict"
+      fail_closed_state: "restricted"
+    containment:
+      by_state:
+        guarded:
+          restrictions:
+            require_approval_operations:
+              - "exports"
+              - "web_egress"
+
+  regulated:
+    guard:
+      mode: "strict"
+      fail_closed_state: "lockdown"
+    overlays:
+      by_state:
+        restricted:
+          approvals:
+            force_for_mutations: true
+            force_for_exports: true
+            force_for_web_egress: true
+    emergency:
+      require_quorum_to_exit_lockdown: true
+
+  safety_critical:
+    guard:
+      mode: "strict"
+      fail_closed_state: "lockdown"
+    emergency:
+      allow_manual_state_change: true
+      require_quorum_to_exit_lockdown: true
+      exit_lockdown_quorum:
+        min_approvals: 3
+        min_distinct_approvers: 3
+        min_approver_trust: 9

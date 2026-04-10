@@ -1,0 +1,352 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    built = client.post("/plugins/build", json={"name": "Echo Plugin", "description": "Simple echo"})
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    listed = client.get("/plugins/list")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert isinstance(listed_body.get("items"), list)
+    assert any(str(item.get("id")) == plugin_id for item in listed_body["items"])
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["ok"] is True
+    assert fetched_body["item"]["id"] == plugin_id
+    assert fetched_body["item"]["source_kind"] in {"generated", "unknown"}
+
+    disabled = client.post("/plugins/disable", json={"id": plugin_id, "reason": "test_disable"})
+    assert disabled.status_code == 200
+    disabled_body = disabled.json()
+    assert disabled_body["ok"] is True
+    assert disabled_body["enabled"] is False
+    assert disabled_body["status"] == "disabled"
+
+    run_disabled = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
+    assert run_disabled.status_code == 200
+    run_disabled_body = run_disabled.json()
+    assert run_disabled_body["ok"] is False
+    assert run_disabled_body["status"] == "disabled"
+
+    enabled = client.post("/plugins/enable", json={"id": plugin_id, "reason": "test_enable"})
+    assert enabled.status_code == 200
+    enabled_body = enabled.json()
+    assert enabled_body["ok"] is True
+    assert enabled_body["enabled"] is True
+
+    run_enabled = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
+    assert run_enabled.status_code == 200
+    run_enabled_body = run_enabled.json()
+    assert run_enabled_body["ok"] is True
+    assert str(run_enabled_body["output"]) == "Plugin response: hello"
+
+    downloaded = client.get(f"/plugins/download/{plugin_id}")
+    assert downloaded.status_code == 200
+    assert downloaded.headers["content-type"] in {"application/zip", "application/x-zip-compressed", "application/octet-stream"}
+
+    registry_path = data_root / "plugins" / "_registry.json"
+    assert registry_path.exists()
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert plugin_id in registry["plugins"]
+
+
+def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/toolkit",
+            "version": "1.2.3",
+            "reason": "integration_test",
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["ok"] is True
+    assert fetched_body["item"]["source_kind"] == "registry"
+    assert fetched_body["item"]["source_ref"] == "acme/toolkit"
+
+    filtered = client.get("/plugins/list?source_kind=registry&search=tool")
+    assert filtered.status_code == 200
+    filtered_ids = {str(item.get("id")) for item in filtered.json()["items"]}
+    assert plugin_id in filtered_ids
+
+    disabled = client.post("/plugins/disable", json={"id": plugin_id})
+    assert disabled.status_code == 200
+    assert disabled.json()["ok"] is True
+
+    disabled_list = client.get("/plugins/list?enabled=0")
+    assert disabled_list.status_code == 200
+    disabled_ids = {str(item.get("id")) for item in disabled_list.json()["items"]}
+    assert plugin_id in disabled_ids
+
+    uninstalled = client.post("/plugins/uninstall", json={"id": plugin_id, "reason": "cleanup"})
+    assert uninstalled.status_code == 200
+    uninstalled_body = uninstalled.json()
+    assert uninstalled_body["ok"] is True
+    assert uninstalled_body["status"] == "uninstalled"
+
+    fetched_after_delete = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched_after_delete.status_code == 200
+    assert fetched_after_delete.json()["ok"] is False
+
+    reloaded = client.post("/plugins/reload")
+    assert reloaded.status_code == 200
+    reloaded_body = reloaded.json()
+    assert reloaded_body["ok"] is True
+    assert "total" in reloaded_body
+
+
+def test_plugins_tools_catalog_and_action_validation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    built = client.post("/plugins/build", json={"name": "Catalog Plugin", "description": "Tool catalog coverage"})
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    tools = client.get(f"/plugins/tools/list?plugin_id={plugin_id}")
+    assert tools.status_code == 200
+    tools_body = tools.json()
+    assert isinstance(tools_body.get("items"), list)
+    assert tools_body.get("total", 0) >= 1
+    first_tool = tools_body["items"][0]
+    assert first_tool["plugin_id"] == plugin_id
+    assert first_tool["action"] == "run"
+    assert first_tool["required_trust"] == 0
+    assert first_tool["approvals_required"] is False
+
+    tool_id = str(first_tool["id"])
+    fetched_tool = client.get(f"/plugins/tools/get?id={tool_id}")
+    assert fetched_tool.status_code == 200
+    fetched_tool_body = fetched_tool.json()
+    assert fetched_tool_body["ok"] is True
+    assert fetched_tool_body["item"]["id"] == tool_id
+
+    bad_action = client.post("/plugins/run", json={"id": plugin_id, "action": "not-supported", "input": "hello"})
+    assert bad_action.status_code == 200
+    bad_action_body = bad_action.json()
+    assert bad_action_body["ok"] is False
+    assert bad_action_body["error"] == "unsupported_action"
+    assert "run" in bad_action_body["supported_actions"]
+
+    exported = client.get(f"/plugins/tools/export?format=csv&plugin_id={plugin_id}")
+    assert exported.status_code == 200
+    assert "plugin_id" in exported.text
+    assert plugin_id in exported.text
+
+
+def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    blocked = client.post("/plugins/run", json={"id": plugin_id, "action": "deploy", "input": {"target": "prod"}})
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["error"] == "insufficient_trust"
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["required_trust"] == 5
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "plugin-risk-test"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    pending = client.post("/plugins/run", json={"id": plugin_id, "action": "deploy", "input": {"target": "prod"}})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    assert pending_body["status"] == "pending"
+    approval_id = str(pending_body["approval_id"])
+    assert approval_id
+
+    still_pending = client.post(
+        "/plugins/run",
+        json={"id": plugin_id, "action": "deploy", "approval_id": approval_id, "input": {"target": "prod"}},
+    )
+    assert still_pending.status_code == 200
+    still_pending_body = still_pending.json()
+    assert still_pending_body["ok"] is True
+    assert still_pending_body["status"] == "pending"
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["status"] == "approved"
+
+    executed = client.post(
+        "/plugins/run",
+        json={"id": plugin_id, "action": "deploy", "approval_id": approval_id, "input": {"target": "prod"}},
+    )
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "ok"
+
+
+def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/ops",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Deploy to production.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                },
+                {
+                    "id": "acme.restart",
+                    "kind": "tool",
+                    "name": "restart",
+                    "action": "restart",
+                    "description": "Restart production service.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                },
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    tools = client.get(f"/plugins/tools/list?plugin_id={plugin_id}")
+    assert tools.status_code == 200
+    tools_body = tools.json()
+    by_action = {str(item.get("action")): str(item.get("id")) for item in tools_body.get("items", [])}
+    deploy_tool_id = by_action["deploy"]
+    restart_tool_id = by_action["restart"]
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "tool-run-approval-binding-test"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    deploy_pending = client.post("/plugins/tools/run", json={"id": deploy_tool_id, "input": {"target": "prod"}})
+    assert deploy_pending.status_code == 200
+    deploy_pending_body = deploy_pending.json()
+    assert deploy_pending_body["ok"] is True
+    assert deploy_pending_body["status"] == "pending"
+    deploy_approval_id = str(deploy_pending_body["approval_id"])
+    assert deploy_pending_body["tool_id"] == deploy_tool_id
+
+    restart_pending = client.post("/plugins/tools/run", json={"id": restart_tool_id, "input": {"target": "prod"}})
+    assert restart_pending.status_code == 200
+    restart_pending_body = restart_pending.json()
+    assert restart_pending_body["ok"] is True
+    assert restart_pending_body["status"] == "pending"
+    restart_approval_id = str(restart_pending_body["approval_id"])
+    assert restart_pending_body["tool_id"] == restart_tool_id
+
+    approved_restart = client.post("/approvals/decision", json={"id": restart_approval_id, "action": "approve"})
+    assert approved_restart.status_code == 200
+    assert approved_restart.json()["ok"] is True
+
+    mismatched = client.post(
+        "/plugins/tools/run",
+        json={"id": deploy_tool_id, "approval_id": restart_approval_id, "input": {"target": "prod"}},
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    assert mismatched_body["tool_id"] == deploy_tool_id
+
+    approved_deploy = client.post("/approvals/decision", json={"id": deploy_approval_id, "action": "approve"})
+    assert approved_deploy.status_code == 200
+    assert approved_deploy.json()["ok"] is True
+
+    executed = client.post(
+        "/plugins/tools/run",
+        json={"id": deploy_tool_id, "approval_id": deploy_approval_id, "input": {"target": "prod"}},
+    )
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "ok"
+    assert executed_body["tool_id"] == deploy_tool_id
+    assert executed_body["meta"]["tool_action"] == "deploy"

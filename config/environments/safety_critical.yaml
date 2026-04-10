@@ -1,0 +1,411 @@
+# ==============================================================================
+# Francis Environment Profile: SAFETY CRITICAL
+# File: config/environments/safety_critical.yaml
+#
+# INTENT:
+#   Maximum-safety posture for environments where Francis may influence
+#   physical systems, security posture, or other high-consequence operations.
+#
+# PRINCIPLES:
+#   - Fail closed by default (unknowns do not execute)
+#   - Strong governance (strict approvals, higher trust floors)
+#   - Actuation is locked down (telemetry ok, control off unless explicitly enabled)
+#   - No uncontrolled external inputs (web learning off by default)
+#   - Restricted exports (approval + filters + tight size limits)
+#
+# ASSUMPTIONS:
+#   - Deployed behind TLS reverse proxy in a controlled network (often OT/LAN).
+#   - Secrets provided via env/vault only.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: safety_critical
+  name: Safety Critical
+  description: >
+    Maximum safety posture: fail-closed, strict governance, local-first operation,
+    actuation locked down, and restricted exports. Intended for high-consequence
+    environments (physical systems, security control, critical operations).
+
+  invariants:
+    - "Fail-closed execution: unknown capabilities require approval at minimum."
+    - "Strict approvals with medium/high/critical gated."
+    - "High trust floors; no blind automation."
+    - "Actuation disabled by default; telemetry only."
+    - "Web learning disabled by default."
+    - "Audit + explanations required."
+
+  operator_notes:
+    - "Enable actuation only after validating control-plane safety and approvals."
+    - "Do not enable internet egress in safety-critical deployments."
+    - "Treat policy/profile changes as change-controlled events."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: safety_critical
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+  # Bias to stability and predictability.
+  concurrency:
+    api_workers: 1
+    worker_threads: 6
+    daemon_concurrency: 2
+
+  # Optional hint: disable “self-modifying” behaviors if any exist later.
+  self_patch:
+    enabled: false
+
+# ------------------------------------------------------------------------------
+# API posture (tight boundary)
+# ------------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+  security:
+    auth_mode: jwt
+    allow_anonymous: false
+    trust_proxy_headers: true
+
+  cors:
+    enabled: true
+    # Replace with explicit operator console origins in real deployment.
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  timeouts:
+    read_s: 25
+    write_s: 35
+    idle_s: 45
+
+  limits:
+    max_request_mb: 5
+    max_json_mb: 3
+
+  websocket:
+    ping_interval_s: 15
+    ping_timeout_s: 8
+    max_message_kb: 128
+
+# ------------------------------------------------------------------------------
+# Observability / audit (required)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+    redaction:
+      enabled: true
+      redact_tokens: true
+      redact_credentials: true
+      redact_headers:
+        - authorization
+        - cookie
+        - x-api-key
+      redact_fields:
+        - password
+        - secret
+        - token
+        - api_key
+        - private_key
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+    include_actor: true
+    include_request_id: true
+    include_approval_id: true
+    include_trust_level: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.1
+
+  metrics:
+    enabled: true
+    export:
+      format: prometheus
+      path: "/metrics"
+
+# ------------------------------------------------------------------------------
+# Governance (strict + high floors)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: true         # safety-critical: medium gets gated
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    # Higher trust floor; no execution below this for anything but read-only.
+    minimum_operational_trust: 4
+    decay_enabled: true
+    growth_enabled: true
+
+  # Hard posture for exports
+  exports:
+    require_approval: true
+    require_filters: true
+    require_reason: true
+    default_max_bundle_size_mb: 5
+    redact_secrets: true
+    redact_credentials: true
+    disable_unbounded_exports: true
+
+  change_control:
+    log_config_changes: true
+    require_approval_for_policy_changes: true
+    require_approval_for_profile_changes: true
+
+# ------------------------------------------------------------------------------
+# Retention (bounded; destructive actions must be approved)
+# ------------------------------------------------------------------------------
+retention:
+  ledger:
+    enabled: true
+    max_days: 14
+    max_mb: 150
+    purge_requires_approval: true
+
+  audit:
+    enabled: true
+    max_days: 180
+    purge_requires_approval: true
+
+  explanations:
+    enabled: true
+    max_days: 180
+    purge_requires_approval: true
+
+  logs:
+    enabled: true
+    max_days: 30
+    purge_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Network posture (fail-closed allowlist only; internet egress disabled)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: true
+
+  egress:
+    enabled: false
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+      # Add ONLY internal endpoints/subnets if absolutely required:
+      # - "10.0.0.0/8"
+      # - "172.16.0.0/12"
+      # - "192.168.0.0/16"
+    denylist:
+      - "0.0.0.0/0"
+      - "::/0"
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (local-only, conservative sampling)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: false
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false
+
+  sampling:
+    temperature: 0.15
+    top_p: 0.9
+    max_tokens: 768
+
+# ------------------------------------------------------------------------------
+# Memory / persistence (durable state recommended)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+    pgvector:
+      enabled: false
+      dsn: ""
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 150
+      max_days: 14
+
+# ------------------------------------------------------------------------------
+# External services (recommended; disable if truly standalone)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: true
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 15
+    pool_timeout_s: 30
+    statement_timeout_s: 25
+
+  redis:
+    enabled: true
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 15
+    socket_timeout_s: 5
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Feature flags (locked down)
+# ------------------------------------------------------------------------------
+features:
+  web_learning:
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      mode: static
+      static_peers: []
+    consensus:
+      enabled: false
+      algorithm: raft
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  # Safety-critical focus: actuation is OFF by default.
+  industrial:
+    enabled: true
+    telemetry_enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  smart_home:
+    enabled: true
+    telemetry_enabled: true
+    actuation_enabled: false
+    require_approval_for_actuation: true
+
+  credentials:
+    request_requires_approval: true
+    revoke_requires_approval: true
+    delegate_requires_approval: true
+    list_min_trust: 5
+
+  resilience:
+    enabled: true
+    backup:
+      enabled: true
+      require_approval: true
+      schedule_hint: "daily"
+    restore:
+      enabled: true
+      require_approval: true
+
+# ------------------------------------------------------------------------------
+# Assertions (fail-fast intent)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: audit_required
+    severity: error
+    expr: "{{observability.audit.level == 'required'}}"
+    message: "Safety-critical profile requires audit level 'required'."
+
+  - id: approvals_strict
+    severity: error
+    expr: "{{governance.approvals.mode == 'strict'}}"
+    message: "Safety-critical profile requires strict approvals."
+
+  - id: medium_gated
+    severity: error
+    expr: "{{governance.approvals.default_requires_approval_for_risk.medium == true}}"
+    message: "Safety-critical posture requires approvals for medium risk actions."
+
+  - id: no_egress
+    severity: error
+    expr: "{{network.egress.enabled == false}}"
+    message: "Safety-critical posture requires egress disabled unless explicitly approved."
+
+  - id: actuation_off
+    severity: error
+    expr: "{{features.industrial.control_actions_enabled == false}}"
+    message: "Safety-critical posture requires industrial control actions disabled by default."
+
+  - id: web_learning_off
+    severity: error
+    expr: "{{features.web_learning.enabled == false}}"
+    message: "Safety-critical posture requires web learning disabled by default."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "SAFETY"
+  banner:
+    enabled: true
+    text: "SAFETY-CRITICAL — FAIL-CLOSED / ACTUATION LOCKED"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

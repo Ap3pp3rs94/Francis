@@ -1,0 +1,542 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Approvals (request → decision → audit)
+# Path:   config/policies/approvals.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Approvals are Francis’s governance gate for side-effecting operations.
+#
+# This policy defines:
+#   - When an approval is required
+#   - Approval request contract and lifecycle
+#   - Decision permissions (trust thresholds, optional role/scope claims)
+#   - Risk classification and quorum (single vs multi-approver)
+#   - Emergency override rules (high audit posture)
+#   - Storage + audit posture (no secret leakage)
+#   - API/UI listing defaults (limits, sorting, filtering)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: if risk cannot be determined or policy cannot be evaluated → require approval.
+# - Deterministic: stable ordering, stable IDs, stable reason codes.
+# - Evidence-first: decisions should be traceable to an auditable record (ledger/log).
+# - No secrets: approval payloads must be redacted/sanitized before persistence and logs.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "approvals_policy"
+  notes:
+    - "Approvals are the governance seam between intent and execution."
+    - "Emergency approvals must be loud, attributable, and postmortem-driven."
+    - "Payloads are untrusted; redact by default."
+
+# ------------------------------------------------------------------------------
+# Global enablement + posture
+# ------------------------------------------------------------------------------
+approvals:
+  enabled: true
+
+  # Fail closed: if policy evaluation fails, require approval (do not execute).
+  fail_closed: true
+
+  # Governance mode hints (used by governance/router layer)
+  # - disabled: approvals system exists but never required (dev-only)
+  # - policy:   follow this policy (default)
+  # - strict:   prefer approvals for most mutations unless explicitly exempted
+  mode: "policy" # disabled | policy | strict
+
+  # If true, any unknown capability / unknown route / unknown action defaults to requiring approval.
+  unknown_action_requires_approval: true
+
+  # If true, any action categorized as "destructive" or "export_sensitive" requires approval regardless of profile.
+  always_require_for_categories:
+    - "destructive"
+    - "export_sensitive"
+    - "credential_operations"
+    - "industrial_actuation"
+
+# ------------------------------------------------------------------------------
+# Identifier and time conventions
+# ------------------------------------------------------------------------------
+identity:
+  # Approval id format: stable, log-friendly, sortable.
+  # Implementations may use ULID/UUIDv7; policy declares expectations.
+  id_format: "ulid" # ulid | uuidv4 | uuidv7
+  id_prefix: "appr_"
+
+  # Timestamp convention
+  timestamps:
+    unit: "seconds" # seconds | milliseconds
+    prefer_utc: true
+
+# ------------------------------------------------------------------------------
+# Storage (policy view)
+# ------------------------------------------------------------------------------
+storage:
+  enabled: true
+
+  # Backend contract (implementation may support more)
+  backend: "filesystem" # filesystem | sqlite | postgres
+
+  filesystem:
+    # Default paths are repo-relative. Runtime may override via env/config.
+    base_dir: "./data/approvals"
+
+    # Suggested layout (implementation may adapt; do not assume existence at bootstrap).
+    dirs:
+      pending: "./data/approvals/pending"
+      decided: "./data/approvals/decided"
+      archive: "./data/approvals/archive"
+      quarantine: "./data/approvals/quarantine"
+
+    file_format: "json" # json | yaml
+    atomic_write: true
+    fsync_on_commit: false
+    permissions_hint:
+      restrict_to_owner: true
+
+  # Retention controls (policy-level)
+  retention:
+    enabled: true
+    pending_max_age_days: 30
+    decided_keep_days: 180
+    archive_keep_days: 365
+    quarantine_keep_days: 30
+    purge_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Approval lifecycle (states + transitions)
+# ------------------------------------------------------------------------------
+lifecycle:
+  enabled: true
+
+  statuses:
+    # Canonical statuses. Implementation may map to additional internal states.
+    - "pending"
+    - "approved"
+    - "rejected"
+    - "expired"
+    - "cancelled"
+    - "emergency_approved"
+    - "failed"
+
+  transitions:
+    # Only these transitions should be allowed.
+    # Unknown transitions must be rejected (fail-closed).
+    pending:
+      allowed_to:
+        - "approved"
+        - "rejected"
+        - "expired"
+        - "cancelled"
+        - "emergency_approved"
+        - "failed"
+    approved:
+      allowed_to: []
+    rejected:
+      allowed_to: []
+    expired:
+      allowed_to: []
+    cancelled:
+      allowed_to: []
+    emergency_approved:
+      allowed_to: []
+    failed:
+      allowed_to: []
+
+  # TTL and expiry behavior
+  expiry:
+    enabled: true
+    default_ttl_s: 3_600          # 1 hour
+    max_ttl_s: 86_400             # 24 hours
+    min_ttl_s: 60                 # 1 minute
+
+    # If a request would outlive max_ttl_s, clamp or deny.
+    on_ttl_exceed: "clamp" # clamp | deny | require_policy_override
+
+    # Auto-expire pending approvals once TTL elapses.
+    auto_expire_pending: true
+
+# ------------------------------------------------------------------------------
+# Request contract (what an approval "is")
+# ------------------------------------------------------------------------------
+request_contract:
+  enabled: true
+
+  required_fields:
+    - "id"
+    - "ts"
+    - "action"     # high-level action verb (e.g., "domains.update", "web_learning.ingest")
+    - "reason"     # human justification (operator-visible)
+    - "status"     # should begin as "pending"
+
+  optional_fields:
+    - "actor"          # who initiated the request (user/service)
+    - "domain"         # domain context, if applicable
+    - "capability"     # canonical capability id (preferred)
+    - "category"       # read_only|mutation|destructive|export_sensitive|...
+    - "risk"           # low|medium|high|critical (resolved)
+    - "scope"          # permission scope, if used
+    - "tags"           # classification tags
+    - "ttl_s"          # request TTL override (bounded)
+    - "expires_ts"     # computed expiry timestamp
+    - "payload"        # non-secret details (sanitized)
+    - "attachments"    # references only (artifact ids, paths, hashes)
+    - "meta"           # forward-compatible metadata
+
+  payload_policy:
+    # Payload is allowed but must be sanitized + size bounded.
+    enabled: true
+    max_bytes: 64_000
+    on_exceed: "truncate" # truncate | drop | fail_request
+
+    # Never persist secret material inside payload.
+    # Implementations should apply these redaction patterns pre-write.
+    forbid_patterns:
+      - "(?i)BEGIN\\s+PRIVATE\\s+KEY"
+      - "(?i)api[_-]?key\\s*[:=]"
+      - "(?i)password\\s*[:=]"
+      - "(?i)token\\s*[:=]"
+      - "(?i)sk-[a-z0-9]{10,}"
+    on_forbidden_match: "redact" # redact | drop_payload | fail_request
+    redact_with: "[REDACTED]"
+
+  attachments_policy:
+    enabled: true
+    # Attachments are references only; no raw bytes.
+    allowed_reference_fields:
+      - "artifact_id"
+      - "path"
+      - "hash_sha256"
+      - "content_type"
+      - "byte_size"
+      - "created_ts"
+
+# ------------------------------------------------------------------------------
+# Dedupe / idempotency (reduce approval spam)
+# ------------------------------------------------------------------------------
+dedupe:
+  enabled: true
+
+  # A canonical fingerprint can be computed from stable fields to dedupe.
+  fingerprint:
+    enabled: true
+    include_fields:
+      - "capability"
+      - "action"
+      - "domain"
+      - "actor"
+      - "reason"
+    include_payload_hash: true
+    hash_algorithm: "sha256"
+
+  # If an identical approval is requested within this window, return the existing pending id.
+  window_s: 120
+  behavior_on_duplicate: "return_existing" # return_existing | create_new | fail
+
+# ------------------------------------------------------------------------------
+# Risk classification (how approvals get severity)
+# ------------------------------------------------------------------------------
+risk:
+  enabled: true
+  default_risk: "medium"
+
+  levels: ["low", "medium", "high", "critical"]
+
+  # Mapping from category to base risk.
+  category_to_risk:
+    read_only: low
+    mutation: medium
+    export_sensitive: high
+    destructive: high
+    credential_operations: critical
+    network_egress: high
+    industrial_actuation: critical
+
+  # Mapping from capability id patterns to risk/category hints.
+  # First match wins; if none match, fall back to defaults (and fail-closed if configured).
+  capability_rules:
+    - match: "^system\\."
+      category: "read_only"
+    - match: "^continuity\\."
+      category: "read_only"
+    - match: "^approvals\\."
+      category: "mutation"
+    - match: "^domains\\.list$"
+      category: "read_only"
+    - match: "^domains\\.(create|update|patch)$"
+      category: "mutation"
+    - match: "^domains\\.(delete|retire|remove)$"
+      category: "destructive"
+    - match: "^domains\\.export$"
+      category: "export_sensitive"
+    - match: "^plugins\\.list$"
+      category: "read_only"
+    - match: "^plugins\\.(install|toggle|enable|disable)$"
+      category: "mutation"
+    - match: "^credentials\\."
+      category: "credential_operations"
+    - match: "^web_learning\\."
+      category: "network_egress"
+    - match: "^simulation\\.(run|export)$"
+      category: "export_sensitive"
+    - match: "^industrial\\."
+      category: "industrial_actuation"
+    - match: "^federation\\."
+      category: "mutation"
+
+  # Tag escalation (risk can only go up).
+  tag_escalation:
+    critical_if_any:
+      - "industrial_control"
+      - "safety_critical"
+      - "credential"
+      - "actuation"
+    high_if_any:
+      - "export"
+      - "egress"
+      - "production"
+      - "regulated"
+    medium_if_any:
+      - "mutation"
+
+# ------------------------------------------------------------------------------
+# Decision policy (who can decide and what’s required)
+# ------------------------------------------------------------------------------
+decision:
+  enabled: true
+
+  actions:
+    # Canonical decision actions
+    approve:
+      result_status: "approved"
+    reject:
+      result_status: "rejected"
+    emergency:
+      result_status: "emergency_approved"
+
+  # Minimum trust required to decide approvals (policy-level).
+  # Implementations may map trust to numeric levels.
+  min_trust_to_decide_by_risk:
+    low: 2
+    medium: 3
+    high: 5
+    critical: 7
+
+  # Require comment fields for non-approve decisions (audit posture).
+  comment_requirements:
+    approve_requires_comment: false
+    reject_requires_comment: true
+    emergency_requires_comment: true
+    min_comment_chars: 8
+    max_comment_chars: 2_000
+
+  # Optional: token scopes/claims model (forward-compatible).
+  # If your auth layer doesn’t use scopes, ignore these.
+  required_scopes_by_action:
+    approve: ["francis:approve"]
+    reject: ["francis:approve"]
+    emergency: ["francis:emergency"]
+
+  # Quorum requirements (multi-approver control) by risk.
+  # If quorum > 1, implementation should record multiple decisions and only finalize when quorum met.
+  quorum_by_risk:
+    low: 1
+    medium: 1
+    high: 1
+    critical: 2
+
+  # If quorum is required, do we require distinct actors?
+  quorum_requires_distinct_actors: true
+
+  # If an approval is decided, can it be “re-opened”?
+  # Default is immutable decisions (safer).
+  allow_reopen: false
+
+# ------------------------------------------------------------------------------
+# Emergency approvals (override)
+# ------------------------------------------------------------------------------
+emergency:
+  enabled: true
+
+  # Emergency should never be “silent”.
+  audit:
+    require_operator_identity: true
+    require_comment: true
+    require_postmortem: true
+    postmortem_fields:
+      - "what_happened"
+      - "why_emergency_needed"
+      - "impact"
+      - "followups"
+      - "prevent_recurrence"
+
+  # If emergency is used, automatically escalate risk for downstream reporting.
+  force_risk: "critical"
+
+  # Optional cooldown to prevent repeated emergency approvals.
+  cooldown:
+    enabled: true
+    per_actor_window_s: 300
+    max_emergencies_per_window: 2
+    on_exceed: "deny" # deny | require_secondary_approver
+
+# ------------------------------------------------------------------------------
+# API/UI listing posture (deterministic, bounded)
+# ------------------------------------------------------------------------------
+listing:
+  enabled: true
+
+  defaults:
+    status: "pending"
+    sort: "ts_desc" # ts_desc | ts_asc
+    limit: 50
+
+  limits:
+    max_limit: 200
+    max_days_lookback: 365
+
+  filtering:
+    allowed_fields:
+      - "status"
+      - "risk"
+      - "domain"
+      - "actor"
+      - "capability"
+      - "action"
+      - "start_ts"
+      - "end_ts"
+
+  # Stability: tie-breakers for consistent ordering when timestamps collide
+  deterministic_order:
+    enabled: true
+    tie_breakers:
+      - "ts_desc"
+      - "id_asc"
+
+# ------------------------------------------------------------------------------
+# Observability + audit sinks
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  # Emit structured events for:
+  # - created
+  # - deduped
+  # - decided
+  # - expired
+  # - cancelled
+  # - emergency
+  events:
+    enabled: true
+    include_payload: false
+    include_payload_hash: true
+    include_actor: true
+    include_domain: true
+    include_risk: true
+    include_capability: true
+
+  # Metrics contract (names are hints; implementation decides actual exporter)
+  metrics:
+    enabled: true
+    counters:
+      - "approvals.created"
+      - "approvals.deduped"
+      - "approvals.decided"
+      - "approvals.expired"
+      - "approvals.cancelled"
+      - "approvals.emergency"
+    histograms:
+      - "approvals.time_to_decision_s"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific strictness)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    approvals:
+      mode: "policy"
+      # dev can be permissive; still keep emergency loud.
+      unknown_action_requires_approval: false
+    decision:
+      quorum_by_risk:
+        critical: 1
+      comment_requirements:
+        reject_requires_comment: false
+
+  workstation:
+    approvals:
+      mode: "policy"
+      unknown_action_requires_approval: true
+
+  production:
+    approvals:
+      mode: "strict"
+      unknown_action_requires_approval: true
+    lifecycle:
+      expiry:
+        default_ttl_s: 1_800
+        max_ttl_s: 14_400
+    decision:
+      quorum_by_risk:
+        critical: 2
+
+  regulated:
+    approvals:
+      mode: "strict"
+      unknown_action_requires_approval: true
+    request_contract:
+      payload_policy:
+        on_forbidden_match: "drop_payload"
+    listing:
+      limits:
+        max_limit: 100
+        max_days_lookback: 730
+    decision:
+      min_trust_to_decide_by_risk:
+        low: 3
+        medium: 5
+        high: 7
+        critical: 8
+      quorum_by_risk:
+        high: 2
+        critical: 2
+    emergency:
+      cooldown:
+        enabled: true
+        per_actor_window_s: 600
+        max_emergencies_per_window: 1
+        on_exceed: "require_secondary_approver"
+
+  safety_critical:
+    approvals:
+      mode: "strict"
+      unknown_action_requires_approval: true
+    decision:
+      min_trust_to_decide_by_risk:
+        low: 4
+        medium: 6
+        high: 8
+        critical: 9
+      quorum_by_risk:
+        high: 2
+        critical: 2
+      quorum_requires_distinct_actors: true
+    emergency:
+      enabled: true
+      audit:
+        require_postmortem: true
+      cooldown:
+        enabled: true
+        per_actor_window_s: 900
+        max_emergencies_per_window: 1
+        on_exceed: "deny"

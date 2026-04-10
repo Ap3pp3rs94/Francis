@@ -1,0 +1,811 @@
+# ==============================================================================
+# Francis Capability Playbooks
+# File: config/capabilities/playbooks.yaml
+#
+# WHAT THIS IS:
+#   A catalog of deterministic, auditable, multi-step workflows ("playbooks")
+#   composed from canonical capability IDs defined in:
+#     - config/capabilities/catalog.yaml
+#
+# WHAT THIS IS NOT:
+#   - NOT an alias map (see aliases.yaml)
+#   - NOT a schedule (see schedules.yaml)
+#   - NOT a permission grant (see trust_permissions_map.yaml)
+#
+# DESIGN CONTRACT:
+#   1) Deterministic: A playbook must be executable in a predictable order.
+#   2) Observable: Steps should be loggable + auditable.
+#   3) Safe by default: destructive / high-risk playbooks declare gating posture.
+#   4) Extensible but not speculative: provide hooks for evolution without
+#      turning this into a full programming language.
+#
+# EXECUTION MODEL (EXPECTED BY FUTURE EXECUTOR):
+#   - Playbook execution is a sequence of steps.
+#   - Each step is usually a "call" to a canonical capability.
+#   - Trust/permissions/approvals are enforced at execution time by governance.
+#   - Inputs are passed in via "inputs" and expanded into step args using a
+#     tiny templating convention:
+#
+#       {{inputs.<name>}}            → playbook input value
+#       {{vars.<name>}}              → derived variable computed by executor
+#       {{steps.<step_id>.<field>}}  → data returned/captured from prior steps
+#
+#   - The executor MAY choose to support:
+#       * timeouts
+#       * retries
+#       * conditional steps (when)
+#       * polling waits (wait)
+#       * foreach fanout (foreach)
+#
+#   - This file MUST remain pure data. No secrets. No inline credentials.
+# ==============================================================================
+
+version: 1
+
+defaults:
+  # Default execution posture applied unless overridden per playbook/step.
+  execution:
+    timeout_ms: 20_000
+    retries:
+      max_attempts: 1
+      backoff_ms: 350
+      backoff_multiplier: 1.8
+      jitter_ms: 200
+    on_error: abort            # abort | continue | best_effort
+    concurrency: 1             # playbook-level default; executor may ignore
+    dry_run_supported: true    # indicates playbooks are designed to allow dry-run mode
+  observability:
+    # Executor decides how these map to ledger/explanations/logging.
+    audit: recommended         # none | recommended | required
+    emit_ledger_events: true
+    emit_explanations: true
+    default_log_level: INFO
+
+# ------------------------------------------------------------------------------
+# PLAYBOOK LIST
+# ------------------------------------------------------------------------------
+playbooks:
+
+  # ============================================================================
+  # SYSTEM / OPERATIONS
+  # ============================================================================
+
+  - id: pb.system.quick_diagnosis
+    name: System Quick Diagnosis
+    summary: Collect a fast, operator-friendly snapshot (health, runtime, metrics, logs).
+    layer: kernel
+    domain: system
+    tags: [system, diagnostics, operator, baseline]
+    posture:
+      risk: low
+      requires_approval: false
+      min_trust_level: 1
+      audit: recommended
+    inputs: {}
+    steps:
+      - id: health
+        type: call
+        capability: system.health.report
+        timeout_ms: 15_000
+        capture: { as: health_report }
+      - id: runtime
+        type: call
+        capability: system.info.runtime
+        timeout_ms: 10_000
+        capture: { as: runtime_info }
+      - id: metrics
+        type: call
+        capability: system.metrics.snapshot
+        timeout_ms: 10_000
+        capture: { as: metrics_snapshot }
+      - id: logs
+        type: call
+        capability: system.logs.tail
+        timeout_ms: 15_000
+        args:
+          # Kept generic — executor/backend can interpret.
+          limit: 200
+        capture: { as: recent_logs }
+    outputs:
+      primary: health_report
+      include: [runtime_info, metrics_snapshot, recent_logs]
+
+  - id: pb.system.capability_inventory
+    name: Capability Inventory
+    summary: Enumerate known capabilities for auditing and UI validation.
+    layer: foundation
+    domain: system
+    tags: [system, catalog, governance]
+    posture:
+      risk: low
+      requires_approval: false
+      min_trust_level: 0
+      audit: recommended
+    inputs: {}
+    steps:
+      - id: list
+        type: call
+        capability: system.capabilities.list
+        capture: { as: capabilities }
+    outputs:
+      primary: capabilities
+
+  # ============================================================================
+  # CONTINUITY / LEDGER
+  # ============================================================================
+
+  - id: pb.continuity.refresh_and_summarize
+    name: Refresh Continuity + Generate Summary
+    summary: Pull recent ledger entries then request a summary artifact.
+    layer: memory
+    domain: continuity
+    tags: [continuity, ledger, summary]
+    posture:
+      risk: medium
+      requires_approval: false
+      min_trust_level: 1
+      audit: required
+    inputs:
+      limit:
+        type: integer
+        required: false
+        default: 200
+        description: Max number of ledger entries to retrieve.
+      # Optional: some backends accept windowing; executor can omit if unsupported.
+      window_hours:
+        type: integer
+        required: false
+        default: 24
+        description: Preferred time window (hours). Backend may ignore.
+    steps:
+      - id: ledger
+        type: call
+        capability: continuity.ledger.list
+        args:
+          limit: "{{inputs.limit}}"
+          window_hours: "{{inputs.window_hours}}"
+        capture: { as: ledger_entries }
+      - id: summary
+        type: call
+        capability: continuity.summary.generate
+        args:
+          # Executor/backends can use this as a hint; it is safe if ignored.
+          source: "ledger"
+          limit: "{{inputs.limit}}"
+          window_hours: "{{inputs.window_hours}}"
+        capture: { as: summary_artifact }
+    outputs:
+      primary: summary_artifact
+      include: [ledger_entries]
+
+  - id: pb.continuity.export_recent_ledger
+    name: Export Recent Ledger
+    summary: Export a governed ledger bundle suitable for audit/compliance.
+    layer: memory
+    domain: continuity
+    tags: [continuity, ledger, export, compliance]
+    posture:
+      risk: medium
+      requires_approval: true
+      min_trust_level: 2
+      audit: required
+    inputs:
+      limit:
+        type: integer
+        required: false
+        default: 500
+        description: Max number of entries to include.
+      format:
+        type: string
+        required: false
+        default: "jsonl"
+        description: Preferred export format hint (jsonl|json|csv). Backend may restrict.
+    steps:
+      - id: export
+        type: call
+        capability: continuity.ledger.export
+        args:
+          limit: "{{inputs.limit}}"
+          format: "{{inputs.format}}"
+        capture: { as: ledger_export }
+    outputs:
+      primary: ledger_export
+
+  # ============================================================================
+  # APPROVALS / GOVERNANCE
+  # ============================================================================
+
+  - id: pb.approvals.review_pending
+    name: Review Pending Approvals
+    summary: Fetch pending approvals for operator review (read-only workflow).
+    layer: governance
+    domain: approvals
+    tags: [approvals, governance, review]
+    posture:
+      risk: low
+      requires_approval: false
+      min_trust_level: 1
+      audit: recommended
+    inputs:
+      limit:
+        type: integer
+        required: false
+        default: 50
+        description: Max approvals to fetch.
+    steps:
+      - id: pending
+        type: call
+        capability: approvals.list.pending
+        args:
+          limit: "{{inputs.limit}}"
+        capture: { as: pending_approvals }
+    outputs:
+      primary: pending_approvals
+
+  - id: pb.approvals.enable_system
+    name: Enable Approvals System
+    summary: Enable approval gating (high-trust, approval-gated itself).
+    layer: governance
+    domain: approvals
+    tags: [approvals, governance, toggle]
+    posture:
+      risk: high
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      reason:
+        type: string
+        required: false
+        default: ""
+        description: Optional operator justification.
+    steps:
+      - id: enable
+        type: call
+        capability: approvals.toggle.enable
+        args:
+          reason: "{{inputs.reason}}"
+        capture: { as: approvals_enabled }
+    outputs:
+      primary: approvals_enabled
+
+  - id: pb.approvals.disable_system
+    name: Disable Approvals System
+    summary: Disable approval gating (critical-risk; strongly governed).
+    layer: governance
+    domain: approvals
+    tags: [approvals, governance, toggle, dangerous]
+    posture:
+      risk: critical
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      reason:
+        type: string
+        required: true
+        default: ""
+        description: Mandatory justification for disabling approvals.
+    steps:
+      - id: disable
+        type: call
+        capability: approvals.toggle.disable
+        args:
+          reason: "{{inputs.reason}}"
+        capture: { as: approvals_disabled }
+    outputs:
+      primary: approvals_disabled
+
+  # ============================================================================
+  # TRUST
+  # ============================================================================
+
+  - id: pb.trust.snapshot_and_history
+    name: Trust Snapshot + Recent History
+    summary: Collect trust posture and a recent history slice for auditing.
+    layer: governance
+    domain: trust
+    tags: [trust, governance, audit]
+    posture:
+      risk: medium
+      requires_approval: false
+      min_trust_level: 2
+      audit: recommended
+    inputs:
+      # Kept generic; backend may support.
+      limit:
+        type: integer
+        required: false
+        default: 100
+        description: Preferred history size (backend may ignore).
+    steps:
+      - id: summary
+        type: call
+        capability: trust.summary
+        capture: { as: trust_state }
+      - id: history
+        type: call
+        capability: trust.history.list
+        args:
+          limit: "{{inputs.limit}}"
+        capture: { as: trust_history }
+    outputs:
+      primary: trust_state
+      include: [trust_history]
+
+  - id: pb.trust.enable_tracking
+    name: Enable Trust Tracking
+    summary: Enable trust evaluation/tracking (governed toggle).
+    layer: governance
+    domain: trust
+    tags: [trust, toggle]
+    posture:
+      risk: high
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      reason:
+        type: string
+        required: false
+        default: ""
+        description: Optional operator justification.
+    steps:
+      - id: enable
+        type: call
+        capability: trust.toggle.enable
+        args:
+          reason: "{{inputs.reason}}"
+        capture: { as: trust_tracking_enabled }
+    outputs:
+      primary: trust_tracking_enabled
+
+  - id: pb.trust.disable_tracking
+    name: Disable Trust Tracking
+    summary: Disable trust evaluation/tracking (critical-risk; strongly governed).
+    layer: governance
+    domain: trust
+    tags: [trust, toggle, dangerous]
+    posture:
+      risk: critical
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      reason:
+        type: string
+        required: true
+        default: ""
+        description: Mandatory justification for disabling trust tracking.
+    steps:
+      - id: disable
+        type: call
+        capability: trust.toggle.disable
+        args:
+          reason: "{{inputs.reason}}"
+        capture: { as: trust_tracking_disabled }
+    outputs:
+      primary: trust_tracking_disabled
+
+  # ============================================================================
+  # DOMAINS
+  # ============================================================================
+
+  - id: pb.domains.onboard_domain
+    name: Domain Onboard
+    summary: Create a domain, then fetch details to verify registration.
+    layer: higher
+    domain: domains
+    tags: [domains, onboarding, governance]
+    posture:
+      risk: high
+      requires_approval: true
+      min_trust_level: 3
+      audit: required
+    inputs:
+      domain_id:
+        type: string
+        required: true
+        default: ""
+        description: Canonical domain identifier (stable key).
+      name:
+        type: string
+        required: true
+        default: ""
+        description: Display name for the domain.
+      description:
+        type: string
+        required: false
+        default: ""
+        description: Optional domain description.
+      tags:
+        type: array
+        required: false
+        default: []
+        description: Optional tags for discovery and governance.
+    steps:
+      - id: create
+        type: call
+        capability: domains.create
+        args:
+          id: "{{inputs.domain_id}}"
+          name: "{{inputs.name}}"
+          description: "{{inputs.description}}"
+          tags: "{{inputs.tags}}"
+        capture: { as: domain_create_result }
+      - id: verify
+        type: call
+        capability: domains.get
+        args:
+          id: "{{inputs.domain_id}}"
+        capture: { as: domain_details }
+      - id: refresh
+        type: call
+        capability: domains.list
+        capture: { as: domain_registry }
+    outputs:
+      primary: domain_details
+      include: [domain_create_result, domain_registry]
+
+  - id: pb.domains.update_domain_metadata
+    name: Update Domain Metadata
+    summary: Update an existing domain and fetch it back to confirm.
+    layer: higher
+    domain: domains
+    tags: [domains, update, governance]
+    posture:
+      risk: high
+      requires_approval: true
+      min_trust_level: 3
+      audit: required
+    inputs:
+      domain_id:
+        type: string
+        required: true
+        default: ""
+        description: Domain id to update.
+      updates:
+        type: object
+        required: true
+        default: {}
+        description: Partial update payload (fields depend on backend schema).
+      reason:
+        type: string
+        required: false
+        default: ""
+        description: Optional operator justification.
+    steps:
+      - id: update
+        type: call
+        capability: domains.update
+        args:
+          id: "{{inputs.domain_id}}"
+          updates: "{{inputs.updates}}"
+          reason: "{{inputs.reason}}"
+        capture: { as: domain_update_result }
+      - id: verify
+        type: call
+        capability: domains.get
+        args:
+          id: "{{inputs.domain_id}}"
+        capture: { as: domain_details }
+    outputs:
+      primary: domain_details
+      include: [domain_update_result]
+
+  - id: pb.domains.retire_domain
+    name: Retire Domain
+    summary: Delete/retire a domain (destructive; confirmation expected by governance).
+    layer: higher
+    domain: domains
+    tags: [domains, delete, dangerous]
+    posture:
+      risk: critical
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      domain_id:
+        type: string
+        required: true
+        default: ""
+        description: Domain id to delete/retire.
+      reason:
+        type: string
+        required: true
+        default: ""
+        description: Mandatory justification for domain retirement.
+    steps:
+      - id: delete
+        type: call
+        capability: domains.delete
+        args:
+          id: "{{inputs.domain_id}}"
+          reason: "{{inputs.reason}}"
+        capture: { as: domain_delete_result }
+      - id: refresh
+        type: call
+        capability: domains.list
+        capture: { as: domain_registry }
+    outputs:
+      primary: domain_delete_result
+      include: [domain_registry]
+
+  # ============================================================================
+  # PLUGINS
+  # ============================================================================
+
+  - id: pb.plugins.install_and_verify
+    name: Install Plugin + Verify
+    summary: Install a plugin then confirm it appears in the registry.
+    layer: plugins
+    domain: plugins
+    tags: [plugins, install, governance]
+    posture:
+      risk: critical
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      plugin_id:
+        type: string
+        required: true
+        default: ""
+        description: Plugin id to install.
+      source:
+        type: string
+        required: false
+        default: ""
+        description: Optional source reference (registry url, artifact ref, etc.).
+      reason:
+        type: string
+        required: false
+        default: ""
+        description: Optional operator justification.
+    steps:
+      - id: install
+        type: call
+        capability: plugins.install
+        args:
+          id: "{{inputs.plugin_id}}"
+          source: "{{inputs.source}}"
+          reason: "{{inputs.reason}}"
+        capture: { as: plugin_install_result }
+      - id: refresh
+        type: call
+        capability: plugins.list
+        capture: { as: plugin_registry }
+      - id: detail
+        type: call
+        capability: plugins.get
+        args:
+          id: "{{inputs.plugin_id}}"
+        capture: { as: plugin_detail }
+    outputs:
+      primary: plugin_detail
+      include: [plugin_install_result, plugin_registry]
+
+  # ============================================================================
+  # WEB LEARNING (governance-heavy)
+  # ============================================================================
+
+  - id: pb.web_learning.safe_ingest_url
+    name: Web Learning — Safe URL Ingest
+    summary: Request fetch + ingest of a URL, then collect audit/log snapshots.
+    layer: higher
+    domain: web_learning
+    tags: [web_learning, ingest, governance, audit]
+    posture:
+      risk: critical
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      url:
+        type: string
+        required: true
+        default: ""
+        description: URL to fetch/ingest.
+      reason:
+        type: string
+        required: true
+        default: ""
+        description: Mandatory justification for ingesting external content.
+    steps:
+      - id: status_before
+        type: call
+        capability: web_learning.status
+        capture: { as: web_status_before }
+
+      - id: fetch
+        type: call
+        capability: web_learning.fetch
+        args:
+          url: "{{inputs.url}}"
+          reason: "{{inputs.reason}}"
+        capture: { as: web_fetch_result }
+
+      - id: ingest
+        type: call
+        capability: web_learning.ingest
+        args:
+          url: "{{inputs.url}}"
+          reason: "{{inputs.reason}}"
+          # Executor/backend may accept correlation ids; safe if ignored.
+          correlation_id: "{{steps.fetch.result_id}}"
+        capture: { as: web_ingest_result }
+
+      - id: audit
+        type: call
+        capability: web_learning.audit.list
+        args:
+          limit: 50
+        capture: { as: web_audit_tail }
+
+      - id: logs
+        type: call
+        capability: web_learning.logs.list
+        args:
+          limit: 200
+        capture: { as: web_logs_tail }
+
+      - id: status_after
+        type: call
+        capability: web_learning.status
+        capture: { as: web_status_after }
+
+    outputs:
+      primary: web_ingest_result
+      include:
+        [web_fetch_result, web_status_before, web_status_after, web_audit_tail, web_logs_tail]
+
+  # ============================================================================
+  # SIMULATION
+  # ============================================================================
+
+  - id: pb.simulation.run_status_export
+    name: Run Simulation → Status → Export
+    summary: Run a simulation, poll status (optional), then export results.
+    layer: higher
+    domain: simulation
+    tags: [simulation, run, export]
+    posture:
+      risk: high
+      requires_approval: true
+      min_trust_level: 3
+      audit: required
+    inputs:
+      spec:
+        type: object
+        required: true
+        default: {}
+        description: Simulation specification payload (backend-defined).
+      poll:
+        type: boolean
+        required: false
+        default: true
+        description: If true, poll status before export (executor-controlled).
+      poll_interval_ms:
+        type: integer
+        required: false
+        default: 1500
+        description: Poll interval for status (if polling is supported).
+      poll_max_attempts:
+        type: integer
+        required: false
+        default: 40
+        description: Max polling attempts (caps time spent waiting).
+      export_format:
+        type: string
+        required: false
+        default: "zip"
+        description: Export format hint (backend-defined).
+    steps:
+      - id: run
+        type: call
+        capability: simulation.run
+        args:
+          spec: "{{inputs.spec}}"
+        capture: { as: simulation_run }
+
+      # Optional polling step: executor may ignore if unsupported.
+      - id: wait_for_completion
+        type: wait
+        when: "{{inputs.poll}}"
+        wait:
+          capability: simulation.status
+          args:
+            id: "{{steps.run.id}}"
+          interval_ms: "{{inputs.poll_interval_ms}}"
+          max_attempts: "{{inputs.poll_max_attempts}}"
+          # Executor determines how "done" is detected; this is a hint.
+          until:
+            field: "status"
+            equals_any: ["completed", "done", "success", "failed", "error"]
+        capture: { as: simulation_status }
+
+      - id: export
+        type: call
+        capability: simulation.export
+        args:
+          id: "{{steps.run.id}}"
+          format: "{{inputs.export_format}}"
+        capture: { as: simulation_export }
+
+    outputs:
+      primary: simulation_export
+      include: [simulation_run, simulation_status]
+
+  # ============================================================================
+  # RESILIENCE (backup / restore)
+  # ============================================================================
+
+  - id: pb.resilience.backup_and_verify
+    name: Backup Now + Verify
+    summary: Start a backup job and then fetch resilience status.
+    layer: higher
+    domain: resilience
+    tags: [resilience, backup, operator]
+    posture:
+      risk: high
+      requires_approval: true
+      min_trust_level: 3
+      audit: required
+    inputs:
+      reason:
+        type: string
+        required: false
+        default: ""
+        description: Optional operator justification.
+    steps:
+      - id: backup
+        type: call
+        capability: resilience.backup
+        args:
+          reason: "{{inputs.reason}}"
+        capture: { as: backup_result }
+      - id: status
+        type: call
+        capability: resilience.status
+        capture: { as: resilience_status }
+    outputs:
+      primary: backup_result
+      include: [resilience_status]
+
+  - id: pb.resilience.restore_run
+    name: Restore (Governed)
+    summary: Start a restore job (critical-risk; destructive if misused).
+    layer: higher
+    domain: resilience
+    tags: [resilience, restore, dangerous]
+    posture:
+      risk: critical
+      requires_approval: true
+      min_trust_level: 4
+      audit: required
+    inputs:
+      target:
+        type: string
+        required: true
+        default: ""
+        description: Restore target identifier (backup id / snapshot id / label).
+      reason:
+        type: string
+        required: true
+        default: ""
+        description: Mandatory justification for restore action.
+    steps:
+      - id: restore
+        type: call
+        capability: resilience.restore
+        args:
+          target: "{{inputs.target}}"
+          reason: "{{inputs.reason}}"
+        capture: { as: restore_result }
+      - id: status_after
+        type: call
+        capability: resilience.status
+        capture: { as: resilience_status }
+    outputs:
+      primary: restore_result
+      include: [resilience_status]

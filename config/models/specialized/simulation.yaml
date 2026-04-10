@@ -1,0 +1,407 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Simulation (digital twins, what-if analysis, sandboxed runs)
+# Path:   config/models/specialized/simulation.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines simulation policy and contracts for Francis:
+#   - Allowed simulation modes and safety constraints
+#   - Scenario specification structure (inputs, validation, outputs)
+#   - Budgets (time/CPU/memory) and sandbox requirements
+#   - Artifact capture and reproducibility controls
+#   - Governance gates for high-risk simulations and exports
+#
+# KEY PRINCIPLE
+# -------------
+# Simulation is NOT actuation.
+# Simulation outputs may inform decisions, but must not trigger real-world changes
+# without passing through governance + approvals + industrial control policy.
+#
+# This is POLICY + CONTRACT, not engine implementation.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "simulation_specialization"
+  notes:
+    - "Sandbox first. No network egress by default."
+    - "Capture artifacts for reproducibility and audit."
+    - "Never directly actuate from simulation."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+simulation:
+  enabled: true
+
+  # Default workload for simulation planning and analysis.
+  default_workload: "reasoning"
+
+  # If the router cannot classify simulation requests, default to safe planning only.
+  unknown_request_policy: "plan_only" # plan_only | deny | fallback_to_reasoning
+
+# ------------------------------------------------------------------------------
+# Modes (planning vs execution vs evaluation)
+# ------------------------------------------------------------------------------
+modes:
+  # Planning is always allowed (read-only, produces a plan/spec).
+  plan:
+    enabled: true
+    produces:
+      - "scenario_spec"
+      - "assumptions"
+      - "budgets"
+      - "expected_outputs"
+
+  # Execution depends on sandbox and governance.
+  execute:
+    enabled: true
+
+    # Default: execution is allowed only in sandbox.
+    require_sandbox: true
+
+    # Default: no network egress during simulation runs.
+    allow_network_egress: false
+
+  # Evaluation produces comparative reports, charts, risk notes.
+  evaluate:
+    enabled: true
+    produces:
+      - "summary"
+      - "metrics"
+      - "graphs_optional"
+      - "risks"
+      - "recommendations"
+
+# ------------------------------------------------------------------------------
+# Engines (declared options; runtime chooses supported)
+# ------------------------------------------------------------------------------
+engines:
+  # Engines are declared by id; actual implementation may be Python, containers, etc.
+  # Keep list short and expandable.
+  local_engines:
+    - id: "python_sandbox"
+      enabled: true
+      notes: "Python-based simulation runner in a constrained sandbox."
+    - id: "industrial_digital_twin"
+      enabled: false
+      notes: "Industrial digital twin engine (enable when subsystem is live)."
+    - id: "discrete_event"
+      enabled: false
+      notes: "Discrete event simulation engine (future)."
+
+  # Remote engines are disabled by default (security boundary).
+  remote_engines:
+    enabled: false
+    engines:
+      - id: "cloud_simulation"
+        enabled: false
+        notes: "Remote simulation service; requires explicit enablement + approval."
+
+# ------------------------------------------------------------------------------
+# Scenario specification contract
+# ------------------------------------------------------------------------------
+scenario:
+  # Validation posture for scenario inputs.
+  validation:
+    enabled: true
+    fail_closed: true
+
+    # Maximum size controls to prevent giant payloads / DoS.
+    limits:
+      max_input_bytes: 2_000_000
+      max_parameters: 200
+      max_entities: 10_000
+
+  # Standard scenario fields expected by runners.
+  contract:
+    required_fields:
+      - "id"
+      - "name"
+      - "kind"
+      - "parameters"
+    optional_fields:
+      - "description"
+      - "assumptions"
+      - "constraints"
+      - "initial_state"
+      - "seed"
+      - "time_horizon"
+      - "units"
+      - "tags"
+      - "meta"
+
+    # Kind is a coarse category used for routing and governance.
+    kinds:
+      - "what_if"
+      - "digital_twin"
+      - "load_test"
+      - "policy_sim"
+      - "forecast"
+      - "custom"
+
+  # Determinism controls
+  determinism:
+    # Prefer deterministic runs by default for reproducibility.
+    default_seeded: true
+    seed_field: "seed"
+    # If seed missing, runtime may generate one and record it as artifact metadata.
+    allow_auto_seed: true
+
+# ------------------------------------------------------------------------------
+# Budgets (compute + time)
+# ------------------------------------------------------------------------------
+budgets:
+  enabled: true
+
+  # Hard ceilings as defensive rails.
+  hard_ceiling:
+    max_runtime_s: 60
+    max_cpu_seconds: 120
+    max_memory_mb: 1024
+    max_disk_mb: 1024
+
+  # Per-kind default budgets (hint-level)
+  defaults_by_kind:
+    what_if:
+      max_runtime_s: 20
+      max_memory_mb: 512
+    digital_twin:
+      max_runtime_s: 45
+      max_memory_mb: 1024
+    load_test:
+      max_runtime_s: 60
+      max_memory_mb: 1024
+    policy_sim:
+      max_runtime_s: 30
+      max_memory_mb: 768
+    forecast:
+      max_runtime_s: 30
+      max_memory_mb: 768
+
+  # If caller asks for more than allowed:
+  on_exceed: "clamp" # clamp | deny | require_approval
+
+# ------------------------------------------------------------------------------
+# Sandbox requirements (critical safety boundary)
+# ------------------------------------------------------------------------------
+sandbox:
+  enabled: true
+
+  # Default sandbox profile used by local engines.
+  default_profile: "restricted"
+
+  profiles:
+    restricted:
+      allow_network: false
+      allow_filesystem_write: true
+      allowed_write_paths:
+        - "./data/industrial/simulations"
+        - "./data/artifacts/simulations"
+        - "./data/cache/simulations"
+      allow_subprocess: false
+      allow_gpu: false
+
+    standard:
+      allow_network: false
+      allow_filesystem_write: true
+      allowed_write_paths:
+        - "./data/industrial/simulations"
+        - "./data/artifacts/simulations"
+        - "./data/cache/simulations"
+      allow_subprocess: true
+      allow_gpu: false
+
+# ------------------------------------------------------------------------------
+# Artifact capture (inputs/outputs, reproducibility, audit)
+# ------------------------------------------------------------------------------
+artifacts:
+  enabled: true
+
+  paths:
+    simulations_dir: "./data/industrial/simulations"
+    artifacts_dir: "./data/artifacts/simulations"
+    logs_dir: "./data/logs/simulations"
+    cache_dir: "./data/cache/simulations"
+
+  capture:
+    # Always store the scenario spec and resolved parameters (for reproducibility).
+    store_inputs: true
+    store_resolved_parameters: true
+
+    # Store outputs and metrics; allow pruning in regulated profiles.
+    store_outputs: true
+    store_metrics: true
+
+    # Store runner metadata: engine id, version, runtime, resource usage.
+    store_runtime_metadata: true
+
+    # Hashing provides integrity checks.
+    store_hashes: true
+    hash_algorithm: "sha256"
+
+  retention:
+    inputs_days: 90
+    outputs_days: 30
+    metrics_days: 180
+    auto_purge_enabled: true
+    purge_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Governance gates (trust + approvals)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  # Simulation is generally read-only, but can be high risk if it models actuation.
+  # Gates are applied to execution and export.
+  trust:
+    min_trust:
+      plan: 1
+      execute: 3
+      execute_high_risk: 5
+      export: 4
+
+  approvals:
+    execute_requires_approval: false
+    execute_high_risk_requires_approval: true
+    export_requires_approval: true
+
+  # Classify simulation risk based on kind/tags (hint-level).
+  risk_inference:
+    default_risk: "low"
+    kind_to_risk:
+      what_if: low
+      forecast: low
+      policy_sim: medium
+      load_test: medium
+      digital_twin: high
+
+    tag_escalation:
+      critical_if_any:
+        - "actuation_model"
+        - "safety_critical"
+        - "industrial_control"
+      high_if_any:
+        - "plant"
+        - "robotics"
+        - "power"
+        - "chemical"
+        - "hvac"
+
+# ------------------------------------------------------------------------------
+# Integration with industrial control / digital twin systems
+# ------------------------------------------------------------------------------
+integration:
+  # Simulation outputs may be shown in UI modules like digital_twin_center, industrial_control.
+  # This section defines the safety boundary for those integrations.
+  boundaries:
+    allow_direct_actuation_from_simulation: false
+    require_operator_review_for_recommendations: true
+
+  # If a simulation suggests an action, it must be encoded as a proposal requiring approval.
+  proposals:
+    enabled: true
+    proposal_kind: "simulation_recommendation"
+    require_approval: true
+
+# ------------------------------------------------------------------------------
+# Observability
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  decision_record:
+    enabled: true
+    include:
+      - "profile"
+      - "mode"
+      - "engine_id"
+      - "scenario_id"
+      - "scenario_kind"
+      - "risk"
+      - "budgets_applied"
+      - "sandbox_profile"
+      - "artifacts_written"
+      - "gates_triggered"
+      - "approval_required"
+      - "latency_ms"
+      - "resource_usage"
+
+  log_policy:
+    include_inputs: false
+    include_outputs: false
+    include_ids_and_metadata: true
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    budgets:
+      hard_ceiling:
+        max_runtime_s: 180
+        max_memory_mb: 2048
+    sandbox:
+      default_profile: "standard"
+    governance:
+      approvals:
+        execute_requires_approval: false
+        execute_high_risk_requires_approval: false
+        export_requires_approval: false
+
+  workstation:
+    sandbox:
+      default_profile: "restricted"
+    governance:
+      approvals:
+        execute_requires_approval: false
+        execute_high_risk_requires_approval: true
+        export_requires_approval: true
+
+  regulated:
+    modes:
+      execute:
+        allow_network_egress: false
+    artifacts:
+      capture:
+        store_outputs: false
+        store_inputs: true
+        store_metrics: true
+      retention:
+        outputs_days: 0
+    governance:
+      approvals:
+        execute_requires_approval: true
+        execute_high_risk_requires_approval: true
+        export_requires_approval: true
+
+  safety_critical:
+    modes:
+      execute:
+        require_sandbox: true
+        allow_network_egress: false
+    sandbox:
+      default_profile: "restricted"
+    budgets:
+      hard_ceiling:
+        max_runtime_s: 30
+        max_cpu_seconds: 60
+        max_memory_mb: 768
+    governance:
+      trust:
+        min_trust:
+          plan: 2
+          execute: 5
+          execute_high_risk: 7
+          export: 6
+      approvals:
+        execute_requires_approval: true
+        execute_high_risk_requires_approval: true
+        export_requires_approval: true

@@ -1,0 +1,823 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Plugin Builder (compile a governed plugin package proposal)
+# Path:   config/prompts/plugin_builder.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Takes an operator request like:
+#   - "Create a plugin that adds a domain export button"
+#   - "Build a connector to X API"
+#   - "Add a new capability that summarizes industrial telemetry"
+# And returns a structured plugin build proposal:
+#   - plugin spec (id, version, purpose, domain)
+#   - capability definitions (ids, categories, gates)
+#   - config schema (non-secret)
+#   - file bundle (paths + content) suitable for creation/patching
+#   - tests + minimal docs
+#   - observability plan (audit events, metrics tags)
+#
+# NON-GOALS
+# ---------
+# - Does not execute anything.
+# - Does not install dependencies or mutate the repo directly.
+# - Does not store or request secrets (tokens/keys/passwords).
+# - Does not generate offensive security artifacts:
+#     * credential theft/phishing
+#     * malware/exploit payloads
+#     * denial-of-service
+#     * surveillance of individuals
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON (schema-compliant). No markdown, no code fences.
+# - Fail-closed:
+#     * If request is unsafe → decision.mode="deny"
+#     * If critical info is missing → decision.mode="ask" (minimal questions)
+#     * Otherwise → decision.mode="propose" (build-ready proposal)
+# - Capability discipline:
+#     * If an allowlist/catalog is provided, do NOT invent capability ids outside it.
+#     * If new capabilities are needed, put them in `capability_proposals` (not in `capabilities_used`),
+#       and include a patch suggestion for config/capabilities/catalog.yaml (as text).
+# - Safety discipline:
+#     * Never output secret values or ask for them. Use credential references only.
+#     * Never provide instructions/code enabling wrongdoing.
+# ==============================================================================
+version: 1
+
+id: "plugin.builder"
+title: "Plugin Builder"
+owner: "francis"
+intent: "compile_plugin_package"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Produces a plugin build proposal (spec + file bundle + tests + docs)."
+    - "Designed to work with plugin_browser and capability catalog."
+    - "Forward-compatible with federation, industrial, regulated postures."
+  compatibility:
+    - "Consumers should ignore unknown fields."
+    - "File bundle is content-addressable by path; apply order matters."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | daemon | worker | federation
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      message: { type: string, required: true }
+
+      # Optional hints for plugin identity
+      suggested_plugin_id: { type: string, required: false } # e.g., "domains_export_tools"
+      suggested_name: { type: string, required: false }
+      target_domain_id: { type: string, required: false }
+      target_ui_panel: { type: string, required: false } # plugin_browser | operations | domain_workbench | ...
+      desired_language: { type: string, required: false } # python | typescript | mixed
+      risk_tolerance: { type: string, required: false } # low | medium | high
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          summary: { type: string, required: false }
+
+      network:
+        type: object
+        required: false
+        fields:
+          web_access_enabled: { type: boolean, required: false }
+          egress_allowed: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          quorum_required_by_default: { type: boolean, required: false }
+
+      policy_summary:
+        type: object
+        required: false
+        fields:
+          allowed_capabilities: { type: array, required: false }
+          blocked_capabilities: { type: array, required: false }
+          notes: { type: array, required: false }
+
+  # Existing plugin snapshot (optional; helps avoid duplicates)
+  plugins:
+    type: object
+    required: false
+    fields:
+      existing:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            plugin_id: { type: string, required: true }
+            name: { type: string, required: false }
+            version: { type: string, required: false }
+            status: { type: string, required: false } # active | disabled | draft
+            capabilities: { type: array, required: false }
+            description: { type: string, required: false }
+
+  domains:
+    type: object
+    required: false
+    fields:
+      active_domain_id: { type: string, required: false }
+      registry_snapshot:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            domain_id: { type: string, required: true }
+            name: { type: string, required: false }
+            status: { type: string, required: false }
+            tags: { type: array, required: false }
+
+  capabilities_catalog:
+    type: object
+    required: false
+    fields:
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            id: { type: string, required: true }
+            category: { type: string, required: false } # read_only | mutation | destructive | credential_ops | network_egress | industrial_actuation | ...
+            description: { type: string, required: false }
+
+  # Optional: policy snippets relevant to plugins
+  policy_hints:
+    type: object
+    required: false
+    fields:
+      filesystem_policy: { type: object, required: false }
+      network_policy: { type: object, required: false }
+      credential_policy: { type: object, required: false }
+      regulated_domains: { type: object, required: false }
+
+  attachments:
+    type: object
+    required: false
+    fields:
+      present: { type: boolean, required: false }
+      intake_completed: { type: boolean, required: false }
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            attachment_id: { type: string, required: true }
+            filename: { type: string, required: false }
+            mime_type: { type: string, required: false }
+            content_text: { type: string, required: false }
+            meta: { type: object, required: false }
+
+  memory:
+    type: object
+    required: false
+    fields:
+      provided: { type: boolean, required: false }
+      chunks:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            source: { type: string, required: false }
+            content: { type: string, required: true }
+            score: { type: number, required: false }
+            meta: { type: object, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - plugin_package
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_followup
+          - followup_questions
+          - reason_codes
+          - summary
+        properties:
+          # Modes:
+          # - deny: unsafe/offensive request or disallowed by posture
+          # - ask: missing critical information blocks safe build
+          # - propose: plugin package proposal ready for review/approval
+          mode:
+            type: string
+            enum: ["deny", "ask", "propose"]
+
+          confidence: { type: number } # 0..1
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+
+          reason_codes:
+            type: array
+            items: { type: string }
+
+          summary: { type: string }
+
+      plugin_package:
+        type: object
+        additionalProperties: false
+        required:
+          - plugin_spec
+          - capability_map
+          - config_contract
+          - security_posture
+          - implementation_plan
+          - file_bundle
+          - tests
+          - docs
+          - validation
+        properties:
+
+          plugin_spec:
+            type: object
+            additionalProperties: false
+            required:
+              - plugin_id
+              - name
+              - version
+              - status
+              - description
+              - kind
+              - owner
+              - domain_id
+              - maturity
+              - entrypoints
+              - dependencies
+              - tags
+            properties:
+              plugin_id: { type: string } # stable slug: lowercase, digits, underscores
+              name: { type: string }
+              version: { type: string } # semver preferred
+              status: { type: string }  # draft | active | disabled
+              description: { type: string }
+
+              # kind indicates integration surface
+              # - capability_provider: adds backend capability handlers
+              # - ui_extension: adds UI panel/widgets
+              # - connector: external service adapter (egress gated)
+              # - hybrid: both
+              kind:
+                type: string
+                enum: ["capability_provider", "ui_extension", "connector", "hybrid", "unknown"]
+
+              owner: { type: string } # "francis" | org/team/user
+              domain_id: { type: string } # empty if global
+              maturity: { type: string, enum: ["prototype", "beta", "stable"] }
+
+              entrypoints:
+                type: object
+                additionalProperties: false
+                required: ["backend", "frontend"]
+                properties:
+                  backend:
+                    type: object
+                    additionalProperties: false
+                    required: ["language", "module", "callable"]
+                    properties:
+                      language: { type: string } # python
+                      module: { type: string }   # python module path (no filesystem assumptions)
+                      callable: { type: string } # entry function/class name
+                  frontend:
+                    type: object
+                    additionalProperties: false
+                    required: ["language", "module"]
+                    properties:
+                      language: { type: string } # typescript | none
+                      module: { type: string }   # TS module path if applicable
+
+              dependencies:
+                type: object
+                additionalProperties: false
+                required: ["python", "node", "external_services"]
+                properties:
+                  python:
+                    type: array
+                    items: { type: string } # minimal; avoid pinning unless necessary
+                  node:
+                    type: array
+                    items: { type: string }
+                  external_services:
+                    type: array
+                    items: { type: string } # e.g., "postgres", "qdrant", "redis", "vendor_api"
+
+              tags:
+                type: array
+                items: { type: string }
+
+          capability_map:
+            type: object
+            additionalProperties: false
+            required:
+              - capabilities_used
+              - capability_proposals
+              - requested_but_unknown
+              - prohibited_categories
+            properties:
+              # Capability IDs this plugin intends to call/use (must exist in allowlist/catalog if provided)
+              capabilities_used:
+                type: array
+                items: { type: string }
+
+              # New capability IDs proposed by the plugin (NOT assumed to exist yet)
+              capability_proposals:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["id", "category", "description", "min_trust", "requires_approval", "requires_quorum", "scopes"]
+                  properties:
+                    id: { type: string }
+                    category: { type: string } # read_only | mutation | destructive | credential_ops | network_egress | industrial_actuation | unknown
+                    description: { type: string }
+                    min_trust: { type: number }
+                    requires_approval: { type: boolean }
+                    requires_quorum: { type: boolean }
+                    scopes:
+                      type: array
+                      items: { type: string }
+
+              requested_but_unknown:
+                type: array
+                items: { type: string }
+
+              # Explicit disallowed categories for the plugin
+              prohibited_categories:
+                type: array
+                items: { type: string } # credential_attack | malware | dos | surveillance | physical_harm | ...
+
+          config_contract:
+            type: object
+            additionalProperties: false
+            required:
+              - config_schema
+              - env_vars
+              - defaults
+              - secrets_policy
+            properties:
+              # JSON Schema snippet for plugin config (non-secret)
+              config_schema:
+                type: object
+                additionalProperties: true
+
+              # Explicit env vars the plugin reads (non-secret; secrets must be references only)
+              env_vars:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["name", "required", "description", "sensitive"]
+                  properties:
+                    name: { type: string }
+                    required: { type: boolean }
+                    description: { type: string }
+                    sensitive: { type: boolean } # must be false unless it's a reference id, never a secret value
+
+              defaults:
+                type: object
+                additionalProperties: true
+
+              # Secret handling policy: only references, never values
+              secrets_policy:
+                type: object
+                additionalProperties: false
+                required: ["allowed", "rules"]
+                properties:
+                  allowed: { type: boolean }
+                  rules:
+                    type: array
+                    items: { type: string }
+
+          security_posture:
+            type: object
+            additionalProperties: false
+            required:
+              - risk_level
+              - categories_touched
+              - network_egress
+              - filesystem_access
+              - credential_access
+              - safeguards
+            properties:
+              risk_level: { type: string, enum: ["low", "medium", "high", "critical"] }
+
+              categories_touched:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - "read_only"
+                    - "mutation"
+                    - "destructive"
+                    - "network_egress"
+                    - "credential_ops"
+                    - "industrial_actuation"
+                    - "unknown"
+
+              network_egress:
+                type: object
+                additionalProperties: false
+                required: ["required", "allowed_domains", "notes"]
+                properties:
+                  required: { type: boolean }
+                  allowed_domains:
+                    type: array
+                    items: { type: string } # hostnames only; no tokens, no query params
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              filesystem_access:
+                type: object
+                additionalProperties: false
+                required: ["required", "paths", "notes"]
+                properties:
+                  required: { type: boolean }
+                  paths:
+                    type: array
+                    items: { type: string } # conceptual paths; enforcement elsewhere
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              credential_access:
+                type: object
+                additionalProperties: false
+                required: ["required", "providers", "reference_only", "notes"]
+                properties:
+                  required: { type: boolean }
+                  providers:
+                    type: array
+                    items: { type: string }
+                  reference_only: { type: boolean }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+              safeguards:
+                type: array
+                items: { type: string } # "approval gated", "deny-by-default", "rate limits", ...
+
+          implementation_plan:
+            type: object
+            additionalProperties: false
+            required:
+              - phases
+              - idempotency_notes
+              - rollback_notes
+              - observability_notes
+            properties:
+              phases:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["name", "goals", "deliverables", "gates"]
+                  properties:
+                    name: { type: string }
+                    goals:
+                      type: array
+                      items: { type: string }
+                    deliverables:
+                      type: array
+                      items: { type: string }
+                    gates:
+                      type: array
+                      items: { type: string } # trust/approval prerequisites
+
+              idempotency_notes:
+                type: array
+                items: { type: string }
+
+              rollback_notes:
+                type: array
+                items: { type: string }
+
+              observability_notes:
+                type: array
+                items: { type: string }
+
+          file_bundle:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+                - path
+                - operation
+                - language
+                - purpose
+                - content
+                - requires_review
+              properties:
+                # Path must be repo-relative and within existing plugin areas.
+                path: { type: string }
+
+                # create | modify | patch (patch means "suggested diff-style changes")
+                operation: { type: string, enum: ["create", "modify", "patch"] }
+
+                language: { type: string } # python | typescript | yaml | json | markdown | other
+                purpose: { type: string }
+
+                # Content must be complete, not truncated. No secrets.
+                content: { type: string }
+
+                # If true, indicates high-risk or policy-sensitive changes.
+                requires_review: { type: boolean }
+
+          tests:
+            type: object
+            additionalProperties: false
+            required: ["included", "notes", "files"]
+            properties:
+              included: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+              files:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["path", "content"]
+                  properties:
+                    path: { type: string }
+                    content: { type: string }
+
+          docs:
+            type: object
+            additionalProperties: false
+            required: ["included", "notes", "files"]
+            properties:
+              included: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+              files:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["path", "content"]
+                  properties:
+                    path: { type: string }
+                    content: { type: string }
+
+          validation:
+            type: object
+            additionalProperties: false
+            required: ["checks", "risk_notes", "compatibility_notes"]
+            properties:
+              checks:
+                type: array
+                items: { type: string } # "imports clean", "typecheck", "no secrets", "lint", ...
+              risk_notes:
+                type: array
+                items: { type: string }
+              compatibility_notes:
+                type: array
+                items: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - blocked
+          - blocked_reasons
+          - wrongdoing_requested
+          - contains_secrets
+          - contains_pii
+          - redactions
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          wrongdoing_requested: { type: boolean }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Plugin Builder.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Absolute constraints:
+      - No secrets: do not request or emit keys/tokens/passwords/private keys. Use credential references only.
+      - No wrongdoing enablement: do not generate plugins for credential theft/phishing, malware, DoS, or surveillance.
+        If requested, set decision.mode="deny" and propose safe alternatives (defensive monitoring, policy, auditing).
+      - Evidence/capability discipline:
+          * If governance.policy_summary.allowed_capabilities is present, only use those ids in capabilities_used.
+          * Else if capabilities_catalog.items is present, only use those ids in capabilities_used.
+          * If new capabilities are needed, include them in capability_proposals (do not assume they exist).
+
+      Build quality bar:
+      - Keep proposal minimal but production-grade: clear entrypoints, observability, tests.
+      - Provide a complete file_bundle with coherent, internally consistent code.
+      - No speculative frameworks or new directory redesigns. Use existing plugin areas and patterns.
+      - Include idempotency notes and rollback notes (even if rollback is "not possible").
+
+      Security posture defaults:
+      - Deny-by-default network egress. If egress is required, list allowed domains explicitly.
+      - Credential access must be reference-only, never secret values.
+      - Filesystem access must be minimal and explicitly scoped.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      RUNTIME:
+      {{runtime}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      PLUGINS:
+      {{plugins}}
+
+      DOMAINS:
+      {{domains}}
+
+      CAPABILITIES_CATALOG:
+      {{capabilities_catalog}}
+
+      POLICY_HINTS:
+      {{policy_hints}}
+
+      ATTACHMENTS:
+      {{attachments}}
+
+      MEMORY:
+      {{memory}}
+
+      Task:
+      Produce a plugin package proposal (spec + file bundle + tests + docs) suitable for review.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.2
+  max_output_tokens: 3200
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "PLUGIN_BUILD_PROPOSED"
+  - "PLUGIN_BUILD_NEEDS_FOLLOWUP"
+  - "PLUGIN_BUILD_DENIED_UNSAFE"
+  - "PLUGIN_BUILD_FAIL_CLOSED"
+  - "PLUGIN_DUPLICATE_LIKELY"
+  - "CAP_ALLOWLIST_ENFORCED"
+  - "CAP_CATALOG_USED"
+  - "CAP_NEW_PROPOSALS_PRESENT"
+  - "CAP_UNKNOWN_REQUIRED"
+  - "EGRESS_REQUIRED"
+  - "CREDENTIAL_REFERENCES_ONLY"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "plugin.build.requested"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "actor_role", "source", "profile"]
+
+  - kind: "plugin.build.proposed"
+    when: "after"
+    fields: ["plugin_package.plugin_spec.plugin_id", "plugin_package.plugin_spec.version", "observability.reason_codes"]
+
+  - kind: "plugin.build.denied"
+    when: "after"
+    fields: ["safety.blocked_reasons"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.24
+      max_output_tokens: 3600
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.16
+      max_output_tokens: 3200
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14
+      max_output_tokens: 3200
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+      max_output_tokens: 3200

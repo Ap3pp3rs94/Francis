@@ -1,0 +1,433 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Modality Config
+# Modality: Audio (ASR + TTS + capture/ingest policy)
+# Path:     config/models/specialized/audio.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines the AUDIO modality contract for Francis:
+#   - Audio capture constraints (what inputs are acceptable)
+#   - Transcription (ASR) engine selection + operational budgets
+#   - Text-to-speech (TTS) engine selection + operational budgets
+#   - Governance gates (approvals/trust) for sensitive operations
+#   - Storage/retention rules for audio artifacts and transcripts
+#
+# DESIGN CONTRACT
+# ---------------
+# 1) Local-first:
+#    Prefer local processing engines. Remote processing must be explicit and gated.
+#
+# 2) Privacy-first:
+#    Audio is inherently sensitive. Default posture is minimize retention and
+#    never ship raw audio off-box without approval in regulated/safety profiles.
+#
+# 3) Deterministic & observable:
+#    Every audio operation should be traceable with request_id + audit tags,
+#    and should record which engine processed the audio (without leaking content).
+#
+# 4) Forward-compatible:
+#    Unknown keys should be ignored by tolerant loaders. This file can evolve
+#    without breaking older runtimes.
+#
+# SECURITY NOTE
+# -------------
+# - No secrets in this file.
+# - Remote providers require env/vault credentials and must be enabled by profile.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "audio_modality_contract"
+  notes:
+    - "Audio is sensitive; govern by approvals/trust and profile posture."
+    - "This config does not require audio engines to exist yet; runtimes may ignore."
+
+# ------------------------------------------------------------------------------
+# Global enablement
+# ------------------------------------------------------------------------------
+audio:
+  # Master switch for any audio features (capture, transcription, TTS).
+  # If false, the system should behave as if audio does not exist.
+  enabled: false
+
+  # High-level behavior flags for consistent UI/daemon behavior.
+  behavior:
+    local_first: true
+    allow_remote_processing: false
+    allow_background_capture: false
+    require_push_to_talk: true
+
+  # Default language posture (used by transcription unless overridden).
+  language:
+    default: "en"
+    # If set true, engines may attempt automatic language detection.
+    allow_auto_detect: true
+    # Optional allowlist; empty means "any".
+    allowlist: []
+
+# ------------------------------------------------------------------------------
+# Audio ingestion constraints (files/streams)
+# ------------------------------------------------------------------------------
+ingestion:
+  # These constraints are enforced before any engine is invoked.
+  fail_closed: true
+
+  # Maximum length constraints keep resource usage predictable and reduce privacy risk.
+  limits:
+    max_duration_s: 300           # 5 minutes per request by default
+    max_bytes: 25_000_000         # ~25MB
+    max_channels: 2
+    max_sample_rate_hz: 48_000
+
+  # Preferred internal normalization target (what the pipeline converts to).
+  normalize_to:
+    sample_rate_hz: 16_000
+    channels: 1
+    pcm_format: "s16le"           # signed 16-bit little endian PCM
+
+  # Accepted container/file formats.
+  # Keep this conservative; expand only when you have decoding support.
+  accepted_formats:
+    - "wav"
+    - "mp3"
+    - "m4a"
+    - "ogg"
+    - "webm"
+
+  # Streaming posture (WS / chunked uploads) — hint-level.
+  streaming:
+    enabled: true
+    chunk_max_bytes: 1_000_000
+    # If enabled, system may emit partial transcripts.
+    allow_partial_transcripts: true
+
+# ------------------------------------------------------------------------------
+# Capture (microphone input) policy
+# ------------------------------------------------------------------------------
+capture:
+  enabled: false
+
+  # Capture is a privileged action. Default is interactive (push-to-talk).
+  mode: "push_to_talk"            # push_to_talk | always_on | disabled
+
+  # Safety rails:
+  rails:
+    allow_always_on: false
+    allow_recording_to_disk: false
+    max_recording_s: 60
+    require_user_gesture: true
+
+  # Device hints (platform-specific). Empty means "system default".
+  devices:
+    input_device_id: ""
+    output_device_id: ""
+
+# ------------------------------------------------------------------------------
+# Transcription (ASR) — speech-to-text
+# ------------------------------------------------------------------------------
+transcription:
+  enabled: true
+
+  # Engine selection:
+  # - "local" means: whisper.cpp / faster-whisper / OS-native etc. (implementation-defined)
+  # - "remote" means: hosted ASR provider (requires explicit allow + credentials)
+  mode: "local"                   # local | remote
+
+  # Router hint: how ASR output should be delivered.
+  output:
+    format: "text"                # text | json
+    include_timestamps: false     # word/segment timestamps
+    include_confidence: false
+    max_segments: 500
+
+  # Operational budgets (hint-level; enforcement depends on runtime)
+  budgets:
+    latency_budget_ms: 30_000
+    cpu_budget_hint: "medium"     # low | medium | high
+    gpu_allowed: true
+
+  # Local ASR engines (declared as options; runtime chooses supported).
+  local_engines:
+    preferred:
+      - id: "faster_whisper"
+        notes: "High performance local ASR (if present)."
+      - id: "whisper_cpp"
+        notes: "Portable local ASR (if present)."
+      - id: "system_asr"
+        notes: "OS-provided ASR (if present)."
+
+    defaults:
+      # These are generic knobs; different engines may map them differently.
+      model_size: "small"         # tiny | base | small | medium | large
+      beam_size: 1
+      vad_enabled: true
+      vad_sensitivity: 0.5        # 0..1
+      temperature: 0.0
+      best_of: 1
+
+  # Remote ASR providers (declared but disabled unless profile allows).
+  remote_providers:
+    enabled: false
+    providers:
+      - id: "openai"
+        enabled: false
+        notes: "Hosted ASR; requires network egress + credentials."
+      - id: "azure"
+        enabled: false
+        notes: "Hosted ASR; requires network egress + credentials."
+      - id: "google"
+        enabled: false
+        notes: "Hosted ASR; requires network egress + credentials."
+
+# ------------------------------------------------------------------------------
+# Text-to-speech (TTS) — text-to-audio
+# ------------------------------------------------------------------------------
+tts:
+  enabled: false
+
+  mode: "local"                   # local | remote
+
+  output:
+    format: "wav"                 # wav | mp3 | ogg
+    sample_rate_hz: 22_050
+    channels: 1
+
+  budgets:
+    latency_budget_ms: 12_000
+    cpu_budget_hint: "low"
+    gpu_allowed: false
+
+  # Local TTS engines (declared as options; runtime chooses supported).
+  local_engines:
+    preferred:
+      - id: "piper"
+        notes: "Local neural TTS (if present)."
+      - id: "system_tts"
+        notes: "OS-provided TTS (if present)."
+
+    defaults:
+      voice: "default"
+      speed: 1.0                  # 0.5..2.0
+      pitch: 1.0                  # 0.5..2.0
+      volume: 1.0                 # 0..1
+
+  # Remote TTS providers (declared but disabled unless profile allows).
+  remote_providers:
+    enabled: false
+    providers:
+      - id: "openai"
+        enabled: false
+        notes: "Hosted TTS; requires network egress + credentials."
+      - id: "azure"
+        enabled: false
+        notes: "Hosted TTS; requires network egress + credentials."
+
+# ------------------------------------------------------------------------------
+# Governance / Safety gates (profile-sensitive)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  # Audio operations are privacy-sensitive. Define default gates here.
+  approvals:
+    # Capturing microphone audio is privileged.
+    capture_requires_approval: true
+
+    # Shipping audio to a remote provider is always gated.
+    remote_processing_requires_approval: true
+
+    # Persisting raw audio to disk is gated (even locally).
+    persist_raw_audio_requires_approval: true
+
+    # Exporting audio artifacts/transcripts out of system is gated.
+    export_requires_approval: true
+
+  trust:
+    # Minimum trust levels required for specific actions (hint-level).
+    min_trust:
+      transcribe_local: 1
+      transcribe_remote: 4
+      tts_local: 1
+      tts_remote: 3
+      capture: 4
+      export: 4
+
+  # Tagging rules for downstream audit/explanations systems.
+  tags:
+    base:
+      - "audio"
+    add_on_capture:
+      - "audio_capture"
+      - "privacy_sensitive"
+    add_on_remote:
+      - "remote_provider"
+      - "privacy_sensitive"
+    add_on_export:
+      - "export"
+      - "privacy_sensitive"
+
+# ------------------------------------------------------------------------------
+# Storage, retention, and redaction posture
+# ------------------------------------------------------------------------------
+storage:
+  # Where audio artifacts and transcripts should live (repo-relative by default).
+  # Environments may override these in their profile configs.
+  paths:
+    audio_artifacts_dir: "./data/artifacts/audio"
+    transcripts_dir: "./data/artifacts/audio/transcripts"
+    tts_outputs_dir: "./data/artifacts/audio/tts"
+    temp_dir: "./data/cache/audio"
+
+  # Retention defaults (intent-level; enforcement depends on runtime).
+  retention:
+    # Keep raw audio short-lived by default.
+    raw_audio_days: 1
+    transcripts_days: 14
+    tts_outputs_days: 7
+
+    # If true, allow a cleanup worker to purge old artifacts automatically.
+    auto_purge_enabled: true
+
+    # Purging is a destructive action; governance can gate it.
+    purge_requires_approval: true
+
+privacy:
+  # Redaction here refers to transcript outputs (text).
+  # Implementation may use a PII scrubber later; defaults remain conservative.
+  transcripts:
+    redact_pii: false
+    redact_emails: true
+    redact_phone_numbers: true
+    redact_api_keys: true
+
+  # Whether to store transcripts at all.
+  store_transcripts: true
+  store_raw_audio: false
+
+# ------------------------------------------------------------------------------
+# Observability
+# ------------------------------------------------------------------------------
+observability:
+  audit_enabled: true
+  emit_explanations: true
+
+  # Metadata-only logging posture for audio operations.
+  log_policy:
+    include_text_payloads: false
+    include_transcripts: false
+    include_audio_bytes: true
+    include_duration_s: true
+    include_engine_id: true
+    include_latency_ms: true
+    include_request_id: true
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    audio:
+      enabled: false
+    transcription:
+      enabled: true
+      mode: "local"
+    tts:
+      enabled: false
+    governance:
+      approvals:
+        capture_requires_approval: false
+        persist_raw_audio_requires_approval: false
+
+  workstation:
+    audio:
+      enabled: true
+    capture:
+      enabled: true
+      mode: "push_to_talk"
+      rails:
+        allow_recording_to_disk: false
+        max_recording_s: 60
+    transcription:
+      enabled: true
+      mode: "local"
+    tts:
+      enabled: true
+      mode: "local"
+    privacy:
+      store_raw_audio: false
+      store_transcripts: true
+    governance:
+      approvals:
+        capture_requires_approval: false
+        remote_processing_requires_approval: true
+        persist_raw_audio_requires_approval: true
+
+  home:
+    audio:
+      enabled: true
+    capture:
+      enabled: true
+      mode: "push_to_talk"
+    transcription:
+      enabled: true
+      mode: "local"
+    tts:
+      enabled: true
+      mode: "local"
+    governance:
+      approvals:
+        capture_requires_approval: true
+        remote_processing_requires_approval: true
+
+  regulated:
+    audio:
+      enabled: false
+    transcription:
+      enabled: true
+      mode: "local"
+    tts:
+      enabled: false
+    governance:
+      approvals:
+        capture_requires_approval: true
+        remote_processing_requires_approval: true
+        persist_raw_audio_requires_approval: true
+        export_requires_approval: true
+    privacy:
+      store_raw_audio: false
+      store_transcripts: true
+    storage:
+      retention:
+        raw_audio_days: 0
+        transcripts_days: 30
+        tts_outputs_days: 0
+
+  safety_critical:
+    audio:
+      enabled: false
+    capture:
+      enabled: false
+    transcription:
+      enabled: true
+      mode: "local"
+    tts:
+      enabled: false
+    governance:
+      approvals:
+        capture_requires_approval: true
+        remote_processing_requires_approval: true
+        persist_raw_audio_requires_approval: true
+        export_requires_approval: true
+    privacy:
+      store_raw_audio: false
+      store_transcripts: true
+    storage:
+      retention:
+        raw_audio_days: 0
+        transcripts_days: 90
+        tts_outputs_days: 0

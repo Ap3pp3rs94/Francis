@@ -1,0 +1,549 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Web Access (safe egress rules for web_learning + future connectors)
+# Path:   config/policies/web_access.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical policy for HTTP(S) requests to external destinations.
+#
+# This policy governs:
+#   - whether web access is enabled (by profile)
+#   - destination eligibility (domain registry + SSRF protections)
+#   - request semantics (schemes, redirects, headers, timeouts, retries)
+#   - content handling (size caps, content-type allow/deny, sanitization intent)
+#   - caching/persistence rules (provenance tags, retention hints)
+#   - audit + metrics for observability
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: if a URL cannot be normalized/classified -> deny.
+# - Deny-by-default: unregistered domains are denied in production-like profiles.
+# - Never forward secrets: do not pass Authorization/Cookie headers to the open web.
+# - SSRF-resistant: deny IP literals, deny private/link-local targets by default,
+#   re-validate on redirects, and block cloud metadata endpoints.
+# - Deterministic: first-match rule ordering; stable reason codes.
+#
+# LAYERING NOTES
+# --------------
+# This file is NECESSARY but not sufficient for egress:
+#   - networks.yaml still enforces transport + routing rules
+#   - regulated_domains.yaml still enforces domain registry + class gates
+#   - privacy.yaml governs retention/export/redaction of fetched content
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "web_access_policy"
+  notes:
+    - "Applies to web_learning and any future HTTP connectors."
+    - "Defaults are conservative and production-safe."
+    - "Profiles tighten or disable egress as required."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+web_access:
+  enabled: true
+
+  # Modes:
+  # - disabled: dev-only (not recommended)
+  # - policy:   baseline safe web access (default)
+  # - strict:   stronger deny posture; fewer overrides; lower limits
+  mode: "policy" # disabled | policy | strict
+
+  deny_by_default: true
+  fail_closed_decision: "deny" # deny | require_review
+
+  # Capabilities that are considered "web access" operations (intent only).
+  governed_capabilities:
+    - "web_learning.search"
+    - "web_learning.fetch"
+    - "web_learning.ingest"
+
+# ------------------------------------------------------------------------------
+# URL normalization + SSRF protections
+# ------------------------------------------------------------------------------
+normalization:
+  enabled: true
+
+  # Allowed schemes:
+  # - In general: https only for public destinations.
+  # - Loopback/local dev can allow http/ws via profiles.
+  allowed_schemes:
+    - "https"
+
+  # Disallow userinfo in URLs: https://user:pass@host/...
+  deny_userinfo: true
+
+  # Deny embedded credentials or tokens in querystrings by heuristic (defense-in-depth).
+  # (Secrets policy also applies in privacy.yaml.)
+  deny_suspected_secrets_in_url: true
+
+  # Host canonicalization.
+  lowercase_host: true
+  strip_trailing_dot: true
+
+  # Port policy:
+  # - Allow default ports (80/443) by default; other ports require explicit allow.
+  allow_default_ports_only: true
+  allowed_ports:
+    - 443
+    - 80
+
+  # Prevent IP-literal SSRF by default.
+  deny_ip_literals: true
+
+  # DNS safety posture (intent; implementation may use a hardened resolver).
+  dns:
+    enabled: true
+
+    # If true, deny targets that resolve to private/link-local/loopback ranges.
+    deny_private_ip_targets: true
+    deny_loopback_targets: true
+    deny_link_local_targets: true
+
+    # Deny known cloud metadata endpoints (defense-in-depth).
+    deny_cloud_metadata_targets: true
+
+    # If true, re-resolve hostname on each redirect hop to avoid DNS rebinding.
+    reresolve_on_redirect: true
+
+# ------------------------------------------------------------------------------
+# Destination policy (domain registry integration)
+# ------------------------------------------------------------------------------
+destinations:
+  enabled: true
+
+  # Require domains be registered/known in these profiles (delegates to regulated_domains.yaml).
+  require_registered_domain_in_profiles:
+    - "production"
+    - "regulated"
+    - "safety_critical"
+
+  # If destination is unknown/unregistered:
+  on_unregistered_domain:
+    dev: "require_review"         # dev can test intentionally
+    workstation: "deny"
+    production: "deny"
+    regulated: "deny"
+    safety_critical: "deny"
+    airgapped: "deny"
+
+  # Optional: allowlist of destination classes for web access (domain class is from regulated_domains.yaml).
+  # If empty, defer to regulated_domains.yaml rules.
+  allowed_domain_classes: []
+
+  # Defense-in-depth deny patterns (hostnames only; case-insensitive).
+  deny_host_patterns:
+    # Local/metadata SSRF primitives
+    - "(?i)^169\\.254\\.169\\.254$"
+    - "(?i)^metadata\\.google\\.internal$"
+    - "(?i)^metadata$"
+
+# ------------------------------------------------------------------------------
+# Request semantics (headers, methods, timeouts, retries)
+# ------------------------------------------------------------------------------
+requests:
+  enabled: true
+
+  # Allowed HTTP methods for external web access.
+  allowed_methods:
+    - "GET"
+    - "HEAD"
+
+  # If true, deny POST/PUT/PATCH/DELETE to external web (search should be done via GET-like semantics).
+  deny_non_idempotent_methods: true
+
+  # Timeouts (ms)
+  timeouts:
+    connect_ms: 5000
+    read_ms: 15000
+    total_ms: 20000
+
+  # Redirect policy (SSRF-resistant).
+  redirects:
+    enabled: true
+    max_hops: 3
+    allow_cross_scheme: false
+    allow_cross_domain: true
+
+    # If redirect crosses to an unregistered domain -> deny.
+    deny_to_unregistered_domain: true
+
+    # If redirect resolves to private/link-local/loopback -> deny.
+    deny_to_private_ip_target: true
+
+  # Request header policy: do not forward sensitive headers to the open web.
+  headers:
+    enabled: true
+
+    # Always set a stable, boring UA (avoid leaking environment details).
+    user_agent: "Francis/2.0 (+local; governed-web-access)"
+
+    # Do not send referrers to external destinations.
+    send_referrer: false
+
+    # Default Accept posture (favor text).
+    accept: "text/plain,text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.1"
+
+    # Do NOT forward these headers from inbound callers.
+    deny_forward_headers:
+      - "authorization"
+      - "cookie"
+      - "set-cookie"
+      - "x-api-key"
+      - "proxy-authorization"
+
+    # Only allow adding headers from this allowlist (keys are case-insensitive).
+    # Empty means: do not permit arbitrary custom headers.
+    allow_custom_headers:
+      - "accept"
+      - "accept-language"
+      - "user-agent"
+
+  # Retry strategy (idempotent only).
+  retries:
+    enabled: true
+
+    # Apply retries only for idempotent GET/HEAD and only on transient failures.
+    only_idempotent: true
+
+    max_attempts: 2
+    base_delay_ms: 250
+    max_delay_ms: 2000
+    jitter_ms: 250
+
+    retry_on_status:
+      - 408
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+
+# ------------------------------------------------------------------------------
+# Rate limiting + concurrency (anti-abuse and stability)
+# ------------------------------------------------------------------------------
+rate_limits:
+  enabled: true
+
+  # Global concurrency limit for web access.
+  global:
+    max_concurrent_requests: 4
+    max_requests_per_minute: 60
+
+  # Per-domain throttles (defense-in-depth; best-effort).
+  per_domain:
+    max_concurrent_requests: 2
+    max_requests_per_minute: 30
+
+  # Circuit breaker (prevent hammering a failing host).
+  circuit_breaker:
+    enabled: true
+    open_after_failures: 5
+    window_seconds: 60
+    cool_down_seconds: 120
+
+# ------------------------------------------------------------------------------
+# Content handling (size limits, types, sanitization intent)
+# ------------------------------------------------------------------------------
+content:
+  enabled: true
+
+  # Absolute cap on bytes downloaded per request (compressed size).
+  max_bytes: 10_485_760 # 10 MiB
+
+  # Decompression guard (if server uses gzip/br/etc).
+  # Policy intent: never allow decompressed payload to exceed this.
+  max_decompressed_bytes: 20_971_520 # 20 MiB
+
+  # Allowed content types (prefix match supported by implementation).
+  allowed_content_types:
+    - "text/plain"
+    - "text/html"
+    - "text/markdown"
+    - "application/json"
+    - "application/xhtml+xml"
+
+  # Denied content types (defense-in-depth).
+  denied_content_types:
+    - "application/octet-stream"
+    - "application/x-msdownload"
+    - "application/x-dosexec"
+    - "application/java-archive"
+    - "application/x-binary"
+    - "application/x-executable"
+    - "application/zip"
+    - "application/x-7z-compressed"
+    - "application/x-rar-compressed"
+
+  # If true, deny downloads without a content-type header (fail closed).
+  deny_missing_content_type: true
+
+  # HTML handling intent (actual sanitization occurs in implementation).
+  html:
+    sanitize: true
+    strip_scripts: true
+    strip_iframes: true
+    strip_embeds: true
+    strip_event_handlers: true
+    deny_remote_resource_fetch: true
+
+  # Attachment/download posture (if a fetch endpoint supports downloads).
+  downloads:
+    enabled: false
+    notes:
+      - "Keep downloads disabled until you implement a dedicated download pipeline with scanning."
+      - "When enabled, downloads must land in sandbox artifacts and remain non-executable."
+
+# ------------------------------------------------------------------------------
+# Caching + persistence posture (delegates to privacy + data governance)
+# ------------------------------------------------------------------------------
+storage:
+  enabled: true
+
+  # Cache policy for fetched content (web_learning cache).
+  cache:
+    enabled: true
+    retention_days: 14
+    max_entry_bytes: 1_048_576 # 1 MiB per cached object
+    max_total_mb: 256
+
+  # Require provenance/source tagging for persistence.
+  require_source_tags: true
+
+  # If secrets are detected in fetched content, deny persistence (privacy policy also enforces).
+  deny_persistence_on_secrets_detected: true
+
+  # If content cannot be classified, fail closed for persistence.
+  deny_persistence_on_unknown_classification: true
+
+# ------------------------------------------------------------------------------
+# Governance gates (trust/approval expectations for web access operations)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+
+  # These are web-access policy gates. API permissions and governance layer still enforce.
+  gates_by_capability:
+    web_learning.search:
+      min_trust: 5
+      requires_approval: true
+      category: "network_egress"
+
+    web_learning.fetch:
+      min_trust: 5
+      requires_approval: true
+      category: "network_egress"
+
+    web_learning.ingest:
+      min_trust: 6
+      requires_approval: true
+      category: "network_egress"
+
+  # In strict mode, bump trust floors.
+  strict_mode_overrides:
+    web_learning.search:
+      min_trust: 7
+      requires_approval: true
+    web_learning.fetch:
+      min_trust: 7
+      requires_approval: true
+    web_learning.ingest:
+      min_trust: 8
+      requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Rule engine (ordered, first match wins) — optional fine-grained overrides
+# ------------------------------------------------------------------------------
+rules:
+  enabled: true
+
+  # Stable reason codes for audit + UI.
+  reason_codes:
+    ALLOW: "Allowed by web_access policy rule."
+    DENY: "Denied by web_access policy rule."
+    REQUIRE_REVIEW: "Requires approval/review by web_access policy rule."
+    NORMALIZATION_FAILED: "URL normalization failed (fail closed)."
+    DESTINATION_UNREGISTERED: "Destination domain not registered/known."
+    DESTINATION_DENIED: "Destination denied by denylist."
+    CONTENT_TYPE_DENIED: "Content type denied."
+    SIZE_LIMIT_EXCEEDED: "Size limit exceeded."
+    REDIRECT_DENIED: "Redirect denied."
+
+  # Explicit allow rules (rare; prefer regulated_domains.yaml registry + class gates).
+  allowlist:
+    - id: "allow.local.loopback_api"
+      match:
+        url_prefixes:
+          - "http://127.0.0.1:8000"
+          - "http://localhost:8000"
+          - "ws://127.0.0.1:8000"
+          - "ws://localhost:8000"
+      decision: "allow"
+      reasons: ["ALLOW"]
+
+  # Deny rules (defense-in-depth).
+  denylist:
+    - id: "deny.cloud_metadata"
+      match:
+        url_prefixes:
+          - "http://169.254.169.254"
+          - "http://metadata.google.internal"
+      decision: "deny"
+      reasons: ["DESTINATION_DENIED"]
+
+    - id: "deny.file_schemes"
+      match:
+        scheme_in:
+          - "file"
+          - "ftp"
+          - "gopher"
+          - "data"
+      decision: "deny"
+      reasons: ["NORMALIZATION_FAILED"]
+
+  on_unmatched: "deny"
+
+# ------------------------------------------------------------------------------
+# Guard integration (escalation on violations)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  on_unregistered_domain_attempt:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  on_ssrf_suspected:
+    set_guard_state_at_least: "lockdown"
+    emit_incident_event: true
+
+  on_content_policy_violation:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "web_access.allowed"
+      - "web_access.denied"
+      - "web_access.review_required"
+      - "web_access.redirect_denied"
+      - "web_access.content_denied"
+      - "web_access.rate_limited"
+    include:
+      - "ts"
+      - "actor_id"
+      - "capability_id"
+      - "profile"
+      - "url"
+      - "normalized_host"
+      - "domain_id"
+      - "decision"
+      - "reasons"
+      - "matched_rule_id"
+      - "status_code"
+      - "bytes"
+      - "content_type"
+      - "cache_hit"
+      - "correlation_id"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "web_access.allowed"
+      - "web_access.denied"
+      - "web_access.review_required"
+      - "web_access.redirect_denied"
+      - "web_access.content_denied"
+      - "web_access.rate_limited"
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    web_access:
+      mode: "policy"
+      deny_by_default: false
+      fail_closed_decision: "require_review"
+    normalization:
+      allowed_schemes: ["https", "http"]
+      allow_default_ports_only: false
+      allowed_ports: [80, 443, 5173, 8000]
+    destinations:
+      require_registered_domain_in_profiles: []
+      on_unregistered_domain:
+        dev: "require_review"
+    rate_limits:
+      global:
+        max_concurrent_requests: 6
+        max_requests_per_minute: 120
+
+  workstation:
+    web_access:
+      mode: "policy"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+
+  production:
+    web_access:
+      mode: "strict"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+    normalization:
+      allowed_schemes: ["https"]
+      allow_default_ports_only: true
+      allowed_ports: [443]
+    destinations:
+      require_registered_domain_in_profiles: ["production"]
+      on_unregistered_domain:
+        production: "deny"
+    rate_limits:
+      global:
+        max_concurrent_requests: 3
+        max_requests_per_minute: 60
+    content:
+      max_bytes: 5_242_880 # 5 MiB
+
+  regulated:
+    web_access:
+      mode: "strict"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+    destinations:
+      require_registered_domain_in_profiles: ["regulated"]
+      on_unregistered_domain:
+        regulated: "deny"
+    content:
+      max_bytes: 2_621_440 # 2.5 MiB
+    storage:
+      cache:
+        retention_days: 7
+
+  safety_critical:
+    # Safety-critical posture should disable web access completely.
+    web_access:
+      enabled: false
+      mode: "strict"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+
+  airgapped:
+    web_access:
+      enabled: false
+      mode: "policy"
+      deny_by_default: true
+      fail_closed_decision: "deny"

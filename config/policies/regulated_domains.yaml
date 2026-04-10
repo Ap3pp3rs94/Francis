@@ -1,0 +1,572 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Regulated Domains (domain registry + allow/deny + compliance gates)
+# Path:   config/policies/regulated_domains.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy governs Francis's concept of "domains" as FIRST-CLASS governance
+# objects. A "domain" here is not only a DNS hostname, but a governed external
+# dependency: vendor portals, APIs, documentation sources, regulators, partner
+# systems, etc.
+#
+# This file provides:
+#   - canonical domain normalization + identity rules
+#   - allow/deny/conditional access rules for outbound interactions
+#   - trust + approval gates by domain class and operation
+#   - compliance-driven constraints for web_learning fetch/ingest
+#   - export/retention constraints for data sourced from regulated domains
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deny by default in regulated and production-like profiles.
+# - Fail-closed: if a destination cannot be normalized/classified -> deny.
+# - Prefer explicit registration: unknown domains are not implicitly allowed.
+# - Bind to networks.yaml: domain permission is necessary but not sufficient
+#   for network egress. Both must allow.
+# - Bind to privacy.yaml: data sourced from regulated domains inherits stricter
+#   redaction/export rules.
+# - Observable: every decision yields stable reason codes for audit + UI.
+#
+# IMPORTANT
+# ---------
+# This file does NOT store secrets, tokens, or credentials. It only defines
+# governance rules and optional domain metadata stubs.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "regulated_domains_policy"
+  notes:
+    - "Domain registration is a compliance boundary."
+    - "Networks policy is still enforced independently."
+    - "Use profile overlays to tighten posture (regulated/safety_critical)."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+regulated_domains:
+  enabled: true
+
+  # Modes:
+  # - disabled: dev-only
+  # - policy:   enforce registry + allow/deny rules (default)
+  # - strict:   stronger deny posture; fewer exceptions; higher trust/approval floors
+  mode: "policy" # disabled | policy | strict
+
+  # Default decision if evaluator cannot normalize or classify.
+  fail_closed_decision: "deny" # deny | require_review
+
+  # Deny-by-default posture for domains not explicitly allowlisted/registered.
+  deny_by_default: true
+
+  # If true, treat unknown/unregistered domains as incidents in regulated profiles.
+  treat_unknown_domains_as_incidents_in_profiles:
+    - "regulated"
+    - "safety_critical"
+
+  # If true, require domains to be registered in domain registry for certain actions.
+  require_registry_for:
+    - "web_learning.fetch"
+    - "web_learning.ingest"
+    - "web_learning.search"
+    - "plugins.install"          # e.g., plugin downloads from external sources
+    - "simulation.export"        # if exports depend on external endpoints
+    - "credentials.request"      # if requesting a credential references external provider endpoints
+
+# ------------------------------------------------------------------------------
+# Canonical normalization / identity model
+# ------------------------------------------------------------------------------
+normalization:
+  enabled: true
+
+  # Canonicalize hostnames for matching:
+  # - lowercase
+  # - trim trailing dots
+  # - disallow embedded credentials in URLs
+  lowercase_host: true
+  strip_trailing_dot: true
+  deny_userinfo_in_url: true
+
+  # Disallow ambiguous inputs (fail closed).
+  deny_ip_literals_by_default: true  # "http://1.2.3.4" is not a governed domain unless explicitly allowed
+  deny_punycode_by_default: false    # allow punycode, but apply homograph protections below
+
+  # Public suffix sanity check hint (implementation may use PSL).
+  public_suffix_sanity_check: true
+
+  # Homograph / spoofing protections (policy intent).
+  homograph_protection:
+    enabled: true
+    deny_mixed_scripts: true
+    deny_confusables_when_detected: true
+    on_detection: "deny" # deny | require_review
+
+# ------------------------------------------------------------------------------
+# Domain classification (privacy + compliance implications)
+# ------------------------------------------------------------------------------
+classification:
+  enabled: true
+
+  # Domain classes are used for gating, retention, export rules, and logging posture.
+  # You can extend these safely without changing enforcement semantics.
+  classes:
+    internal:
+      description: "Local instance, LAN services, federation peers explicitly trusted."
+      default_risk: "low"
+      data_category: "internal"
+
+    vendor:
+      description: "Commercial vendor portals/APIs used for operations."
+      default_risk: "medium"
+      data_category: "internal"
+
+    regulator:
+      description: "Government/authority sites, compliance portals, reporting APIs."
+      default_risk: "high"
+      data_category: "regulated"
+
+    research:
+      description: "Documentation, academic sources, standards bodies."
+      default_risk: "medium"
+      data_category: "internal"
+
+    public_web:
+      description: "General internet sources."
+      default_risk: "high"
+      data_category: "internal"
+
+    unknown:
+      description: "Unclassified/unregistered domain."
+      default_risk: "critical"
+      data_category: "regulated"
+
+# ------------------------------------------------------------------------------
+# Default gates by operation (capability-aligned intent)
+# ------------------------------------------------------------------------------
+# These gates are domain-policy gates. Networks policy still applies.
+gates:
+  enabled: true
+
+  # Baseline gate templates (by operation category).
+  templates:
+
+    read_only:
+      min_trust: 2
+      requires_approval: false
+      decision: "allow"
+
+    controlled_egress:
+      min_trust: 5
+      requires_approval: true
+      decision: "allow"
+
+    regulated_egress:
+      min_trust: 7
+      requires_approval: true
+      decision: "allow"
+
+    critical_egress:
+      min_trust: 9
+      requires_approval: true
+      requires_quorum: true
+      decision: "allow"
+
+  # Operation-to-template mapping (policy intent).
+  by_capability:
+
+    # Domains registry operations
+    domains.list: "read_only"
+    domains.get: "read_only"
+    domains.create: "controlled_egress"
+    domains.update: "controlled_egress"
+    domains.delete: "critical_egress"
+    domains.export: "regulated_egress"
+
+    # Web learning is always treated as egress and higher risk.
+    web_learning.status: "read_only"
+    web_learning.logs.list: "read_only"
+    web_learning.search: "regulated_egress"
+    web_learning.fetch: "regulated_egress"
+    web_learning.ingest: "regulated_egress"
+    web_learning.toggle: "controlled_egress"
+
+    # Plugins and external dependencies
+    plugins.list: "read_only"
+    plugins.install: "regulated_egress"
+    plugins.toggle: "controlled_egress"
+
+# ------------------------------------------------------------------------------
+# Export + persistence constraints for data sourced from domains
+# ------------------------------------------------------------------------------
+data_controls:
+  enabled: true
+
+  # When content is fetched/ingested from a domain, tag it with a source domain id/class.
+  require_source_tag_for_persistence: true
+
+  # If a domain is class=regulator or data_category=regulated, tighten export.
+  export_controls:
+    default:
+      require_approval: true
+      min_trust: 7
+      enforce_redaction: true
+      fail_closed_on_redaction_error: true
+
+    by_domain_class:
+      internal:
+        require_approval: false
+        min_trust: 3
+        enforce_redaction: true
+
+      vendor:
+        require_approval: true
+        min_trust: 6
+        enforce_redaction: true
+
+      regulator:
+        require_approval: true
+        min_trust: 8
+        enforce_redaction: true
+
+      public_web:
+        require_approval: true
+        min_trust: 7
+        enforce_redaction: true
+
+      unknown:
+        decision: "deny"
+
+  # Retention hints for domain-sourced content (privacy.yaml is still canonical).
+  retention_hints_days:
+    internal: 365
+    vendor: 180
+    regulator: 365
+    research: 180
+    public_web: 30
+    unknown: 0
+
+# ------------------------------------------------------------------------------
+# Web learning constraints (domain-aware)
+# ------------------------------------------------------------------------------
+web_learning:
+  enabled: true
+
+  # In regulated profiles, do not allow arbitrary URLs; require registered domains.
+  require_registered_domain_in_profiles:
+    - "regulated"
+    - "production"
+    - "safety_critical"
+
+  # Redirect handling: do not allow jumping from allowed domain to unknown domain.
+  redirects:
+    max_hops: 3
+    deny_cross_domain_to_unregistered: true
+    deny_cross_scheme: true
+    deny_to_ip_literal: true
+
+  # Content controls (policy intent; implementation may enforce via networks.yaml too).
+  content:
+    max_bytes: 10_485_760
+    allowed_content_types:
+      - "text/plain"
+      - "text/html"
+      - "text/markdown"
+      - "application/json"
+      - "application/xhtml+xml"
+    denied_content_types:
+      - "application/octet-stream"
+      - "application/x-msdownload"
+      - "application/x-dosexec"
+      - "application/java-archive"
+      - "application/x-sh"
+      - "application/x-binary"
+      - "application/x-executable"
+
+  # Robots / etiquette posture.
+  robots:
+    respect_robots_txt: true
+
+# ------------------------------------------------------------------------------
+# Rule engine (deterministic; first match wins)
+# ------------------------------------------------------------------------------
+rules:
+  enabled: true
+
+  # Stable reason codes for audit + UI.
+  reason_codes:
+    DOMAIN_ALLOWED: "Domain allowed by rule."
+    DOMAIN_DENIED: "Domain denied by rule."
+    DOMAIN_UNREGISTERED: "Domain is not registered/known."
+    DOMAIN_CLASS_RESTRICTED: "Domain class requires stronger governance."
+    OPERATION_NOT_PERMITTED: "Operation not permitted for this domain."
+    PROFILE_RESTRICTS_DOMAIN: "Profile restricts this domain/operation."
+    NORMALIZATION_FAILED: "Destination could not be normalized safely."
+    REDIRECT_TO_UNREGISTERED: "Redirect attempted to unregistered domain."
+
+  # Ordered top-to-bottom. First match decides.
+  allowlist:
+
+    # --------------------------------------------------------------------------
+    # Local/internal endpoints (always allowed, but still subject to networks.yaml)
+    # --------------------------------------------------------------------------
+    - id: "allow.internal.localhost"
+      match:
+        host_patterns:
+          - "(?i)^localhost$"
+          - "^127\\.0\\.0\\.1$"
+        classes: ["internal"]
+        capabilities: ["*"]
+      decision: "allow"
+      gates: "read_only"
+      reasons: ["DOMAIN_ALLOWED"]
+
+    # --------------------------------------------------------------------------
+    # Federation peers (explicitly registered elsewhere; placeholder allow rule)
+    # --------------------------------------------------------------------------
+    - id: "allow.internal.federation_peers"
+      match:
+        host_patterns: [] # populate in federated deployments
+        classes: ["internal"]
+        capabilities:
+          - "federation.*"
+          - "chat.connect"
+      decision: "allow"
+      gates: "controlled_egress"
+      reasons: ["DOMAIN_ALLOWED"]
+
+    # --------------------------------------------------------------------------
+    # Research sources (safe-ish, still approval-gated for ingest/export)
+    # --------------------------------------------------------------------------
+    - id: "allow.research.standards_docs"
+      match:
+        host_patterns:
+          - "(?i)^nvlpubs\\.nist\\.gov$"
+          - "(?i)^csrc\\.nist\\.gov$"
+          - "(?i)^owasp\\.org$"
+          - "(?i)^www\\.rfc-editor\\.org$"
+        classes: ["research"]
+        capabilities:
+          - "web_learning.search"
+          - "web_learning.fetch"
+          - "web_learning.ingest"
+      decision: "allow"
+      gates: "regulated_egress"
+      reasons: ["DOMAIN_ALLOWED"]
+
+    # --------------------------------------------------------------------------
+    # Vendor portals/APIs (examples; keep empty until you intentionally add)
+    # --------------------------------------------------------------------------
+    - id: "allow.vendor.placeholders"
+      match:
+        host_patterns: [] # intentionally empty until you register vendor endpoints
+        classes: ["vendor"]
+        capabilities:
+          - "web_learning.fetch"
+          - "web_learning.ingest"
+          - "plugins.install"
+      decision: "allow"
+      gates: "regulated_egress"
+      reasons: ["DOMAIN_ALLOWED"]
+
+    # --------------------------------------------------------------------------
+    # Regulator portals (examples; keep empty until you intentionally add)
+    # --------------------------------------------------------------------------
+    - id: "allow.regulator.placeholders"
+      match:
+        host_patterns: [] # intentionally empty until you register regulator endpoints
+        classes: ["regulator"]
+        capabilities:
+          - "web_learning.fetch"
+          - "web_learning.ingest"
+          - "web_learning.search"
+      decision: "allow"
+      gates: "critical_egress"
+      reasons: ["DOMAIN_CLASS_RESTRICTED"]
+
+  denylist:
+
+    # Explicitly deny obvious high-risk / non-business categories (policy intent).
+    - id: "deny.high_risk_categories"
+      match:
+        host_patterns:
+          - "(?i)\\b(porn|xxx|adult)\\b"
+          - "(?i)\\b(gambling|casino|bet)\\b"
+          - "(?i)\\b(hack|crack|keygen|cheat)\\b"
+          - "(?i)\\b(malware|ransom|botnet)\\b"
+        classes: ["public_web", "unknown"]
+        capabilities: ["*"]
+      decision: "deny"
+      reasons: ["DOMAIN_DENIED"]
+
+    # Deny IP-literal targets unless explicitly allowed.
+    - id: "deny.ip_literals"
+      match:
+        ip_literals: true
+        capabilities: ["*"]
+      decision: "deny"
+      reasons: ["NORMALIZATION_FAILED"]
+
+  # Fallback if no rules matched.
+  on_unmatched:
+    decision: "deny"
+    reasons:
+      - "DOMAIN_UNREGISTERED"
+
+# ------------------------------------------------------------------------------
+# Registry stubs (optional; NOT a source of truth for secrets)
+# ------------------------------------------------------------------------------
+# This section provides a place to define known domains centrally.
+# Your runtime registry may live elsewhere (data/domains registry), but this
+# gives you a canonical policy-level allowlist seed.
+registry:
+  enabled: true
+
+  # If true, only domains appearing in this registry (or runtime registry) are considered "registered".
+  # Implementation may merge this policy list with runtime registry entries.
+  registry_is_authoritative_in_profiles:
+    - "regulated"
+    - "safety_critical"
+
+  # Minimal schema:
+  # - id: stable domain id used internally
+  # - host: canonical hostname (no scheme)
+  # - class: one of classification.classes keys
+  # - tags: optional
+  # - notes: optional
+  # - allowed_capabilities: optional allowlist override (otherwise rule engine applies)
+  domains:
+
+    - id: "local.api"
+      host: "127.0.0.1"
+      class: "internal"
+      tags: ["local", "api"]
+      notes: "Local API service."
+
+    - id: "local.ui"
+      host: "127.0.0.1"
+      class: "internal"
+      tags: ["local", "ui"]
+      notes: "Local UI service."
+
+    - id: "ollama.local"
+      host: "127.0.0.1"
+      class: "internal"
+      tags: ["models", "ollama"]
+      notes: "Local Ollama runtime."
+
+# ------------------------------------------------------------------------------
+# Guard integration (unknown/denied domain attempts can escalate posture)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  on_unknown_domain_in_profiles:
+    profiles: ["regulated", "safety_critical"]
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  on_denied_domain_attempt:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "domain.allowed"
+      - "domain.denied"
+      - "domain.unregistered"
+      - "domain.registry.updated"
+      - "domain.web_learning.redirect_denied"
+    include:
+      - "ts"
+      - "actor_id"
+      - "capability_id"
+      - "profile"
+      - "destination"
+      - "normalized_host"
+      - "domain_id"
+      - "domain_class"
+      - "decision"
+      - "gates"
+      - "approval_id"
+      - "reasons"
+      - "matched_rule_id"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "domain.allowed"
+      - "domain.denied"
+      - "domain.unregistered"
+      - "domain.redirect_denied"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific strictness)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    regulated_domains:
+      mode: "policy"
+      deny_by_default: false
+      fail_closed_decision: "require_review"
+    web_learning:
+      require_registered_domain_in_profiles: [] # allow ad-hoc dev testing
+    registry:
+      registry_is_authoritative_in_profiles: [] # dev can be flexible
+
+  workstation:
+    regulated_domains:
+      mode: "policy"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+
+  production:
+    regulated_domains:
+      mode: "strict"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+    web_learning:
+      require_registered_domain_in_profiles:
+        - "production"
+    registry:
+      registry_is_authoritative_in_profiles:
+        - "production"
+
+  regulated:
+    regulated_domains:
+      mode: "strict"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+    web_learning:
+      require_registered_domain_in_profiles:
+        - "regulated"
+    registry:
+      registry_is_authoritative_in_profiles:
+        - "regulated"
+    data_controls:
+      export_controls:
+        default:
+          require_approval: true
+          min_trust: 8
+
+  safety_critical:
+    regulated_domains:
+      mode: "strict"
+      deny_by_default: true
+      fail_closed_decision: "deny"
+    web_learning:
+      enabled: false
+    registry:
+      registry_is_authoritative_in_profiles:
+        - "safety_critical"

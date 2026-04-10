@@ -1,0 +1,318 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Creative Ideation (wide exploration with disciplined constraints)
+# Path:   config/prompts/creative_ideation.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Generates creative options while staying grounded:
+#   - provide multiple distinct approaches
+#   - label assumptions and constraints
+#   - include feasibility + risk notes
+#   - propose next experiments (cheap tests) per idea
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON (schema-compliant), no markdown.
+# - Generate breadth first, then converge to recommended shortlist.
+# - Stay policy-aware:
+#     * do not enable wrongdoing (credential theft, malware, DoS, surveillance)
+#     * do not request or emit secrets
+# - Be practical: each idea includes a next action that is low-cost to test.
+# - Forward-minded: anticipate integration points with Francis’s architecture
+#   without redesigning the directory tree or inventing unapproved files.
+# ==============================================================================
+version: 1
+
+id: "creative.ideation"
+title: "Creative Ideation"
+owner: "francis"
+intent: "generate_options"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "This prompt is for ideation; execution planning belongs to autonomy.yaml."
+    - "Produces structured options that can be turned into capabilities/playbooks later."
+  compatibility:
+    - "Works for UI, CLI, API usage."
+    - "Safe for regulated environments (ideas must remain compliant)."
+
+# ------------------------------------------------------------------------------
+# Input contract
+# ------------------------------------------------------------------------------
+inputs:
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      profile: { type: string, required: false }
+      prompt: { type: string, required: true } # the ideation ask
+      constraints_text: { type: string, required: false } # optional user constraints
+      success_criteria: { type: string, required: false }
+      time_horizon: { type: string, required: false } # today | week | month | quarter
+      budget: { type: string, required: false } # none | low | medium | high
+      risk_tolerance: { type: string, required: false } # low | medium | high
+
+  context:
+    type: object
+    required: false
+    fields:
+      # Optional snapshots to make ideas relevant.
+      current_system: { type: object, required: false }
+      existing_capabilities: { type: array, required: false }
+      known_constraints: { type: object, required: false }
+      environment: { type: string, required: false } # home | enterprise | regulated
+      audience: { type: string, required: false } # operator_business | student_support | general
+
+# ------------------------------------------------------------------------------
+# Output schema (strict JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - summary
+      - assumptions
+      - ideas
+      - shortlist
+      - risks
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      summary:
+        type: object
+        additionalProperties: false
+        required: ["one_liner", "themes"]
+        properties:
+          one_liner: { type: string }
+          themes:
+            type: array
+            items: { type: string }
+
+      assumptions:
+        type: array
+        items: { type: string }
+
+      ideas:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - title
+            - concept
+            - why_it_works
+            - implementation_notes
+            - cost
+            - complexity
+            - time_to_value
+            - risks
+            - next_experiment
+            - integration_points
+          properties:
+            id: { type: string }
+            title: { type: string }
+            concept: { type: string }
+            why_it_works:
+              type: array
+              items: { type: string }
+
+            implementation_notes:
+              type: object
+              additionalProperties: false
+              required: ["steps", "dependencies", "constraints"]
+              properties:
+                steps:
+                  type: array
+                  items: { type: string }
+                dependencies:
+                  type: array
+                  items: { type: string }
+                constraints:
+                  type: array
+                  items: { type: string }
+
+            cost: { type: string, enum: ["none", "low", "medium", "high", "unknown"] }
+            complexity: { type: string, enum: ["low", "medium", "high", "unknown"] }
+            time_to_value: { type: string, enum: ["today", "week", "month", "quarter", "unknown"] }
+
+            risks:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: ["kind", "severity", "message"]
+                properties:
+                  kind: { type: string } # scope | safety | compliance | technical | ux | cost | unknown
+                  severity: { type: string, enum: ["low", "medium", "high", "critical"] }
+                  message: { type: string }
+
+            next_experiment:
+              type: object
+              additionalProperties: false
+              required: ["goal", "test", "success_metric", "timebox"]
+              properties:
+                goal: { type: string }
+                test: { type: string }
+                success_metric: { type: string }
+                timebox: { type: string }
+
+            integration_points:
+              type: array
+              items: { type: string } # e.g., "capabilities.catalog", "approvals", "ledger", "chat_ui panel"
+
+      shortlist:
+        type: object
+        additionalProperties: false
+        required: ["top_ids", "why_these", "next_steps"]
+        properties:
+          top_ids:
+            type: array
+            items: { type: string }
+          why_these:
+            type: array
+            items: { type: string }
+          next_steps:
+            type: array
+            items: { type: string }
+
+      risks:
+        type: object
+        additionalProperties: false
+        required: ["global", "blocked_topics"]
+        properties:
+          global:
+            type: array
+            items: { type: string }
+          blocked_topics:
+            type: array
+            items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s creative ideation engine.
+
+      Output MUST be strict JSON matching the schema. No markdown.
+
+      Ideation standards:
+      - Produce distinct ideas (avoid rephrasing the same concept).
+      - Be grounded: connect each idea to an implementation path.
+      - Include a cheap next experiment for each idea (timeboxed).
+      - Be explicit about assumptions and constraints.
+      - Keep a forward-minded view of integration with Francis:
+          * capabilities and playbooks
+          * approvals and trust
+          * ledger and observability
+          * chat_ui panels
+        but do not propose new files/directories unless explicitly requested.
+
+      Safety / policy:
+      - Do not propose or enable wrongdoing:
+          * credential theft or phishing
+          * malware or exploit development
+          * denial-of-service attacks
+          * surveillance of individuals
+      - If the user asks for such topics, mark them as blocked_topics and pivot to
+        defensive or compliance-oriented alternatives (monitoring, detection, hardening).
+      - Never output secrets or ask for them.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      CONTEXT:
+      {{context}}
+
+      Task:
+      Generate a wide set of ideas, then converge to a shortlist.
+      Keep it actionable and safe.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.75
+  max_output_tokens: 2400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Reason code catalog
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "IDEATION_GENERATED"
+  - "SHORTLIST_SELECTED"
+  - "ASSUMPTIONS_STATED"
+  - "BLOCKED_UNSAFE_TOPIC"
+  - "PROFILE_STRICT_POSTURE"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "creative.ideation.requested"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "profile"]
+
+  - kind: "creative.ideation.generated"
+    when: "after"
+    fields: ["ideas.count", "shortlist.top_ids", "observability.reason_codes"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.6
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.55
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.5

@@ -1,0 +1,453 @@
+# ==============================================================================
+# Francis 2.0 — Runtime Config
+# Config: Logging (levels, sinks, formats, redaction, audit)
+# Path:   config/runtime/logging.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Canonical logging policy for all Francis runtime components:
+#   - API service
+#   - daemon scheduler/runner
+#   - workers
+#   - governance (trust/approvals/guard)
+#   - memory/continuity/ledger
+#   - web learning + attribution
+#   - simulation + industrial control
+#
+# DESIGN CONTRACT
+# ---------------
+# - Observability > cleverness: logs must be actionable, structured, and safe.
+# - Redaction is mandatory: do not log secrets; minimize PII.
+# - Correlation is mandatory: every event should be traceable across subsystems.
+# - Audit events have a dedicated sink and stricter retention defaults.
+# - Profiles may tighten/loosen, but base behavior must be production-capable.
+#
+# SECURITY NOTE
+# -------------
+# This file defines logging behavior. It must not contain secrets.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "runtime_logging_policy"
+  last_reviewed: "2025-12-31"
+  notes:
+    - "Console = human-friendly; files = JSONL for ingestion."
+    - "Audit logs are append-only JSONL with longer retention."
+    - "Redaction patterns are conservative and extensible."
+
+# ------------------------------------------------------------------------------
+# Global defaults
+# ------------------------------------------------------------------------------
+defaults:
+
+  # Global minimum log level.
+  # Logger-specific overrides may raise or lower within bounds.
+  level: "INFO" # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
+  # Whether to include exception tracebacks by default in error logs.
+  include_tracebacks: true
+
+  # Whether to include caller (filename:line) in console logs.
+  include_caller_console: false
+
+  # If true, ensure UTC timestamps for JSON logs; console may remain local time.
+  json_utc_timestamps: true
+
+  # Correlation fields to attach where available.
+  # These should be populated from contextvars or request middleware.
+  correlation_fields:
+    - "request_id"
+    - "correlation_id"
+    - "conversation_id"
+    - "actor_id"
+    - "capability_id"
+    - "domain_id"
+    - "run_id"
+
+  # If true, unknown correlation fields are ignored (forward compatibility).
+  ignore_unknown_correlation_fields: true
+
+# ------------------------------------------------------------------------------
+# Formatters
+# ------------------------------------------------------------------------------
+formatters:
+
+  # Human-friendly console formatter (compact, readable).
+  console_compact:
+    kind: "text"
+    timestamp: "local" # local | utc
+    template: "{time} {level:<8} {name} {msg} {kv}"
+    include:
+      level: true
+      logger_name: true
+      message: true
+      key_values: true
+      caller: false
+      correlation: true
+
+  # More verbose console formatter (useful in dev).
+  console_verbose:
+    kind: "text"
+    timestamp: "local"
+    template: "{time} {level:<8} {name} [{caller}] {msg} {kv}"
+    include:
+      level: true
+      logger_name: true
+      message: true
+      key_values: true
+      caller: true
+      correlation: true
+
+  # JSONL formatter for file sinks.
+  jsonl:
+    kind: "json"
+    timestamp: "utc"
+    # Standard event envelope keys:
+    envelope:
+      ts_key: "ts"
+      level_key: "level"
+      logger_key: "logger"
+      msg_key: "message"
+      fields_key: "fields"
+      exc_key: "exception"
+      correlation_key: "corr"
+
+  # Audit JSONL formatter (stricter envelope; intended for append-only files).
+  audit_jsonl:
+    kind: "json"
+    timestamp: "utc"
+    envelope:
+      ts_key: "ts"
+      level_key: "level"
+      logger_key: "logger"
+      msg_key: "event"
+      fields_key: "fields"
+      exc_key: "exception"
+      correlation_key: "corr"
+    audit:
+      # If true, audit logger should avoid DEBUG logs and prefer INFO+ only.
+      min_level: "INFO"
+      # If true, audit events should always include correlation fields if available.
+      require_correlation: true
+
+# ------------------------------------------------------------------------------
+# Sinks (handlers)
+# ------------------------------------------------------------------------------
+sinks:
+
+  # Console sink (stdout).
+  console:
+    kind: "console"
+    formatter: "console_compact"
+    level: "INFO"
+
+  # Primary runtime file sink (JSONL).
+  runtime_file:
+    kind: "file"
+    formatter: "jsonl"
+    path: "./data/logs/runtime/runtime.jsonl"
+    level: "INFO"
+    rotation:
+      # Rotate by size (MiB); keep a bounded number of files.
+      mode: "size"
+      max_size_mb: 50
+      backup_count: 10
+    fsync: false # true for ultra-safety, but slower on Windows
+
+  # Error file sink (JSONL).
+  error_file:
+    kind: "file"
+    formatter: "jsonl"
+    path: "./data/logs/runtime/errors.jsonl"
+    level: "ERROR"
+    rotation:
+      mode: "size"
+      max_size_mb: 50
+      backup_count: 20
+    fsync: false
+
+  # Audit file sink (JSONL, append-only semantics).
+  audit_file:
+    kind: "file"
+    formatter: "audit_jsonl"
+    path: "./data/logs/audit/audit.jsonl"
+    level: "INFO"
+    rotation:
+      # Audit logs rotate slower and retain longer.
+      mode: "size"
+      max_size_mb: 200
+      backup_count: 30
+    fsync: true
+
+  # Web learning quarantine trace sink (optional; verbose).
+  web_learning_trace:
+    kind: "file"
+    formatter: "jsonl"
+    path: "./data/logs/web_learning/trace.jsonl"
+    level: "INFO"
+    rotation:
+      mode: "size"
+      max_size_mb: 100
+      backup_count: 10
+    fsync: false
+
+  # Industrial ops trace sink (optional; high scrutiny).
+  industrial_trace:
+    kind: "file"
+    formatter: "jsonl"
+    path: "./data/logs/industrial/ops.jsonl"
+    level: "INFO"
+    rotation:
+      mode: "size"
+      max_size_mb: 200
+      backup_count: 20
+    fsync: true
+
+# ------------------------------------------------------------------------------
+# Logger routing (what goes where)
+# ------------------------------------------------------------------------------
+routing:
+
+  # Root logger configuration:
+  root:
+    level: "INFO"
+    sinks: ["console", "runtime_file", "error_file"]
+
+  # Dedicated audit logger(s)
+  audit:
+    sinks: ["audit_file"]
+    level: "INFO"
+    propagate: false
+
+  # Component-level overrides (names are Python logger names)
+  loggers:
+
+    # API server logs (uvicorn, fastapi)
+    "uvicorn":
+      level: "INFO"
+      sinks: ["console", "runtime_file", "error_file"]
+    "uvicorn.error":
+      level: "INFO"
+      sinks: ["console", "runtime_file", "error_file"]
+    "uvicorn.access":
+      level: "WARNING" # avoid noisy access logs by default
+      sinks: ["runtime_file"]
+
+    # Core app namespace
+    "francis":
+      level: "INFO"
+      sinks: ["console", "runtime_file", "error_file"]
+
+    # Governance
+    "francis.governance":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file"]
+
+    "francis.trust":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file", "audit_file"]
+      propagate: false
+
+    "francis.approvals":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file", "audit_file"]
+      propagate: false
+
+    "francis.guard":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file", "audit_file"]
+      propagate: false
+
+    # Continuity / ledger
+    "francis.continuity":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file"]
+
+    # Web learning
+    "francis.web_learning":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file", "web_learning_trace", "audit_file"]
+      propagate: false
+
+    # Simulation
+    "francis.simulation":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file"]
+
+    # Industrial control
+    "francis.industrial":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file", "industrial_trace", "audit_file"]
+      propagate: false
+
+    # Plugins
+    "francis.plugins":
+      level: "INFO"
+      sinks: ["runtime_file", "error_file"]
+
+# ------------------------------------------------------------------------------
+# Redaction policy (secrets + PII safe logging)
+# ------------------------------------------------------------------------------
+redaction:
+
+  enabled: true
+
+  # If true, redaction is applied to:
+  # - message strings
+  # - structured fields (values)
+  # - exception messages
+  scope:
+    redact_message: true
+    redact_fields: true
+    redact_exceptions: true
+
+  # Replace with this token
+  replacement: "[REDACTED]"
+
+  # High-signal patterns (conservative)
+  patterns:
+
+    # Common token formats (examples; these are intentionally broad)
+    - id: "bearer_token"
+      kind: "regex"
+      pattern: "(?i)\\bBearer\\s+[A-Za-z0-9\\-\\._~\\+/]+=*\\b"
+      replacement: "Bearer [REDACTED]"
+
+    - id: "api_key_generic"
+      kind: "regex"
+      pattern: "(?i)\\b(api[_-]?key|token|secret)\\b\\s*[:=]\\s*[^\\s,;]+"
+      replacement: "\\1=[REDACTED]"
+
+    - id: "openai_sk"
+      kind: "regex"
+      pattern: "\\bsk-[A-Za-z0-9]{10,}\\b"
+      replacement: "[REDACTED_SK]"
+
+    - id: "jwt_like"
+      kind: "regex"
+      pattern: "\\beyJ[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+\\b"
+      replacement: "[REDACTED_JWT]"
+
+    - id: "private_key_block"
+      kind: "regex"
+      pattern: "-----BEGIN ([A-Z ]+)-----[\\s\\S]*?-----END \\1-----"
+      replacement: "-----BEGIN [REDACTED]-----...-----END [REDACTED]-----"
+
+    # Emails can be PII; redact if found in message/fields
+    - id: "email"
+      kind: "regex"
+      pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b"
+      replacement: "[REDACTED_EMAIL]"
+
+  # Field-name based redaction (structured logs)
+  field_name_rules:
+    enabled: true
+    names:
+      - "password"
+      - "pass"
+      - "passwd"
+      - "secret"
+      - "token"
+      - "api_key"
+      - "key"
+      - "private_key"
+      - "authorization"
+      - "cookie"
+      - "set-cookie"
+      - "session"
+      - "jwt"
+      - "refresh_token"
+      - "access_token"
+
+# ------------------------------------------------------------------------------
+# Sampling / noise controls
+# ------------------------------------------------------------------------------
+sampling:
+
+  enabled: true
+
+  # Access logs can be noisy; sample them if enabled
+  access_log_sampling:
+    enabled: true
+    # Keep 1 out of N entries
+    keep_every_n: 20
+    # Always keep errors regardless of sampling
+    always_keep_errors: true
+
+  # Repeated identical errors can flood logs; optionally debounce
+  error_debounce:
+    enabled: true
+    window_s: 10
+    max_duplicates: 5
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    defaults:
+      level: "DEBUG"
+      include_caller_console: true
+    sinks:
+      console:
+        formatter: "console_verbose"
+        level: "DEBUG"
+      runtime_file:
+        level: "DEBUG"
+    routing:
+      loggers:
+        "uvicorn.access":
+          level: "INFO"
+
+  production:
+    defaults:
+      level: "INFO"
+      include_caller_console: false
+    routing:
+      loggers:
+        "uvicorn.access":
+          level: "WARNING"
+
+  regulated:
+    defaults:
+      level: "INFO"
+    redaction:
+      enabled: true
+      scope:
+        redact_message: true
+        redact_fields: true
+        redact_exceptions: true
+      field_name_rules:
+        enabled: true
+    sinks:
+      audit_file:
+        fsync: true
+      industrial_trace:
+        fsync: true
+    sampling:
+      access_log_sampling:
+        enabled: true
+        keep_every_n: 50
+        always_keep_errors: true
+
+  safety_critical:
+    defaults:
+      level: "INFO"
+    sinks:
+      runtime_file:
+        fsync: true
+      error_file:
+        fsync: true
+      audit_file:
+        fsync: true
+    routing:
+      loggers:
+        "uvicorn.access":
+          level: "ERROR" # reduce noise; keep only critical issues
+    sampling:
+      enabled: false # in safety-critical mode, keep full fidelity (bounded by rotation)

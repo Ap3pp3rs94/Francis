@@ -1,0 +1,347 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Safety (behavior, data, action governance)
+# Path:   config/models/specialized/safety.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines Francis's unified safety contract:
+#   - Content safety: disallowed outputs and safe alternatives
+#   - Action safety: tool execution restrictions and high-risk operations
+#   - Data safety: secrets/PII/regulatory protection, export controls
+#   - Governance coupling: trust + approvals + profile posture
+#   - Observability: reason codes, audit traces, escalation workflow
+#
+# This is POLICY + CONTRACT (not implementation).
+# Enforcement occurs across:
+#   - LLM response layer
+#   - Tool router / executor
+#   - Governance / approvals / trust
+#   - Web learning ingestion pipeline
+#   - Export/artifact pipeline
+#
+# PRINCIPLES
+# ----------
+# - Fail-closed: if unsure, deny or escalate rather than guess.
+# - Safe completion: offer safe alternatives when denying.
+# - Least privilege: tools and actions must be explicitly allowed.
+# - Data minimization: do not leak secrets or sensitive data.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "safety_policy"
+  notes:
+    - "This is the system safety backbone — applies everywhere."
+    - "Safety is not only content; it includes actions and data."
+
+# ------------------------------------------------------------------------------
+# Global enablement
+# ------------------------------------------------------------------------------
+safety:
+  enabled: true
+  fail_closed: true
+
+  # What to do when content/action safety cannot be determined.
+  on_uncertainty: "escalate" # deny | escalate | safe_complete
+
+  # Default posture: prefer safe completion over hard refusal when possible.
+  prefer_safe_completion: true
+
+# ------------------------------------------------------------------------------
+# Content safety (output policy)
+# ------------------------------------------------------------------------------
+content:
+  enabled: true
+
+  # Policy modes:
+  # - "strict": deny disallowed content; minimal safe completion.
+  # - "balanced": deny harmful content but provide safe alternatives.
+  # - "permissive": only block clearly disallowed categories (not recommended).
+  mode: "balanced"
+
+  # Disallowed categories (high-level). Implementations map these to classifiers/rules.
+  disallowed:
+    - "self_harm_instructions"
+    - "violent_wrongdoing_instructions"
+    - "illegal_activity_instructions"
+    - "weapons_construction_guidance"
+    - "malware_or_exploitation_guidance"
+    - "credential_theft_or_phishing"
+    - "doxxing_or_private_info_exposure"
+    - "sexual_content_involving_minors"
+    - "hate_or_harassment_targeted"
+    - "medical_diagnosis_or_prescription_as_authority"
+    - "legal_advice_as_authority"
+    - "financial_advice_as_guarantee"
+
+  # Allowed-but-guarded categories: require disclaimers and conservative language.
+  guarded:
+    medical:
+      allowed: true
+      posture: "informational_only" # informational_only | deny
+      require_disclaimer: true
+
+    legal:
+      allowed: true
+      posture: "informational_only"
+      require_disclaimer: true
+
+    financial:
+      allowed: true
+      posture: "informational_only"
+      require_disclaimer: true
+
+    security:
+      allowed: true
+      posture: "defensive_only"     # defensive_only | deny
+      require_disclaimer: true
+
+  # Safe completion strategy: how to respond when denying.
+  safe_completion:
+    include_reason_code: true
+    include_brief_explanation: true
+    offer_alternatives: true
+    max_alternatives: 5
+
+# ------------------------------------------------------------------------------
+# Action safety (tools, execution, external side-effects)
+# ------------------------------------------------------------------------------
+actions:
+  enabled: true
+
+  # Default rule: tools are not allowed unless explicitly permitted by policy.
+  default_tool_permission: "deny" # deny | allow | allow_read_only
+
+  # Action categories with escalating requirements.
+  categories:
+
+    read_only:
+      risk: low
+      requires_approval: false
+      min_trust: 1
+
+    mutation:
+      risk: medium
+      requires_approval: true
+      min_trust: 3
+
+    destructive:
+      risk: high
+      requires_approval: true
+      min_trust: 5
+
+    irreversible:
+      risk: critical
+      requires_approval: true
+      min_trust: 6
+
+    industrial_actuation:
+      risk: critical
+      requires_approval: true
+      min_trust: 7
+
+    credential_operations:
+      risk: critical
+      requires_approval: true
+      min_trust: 6
+
+    export_sensitive:
+      risk: high
+      requires_approval: true
+      min_trust: 5
+
+    network_egress:
+      risk: high
+      requires_approval: true
+      min_trust: 4
+
+  # Tool execution rails (hint-level; executor enforces).
+  execution_rails:
+    # Default command posture for shells.
+    allow_shell: true
+    allow_powershell: true
+    allow_python: true
+
+    # Deny patterns: common dangerous commands.
+    deny_command_patterns:
+      - "(?i)rm\\s+-rf\\s+/"
+      - "(?i)del\\s+/f\\s+/s\\s+/q\\s+C:\\\\"
+      - "(?i)format\\s+"
+      - "(?i)diskpart"
+      - "(?i)shutdown"
+      - "(?i)reg\\s+delete"
+      - "(?i)Invoke-WebRequest\\s+.*\\|\\s+iex"
+      - "(?i)curl\\s+.*\\|\\s+sh"
+
+    # When command is denied, do:
+    on_denied_command: "deny_with_reason" # deny_with_reason | escalate
+
+# ------------------------------------------------------------------------------
+# Data safety (secrets, PII, regulated data)
+# ------------------------------------------------------------------------------
+data:
+  enabled: true
+
+  # Secrets must not be emitted.
+  secrets:
+    block_output_if_patterns_detected:
+      - "(?i)sk-[a-z0-9]{10,}"
+      - "(?i)api[_-]?key\\s*[:=]"
+      - "(?i)password\\s*[:=]"
+      - "(?i)secret\\s*[:=]"
+      - "(?i)BEGIN\\s+PRIVATE\\s+KEY"
+
+    on_detect:
+      output: "redact_and_warn" # deny | redact_and_warn | require_approval
+      logs: "redact"            # redact | store_hash_only
+
+  # PII handling posture
+  pii:
+    enabled: true
+    treat_as_sensitive: true
+    on_detect:
+      include_in_output: "minimize" # allow | minimize | deny
+      include_in_artifacts: "deny"  # allow | deny
+
+    patterns_hint:
+      - "email"
+      - "phone"
+      - "address"
+      - "ssn_like"
+      - "dob"
+
+  regulated_data:
+    enabled: true
+    default_posture: "deny_export" # allow | deny_export | deny_all
+    require_approval_for_export: true
+
+# ------------------------------------------------------------------------------
+# Web learning safety (egress + ingestion)
+# ------------------------------------------------------------------------------
+web_learning:
+  enabled: true
+
+  # Egress is sensitive; default is off unless profile allows.
+  allow_network_egress: false
+
+  governance:
+    require_approval_to_enable: true
+    require_approval_per_ingest: true
+    min_trust:
+      search: 2
+      fetch: 3
+      ingest: 4
+      bulk_crawl: 6
+
+  # Source filtering hints
+  sources:
+    exclude_low_trust_by_default: true
+    allow_low_trust_if_user_requests: true
+
+# ------------------------------------------------------------------------------
+# Governance coupling (trust + approvals)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  # If a gate is triggered and cannot be satisfied automatically:
+  on_gate_trigger:
+    approval_required: "deny" # deny | mark_required | queue_for_approval
+    trust_insufficient: "deny" # deny | mark_required | escalate
+
+  # Map risk levels to action categories (coarse)
+  risk_to_category:
+    low: "read_only"
+    medium: "mutation"
+    high: "destructive"
+    critical: "irreversible"
+
+# ------------------------------------------------------------------------------
+# Observability (reason codes + audit traces)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  # Emit safety decision records (metadata only).
+  decision_record:
+    enabled: true
+    include:
+      - "profile"
+      - "risk"
+      - "category"
+      - "reason_code"
+      - "blocked"
+      - "safe_completion_used"
+      - "gates_triggered"
+      - "approval_required"
+      - "min_trust_required"
+
+  # Keep logs metadata-only by default.
+  log_policy:
+    include_user_content: false
+    include_model_output: false
+    include_reason_codes: true
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    content:
+      mode: "balanced"
+    web_learning:
+      allow_network_egress: true
+      governance:
+        require_approval_per_ingest: false
+    observability:
+      log_policy:
+        include_user_content: true
+
+  workstation:
+    content:
+      mode: "balanced"
+    web_learning:
+      allow_network_egress: true
+    actions:
+      default_tool_permission: "allow_read_only"
+
+  regulated:
+    content:
+      mode: "strict"
+    web_learning:
+      allow_network_egress: false
+    data:
+      regulated_data:
+        default_posture: "deny_all"
+    actions:
+      default_tool_permission: "deny"
+    observability:
+      log_policy:
+        include_user_content: false
+
+  safety_critical:
+    content:
+      mode: "strict"
+    web_learning:
+      allow_network_egress: false
+    actions:
+      default_tool_permission: "deny"
+      execution_rails:
+        on_denied_command: "escalate"
+    data:
+      secrets:
+        on_detect:
+          output: "deny"
+          logs: "store_hash_only"
+      regulated_data:
+        default_posture: "deny_all"
+    governance:
+      on_gate_trigger:
+        approval_required: "deny"
+        trust_insufficient: "escalate"

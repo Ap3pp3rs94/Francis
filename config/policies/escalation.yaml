@@ -1,0 +1,537 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Escalation (risk/uncertainty/anomaly → stronger governance)
+# Path:   config/policies/escalation.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Escalation is the governance "pressure valve":
+# it raises requirements when actions are risky or conditions are uncertain.
+#
+# This policy answers:
+#   "When must Francis require additional gates (approval/quorum/human review)
+#    before executing?"
+#
+# It considers signals from:
+#   - action readiness scoring (config/policies/action_readiness.yaml)
+#   - trust posture (config/policies/collaborative_trust.yaml)
+#   - data governance (config/policies/data_governance.yaml)
+#   - attribution requirements (config/policies/attribution_requirements.yaml)
+#   - credential usage (config/policies/credential_usage.yaml)
+#   - environmental posture (config/policies/environmental.yaml)
+#   - runtime anomalies (rate limits, policy violations, suspicious patterns)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deterministic: first-match rules + stable severity mapping.
+# - Fail-closed: if escalation evaluation fails, default to requiring approval (or deny in strict profiles).
+# - Composable: produces an "escalation decision" consumed by governance layer.
+# - Observable: every escalation decision includes reason codes and is auditable.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "escalation_policy"
+  notes:
+    - "Escalation is orthogonal to permissions: even allowed actions may escalate."
+    - "Escalation must be explainable (reason codes + evidence)."
+    - "Avoid alert fatigue via cooldown and dedupe."
+
+# ------------------------------------------------------------------------------
+# Global enablement + posture
+# ------------------------------------------------------------------------------
+escalation:
+  enabled: true
+
+  # Modes:
+  # - disabled: no escalation (dev-only)
+  # - policy:   normal enforcement (default)
+  # - strict:   conservative; more triggers lead to approval/quorum/deny
+  mode: "policy" # disabled | policy | strict
+
+  # Fail closed:
+  # If evaluation fails (missing inputs, internal error), apply this outcome.
+  fail_closed_outcome: "require_approval" # warn | require_approval | require_quorum | deny
+
+  # If true, emit ledger/audit events for escalations.
+  audit_all: true
+
+  # If true, suppress duplicate escalations for the same action signature.
+  dedupe_enabled: true
+  dedupe_window_s: 60
+
+# ------------------------------------------------------------------------------
+# Escalation levels (what we can decide)
+# ------------------------------------------------------------------------------
+levels:
+  # Ordered from lowest to highest.
+  order:
+    - "none"
+    - "warn"
+    - "require_approval"
+    - "require_quorum"
+    - "deny"
+
+  # Level definitions (for UI + audit).
+  definitions:
+    none:
+      description: "Proceed normally."
+    warn:
+      description: "Proceed but warn operator; log reasons."
+    require_approval:
+      description: "Must create/obtain an approval before executing."
+    require_quorum:
+      description: "Requires multiple approvals/endorsers (quorum) before executing."
+    deny:
+      description: "Do not execute. Provide safe alternative or request clarification."
+
+# ------------------------------------------------------------------------------
+# Reason codes (stable identifiers used in audits/UI)
+# ------------------------------------------------------------------------------
+reason_codes:
+  # Safety / environment
+  ENV_CAUTION: "Environmental posture is caution."
+  ENV_DEGRADED: "Environmental posture is degraded."
+  ENV_CRITICAL: "Environmental posture is critical."
+  ENV_HARD_DENY: "Safety-critical environmental trigger present."
+
+  # Trust / identity
+  TRUST_UNKNOWN: "Actor identity is unknown or incomplete."
+  TRUST_INSUFFICIENT: "Actor trust below required threshold."
+  TRUST_QUARANTINED: "Actor is quarantined."
+  TRUST_REVOKED: "Actor is revoked."
+
+  # Data governance / privacy
+  DATA_SECRET: "Action touches secret-classified data."
+  DATA_REGULATED: "Action touches regulated data."
+  DATA_CROSS_DOMAIN: "Cross-domain data access/export requested."
+  DATA_EXPORT_NON_PUBLIC: "Export of non-public data requested."
+  DATA_UNKNOWN_PROVENANCE: "Write/export involves unknown provenance data."
+  DATA_POLICY_UNCLEAR: "Data classification/policy could not be resolved."
+
+  # Attribution / evidence
+  ATTR_REQUIRED_MISSING: "Attribution is required but missing or insufficient."
+  ATTR_WEB_UNTRUSTED: "Web source quality is below threshold."
+  ATTR_INJECTION_PATTERN: "Prompt-injection pattern detected in sourced content."
+
+  # Credential usage / egress
+  CRED_REQUEST: "Credential request operation."
+  CRED_USE: "Credential use operation."
+  EGRESS_UNKNOWN_DEST: "Network destination not allowlisted."
+  EGRESS_DENIED: "Egress denied by policy."
+  EGRESS_HIGH_RISK: "Egress-bearing action classified high risk."
+
+  # Action readiness / uncertainty
+  READINESS_LOW: "Action readiness below threshold."
+  READINESS_AMBIGUOUS: "Intent or parameters ambiguous."
+  READINESS_UNVERIFIED_OUTPUT: "High-impact output lacks verification."
+
+  # Operational anomalies
+  ANOMALY_RATE_LIMIT: "Rate limit exceeded."
+  ANOMALY_POLICY_VIOLATION: "Repeated policy violations."
+  ANOMALY_FAILURE_BURST: "Repeated failures detected."
+  ANOMALY_SUSPICIOUS_PATTERN: "Suspicious behavior pattern detected."
+
+  # Industrial / physical actuation
+  INDUSTRIAL_ACTUATION: "Industrial actuation requested."
+  INDUSTRIAL_OVERRIDE: "Industrial override/emergency actuation requested."
+
+# ------------------------------------------------------------------------------
+# Action signature (how to dedupe / identify actions)
+# ------------------------------------------------------------------------------
+action_signature:
+  enabled: true
+  # Inputs that form the signature used for dedupe and audit correlation.
+  fields:
+    - "capability_id"
+    - "actor_id"
+    - "domain_id"
+    - "operation_category"
+    - "destination_host"
+    - "data_classification_max"
+    - "credential_scope_id"
+    - "parameters_hash"
+
+  parameters_hash:
+    algorithm: "sha256"
+    include_sensitive: false
+
+# ------------------------------------------------------------------------------
+# Threshold inputs (expected upstream signals)
+# ------------------------------------------------------------------------------
+inputs:
+  enabled: true
+
+  # Environmental posture expected from environmental policy.
+  environmental_states: ["normal", "caution", "degraded", "critical"]
+
+  # Trust state expected from collaborative trust.
+  trust_state_fields:
+    - "actor_id"
+    - "trust_level"
+    - "quarantined"
+    - "revoked"
+
+  # Data governance classification maximum touched by action.
+  data_classifications: ["public", "internal", "confidential", "regulated", "secret", "safety_critical"]
+
+  # Action readiness score model (0..1).
+  readiness:
+    min: 0.0
+    max: 1.0
+
+# ------------------------------------------------------------------------------
+# Escalation rules (evaluated top-to-bottom, first match wins within priority bands)
+# ------------------------------------------------------------------------------
+rules:
+  enabled: true
+
+  # Priority bands (top band rules should be rare and decisive).
+  # Implementation may evaluate as: sort by priority desc, then by file order.
+  priority_bands:
+    critical: 100
+    high: 80
+    medium: 50
+    low: 20
+
+  list:
+
+    # ==========================================================================
+    # 1) HARD DENIES (safety / revoked / impossible-to-justify)
+    # ==========================================================================
+    - id: "deny.revoked_actor"
+      priority: 100
+      when:
+        trust:
+          revoked: true
+      decide: "deny"
+      reasons: ["TRUST_REVOKED"]
+
+    - id: "deny.environment_hard"
+      priority: 100
+      when:
+        environmental:
+          hard_deny_reason_present: true
+      decide: "deny"
+      reasons: ["ENV_HARD_DENY"]
+
+    - id: "deny.secret_export"
+      priority: 100
+      when:
+        operation:
+          type: "export"
+        data:
+          max_classification_in: ["secret"]
+      decide: "deny"
+      reasons: ["DATA_SECRET", "DATA_EXPORT_NON_PUBLIC"]
+
+    - id: "deny.unknown_identity_strict"
+      priority: 100
+      when:
+        trust:
+          identity_known: false
+        profile:
+          in: ["production", "regulated", "safety_critical"]
+      decide: "deny"
+      reasons: ["TRUST_UNKNOWN"]
+
+    # ==========================================================================
+    # 2) QUORUM REQUIRED (industrial actuation, safety-critical exports, restores)
+    # ==========================================================================
+    - id: "quorum.industrial_actuation"
+      priority: 90
+      when:
+        capability:
+          matches_any:
+            - "^industrial\\.(actuate|command|override)"
+        environmental:
+          state_in: ["caution", "degraded", "critical"]
+      decide: "require_quorum"
+      reasons: ["INDUSTRIAL_ACTUATION", "ENV_CAUTION"]
+
+    - id: "quorum.regulated_export"
+      priority: 90
+      when:
+        operation:
+          type: "export"
+        data:
+          max_classification_in: ["regulated", "safety_critical"]
+      decide: "require_quorum"
+      reasons: ["DATA_REGULATED", "DATA_EXPORT_NON_PUBLIC"]
+
+    - id: "quorum.restore_operation"
+      priority: 90
+      when:
+        capability:
+          matches_any:
+            - "^resilience\\.restore$"
+      decide: "require_quorum"
+      reasons: ["ANOMALY_SUSPICIOUS_PATTERN"] # semantic: restore is inherently high impact
+
+    # ==========================================================================
+    # 3) APPROVAL REQUIRED (common high-risk categories)
+    # ==========================================================================
+    - id: "approval.environment_degraded"
+      priority: 80
+      when:
+        environmental:
+          state_in: ["degraded"]
+        operation:
+          type_in: ["mutation", "export", "egress", "actuation"]
+      decide: "require_approval"
+      reasons: ["ENV_DEGRADED"]
+
+    - id: "approval.environment_critical"
+      priority: 80
+      when:
+        environmental:
+          state_in: ["critical"]
+        operation:
+          type_in: ["mutation", "export", "egress", "actuation"]
+      decide: "require_approval"
+      reasons: ["ENV_CRITICAL"]
+
+    - id: "approval.credential_ops"
+      priority: 80
+      when:
+        capability:
+          matches_any:
+            - "^credentials\\.(request|revoke|rotate|delegate)"
+      decide: "require_approval"
+      reasons: ["CRED_REQUEST"]
+
+    - id: "approval.network_egress"
+      priority: 80
+      when:
+        operation:
+          type: "egress"
+      decide: "require_approval"
+      reasons: ["EGRESS_HIGH_RISK"]
+
+    - id: "approval.unknown_destination"
+      priority: 80
+      when:
+        egress:
+          destination_allowlisted: false
+          destination_present: true
+      decide: "require_approval"
+      reasons: ["EGRESS_UNKNOWN_DEST"]
+
+    - id: "approval.regulated_write"
+      priority: 80
+      when:
+        operation:
+          type: "write"
+        data:
+          max_classification_in: ["regulated", "safety_critical"]
+      decide: "require_approval"
+      reasons: ["DATA_REGULATED"]
+
+    - id: "approval.cross_domain"
+      priority: 80
+      when:
+        data:
+          cross_domain: true
+      decide: "require_approval"
+      reasons: ["DATA_CROSS_DOMAIN"]
+
+    - id: "approval.attribution_missing"
+      priority: 80
+      when:
+        attribution:
+          required: true
+          satisfied: false
+      decide: "require_approval"
+      reasons: ["ATTR_REQUIRED_MISSING"]
+
+    - id: "approval.injection_detected"
+      priority: 80
+      when:
+        attribution:
+          injection_pattern_detected: true
+      decide: "require_approval"
+      reasons: ["ATTR_INJECTION_PATTERN"]
+
+    # ==========================================================================
+    # 4) WARN (low-risk but noteworthy conditions)
+    # ==========================================================================
+    - id: "warn.readiness_low"
+      priority: 50
+      when:
+        readiness:
+          score_below: 0.6
+      decide: "warn"
+      reasons: ["READINESS_LOW"]
+
+    - id: "warn.environment_caution"
+      priority: 50
+      when:
+        environmental:
+          state_in: ["caution"]
+      decide: "warn"
+      reasons: ["ENV_CAUTION"]
+
+    - id: "warn.anomaly_rate_limit"
+      priority: 50
+      when:
+        anomaly:
+          rate_limit_exceeded: true
+      decide: "warn"
+      reasons: ["ANOMALY_RATE_LIMIT"]
+
+    # ==========================================================================
+    # 5) DEFAULT (no escalation)
+    # ==========================================================================
+    - id: "default.none"
+      priority: 0
+      when: {}
+      decide: "none"
+      reasons: []
+
+# ------------------------------------------------------------------------------
+# Quorum configuration (what "require_quorum" means)
+# ------------------------------------------------------------------------------
+quorum:
+  enabled: true
+
+  # How many approvals are required, and from what trust bands.
+  defaults:
+    min_approvals: 2
+    min_distinct_approvers: 2
+    min_approver_trust: 7
+    allow_same_actor_twice: false
+
+  overrides:
+    industrial_actuation:
+      min_approvals: 3
+      min_distinct_approvers: 3
+      min_approver_trust: 9
+
+    regulated_export:
+      min_approvals: 2
+      min_distinct_approvers: 2
+      min_approver_trust: 8
+
+    safety_critical:
+      min_approvals: 3
+      min_distinct_approvers: 3
+      min_approver_trust: 9
+
+# ------------------------------------------------------------------------------
+# Override mechanics (how an operator may override escalation)
+# ------------------------------------------------------------------------------
+overrides:
+  enabled: true
+
+  # Which levels can be overridden.
+  allow_override_levels:
+    - "warn"
+    - "require_approval"
+    # Quorum/deny are generally not overrideable without explicit profile rules.
+  deny_override_levels:
+    - "deny"
+    - "require_quorum"
+
+  # Override requires explicit justification for audit.
+  require_justification: true
+  min_justification_chars: 12
+
+  # Trust required to override a level.
+  min_trust_to_override:
+    warn: 5
+    require_approval: 7
+
+  # Override generates an audit event and (optionally) an approval item.
+  generate_approval_on_override: true
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "escalation.decided"
+      - "escalation.overridden"
+      - "escalation.denied"
+    include:
+      - "action_signature"
+      - "capability_id"
+      - "actor_id"
+      - "domain_id"
+      - "decision"
+      - "reasons"
+      - "readiness_score"
+      - "environment_state"
+      - "data_classification_max"
+      - "destination_host"
+      - "ts"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "escalation.none"
+      - "escalation.warn"
+      - "escalation.require_approval"
+      - "escalation.require_quorum"
+      - "escalation.deny"
+      - "escalation.overrides"
+    histograms:
+      - "escalation.readiness_score"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    escalation:
+      mode: "policy"
+      fail_closed_outcome: "warn"
+    overrides:
+      deny_override_levels: ["deny"] # allow overriding require_quorum in dev only if desired
+
+  workstation:
+    escalation:
+      mode: "policy"
+      fail_closed_outcome: "require_approval"
+
+  production:
+    escalation:
+      mode: "strict"
+      fail_closed_outcome: "require_approval"
+    overrides:
+      deny_override_levels:
+        - "deny"
+        - "require_quorum"
+      min_trust_to_override:
+        warn: 6
+        require_approval: 8
+
+  regulated:
+    escalation:
+      mode: "strict"
+      fail_closed_outcome: "deny"
+    rules:
+      # In regulated, treat attribution missing as deny for exports/claims.
+      enabled: true
+    overrides:
+      deny_override_levels:
+        - "deny"
+        - "require_quorum"
+
+  safety_critical:
+    escalation:
+      mode: "strict"
+      fail_closed_outcome: "deny"
+    overrides:
+      enabled: false

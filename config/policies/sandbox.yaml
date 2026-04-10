@@ -1,0 +1,660 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Sandbox (execution containment for tools, plugins, simulations)
+# Path:   config/policies/sandbox.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy governs any "execution surface" that could affect the host:
+#   - tool runners (shell, python, node, ps)
+#   - plugin execution (runtime/compiled)
+#   - simulation runners
+#   - integration connectors that spawn processes
+#
+# It defines:
+#   - execution classes (read_only, compute, filesystem_mutation, network_egress, privileged)
+#   - per-context constraints (timeouts, cpu/mem, process limits)
+#   - filesystem allow/deny and read/write boundaries
+#   - network egress policy (default deny; profile overlays)
+#   - environment variable scrubbing (secrets never enter subprocess env)
+#   - audit requirements and violation handling (guard escalation)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deny-by-default: unknown context/class => deny or require_review.
+# - Fail-closed: enforcement errors => deny + log.
+# - Least privilege: minimal filesystem + network access required for the action.
+# - No secret propagation: redact/scrub env + output.
+# - Deterministic observability: stable reason codes; structured audit events.
+# - Provider-agnostic: policy defines intent; runtime enforces using best available mechanism.
+#
+# INTERACTIONS
+# ------------
+# - networks.yaml + regulated_domains.yaml: sandbox network is necessary but not sufficient.
+# - filesystem.yaml: sandbox filesystem policy layers with global filesystem policy.
+# - privacy.yaml: output redaction and export gating.
+# - guard.yaml: escalation on violations.
+# - api_permissions.yaml: capability gates determine whether execution is allowed at all.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "sandbox_policy"
+  notes:
+    - "Provider-agnostic. Applies to ANY spawned process / tool execution."
+    - "Network policy is deny-by-default; allow local loopback by default."
+    - "Secrets must never reach subprocess env or logs."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+sandbox:
+  enabled: true
+
+  # Modes:
+  # - disabled: no sandbox enforcement (dev only; not recommended)
+  # - policy:   enforce baseline rules (default)
+  # - strict:   conservative; less egress; lower write; stronger reviews
+  mode: "policy" # disabled | policy | strict
+
+  # If context cannot be determined or constraints cannot be evaluated.
+  fail_closed_decision: "deny" # deny | require_review
+
+  # If a sandbox provider fails unexpectedly, do not fallback to unsafe execution.
+  deny_on_enforcement_error: true
+
+  # Deny-by-default: if no rule matches the requested context/class, deny.
+  deny_by_default: true
+
+  # Treat sandbox violations as incidents.
+  treat_violations_as_incidents: true
+
+  # Execution must be explicitly classified into an execution_class (below).
+  require_execution_class: true
+
+# ------------------------------------------------------------------------------
+# Execution classes (capability → sandbox requirements)
+# ------------------------------------------------------------------------------
+execution_classes:
+  enabled: true
+
+  classes:
+
+    read_only:
+      description: "Local inspection/introspection. No writes beyond sandbox temp. No egress."
+      allow_filesystem_write: false
+      allow_network_egress: false
+      allow_spawn_subprocesses: true
+
+    compute:
+      description: "CPU-bound tasks (parsing, transforms). Writes allowed only to sandbox outputs."
+      allow_filesystem_write: true
+      allow_network_egress: false
+      allow_spawn_subprocesses: true
+
+    filesystem_mutation:
+      description: "Controlled writes to workspace/artifacts. No network egress."
+      allow_filesystem_write: true
+      allow_network_egress: false
+      allow_spawn_subprocesses: true
+
+    network_egress:
+      description: "Outbound requests allowed under networks.yaml + regulated_domains.yaml."
+      allow_filesystem_write: true
+      allow_network_egress: true
+      allow_spawn_subprocesses: true
+
+    privileged:
+      description: "High-risk host mutations (services, drivers, system config). Usually denied."
+      allow_filesystem_write: true
+      allow_network_egress: false
+      allow_spawn_subprocesses: true
+
+  # Default mapping (hint). Enforcement can also derive class from capability taxonomy.
+  default_class_by_category:
+    read_only: "read_only"
+    mutation: "filesystem_mutation"
+    destructive: "privileged"
+    network_egress: "network_egress"
+    industrial_actuation: "privileged"
+    credential_operations: "privileged"
+    simulation: "compute"
+
+# ------------------------------------------------------------------------------
+# Contexts (where execution originates)
+# ------------------------------------------------------------------------------
+contexts:
+  enabled: true
+
+  # Context is required to avoid “one-size-fits-all” constraints.
+  # Examples:
+  # - tool_runner: ad-hoc execution from chat/tool layer
+  # - plugin_runner: plugin execution (trusted package surface)
+  # - simulation_runner: deterministic model/sim runs
+  # - worker_job: background tasks/daemons
+  known_contexts:
+    - "tool_runner"
+    - "plugin_runner"
+    - "simulation_runner"
+    - "worker_job"
+    - "integration_connector"
+
+  # Default context if unspecified.
+  default_context: "tool_runner"
+
+# ------------------------------------------------------------------------------
+# Resource limits (default budgets; per-context and per-class overrides below)
+# ------------------------------------------------------------------------------
+limits:
+  enabled: true
+
+  # Global default limits (conservative; override by context/class).
+  defaults:
+    wall_time_ms: 30_000
+    cpu_time_ms: 20_000
+    memory_mb: 512
+    max_processes: 12
+    max_open_files: 256
+    max_stdout_bytes: 262144   # 256 KiB
+    max_stderr_bytes: 262144
+    max_output_artifact_mb: 50
+    max_total_written_mb: 200
+
+  # Per execution class overrides.
+  by_execution_class:
+    read_only:
+      wall_time_ms: 15_000
+      cpu_time_ms: 10_000
+      memory_mb: 256
+      max_total_written_mb: 10
+
+    compute:
+      wall_time_ms: 120_000
+      cpu_time_ms: 90_000
+      memory_mb: 2048
+      max_total_written_mb: 200
+
+    filesystem_mutation:
+      wall_time_ms: 120_000
+      cpu_time_ms: 60_000
+      memory_mb: 1024
+      max_total_written_mb: 500
+
+    network_egress:
+      wall_time_ms: 60_000
+      cpu_time_ms: 30_000
+      memory_mb: 768
+      max_total_written_mb: 200
+
+    privileged:
+      wall_time_ms: 30_000
+      cpu_time_ms: 20_000
+      memory_mb: 512
+      max_total_written_mb: 50
+
+  # Per context overrides (orthogonal to class).
+  by_context:
+    tool_runner:
+      max_processes: 8
+
+    plugin_runner:
+      wall_time_ms: 120_000
+      max_processes: 16
+      memory_mb: 1024
+
+    simulation_runner:
+      wall_time_ms: 300_000
+      cpu_time_ms: 240_000
+      memory_mb: 4096
+      max_processes: 16
+      max_total_written_mb: 1000
+
+    worker_job:
+      wall_time_ms: 300_000
+      cpu_time_ms: 240_000
+      memory_mb: 2048
+      max_processes: 16
+
+    integration_connector:
+      wall_time_ms: 60_000
+      cpu_time_ms: 30_000
+      memory_mb: 512
+      max_processes: 8
+
+# ------------------------------------------------------------------------------
+# Filesystem policy (sandbox-level; layers with filesystem.yaml)
+# ------------------------------------------------------------------------------
+filesystem:
+  enabled: true
+
+  # If true, sandbox may only read/write within declared roots.
+  enforce_rooted_access: true
+
+  # If true, sandbox denies path traversal and requires canonicalization.
+  deny_path_traversal: true
+
+  # Deny writes outside explicit allowlist even if execution class allows writes.
+  deny_writes_outside_allowlist: true
+
+  # Canonical roots (Windows; keep explicit).
+  roots:
+
+    # Readable roots (RO)
+    read_only:
+      - "C:\\Francis\\config"
+      - "C:\\Francis\\src"
+      - "C:\\Francis\\apps"
+      - "C:\\Francis\\CAPABILITIES.md"
+      - "C:\\Francis\\BUILD_MANIFEST.md"
+      - "C:\\Francis\\CHANGELOG.md"
+
+    # Writable roots (RW)
+    write_allowed:
+      - "C:\\Francis\\workspace"
+      - "C:\\Francis\\data\\artifacts"
+      - "C:\\Francis\\data\\exports"
+      - "C:\\Francis\\data\\logs"
+
+    # Temporary sandbox scratch (RW; should be ephemeral if possible)
+    temp:
+      - "C:\\Francis\\data\\sandbox_tmp"
+
+  # Explicit denylist (never accessible even if under a read root).
+  deny:
+    - "C:\\Francis\\.git"
+    - "C:\\Francis\\.env"
+    - "C:\\Francis\\.env.*"
+    - "C:\\Francis\\config\\secrets.yaml"
+    - "C:\\Francis\\data\\credentials"
+    - "C:\\Francis\\data\\vault"
+    - "C:\\Users\\"
+    - "C:\\Windows\\"
+    - "C:\\Program Files\\"
+    - "C:\\Program Files (x86)\\"
+
+  # Per class filesystem semantics.
+  by_execution_class:
+    read_only:
+      allow_write_roots: [] # no writes (temp only allowed if implementation needs)
+      allow_temp: true
+
+    compute:
+      allow_write_roots:
+        - "C:\\Francis\\workspace"
+        - "C:\\Francis\\data\\artifacts"
+        - "C:\\Francis\\data\\sandbox_tmp"
+      allow_temp: true
+
+    filesystem_mutation:
+      allow_write_roots:
+        - "C:\\Francis\\workspace"
+        - "C:\\Francis\\data\\artifacts"
+        - "C:\\Francis\\data\\sandbox_tmp"
+      allow_temp: true
+
+    network_egress:
+      allow_write_roots:
+        - "C:\\Francis\\data\\artifacts"
+        - "C:\\Francis\\data\\sandbox_tmp"
+      allow_temp: true
+
+    privileged:
+      # Privileged class is expected to be denied upstream; keep tight.
+      allow_write_roots:
+        - "C:\\Francis\\data\\sandbox_tmp"
+      allow_temp: true
+
+# ------------------------------------------------------------------------------
+# Network policy (sandbox-level; layers with networks.yaml + regulated_domains.yaml)
+# ------------------------------------------------------------------------------
+network:
+  enabled: true
+
+  # Default posture: deny egress unless execution class allows and networks policy allows.
+  deny_by_default: true
+
+  # Loopback access is allowed for local dev (API/UI/ollama), unless profile disables.
+  allow_loopback: true
+
+  # Internal LAN access is off by default (must be enabled explicitly in profiles).
+  allow_lan: false
+
+  # Domain registry must approve for egress in regulated profiles.
+  require_registered_domain_in_profiles:
+    - "production"
+    - "regulated"
+    - "safety_critical"
+
+  # Explicit allowlist of local endpoints (loopback).
+  allowlist:
+    - "http://127.0.0.1:8000"
+    - "ws://127.0.0.1:8000"
+    - "http://127.0.0.1:5173"
+    - "http://localhost:8000"
+    - "ws://localhost:8000"
+
+  # Denylist of destination patterns (defense-in-depth).
+  denylist:
+    - "http://169.254.169.254" # cloud metadata
+    - "http://metadata.google.internal"
+    - "http://localhost:2375"  # docker daemon (common footgun)
+    - "http://127.0.0.1:2375"
+    - "http://localhost:2376"
+    - "http://127.0.0.1:2376"
+
+  # Per execution class network semantics.
+  by_execution_class:
+    read_only:
+      allow_network: false
+    compute:
+      allow_network: false
+    filesystem_mutation:
+      allow_network: false
+    network_egress:
+      allow_network: true
+    privileged:
+      allow_network: false
+
+# ------------------------------------------------------------------------------
+# Environment variable scrubbing (secrets never enter subprocess env)
+# ------------------------------------------------------------------------------
+environment:
+  enabled: true
+
+  # If true, subprocess receives a constructed env that excludes sensitive variables.
+  scrub_env: true
+
+  # Always remove these variables if present (exact match).
+  deny_exact:
+    - "OPENAI_API_KEY"
+    - "ANTHROPIC_API_KEY"
+    - "AZURE_OPENAI_API_KEY"
+    - "AWS_SECRET_ACCESS_KEY"
+    - "AWS_SESSION_TOKEN"
+    - "GITHUB_TOKEN"
+    - "GOOGLE_API_KEY"
+    - "HF_TOKEN"
+    - "POSTGRES_DSN"
+    - "REDIS_URL"
+    - "FRANCIS_MASTER_KEY"
+    - "FRANCIS_VAULT_MASTER_KEY"
+
+  # Remove vars matching these regexes (case-insensitive).
+  deny_patterns:
+    - "(?i).*secret.*"
+    - "(?i).*token.*"
+    - "(?i).*password.*"
+    - "(?i).*private[_-]?key.*"
+    - "(?i)^FRANCIS_.*KEY.*$"
+
+  # Allow only these prefixes by default (tight). Others dropped unless explicitly allowed.
+  allow_prefixes:
+    - "PATH"
+    - "SYSTEMROOT"
+    - "COMSPEC"
+    - "TEMP"
+    - "TMP"
+    - "NUMBER_OF_PROCESSORS"
+    - "PROCESSOR_"
+    - "USERNAME"
+    - "USERDOMAIN"
+    - "OS"
+    - "WINDIR"
+    - "PROMPT"
+    - "PSMODULEPATH"
+    - "FRANCIS_"     # non-secret runtime controls, after deny rules apply
+    - "VITE_"        # UI build variables (non-secret)
+
+  # If true, env passed to sandbox is recorded in audit as keys-only (never values).
+  audit_env_keys_only: true
+
+# ------------------------------------------------------------------------------
+# Command execution policy (prevent footguns)
+# ------------------------------------------------------------------------------
+execution:
+  enabled: true
+
+  # Disallow invoking a shell by default (prevents injection), unless explicitly allowed per context.
+  deny_shell_invocation_by_default: true
+
+  # Disallow “string command lines”; require argv arrays (policy intent).
+  require_argv_form: true
+
+  # Working directory must be under an allowed root.
+  require_workdir_under_roots: true
+  default_workdir: "C:\\Francis\\workspace"
+
+  # Disallow execution of binaries from user home and temp locations.
+  deny_exec_from_untrusted_paths: true
+  untrusted_exec_roots:
+    - "C:\\Users\\"
+    - "C:\\Windows\\Temp\\"
+    - "C:\\Users\\Public\\"
+
+  # Allowlisted interpreters (absolute paths recommended; keep minimal).
+  # Implementations may resolve via PATH but MUST validate actual executable location.
+  allowed_interpreters:
+    - "python"
+    - "py"
+    - "node"
+    - "npm"
+    - "npx"
+    - "powershell"
+    - "pwsh"
+
+  # Context-specific overrides.
+  by_context:
+    tool_runner:
+      deny_shell_invocation_by_default: true
+    plugin_runner:
+      deny_shell_invocation_by_default: true
+    simulation_runner:
+      deny_shell_invocation_by_default: true
+    worker_job:
+      deny_shell_invocation_by_default: true
+    integration_connector:
+      deny_shell_invocation_by_default: true
+
+# ------------------------------------------------------------------------------
+# Artifacts (where outputs go; size limits already enforced in limits)
+# ------------------------------------------------------------------------------
+artifacts:
+  enabled: true
+
+  # All sandbox outputs must land under this root (or be ephemeral).
+  root: "C:\\Francis\\data\\artifacts\\sandbox"
+
+  # If true, deny writing artifacts outside artifacts.root even if filesystem allows.
+  enforce_artifact_root: true
+
+  # Naming contract for artifacts (policy intent).
+  naming:
+    include_ts: true
+    include_context: true
+    include_capability_id: true
+    max_name_len: 128
+
+  retention_days: 30
+
+# ------------------------------------------------------------------------------
+# Violations (what counts as a sandbox violation)
+# ------------------------------------------------------------------------------
+violations:
+  enabled: true
+
+  # These are the primary violation types; enforcement should map to reason codes.
+  types:
+    - "fs.read_denied"
+    - "fs.write_denied"
+    - "fs.path_traversal"
+    - "net.egress_denied"
+    - "net.denied_destination"
+    - "env.secret_detected"
+    - "exec.shell_denied"
+    - "exec.untrusted_path"
+    - "exec.argv_required"
+    - "limit.timeout"
+    - "limit.memory"
+    - "limit.process_count"
+    - "output.truncated"
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "sandbox.exec.requested"
+      - "sandbox.exec.allowed"
+      - "sandbox.exec.denied"
+      - "sandbox.exec.completed"
+      - "sandbox.exec.violated"
+    include:
+      - "ts"
+      - "actor_id"
+      - "context"
+      - "execution_class"
+      - "capability_id"
+      - "workdir"
+      - "argv_redacted"
+      - "env_keys"
+      - "network_requested"
+      - "files_requested"
+      - "limits"
+      - "decision"
+      - "reason_codes"
+      - "exit_code"
+      - "resource_usage"
+      - "stdout_bytes"
+      - "stderr_bytes"
+      - "artifact_paths"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "sandbox.allowed"
+      - "sandbox.denied"
+      - "sandbox.violations"
+      - "sandbox.timeouts"
+      - "sandbox.output_truncations"
+
+# ------------------------------------------------------------------------------
+# Guard integration (escalation)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  on_violation:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  # If an attempt indicates potential escape (writes into config/src/.git, network to denied endpoints).
+  on_escape_suspected:
+    set_guard_state_at_least: "lockdown"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_codes:
+  POLICY_DISABLED: "Sandbox policy disabled."
+  FAIL_CLOSED: "Sandbox evaluation failed (fail closed)."
+  CONTEXT_UNKNOWN: "Execution context unknown/unrecognized."
+  CLASS_REQUIRED: "Execution class required but missing."
+  CLASS_DENIED: "Execution class denied by policy."
+  LIMIT_EXCEEDED: "Resource limit exceeded."
+  FS_DENIED: "Filesystem access denied by sandbox policy."
+  NET_DENIED: "Network egress denied by sandbox policy."
+  ENV_DENIED: "Sensitive environment variable denied."
+  EXEC_DENIED: "Execution denied (shell/untrusted path/argv requirement)."
+  PROVIDER_ERROR: "Sandbox enforcement provider error (deny)."
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific strictness)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    sandbox:
+      mode: "policy"
+      fail_closed_decision: "require_review"
+      deny_by_default: true
+    network:
+      allow_loopback: true
+      allow_lan: false
+      require_registered_domain_in_profiles: [] # dev can test, but still deny by default
+    limits:
+      defaults:
+        wall_time_ms: 60_000
+        memory_mb: 1024
+
+  workstation:
+    sandbox:
+      mode: "policy"
+      fail_closed_decision: "deny"
+    network:
+      allow_loopback: true
+      allow_lan: false
+
+  production:
+    sandbox:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    network:
+      allow_loopback: true
+      allow_lan: false
+      require_registered_domain_in_profiles:
+        - "production"
+    environment:
+      scrub_env: true
+    artifacts:
+      retention_days: 14
+
+  regulated:
+    sandbox:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    network:
+      allow_loopback: true
+      allow_lan: false
+      require_registered_domain_in_profiles:
+        - "regulated"
+    filesystem:
+      deny:
+        - "C:\\Francis\\workspace\\untrusted" # example: tighten known staging folders
+    artifacts:
+      retention_days: 7
+
+  safety_critical:
+    sandbox:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    network:
+      allow_loopback: true
+      allow_lan: false
+      deny_by_default: true
+      require_registered_domain_in_profiles:
+        - "safety_critical"
+    execution:
+      deny_shell_invocation_by_default: true
+    limits:
+      by_execution_class:
+        network_egress:
+          wall_time_ms: 0
+          cpu_time_ms: 0
+          memory_mb: 0
+
+  airgapped:
+    sandbox:
+      mode: "policy"
+      fail_closed_decision: "deny"
+    network:
+      allow_loopback: true
+      allow_lan: false
+      deny_by_default: true

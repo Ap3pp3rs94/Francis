@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from fastapi.routing import APIRoute
+
+
+def _routes() -> dict[str, set[str]]:
+    from francis.api.app import create_app
+
+    app = create_app()
+    out: dict[str, set[str]] = {}
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        methods = {method.upper() for method in (route.methods or set())}
+        out.setdefault(route.path, set()).update(methods)
+    return out
+
+
+def _assert_has_endpoints(routes: dict[str, set[str]], endpoints: Iterable[tuple[str, str]]) -> None:
+    missing: list[str] = []
+    for method, path in endpoints:
+        methods = routes.get(path)
+        if methods is None:
+            missing.append(f"{method} {path} (path missing)")
+            continue
+        if method.upper() not in methods:
+            missing.append(f"{method} {path} (method missing; have {sorted(methods)})")
+    assert not missing, "Missing chat-ui contract endpoints:\n" + "\n".join(missing)
+
+
+def test_chat_ui_contract_endpoints_are_mounted() -> None:
+    routes = _routes()
+
+    endpoints = [
+        ("GET", "/approvals/list"),
+        ("POST", "/approvals/decision"),
+        ("GET", "/credentials/list"),
+        ("GET", "/credentials/scopes"),
+        ("GET", "/credentials/delegations"),
+        ("POST", "/credentials/request"),
+        ("POST", "/credentials/revoke"),
+        ("GET", "/domains/list"),
+        ("GET", "/domains/get"),
+        ("POST", "/domains/create"),
+        ("PATCH", "/domains/update"),
+        ("POST", "/domains/delete"),
+        ("GET", "/domains/summary"),
+        ("GET", "/explanations/list"),
+        ("GET", "/explanations/get"),
+        ("GET", "/explanations/export"),
+        ("GET", "/federation/instances/list"),
+        ("GET", "/federation/instances/get"),
+        ("GET", "/federation/delegations/list"),
+        ("GET", "/federation/consensus_logs/list"),
+        ("GET", "/federation/shared_knowledge/list"),
+        ("GET", "/industrial/digital_twins/list"),
+        ("GET", "/industrial/digital_twins/get"),
+        ("GET", "/industrial/digital_twins/snapshot"),
+        ("POST", "/industrial/digital_twins/action"),
+        ("GET", "/industrial/assets"),
+        ("POST", "/industrial/assets"),
+        ("PATCH", "/industrial/assets/{asset_id}"),
+        ("DELETE", "/industrial/assets/{asset_id}"),
+        ("GET", "/industrial/processes"),
+        ("POST", "/industrial/processes"),
+        ("GET", "/industrial/simulations"),
+        ("POST", "/industrial/simulations"),
+        ("GET", "/industrial/runs"),
+        ("POST", "/industrial/runs/start"),
+        ("POST", "/industrial/runs/{run_id}/cancel"),
+        ("GET", "/industrial/runs/export"),
+        ("GET", "/industrial/safety/validations"),
+        ("POST", "/industrial/safety/validate"),
+        ("GET", "/industrial/telemetry"),
+        ("POST", "/industrial/interventions/request"),
+        ("POST", "/industrial/interventions/execute"),
+        ("GET", "/memory/timeline/list"),
+        ("GET", "/memory/timeline/get"),
+        ("GET", "/memory/timeline/export"),
+        ("GET", "/operations/list"),
+        ("POST", "/operations/get_many"),
+        ("POST", "/operations/create"),
+        ("GET", "/operations/{operation_id}"),
+        ("PATCH", "/operations/{operation_id}"),
+        ("POST", "/operations/{operation_id}/cancel"),
+        ("DELETE", "/operations/{operation_id}"),
+        ("GET", "/operations/export"),
+        ("GET", "/plugins/list"),
+        ("GET", "/plugins/get"),
+        ("POST", "/plugins/enable"),
+        ("POST", "/plugins/disable"),
+        ("POST", "/plugins/install"),
+        ("POST", "/plugins/uninstall"),
+        ("POST", "/plugins/run"),
+        ("POST", "/plugins/reload"),
+        ("GET", "/plugins/tools/list"),
+        ("GET", "/plugins/tools/get"),
+        ("GET", "/plugins/tools/export"),
+        ("POST", "/plugins/tools/run"),
+        ("GET", "/system/info"),
+        ("GET", "/system/status"),
+        ("GET", "/system/health"),
+        ("GET", "/system/flags"),
+        ("GET", "/system/config/effective"),
+        ("POST", "/system/config/mutate"),
+        ("POST", "/system/flags/set"),
+        ("POST", "/system/flags/{key}"),
+        ("GET", "/trust/state"),
+        ("GET", "/trust/history"),
+        ("GET", "/trust/events"),
+        ("GET", "/trust/policy"),
+        ("POST", "/trust/adjust"),
+        ("GET", "/system/trust/state"),
+        ("GET", "/system/trust/history"),
+        ("GET", "/system/trust/events"),
+        ("GET", "/system/trust/policy"),
+        ("POST", "/system/trust/adjust"),
+        ("GET", "/web_learning/status"),
+        ("GET", "/web_learning/policy"),
+        ("GET", "/web_learning/records"),
+        ("GET", "/web_learning/events"),
+        ("GET", "/web_learning/quarantine"),
+        ("POST", "/web_learning/request"),
+        ("POST", "/web_learning/enabled"),
+        ("POST", "/web_learning/quarantine/decide"),
+        ("GET", "/web_learning/records/export"),
+        ("POST", "/web_learning/export"),
+        ("GET", "/web-learning/status"),
+        ("GET", "/system/web_learning/policy"),
+        ("GET", "/system/web-learning/policy"),
+        ("POST", "/system/web-learning/request"),
+    ]
+    _assert_has_endpoints(routes, endpoints)

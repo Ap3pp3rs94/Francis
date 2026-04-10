@@ -1,0 +1,702 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: World Simulation (governed scenario modeling + experiment design)
+# Path:   config/prompts/world_simulation.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Produces a structured simulation specification + analysis plan for "world"
+# scenarios and digital twin experiments.
+#
+# This prompt is used when the system needs to:
+#   - design a scenario ("what should we simulate?")
+#   - translate intent -> simulation contract (inputs, constraints, metrics)
+#   - propose a safe execution plan (bounded, sandbox-aware)
+#   - interpret results (if provided) with auditable claims
+#
+# It does NOT:
+#   - control real-world actuators
+#   - perform destructive operations
+#   - fetch the web
+#
+# GOVERNANCE
+# ----------
+# Simulation can be high impact when it influences:
+#   - industrial actuation
+#   - safety-critical policy decisions
+#   - network/credential/security domains
+#
+# Therefore:
+#   - default to plan-only + sandbox-friendly execution posture
+#   - require explicit gates for high-risk categories
+#   - fail-closed if context is insufficient
+#
+# SAFETY
+# ------
+# - Never provide wrongdoing enablement (credential attacks, malware, DoS,
+#   surveillance) even if framed as "hypothetical simulation".
+# - You MAY support defensive simulations:
+#     * threat modeling at a high level
+#     * detection/monitoring evaluation
+#     * resilience planning
+#   but MUST NOT output actionable attack procedures, payloads, exploit steps,
+#   or instructions enabling harm.
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Every plan must be bounded (time horizon, max runs, compute budget).
+# - Prefer minimal viable fidelity; upgrade only if needed to answer the question.
+# - Preserve forward compatibility: allow new model types and metrics.
+# ==============================================================================
+version: 1
+
+id: "world.simulation"
+title: "World Simulation"
+owner: "francis"
+intent: "compose_simulation_contract"
+mode: "strict"
+
+meta:
+  notes:
+    - "Produces simulation contracts (spec + run plan + analysis plan)."
+    - "Designed to interoperate with digital twin, industrial control, and governance."
+    - "Strict output enables deterministic execution and auditing."
+  compatibility:
+    - "Stable envelope; consumers ignore unknown fields."
+    - "Extensible enumerations include string escape hatches."
+
+# ------------------------------------------------------------------------------
+# Inputs (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+
+      # Operator request text (sanitized; no secrets)
+      question: { type: string, required: true }
+      goal: { type: string, required: false } # "optimize", "compare", "forecast", "stress test", "validate policy", etc.
+
+      # Optional: scope & environment
+      domain_id: { type: string, required: false }
+      twin_id: { type: string, required: false } # digital twin identifier (asset/process/system)
+      system_label: { type: string, required: false } # human-friendly name
+
+      # Optional: constraints & risk posture requested by the operator
+      constraints:
+        type: array
+        required: false
+        items: { type: string } # e.g., "no downtime", "max temp 80C", "budget < $10k"
+
+      # Optional: target outputs
+      metrics_requested:
+        type: array
+        required: false
+        items: { type: string } # e.g., "throughput", "latency_ms", "cost", "risk_score"
+
+      # Optional: time horizon
+      horizon:
+        type: object
+        required: false
+        fields:
+          start_ts: { type: number, required: false }
+          end_ts: { type: number, required: false }
+          duration_s: { type: number, required: false } # if end_ts not provided
+          timestep_s: { type: number, required: false } # for time-stepped models
+
+      # Optional: known scenario parameters
+      parameters:
+        type: object
+        required: false
+        additionalProperties: true # free-form bag; must be treated as untrusted
+
+      # Optional: if results are already available, include them here for interpretation
+      simulation_context:
+        type: object
+        required: false
+        fields:
+          run_id: { type: string, required: false }
+          status: { type: string, required: false } # queued | running | complete | failed
+          results:
+            type: object
+            required: false
+            additionalProperties: true
+          artifacts:
+            type: array
+            required: false
+            items:
+              type: object
+              fields:
+                kind: { type: string, required: false } # csv | json | parquet | plot | log
+                ref: { type: string, required: false }  # artifact id/path
+                note: { type: string, required: false }
+
+  environment:
+    type: object
+    required: false
+    fields:
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      run_mode: { type: string, required: false } # local | edge | federated | unknown
+      guard_state:
+        type: string
+        required: false
+        enum: ["normal", "restricted", "lockdown", "unknown"]
+
+      # Whether sandbox execution is available (preferred for simulation)
+      sandbox_available: { type: boolean, required: false }
+
+      # High-level system health hint (optional)
+      system_health_ok: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust_level: { type: number, required: false }
+      approvals_enabled: { type: boolean, required: false }
+      quorum_required_default: { type: boolean, required: false }
+
+      # Whether simulation execution is currently permitted (policy + runtime)
+      simulation_enabled: { type: boolean, required: false }
+
+      # Whether industrial actuation is permitted (should be false for simulation-only)
+      industrial_actuation_enabled: { type: boolean, required: false }
+
+  constraints:
+    type: object
+    required: false
+    fields:
+      # Boundedness controls
+      max_experiments: { type: number, required: false }       # default 3
+      max_runs_per_experiment: { type: number, required: false } # default 200 (MC)
+      max_seconds_total: { type: number, required: false }     # default 45 (planning); execution handled elsewhere
+      max_compute_tier:
+        type: string
+        required: false
+        enum: ["tiny", "small", "medium", "large", "unknown"]
+
+      # If true, treat all outputs as internal (no external sharing).
+      internal_only: { type: boolean, required: false }
+
+  policy_controls:
+    type: object
+    required: false
+    fields:
+      # Hard denies remain non-negotiable for enablement; defensive simulation is ok.
+      hard_denies:
+        type: object
+        required: false
+        fields:
+          credential_attack_enablement: { type: boolean, required: false }
+          malware_enablement: { type: boolean, required: false }
+          dos_enablement: { type: boolean, required: false }
+          surveillance_enablement: { type: boolean, required: false }
+
+      require_safety_review_for_high_risk: { type: boolean, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - simulation
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_run
+          - needs_followup
+          - followup_questions
+          - reason_codes
+          - summary
+        properties:
+          # ask: missing critical inputs to build a safe contract
+          # propose: contract ready
+          # deny: unsafe/disallowed by governance/safety
+          mode: { type: string, enum: ["ask", "propose", "deny"] }
+          confidence: { type: number } # 0..1
+          needs_run: { type: boolean }
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          summary: { type: string }
+
+      simulation:
+        type: object
+        additionalProperties: false
+        required:
+          - problem
+          - experiments
+          - execution_plan
+          - analysis_plan
+          - interpretation
+        properties:
+          problem:
+            type: object
+            additionalProperties: false
+            required:
+              - title
+              - domain_id
+              - twin_id
+              - scenario
+              - objective
+              - constraints
+              - assumptions
+              - risk_class
+            properties:
+              title: { type: string }
+              domain_id: { type: string }
+              twin_id: { type: string }
+
+              scenario: { type: string }   # concise scenario statement
+              objective: { type: string }  # what "success" means
+
+              constraints:
+                type: array
+                items: { type: string }
+
+              assumptions:
+                type: array
+                items: { type: string } # explicit assumptions; do not invent specifics without noting uncertainty
+
+              # risk_class informs governance gates; string allows extension
+              risk_class:
+                type: string
+                enum:
+                  - "low"
+                  - "medium"
+                  - "high"
+                  - "safety_critical"
+                  - "industrial_sensitive"
+                  - "security_sensitive"
+                  - "unknown"
+
+          experiments:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+                - experiment_id
+                - model_type
+                - fidelity
+                - horizon
+                - parameters
+                - control_variables
+                - disturbances
+                - outputs
+                - stop_conditions
+              properties:
+                experiment_id: { type: string }
+
+                # model_type examples:
+                # - "system_dynamics"
+                # - "discrete_event"
+                # - "agent_based"
+                # - "monte_carlo"
+                # - "queueing"
+                # - "hybrid"
+                model_type: { type: string }
+
+                # fidelity: minimal | standard | high (prefer minimal unless justified)
+                fidelity:
+                  type: string
+                  enum: ["minimal", "standard", "high", "unknown"]
+
+                horizon:
+                  type: object
+                  additionalProperties: false
+                  required: ["duration_s", "timestep_s"]
+                  properties:
+                    duration_s: { type: number }
+                    timestep_s: { type: number }
+
+                # parameters is a sanitized, normalized bag. No secrets.
+                parameters:
+                  type: object
+                  additionalProperties: true
+
+                control_variables:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["name", "type", "range", "notes"]
+                    properties:
+                      name: { type: string }
+                      type: { type: string } # continuous | discrete | categorical | boolean
+                      range: { type: string } # e.g., "[0..1]", "{a,b,c}"
+                      notes: { type: string }
+
+                disturbances:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["name", "distribution", "notes"]
+                    properties:
+                      name: { type: string }
+                      distribution: { type: string } # "normal(mu,sigma)", "uniform(a,b)", "empirical", "unknown"
+                      notes: { type: string }
+
+                outputs:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: ["metric", "aggregation", "priority", "notes"]
+                    properties:
+                      metric: { type: string }
+                      aggregation: { type: string } # mean | p95 | min | max | histogram | time_series | etc.
+                      priority: { type: number } # 1 highest
+                      notes: { type: string }
+
+                stop_conditions:
+                  type: array
+                  items: { type: string } # "if variance < X", "if constraint violation > Y", etc.
+
+          execution_plan:
+            type: object
+            additionalProperties: false
+            required:
+              - posture
+              - sandbox_preferred
+              - max_experiments
+              - max_runs_per_experiment
+              - run_calls
+              - artifacts_expected
+              - rollback_notes
+            properties:
+              # plan_only | propose_actions | execute_if_approved (but prompt itself does not execute)
+              posture:
+                type: string
+                enum: ["plan_only", "propose_actions", "execute_if_approved"]
+
+              sandbox_preferred: { type: boolean }
+              max_experiments: { type: number }
+              max_runs_per_experiment: { type: number }
+
+              # Suggested capability calls for the orchestrator/executor to perform.
+              # These are proposals only; governance must enforce approvals.
+              run_calls:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["capability_id", "args", "requires_approval", "notes"]
+                  properties:
+                    capability_id: { type: string } # e.g., "simulation.run"
+                    args:
+                      type: object
+                      additionalProperties: true
+                    requires_approval: { type: boolean }
+                    notes: { type: string }
+
+              artifacts_expected:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["kind", "name", "format", "notes"]
+                  properties:
+                    kind: { type: string } # results_summary | timeseries | run_log | parameter_snapshot | plot | other
+                    name: { type: string }
+                    format: { type: string } # json | csv | parquet | png | txt | other
+                    notes: { type: string }
+
+              rollback_notes:
+                type: array
+                items: { type: string } # simulation is typically non-mutating; include notes if it affects stateful caches
+
+          analysis_plan:
+            type: object
+            additionalProperties: false
+            required:
+              - evaluation
+              - comparisons
+              - uncertainty
+              - acceptance_criteria
+              - reporting
+            properties:
+              evaluation:
+                type: array
+                items: { type: string } # steps: validate inputs, sanity checks, etc.
+
+              comparisons:
+                type: array
+                items: { type: string } # baseline vs variant, A/B, etc.
+
+              uncertainty:
+                type: array
+                items: { type: string } # sensitivity, confidence intervals, etc.
+
+              acceptance_criteria:
+                type: array
+                items: { type: string } # what constitutes a valid run & a meaningful result
+
+              reporting:
+                type: object
+                additionalProperties: false
+                required: ["summary_fields", "charts", "audit_fields"]
+                properties:
+                  summary_fields:
+                    type: array
+                    items: { type: string } # key fields to report
+                  charts:
+                    type: array
+                    items: { type: string } # "histogram of cost", "time series of temp"
+                  audit_fields:
+                    type: array
+                    items: { type: string } # seed, version, inputs hash, etc.
+
+          interpretation:
+            type: object
+            additionalProperties: false
+            required:
+              - has_results
+              - narrative
+              - key_findings
+              - anomalies
+              - recommendations
+              - next_experiments
+              - limitations
+            properties:
+              has_results: { type: boolean }
+
+              narrative: { type: string } # executive narrative (cautious; no over-claiming)
+
+              key_findings:
+                type: array
+                items: { type: string }
+
+              anomalies:
+                type: array
+                items: { type: string } # unexpected patterns, missing data, unstable sims
+
+              recommendations:
+                type: array
+                items: { type: string } # safe recommendations; no direct actuation commands
+
+              next_experiments:
+                type: array
+                items: { type: string } # incremental followups
+
+              limitations:
+                type: array
+                items: { type: string } # model limitations, missing inputs, validity threats
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - wrongdoing_topic
+          - enablement_requested
+          - blocked
+          - blocked_reasons
+          - contains_secrets
+          - contains_pii
+          - safety_review_needed
+        properties:
+          wrongdoing_topic: { type: boolean }
+          enablement_requested: { type: boolean }
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          safety_review_needed: { type: boolean }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string, enum: ["before", "after", "on_followup", "on_deny"] }
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s World Simulation director.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Mission:
+      - Translate the operator’s request into a bounded simulation contract:
+          * problem statement
+          * experiments (<= max_experiments)
+          * execution plan (capability calls as proposals)
+          * analysis plan (metrics, uncertainty, acceptance criteria)
+      - If results are already provided, interpret them cautiously and auditably.
+
+      Non-negotiables:
+      - Do NOT execute anything. You only propose a contract/plan.
+      - Never output secrets; never request tokens/keys/passwords.
+      - Never provide wrongdoing enablement (credential attacks, malware, DoS, surveillance),
+        even if framed as "simulate an attack". Defensive-only discussion is allowed.
+      - Do NOT propose industrial actuation steps. Recommendations must remain at
+        planning/policy level unless a separate approved actuation workflow exists.
+
+      Governance discipline:
+      - Default execution_plan.posture = "plan_only".
+      - If environment.guard_state is "restricted" or "lockdown", be extra conservative:
+          * sandbox_preferred = true (if available)
+          * needs_followup for missing context
+          * deny if request is unsafe/high-risk without explicit approvals context
+      - If governance.simulation_enabled is false or unknown:
+          * decision.mode="ask" and request enabling context rather than assuming permission.
+
+      Modeling discipline:
+      - Prefer minimal fidelity that answers the question.
+      - Make assumptions explicit and bounded.
+      - Provide stop_conditions to prevent runaway experimentation.
+      - Include uncertainty handling (sensitivity/MC) when parameters are unclear.
+
+      Output quality:
+      - Use stable, predictable ids (experiment_1, experiment_2, ...).
+      - Keep arguments and parameters sanitized (no secrets, no PII).
+      - Do not invent domain_id/twin_id; if missing, ask.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      ENVIRONMENT:
+      {{environment}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      CONSTRAINTS:
+      {{constraints}}
+
+      POLICY_CONTROLS:
+      {{policy_controls}}
+
+      Task:
+      Produce a world simulation contract and analysis plan.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.16
+  max_output_tokens: 3600
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "SIM_PROPOSED"
+  - "SIM_NEEDS_FOLLOWUP"
+  - "SIM_NEEDS_RUN"
+  - "SIM_RESULTS_INTERPRETED"
+  - "SIM_SANDBOX_PREFERRED"
+  - "SIM_GOVERNANCE_BLOCKED"
+  - "SIM_GUARD_RESTRICTED"
+  - "SIM_GUARD_LOCKDOWN"
+  - "SIM_HIGH_RISK_REQUIRES_REVIEW"
+  - "REFUSE_UNSAFE_ENABLEMENT"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+
+# ------------------------------------------------------------------------------
+# Audit events
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "world_simulation.requested"
+    when: "before"
+    fields: ["request.goal", "request.domain_id", "request.twin_id", "environment.profile", "environment.guard_state"]
+
+  - kind: "world_simulation.proposed"
+    when: "after"
+    fields: ["decision.needs_run", "simulation.execution_plan.posture", "observability.reason_codes"]
+
+  - kind: "world_simulation.followup_required"
+    when: "on_followup"
+    fields: ["decision.followup_questions"]
+
+  - kind: "world_simulation.denied"
+    when: "on_deny"
+    fields: ["safety.blocked_reasons"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays (tighten in high-stakes environments)
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.18
+      max_output_tokens: 3800
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.16
+      max_output_tokens: 3600
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14
+      max_output_tokens: 3600
+    notes:
+      - "Prefer explicit assumptions; elevate safety_review_needed for high-risk domains."
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+      max_output_tokens: 3600
+    notes:
+      - "Default risk_class to safety_critical unless clearly low-risk."
+      - "Prefer deny/ask over propose when context is missing."

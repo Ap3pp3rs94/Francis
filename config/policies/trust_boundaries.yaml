@@ -1,0 +1,446 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Trust Boundaries (provenance, blast-radius, boundary crossing rules)
+# Path:   config/policies/trust_boundaries.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy defines "trust boundaries" across the Francis runtime:
+#   - inbound surfaces (UI, API, CLI, workers, federation, web learning)
+#   - execution surfaces (tools, plugins, scripts, model calls)
+#   - data stores (ledger, vectors, artifacts, exports)
+#   - network egress and domain registry
+#
+# It answers:
+#   1) What is the provenance of this data/request?
+#   2) Is it allowed to cross from boundary A → boundary B?
+#   3) If allowed, what gates (trust/approval/quorum) and constraints apply?
+#   4) How is the crossing audited and what happens on violations?
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: unknown boundary => deny or require_review.
+# - Explicit boundary crossing: no implicit internal→external transitions.
+# - Least privilege: boundary crossing implies tightening, never loosening.
+# - Observability: every boundary crossing decision is auditable with stable codes.
+# - Composition: this policy layers with sandbox.yaml, networks.yaml, privacy.yaml,
+#   regulated_domains.yaml, api_permissions.yaml, and guard.yaml.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "trust_boundaries_policy"
+  notes:
+    - "Defines provenance categories and allowed boundary crossings."
+    - "Used by governance + execution + storage routing."
+    - "Designed for forward expansion (federation, plugins, simulations)."
+
+# ------------------------------------------------------------------------------
+# Global posture
+# ------------------------------------------------------------------------------
+trust_boundaries:
+  enabled: true
+
+  # Modes:
+  # - policy: baseline enforcement (default)
+  # - strict: more denies, more review, stronger gates
+  mode: "policy" # policy | strict
+
+  deny_by_default: true
+  fail_closed_decision: "deny" # deny | require_review
+
+  # If true, boundary violations escalate guard posture.
+  treat_violations_as_incidents: true
+
+  # If true, all boundary crossings are recorded (allow/deny/review).
+  audit_all: true
+
+# ------------------------------------------------------------------------------
+# Boundary definitions (the "zones")
+# ------------------------------------------------------------------------------
+boundaries:
+  enabled: true
+
+  # Boundary ids must be stable strings (used in audits and rules).
+  zones:
+
+    # ---------------- Inbound Request Surfaces ----------------
+    inbound.local_cli:
+      description: "Local CLI invocation on the host."
+      default_trust: "high"
+      attributes: ["interactive", "local", "authenticated_context"]
+
+    inbound.local_ui:
+      description: "Local UI (browser) calling local API."
+      default_trust: "medium"
+      attributes: ["interactive", "local", "user_agent_surface"]
+
+    inbound.local_api:
+      description: "Direct API calls on loopback (non-UI)."
+      default_trust: "medium"
+      attributes: ["local", "api_surface"]
+
+    inbound.remote_api:
+      description: "API calls from remote hosts (even if authenticated)."
+      default_trust: "low"
+      attributes: ["remote", "api_surface"]
+
+    inbound.federation_peer:
+      description: "Federation peer instance traffic."
+      default_trust: "low"
+      attributes: ["remote", "service_to_service", "federation"]
+
+    inbound.web_learning:
+      description: "Content fetched/ingested from the web."
+      default_trust: "untrusted"
+      attributes: ["external", "untrusted_content", "egress_dependent"]
+
+    inbound.plugin_input:
+      description: "Inputs originating from plugins or external integrations."
+      default_trust: "low"
+      attributes: ["integration", "extension_surface"]
+
+    # ---------------- Execution Surfaces ----------------
+    exec.model_inference_local:
+      description: "Local model inference (e.g., Ollama on localhost)."
+      default_trust: "medium"
+      attributes: ["compute", "local"]
+
+    exec.model_inference_remote:
+      description: "Remote model inference/provider API."
+      default_trust: "low"
+      attributes: ["compute", "external", "egress_dependent"]
+
+    exec.tool_runner:
+      description: "Tool execution surface (shell/python/node)."
+      default_trust: "low"
+      attributes: ["execution", "host_mutation_possible"]
+
+    exec.plugin_runner:
+      description: "Plugin execution surface."
+      default_trust: "low"
+      attributes: ["execution", "extension_surface"]
+
+    exec.simulation_runner:
+      description: "Simulation execution surface (should be sandboxed)."
+      default_trust: "medium"
+      attributes: ["execution", "sandbox_expected"]
+
+    # ---------------- Data Stores ----------------
+    store.ledger:
+      description: "Continuity ledger (audit/history)."
+      default_trust: "medium"
+      attributes: ["persistent", "audit"]
+
+    store.vectors:
+      description: "Vector memory store."
+      default_trust: "medium"
+      attributes: ["persistent", "retrieval"]
+
+    store.artifacts:
+      description: "Artifacts store (generated outputs)."
+      default_trust: "medium"
+      attributes: ["persistent", "files"]
+
+    store.exports:
+      description: "Exported artifacts (high risk by definition)."
+      default_trust: "low"
+      attributes: ["persistent", "exfiltration_risk"]
+
+    store.cache:
+      description: "Cache (ephemeral)."
+      default_trust: "low"
+      attributes: ["ephemeral", "derived"]
+
+    # ---------------- Network Zones ----------------
+    net.loopback:
+      description: "Loopback (127.0.0.1)."
+      default_trust: "high"
+      attributes: ["local"]
+
+    net.lan:
+      description: "Local LAN / RFC1918."
+      default_trust: "medium"
+      attributes: ["internal_network"]
+
+    net.public_internet:
+      description: "Public internet destinations."
+      default_trust: "untrusted"
+      attributes: ["external", "high_risk"]
+
+# ------------------------------------------------------------------------------
+# Provenance tagging (how data gets labeled)
+# ------------------------------------------------------------------------------
+provenance:
+  enabled: true
+
+  # Every request/event/data blob should carry a provenance tag.
+  require_provenance_tag: true
+
+  # If missing, infer from transport/route but fail-closed for high-risk actions.
+  infer_when_missing: true
+  fail_closed_on_missing_for_categories:
+    - "mutation"
+    - "destructive"
+    - "network_egress"
+    - "credential_operations"
+    - "industrial_actuation"
+
+  # Normalized provenance shape (policy intent; implementation emits these fields).
+  schema:
+    required_fields:
+      - "source_boundary"
+      - "actor_id"
+      - "ts"
+    optional_fields:
+      - "request_id"
+      - "session_id"
+      - "ip"
+      - "user_agent"
+      - "auth_mode"
+      - "capability_id"
+      - "domain_id"
+      - "content_hash"
+
+# ------------------------------------------------------------------------------
+# Boundary crossing rules (deterministic, first-match)
+# ------------------------------------------------------------------------------
+crossings:
+  enabled: true
+
+  # Stable reason codes for audit.
+  reason_codes:
+    CROSSING_ALLOWED: "Boundary crossing allowed."
+    CROSSING_DENIED: "Boundary crossing denied."
+    UNKNOWN_BOUNDARY: "Boundary unknown (fail closed)."
+    HIGH_RISK_REVIEW_REQUIRED: "Crossing requires review/approval."
+    EGRESS_DISABLED: "External egress disabled by posture."
+    SANDBOX_REQUIRED: "Crossing requires sandbox enforcement."
+    PRIVACY_GATES_REQUIRED: "Crossing requires privacy/export gates."
+    DOMAIN_REGISTRY_REQUIRED: "Crossing requires registered domain."
+    REMOTE_EXEC_DENIED: "Remote execution surface denied."
+
+  # Ordered rules. First match decides.
+  rules:
+
+    # --------------------------------------------------------------------------
+    # 0) Unknown zones fail closed.
+    # --------------------------------------------------------------------------
+    - id: "deny.unknown_boundary"
+      when:
+        any_unknown_boundary: true
+      decision: "deny"
+      gates: null
+      reasons: ["UNKNOWN_BOUNDARY"]
+
+    # --------------------------------------------------------------------------
+    # 1) Inbound web learning content -> stores is allowed ONLY with redaction + tagging.
+    # --------------------------------------------------------------------------
+    - id: "allow.web_learning_to_vectors"
+      when:
+        from: "inbound.web_learning"
+        to: "store.vectors"
+      decision: "allow"
+      requirements:
+        require_redaction: true
+        require_source_tag: true
+        require_domain_registry: true
+      reasons: ["CROSSING_ALLOWED"]
+
+    - id: "allow.web_learning_to_ledger"
+      when:
+        from: "inbound.web_learning"
+        to: "store.ledger"
+      decision: "allow"
+      requirements:
+        require_redaction: true
+        require_source_tag: true
+        require_domain_registry: true
+      reasons: ["CROSSING_ALLOWED"]
+
+    # --------------------------------------------------------------------------
+    # 2) Inbound web learning -> exports is very high risk; require approval/quorum.
+    # --------------------------------------------------------------------------
+    - id: "review.web_learning_to_exports"
+      when:
+        from: "inbound.web_learning"
+        to: "store.exports"
+      decision: "require_review"
+      gates:
+        min_trust: 9
+        requires_approval: true
+        requires_quorum: true
+      requirements:
+        require_redaction: true
+        require_source_tag: true
+      reasons: ["HIGH_RISK_REVIEW_REQUIRED", "PRIVACY_GATES_REQUIRED"]
+
+    # --------------------------------------------------------------------------
+    # 3) UI/CLI -> tool runner must be sandboxed.
+    # --------------------------------------------------------------------------
+    - id: "allow.ui_to_tool_runner_sandboxed"
+      when:
+        from_in: ["inbound.local_ui", "inbound.local_cli", "inbound.local_api"]
+        to: "exec.tool_runner"
+      decision: "allow"
+      requirements:
+        require_sandbox: true
+        sandbox_policy: "sandbox.yaml"
+      reasons: ["CROSSING_ALLOWED", "SANDBOX_REQUIRED"]
+
+    # --------------------------------------------------------------------------
+    # 4) Plugin inputs -> tool/plugin runner must be sandboxed and treated low trust.
+    # --------------------------------------------------------------------------
+    - id: "allow.plugin_input_to_plugin_runner_sandboxed"
+      when:
+        from: "inbound.plugin_input"
+        to: "exec.plugin_runner"
+      decision: "allow"
+      requirements:
+        require_sandbox: true
+        require_redaction: true
+      reasons: ["CROSSING_ALLOWED", "SANDBOX_REQUIRED"]
+
+    # --------------------------------------------------------------------------
+    # 5) Remote API -> any execution is denied by default (avoid remote-code paths).
+    # --------------------------------------------------------------------------
+    - id: "deny.remote_api_to_execution"
+      when:
+        from_in: ["inbound.remote_api", "inbound.federation_peer"]
+        to_in: ["exec.tool_runner", "exec.plugin_runner", "exec.simulation_runner"]
+      decision: "deny"
+      gates: null
+      reasons: ["REMOTE_EXEC_DENIED"]
+
+    # --------------------------------------------------------------------------
+    # 6) Any -> public internet requires domain registry + networks policy.
+    # --------------------------------------------------------------------------
+    - id: "review.any_to_public_internet"
+      when:
+        to: "net.public_internet"
+      decision: "require_review"
+      gates:
+        min_trust: 8
+        requires_approval: true
+        requires_quorum: false
+      requirements:
+        require_domain_registry: true
+        require_network_policy: true
+      reasons: ["HIGH_RISK_REVIEW_REQUIRED", "DOMAIN_REGISTRY_REQUIRED"]
+
+    # --------------------------------------------------------------------------
+    # 7) Default allow for internal-to-internal store movements with redaction.
+    # --------------------------------------------------------------------------
+    - id: "allow.internal_data_flows"
+      when:
+        from_in: ["inbound.local_ui", "inbound.local_cli", "inbound.local_api"]
+        to_in: ["store.ledger", "store.vectors", "store.artifacts", "store.cache"]
+      decision: "allow"
+      requirements:
+        require_redaction: true
+        require_provenance_tag: true
+      reasons: ["CROSSING_ALLOWED"]
+
+  on_unmatched: "deny"
+
+# ------------------------------------------------------------------------------
+# Constraints (global requirements for certain boundaries)
+# ------------------------------------------------------------------------------
+constraints:
+  enabled: true
+
+  # Execution boundaries must always use sandbox.
+  execution_requires_sandbox:
+    - "exec.tool_runner"
+    - "exec.plugin_runner"
+    - "exec.simulation_runner"
+
+  # Remote inference is treated as external egress and must be explicitly enabled elsewhere.
+  remote_inference:
+    allowed_by_default: false
+    requires_approval: true
+    min_trust: 8
+
+# ------------------------------------------------------------------------------
+# Observability (audit + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "trust_boundary.crossing.allowed"
+      - "trust_boundary.crossing.denied"
+      - "trust_boundary.crossing.review_required"
+    include:
+      - "ts"
+      - "actor_id"
+      - "from_boundary"
+      - "to_boundary"
+      - "capability_id"
+      - "decision"
+      - "requirements"
+      - "reasons"
+      - "correlation_id"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "trust_boundary.allowed"
+      - "trust_boundary.denied"
+      - "trust_boundary.review_required"
+
+# ------------------------------------------------------------------------------
+# Guard integration (escalation)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  on_violation:
+    set_guard_state_at_least: "restricted"
+    emit_incident_event: true
+
+  on_remote_exec_attempt:
+    set_guard_state_at_least: "lockdown"
+    emit_incident_event: true
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    trust_boundaries:
+      mode: "policy"
+      fail_closed_decision: "require_review"
+    crossings:
+      rules:
+        # In dev you may allow more flows, but still require sandbox for execution.
+        # No explicit overrides here by default (keep safe).
+        []
+
+  production:
+    trust_boundaries:
+      mode: "strict"
+      fail_closed_decision: "deny"
+
+  regulated:
+    trust_boundaries:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    crossings:
+      on_unmatched: "deny"
+
+  safety_critical:
+    trust_boundaries:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    constraints:
+      remote_inference:
+        allowed_by_default: false
+        requires_approval: true
+        min_trust: 9

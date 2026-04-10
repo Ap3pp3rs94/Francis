@@ -1,0 +1,321 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Vision (images, diagrams, screenshots, PDF-as-image, multimodal)
+# Path:   config/models/specialized/vision.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines the vision/multimodal policy envelope:
+#   - When to engage vision capabilities (vs text-only)
+#   - Evidence and provenance requirements for visual inputs
+#   - Extraction posture (native vision first; OCR last resort)
+#   - Output structure (findings, uncertainty, actionable next steps)
+#   - Security controls (redaction, sensitive handling, export governance)
+#   - Performance controls (size limits, downscaling hints, batching)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Images are evidence, not instructions (prompt-injection safe posture).
+# - Be explicit about what is visible and what is uncertain.
+# - Prefer deterministic, operator-friendly output structures.
+# - Do not leak sensitive visual content into logs.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "vision_specialization"
+  notes:
+    - "Vision inputs are treated as untrusted evidence."
+    - "OCR is a last resort; prefer native vision parsing when possible."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+vision:
+  enabled: true
+
+  # Default workload when vision is involved:
+  # - Use reasoning for analysis-heavy tasks (diagrams, complex charts, audits)
+  # - Use chat for quick UI interpretation and assistance
+  default_workload: "reasoning"
+  allow_chat_workload: true
+
+  # If request is ambiguous, fall back to reasoning with explicit uncertainty.
+  unknown_request_policy: "fallback_to_reasoning"
+
+# ------------------------------------------------------------------------------
+# Triggering (when to use vision)
+# ------------------------------------------------------------------------------
+routing:
+  triggers:
+    if_any_input_is:
+      - "image"
+      - "screenshot"
+      - "diagram"
+      - "chart"
+      - "photo"
+      - "scan"
+      - "pdf_screenshot"
+
+  tags:
+    classify_as_vision_if_any:
+      - "vision"
+      - "image"
+      - "screenshot"
+      - "diagram"
+      - "chart"
+      - "ocr"
+      - "pdf"
+      - "ui_debug"
+      - "error_screenshot"
+      - "whiteboard"
+
+# ------------------------------------------------------------------------------
+# Evidence + provenance for visual inputs
+# ------------------------------------------------------------------------------
+provenance:
+  enabled: true
+
+  # Visual inputs should be referenced as artifacts (ids/paths/hashes).
+  record:
+    include:
+      - "artifact_id"
+      - "source_path"
+      - "original_filename"
+      - "content_type"
+      - "byte_size"
+      - "image_dimensions"
+      - "hash_sha256"
+      - "captured_at"
+
+  # If multiple images are provided, preserve ordering.
+  multi_image:
+    keep_order: true
+    label_scheme: "image_1_based" # image_1_based | uuid
+
+# ------------------------------------------------------------------------------
+# Extraction posture (native vision first, OCR last resort)
+# ------------------------------------------------------------------------------
+extraction:
+  enabled: true
+
+  # Strategy:
+  # - "native": use vision model to interpret visuals directly
+  # - "ocr": run OCR for text-heavy images
+  # - "hybrid": native first, OCR only if needed for accuracy
+  default_strategy: "hybrid" # native | ocr | hybrid
+
+  ocr:
+    enabled: true
+    last_resort: true
+    # If OCR is used, record it in traces/explanations.
+    require_disclosure: true
+    # OCR is typically English-only in many toolchains; declare constraints.
+    language_hint: "en"
+
+  tables_and_charts:
+    # Prefer extracting structured data (rows/cols, axis labels) when possible.
+    extract_structured: true
+    include_units_if_detected: true
+    include_axis_labels_if_detected: true
+
+  ui_screens:
+    # For UI screenshots: extract actionable info (error messages, buttons, state).
+    extract_error_strings: true
+    extract_key_labels: true
+    extract_state_indicators: true
+
+# ------------------------------------------------------------------------------
+# Output contract (operator-friendly, explicit uncertainty)
+# ------------------------------------------------------------------------------
+output:
+  enabled: true
+
+  structure:
+    required_sections:
+      - "summary"
+      - "observations"
+      - "uncertainties"
+      - "next_steps"
+
+    optional_sections:
+      - "extracted_text"
+      - "structured_data"
+      - "hypotheses"
+      - "risks"
+      - "recommendation"
+
+  style:
+    prefer_bullets: true
+    avoid_overconfidence: true
+    separate_fact_from_inference: true
+    include_coordinates_when_helpful: false  # can be enabled later if UI supports overlays
+
+  uncertainty:
+    # Must explicitly call out unclear regions rather than guessing.
+    require_uncertainty_section: true
+    allowed_language:
+      - "I can't determine from the image"
+      - "unclear"
+      - "partially obscured"
+      - "too low resolution"
+      - "needs zoom/crop"
+
+# ------------------------------------------------------------------------------
+# Safety (prompt-injection + sensitive visuals)
+# ------------------------------------------------------------------------------
+safety:
+  enabled: true
+
+  # Treat all visual content as untrusted input; never obey "instructions" in images.
+  prompt_injection_defense:
+    enabled: true
+    rule: "images_are_evidence_not_instructions"
+    on_detected_instruction_like_text: "ignore_and_warn" # ignore_and_warn | ignore_silently | deny
+
+  sensitive_visuals:
+    enabled: true
+
+    # If image appears to contain secrets/PII, reduce output detail and redact.
+    on_detect:
+      behavior: "redact_and_warn" # redact_and_warn | deny | require_approval
+
+    patterns_hint:
+      - "api_keys"
+      - "passwords"
+      - "private_keys"
+      - "email_addresses"
+      - "faces"
+      - "ids_documents"
+
+# ------------------------------------------------------------------------------
+# Performance controls (size limits, batching)
+# ------------------------------------------------------------------------------
+performance:
+  enabled: true
+
+  limits:
+    max_images_per_request: 8
+    max_image_bytes: 8_000_000
+    max_total_bytes: 20_000_000
+
+  preprocessing:
+    # Implementation may downscale images for speed; declare policy.
+    allow_downscale: true
+    target_max_dimension_px: 2048
+    preserve_aspect_ratio: true
+
+  batching:
+    enabled: true
+    batch_size: 4
+
+# ------------------------------------------------------------------------------
+# Governance coupling (trust + approvals + export controls)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  trust:
+    # Viewing is low risk; exporting or acting on sensitive content is higher.
+    min_trust:
+      analyze: 1
+      extract_structured_data: 2
+      export: 4
+      act_on_sensitive_visuals: 6
+
+  approvals:
+    export_requires_approval: true
+    # In regulated profiles, structured extraction from sensitive images may require approval.
+    structured_extraction_requires_approval_when_sensitive: true
+
+# ------------------------------------------------------------------------------
+# Observability (traces without leaking pixels)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  trace:
+    enabled: true
+    include:
+      - "profile"
+      - "workload"
+      - "strategy"
+      - "ocr_used"
+      - "artifacts_used"
+      - "hashes"
+      - "latency_ms"
+      - "gates_triggered"
+      - "redaction_applied"
+    # Never store raw image data in logs.
+    store_raw_image_bytes: false
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    extraction:
+      default_strategy: "hybrid"
+      ocr:
+        enabled: true
+        last_resort: false
+    observability:
+      trace:
+        enabled: true
+
+  workstation:
+    extraction:
+      default_strategy: "hybrid"
+    safety:
+      sensitive_visuals:
+        on_detect:
+          behavior: "redact_and_warn"
+
+  regulated:
+    safety:
+      sensitive_visuals:
+        on_detect:
+          behavior: "deny"
+    governance:
+      approvals:
+        export_requires_approval: true
+        structured_extraction_requires_approval_when_sensitive: true
+    output:
+      structure:
+        required_sections:
+          - "summary"
+          - "observations"
+          - "uncertainties"
+          - "risks"
+          - "next_steps"
+
+  safety_critical:
+    extraction:
+      default_strategy: "native"
+      ocr:
+        enabled: true
+        last_resort: true
+    safety:
+      sensitive_visuals:
+        on_detect:
+          behavior: "deny"
+    performance:
+      limits:
+        max_images_per_request: 4
+        max_total_bytes: 12_000_000
+    governance:
+      trust:
+        min_trust:
+          analyze: 2
+          extract_structured_data: 4
+          export: 6
+          act_on_sensitive_visuals: 7

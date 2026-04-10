@@ -1,0 +1,388 @@
+# ==============================================================================
+# Francis Environment Profile: REGULATED
+# File: config/environments/regulated.yaml
+#
+# INTENT:
+#   Compliance-forward production posture:
+#     - Strict governance (approvals + trust)
+#     - Required audit + explanations
+#     - Restricted exports and explicit retention
+#     - Allowlist-only networking (fail closed)
+#     - Web learning disabled by default
+#
+# ASSUMPTIONS:
+#   - Deployed behind a TLS reverse proxy.
+#   - Secrets are provided via env/vault only (no secrets in config files).
+#   - Operators require traceability for meaningful actions.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: regulated
+  name: Regulated
+  description: >
+    Regulated/compliance posture: strict governance, required audit trails,
+    constrained networking, restricted exports, and explicit retention controls.
+
+  invariants:
+    - "Audit and explanations are required."
+    - "Strict approvals for high/critical operations."
+    - "Exports require approval and are redacted."
+    - "Allowlist-only networking."
+    - "Web learning is disabled by default."
+
+  operator_notes:
+    - "Treat this profile as the baseline for compliance environments."
+    - "Do not relax trust floors or approval requirements without documented change control."
+    - "Keep retention and export policies aligned with your org requirements."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: regulated
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+  concurrency:
+    api_workers: 2
+    worker_threads: 8
+    daemon_concurrency: 4
+
+# ------------------------------------------------------------------------------
+# API posture (secure boundary)
+# ------------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+  security:
+    auth_mode: jwt
+    allow_anonymous: false
+    trust_proxy_headers: true
+
+  cors:
+    enabled: true
+    # In regulated posture, origins should be explicitly configured.
+    # Replace these with your real UI domain(s).
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  timeouts:
+    read_s: 30
+    write_s: 45
+    idle_s: 60
+
+  limits:
+    max_request_mb: 5
+    max_json_mb: 3
+
+  websocket:
+    ping_interval_s: 20
+    ping_timeout_s: 10
+    max_message_kb: 128
+
+# ------------------------------------------------------------------------------
+# Observability / Audit (the point of regulated posture)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+    # Regulated environments often require tighter log hygiene.
+    redaction:
+      enabled: true
+      redact_tokens: true
+      redact_credentials: true
+      redact_headers:
+        - authorization
+        - cookie
+        - x-api-key
+      redact_fields:
+        - password
+        - secret
+        - token
+        - api_key
+        - private_key
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+
+    # Audit event hygiene (intent-level guidance).
+    include_actor: true
+    include_request_id: true
+    include_approval_id: true
+    include_trust_level: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.15
+
+  metrics:
+    enabled: true
+    export:
+      format: prometheus
+      path: "/metrics"
+
+# ------------------------------------------------------------------------------
+# Governance (strict + higher floors)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: true          # regulated: even medium risk often needs approval
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 3   # higher baseline trust required
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    # Smaller default export bundles to reduce accidental exfiltration.
+    default_max_bundle_size_mb: 10
+    redact_secrets: true
+    redact_credentials: true
+    # Enforce export bounding (hint-level; enforcement implementation-specific)
+    require_filters: true
+    require_reason: true
+
+  change_control:
+    # Hint-level: governance can optionally log when profile/policy changes occur.
+    log_config_changes: true
+    require_approval_for_policy_changes: true
+
+# ------------------------------------------------------------------------------
+# Data retention / privacy posture (explicit)
+# ------------------------------------------------------------------------------
+retention:
+  # These are intent-level settings; enforcement depends on your backend.
+  ledger:
+    enabled: true
+    max_days: 30
+    max_mb: 200
+    purge_requires_approval: true
+
+  audit:
+    enabled: true
+    max_days: 90
+    purge_requires_approval: true
+
+  explanations:
+    enabled: true
+    max_days: 90
+    purge_requires_approval: true
+
+  logs:
+    enabled: true
+    max_days: 30
+    purge_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Network posture (fail-closed allowlist only)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: true
+
+  egress:
+    enabled: false
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+      # Add ONLY internal endpoints/subnets required for operations:
+      # - "10.0.0.0/8"
+      # - "172.16.0.0/12"
+      # - "192.168.0.0/16"
+    denylist:
+      - "0.0.0.0/0"
+      - "::/0"
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (local-only by default; remote must be explicitly enabled)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: false
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false
+
+  sampling:
+    temperature: 0.2
+    top_p: 0.9
+    max_tokens: 1024
+
+# ------------------------------------------------------------------------------
+# Memory / persistence (externalized state expected)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+    pgvector:
+      enabled: false
+      dsn: ""
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 200
+      max_days: 30
+
+# ------------------------------------------------------------------------------
+# External services (expected in regulated production)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: true
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 20
+    pool_timeout_s: 30
+    statement_timeout_s: 30
+
+  redis:
+    enabled: true
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 20
+    socket_timeout_s: 5
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Feature flags (regulated defaults)
+# ------------------------------------------------------------------------------
+features:
+  web_learning:
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      mode: static
+      static_peers: []
+    consensus:
+      enabled: false
+      algorithm: raft
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  industrial:
+    enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  credentials:
+    # Hint-level: treat credential request/revoke as critical in regulated posture.
+    request_requires_approval: true
+    revoke_requires_approval: true
+    list_min_trust: 4
+
+  resilience:
+    enabled: true
+    backup:
+      enabled: true
+      require_approval: true
+      schedule_hint: "daily"
+    restore:
+      enabled: true
+      require_approval: true
+
+# ------------------------------------------------------------------------------
+# Assertions (lint/fail-fast intent)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: audit_required
+    severity: error
+    expr: "{{observability.audit.level == 'required'}}"
+    message: "Regulated profile requires audit level 'required'."
+
+  - id: strict_approvals
+    severity: error
+    expr: "{{governance.approvals.mode == 'strict'}}"
+    message: "Regulated profile requires strict approvals."
+
+  - id: medium_requires_approval
+    severity: warn
+    expr: "{{governance.approvals.default_requires_approval_for_risk.medium == true}}"
+    message: "Regulated posture typically requires approvals for medium risk actions."
+
+  - id: egress_disabled
+    severity: error
+    expr: "{{network.egress.enabled == false}}"
+    message: "Regulated profile requires egress disabled unless explicitly allowlisted."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "REGULATED"
+  banner:
+    enabled: true
+    text: "REGULATED MODE — STRICT AUDIT / RESTRICTED EXPORTS"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

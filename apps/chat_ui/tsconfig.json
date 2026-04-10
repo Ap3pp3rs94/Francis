@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Francis Chat UI (Vite + React) — strict, production-hardened",
+  "compilerOptions": {
+    /* ------------------------------------------------------------------------------------------
+     * Target / runtime
+     * ------------------------------------------------------------------------------------------ */
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "useDefineForClassFields": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * Module system (Vite-first)
+     * ------------------------------------------------------------------------------------------ */
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * JSX / React
+     * ------------------------------------------------------------------------------------------ */
+    "jsx": "react-jsx",
+
+    /* ------------------------------------------------------------------------------------------
+     * Type checking strictness (Francis standard: defensive by default)
+     * ------------------------------------------------------------------------------------------ */
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * Code quality / correctness gates
+     * ------------------------------------------------------------------------------------------ */
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitThis": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * JS interop (minimal but practical for ecosystem)
+     * ------------------------------------------------------------------------------------------ */
+    "allowJs": false,
+    "checkJs": false,
+    "skipLibCheck": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * Emit behavior (Vite handles bundling; tsc is for typecheck)
+     * ------------------------------------------------------------------------------------------ */
+    "noEmit": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * Paths / baseUrl
+     * - Keep simple unless you add aliasing to vite.config.ts
+     * ------------------------------------------------------------------------------------------ */
+    "baseUrl": ".",
+
+    /* ------------------------------------------------------------------------------------------
+     * Types
+     * - Vite provides import.meta.env typing via vite/client.
+     * ------------------------------------------------------------------------------------------ */
+    "types": ["vite/client"],
+
+    /* ------------------------------------------------------------------------------------------
+     * Build ergonomics / observability
+     * ------------------------------------------------------------------------------------------ */
+    "forceConsistentCasingInFileNames": true,
+
+    /* ------------------------------------------------------------------------------------------
+     * Output / diagnostics (kept default; enable as-needed)
+     * ------------------------------------------------------------------------------------------ */
+    "pretty": true
+  },
+
+  /* --------------------------------------------------------------------------------------------
+   * Scope
+   * -------------------------------------------------------------------------------------------- */
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".vite",
+    "coverage",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.test.tsx",
+    "**/*.spec.tsx"
+  ]
+}

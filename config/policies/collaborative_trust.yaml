@@ -1,0 +1,694 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Collaborative Trust (multi-actor / multi-instance trust governance)
+# Path:   config/policies/collaborative_trust.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This policy defines how Francis establishes and manages trust when collaborating
+# with:
+#   - human operators (UI/CLI)
+#   - service accounts (API clients)
+#   - other Francis instances (federation)
+#   - plugins (internal or external)
+#   - workers/daemons (local processes)
+#
+# It governs:
+#   - Baseline trust assignment from authentication + attestation posture
+#   - Trust updates from observed signals (approvals, behavior, anomalies)
+#   - Trust sharing / endorsements across federation (bounded, non-transitive by default)
+#   - Revocation, quarantine, and re-verification requirements
+#   - Audit contract: every trust change is explainable and logged
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: if identity or trust cannot be resolved, treat as untrusted.
+# - Deterministic: trust is computed by declared rules; outputs are explainable.
+# - Least privilege: trust gates actions; higher trust is earned, bounded, and decays.
+# - Anti-sybil: do not allow trust inflation through cheap identities or transitive chains.
+# - No secrets: do not store raw tokens/keys in trust state; store references/hashes only.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "collaborative_trust_policy"
+  notes:
+    - "Trust is a governance input, not a UX feature."
+    - "Trust is numeric, bounded, and explainable."
+    - "Federation trust sharing is optional and capped."
+
+# ------------------------------------------------------------------------------
+# Global enablement + posture
+# ------------------------------------------------------------------------------
+collaborative_trust:
+  enabled: true
+
+  # Modes:
+  # - disabled: trust system exists but does not gate; use only auth decisions
+  # - policy:   follow this policy (default)
+  # - strict:   require strong identity + trust for most non-read actions
+  mode: "policy" # disabled | policy | strict
+
+  # If true, any unresolved identity/trust state denies non-read operations.
+  fail_closed: true
+
+  # If true, trust changes must emit audit events (recommended).
+  audit_all_trust_changes: true
+
+  # If true, unknown actors are allowed *read-only* under limited conditions.
+  allow_unknown_read_only: false
+
+  # If true, trust is evaluated for internal components as well (plugins/workers).
+  evaluate_internal_callers: true
+
+# ------------------------------------------------------------------------------
+# Trust scale (numeric) + semantics
+# ------------------------------------------------------------------------------
+trust_scale:
+  # Canonical scale used by policies (approvals, api_permissions, action_readiness).
+  # Numeric levels must be stable across the system.
+  min: 0
+  max: 10
+
+  semantics:
+    0: "untrusted / unknown"
+    1: "identified (weak) / read-only eligible"
+    2: "low trust / basic read and low-risk actions"
+    3: "operator standard / routine actions with governance"
+    4: "trusted operator / limited egress or exports (policy-dependent)"
+    5: "senior operator / can approve medium-high risk"
+    6: "admin operator / can perform broad mutations with approvals"
+    7: "high-trust approver / can decide critical approvals (policy-dependent)"
+    8: "system steward / multi-approver quorum eligible"
+    9: "safety-critical steward / actuation and regulated exports (with approvals)"
+    10: "root-of-trust (reserved; should be rare and tightly controlled)"
+
+  # Clamp behavior for computed trust.
+  clamp: true
+
+# ------------------------------------------------------------------------------
+# Collaborator identity model
+# ------------------------------------------------------------------------------
+identity:
+  enabled: true
+
+  # Collaborator types; used for baseline trust and signal weighting.
+  collaborator_types:
+    - "human"
+    - "service"
+    - "instance"
+    - "plugin"
+    - "worker"
+    - "unknown"
+
+  # Identity requirements by type.
+  # Implementations map these to actual auth/claims/certs.
+  requirements:
+    human:
+      require_unique_id: true
+      require_display_name: false
+      require_auth_method: true
+      allow_anonymous: false
+
+    service:
+      require_unique_id: true
+      require_auth_method: true
+      allow_anonymous: false
+
+    instance:
+      require_unique_id: true
+      require_instance_fingerprint: true
+      allow_anonymous: false
+
+    plugin:
+      require_unique_id: true
+      require_plugin_manifest_ref: true
+      allow_anonymous: false
+
+    worker:
+      require_unique_id: true
+      allow_anonymous: false
+
+    unknown:
+      require_unique_id: false
+      allow_anonymous: true
+
+  # Stable collaborator id format (policy-level expectation).
+  id_format:
+    prefix_by_type:
+      human: "user_"
+      service: "svc_"
+      instance: "node_"
+      plugin: "plug_"
+      worker: "wrk_"
+      unknown: "unk_"
+    prefer: "ulid" # ulid | uuidv4 | uuidv7 | opaque
+
+  # Privacy posture: what identity attributes may be persisted.
+  privacy:
+    persist_fields:
+      - "collaborator_id"
+      - "collaborator_type"
+      - "auth_method"
+      - "issuer"
+      - "subject"
+      - "fingerprints"
+      - "scopes"
+      - "created_ts"
+      - "last_seen_ts"
+    do_not_persist_fields:
+      - "raw_token"
+      - "jwt"
+      - "password"
+      - "private_key"
+      - "full_ip_address"
+    ip_handling:
+      store: "hash" # none | hash | full
+      hash_algorithm: "sha256"
+      rotate_salt_days: 7
+
+# ------------------------------------------------------------------------------
+# Authentication/attestation posture → baseline trust
+# ------------------------------------------------------------------------------
+baseline_trust:
+  enabled: true
+
+  # Auth methods recognized by policy (implementation maps actual methods).
+  auth_methods:
+    - "none"
+    - "local_process"
+    - "bearer_token"
+    - "jwt"
+    - "mtls"
+    - "signed_request"
+    - "device_attested"
+
+  # Baseline trust by auth method.
+  # NOTE: baseline trust is only the starting point; signals can raise/lower it.
+  by_auth_method:
+    none: 0
+    bearer_token: 2
+    jwt: 3
+    signed_request: 4
+    mtls: 5
+    device_attested: 6
+    local_process: 6
+
+  # Baseline trust by collaborator type (applied after auth baseline; min/max bounded).
+  by_collaborator_type:
+    human:
+      add: 0
+      min: 0
+      max: 9
+    service:
+      add: -1
+      min: 0
+      max: 8
+    instance:
+      add: 0
+      min: 0
+      max: 8
+    plugin:
+      add: -2
+      min: 0
+      max: 7
+    worker:
+      add: -1
+      min: 0
+      max: 8
+    unknown:
+      add: 0
+      min: 0
+      max: 1
+
+  # If identity is missing required fields → baseline becomes 0.
+  on_identity_incomplete: "set_untrusted" # set_untrusted | deny | degrade_to_read_only
+
+# ------------------------------------------------------------------------------
+# Trust signals (how trust changes over time)
+# ------------------------------------------------------------------------------
+signals:
+  enabled: true
+
+  # Signal processing model:
+  # - accumulate weighted deltas into a trust score
+  # - clamp to [min,max]
+  # - apply decay
+  model: "weighted_sum_clamped" # weighted_sum_clamped | bayesian | rules_only
+
+  # Signal classes are used for weighting and audit explanations.
+  classes:
+    strong: 1.0
+    medium: 0.6
+    weak: 0.3
+
+  # Trust increases (positive signals)
+  positive:
+    # Approvals: a trusted approver explicitly approved an action by this collaborator.
+    approval_granted:
+      enabled: true
+      class: "strong"
+      delta: +1.0
+      max_effect_per_day: +2.0
+
+    # Clean operations: actions executed with no errors, no policy violations, no anomalies.
+    clean_operations_window:
+      enabled: true
+      class: "medium"
+      delta: +0.2
+      window_s: 3600
+      max_effect_per_day: +1.0
+
+    # Verified identity upgrade: collaborator re-authenticates with stronger method (jwt → mtls).
+    stronger_auth_upgrade:
+      enabled: true
+      class: "strong"
+      delta: +1.5
+      max_effect_per_day: +1.5
+
+    # Federation consensus endorsement (if federation enabled, bounded by caps).
+    federation_consensus_endorsement:
+      enabled: true
+      class: "medium"
+      delta: +0.5
+      max_effect_per_day: +1.0
+
+  # Trust decreases (negative signals)
+  negative:
+    # Policy violations: attempting gated actions without approval, repeated denied requests.
+    policy_violation:
+      enabled: true
+      class: "strong"
+      delta: -2.0
+      max_effect_per_day: -6.0
+
+    # Suspicious behavior: rate limit hits, abnormal access patterns.
+    anomaly_detected:
+      enabled: true
+      class: "strong"
+      delta: -3.0
+      max_effect_per_day: -9.0
+
+    # Auth downgrade: losing strong auth posture (mtls → bearer token).
+    auth_downgrade:
+      enabled: true
+      class: "medium"
+      delta: -1.0
+      max_effect_per_day: -2.0
+
+    # Failed actions: repeated runtime failures can indicate misuse or misconfiguration.
+    repeated_failures:
+      enabled: true
+      class: "weak"
+      delta: -0.5
+      window_s: 1800
+      threshold: 3
+      max_effect_per_day: -2.0
+
+# ------------------------------------------------------------------------------
+# Decay and stability (avoid permanent elevation)
+# ------------------------------------------------------------------------------
+decay:
+  enabled: true
+
+  # Trust decays toward baseline over time.
+  # This prevents permanent privilege accumulation.
+  toward: "baseline" # baseline | zero
+  half_life_days: 30
+
+  # Minimum decay interval.
+  min_interval_s: 3600
+
+  # Decay does not apply to these collaborator types by default (can be overridden).
+  exemptions:
+    collaborator_types:
+      - "worker" # local workers may be stable identities (optional)
+    allow_exemptions: true
+
+# ------------------------------------------------------------------------------
+# Endorsements / delegation (trust propagation with caps)
+# ------------------------------------------------------------------------------
+propagation:
+  enabled: true
+
+  # Default: do NOT allow transitive trust chains (anti-sybil).
+  allow_transitive: false
+  max_transitive_depth: 1
+
+  # Endorsement rules
+  endorsements:
+    enabled: true
+
+    # Minimum trust required to endorse another collaborator.
+    min_trust_to_endorse: 7
+
+    # Endorsements must be attributable.
+    require_endorser_identity: true
+
+    # Optional: require a signature artifact reference (no raw keys here).
+    require_signature_ref: true
+
+    # Cap: endorsements cannot elevate above this trust level without direct signals.
+    endorsed_trust_cap: 6
+
+    # TTL for endorsement influence.
+    ttl_s: 86_400 # 24 hours
+
+    # If endorsement expires, trust should drift back via decay.
+    expire_behavior: "decay" # decay | immediate_drop
+
+  delegation:
+    enabled: true
+
+    # Delegation does not change trust directly; it grants scoped capability access
+    # and must be separately approved/audited.
+    trust_does_not_increase_on_delegation: true
+
+# ------------------------------------------------------------------------------
+# Federation consensus (multi-instance trust sharing)
+# ------------------------------------------------------------------------------
+federation:
+  enabled: false
+
+  # If federation is enabled, trust sharing must be bounded and auditable.
+  sharing:
+    enabled: true
+
+    # Only share trust summaries, not raw signals, by default.
+    share_mode: "summary" # summary | full | none
+
+    # Do not share PII-like metadata. Only identifiers and trust bands.
+    share_fields:
+      - "collaborator_id"
+      - "collaborator_type"
+      - "trust_level"
+      - "trust_band"
+      - "evaluated_at"
+      - "reason_codes"
+
+    # Trust bands for coarse sharing (prevents precise gaming).
+    trust_bands:
+      - { name: "low", min: 0, max: 2 }
+      - { name: "medium", min: 3, max: 5 }
+      - { name: "high", min: 6, max: 8 }
+      - { name: "critical", min: 9, max: 10 }
+
+  consensus:
+    enabled: true
+
+    # Quorum rule for accepting a shared trust assessment.
+    # Example: require at least N nodes, and at least pct agreement.
+    quorum:
+      min_nodes: 3
+      min_agreement_pct: 0.67
+
+    # Conflict handling when peers disagree.
+    conflict_resolution: "take_min" # take_min | take_median | take_max | require_operator_approval
+
+    # Cap trust derived from federation consensus.
+    consensus_trust_cap: 6
+
+    # How long federation-provided trust is considered fresh.
+    freshness_ttl_s: 900
+
+# ------------------------------------------------------------------------------
+# Action gating integration (how trust impacts actions)
+# ------------------------------------------------------------------------------
+gating:
+  enabled: true
+
+  # These are default trust requirements by action category.
+  # More specific policies (api_permissions, approvals, action_readiness) may override.
+  min_trust_by_category:
+    read_only: 1
+    mutation: 3
+    export_sensitive: 5
+    destructive: 6
+    credential_operations: 7
+    network_egress: 5
+    industrial_actuation: 9
+
+  # If trust is below required threshold:
+  on_insufficient_trust: "deny" # deny | require_approval | degrade_to_read_only
+
+  # If collaborator is unknown:
+  unknown_actor:
+    allow_read_only: false
+    on_attempt_mutation: "deny"
+
+# ------------------------------------------------------------------------------
+# Revocation / quarantine (rapid containment)
+# ------------------------------------------------------------------------------
+revocation:
+  enabled: true
+
+  # If revoked, collaborator trust is forced to 0 and actions are denied.
+  immediate: true
+
+  # Revocation triggers
+  triggers:
+    - id: "manual_operator_revoke"
+      enabled: true
+      severity: "critical"
+    - id: "credential_compromise_suspected"
+      enabled: true
+      severity: "critical"
+    - id: "policy_violation_burst"
+      enabled: true
+      severity: "high"
+      window_s: 600
+      threshold: 3
+    - id: "anomaly_critical"
+      enabled: true
+      severity: "critical"
+
+  quarantine:
+    enabled: true
+    # Quarantine means: allow only read-only endpoints + require approvals for everything else.
+    behavior:
+      force_trust_level: 1
+      require_approval_for_all_mutations: true
+      require_reverification: true
+    ttl_s: 3_600
+
+# ------------------------------------------------------------------------------
+# Rate limiting (per collaborator, policy-level hints)
+# ------------------------------------------------------------------------------
+rate_limits:
+  enabled: true
+
+  # Default limits by collaborator type (implementation may apply per-route too).
+  defaults:
+    human:
+      requests_per_min: 120
+      bursts: 30
+    service:
+      requests_per_min: 300
+      bursts: 60
+    instance:
+      requests_per_min: 600
+      bursts: 120
+    plugin:
+      requests_per_min: 120
+      bursts: 30
+    worker:
+      requests_per_min: 600
+      bursts: 120
+    unknown:
+      requests_per_min: 30
+      bursts: 10
+
+  # On limit exceeded:
+  on_exceed: "throttle_and_log" # throttle_and_log | deny_and_log | quarantine
+
+# ------------------------------------------------------------------------------
+# Storage contract (trust state persistence)
+# ------------------------------------------------------------------------------
+storage:
+  enabled: true
+
+  backend: "filesystem" # filesystem | sqlite | postgres
+
+  filesystem:
+    base_dir: "./data/trust"
+
+    paths:
+      current_state: "./data/trust/levels/current_state.json"
+      history_log: "./data/trust/levels/history.jsonl"
+      revocations: "./data/trust/revocations/revocations.jsonl"
+      endorsements: "./data/trust/endorsements/endorsements.jsonl"
+
+    atomic_write: true
+    permissions_hint:
+      restrict_to_owner: true
+
+  retention:
+    enabled: true
+    history_keep_days: 365
+    revocations_keep_days: 730
+    endorsements_keep_days: 90
+
+# ------------------------------------------------------------------------------
+# Observability (audit trail + metrics)
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  events:
+    enabled: true
+    # Emit events for: baseline set, signal applied, decay tick, endorsement, revocation, quarantine.
+    kinds:
+      - "trust.baseline_set"
+      - "trust.signal_applied"
+      - "trust.decayed"
+      - "trust.endorsed"
+      - "trust.revoked"
+      - "trust.quarantined"
+      - "trust.reverified"
+
+    include:
+      - "collaborator_id"
+      - "collaborator_type"
+      - "old_trust"
+      - "new_trust"
+      - "reason_codes"
+      - "signal_id"
+      - "actor"           # who caused the change (if applicable)
+      - "ts"
+
+    # Never include raw secrets/tokens.
+    include_sensitive: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "trust.baseline_set"
+      - "trust.signal_applied"
+      - "trust.revoked"
+      - "trust.quarantined"
+      - "trust.endorsed"
+    histograms:
+      - "trust.level"
+      - "trust.delta"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    collaborative_trust:
+      mode: "policy"
+      fail_closed: false
+      allow_unknown_read_only: true
+    gating:
+      unknown_actor:
+        allow_read_only: true
+        on_attempt_mutation: "require_approval"
+    baseline_trust:
+      by_auth_method:
+        none: 1
+
+  workstation:
+    collaborative_trust:
+      mode: "policy"
+      fail_closed: true
+      allow_unknown_read_only: false
+
+  production:
+    collaborative_trust:
+      mode: "strict"
+      fail_closed: true
+      allow_unknown_read_only: false
+    baseline_trust:
+      by_auth_method:
+        bearer_token: 1
+        jwt: 3
+        signed_request: 4
+        mtls: 6
+        device_attested: 7
+        local_process: 7
+    propagation:
+      allow_transitive: false
+    federation:
+      enabled: false
+
+  federated:
+    collaborative_trust:
+      mode: "strict"
+      fail_closed: true
+    federation:
+      enabled: true
+      consensus:
+        enabled: true
+        quorum:
+          min_nodes: 3
+          min_agreement_pct: 0.67
+        conflict_resolution: "take_min"
+        consensus_trust_cap: 6
+
+  regulated:
+    collaborative_trust:
+      mode: "strict"
+      fail_closed: true
+      allow_unknown_read_only: false
+    baseline_trust:
+      by_auth_method:
+        bearer_token: 0
+        jwt: 3
+        signed_request: 5
+        mtls: 7
+        device_attested: 8
+        local_process: 8
+    propagation:
+      endorsements:
+        endorsed_trust_cap: 5
+        ttl_s: 43_200
+    revocation:
+      quarantine:
+        ttl_s: 7_200
+    gating:
+      min_trust_by_category:
+        network_egress: 7
+        export_sensitive: 7
+        destructive: 8
+        credential_operations: 8
+
+  safety_critical:
+    collaborative_trust:
+      mode: "strict"
+      fail_closed: true
+      allow_unknown_read_only: false
+    baseline_trust:
+      by_auth_method:
+        bearer_token: 0
+        jwt: 2
+        signed_request: 5
+        mtls: 8
+        device_attested: 9
+        local_process: 9
+    propagation:
+      enabled: true
+      allow_transitive: false
+      endorsements:
+        min_trust_to_endorse: 9
+        endorsed_trust_cap: 4
+        ttl_s: 21_600
+    federation:
+      enabled: true
+      consensus:
+        enabled: true
+        quorum:
+          min_nodes: 5
+          min_agreement_pct: 0.8
+        conflict_resolution: "require_operator_approval"
+        consensus_trust_cap: 4
+    gating:
+      min_trust_by_category:
+        industrial_actuation: 10

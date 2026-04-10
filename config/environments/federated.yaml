@@ -1,0 +1,311 @@
+# ==============================================================================
+# Francis Environment Profile: FEDERATED
+# File: config/environments/federated.yaml
+#
+# INTENT:
+#   Multi-instance federation posture:
+#     - Enable federation subsystem and instance identity
+#     - Configure discovery/coordination endpoints explicitly
+#     - Tighten governance and audit because blast radius increases
+#     - Network allowlist for federation traffic (no accidental WAN gossip)
+#
+# SECURITY PRINCIPLES:
+#   - Federation traffic is privileged control-plane traffic.
+#   - Defaults are conservative: federation enabled only with explicit settings.
+#   - Never assume public internet is safe; prefer private networks/VPN.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: federated
+  name: Federated
+  description: >
+    Federation-enabled profile for coordinated multi-instance operation.
+    Requires explicit discovery configuration and strong governance/audit.
+
+  invariants:
+    - "Federation enabled with explicit instance identity."
+    - "Discovery endpoints must be explicitly configured."
+    - "Audit and explanations are required."
+    - "Network allowlist must include federation endpoints."
+
+  operator_notes:
+    - "Run behind a reverse proxy with TLS for control-plane traffic."
+    - "Prefer private networks/VPN; avoid exposing federation endpoints publicly."
+    - "If you enable remote model providers, do so explicitly and log it."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: federated
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+# ------------------------------------------------------------------------------
+# Instance identity (critical for federation)
+# ------------------------------------------------------------------------------
+identity:
+  # Stable unique identifier for this node within the federation.
+  # Recommended: a UUID, hostname-based ID, or provisioned instance key.
+  instance_id: "francis-node-001"
+  instance_name: "Francis Node 001"
+  role: "member"                    # member | leader | observer (hint-level)
+  region: ""                        # optional: "us-east", "onprem-1", etc.
+  tags: []                          # optional: ["gpu", "edge", "lab"]
+
+# ------------------------------------------------------------------------------
+# API posture
+# ------------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+  security:
+    auth_mode: jwt
+    allow_anonymous: false
+    trust_proxy_headers: true
+
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  timeouts:
+    read_s: 45
+    write_s: 60
+    idle_s: 120
+
+# ------------------------------------------------------------------------------
+# Observability (federated = audit-heavy)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.5
+
+# ------------------------------------------------------------------------------
+# Governance (tighter because of larger blast radius)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 2
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 50
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (explicit allowlists for federation control-plane)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: true
+
+  egress:
+    enabled: true
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+
+      # RFC1918 ranges are common for private federation networks.
+      # Keep broad allowlists if you truly operate on private subnets.
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+    denylist:
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Federation subsystem configuration
+# ------------------------------------------------------------------------------
+features:
+  federation:
+    enabled: true
+
+    # Control-plane binding for federation API/transport (if separate from main API).
+    bind:
+      host: "0.0.0.0"
+      port: 9100
+
+    # Discovery: how nodes find each other.
+    # Choose ONE model (explicit).
+    discovery:
+      enabled: true
+      mode: static               # static | registry | dns | file (hint-level)
+
+      # Static peer list example (recommended simplest):
+      static_peers:
+        # Example format: scheme://host:port
+        # Replace with your actual nodes. These MUST be internal-only ideally.
+        - "http://10.0.0.11:9100"
+        - "http://10.0.0.12:9100"
+
+      # Optional: registry discovery (if you implement a registry service later)
+      registry_url: ""
+
+      # Optional: DNS discovery (if using SRV/A records later)
+      dns_name: ""
+
+    # Consensus/gossip parameters (hint-level; backend may ignore until implemented)
+    consensus:
+      enabled: true
+      algorithm: raft            # raft | paxos | none (hint-level)
+      election_timeout_ms: 2500
+      heartbeat_interval_ms: 500
+      log_level: info
+
+    # Federated task coordination (hint-level)
+    coordination:
+      enabled: true
+      task_routing: balanced     # balanced | sticky | leader_only
+      max_inflight_per_peer: 8
+
+    # Security posture for federation traffic (auth between nodes)
+    security:
+      mode: jwt                  # jwt | token | mtls (mtls recommended later)
+      shared_token: ""           # leave empty; provided via env/secrets at runtime
+      jwt_issuer: "francis-federation"
+      jwt_audience: "francis-nodes"
+      require_signed_messages: true
+
+    # Safety guardrails (important)
+    guardrails:
+      # Prevent accidental "public federation".
+      allow_public_addresses: false
+      require_private_network_peers: true
+
+      # Require approvals for cross-node high-risk actions.
+      require_approval_for_remote_execution: true
+
+      # If enabled, any unknown peer is rejected (recommended).
+      strict_peer_allowlist: true
+
+      # Allowlist of peer instance_ids (optional; if your federation advertises ids)
+      peer_instance_allowlist: []
+      # Example:
+      # peer_instance_allowlist:
+      #   - "francis-node-001"
+      #   - "francis-node-002"
+
+# ------------------------------------------------------------------------------
+# Models (federated: local-first; remote optional but explicit)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: false
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false
+
+# ------------------------------------------------------------------------------
+# External services (common in federated deployments)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: true
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 10
+    pool_timeout_s: 30
+
+  redis:
+    enabled: true
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 10
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Assertions (fail-fast / lint)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: federation_enabled
+    severity: error
+    expr: "{{features.federation.enabled == true}}"
+    message: "Federated profile requires features.federation.enabled=true."
+
+  - id: discovery_configured
+    severity: error
+    expr: "{{features.federation.discovery.enabled == true}}"
+    message: "Federated profile requires federation discovery enabled."
+
+  - id: strict_governance
+    severity: error
+    expr: "{{governance.approvals.mode == 'strict'}}"
+    message: "Federated profile requires strict approvals mode."
+
+  - id: no_public_federation
+    severity: warn
+    expr: "{{features.federation.guardrails.allow_public_addresses == false}}"
+    message: "Federated profile should not allow public addresses."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "FEDERATED"
+  banner:
+    enabled: true
+    text: "FEDERATED MODE — MULTI-NODE CONTROL PLANE"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"
+  federation:
+    control_plane_url: "http://127.0.0.1:9100"

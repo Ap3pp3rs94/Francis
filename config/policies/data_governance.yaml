@@ -1,0 +1,515 @@
+# ==============================================================================
+#  FRANCIS — data_governance.yaml
+#  Cone Layer 3: Governance Policy (Data)
+# ==============================================================================
+#
+#  Purpose:
+#    Define how FRANCIS classifies, stores, retains, encrypts, audits, redacts,
+#    exports, and deletes data across the entire project tree.
+#
+#  Scope:
+#    - Runtime data under:      C:\Francis\data\**
+#    - Config/secrets under:    C:\Francis\config\**
+#    - Generated artifacts:     C:\Francis\data\artifacts\**
+#    - Logs/telemetry:          C:\Francis\data\logs\**
+#    - Web knowledge cache:     C:\Francis\data\web_knowledge\**
+#    - Vectors/embeddings:      C:\Francis\data\vectors\**
+#
+#  Design principles:
+#    - Minimize sensitive data collection by default.
+#    - Prevent accidental persistence of secrets in logs/artifacts.
+#    - Classify data deterministically by path + content signals.
+#    - Explicit retention schedules per data family.
+#    - Strong export controls + approval gates for risky flows.
+#
+#  Notes:
+#    - This policy is intended to be enforced by your governance/policy engine,
+#      filesystem policy, and credential/telemetry subsystems.
+#    - All "match" rules use glob-style patterns.
+#
+# ==============================================================================
+
+schema_version: 1
+
+policy:
+  id: data_governance
+  enabled: true
+  enforcement_mode: strict   # strict | warn | off
+  owner: governance
+  tags:
+    - security
+    - privacy
+    - retention
+    - compliance
+    - audit
+
+# ------------------------------------------------------------------------------
+# DATA CLASSIFICATION MODEL
+# ------------------------------------------------------------------------------
+classification:
+  # Ranking: higher = more sensitive.
+  levels:
+    - id: public
+      rank: 10
+      description: "Non-sensitive, safe for public sharing."
+      handling:
+        allow_logging: true
+        allow_export: true
+        requires_encryption_at_rest: false
+
+    - id: internal
+      rank: 20
+      description: "Default internal operational data (non-public)."
+      handling:
+        allow_logging: true
+        allow_export: true
+        requires_encryption_at_rest: false
+
+    - id: confidential
+      rank: 30
+      description: "Sensitive operational data; limit sharing; redact logs where possible."
+      handling:
+        allow_logging: limited
+        allow_export: gated
+        requires_encryption_at_rest: true
+
+    - id: restricted
+      rank: 40
+      description: "Highly sensitive; strong controls; approvals often required."
+      handling:
+        allow_logging: minimal
+        allow_export: approval_required
+        requires_encryption_at_rest: true
+
+    - id: secret
+      rank: 50
+      description: "Credentials/keys/tokens; never log; never export; isolate access."
+      handling:
+        allow_logging: false
+        allow_export: false
+        requires_encryption_at_rest: true
+
+    - id: regulated
+      rank: 60
+      description: "Regulated personal/safety-critical data; strict approvals and retention."
+      handling:
+        allow_logging: minimal
+        allow_export: approval_required
+        requires_encryption_at_rest: true
+
+  defaults:
+    # Classification applied when no inference rule matches.
+    default_level: internal
+
+  # Deterministic inference rules (top-down; first match wins).
+  inference_rules:
+    # --- Secrets / credentials
+    - match:
+        any:
+          - "C:\\Francis\\config\\secrets.yaml"
+          - "C:\\Francis\\data\\credentials\\**"
+          - "**\\vault.db"
+      classify_as: secret
+      notes: "Credentials, delegations, scopes, vault database."
+
+    # --- Potentially sensitive config (not necessarily secret)
+    - match:
+        any:
+          - "C:\\Francis\\config\\policies\\**"
+          - "C:\\Francis\\config\\models\\**"
+          - "C:\\Francis\\config\\runtime\\**"
+          - "C:\\Francis\\meta\\**"
+      classify_as: confidential
+      notes: "Policy/config can reveal system behavior and control surfaces."
+
+    # --- Conversation memory / summaries
+    - match:
+        any:
+          - "C:\\Francis\\data\\conversations\\**"
+          - "C:\\Francis\\data\\memory\\**"
+      classify_as: confidential
+      notes: "User-provided text may contain PII; treat as confidential by default."
+
+    # --- Attachments & uploads
+    - match:
+        any:
+          - "C:\\Francis\\data\\uploads\\**"
+          - "C:\\Francis\\data\\artifacts\\deliverables\\**"
+      classify_as: confidential
+      notes: "May include externally sourced or user-provided documents."
+
+    # --- Logs (may still contain sensitive info; redaction rules apply)
+    - match:
+        any:
+          - "C:\\Francis\\data\\logs\\**"
+          - "C:\\Francis\\data\\credentials\\usage_logs\\**"
+      classify_as: confidential
+      notes: "Logs are confidential; secrets must be redacted and never stored in plaintext."
+
+    # --- Quarantine is high-risk by nature
+    - match:
+        any:
+          - "C:\\Francis\\data\\quarantine\\malware\\**"
+          - "C:\\Francis\\data\\quarantine\\unsafe_code\\**"
+      classify_as: restricted
+      notes: "Potentially dangerous artifacts; restrict access and keep isolated."
+
+    - match:
+        any:
+          - "C:\\Francis\\data\\quarantine\\misinformation\\**"
+          - "C:\\Francis\\data\\web_knowledge\\blocked\\**"
+      classify_as: restricted
+      notes: "Harmful/blocked content logs; maintain for audit but restrict handling."
+
+    # --- Web knowledge cache
+    - match:
+        any:
+          - "C:\\Francis\\data\\web_knowledge\\cache\\**"
+          - "C:\\Francis\\data\\web_knowledge\\sources\\**"
+      classify_as: internal
+      notes: "Derived from public sources but may include extracted context; keep internal."
+
+    # --- Embeddings/vectors (can leak semantics)
+    - match:
+        any:
+          - "C:\\Francis\\data\\vectors\\**"
+      classify_as: confidential
+      notes: "Embeddings can encode sensitive info; treat as confidential."
+
+# ------------------------------------------------------------------------------
+# STORAGE GOVERNANCE (WHERE DATA IS ALLOWED TO LIVE)
+# ------------------------------------------------------------------------------
+storage:
+  allowed_roots:
+    - "C:\\Francis\\data"
+    - "C:\\Francis\\config"
+    - "C:\\Francis\\docs"
+    - "C:\\Francis\\meta"
+    - "C:\\Francis\\schemas"
+    - "C:\\Francis\\src"
+    - "C:\\Francis\\scripts"
+    - "C:\\Francis\\infra"
+    - "C:\\Francis\\plugins"
+    - "C:\\Francis\\runtimes"
+    - "C:\\Francis\\tests"
+
+  prohibited_roots:
+    # Keep secrets out of typical “Downloads/Desktop” style folders by policy.
+    - "C:\\Users\\*\\Desktop\\**"
+    - "C:\\Users\\*\\Downloads\\**"
+    - "C:\\Temp\\**"
+    - "C:\\Windows\\Temp\\**"
+
+  git_safety:
+    # Policy intent: secrets MUST NOT be committed.
+    forbid_committing:
+      - "C:\\Francis\\config\\secrets.yaml"
+      - "C:\\Francis\\data\\credentials\\**"
+      - "**\\vault.db"
+    recommended_committable_templates:
+      - "C:\\Francis\\config\\secrets.example.yaml"
+      - "C:\\Francis\\data\\credentials\\delegations\\_template.delegation.yaml"
+      - "C:\\Francis\\data\\credentials\\scopes\\_template.scopes.yaml"
+
+# ------------------------------------------------------------------------------
+# ENCRYPTION REQUIREMENTS
+# ------------------------------------------------------------------------------
+encryption:
+  at_rest:
+    required_for_levels:
+      - confidential
+      - restricted
+      - secret
+      - regulated
+
+    # Your enforcement can be OS-level (BitLocker/LUKS) or per-file/database.
+    accepted_controls:
+      - id: os_volume_encryption
+        description: "Full disk/volume encryption (e.g., BitLocker)."
+      - id: database_encryption
+        description: "DB-level encryption (SQLCipher/pgcrypto/etc.)."
+      - id: file_envelope_encryption
+        description: "Per-file encryption using envelope keys from vault."
+
+    vault_integration:
+      key_source: "C:\\Francis\\data\\credentials\\vault.db"
+      key_rotation:
+        enabled: true
+        rotation_days: 90
+        emergency_rekey_on_compromise: true
+
+  in_transit:
+    require_tls: true
+    min_tls_version: "1.2"
+    require_hostname_verification: true
+
+# ------------------------------------------------------------------------------
+# LOGGING & REDACTION (STOP SECRETS/PII FROM LANDING IN LOGS)
+# ------------------------------------------------------------------------------
+redaction:
+  enabled: true
+  apply_to:
+    - "C:\\Francis\\data\\logs\\**"
+    - "C:\\Francis\\data\\artifacts\\explanations\\**"
+    - "C:\\Francis\\data\\artifacts\\reports\\**"
+    - "C:\\Francis\\data\\conversations\\summaries\\**"
+    - "C:\\Francis\\data\\conversations\\ledger\\**"
+
+  # Patterns are applied in order. Keep them conservative and additive.
+  patterns:
+    - name: bearer_token
+      regex: "(?i)bearer\\s+[a-z0-9._\\-]+"
+      replacement: "Bearer [REDACTED]"
+
+    - name: api_key_like
+      regex: "(?i)sk-[a-z0-9]{16,}"
+      replacement: "[REDACTED_KEY]"
+
+    - name: jwt
+      regex: "eyJ[a-zA-Z0-9_\\-]+=*\\.[a-zA-Z0-9_\\-]+=*\\.[a-zA-Z0-9_\\-]+=*"
+      replacement: "[REDACTED_JWT]"
+
+    - name: email
+      regex: "(?i)[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}"
+      replacement: "[REDACTED_EMAIL]"
+
+    - name: phone_naive
+      regex: "(?x)(\\+?1[\\s\\-\\.]*)?(\\(?\\d{3}\\)?[\\s\\-\\.]*)\\d{3}[\\s\\-\\.]*\\d{4}"
+      replacement: "[REDACTED_PHONE]"
+
+    - name: ssn_naive
+      regex: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+      replacement: "[REDACTED_SSN]"
+
+  # If something classified as secret is detected in a log stream, define behavior.
+  leak_response:
+    enabled: true
+    on_detect_secret_in_log: quarantine_and_alert  # block | quarantine_and_alert | redact_only
+    quarantine_path: "C:\\Francis\\data\\quarantine\\unsafe_code"
+    alert_channels:
+      - "logs.safety"
+      - "logs.audit"
+
+# ------------------------------------------------------------------------------
+# RETENTION & DISPOSAL (WHAT GETS KEPT, FOR HOW LONG)
+# ------------------------------------------------------------------------------
+retention:
+  # Default applies when no specific rule matches.
+  defaults:
+    ttl_days: 90
+    on_expire: delete
+    delete_method: standard  # standard | secure
+
+  schedules:
+    # --- High churn caches (short-lived)
+    - id: cache_short
+      match:
+        any:
+          - "C:\\Francis\\data\\cache\\**"
+          - "C:\\Francis\\data\\vectors\\embeddings_cache\\**"
+          - "C:\\Francis\\data\\web_knowledge\\cache\\**"
+      ttl_days: 14
+      on_expire: delete
+      delete_method: standard
+
+    # --- Operational logs
+    - id: logs_standard
+      match:
+        any:
+          - "C:\\Francis\\data\\logs\\operations\\**"
+          - "C:\\Francis\\data\\logs\\api_actions\\**"
+          - "C:\\Francis\\data\\logs\\errors\\**"
+          - "C:\\Francis\\data\\logs\\plugin_factory\\**"
+      ttl_days: 90
+      on_expire: archive
+      archive_path: "C:\\Francis\\data\\artifacts\\exports\\log_archives"
+      delete_method: standard
+
+    # --- Audit/security logs (longer retention)
+    - id: logs_audit_security
+      match:
+        any:
+          - "C:\\Francis\\data\\logs\\audit\\**"
+          - "C:\\Francis\\data\\logs\\safety\\**"
+          - "C:\\Francis\\data\\logs\\trust_changes\\**"
+          - "C:\\Francis\\data\\credentials\\usage_logs\\**"
+          - "C:\\Francis\\data\\web_knowledge\\blocked\\harmful_content_log.jsonl"
+      ttl_days: 365
+      on_expire: archive
+      archive_path: "C:\\Francis\\data\\artifacts\\exports\\audit_archives"
+      delete_method: standard
+
+    # --- Conversations / memory
+    - id: conversations_default
+      match:
+        any:
+          - "C:\\Francis\\data\\conversations\\threads\\**"
+          - "C:\\Francis\\data\\conversations\\indexes\\**"
+          - "C:\\Francis\\data\\conversations\\context_snapshots\\**"
+          - "C:\\Francis\\data\\memory\\**"
+      ttl_days: 180
+      on_expire: delete
+      delete_method: secure
+
+    - id: rolling_summary
+      match:
+        any:
+          - "C:\\Francis\\data\\conversations\\summaries\\rolling_summary.md"
+      ttl_days: 365
+      on_expire: archive
+      archive_path: "C:\\Francis\\data\\artifacts\\exports\\conversation_summaries"
+      delete_method: secure
+
+    - id: ledger
+      match:
+        any:
+          - "C:\\Francis\\data\\conversations\\ledger\\ledger.jsonl"
+      ttl_days: 365
+      on_expire: archive
+      archive_path: "C:\\Francis\\data\\artifacts\\exports\\ledger_archives"
+      delete_method: secure
+
+    # --- Credentials (do not auto-delete vault by retention; rotate via vault policy)
+    - id: credentials_persist
+      match:
+        any:
+          - "C:\\Francis\\data\\credentials\\vault.db"
+      ttl_days: 0
+      on_expire: keep
+      delete_method: secure
+
+    # --- Quarantine (keep long enough for review, then purge securely)
+    - id: quarantine_standard
+      match:
+        any:
+          - "C:\\Francis\\data\\quarantine\\**"
+      ttl_days: 90
+      on_expire: delete
+      delete_method: secure
+
+# ------------------------------------------------------------------------------
+# EXPORT CONTROLS (WHAT MAY LEAVE THE SYSTEM / BECOME DELIVERABLES)
+# ------------------------------------------------------------------------------
+exports:
+  enabled: true
+
+  allowed_export_roots:
+    - "C:\\Francis\\data\\artifacts\\deliverables"
+    - "C:\\Francis\\data\\artifacts\\exports"
+    - "C:\\Francis\\docs"
+
+  deny_export_if_classification_in:
+    - secret
+
+  require_approval_if_classification_in:
+    - confidential
+    - restricted
+    - regulated
+
+  approval_gate:
+    policy_ref: "approvals.yaml"
+    # Recommended mapping to your approvals subsystem:
+    request_queue: "C:\\Francis\\data\\approvals\\pending"
+    approved_queue: "C:\\Francis\\data\\approvals\\approved"
+    rejected_queue: "C:\\Francis\\data\\approvals\\rejected"
+    emergency_queue: "C:\\Francis\\data\\approvals\\emergency"
+
+  export_sanitization:
+    enabled: true
+    # Always apply redaction patterns to exported logs/reports unless explicitly exempted.
+    apply_redaction: true
+    strip_secrets_like_strings: true
+    include_provenance_manifest: true
+
+# ------------------------------------------------------------------------------
+# ACCESS CONTROL INTENT (HIGH-LEVEL; DETAILED RULES LIVE IN trust_boundaries.yaml)
+# ------------------------------------------------------------------------------
+access_intent:
+  # This section gives the policy engine hints; the Trust system enforces the final
+  # allow/deny using trust levels, scopes, and domain permissions.
+  default:
+    allow_read_levels:
+      - internal
+      - confidential
+    allow_write_levels:
+      - internal
+      - confidential
+
+  restricted_data:
+    allow_read_levels:
+      - restricted
+      - secret
+      - regulated
+    requirements:
+      - "service_identity_required"
+      - "least_privilege_scopes"
+      - "audit_log_required"
+      - "approval_required_for_export"
+
+  secret_data:
+    requirements:
+      - "credential_vault_only"
+      - "no_plaintext_logging"
+      - "no_export"
+      - "access_limited_to_credentials_subsystem"
+
+# ------------------------------------------------------------------------------
+# PROVENANCE & LINEAGE (WHERE DID DATA COME FROM / HOW WAS IT TRANSFORMED)
+# ------------------------------------------------------------------------------
+provenance:
+  enabled: true
+  store_manifests_under:
+    - "C:\\Francis\\data\\artifacts\\exports\\manifests"
+  include_fields:
+    - source_type
+    - source_uri
+    - retrieval_timestamp
+    - hash_sha256
+    - transformation_chain
+    - policy_versions
+
+# ------------------------------------------------------------------------------
+# BACKUP POLICY (WHAT SHOULD BE BACKED UP AND HOW)
+# ------------------------------------------------------------------------------
+backups:
+  enabled: true
+
+  include:
+    - "C:\\Francis\\config\\**"
+    - "C:\\Francis\\docs\\**"
+    - "C:\\Francis\\meta\\**"
+    - "C:\\Francis\\schemas\\**"
+    - "C:\\Francis\\src\\**"
+    - "C:\\Francis\\plugins\\**"
+    - "C:\\Francis\\data\\artifacts\\**"
+    - "C:\\Francis\\data\\trust\\**"
+    - "C:\\Francis\\data\\domains\\_registry.json"
+
+  exclude:
+    - "C:\\Francis\\apps\\chat_ui\\node_modules\\**"
+    - "C:\\Francis\\data\\cache\\**"
+    - "C:\\Francis\\data\\uploads\\inbox\\**"
+    - "C:\\Francis\\data\\web_knowledge\\cache\\**"
+    - "C:\\Francis\\data\\vectors\\embeddings_cache\\**"
+
+  protection:
+    encryption_required: true
+    encryption_control: os_volume_encryption
+    include_vault_db: true
+    vault_db_handling: "encrypted_backup_only"
+
+# ------------------------------------------------------------------------------
+# POLICY INTEGRATION (LINKS TO RELATED POLICIES)
+# ------------------------------------------------------------------------------
+integration:
+  depends_on:
+    - "privacy.yaml"
+    - "filesystem.yaml"
+    - "credential_usage.yaml"
+    - "trust_boundaries.yaml"
+    - "approvals.yaml"
+  emits_signals:
+    - "governance.data.classification"
+    - "governance.data.retention"
+    - "governance.data.export_gate"
+    - "governance.data.redaction"

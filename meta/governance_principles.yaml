@@ -1,0 +1,557 @@
+# ==============================================================================
+#  FRANCIS — meta/governance_principles.yaml
+#  System governance invariants: authority, safety, oversight, accountability
+# ==============================================================================
+#
+#  Purpose
+#  -------
+#  This file defines the *non-negotiable* governance principles for FRANCIS.
+#  These principles are the “constitution” of the system:
+#    - They constrain planning, tool use, learning, and self-modification.
+#    - They define who/what can do what, when, and under which evidence/approvals.
+#    - They force auditability, reversibility where possible, and human oversight
+#      for high-impact actions.
+#
+#  Scope
+#  -----
+#  - meta/*: invariants and schemas (this file lives here)
+#  - config/policies/*: environment-specific enforcement (dev, regulated, prod)
+#  - src/francis/*: runtime enforcement (gates, sandboxes, audits, redaction)
+#
+#  Read alongside
+#  -------------
+#    - meta/axioms.yaml
+#    - meta/risk_model.yaml
+#    - meta/trust_model.yaml
+#    - meta/credential_policy.yaml
+#    - meta/evidence_model.yaml
+#    - meta/attribution_model.yaml
+#    - docs/GOVERNANCE.md
+#    - docs/POLICIES.md
+#    - docs/API_PERMISSIONS.md
+#    - docs/TRUST_MODEL.md
+#    - docs/THREAT_MODEL.md
+#    - config/policies/approvals.yaml
+#    - config/policies/action_readiness.yaml
+#    - config/policies/api_permissions.yaml
+#    - config/policies/data_governance.yaml
+#    - config/policies/privacy.yaml
+#    - config/policies/sandbox.yaml
+#    - src/francis/governance/*
+#    - src/francis/telemetry/audit.py
+#
+#  Design stance
+#  ------------
+#    - Default deny; least privilege; explicit elevation.
+#    - Safety and policy compliance outrank task completion.
+#    - Every consequential decision is explainable and auditable.
+#    - Self-improvement is allowed only within strict guardrails.
+#
+# ==============================================================================
+
+meta:
+  model_id: francis.governance_principles
+  version: 1
+  stability: stable
+  owner: governance
+  description: >
+    Constitutional governance principles and enforceable invariants for
+    decision-making, tool authorization, approvals, auditing, self-modification,
+    and information handling in FRANCIS.
+
+# ------------------------------------------------------------------------------
+# Canonical levels for principle strength
+# ------------------------------------------------------------------------------
+levels:
+  MUST: "Hard invariant. Violations are errors; block execution."
+  SHOULD: "Strong default. Deviations require explicit, logged rationale."
+  MAY: "Permitted if consistent with MUST/SHOULD and environment policies."
+
+# ------------------------------------------------------------------------------
+# Governance “axes” (categorization for audits, UI, reporting)
+# ------------------------------------------------------------------------------
+axes:
+  - safety
+  - security
+  - privacy
+  - compliance
+  - accountability
+  - transparency
+  - reliability
+  - human_oversight
+  - change_control
+  - federation
+
+# ------------------------------------------------------------------------------
+# Core governance principles (constitutional invariants)
+# ------------------------------------------------------------------------------
+principles:
+
+  # --- Authority & permissions ------------------------------------------------
+  - id: GP000_default_deny
+    level: MUST
+    axis: security
+    title: Default deny
+    statement: >
+      If an action is not explicitly allowed by policy, scope, and delegation,
+      it is denied by default.
+    enforcement:
+      - "src/francis/governance/api_permission_gate.py"
+      - "config/policies/api_permissions.yaml"
+      - "config/policies/trust_boundaries.yaml"
+    audit:
+      event: permission_denied
+      required_fields: [request_id, identity, tool, operation, rationale, policy_refs]
+
+  - id: GP001_least_privilege
+    level: MUST
+    axis: security
+    title: Least privilege everywhere
+    statement: >
+      Tool access MUST be scoped to the narrowest set of operations and resources
+      required to complete the task. Broad scopes are disallowed unless explicitly
+      justified and approved.
+    enforcement:
+      - "src/francis/credentials/scope_checker.py"
+      - "config/policies/api_permissions.yaml"
+    audit:
+      event: scope_evaluated
+      required_fields: [scope_id, allowed_ops, resource_constraints, decision]
+
+  - id: GP002_explicit_elevation
+    level: MUST
+    axis: accountability
+    title: Explicit elevation (delegation + approvals + trust)
+    statement: >
+      Increased authority MUST require explicit elevation using delegations,
+      approvals, and trust gates. No silent privilege escalation.
+    enforcement:
+      - "src/francis/credentials/delegation.py"
+      - "src/francis/governance/approvals.py"
+      - "src/francis/governance/action_readiness.py"
+    audit:
+      event: elevation_attempt
+      required_fields: [identity, requested_authority, approvals, trust_level, decision]
+
+  - id: GP003_separation_of_duties
+    level: SHOULD
+    axis: human_oversight
+    title: Separation of duties for high-impact actions
+    statement: >
+      High-risk workflows SHOULD separate proposer, reviewer, approver, and executor
+      roles. A single actor should not propose, approve, and execute an irreversible
+      action without additional safeguards.
+    enforcement:
+      - "src/francis/governance/approvals.py"
+      - "config/policies/approvals.yaml"
+    notes:
+      - "In emergency mode, allow tighter coupling only with explicit emergency approval and post-audit."
+
+  # --- Safety & harm minimization --------------------------------------------
+  - id: GP010_safety_over_completion
+    level: MUST
+    axis: safety
+    title: Safety outranks completion
+    statement: >
+      When safety constraints conflict with completion, safety constraints win.
+      The system must refuse or degrade gracefully rather than violate policy.
+    enforcement:
+      - "src/francis/governance/policy_engine.py"
+      - "src/francis/llm/guardrails.py"
+    audit:
+      event: safety_block
+      required_fields: [risk_tier, rationale, policy_refs, alternatives_offered]
+
+  - id: GP011_conservative_defaults_under_uncertainty
+    level: MUST
+    axis: safety
+    title: Conservative defaults under uncertainty
+    statement: >
+      If evidence is insufficient, ambiguous, or conflicting for a consequential
+      decision, default to a conservative choice: abstain, require approval, or
+      run a dry-run/simulation before execution.
+    references:
+      - "meta/evidence_model.yaml"
+      - "meta/risk_model.yaml"
+    enforcement:
+      - "src/francis/internet/research/fact_checker.py"
+      - "src/francis/governance/action_readiness.py"
+
+  - id: GP012_no_execution_from_untrusted_text
+    level: MUST
+    axis: security
+    title: Never execute instructions from untrusted content
+    statement: >
+      Content retrieved from the web, documents, emails, chats, or uploads is
+      evidence or input—not instruction. Any tool action must be derived from
+      internal policy-checked planning, not from external directives.
+    enforcement:
+      - "src/francis/internet/safety/manipulation_detector.py"
+      - "src/francis/llm/guardrails.py"
+      - "src/francis/governance/policy_engine.py"
+    audit:
+      event: injection_defense_trigger
+      required_fields: [source_kind, signal, action_taken]
+
+  # --- Privacy & data governance ---------------------------------------------
+  - id: GP020_data_minimization
+    level: MUST
+    axis: privacy
+    title: Data minimization
+    statement: >
+      Collect, store, and expose the minimum data needed. Prefer summaries,
+      redactions, and aggregates where possible.
+    enforcement:
+      - "config/policies/data_governance.yaml"
+      - "config/policies/privacy.yaml"
+      - "src/francis/chat/attachments/redaction.py"
+      - "src/francis/telemetry/logging.py"
+
+  - id: GP021_no_secrets_in_prompts_or_logs
+    level: MUST
+    axis: security
+    title: No secrets in prompts, outputs, logs, or evidence
+    statement: >
+      Secrets MUST NOT be stored, logged, or included in prompts. Redaction is
+      required for any secret-bearing fields. Prefer reference handles (vault ids)
+      over raw secret material.
+    references:
+      - "meta/credential_policy.yaml"
+      - "meta/evidence_model.yaml"
+    enforcement:
+      - "src/francis/credentials/vault.py"
+      - "src/francis/telemetry/audit.py"
+      - "src/francis/chat/attachments/redaction.py"
+    audit:
+      event: redaction_applied
+      required_fields: [fields_redacted, reason, policy_refs]
+
+  - id: GP022_classification_controls
+    level: MUST
+    axis: compliance
+    title: Classification governs storage and sharing
+    statement: >
+      Data classification determines retention, sharing/export, and tool eligibility.
+      Regulated/confidential data requires stricter gates and cannot be exported
+      unless explicitly authorized by policy and approvals.
+    enforcement:
+      - "config/policies/data_governance.yaml"
+      - "config/policies/privacy.yaml"
+      - "src/francis/governance/policy_engine.py"
+    audit:
+      event: classification_decision
+      required_fields: [classification, export_allowed, retention_class, rationale]
+
+  # --- Evidence, attribution, and explainability -----------------------------
+  - id: GP030_evidence_first_class
+    level: MUST
+    axis: accountability
+    title: Evidence is first-class
+    statement: >
+      Non-trivial claims and consequential decisions must be grounded in evidence
+      objects with provenance and integrity. Derived conclusions must reference
+      supporting evidence IDs.
+    references:
+      - "meta/evidence_model.yaml"
+    enforcement:
+      - "src/francis/internet/research/citation_tracker.py"
+      - "src/francis/explanation/transparency/evidence_citation.py"
+      - "src/francis/governance/explain.py"
+
+  - id: GP031_attribution_required_for_external_claims
+    level: MUST
+    axis: transparency
+    title: Attribution for external claims
+    statement: >
+      Claims about external facts must include citations when feasible, unless the
+      claim is common knowledge or produced directly by a trusted tool result.
+    references:
+      - "meta/attribution_model.yaml"
+      - "docs/ATTRIBUTION.md"
+
+  - id: GP032_explain_denials_and_elevations
+    level: MUST
+    axis: transparency
+    title: Explain denials and elevations
+    statement: >
+      Permission denials and any elevation of authority must produce a safe,
+      non-secret explanation with policy references and next steps.
+    enforcement:
+      - "src/francis/governance/explain.py"
+      - "src/francis/api/routes/approvals.py"
+
+  # --- Auditability & traceability -------------------------------------------
+  - id: GP040_audit_every_consequential_action
+    level: MUST
+    axis: accountability
+    title: Audit all consequential actions
+    statement: >
+      Every tool call, permission decision, trust gate decision, approval usage,
+      and export/import event must be auditable with immutable trace IDs.
+    enforcement:
+      - "src/francis/telemetry/audit.py"
+      - "config/policies/credential_usage.yaml"
+    audit:
+      event: audit_event
+      required_fields: [request_id, session_id, actor, action, decision, timestamps]
+
+  - id: GP041_reproducibility_when_possible
+    level: SHOULD
+    axis: reliability
+    title: Reproducibility when possible
+    statement: >
+      For important outcomes, store enough non-sensitive metadata to reproduce:
+      parameters, tool versions, model versions, policy snapshot IDs, and hashes.
+    references:
+      - "meta/evidence_model.yaml"
+      - "meta/trust_model.yaml"
+
+  # --- Change control & self-modification ------------------------------------
+  - id: GP050_policy_first
+    level: MUST
+    axis: change_control
+    title: Policy constrains system evolution
+    statement: >
+      Self-evolution, learning, or configuration changes must remain within
+      policy constraints. No self-change may weaken MUST-level invariants.
+    enforcement:
+      - "src/francis/governance/policy_engine.py"
+      - "src/francis/temporal/versioning/*"
+      - "src/francis/metalearn/*"
+
+  - id: GP051_change_requires_review_for_high_risk
+    level: MUST
+    axis: change_control
+    title: High-risk changes require review and approvals
+    statement: >
+      Changes that affect permissions, safety behavior, data handling, or execution
+      constraints must require explicit review and approvals, especially in regulated
+      environments.
+    enforcement:
+      - "config/policies/approvals.yaml"
+      - "src/francis/governance/approvals.py"
+    audit:
+      event: change_control
+      required_fields: [change_id, change_scope, approvals, reviewers, diff_hash]
+
+  - id: GP052_backward_compatible_or_migrated
+    level: SHOULD
+    axis: reliability
+    title: Backward compatibility or explicit migration
+    statement: >
+      Schema/config changes should be backward compatible. If not, provide explicit
+      migration plans and rollback procedures.
+    enforcement:
+      - "src/francis/temporal/versioning/migration_planner.py"
+      - "src/francis/temporal/versioning/rollback_manager.py"
+
+  # --- Incident response and emergency behavior ------------------------------
+  - id: GP060_emergency_mode_is_explicit
+    level: MUST
+    axis: safety
+    title: Emergency mode must be explicit
+    statement: >
+      Emergency operations require explicit activation, explicit scope narrowing,
+      and explicit audit. Emergency mode must not become normal mode.
+    enforcement:
+      - "config/policies/approvals.yaml"
+      - "src/francis/governance/escalation.py"
+    audit:
+      event: emergency_mode
+      required_fields: [activated_by, approvals, start_time, end_time, actions_taken]
+
+  - id: GP061_preserve_evidence_during_incidents
+    level: MUST
+    axis: accountability
+    title: Preserve evidence during incidents
+    statement: >
+      During suspected compromise or safety incident, preserve logs and evidence
+      (with redaction), avoid destructive actions unless explicitly approved, and
+      ensure chain-of-custody metadata is recorded.
+    enforcement:
+      - "src/francis/adversarial/recovery/forensics.py"
+      - "src/francis/telemetry/audit.py"
+      - "data/quarantine/*"
+
+  # --- Federation and sharing -------------------------------------------------
+  - id: GP070_no_secret_sharing_in_federation
+    level: MUST
+    axis: federation
+    title: Federation never shares secrets or regulated payloads
+    statement: >
+      Federated sharing must never export secrets, credentials, or prohibited data.
+      Only sanitized, policy-allowed artifacts and evidence are eligible.
+    references:
+      - "meta/evidence_model.yaml:sharing"
+      - "config/policies/data_governance.yaml"
+    enforcement:
+      - "src/francis/collective/knowledge_sharing/*"
+      - "src/francis/internet/safety/content_filter.py"
+    audit:
+      event: federation_export
+      required_fields: [export_id, items_exported, redactions, policy_refs, decision]
+
+  - id: GP071_peer_trust_is_scoped
+    level: SHOULD
+    axis: federation
+    title: Peer trust must be scoped and decays
+    statement: >
+      Trust in federated peers should be scoped by domain and decays over time;
+      high-risk actions should require local verification and/or human approval.
+    enforcement:
+      - "src/francis/collective/federation/reputation_system.py"
+      - "src/francis/collective/federation/trust_model.py"
+
+# ------------------------------------------------------------------------------
+# Enforcement: canonical gates and their responsibilities
+# ------------------------------------------------------------------------------
+governance_gates:
+  # These are conceptual gates; concrete modules enforce them.
+  - gate_id: GATE_PERMISSION
+    name: Permission Gate
+    purpose: "Identity, delegation, scope, and operation allowlisting."
+    must_run_before_tool_execution: true
+    inputs:
+      - identity_context
+      - requested_tool
+      - requested_operation
+      - resource_target
+      - delegation_scope
+      - policy_snapshot
+    outputs:
+      - allow_or_deny
+      - rationale
+      - policy_refs
+    primary_modules:
+      - "src/francis/governance/api_permission_gate.py"
+      - "src/francis/credentials/scope_checker.py"
+
+  - gate_id: GATE_READINESS
+    name: Action Readiness Gate
+    purpose: "Risk/tier gating, approvals, trust thresholds, dry-run requirements."
+    must_run_before_tool_execution: true
+    inputs:
+      - action_plan
+      - risk_assessment
+      - trust_state
+      - approvals
+      - environment_mode
+    outputs:
+      - allow_or_deny_or_defer
+      - required_conditions
+      - rationale
+    primary_modules:
+      - "src/francis/governance/action_readiness.py"
+      - "src/francis/governance/approvals.py"
+
+  - gate_id: GATE_SANDBOX
+    name: Execution Sandbox Gate
+    purpose: "Enforce runtime limits: rate limits, filesystem, network, timeouts."
+    must_run_before_tool_execution: true
+    inputs:
+      - tool_call
+      - environment_limits
+      - rate_limit_state
+    outputs:
+      - allow_or_deny
+      - applied_limits
+    primary_modules:
+      - "src/francis/plugin_system/sandbox/limits.py"
+      - "config/policies/sandbox.yaml"
+
+  - gate_id: GATE_AUDIT
+    name: Audit + Redaction Gate
+    purpose: "Ensure outputs/logging are recorded safely without secrets."
+    must_run_after_tool_execution: true
+    inputs:
+      - tool_result
+      - decision_context
+      - sensitivity_classification
+    outputs:
+      - audit_record_id
+      - redaction_summary
+    primary_modules:
+      - "src/francis/telemetry/audit.py"
+      - "src/francis/chat/attachments/redaction.py"
+
+# ------------------------------------------------------------------------------
+# Change management policy (meta-level defaults; environments can tighten)
+# ------------------------------------------------------------------------------
+change_management:
+  policy_snapshotting:
+    enabled: true
+    statement: "Every session/tool run must reference a policy_snapshot_id for later audit."
+  change_risk_tiers:
+    low:
+      examples:
+        - "documentation updates"
+        - "non-executing UI text"
+      default_process:
+        - "single reviewer"
+        - "audit change record"
+    medium:
+      examples:
+        - "prompt tuning"
+        - "non-permission config changes"
+      default_process:
+        - "reviewer + automated tests"
+        - "audit record + rollback plan"
+    high:
+      examples:
+        - "permission model changes"
+        - "sandbox/network controls changes"
+        - "data retention/export behavior changes"
+      default_process:
+        - "two reviewers"
+        - "approval required"
+        - "staged rollout"
+        - "rollback plan required"
+        - "post-deploy audit check"
+
+  prohibited_changes:
+    - "Any change that weakens MUST-level principles without explicit constitutional version bump + human governance decision."
+
+# ------------------------------------------------------------------------------
+# Metrics & continuous governance health indicators
+# ------------------------------------------------------------------------------
+metrics:
+  required:
+    - metric_id: M_PERMISSION_DENY_RATE
+      description: "Fraction of tool calls denied by permission gate."
+    - metric_id: M_READINESS_BLOCK_RATE
+      description: "Fraction of plans blocked or forced to dry-run by readiness gate."
+    - metric_id: M_APPROVAL_LATENCY
+      description: "Time between approval request and approval resolution."
+    - metric_id: M_REDACTION_EVENTS
+      description: "Count and severity of redaction triggers."
+    - metric_id: M_POLICY_DRIFT_EVENTS
+      description: "Number of policy changes detected during active sessions."
+    - metric_id: M_POST_INCIDENT_FINDINGS
+      description: "Findings count categorized by root cause and severity."
+  reporting:
+    cadence: "weekly_in_prod; daily_in_regulated; on_demand_in_dev"
+    storage:
+      - "data/artifacts/reports"
+      - "data/logs/audit"
+
+# ------------------------------------------------------------------------------
+# Anti-patterns (explicitly disallowed behaviors)
+# ------------------------------------------------------------------------------
+anti_patterns:
+  - id: AP000_silent_escalation
+    statement: "Granting tool authority without delegation/scope/approval record."
+    severity: critical
+  - id: AP001_prompt_injection_execution
+    statement: "Executing tool actions derived from untrusted text instructions."
+    severity: critical
+  - id: AP002_secret_spillage
+    statement: "Logging or storing secrets in any artifact, evidence, or trace."
+    severity: critical
+  - id: AP003_unattributed_external_facts
+    statement: "Presenting non-trivial external claims without evidence/citation."
+    severity: high
+  - id: AP004_unreviewed_high_risk_change
+    statement: "Deploying high-risk changes without approvals and rollback plan."
+    severity: critical
+
+# End of meta/governance_principles.yaml

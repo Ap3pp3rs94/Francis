@@ -1,0 +1,306 @@
+# ==============================================================================
+# FRANCIS — .gitignore
+# Cone Layer 0: Source Control Hygiene Contract
+# ==============================================================================
+#
+# Design intent:
+#   - Track source-of-truth: code, schemas, policies, docs, templates.
+#   - Ignore runtime state: logs, caches, local DBs, uploads, embeddings.
+#   - Ignore secrets always: dotenv, secrets.yaml, key material, vault DB.
+#
+# Operational notes:
+#   - .gitignore does NOT remove files already committed.
+#     If a secret/runtime file was tracked, you must de-track it:
+#       git rm --cached <path>   (then commit)
+#
+# ==============================================================================
+# 1) ENV / SECRETS (never commit)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+
+# direnv
+.envrc
+.direnv/
+
+# Root secrets file exists in tree; example stays tracked.
+config/secrets.yaml
+config/secrets.local.yaml
+config/secrets.*.local.yaml
+
+# Common secret material (private keys / keystores)
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.kdbx
+
+
+# ==============================================================================
+# 2) LANGUAGE RUNTIMES (Python, Rust, C/C++, WASM)
+# ==============================================================================
+# ------------------------------------------------------------------------------
+# Python (venvs, caches, tooling, packaging)
+# ------------------------------------------------------------------------------
+# Virtual environments
+/.venv/
+.venv/
+.venv*/
+venv/
+ENV/
+env/
+
+# Bytecode and runtime caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.nox/
+.tox/
+.hypothesis/
+
+# Coverage & profiling outputs
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.prof
+*.pstats
+
+# Packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# ------------------------------------------------------------------------------
+# Rust (Cargo) — only relevant if runtimes/rust or sdk/rust are used
+# ------------------------------------------------------------------------------
+**/target/
+**/*.rs.bk
+
+# ------------------------------------------------------------------------------
+# C / C++ — only relevant if runtimes/c_cpp or sdk/c_cpp are used
+# (scoped to c_cpp trees to avoid blocking intentional tracked binaries elsewhere)
+# ------------------------------------------------------------------------------
+**/c_cpp/**/build/
+**/c_cpp/**/cmake-build-*/
+**/c_cpp/**/CMakeFiles/
+**/c_cpp/**/CMakeCache.txt
+
+**/c_cpp/**/*.o
+**/c_cpp/**/*.obj
+**/c_cpp/**/*.a
+**/c_cpp/**/*.lib
+**/c_cpp/**/*.so
+**/c_cpp/**/*.dylib
+**/c_cpp/**/*.dll
+**/c_cpp/**/*.exe
+**/c_cpp/**/*.out
+**/c_cpp/**/*.pdb
+
+# ------------------------------------------------------------------------------
+# WebAssembly — compiled binaries are treated as generated artifacts by default.
+# Source .wat files remain tracked.
+# ------------------------------------------------------------------------------
+**/wasm/**/*.wasm
+**/wasm/**/*.wasm.map
+
+
+# ==============================================================================
+# 3) NODE / FRONTEND (deps, builds, caches)
+# ==============================================================================
+# Dependencies
+**/node_modules/
+
+# Build outputs / bundler caches
+**/dist/
+**/build/
+**/.vite/
+**/.cache/
+**/.turbo/
+**/.next/
+**/.svelte-kit/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+*.log.*
+
+# TypeScript incremental builds
+*.tsbuildinfo
+
+# Frontend env (Vite loads per-project .env files)
+apps/**/.env
+apps/**/.env.*
+!apps/**/.env.example
+
+# Frontend-local runtime state
+apps/**/data/**
+apps/**/plugins/generated/**
+
+
+# ==============================================================================
+# NOTE: LOCK FILES ARE TRACKED (DO NOT IGNORE)
+# ==============================================================================
+# Lock files ensure reproducible environments and MUST remain tracked.
+# Do NOT add these to .gitignore:
+#   - uv.lock                 (Python; present in repo)
+#   - package-lock.json       (npm)
+#   - yarn.lock               (Yarn)
+#   - pnpm-lock.yaml          (pnpm)
+#   - Cargo.lock              (Rust, if used)
+
+
+# ==============================================================================
+# 4) EDITORS / IDEs
+# ==============================================================================
+# VS Code: ignore user state, allow shared project configs if you add them later
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim swap
+*.swp
+*.swo
+
+
+# ==============================================================================
+# 5) OS / FILESYSTEM NOISE
+# ==============================================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.tmp/
+*.tmp
+*.bak
+*.old
+*~
+
+# Stray restore artifacts (safe to ignore; should not be tracked)
+/--------
+/FullName
+
+
+# ==============================================================================
+# 6) INFRASTRUCTURE (Terraform state + local compose overrides must never commit)
+# ==============================================================================
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Docker Compose local overrides (keep tracked overrides; ignore personal ones)
+docker-compose.override.yml
+docker-compose.override.yaml
+docker-compose.local.yml
+docker-compose.local.yaml
+**/docker-compose.override.yml
+**/docker-compose.override.yaml
+**/docker-compose.local.yml
+**/docker-compose.local.yaml
+
+# Compose v2 naming (your repo uses infra/docker/compose*.yaml)
+**/compose.override.local.yml
+**/compose.override.local.yaml
+**/compose.local.yml
+**/compose.local.yaml
+
+
+# ==============================================================================
+# 7) FRANCIS RUNTIME STATE (data/) — deny-by-default, allow scaffolds
+# ==============================================================================
+#
+# Policy:
+#   - /data is mutable runtime state (ledger, logs, caches, uploads, embeddings).
+#   - We ignore everything by default to prevent committing personal state.
+#   - We allowlist only the minimal scaffolds/templates intended to be versioned.
+#
+
+# Deny-by-default: ignore everything under data
+/data/**
+
+# Keep root placeholder so the directory exists on fresh clone
+!/data/.gitkeep
+
+# ------------------------------------------------------------------------------
+# Credentials scaffolds (templates tracked; vault DB never tracked)
+# ------------------------------------------------------------------------------
+!/data/credentials/
+!/data/credentials/delegations/
+!/data/credentials/scopes/
+!/data/credentials/usage_logs/
+!/data/credentials/delegations/_template.delegation.yaml
+!/data/credentials/scopes/_template.scopes.yaml
+!/data/credentials/usage_logs/_template.usage.jsonl
+/data/credentials/vault.db
+
+# ------------------------------------------------------------------------------
+# Domains scaffolds (registry + template domain tracked; live domains ignored)
+# ------------------------------------------------------------------------------
+!/data/domains/
+!/data/domains/_registry.json
+!/data/domains/_template_domain/
+!/data/domains/_template_domain/**
+
+# ------------------------------------------------------------------------------
+# Federation scaffolds (template instance tracked; live instances/logs ignored)
+# ------------------------------------------------------------------------------
+!/data/federation/
+!/data/federation/instances/
+!/data/federation/instances/_template_instance/
+!/data/federation/instances/_template_instance/**
+
+# ------------------------------------------------------------------------------
+# Industrial / simulation scaffolds (templates tracked; live runs ignored)
+# ------------------------------------------------------------------------------
+!/data/industrial/
+!/data/industrial/digital_twins/
+!/data/industrial/digital_twins/_template_asset/
+!/data/industrial/digital_twins/_template_asset/**
+!/data/industrial/processes/
+!/data/industrial/processes/_template_process/
+!/data/industrial/processes/_template_process/**
+!/data/industrial/simulations/
+!/data/industrial/simulations/_template_sim/
+!/data/industrial/simulations/_template_sim/**
+
+
+# ==============================================================================
+# 8) PLUGINS (generated outputs are runtime artifacts)
+# ==============================================================================
+# Generated plugins are produced by the plugin factory at runtime and are expected
+# to churn. Promote stable plugins into plugins/builtins or plugins/packs instead.
+#
+/plugins/generated/**
+!/plugins/generated/.gitkeep
+
+
+# ==============================================================================
+# 9) RUNTIME DEFENSIVES (PID/SOCK files)
+# ==============================================================================
+*.pid
+*.sock

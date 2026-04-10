@@ -1,0 +1,277 @@
+# ==============================================================================
+# Francis Environment Profile: DEV
+# File: config/environments/dev.yaml
+#
+# INTENT:
+#   Developer velocity profile:
+#     - Fast iteration / high observability
+#     - Localhost-friendly security + CORS for chat_ui
+#     - Optional local docker services (Postgres/Redis/Qdrant)
+#     - Governance present but tuned for development cadence
+#
+# SECURITY NOTE:
+#   "dev" is not "unsafe"; it is "explicitly relaxed" with clear boundaries.
+#   Avoid disabling governance entirely unless you are debugging core boot.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: dev
+  name: Development
+  description: >
+    Developer iteration profile. Enables verbose logging, local UI CORS,
+    optional docker-backed services, and relaxed gating where appropriate.
+
+  operator_notes:
+    - "Use this profile only on dev machines."
+    - "Prefer token auth even in dev to keep parity with production."
+    - "Web learning is allowed but should remain approval-gated for ingest."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: dev
+  strict_config: false
+  debug: true
+  deterministic_mode: false      # allow normal dev behavior
+  fail_fast: false              # don't crash on non-critical optional failures
+  safe_defaults: true
+
+# ------------------------------------------------------------------------------
+# API posture (service boundary)
+# ------------------------------------------------------------------------------
+api:
+  host: "127.0.0.1"
+  port: 8000
+
+  # Dev auth:
+  # - token is a good compromise: keeps auth in place but easy to use.
+  security:
+    auth_mode: token            # none | token | jwt
+    allow_anonymous: false
+    trust_proxy_headers: false
+
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+      - "http://127.0.0.1:4173"   # vite preview (optional)
+      - "http://localhost:4173"
+
+  timeouts:
+    read_s: 60
+    write_s: 60
+    idle_s: 120
+
+# ------------------------------------------------------------------------------
+# Observability (developer-centric)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: DEBUG
+    format: pretty             # pretty | jsonl (dev prefers readable)
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    level: recommended         # keep audit alive in dev so flows are tested
+    emit_ledger_events: true
+    emit_explanations: true
+
+  # Extra verbosity hints:
+  tracing:
+    enabled: true
+    sample_rate: 1.0
+
+# ------------------------------------------------------------------------------
+# Governance defaults (dev-friendly but not absent)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: policy               # policy is faster than strict but still meaningful
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 0
+    decay_enabled: false       # in dev, avoid surprising trust decay during testing
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 100
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (dev: allow local services; discourage public egress surprises)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: false
+
+  egress:
+    enabled: true
+    # Dev allowlist includes loopback + RFC1918 by default.
+    # You can still keep this tight if you want.
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+    # Explicitly deny "accidental metadata endpoints" (common footguns)
+    denylist:
+      - "169.254.169.254/32"      # cloud instance metadata (AWS/Azure/GCP patterns)
+      - "100.100.100.200/32"      # Alibaba metadata (common)
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Model routing posture (dev: allow local; optionally allow remote)
+# ------------------------------------------------------------------------------
+models:
+  # For dev, you might use local ollama OR remote providers.
+  # Keep remote disabled by default; enable explicitly if desired.
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: true
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false            # enable explicitly only when keys exist in .env
+
+  sampling:
+    temperature: 0.6
+    top_p: 0.95
+    max_tokens: 2048
+
+# ------------------------------------------------------------------------------
+# Memory / vector posture (dev: allow local or docker services)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant             # qdrant | faiss | pgvector
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+
+    pgvector:
+      enabled: false
+      dsn: ""
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 500
+      max_days: 60
+
+# ------------------------------------------------------------------------------
+# Feature flags (dev: enable experimentation, but keep ingestion governed)
+# ------------------------------------------------------------------------------
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: true
+    require_approval: true        # keep ingest approval-gated even in dev
+    audit_enabled: true
+    log_enabled: true
+
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      url: ""
+    gossip:
+      enabled: false
+
+  industrial:
+    enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  connectors:
+    cloud:
+      enabled: false
+    saas:
+      enabled: false
+    communication:
+      enabled: true
+      email_enabled: false
+      sms_enabled: false
+      push_enabled: false
+
+# ------------------------------------------------------------------------------
+# External services (dev: docker-friendly)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: false
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 10
+    pool_timeout_s: 30
+
+  redis:
+    enabled: false
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 10
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "DEV"
+  banner:
+    enabled: true
+    text: "DEV MODE — VERBOSE LOGS / GOV-GATED INGEST"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

@@ -1,0 +1,364 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Specialization Selector (routing + posture selection)
+# Path:   config/prompts/specialization_selector.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Determines which specialization should handle an incoming request and under
+# what posture / governance constraints.
+#
+# It does NOT solve the request directly.
+# It produces a routing decision for:
+#   - chat orchestrator prompt selection
+#   - model routing profile selection (config/models/*)
+#   - tool usage posture (none | read_only | plan_only | propose_actions | execute_if_approved)
+#   - safety review requirement
+#   - governance gates (trust floor, approvals, sandbox-only)
+#   - context fetch requirements (memory, domain registry, ledger, docs)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Prefer stability over novelty: pick the minimal specialization that fits.
+# - Be conservative with tool posture; default to plan_only unless clearly safe.
+# - Always flag safety_review_needed for:
+#     * wrongdoing-adjacent topics
+#     * credential handling
+#     * network egress / web learning
+#     * industrial actuation
+#     * destructive operations
+# - Forward-minded:
+#     * support new specializations and providers without breaking schema
+# ==============================================================================
+version: 1
+
+id: "specialization.selector"
+title: "Specialization Selector"
+owner: "francis"
+intent: "route_request"
+mode: "strict"
+
+meta:
+  notes:
+    - "Routes requests to specialist prompts and tool posture."
+    - "Provides conservative gating hints for governance."
+    - "Designed to be used on every inbound user message (cheap + fast)."
+  compatibility:
+    - "Stable output envelope; consumers ignore unknown fields."
+    - "Supports future specializations via string escape hatches."
+
+# ------------------------------------------------------------------------------
+# Input contract
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      ts_unix_s: { type: number, required: false }
+
+      source: { type: string, required: false } # ui | api | cli | daemon | worker | federation
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+
+      actor:
+        type: object
+        required: false
+        fields:
+          actor_id: { type: string, required: false }
+          actor_role: { type: string, required: false } # operator | admin | user | service
+          audience_type:
+            type: string
+            required: false
+            enum: ["operator_business", "student_support", "general", "unknown"]
+          tone_hint:
+            type: string
+            required: false
+            enum: ["professional", "supportive", "neutral", "urgent", "refusal"]
+
+      message: { type: string, required: true }
+
+      # Optional: upstream classification hints
+      intent_hint: { type: string, required: false } # conversational | operational | research | coding | policy | unknown
+      attachments_present: { type: boolean, required: false }
+
+  context:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      trust_level: { type: number, required: false }
+      approvals_enabled: { type: boolean, required: false }
+      web_learning_enabled: { type: boolean, required: false }
+
+      # Optional: recent subsystem signals
+      system_health_ok: { type: boolean, required: false }
+      pending_approvals_count: { type: number, required: false }
+
+      # Optional: hint whether memory retrieval is available
+      memory_available: { type: boolean, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - routing
+      - governance
+      - context_needs
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      routing:
+        type: object
+        additionalProperties: false
+        required:
+          - specialization
+          - rationale
+          - confidence
+          - response_tone
+          - response_format
+          - tool_posture
+          - model_profile_hint
+        properties:
+          # specialization is the downstream prompt family to use.
+          # keep stable names; allow extension via string.
+          specialization:
+            type: string
+            enum:
+              - "chat_orchestrator"
+              - "reasoning"
+              - "code"
+              - "research"
+              - "retrieval"
+              - "safety"
+              - "simulation"
+              - "creative"
+              - "operation_planner"
+              - "domain_induction"
+              - "explanation_generator"
+              - "attachments_intake"
+              - "colleague"
+              - "unknown"
+
+          rationale: { type: string }
+          confidence: { type: number } # 0..1
+
+          response_tone:
+            type: string
+            enum: ["professional", "supportive", "neutral", "urgent", "refusal"]
+
+          response_format:
+            type: string
+            enum: ["plain", "markdown", "json", "yaml"]
+
+          # tool_posture describes what the downstream system is allowed to do.
+          tool_posture:
+            type: string
+            enum:
+              - "none"
+              - "read_only"
+              - "plan_only"
+              - "propose_actions"
+              - "execute_if_approved"
+
+          # model_profile_hint maps to config/models/specialized/*.yaml
+          # Example: "reasoning", "code", "research", "safety", "retrieval", "simulation"
+          model_profile_hint: { type: string }
+
+      governance:
+        type: object
+        additionalProperties: false
+        required:
+          - safety_review_needed
+          - min_trust
+          - approvals_needed
+          - quorum_needed
+          - sandbox_only
+          - attribution_required
+          - notes
+        properties:
+          safety_review_needed: { type: boolean }
+          min_trust: { type: number }
+          approvals_needed: { type: boolean }
+          quorum_needed: { type: boolean }
+          sandbox_only: { type: boolean }
+          attribution_required: { type: boolean }
+          notes:
+            type: array
+            items: { type: string }
+
+      context_needs:
+        type: object
+        additionalProperties: false
+        required:
+          - memory_fetch
+          - ledger_fetch
+          - domain_registry_fetch
+          - approvals_fetch
+          - web_learning_allowed
+          - attachments_intake
+          - missing_info_questions
+        properties:
+          memory_fetch: { type: boolean }
+          ledger_fetch: { type: boolean }
+          domain_registry_fetch: { type: boolean }
+          approvals_fetch: { type: boolean }
+          web_learning_allowed: { type: boolean }
+          attachments_intake: { type: boolean }
+          missing_info_questions:
+            type: array
+            items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Specialization Selector.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Your job:
+      - Route the request to the most appropriate specialization.
+      - Set a conservative tool posture.
+      - Specify governance gating hints (trust, approvals, sandbox-only).
+      - Specify which context to fetch before answering.
+
+      Routing rules (high level):
+      - If request is code implementation/debugging -> specialization="code", model_profile_hint="code"
+      - If request is deep reasoning/logic/planning -> "reasoning"
+      - If request is research with citations/web -> "research" (but web_learning_allowed may be false)
+      - If request requires existing memory/ledger/domains -> "retrieval" or "chat_orchestrator" + context_needs
+      - If request is safety/policy adjudication -> "safety" + safety_review_needed=true
+      - If request is simulation/digital twin/industrial modeling -> "simulation"
+      - If request is operational runbook -> "operation_planner" (or "reasoning" if purely conceptual)
+
+      Governance defaults:
+      - Default tool_posture="plan_only".
+      - Escalate to safety_review_needed=true when topics include:
+          * credential handling
+          * network egress / web learning
+          * industrial actuation
+          * destructive filesystem changes
+          * wrongdoing-adjacent content
+      - In guard_state "restricted" or "lockdown": never select execute_if_approved by default.
+
+      Attribution:
+      - If answer likely relies on web sources or external claims, set attribution_required=true.
+
+      Tone rules:
+      - If actor.audience_type="operator_business": professional, concise, actionable.
+      - If actor.audience_type="student_support": supportive, plain language.
+      - If guard_state is "lockdown" and request is risky: urgent/refusal.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      CONTEXT:
+      {{context}}
+
+      Task:
+      Choose specialization + posture + governance + context needs.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.1
+  max_output_tokens: 1400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Reason codes (stable)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "ROUTE_CODE"
+  - "ROUTE_REASONING"
+  - "ROUTE_RESEARCH"
+  - "ROUTE_RETRIEVAL"
+  - "ROUTE_SAFETY"
+  - "ROUTE_SIMULATION"
+  - "ROUTE_PLANNER"
+  - "ROUTE_CHAT_ORCH"
+  - "NEEDS_MEMORY"
+  - "NEEDS_LEDGER"
+  - "NEEDS_DOMAINS"
+  - "NEEDS_APPROVALS"
+  - "NEEDS_ATTACHMENTS_INTAKE"
+  - "SAFETY_REVIEW_REQUIRED"
+  - "ATTRIBUTION_REQUIRED"
+  - "GUARD_RESTRICTED"
+  - "GUARD_LOCKDOWN"
+
+# ------------------------------------------------------------------------------
+# Audit events
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "specialization.selector.requested"
+    when: "before"
+    fields: ["request.source", "request.profile", "request.actor.audience_type"]
+
+  - kind: "specialization.selector.completed"
+    when: "after"
+    fields: ["routing.specialization", "routing.tool_posture", "governance.safety_review_needed", "observability.reason_codes"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.12
+
+  production:
+    generation_hints:
+      temperature: 0.1
+
+  regulated:
+    generation_hints:
+      temperature: 0.08
+
+  safety_critical:
+    generation_hints:
+      temperature: 0.06

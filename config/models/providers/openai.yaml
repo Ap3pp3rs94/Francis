@@ -1,0 +1,365 @@
+# ==============================================================================
+#  FRANCIS — openai.yaml
+#  Cone Layer 2: Model Provider Profile (OpenAI)
+# ==============================================================================
+#
+#  Purpose:
+#    First-class provider config for OpenAI’s hosted API.
+#
+#  Design goals:
+#    - Safe-by-default logging (no prompt/response bodies)
+#    - Strong resilience defaults (retry + circuit breaker)
+#    - Explicit capability signaling for routing/tooling
+#    - Sensible model aliases (easy to swap without touching code)
+#    - Environment-friendly auth (API key via env interpolation)
+#
+#  IMPORTANT:
+#    - Model ids evolve. Treat model_aliases as YOUR stable interface and update
+#      the right-hand side to whatever OpenAI exposes in /v1/models.
+#    - If your config loader supports ${ENV_VAR} interpolation, set:
+#        OPENAI_API_KEY
+#      Optionally also:
+#        OPENAI_BASE_URL (defaults to https://api.openai.com/v1)
+#        OPENAI_ORG_ID / OPENAI_PROJECT_ID (if you use them)
+#
+# ==============================================================================
+
+schema_version: 1
+
+provider:
+  id: openai
+  display_name: "OpenAI"
+  enabled: true
+
+  # Provider type should map to your implementation (e.g. openai_provider.py).
+  type: openai
+
+  # ---------------------------------------------------------------------------
+  # CONNECTION / TRANSPORT
+  # ---------------------------------------------------------------------------
+  transport:
+    # OpenAI API root
+    # If your loader supports env interpolation, you can switch to:
+    # base_url: "${OPENAI_BASE_URL}"
+    base_url: "https://api.openai.com/v1"
+    api_prefix: ""
+
+    tls:
+      verify: true
+      ca_bundle_path: null
+
+    proxy:
+      http: null
+      https: null
+      no_proxy: null
+
+    timeouts:
+      connect_s: 10
+      read_s: 180
+      write_s: 180
+      total_s: 180
+
+    pooling:
+      enabled: true
+      max_connections: 256
+      max_keepalive_connections: 64
+      keepalive_expiry_s: 90
+
+    # Some HTTP clients benefit from HTTP/2 on OpenAI endpoints.
+    http2: true
+
+    headers:
+      # REQUIRED:
+      Authorization: "Bearer ${OPENAI_API_KEY}"
+
+      # Optional (uncomment if you need them and your loader supports env vars):
+      # OpenAI-Organization: "${OPENAI_ORG_ID}"
+      # OpenAI-Project: "${OPENAI_PROJECT_ID}"
+
+      User-Agent: "FRANCIS/openai"
+      X-Client-Name: "francis"
+      X-Provider-ID: "openai"
+
+  # ---------------------------------------------------------------------------
+  # ENDPOINT MAP
+  # ---------------------------------------------------------------------------
+  endpoints:
+    models: "/models"
+
+    # Newer unified endpoint (if your client supports it)
+    responses: "/responses"
+
+    # Legacy / widely-supported endpoints
+    chat_completions: "/chat/completions"
+    completions: "/completions"
+    embeddings: "/embeddings"
+    moderations: "/moderations"
+
+  # ---------------------------------------------------------------------------
+  # CAPABILITIES (what this provider is expected to support)
+  # ---------------------------------------------------------------------------
+  capabilities:
+    # Text
+    chat: true
+    responses: true
+    completions: true
+    embeddings: true
+
+    # Runtime features
+    streaming: true
+    tool_calls: true
+
+    # Structured output controls (client-dependent; keep true for routing signals)
+    json_mode: true
+    json_schema: true
+
+    # Multimodal (set true if your stack routes/handles these)
+    vision: true
+    audio: false
+
+  # ---------------------------------------------------------------------------
+  # MODEL ALIASES (FRANCIS-stable handles -> provider model ids)
+  # ---------------------------------------------------------------------------
+  # Update RHS to your preferred OpenAI models. Keep LHS stable across the stack.
+  model_aliases:
+    # General assistant
+    default_chat: "gpt-4o-mini"
+    deliberate_chat: "gpt-4o"
+
+    # Code-focused
+    coder_chat: "gpt-4o-mini"
+
+    # Fast/cheap
+    fast_chat: "gpt-4o-mini"
+
+    # Vision-capable
+    vision_chat: "gpt-4o"
+
+    # Embeddings
+    default_embed: "text-embedding-3-large"
+    small_embed: "text-embedding-3-small"
+
+    # Moderation (optional; only used if you enable moderation below)
+    moderation: "omni-moderation-latest"
+
+  # Optional per-alias hints for routing/guardrails (non-authoritative metadata)
+  model_profiles:
+    - alias: default_chat
+      context_window_tokens: 128000
+      supports_tools: true
+      supports_streaming: true
+      supports_vision: false
+      intended_use: "general_assistant"
+
+    - alias: deliberate_chat
+      context_window_tokens: 128000
+      supports_tools: true
+      supports_streaming: true
+      supports_vision: true
+      intended_use: "high_accuracy_reasoning"
+
+    - alias: coder_chat
+      context_window_tokens: 128000
+      supports_tools: true
+      supports_streaming: true
+      supports_vision: false
+      intended_use: "code_generation"
+
+    - alias: fast_chat
+      context_window_tokens: 128000
+      supports_tools: true
+      supports_streaming: true
+      supports_vision: false
+      intended_use: "low_latency"
+
+    - alias: vision_chat
+      context_window_tokens: 128000
+      supports_tools: true
+      supports_streaming: true
+      supports_vision: true
+      intended_use: "vision_assistant"
+
+    - alias: default_embed
+      context_window_tokens: 8192
+      intended_use: "embeddings"
+
+    - alias: small_embed
+      context_window_tokens: 8192
+      intended_use: "embeddings"
+
+    - alias: moderation
+      intended_use: "moderation"
+
+  # ---------------------------------------------------------------------------
+  # DEFAULT GENERATION PARAMETERS (safe global defaults)
+  # ---------------------------------------------------------------------------
+  defaults:
+    chat:
+      temperature: 0.2
+      top_p: 0.9
+      max_output_tokens: 1536
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+
+      # If your client supports “seed” determinism, you can enable it per-request.
+      seed: null
+
+      # If your stack uses structured output:
+      # response_format:
+      #   type: "json_object"     # or "json_schema"
+      #   schema: {}              # if json_schema supported
+
+    responses:
+      # Mirrors chat defaults if you use /responses
+      temperature: 0.2
+      top_p: 0.9
+      max_output_tokens: 1536
+
+    embeddings:
+      batch_size: 64
+      normalize: false
+
+  # ---------------------------------------------------------------------------
+  # RESILIENCE (retries, backoff, circuit breaker)
+  # ---------------------------------------------------------------------------
+  resilience:
+    retries:
+      enabled: true
+      max_retries: 5
+
+      backoff:
+        strategy: exponential
+        base_delay_ms: 300
+        max_delay_ms: 12000
+        jitter: full
+
+      retry_on_status:
+        - 408
+        - 409
+        - 425
+        - 429
+        - 500
+        - 502
+        - 503
+        - 504
+
+      retry_on_exceptions:
+        - TimeoutError
+        - ConnectionError
+
+    circuit_breaker:
+      enabled: true
+      window_s: 60
+      min_requests: 12
+      failure_ratio_threshold: 0.5
+      open_state_s: 30
+      half_open_max_calls: 4
+
+  # ---------------------------------------------------------------------------
+  # THROTTLING / CONCURRENCY
+  # ---------------------------------------------------------------------------
+  throttling:
+    enabled: true
+
+    # Concurrency limit within FRANCIS (not OpenAI-side)
+    max_concurrency: 8
+    max_queue_depth: 500
+
+    # Soft limits (useful for your own budgeting / smoothing bursts)
+    requests_per_minute: 600
+    tokens_per_minute: 400000
+
+  # ---------------------------------------------------------------------------
+  # SAFETY / GOVERNANCE (provider-specific hooks)
+  # ---------------------------------------------------------------------------
+  safety:
+    # Model policy controls (optional)
+    model_allowlist: []
+    model_denylist: []
+
+    # Optional moderation gate (only used if your code calls it)
+    moderation:
+      enabled: false
+      model_alias: moderation
+      # Policies can decide what to do with flagged content:
+      #   - block
+      #   - require_approval
+      #   - redact_and_continue
+      action_on_flag: require_approval
+
+      # If you want to treat certain categories as hard-block:
+      hard_block_categories:
+        - "self-harm"
+        - "sexual/minors"
+        - "violent/extremism"
+
+    # Prompt injection handling signals (system policies should enforce too)
+    prompt_injection:
+      enabled: true
+      mode: strict
+      suspicious_signal_threshold: 0.75
+
+    # Log/telemetry redaction (defense-in-depth)
+    redaction:
+      enabled: true
+      patterns:
+        - name: bearer_token
+          regex: "(?i)bearer\\s+[a-z0-9._\\-]+"
+          replacement: "Bearer [REDACTED]"
+        - name: openai_like_key
+          regex: "(?i)sk-[a-z0-9]{16,}"
+          replacement: "[REDACTED_KEY]"
+        - name: jwt
+          regex: "eyJ[a-zA-Z0-9_\\-]+=*\\.[a-zA-Z0-9_\\-]+=*\\.[a-zA-Z0-9_\\-]+=*"
+          replacement: "[REDACTED_JWT]"
+        - name: email
+          regex: "(?i)[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}"
+          replacement: "[REDACTED_EMAIL]"
+
+  # ---------------------------------------------------------------------------
+  # OBSERVABILITY (logging, metrics, tracing)
+  # ---------------------------------------------------------------------------
+  observability:
+    logging:
+      level: info
+
+      # Safer defaults: never log bodies unless explicitly debugging.
+      log_request_headers: true
+      log_request_body: false
+      log_response_headers: true
+      log_response_body: false
+
+      # Sample to prevent noisy logs at scale
+      sample_rate: 0.05
+
+      # If you support request ids:
+      capture_provider_request_id: true
+
+    metrics:
+      enabled: true
+      tags:
+        provider: "openai"
+
+    tracing:
+      enabled: true
+      propagate_headers:
+        - traceparent
+        - baggage
+
+  # ---------------------------------------------------------------------------
+  # FEATURE FLAGS (provider-specific behavior toggles)
+  # ---------------------------------------------------------------------------
+  feature_flags:
+    # Prefer /responses if your OpenAI client supports it end-to-end.
+    prefer_responses_endpoint: false
+
+    # Cache /v1/models for a short TTL
+    models_endpoint_cache:
+      enabled: true
+      ttl_s: 120
+
+    # If your tooling supports tool-call normalization between endpoints.
+    normalize_tool_calls: true
+
+    # Conservative: don’t auto-escalate max_output_tokens based on model window.
+    auto_scale_max_output_tokens: false

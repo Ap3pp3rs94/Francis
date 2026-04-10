@@ -1,0 +1,445 @@
+# ==============================================================================
+#  FRANCIS — scheduler.yaml
+#  Cone Layer 2: Runtime Orchestration (Scheduling + Dispatch)
+# ==============================================================================
+#
+#  Purpose:
+#    Central scheduling policy for FRANCIS jobs: cron/interval/event-triggered
+#    tasks that drive background learning, maintenance, federation sync, safety
+#    scans, trust updates, and periodic capability runs.
+#
+#  Design goals:
+#    - Deterministic + auditable scheduling (no “mystery runs”).
+#    - Safe-by-default execution (gates: readiness, trust, approvals).
+#    - Fairness across domains/capabilities (avoid starvation).
+#    - Backpressure-aware (shed load, defer non-critical work).
+#    - Works in local, edge, and federated deployments.
+#
+#  Primary data paths (runtime):
+#    - State:  C:\Francis\data\state\runtime\**
+#    - Logs:   C:\Francis\data\logs\operations\francis.jsonl
+#    - Jobs:   C:\Francis\data\artifacts\runbooks\** (optional exports)
+#
+# ==============================================================================
+
+schema_version: 1
+
+scheduler:
+  enabled: true
+
+  # strict: scheduler refuses to run jobs that fail gates
+  # warn:   job can run but emits warnings + attaches rationale
+  # off:    gates disabled (NOT recommended)
+  enforcement_mode: strict
+
+  # ---------------------------------------------------------------------------
+  # CLOCK + TICK
+  # ---------------------------------------------------------------------------
+  clock:
+    timezone: "UTC"              # keep deterministic; env overrides may apply
+    tick_interval_ms: 500        # scheduler loop cadence
+    tick_jitter_ms: 50           # spread load across instances
+    max_due_jobs_per_tick: 200   # prevents “thundering herd” on backlog
+
+  # ---------------------------------------------------------------------------
+  # PERSISTENCE (SCHEDULE REGISTRY + LAST RUNS + MISFIRES)
+  # ---------------------------------------------------------------------------
+  persistence:
+    enabled: true
+    backend: sqlite
+    sqlite:
+      path: "C:\\Francis\\data\\state\\runtime\\scheduler.db"
+      pragmas:
+        journal_mode: "WAL"
+        synchronous: "NORMAL"
+        foreign_keys: true
+    # If you later move to Postgres for HA/federation:
+    postgres:
+      enabled: false
+      dsn_env: "FRANCIS_SCHEDULER_PG_DSN"
+      schema: "francis_scheduler"
+
+  # ---------------------------------------------------------------------------
+  # INSTANCE COORDINATION (LOCAL VS DISTRIBUTED)
+  # ---------------------------------------------------------------------------
+  coordination:
+    mode: local                  # local | leader_election | distributed
+    instance_id_env: "FRANCIS_INSTANCE_ID"
+
+    leader_election:
+      enabled: false
+      backend: file_lease         # file_lease | postgres | redis
+      file_lease:
+        lease_path: "C:\\Francis\\data\\state\\runtime\\scheduler.leader"
+        lease_ttl_ms: 5000
+        renew_every_ms: 1500
+      postgres:
+        table: "scheduler_leases"
+        lease_ttl_ms: 5000
+      redis:
+        key_prefix: "francis:scheduler:lease"
+        lease_ttl_ms: 5000
+
+    distributed:
+      enabled: false
+      sharding:
+        strategy: consistent_hash  # consistent_hash | round_robin | static
+        virtual_nodes: 128
+        shard_key_fields:
+          - domain_id
+          - capability_id
+      heartbeats:
+        interval_ms: 2000
+        stale_after_ms: 10000
+
+  # ---------------------------------------------------------------------------
+  # SOURCES OF SCHEDULE DEFINITIONS
+  # ---------------------------------------------------------------------------
+  sources:
+    # Your primary “what runs when” catalog:
+    capabilities_schedules:
+      enabled: true
+      path: "C:\\Francis\\config\\capabilities\\schedules.yaml"
+      # If schedules.yaml changes, reload schedules without restart.
+      hot_reload:
+        enabled: true
+        poll_interval_ms: 2000
+
+    # Optional: allow plugins/domains to contribute schedules.
+    plugin_schedules:
+      enabled: true
+      search_roots:
+        - "C:\\Francis\\plugins"
+      globs:
+        - "**\\schedule.yaml"
+        - "**\\schedules.yaml"
+      hot_reload:
+        enabled: true
+        poll_interval_ms: 5000
+
+    # Optional: allow runtime-injected schedules from domains (learned/induced).
+    induced_schedules:
+      enabled: true
+      path: "C:\\Francis\\data\\domains\\**\\temporal\\versions\\**\\schedules.yaml"
+      hot_reload:
+        enabled: true
+        poll_interval_ms: 10000
+
+  # ---------------------------------------------------------------------------
+  # JOB SEMANTICS (MISFIRES, COALESCING, DEADLINES)
+  # ---------------------------------------------------------------------------
+  semantics:
+    misfire_policy: coalesce       # run_all | coalesce | skip
+    max_misfire_delay_ms: 600000   # 10 minutes; beyond this treat as stale
+    coalesce_window_ms: 300000     # 5 minutes; merges repeated triggers
+
+    # Job-level default timeouts (can be overridden per job)
+    timeouts:
+      soft_timeout_ms: 300000      # 5 minutes: request graceful stop
+      hard_timeout_ms: 900000      # 15 minutes: force cancel/kill if supported
+
+    # Deadlines are “must finish by”; useful for real-time / safety tasks.
+    deadlines:
+      enabled: true
+      default_deadline_ms: 0       # 0 means no deadline unless set per job
+
+    idempotency:
+      enabled: true
+      # Prevent duplicate execution when clocks drift or events replay.
+      dedupe_window_ms: 60000
+      idempotency_key_fields:
+        - schedule_id
+        - logical_run_time
+
+  # ---------------------------------------------------------------------------
+  # QUEUES / LANES (PRIORITY + WORKER POOL MAPPING)
+  # ---------------------------------------------------------------------------
+  queues:
+    # Real-time: highest priority, low latency, strict timeouts.
+    - id: realtime
+      priority: 100
+      worker_pool: realtime
+      max_concurrency: 8
+      max_queue_depth: 500
+      default_soft_timeout_ms: 60000
+      default_hard_timeout_ms: 180000
+      allow_catchup: false
+
+    # Interactive/background tasks triggered by user actions.
+    - id: interactive
+      priority: 80
+      worker_pool: default
+      max_concurrency: 16
+      max_queue_depth: 2000
+      default_soft_timeout_ms: 180000
+      default_hard_timeout_ms: 600000
+      allow_catchup: true
+
+    # Batch compute (web learning, vector rebuilds, large simulations).
+    - id: batch
+      priority: 40
+      worker_pool: batch
+      max_concurrency: 4
+      max_queue_depth: 200
+      default_soft_timeout_ms: 900000
+      default_hard_timeout_ms: 3600000
+      allow_catchup: true
+
+    # Maintenance (retention sweeps, cache eviction, compaction).
+    - id: maintenance
+      priority: 60
+      worker_pool: maintenance
+      max_concurrency: 2
+      max_queue_depth: 500
+      default_soft_timeout_ms: 300000
+      default_hard_timeout_ms: 900000
+      allow_catchup: true
+
+  # ---------------------------------------------------------------------------
+  # FAIRNESS + BACKPRESSURE
+  # ---------------------------------------------------------------------------
+  fairness:
+    enabled: true
+    strategy: weighted_round_robin  # weighted_round_robin | fifo | earliest_deadline_first
+    weights:
+      # Higher weight = more scheduling share during contention.
+      realtime: 10
+      interactive: 6
+      maintenance: 4
+      batch: 1
+
+    # Prevent one domain/capability from consuming all slots.
+    per_domain_limits:
+      enabled: true
+      max_concurrency_per_domain: 4
+      burst_allowance: 2
+      cooldown_ms: 30000
+
+    per_capability_limits:
+      enabled: true
+      max_concurrency_per_capability: 2
+      burst_allowance: 1
+      cooldown_ms: 15000
+
+  backpressure:
+    enabled: true
+
+    # Admission control if system is strained.
+    system_limits:
+      cpu_percent_soft: 75
+      cpu_percent_hard: 90
+      mem_percent_soft: 75
+      mem_percent_hard: 90
+
+    queue_limits:
+      max_total_queue_depth: 2500
+
+    behavior:
+      # what to do if limits exceeded
+      on_soft_limit: defer_noncritical     # defer_noncritical | slow_tick | warn_only
+      on_hard_limit: shed_load             # shed_load | pause_scheduler | warn_only
+
+    deferral:
+      # “defer” means push next eligible run time forward.
+      defer_ms_min: 15000
+      defer_ms_max: 120000
+      add_jitter: true
+
+    shedding:
+      # shed means skip/deny enqueue for specific queues
+      shed_queues_in_order:
+        - batch
+        - maintenance
+        - interactive
+      never_shed_queues:
+        - realtime
+
+  # ---------------------------------------------------------------------------
+  # RETRIES + CIRCUIT BREAKERS
+  # ---------------------------------------------------------------------------
+  retries:
+    enabled: true
+    default_policy:
+      max_attempts: 5
+      backoff: exponential
+      base_delay_ms: 1000
+      max_delay_ms: 60000
+      jitter: full
+      retry_on:
+        - transient_network_error
+        - rate_limited
+        - timeout_soft
+        - dependency_unavailable
+      do_not_retry_on:
+        - policy_denied
+        - approval_required
+        - validation_failed
+        - unsafe_content_detected
+
+  circuit_breakers:
+    enabled: true
+    # Circuit breakers are keyed by (connector/service/capability).
+    default:
+      failure_threshold: 10
+      window_ms: 60000
+      open_ms: 120000
+      half_open_max_calls: 3
+
+  # ---------------------------------------------------------------------------
+  # GATES (SAFETY / TRUST / APPROVAL)
+  # ---------------------------------------------------------------------------
+  gates:
+    # These gates should align with your policy engine modules:
+    # - config/policies/action_readiness.yaml
+    # - config/policies/api_permissions.yaml
+    # - config/policies/trust_boundaries.yaml
+    # - config/policies/approvals.yaml
+    enabled: true
+
+    action_readiness:
+      required: true
+      minimum_level: "safe"             # example: safe | supervised | restricted
+      on_fail: deny
+
+    trust:
+      required: true
+      # Minimum trust required to execute background operations without approval.
+      min_trust_level: 0.55
+      on_fail: require_approval
+
+    approvals:
+      enabled: true
+      # If any job is marked approval_required, it must be in approved queue.
+      queues:
+        pending: "C:\\Francis\\data\\approvals\\pending"
+        approved: "C:\\Francis\\data\\approvals\\approved"
+        rejected: "C:\\Francis\\data\\approvals\\rejected"
+        emergency: "C:\\Francis\\data\\approvals\\emergency"
+      on_missing_approval: deny
+
+    environment:
+      # Enforce environment constraints (airgapped/regulated/etc.)
+      enforce_environment_profile: true
+      profile_path: "C:\\Francis\\config\\profile.yaml"
+
+  # ---------------------------------------------------------------------------
+  # BUILT-IN MAINTENANCE JOBS (DEFAULTS)
+  #  These are “baseline” jobs the scheduler can register even if not present
+  #  in schedules.yaml (useful for first boot).
+  # ---------------------------------------------------------------------------
+  builtins:
+    enabled: true
+    jobs:
+      - id: retention_sweep
+        queue: maintenance
+        trigger:
+          cron: "0 */6 * * *"           # every 6 hours
+        action:
+          capability: "system.retention.sweep"
+        safeguards:
+          require_approval: false
+          allow_in_airgapped: true
+
+      - id: cache_eviction
+        queue: maintenance
+        trigger:
+          cron: "15 */2 * * *"          # every 2 hours
+        action:
+          capability: "system.cache.evict"
+        safeguards:
+          require_approval: false
+          allow_in_airgapped: true
+
+      - id: trust_decay_update
+        queue: maintenance
+        trigger:
+          cron: "5 * * * *"             # hourly
+        action:
+          capability: "trust.decay.update"
+        safeguards:
+          require_approval: false
+          allow_in_airgapped: true
+
+      - id: vector_index_compaction
+        queue: batch
+        trigger:
+          cron: "0 3 * * 0"             # Sundays 03:00
+        action:
+          capability: "vectors.index.compact"
+        safeguards:
+          require_approval: true
+          allow_in_airgapped: true
+
+      - id: web_knowledge_refresh
+        queue: batch
+        trigger:
+          cron: "0 2 * * *"             # daily 02:00
+        action:
+          capability: "web_learning.refresh"
+        safeguards:
+          require_approval: true
+          allow_in_airgapped: false
+
+  # ---------------------------------------------------------------------------
+  # OBSERVABILITY
+  # ---------------------------------------------------------------------------
+  observability:
+    logs:
+      enabled: true
+      channel: "operations.scheduler"
+      jsonl_path: "C:\\Francis\\data\\logs\\operations\\francis.jsonl"
+      include_fields:
+        - run_id
+        - schedule_id
+        - job_id
+        - queue
+        - domain_id
+        - capability_id
+        - trigger_type
+        - logical_run_time
+        - enqueued_at
+        - started_at
+        - finished_at
+        - outcome
+        - duration_ms
+        - retries
+        - gate_decisions
+        - resource_snapshot
+
+    metrics:
+      enabled: true
+      # integration point for telemetry/metrics exporters
+      emit:
+        - scheduler_queue_depth
+        - scheduler_job_latency_ms
+        - scheduler_job_duration_ms
+        - scheduler_job_outcomes
+        - scheduler_gate_denials
+        - scheduler_retry_counts
+        - scheduler_backpressure_events
+
+    tracing:
+      enabled: true
+      trace_context_propagation: true
+
+  # ---------------------------------------------------------------------------
+  # EMERGENCY CONTROLS
+  # ---------------------------------------------------------------------------
+  emergency:
+    kill_switch:
+      enabled: true
+      # If this file exists, scheduler pauses new enqueues (realtime exempt).
+      path: "C:\\Francis\\data\\state\\runtime\\SCHEDULER_STOP"
+      behavior:
+        pause_queues:
+          - interactive
+          - batch
+          - maintenance
+        allow_queues:
+          - realtime
+      poll_interval_ms: 1000
+
+    safe_shutdown:
+      drain_on_shutdown: true
+      drain_timeout_ms: 15000
+      cancel_after_drain_timeout: true

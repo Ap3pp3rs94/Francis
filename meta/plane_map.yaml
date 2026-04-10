@@ -1,0 +1,746 @@
+# ==============================================================================
+#  FRANCIS — meta/plane_map.yaml
+#  Plane taxonomy + routing map (who does what, where, and under what constraints)
+# ==============================================================================
+#
+#  Purpose
+#  -------
+#  "Planes" are FRANCIS’s architectural *surfaces* / *layers of responsibility*.
+#  They are used to:
+#    - route work to the correct subsystem (planner vs governance vs executor)
+#    - enforce cross-plane safety boundaries (e.g., "web content" → never directly
+#      triggers "execution")
+#    - standardize telemetry tags (logs/audit/events)
+#    - support UI explainability (what happened in which plane)
+#    - support federation sharing rules (what plane outputs are shareable)
+#
+#  This file is a meta-map; concrete rules live elsewhere:
+#    - meta/governance_principles.yaml
+#    - meta/risk_model.yaml
+#    - meta/trust_model.yaml
+#    - meta/internet_safety_model.yaml
+#    - meta/evidence_model.yaml
+#    - meta/action_taxonomy.yaml
+#    - config/policies/*.yaml
+#
+#  Read alongside
+#  -------------
+#    - docs/PLANES.md
+#    - docs/GOVERNANCE.md
+#    - docs/API_PERMISSIONS.md
+#    - docs/POLICIES.md
+#    - docs/TRUST_MODEL.md
+#    - docs/WEB_ACCESS.md
+#
+#  Design stance
+#  ------------
+#    - Planes exist to reduce coupling and prevent “instruction → execution” leaps.
+#    - Every cross-plane transition is explicit, validated, and logged.
+#    - The highest-risk plane (Execution) is the most constrained.
+#
+# ==============================================================================
+
+meta:
+  model_id: francis.plane_map
+  version: 1
+  stability: stable
+  owner: architecture
+  description: >
+    Canonical map of FRANCIS planes, their responsibilities, boundaries, allowed
+    transitions, and default routing hints for orchestrators and telemetry.
+
+# ------------------------------------------------------------------------------
+# Plane semantics
+# ------------------------------------------------------------------------------
+definitions:
+  plane:
+    definition: >
+      A bounded responsibility surface in the system. Planes define what kinds of
+      operations are allowed, what artifacts are produced, and how trust/policy is
+      applied. Planes are not processes; they are *constraints + intents* applied
+      to processes.
+  plane_transition:
+    definition: >
+      A directed edge between planes (A -> B) that is allowed only under explicit
+      conditions (policy/trust/approval). Transitions are auditable.
+  plane_output:
+    definition: >
+      An artifact or state change produced by a plane: logs, evidence packs,
+      plans, tool traces, cache items, runbooks, etc.
+
+naming:
+  plane_id_format: "P{number}_{NAME}"
+  category_labels:
+    - control
+    - cognition
+    - execution
+    - data
+    - governance
+    - security
+    - observability
+    - federation
+    - interface
+
+# ------------------------------------------------------------------------------
+# Canonical planes
+# ------------------------------------------------------------------------------
+planes:
+
+  - id: P0_FOUNDATION
+    name: Foundation
+    category: control
+    purpose: >
+      System invariants and bootstrapping contracts: configuration loading,
+      feature flags, deterministic formatting/serialization conventions, and
+      baseline capability wiring.
+    typical_operations:
+      - "load configuration and validate schema"
+      - "resolve environment profile"
+      - "initialize runtime and worker pools"
+      - "apply feature flags"
+    side_effects_allowed: false
+    default_risk_class: low
+    primary_modules:
+      - "src/francis/kernel/*"
+      - "src/francis/settings.py"
+      - "src/francis/meta/*"
+    primary_policies:
+      - "config/policies/filesystem.yaml"
+      - "config/policies/sandbox.yaml"
+    telemetry_tags:
+      - "plane:P0_FOUNDATION"
+      - "domain:system"
+    artifacts:
+      produces:
+        - "runtime_state_snapshot"
+        - "configuration_snapshot"
+      stores_to:
+        - "data/state/runtime"
+        - "data/state/snapshots"
+    notes:
+      - "Foundation does not fetch web content and does not execute tools."
+      - "If Foundation fails, system should fail closed."
+
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: >
+      Human-facing surfaces and input normalization. Captures user intent,
+      constraints, and displays system state (including gating decisions).
+    typical_operations:
+      - "chat UI request ingestion"
+      - "normalize user intent and constraints"
+      - "render tool traces and approvals"
+    side_effects_allowed: false
+    default_risk_class: low
+    primary_modules:
+      - "apps/chat_ui/*"
+      - "src/francis/api/routes/chat.py"
+      - "src/francis/api/routes/approvals.py"
+    primary_policies:
+      - "config/policies/privacy.yaml"
+      - "config/policies/guard.yaml"
+    telemetry_tags:
+      - "plane:P1_INTERFACE"
+      - "domain:ui"
+    artifacts:
+      produces:
+        - "session_events"
+        - "ui_render_models"
+      stores_to:
+        - "data/conversations/*"
+    notes:
+      - "Interface never directly triggers Execution; it requests orchestration."
+
+  - id: P2_IDENTITY
+    name: Identity & Credentials
+    category: security
+    purpose: >
+      Identity resolution, credential storage, delegation validation, scope
+      checking, expiration handling, and credential usage logging.
+    typical_operations:
+      - "resolve requesting identity (user/service/delegated)"
+      - "validate delegations and scopes"
+      - "retrieve credentials from vault"
+      - "rotate/revoke (if policy allows)"
+    side_effects_allowed: true
+    side_effect_types:
+      - "credential_read"
+      - "credential_write"
+      - "delegation_issue"
+      - "delegation_revoke"
+    default_risk_class: high
+    primary_modules:
+      - "src/francis/credentials/*"
+      - "data/credentials/*"
+    primary_policies:
+      - "config/policies/api_permissions.yaml"
+      - "config/policies/credential_usage.yaml"
+      - "config/policies/privacy.yaml"
+      - "meta/credential_policy.yaml"
+    telemetry_tags:
+      - "plane:P2_IDENTITY"
+      - "domain:security"
+    artifacts:
+      produces:
+        - "delegation_validation_result"
+        - "scope_check_result"
+        - "credential_usage_event"
+      stores_to:
+        - "data/credentials/usage_logs"
+        - "data/logs/credential_usage"
+        - "data/logs/audit"
+    constraints:
+      hard_rules:
+        - "Never log secrets; log only references/hashes."
+        - "Default deny if identity cannot be verified."
+        - "Delegations must narrow scopes; never broaden on propagation."
+
+  - id: P3_GOVERNANCE
+    name: Governance & Policy
+    category: governance
+    purpose: >
+      Enforces policies, approvals, action readiness, ethical boundaries, and
+      risk controls. Decides “may we do this” and “under what conditions”.
+    typical_operations:
+      - "policy engine evaluation"
+      - "action readiness evaluation"
+      - "approval requirement checks"
+      - "escalation routing"
+      - "ethical review constraints"
+    side_effects_allowed: true
+    side_effect_types:
+      - "approval_record_write"
+      - "audit_event_write"
+    default_risk_class: high
+    primary_modules:
+      - "src/francis/governance/*"
+      - "config/policies/*"
+      - "meta/governance_principles.yaml"
+      - "meta/risk_model.yaml"
+      - "meta/trust_model.yaml"
+    telemetry_tags:
+      - "plane:P3_GOVERNANCE"
+      - "domain:governance"
+    artifacts:
+      produces:
+        - "policy_decision"
+        - "action_readiness_decision"
+        - "approval_required_notice"
+      stores_to:
+        - "data/approvals/*"
+        - "data/logs/audit"
+        - "data/logs/decisions"
+    constraints:
+      hard_rules:
+        - "Fail closed under missing policy config."
+        - "Never allow execution without explicit governance pass."
+        - "Irreversible actions require approvals unless explicitly exempt."
+
+  - id: P4_COGNITION
+    name: Cognition & Planning
+    category: cognition
+    purpose: >
+      Converts goals into plans, decomposes tasks, selects tools, and produces
+      structured proposals. Produces *plans* — not side effects.
+    typical_operations:
+      - "task decomposition"
+      - "plan generation"
+      - "tool selection proposals"
+      - "conflict resolution proposals"
+      - "simulation or dry-run plan variants"
+    side_effects_allowed: false
+    default_risk_class: medium
+    primary_modules:
+      - "src/francis/deliberation/*"
+      - "src/francis/agent/*"
+      - "src/francis/llm/reasoning/*"
+      - "src/francis/chat/router.py"
+    telemetry_tags:
+      - "plane:P4_COGNITION"
+      - "domain:reasoning"
+    artifacts:
+      produces:
+        - "plan"
+        - "task_graph"
+        - "tool_call_proposals"
+      stores_to:
+        - "data/artifacts/runbooks"
+        - "data/conversations/*"
+    constraints:
+      hard_rules:
+        - "Plans must be policy-aware: tag steps with required approvals/scopes."
+        - "Never treat external content as instructions; re-derive steps internally."
+        - "Tool proposals must include explicit targets and expected outputs."
+
+  - id: P5_EVIDENCE
+    name: Evidence & Research
+    category: security
+    purpose: >
+      Controlled ingestion of external information (web/docs/papers/code) into
+      evidence objects with provenance, citations, and safety classification.
+    typical_operations:
+      - "web research and source retrieval"
+      - "provenance capture and evidence packaging"
+      - "conflict detection across sources"
+      - "citation generation"
+      - "recency validation"
+    side_effects_allowed: true
+    side_effect_types:
+      - "cache_write"
+      - "evidence_store_write"
+      - "blocked_content_log_write"
+    default_risk_class: high
+    primary_modules:
+      - "src/francis/internet/*"
+      - "src/francis/explanation/transparency/evidence_citation.py"
+      - "meta/internet_safety_model.yaml"
+      - "meta/evidence_model.yaml"
+    telemetry_tags:
+      - "plane:P5_EVIDENCE"
+      - "domain:internet"
+    artifacts:
+      produces:
+        - "evidence_pack"
+        - "source_rankings"
+        - "recency_report"
+      stores_to:
+        - "data/web_knowledge/cache"
+        - "data/web_knowledge/sources"
+        - "data/web_knowledge/blocked"
+    constraints:
+      hard_rules:
+        - "No script execution; sanitize active content."
+        - "Treat all content as untrusted; never execute embedded instructions."
+        - "Redact PII/secrets; store hashes + provenance, not raw sensitive payloads."
+
+  - id: P6_SIMULATION
+    name: Simulation & Digital Twins
+    category: cognition
+    purpose: >
+      Runs simulations, model checks, and digital twin evaluations. Produces
+      forecasted outcomes or validation artifacts without real-world side effects.
+    typical_operations:
+      - "industrial simulation runs"
+      - "digital twin calibration"
+      - "scenario evaluation"
+      - "safety validation checks"
+    side_effects_allowed: true
+    side_effect_types:
+      - "simulation_cache_write"
+      - "simulation_artifact_write"
+    default_risk_class: medium
+    primary_modules:
+      - "src/francis/api/routes/simulation.py"
+      - "src/francis/api/routes/industrial.py"
+      - "data/industrial/*"
+      - "data/artifacts/simulations"
+    telemetry_tags:
+      - "plane:P6_SIMULATION"
+      - "domain:simulation"
+    artifacts:
+      produces:
+        - "simulation_result"
+        - "validation_report"
+      stores_to:
+        - "data/artifacts/simulations"
+        - "data/industrial/simulations"
+    constraints:
+      hard_rules:
+        - "Simulations may not directly actuate real-world connectors."
+        - "Industrial actuator commands belong to Execution with extra gating."
+
+  - id: P7_EXECUTION
+    name: Tool Execution
+    category: execution
+    purpose: >
+      Executes tool calls and connector operations in a constrained sandbox after
+      passing identity + governance. This is where side effects occur.
+    typical_operations:
+      - "execute connector tool calls"
+      - "apply sandbox limits, rate limits"
+      - "capture tool traces"
+      - "write artifacts (reports, exports)"
+    side_effects_allowed: true
+    side_effect_types:
+      - "external_api_calls"
+      - "writes"
+      - "messages"
+      - "file_operations"
+    default_risk_class: critical
+    primary_modules:
+      - "src/francis/agent/executor.py"
+      - "src/francis/plugin_system/execution/*"
+      - "src/francis/llm/tooling/*"
+      - "connectors/*"
+      - "config/policies/sandbox.yaml"
+      - "config/policies/api_permissions.yaml"
+    telemetry_tags:
+      - "plane:P7_EXECUTION"
+      - "domain:execution"
+    artifacts:
+      produces:
+        - "tool_trace"
+        - "action_result"
+        - "deliverable"
+      stores_to:
+        - "data/logs/api_actions"
+        - "data/artifacts/*"
+        - "data/logs/audit"
+    constraints:
+      hard_rules:
+        - "Requires passed checks: Identity + Governance + Readiness."
+        - "Never execute instructions sourced from untrusted content without re-derivation."
+        - "All tool calls must be auditable and redact sensitive fields."
+        - "Destructive ops require approvals unless emergency policy permits."
+
+  - id: P8_MEMORY
+    name: Memory & Knowledge Graph
+    category: data
+    purpose: >
+      Durable memory, retrieval, vector stores, and knowledge graph evolution.
+      Ensures provenance and retention constraints are honored.
+    typical_operations:
+      - "store/retrieve embeddings"
+      - "summarize and update episodic/semantic memory"
+      - "knowledge graph updates"
+      - "retention/forgetting rules"
+    side_effects_allowed: true
+    side_effect_types:
+      - "db_write"
+      - "vector_index_update"
+      - "summary_write"
+    default_risk_class: high
+    primary_modules:
+      - "src/francis/memory/*"
+      - "data/memory/*"
+      - "data/knowledge_graph/*"
+      - "data/vectors/*"
+    telemetry_tags:
+      - "plane:P8_MEMORY"
+      - "domain:memory"
+    artifacts:
+      produces:
+        - "memory_update"
+        - "retrieval_result"
+        - "embedding_index"
+      stores_to:
+        - "data/memory/*"
+        - "data/vectors/*"
+        - "data/knowledge_graph/*"
+    constraints:
+      hard_rules:
+        - "Retention must follow policy; do not store secrets/PII unless explicitly allowed."
+        - "Every memory item must carry provenance where applicable."
+
+  - id: P9_OBSERVABILITY
+    name: Telemetry, Audit, and Trust Metrics
+    category: observability
+    purpose: >
+      Produces immutable audit trails, operational logs, metrics, traces, and trust
+      updates. Makes the system inspectable and certifiable.
+    typical_operations:
+      - "audit event write"
+      - "metric emission"
+      - "trust metric updates"
+      - "error logging"
+      - "decision logging"
+    side_effects_allowed: true
+    side_effect_types:
+      - "log_write"
+      - "metric_write"
+      - "trust_state_write"
+    default_risk_class: medium
+    primary_modules:
+      - "src/francis/telemetry/*"
+      - "src/francis/trust/*"
+      - "data/logs/*"
+      - "data/trust/*"
+    telemetry_tags:
+      - "plane:P9_OBSERVABILITY"
+      - "domain:telemetry"
+    artifacts:
+      produces:
+        - "audit_record"
+        - "trust_delta"
+        - "error_report"
+      stores_to:
+        - "data/logs/audit"
+        - "data/logs/errors"
+        - "data/logs/decisions"
+        - "data/trust/*"
+    constraints:
+      hard_rules:
+        - "Audit logs must not contain secrets."
+        - "Trust updates must cite evidence or tool traces."
+
+  - id: P10_FEDERATION
+    name: Federation & Shared Knowledge
+    category: federation
+    purpose: >
+      Exchanges sanitized knowledge and outcomes across federated peers, applying
+      trust/reputation and strict sharing policies.
+    typical_operations:
+      - "domain export/import (sanitized)"
+      - "peer reputation updates"
+      - "federated consensus"
+      - "shared knowledge synchronization"
+    side_effects_allowed: true
+    side_effect_types:
+      - "network_exchange"
+      - "shared_knowledge_write"
+    default_risk_class: high
+    primary_modules:
+      - "src/francis/collective/federation/*"
+      - "src/francis/collective/knowledge_sharing/*"
+      - "data/federation/*"
+    telemetry_tags:
+      - "plane:P10_FEDERATION"
+      - "domain:federation"
+    artifacts:
+      produces:
+        - "export_manifest"
+        - "import_manifest"
+        - "peer_reputation_event"
+      stores_to:
+        - "data/federation/shared_knowledge"
+        - "data/logs/audit"
+    constraints:
+      hard_rules:
+        - "Never export secrets/PII/regulated data."
+        - "All exports/imports must pass sanitization pipeline and be logged."
+        - "Peer trust must gate acceptance of imported knowledge."
+
+# ------------------------------------------------------------------------------
+# Allowed plane transitions (directed graph)
+# ------------------------------------------------------------------------------
+transitions:
+  # Interface → Cognition is the normal start of work.
+  - from: P1_INTERFACE
+    to: P4_COGNITION
+    allowed: true
+    conditions:
+      - "session_valid"
+      - "request_parsed"
+    audit_event: "plane_transition"
+
+  # Cognition may request Evidence; Evidence returns evidence packs.
+  - from: P4_COGNITION
+    to: P5_EVIDENCE
+    allowed: true
+    conditions:
+      - "web_access_policy_allows"
+      - "recency_mode_determined"
+    audit_event: "plane_transition"
+
+  - from: P5_EVIDENCE
+    to: P4_COGNITION
+    allowed: true
+    conditions:
+      - "evidence_packaged_with_provenance"
+      - "injection_screen_passed_or_summarized"
+    audit_event: "plane_transition"
+
+  # Cognition → Governance for preflight checks (required for tool execution).
+  - from: P4_COGNITION
+    to: P3_GOVERNANCE
+    allowed: true
+    conditions:
+      - "plan_ready_for_review"
+    audit_event: "plane_transition"
+
+  # Governance → Identity to validate permissions (may happen in either order).
+  - from: P3_GOVERNANCE
+    to: P2_IDENTITY
+    allowed: true
+    conditions:
+      - "tool_proposed"
+    audit_event: "plane_transition"
+
+  - from: P2_IDENTITY
+    to: P3_GOVERNANCE
+    allowed: true
+    conditions:
+      - "delegation_and_scopes_validated"
+    audit_event: "plane_transition"
+
+  # Governance + Identity → Execution (only after allow decisions).
+  - from: P3_GOVERNANCE
+    to: P7_EXECUTION
+    allowed: true
+    conditions:
+      - "policy_decision_allows"
+      - "action_readiness_allows"
+      - "approvals_satisfied_if_required"
+      - "identity_scopes_allow"
+    audit_event: "plane_transition"
+
+  # Execution → Observability always (tool traces, audit events).
+  - from: P7_EXECUTION
+    to: P9_OBSERVABILITY
+    allowed: true
+    conditions:
+      - "always"
+    audit_event: "plane_transition"
+
+  # Evidence → Observability (blocked/allow decisions, provenance).
+  - from: P5_EVIDENCE
+    to: P9_OBSERVABILITY
+    allowed: true
+    conditions:
+      - "always"
+    audit_event: "plane_transition"
+
+  # Cognition → Simulation and Simulation → Cognition.
+  - from: P4_COGNITION
+    to: P6_SIMULATION
+    allowed: true
+    conditions:
+      - "simulation_requested"
+      - "simulation_policy_allows"
+    audit_event: "plane_transition"
+
+  - from: P6_SIMULATION
+    to: P4_COGNITION
+    allowed: true
+    conditions:
+      - "simulation_result_available"
+    audit_event: "plane_transition"
+
+  # Memory interactions can happen after evidence or execution, but must be governed.
+  - from: P5_EVIDENCE
+    to: P8_MEMORY
+    allowed: true
+    conditions:
+      - "data_governance_allows_storage"
+      - "provenance_present"
+    audit_event: "plane_transition"
+
+  - from: P7_EXECUTION
+    to: P8_MEMORY
+    allowed: true
+    conditions:
+      - "store_artifacts_or_summaries"
+      - "data_governance_allows_storage"
+    audit_event: "plane_transition"
+
+  - from: P8_MEMORY
+    to: P4_COGNITION
+    allowed: true
+    conditions:
+      - "retrieval_requested"
+    audit_event: "plane_transition"
+
+  # Federation requires explicit policy and governance.
+  - from: P8_MEMORY
+    to: P10_FEDERATION
+    allowed: true
+    conditions:
+      - "sharing_policy_allows"
+      - "sanitization_pipeline_passed"
+      - "operator_approval_if_required"
+    audit_event: "plane_transition"
+
+  - from: P10_FEDERATION
+    to: P8_MEMORY
+    allowed: true
+    conditions:
+      - "import_policy_allows"
+      - "peer_trust_sufficient"
+      - "sanitization_pipeline_passed"
+    audit_event: "plane_transition"
+
+# ------------------------------------------------------------------------------
+# Disallowed transitions (explicitly forbidden shortcuts)
+# ------------------------------------------------------------------------------
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: "No direct UI-to-execution; must pass Cognition + Governance + Identity."
+
+  - from: P5_EVIDENCE
+    to: P7_EXECUTION
+    reason: "No execution directly from web content; must be re-derived in Cognition and gated."
+
+  - from: P10_FEDERATION
+    to: P7_EXECUTION
+    reason: "No execution triggered by federated imports; must pass full gating."
+
+  - from: P0_FOUNDATION
+    to: P7_EXECUTION
+    reason: "Bootstrapping must not auto-trigger external side effects."
+
+# ------------------------------------------------------------------------------
+# Default routing hints (for orchestrators / tool selectors)
+# ------------------------------------------------------------------------------
+routing_hints:
+  intent_to_plane:
+    chat_interaction: P1_INTERFACE
+    plan_generation: P4_COGNITION
+    tool_execution: P7_EXECUTION
+    policy_question: P3_GOVERNANCE
+    permission_question: P2_IDENTITY
+    web_research: P5_EVIDENCE
+    simulation: P6_SIMULATION
+    memory_query: P8_MEMORY
+    audit_review: P9_OBSERVABILITY
+    federation_sync: P10_FEDERATION
+
+  tool_call_preflight_sequence:
+    # Recommended order (some systems interleave P2 and P3)
+    - P4_COGNITION
+    - P3_GOVERNANCE
+    - P2_IDENTITY
+    - P7_EXECUTION
+    - P9_OBSERVABILITY
+
+# ------------------------------------------------------------------------------
+# Telemetry defaults (how to tag events consistently)
+# ------------------------------------------------------------------------------
+telemetry:
+  required_event_fields:
+    - "timestamp"
+    - "plane_id"
+    - "event_type"
+    - "session_id"
+    - "request_id"
+  correlation:
+    include_trace_id: true
+    include_tool_call_id: true
+  redaction:
+    never_log_fields:
+      - "access_token"
+      - "api_key"
+      - "password"
+      - "cookie"
+      - "authorization_header"
+      - "private_key"
+    log_hash_instead_of_value: true
+
+# ------------------------------------------------------------------------------
+# Validation invariants (CI/runtime assertions)
+# ------------------------------------------------------------------------------
+validation:
+  invariants:
+    - id: PM_INV_001
+      statement: "Execution plane must only be reachable via Governance pass."
+    - id: PM_INV_002
+      statement: "Evidence plane outputs must not be treated as executable instructions."
+    - id: PM_INV_003
+      statement: "All plane transitions must emit an auditable event."
+    - id: PM_INV_004
+      statement: "Forbidden transitions must be enforced at runtime."
+    - id: PM_INV_005
+      statement: "Observability must receive traces from any plane that causes side effects."
+
+  suggested_tests:
+    - name: "deny_ui_direct_execution"
+      expected: "blocked with forbidden_transition"
+    - name: "deny_web_direct_execution"
+      expected: "blocked with forbidden_transition"
+    - name: "allow_planned_tool_execution"
+      expected: "passes P4->P3->P2->P7 with full audit trail"
+    - name: "federation_import_requires_gating"
+      expected: "import goes to P8 only after sanitization and trust checks"
+
+# End of meta/plane_map.yaml

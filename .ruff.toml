@@ -1,0 +1,9 @@
+line-length = 120
+extend-exclude = [
+    "data",
+    "archive",
+    "data/quarantine",
+    ".venv",
+    "apps/chat_ui/node_modules",
+    "apps/chat_ui/dist",
+]

@@ -1,0 +1,484 @@
+# ==============================================================================
+#  FRANCIS — meta/attribution_model.yaml
+#  Provenance + citation rules for answers, plans, and tool-driven actions
+# ==============================================================================
+#
+#  Why this exists
+#  --------------
+#  FRANCIS treats attribution as a first-class safety and correctness control.
+#  This model defines:
+#    - what "counts" as evidence vs source vs claim
+#    - what provenance must be captured (and how)
+#    - how citations are formed and displayed
+#    - minimum attribution requirements by action type / risk / data class
+#    - how conflicts and uncertainty must be disclosed
+#
+#  Read alongside
+#  -------------
+#    - docs/ATTRIBUTION.md
+#    - docs/WEB_ACCESS.md
+#    - docs/TRUST_MODEL.md
+#    - docs/THREAT_MODEL.md
+#    - config/policies/data_governance.yaml
+#    - config/policies/privacy.yaml
+#    - config/policies/web_access.yaml
+#    - meta/evidence_model.yaml
+#    - meta/internet_safety_model.yaml
+#
+#  Design stance
+#  ------------
+#    - Evidence-first: claims must be anchored to explicit evidence.
+#    - Tool results > web summaries (when both exist).
+#    - Conservatism under uncertainty: disclose uncertainty and abstain when needed.
+#    - No secret leakage: provenance must never store plaintext secrets.
+#
+# ==============================================================================
+
+meta:
+  model_id: francis.attribution_model
+  version: 1
+  stability: stable
+  owner: governance
+  description: >
+    Defines the attribution framework used by FRANCIS to produce auditable,
+    citation-rich outputs and to enforce evidence requirements for high-risk
+    actions and external-facing communication.
+
+# ------------------------------------------------------------------------------
+# Core vocabulary
+# ------------------------------------------------------------------------------
+vocabulary:
+  claim:
+    description: >
+      An asserted statement that could be wrong and therefore should be supported
+      by evidence when it matters (facts, numbers, timelines, instructions,
+      attributions of causality).
+    required_fields: [claim_id, text]
+  evidence:
+    description: >
+      A concrete support unit for one or more claims. Evidence references at least
+      one source and includes a short excerpt or extracted datum plus provenance.
+    required_fields: [evidence_id, source_ref, extracted, method]
+  source:
+    description: >
+      A content origin for evidence (tool output, web page, document, dataset,
+      user-provided file, internal log). Sources must be provenance-captured.
+    required_fields: [source_id, source_type, retrieved_at, locator]
+
+# ------------------------------------------------------------------------------
+# Principles and invariants
+# ------------------------------------------------------------------------------
+principles:
+  - id: evidence_first
+    text: Claims should be supported by explicit evidence whenever feasible.
+  - id: least_surprise
+    text: Citations should be consistent, minimal, and placed where the claim is made.
+  - id: provenance_or_it_didnt_happen
+    text: If a source cannot be provenance-captured, it should not be treated as strong evidence.
+  - id: tool_outputs_are_primary
+    text: When a tool returns authoritative results, prefer them over web summaries.
+  - id: disclose_uncertainty
+    text: When evidence is weak/conflicting/old, explicitly disclose uncertainty and risk.
+  - id: no_secrets_in_provenance
+    text: Never store raw tokens, passwords, private keys, or sensitive payloads in provenance fields.
+  - id: conservative_default
+    text: If classification is ambiguous, escalate requirements (more sources, higher scrutiny).
+
+invariants:
+  - Source IDs are stable within an execution/session and reproducible in artifacts.
+  - Evidence excerpts must be short and non-copyright-violating (snippets, not full reproduction).
+  - Any content classified above policy-sharing limits must be redacted or summarized.
+  - External-facing communication requires stronger attribution and review than internal notes.
+
+# ------------------------------------------------------------------------------
+# Source types and baseline credibility posture
+# ------------------------------------------------------------------------------
+# base_trust is a prior used by trust/evidence scoring. Policies can override.
+source_types:
+  - id: tool_output
+    label: Tool output (first-party runtime)
+    base_trust: 0.90
+    provenance_required: true
+    notes: >
+      Includes structured returns from connectors, internal services, and sanctioned
+      runtime tools. Still subject to redaction and integrity checks.
+  - id: official_documentation
+    label: Official documentation
+    base_trust: 0.80
+    provenance_required: true
+    notes: "Vendor docs, standards bodies, official product docs."
+  - id: academic_primary
+    label: Academic primary source
+    base_trust: 0.80
+    provenance_required: true
+    notes: "Peer-reviewed papers, preprints with clear authorship; prefer primary over blogs."
+  - id: code_repository
+    label: Code repository content
+    base_trust: 0.70
+    provenance_required: true
+    notes: "Source code, README, issues; trust depends on repo authenticity and commit history."
+  - id: news_media
+    label: News media
+    base_trust: 0.60
+    provenance_required: true
+    notes: "Use for current events; verify across outlets where impact is high."
+  - id: community_forum
+    label: Community forum / Q&A
+    base_trust: 0.40
+    provenance_required: true
+    notes: "StackOverflow/Reddit/forums. Useful but not authoritative; treat as weak evidence."
+  - id: user_provided
+    label: User-provided content
+    base_trust: 0.65
+    provenance_required: true
+    notes: >
+      User files/messages can be authoritative for the user's context but may be incomplete.
+      Must be clearly marked as user-provided.
+  - id: internal_log
+    label: Internal logs / telemetry
+    base_trust: 0.75
+    provenance_required: true
+    notes: "System logs are evidence of what the system did, not necessarily why it was correct."
+  - id: simulation_output
+    label: Simulation output
+    base_trust: 0.70
+    provenance_required: true
+    notes: "Valid for 'what the model predicts' given assumptions; must include assumptions."
+  - id: federated_peer
+    label: Federated peer instance output
+    base_trust: 0.55
+    provenance_required: true
+    notes: >
+      Treat as advisory. Must include peer identity, trust score, and sanitization summary.
+
+# ------------------------------------------------------------------------------
+# Provenance capture requirements
+# ------------------------------------------------------------------------------
+provenance:
+  required_fields:
+    # Minimal stable fields
+    - source_id
+    - source_type
+    - retrieved_at
+    - locator
+    - content_hash
+    - capture_method
+    - capture_actor
+  recommended_fields:
+    - title
+    - author
+    - published_at
+    - last_modified_at
+    - language
+    - mime_type
+    - byte_size
+    - extractors
+    - tool_ref
+    - request_id
+    - policy_snapshot_id
+    - safety_classification
+    - redaction_applied
+    - notes
+  locator_schema:
+    # locator is intentionally abstract: do not assume it's always a URL
+    types:
+      - id: url
+        fields: [url]
+      - id: file_path
+        fields: [path]
+      - id: connector_ref
+        fields: [provider, resource_type, resource_id]
+      - id: conversation_ref
+        fields: [thread_id, message_id]
+      - id: artifact_ref
+        fields: [artifact_type, artifact_id]
+  hashing:
+    algorithm: sha256
+    canonicalization:
+      enabled: true
+      notes: >
+        Canonicalize text for stable hashing (normalize line endings, trim trailing
+        whitespace where safe). Never canonicalize binary beyond raw bytes.
+  secret_safety:
+    prohibited_patterns:
+      - "(?i)api[_-]?key\\s*[:=]"
+      - "(?i)secret\\s*[:=]"
+      - "(?i)password\\s*[:=]"
+      - "-----BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY-----"
+      - "(?i)bearer\\s+[a-z0-9\\-\\._~\\+\\/]+=*"
+    handling:
+      on_detection: redact
+      store_redaction_reason: true
+      notes: >
+        If prohibited patterns are detected, store only redacted provenance fields
+        and emit an audit event.
+
+# ------------------------------------------------------------------------------
+# Citation formatting (human-readable outputs)
+# ------------------------------------------------------------------------------
+citations:
+  # The default citation style for markdown answers in the Chat UI.
+  style:
+    id_format: "S{n}"           # S1, S2, ...
+    inline_format: "[{id}]"     # ... claim [S1]
+    footnote_format: "[{id}]: {title_or_locator}"
+    prefer_inline: true
+    max_inline_per_paragraph: 5
+  placement_rules:
+    - id: cite_next_to_claim
+      description: Place citations immediately after the sentence containing the supported claim.
+    - id: cite_after_punctuation
+      description: Place citations after punctuation (e.g., period then citation).
+    - id: no_orphan_citation_blocks
+      description: Do not dump all citations at the end; distribute near claims.
+  excerpt_policy:
+    max_verbatim_words_per_source: 25
+    snippets_only: true
+    notes: >
+      Evidence excerpts should be minimal and policy-safe. Prefer paraphrase with citation.
+
+# ------------------------------------------------------------------------------
+# Evidence strength scoring (supports trust model + UI)
+# ------------------------------------------------------------------------------
+evidence_scoring:
+  # Evidence strength ∈ [0,1]. Used for disclosure and gating in higher-risk actions.
+  components:
+    source_prior_weight: 0.35
+    recency_weight: 0.20
+    corroboration_weight: 0.20
+    extraction_quality_weight: 0.15
+    relevance_weight: 0.10
+  extraction_quality:
+    # These are indicative; runtime may estimate based on parsing method confidence.
+    methods:
+      tool_structured: 0.95
+      html_parse: 0.75
+      pdf_text_parse: 0.70
+      ocr: 0.45
+      manual_user_quote: 0.55
+  recency:
+    # Used when freshness matters (e.g., news, prices, policies).
+    half_life_days_by_source_type:
+      tool_output: 30
+      official_documentation: 365
+      academic_primary: 730
+      news_media: 7
+      community_forum: 180
+      code_repository: 180
+      internal_log: 30
+      simulation_output: 90
+      user_provided: 365
+  corroboration:
+    min_distinct_sources_for_strong: 2
+    distinctness_rules:
+      - "Different domains/providers count as distinct."
+      - "Same publisher mirrors do NOT count as distinct."
+      - "Tool output + official docs counts as strong corroboration."
+  thresholds:
+    strong: 0.80
+    moderate: 0.60
+    weak: 0.40
+
+# ------------------------------------------------------------------------------
+# Attribution requirements by context
+# ------------------------------------------------------------------------------
+# This is the baseline. Higher-level policies can raise requirements.
+requirements:
+  by_risk_level:
+    none:
+      min_sources: 0
+      require_citations_for_facts: false
+      disclose_uncertainty_threshold: 0.0
+    low:
+      min_sources: 0
+      require_citations_for_facts: false
+      disclose_uncertainty_threshold: 0.50
+    medium:
+      min_sources: 1
+      require_citations_for_facts: true
+      prefer_primary_sources: true
+      disclose_uncertainty_threshold: 0.60
+    high:
+      min_sources: 2
+      require_citations_for_facts: true
+      prefer_primary_sources: true
+      require_conflict_check: true
+      require_recency_check_if_applicable: true
+      disclose_uncertainty_threshold: 0.70
+    critical:
+      min_sources: 2
+      require_citations_for_facts: true
+      prefer_primary_sources: true
+      require_conflict_check: true
+      require_recency_check_if_applicable: true
+      require_tool_output_when_available: true
+      require_policy_snapshot_pin: true
+      disclose_uncertainty_threshold: 0.80
+
+  by_data_classification:
+    public:
+      allow_external_citations: true
+      allow_external_export: true
+    internal:
+      allow_external_citations: true
+      allow_external_export: false
+      notes: "Cite sources but avoid exporting internal payloads."
+    confidential:
+      allow_external_citations: true
+      allow_external_export: false
+      require_redaction: true
+      require_minimization: true
+    regulated:
+      allow_external_citations: limited
+      allow_external_export: false
+      require_redaction: true
+      require_minimization: true
+      require_additional_logging: true
+      notes: >
+        Regulated data must be summarized; provenance retained internally with strict access controls.
+
+  # Action taxonomy linkage (semantic intent)
+  # These action_id values should correspond to meta/action_taxonomy.yaml.
+  by_action_id:
+    interpret.text:
+      min_sources: 0
+      cite_user_provided_as: "user_provided"
+      notes: "No citations required unless asserting external facts."
+    retrieve.web:
+      min_sources: 1
+      require_provenance: true
+      cite_as: "official_documentation|academic_primary|news_media|community_forum"
+      notes: "Always preserve locators and retrieval timestamps."
+    retrieve.saas_readonly:
+      min_sources: 1
+      require_tool_output: true
+      notes: "Treat connector output as primary evidence."
+    communicate.outbound_message:
+      min_sources: 2
+      require_tool_output_when_available: true
+      require_conflict_check: true
+      require_uncertainty_disclosure: true
+      notes: "Outbound comms must be defensible; use stronger evidence."
+    write.code_change:
+      min_sources: 1
+      require_evidence_for_rationale: true
+      notes: "Cite policy/docs that justify the change, and link to impacted modules."
+    credential.rotate:
+      min_sources: 1
+      require_tool_output_when_available: true
+      require_policy_snapshot_pin: true
+      notes: "Credential actions must be fully auditable and policy-anchored."
+    industrial.control:
+      min_sources: 2
+      require_simulation_or_dry_run_evidence: true
+      require_policy_snapshot_pin: true
+      notes: "Actuation must be justified by simulation/validation evidence."
+
+# ------------------------------------------------------------------------------
+# Conflict handling and truthfulness disclosure
+# ------------------------------------------------------------------------------
+conflict_handling:
+  detect_conflicts: true
+  rules:
+    - id: prefer_tool_over_web
+      when: "tool_output_conflicts_with_web"
+      action: prefer_tool_output
+    - id: prefer_primary_over_secondary
+      when: "primary_conflicts_with_secondary"
+      action: prefer_primary
+    - id: require_disclosure_on_unresolved_conflict
+      when: "conflict_unresolved"
+      action: disclose_and_abstain_if_high_risk
+  disclosure:
+    required_fields:
+      - conflict_summary
+      - competing_sources
+      - reason_for_preference
+      - residual_uncertainty
+    phrasing_guidance: >
+      Be explicit: describe what differs, why one is preferred, and what remains unknown.
+
+# ------------------------------------------------------------------------------
+# UI / reporting integration
+# ------------------------------------------------------------------------------
+ui:
+  show_citations: true
+  show_provenance_inspector: true
+  show_evidence_strength: true
+  evidence_badges:
+    strong: "Strong"
+    moderate: "Moderate"
+    weak: "Weak"
+  provenance_display:
+    fields:
+      - title
+      - locator
+      - retrieved_at
+      - published_at
+      - content_hash
+      - source_type
+      - redaction_applied
+  notes: >
+    UI must make it easy to trace from claim → evidence → source without exposing secrets.
+
+# ------------------------------------------------------------------------------
+# Storage mapping (where artifacts live)
+# ------------------------------------------------------------------------------
+storage:
+  sources_root: "data/web_knowledge/sources"
+  tool_traces_root: "data/logs/api_actions"
+  decision_logs_root: "data/logs/decisions"
+  explanations_root: "data/artifacts/explanations"
+  reports_root: "data/artifacts/reports"
+  exports_root: "data/artifacts/exports"
+  conversation_ledger: "data/conversations/ledger/ledger.jsonl"
+  rolling_summary: "data/conversations/summaries/rolling_summary.md"
+  retention:
+    sources_days: 180
+    tool_traces_days: 90
+    decision_logs_days: 365
+    notes: >
+      Retention is also constrained by data governance policies; regulated content may
+      have shorter retention or stricter access controls.
+
+# ------------------------------------------------------------------------------
+# Federation constraints (sharing attribution safely)
+# ------------------------------------------------------------------------------
+federation:
+  export_allowed_source_types:
+    - official_documentation
+    - academic_primary
+    - news_media
+    - community_forum
+  export_prohibited_source_types:
+    - credential
+    - internal_log
+    - tool_output
+  export_requires:
+    - provenance
+    - sanitization_summary
+    - policy_snapshot_id
+  notes: >
+    Federation exports should share *references and abstractions* rather than raw internal
+    payloads. Tool outputs may be summarized but not shared verbatim unless explicitly allowed.
+
+# ------------------------------------------------------------------------------
+# Validation hooks (implemented by runtime modules)
+# ------------------------------------------------------------------------------
+validation_hooks:
+  enabled: true
+  hooks:
+    - id: provenance_integrity_check
+      module: "src/francis/internet/research/citation_tracker.py"
+      purpose: "Ensure required provenance fields exist and hashes are present."
+    - id: citation_render_check
+      module: "src/francis/explanation/transparency/evidence_citation.py"
+      purpose: "Ensure citations are placed near claims and do not exceed limits."
+    - id: redaction_enforcement
+      module: "src/francis/chat/attachments/redaction.py"
+      purpose: "Prevent secret/PII leakage in provenance and excerpts."
+    - id: policy_alignment_check
+      module: "src/francis/governance/policy_engine.py"
+      purpose: "Ensure attribution behavior is consistent with current policy snapshot."
+
+# End of meta/attribution_model.yaml

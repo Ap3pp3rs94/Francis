@@ -1,0 +1,440 @@
+# ==============================================================================
+# Francis 2.0 — Policy Config
+# Policy: Networks (egress/inbound governance + segmentation + web learning constraints)
+# Path:   config/policies/networks.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Networks policy governs all network usage by Francis:
+#   - outbound egress controls (host allowlists, ports, protocols)
+#   - DNS policy (blocked zones, internal vs external resolution)
+#   - TLS requirements and certificate posture
+#   - proxy posture and anti-exfiltration defaults
+#   - rate limiting and concurrency constraints
+#   - federation peer allowlisting
+#   - web_learning fetch/ingest constraints (content types, size, redirects)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Deny-by-default for internet egress unless explicitly allowlisted.
+# - Fail-closed: if destination cannot be classified or normalized → deny.
+# - Prefer HTTPS; prohibit insecure schemes in production-like profiles.
+# - Integrate with guard.yaml: elevated guard states tighten egress.
+# - Observable: every egress decision is auditable with reason codes.
+#
+# NOTE
+# ----
+# This is POLICY + CONTRACT, not implementation.
+# ==============================================================================
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "networks_policy"
+  notes:
+    - "Primary anti-exfiltration governor."
+    - "Web learning is treated as high-risk egress."
+    - "Federation connectivity is separately allowlisted."
+
+# ------------------------------------------------------------------------------
+# Global enablement + posture
+# ------------------------------------------------------------------------------
+networks:
+  enabled: true
+
+  # Modes:
+  # - disabled: dev-only
+  # - policy:   enforce allowlists + safety constraints (default)
+  # - strict:   conservative; more denies; higher TLS bar; smaller limits
+  mode: "policy" # disabled | policy | strict
+
+  # Fail closed if evaluation fails.
+  fail_closed_decision: "deny"
+
+  # Audit all network decisions (allow + deny).
+  audit_all: true
+
+# ------------------------------------------------------------------------------
+# Destination normalization (URL/IP/host parsing rules)
+# ------------------------------------------------------------------------------
+normalization:
+  enabled: true
+
+  # Normalize URL by:
+  # - lowercasing scheme/host
+  # - removing default ports
+  # - stripping fragments
+  # - optionally removing trailing slashes for matching
+  normalize_url: true
+  strip_fragments: true
+  normalize_trailing_slash: true
+
+  # Deny dangerous/ambiguous schemes.
+  deny_schemes:
+    - "file"
+    - "data"
+    - "javascript"
+    - "vbscript"
+    - "ftp"
+    - "gopher"
+
+  # Allow schemes (others denied by default).
+  allow_schemes:
+    - "http"
+    - "https"
+    - "ws"
+    - "wss"
+
+  # If true, only allow ws/wss for explicitly WS capabilities.
+  websocket_requires_explicit_capability: true
+
+# ------------------------------------------------------------------------------
+# DNS policy
+# ------------------------------------------------------------------------------
+dns:
+  enabled: true
+
+  # Deny outbound access to internal-only DNS zones unless explicitly allowed.
+  deny_private_hostnames_by_default: true
+
+  # Deny these TLDs / zones by default (common local/reserved).
+  deny_tlds:
+    - ".local"
+    - ".lan"
+    - ".internal"
+    - ".home"
+    - ".corp"
+    - ".test"
+    - ".example"
+
+  # Deny link-local or metadata service hostnames (cloud).
+  deny_host_patterns:
+    - "(?i)^169\\.254\\."
+    - "(?i)^metadata\\."
+    - "(?i)^instance-data\\."
+    - "(?i)^169\\.254\\.169\\.254$"
+
+  # If true, perform best-effort public suffix checks (implementation-specific).
+  public_suffix_sanity_check: true
+
+# ------------------------------------------------------------------------------
+# IP policy (private ranges, loopback, etc.)
+# ------------------------------------------------------------------------------
+ip_policy:
+  enabled: true
+
+  # Deny private IP ranges by default for internet egress.
+  deny_private_ranges_by_default: true
+
+  # RFC1918 + loopback + link-local + multicast + reserved blocks (policy hints)
+  private_ranges:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+    - "127.0.0.0/8"
+    - "169.254.0.0/16"
+    - "224.0.0.0/4"
+
+  # Cloud metadata IP (explicit hard deny).
+  hard_deny_ips:
+    - "169.254.169.254"
+
+# ------------------------------------------------------------------------------
+# TLS / certificate posture
+# ------------------------------------------------------------------------------
+tls:
+  enabled: true
+
+  # Require TLS for https/wss unless explicitly allowed otherwise.
+  require_tls_for_secure_schemes: true
+
+  # In production/regulated profiles, prohibit plain HTTP to public internet.
+  prohibit_plain_http_to_public_in_profiles:
+    - "production"
+    - "regulated"
+    - "safety_critical"
+    - "high_availability"
+
+  # Minimum TLS version (policy hint; implementation dependent).
+  min_tls_version: "1.2" # 1.2 | 1.3
+
+  # Certificate verification posture.
+  verify_certificates: true
+  allow_insecure_skip_verify_in_profiles:
+    - "dev" # dev only
+
+  # Optional: certificate pinning hooks (not implemented here, policy declares intent).
+  pinning:
+    enabled: false
+    pins: [] # e.g., [{ host: "api.example.com", spki_sha256: "..." }]
+
+# ------------------------------------------------------------------------------
+# Proxy posture
+# ------------------------------------------------------------------------------
+proxy:
+  enabled: true
+
+  # If true, require all internet egress to go through proxy (enterprise).
+  require_proxy_for_internet_in_profiles:
+    - "regulated"
+    - "production"
+
+  # If true, deny unknown proxies (anti-exfil).
+  deny_unknown_proxy: true
+
+  # Explicit proxy allowlist (empty by default).
+  allowlist:
+    - "http://127.0.0.1:8888" # example local debugging proxy (dev)
+
+  # If configured, these env vars are allowed to influence outbound routing.
+  allowed_env_vars:
+    - "HTTP_PROXY"
+    - "HTTPS_PROXY"
+    - "NO_PROXY"
+
+# ------------------------------------------------------------------------------
+# Egress allowlists (the heart of the policy)
+# ------------------------------------------------------------------------------
+egress:
+  enabled: true
+
+  # Default: deny all egress unless allowlisted.
+  deny_by_default: true
+
+  # Allowlist blocks. Order matters; first match wins.
+  allow:
+
+    # --------------------------------------------------------------------------
+    # Localhost / local dev services
+    # --------------------------------------------------------------------------
+    - id: "local.loopback_http"
+      description: "Local API/UI development endpoints"
+      match:
+        hosts:
+          - "127.0.0.1"
+          - "localhost"
+        ports: [80, 443, 8000, 5173, 63342]
+        schemes: ["http", "https", "ws", "wss"]
+      constraints:
+        allow_private_ip: true
+        require_tls: false
+
+    # --------------------------------------------------------------------------
+    # Federation peers (explicit allowlist; usually internal network)
+    # --------------------------------------------------------------------------
+    - id: "federation.peers"
+      description: "Federation peer instances (explicit allowlist)"
+      match:
+        hosts: [] # populate in federated deployments
+        ports: [443, 8443, 8000]
+        schemes: ["https", "wss"]
+      constraints:
+        allow_private_ip: true
+        require_tls: true
+
+    # --------------------------------------------------------------------------
+    # Ollama (local model runtime)
+    # --------------------------------------------------------------------------
+    - id: "ollama.local"
+      description: "Local Ollama runtime"
+      match:
+        hosts:
+          - "127.0.0.1"
+          - "localhost"
+        ports: [11434]
+        schemes: ["http"]
+      constraints:
+        allow_private_ip: true
+        require_tls: false
+
+  # Denylist overrides (applies even if allowlisted).
+  deny:
+    - id: "deny.cloud_metadata"
+      description: "Block cloud metadata service"
+      match:
+        hosts:
+          - "169.254.169.254"
+          - "instance-data"
+          - "metadata"
+        ports: [80, 443]
+        schemes: ["http", "https"]
+
+# ------------------------------------------------------------------------------
+# Rate limiting / concurrency (per capability + per host)
+# ------------------------------------------------------------------------------
+rate_limits:
+  enabled: true
+
+  global:
+    max_concurrent_requests: 8
+    max_requests_per_min: 120
+
+  per_host:
+    default:
+      max_concurrent_requests: 4
+      max_requests_per_min: 60
+
+  per_capability:
+    web_learning.search:
+      max_concurrent_requests: 2
+      max_requests_per_min: 30
+    web_learning.fetch:
+      max_concurrent_requests: 2
+      max_requests_per_min: 30
+    web_learning.ingest:
+      max_concurrent_requests: 1
+      max_requests_per_min: 10
+
+# ------------------------------------------------------------------------------
+# Web learning constraints (fetch/ingest safety envelope)
+# ------------------------------------------------------------------------------
+web_learning:
+  enabled: true
+
+  # Web learning is high-risk; it should require approval/trust elsewhere.
+  # This policy constrains the network behavior when it is permitted.
+  redirects:
+    max_hops: 3
+    deny_cross_scheme: true
+    deny_to_private_ip: true
+
+  response_limits:
+    max_bytes: 10_485_760 # 10 MB
+    max_text_bytes: 5_242_880 # 5 MB
+    max_time_s: 20
+
+  content_types:
+    allow:
+      - "text/plain"
+      - "text/html"
+      - "text/markdown"
+      - "application/json"
+      - "application/xhtml+xml"
+    deny:
+      - "application/octet-stream"
+      - "application/x-msdownload"
+      - "application/x-dosexec"
+      - "application/java-archive"
+      - "application/x-sh"
+      - "application/x-binary"
+      - "application/x-executable"
+
+  user_agent:
+    # Policy hint: explicit UA for traceability.
+    value: "Francis/2.0 (web_learning; +local_policy)"
+    allow_override: false
+
+  robots:
+    # Policy hint; implementation may choose to respect robots.txt.
+    respect_robots_txt: true
+
+# ------------------------------------------------------------------------------
+# Guard integration (tighten egress when guard state elevated)
+# ------------------------------------------------------------------------------
+guard_integration:
+  enabled: true
+
+  # If guard state is restricted or lockdown, deny internet egress entirely.
+  deny_egress_when_guard_state_in:
+    - "restricted"
+    - "lockdown"
+
+  # In guarded state, reduce rate limits.
+  throttle_when_guard_state_in:
+    guarded:
+      factor: 0.7
+
+# ------------------------------------------------------------------------------
+# Audit + observability
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  audit:
+    enabled: true
+    kinds:
+      - "net.egress.allowed"
+      - "net.egress.denied"
+      - "net.egress.throttled"
+      - "net.web_learning.response_capped"
+    include:
+      - "ts"
+      - "actor_id"
+      - "capability_id"
+      - "url"
+      - "normalized_url"
+      - "scheme"
+      - "host"
+      - "port"
+      - "decision"
+      - "reason"
+      - "matched_rule_id"
+      - "bytes_in"
+      - "bytes_out"
+      - "duration_ms"
+    include_payload: false
+
+  metrics:
+    enabled: true
+    counters:
+      - "net.allowed"
+      - "net.denied"
+      - "net.throttled"
+      - "net.web_learning.capped"
+    histograms:
+      - "net.duration_ms"
+      - "net.bytes_in"
+      - "net.bytes_out"
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    networks:
+      mode: "policy"
+      fail_closed_decision: "deny"
+    egress:
+      deny_by_default: false
+    tls:
+      verify_certificates: false
+      allow_insecure_skip_verify_in_profiles: ["dev"]
+
+  workstation:
+    networks:
+      mode: "policy"
+      fail_closed_decision: "deny"
+    egress:
+      deny_by_default: true
+
+  production:
+    networks:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    egress:
+      deny_by_default: true
+    tls:
+      min_tls_version: "1.3"
+      verify_certificates: true
+
+  regulated:
+    networks:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    proxy:
+      require_proxy_for_internet_in_profiles: ["regulated"]
+      deny_unknown_proxy: true
+    tls:
+      min_tls_version: "1.3"
+      verify_certificates: true
+
+  safety_critical:
+    networks:
+      mode: "strict"
+      fail_closed_decision: "deny"
+    egress:
+      deny_by_default: true
+    web_learning:
+      enabled: false

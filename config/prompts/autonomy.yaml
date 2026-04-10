@@ -1,0 +1,481 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Autonomy (decision + plan synthesis under policy)
+# Path:   config/prompts/autonomy.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This prompt is the canonical autonomy "decision engine" for Francis.
+#
+# Given:
+#   - a user request
+#   - current system posture (profile, guard state, trust state)
+#   - governance and policy summaries (allowed/blocked capabilities, gates)
+#   - runtime readiness (health, connectivity, sandbox availability)
+#   - optional context (domain registry, recent ledger, active tasks)
+#
+# It outputs:
+#   - a deterministic autonomy decision (deny / ask / propose / require_approval / execute)
+#   - a concrete step plan (capability calls + args) that remains policy-aware
+#   - explicit gates and preconditions for each step (approval/quorum/readiness/sandbox)
+#   - observability hooks (audit events, correlation ids, expected artifacts)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Fail-closed: if a required policy input is missing for a high-risk action, do NOT execute.
+# - Deny-by-default: do not invent capabilities. Only use allowed capabilities if provided.
+# - No speculative execution: produce a plan; runtime enforces and may downgrade.
+# - Strict safety: never operationalize wrongdoing (credential theft, malware, DoS, surveillance).
+# - Deterministic output: STRICT JSON, schema-compliant, no markdown, no code fences.
+#
+# NON-GOALS
+# ---------
+# - Do not implement enforcement logic (that belongs to governance/sandbox/guard).
+# - Do not mutate system state directly; only propose capability calls.
+# - Do not embed secrets or sensitive materials.
+# ==============================================================================
+version: 1
+
+id: "autonomy"
+title: "Autonomy Decision & Plan"
+owner: "francis"
+intent: "decide_and_plan"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Machine-consumable plan generator; governance layer remains authoritative."
+    - "Prefer explicit gates and safe degradation over clever autonomy."
+    - "All high-risk actions must be approval-aware and readiness-aware."
+  compatibility:
+    - "Framework-agnostic; no UI assumptions."
+    - "Works for CLI/API/UI entrypoints."
+    - "Designed to remain stable as new capabilities/plugins arrive."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | worker | federation
+      user_intent: { type: string, required: false }
+      message: { type: string, required: true }
+      attachments: { type: array, required: false }
+      time_utc_iso: { type: string, required: false }
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      run_mode: { type: string, required: false } # dev | prod
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          ts: { type: number, required: false }
+          summary: { type: string, required: false }
+          components: { type: object, required: false }
+      sandbox:
+        type: object
+        required: false
+        fields:
+          available: { type: boolean, required: false }
+          mode: { type: string, required: false } # policy | strict
+          reason: { type: string, required: false }
+      network:
+        type: object
+        required: false
+        fields:
+          web_access_enabled: { type: boolean, required: false }
+          egress_allowed: { type: boolean, required: false }
+          notes: { type: array, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false } # integer trust level
+          label: { type: string, required: false }
+          decay_enabled: { type: boolean, required: false }
+          notes: { type: array, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          pending_count: { type: number, required: false }
+          pending_items: { type: array, required: false }
+          quorum_required_by_default: { type: boolean, required: false }
+
+      # Optional policy summary from enforcement layer:
+      # - allowed_capabilities: allowlist of capability ids the actor may request
+      # - blocked_capabilities: denylist of capability ids
+      # - gates_by_capability: known gates for capability ids (min_trust, requires_approval, etc.)
+      policy_summary:
+        type: object
+        required: false
+        fields:
+          allowed_capabilities: { type: array, required: false }
+          blocked_capabilities: { type: array, required: false }
+          gates_by_capability: { type: object, required: false }
+          notes: { type: array, required: false }
+
+  context:
+    type: object
+    required: false
+    fields:
+      # Optional state snapshots that help planning.
+      recent_ledger_entries: { type: array, required: false }
+      active_domain: { type: string, required: false }
+      known_domains: { type: array, required: false }
+      plugins: { type: array, required: false }
+      open_tasks: { type: array, required: false }
+      constraints: { type: object, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - plan
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - should_execute
+          - requires_approval
+          - requires_quorum
+          - needs_followup
+          - confidence
+          - reason_codes
+        properties:
+          # Allowed modes:
+          # - deny: blocked by policy/safety
+          # - ask: need clarification / missing info for safe plan
+          # - propose: provide plan but do not execute (default if uncertain)
+          # - require_approval: plan requires approvals before execution
+          # - execute: safe to execute now (rare; read-only or explicitly permitted)
+          mode:
+            type: string
+            enum: ["deny", "ask", "propose", "require_approval", "execute"]
+
+          # Execution intent (the orchestrator may still refuse)
+          should_execute: { type: boolean }
+
+          requires_approval: { type: boolean }
+          requires_quorum: { type: boolean }
+
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+
+          confidence: { type: number } # 0..1
+
+          # Stable reason codes for audit/UI.
+          reason_codes:
+            type: array
+            items: { type: string }
+
+          # Human-readable explanation (short).
+          summary: { type: string }
+
+      plan:
+        type: object
+        additionalProperties: false
+        required:
+          - title
+          - steps
+          - rollback
+        properties:
+          title: { type: string }
+
+          steps:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+                - kind
+                - description
+                - gates
+                - preconditions
+                - expected_effect
+              properties:
+                id: { type: string }
+                # step kinds:
+                # - capability_call: request execution of a known capability_id
+                # - request_approval: create/await an approval item
+                # - ask_user: ask for missing info
+                # - noop: explicit no-op
+                kind:
+                  type: string
+                  enum: ["capability_call", "request_approval", "ask_user", "noop"]
+
+                description: { type: string }
+
+                capability_id: { type: string }
+                args:
+                  type: object
+                  additionalProperties: true
+
+                gates:
+                  type: object
+                  additionalProperties: false
+                  required:
+                    - category
+                    - min_trust
+                    - requires_approval
+                    - requires_quorum
+                    - sandbox_required
+                    - readiness_required
+                    - network_egress
+                  properties:
+                    category: { type: string } # read_only | mutation | destructive | network_egress | ...
+                    min_trust: { type: number }
+                    requires_approval: { type: boolean }
+                    requires_quorum: { type: boolean }
+                    sandbox_required: { type: boolean }
+                    readiness_required: { type: boolean }
+                    network_egress: { type: boolean }
+
+                preconditions:
+                  type: object
+                  additionalProperties: false
+                  required: ["must_hold", "checks"]
+                  properties:
+                    must_hold:
+                      type: array
+                      items: { type: string } # plain-language invariants
+                    checks:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        required: ["id", "required"]
+                        properties:
+                          id: { type: string } # e.g., system.health.ok
+                          required: { type: boolean }
+                          on_fail: { type: string } # deny | require_review | downgrade_to_propose
+
+                expected_effect: { type: string }
+
+                outputs:
+                  type: object
+                  additionalProperties: false
+                  required: ["artifacts", "ledger", "vectors"]
+                  properties:
+                    artifacts:
+                      type: array
+                      items: { type: string }
+                    ledger:
+                      type: array
+                      items: { type: string }
+                    vectors:
+                      type: array
+                      items: { type: string }
+
+                risk:
+                  type: object
+                  additionalProperties: false
+                  required: ["level", "blast_radius", "notes"]
+                  properties:
+                    level: { type: string, enum: ["low", "medium", "high", "critical"] }
+                    blast_radius: { type: string } # local | repo | system | network | physical
+                    notes:
+                      type: array
+                      items: { type: string }
+
+          rollback:
+            type: object
+            additionalProperties: false
+            required: ["strategy", "steps"]
+            properties:
+              strategy: { type: string } # none | best_effort | transactional | restore_point
+              steps:
+                type: array
+                items: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - blocked
+          - blocked_reasons
+          - sensitive
+          - redactions
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          sensitive:
+            type: object
+            additionalProperties: false
+            required: ["contains_pii", "contains_secrets", "regulated_tags"]
+            properties:
+              contains_pii: { type: boolean }
+              contains_secrets: { type: boolean }
+              regulated_tags:
+                type: array
+                items: { type: string }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required:
+          - audit_events
+          - metrics
+          - correlation_id
+        properties:
+          correlation_id: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when"]
+              properties:
+                kind: { type: string } # autonomy.decided | plan.proposed | execution.requested | ...
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+          metrics:
+            type: array
+            items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+
+  - role: "system"
+    content: |-
+      You are Francis’s autonomy governor.
+
+      Produce a safe, policy-aware plan that the runtime can enforce.
+
+      Hard rules:
+      - Output MUST be a single strict JSON object matching the schema (no markdown, no code fences).
+      - Do NOT invent capabilities. Use only capability ids that appear in governance.policy_summary.allowed_capabilities
+        if that list is provided. If it is not provided, prefer "ask" or "propose" with clearly stated assumptions.
+      - Fail closed on high-risk categories:
+          * destructive actions
+          * credential operations
+          * network egress
+          * industrial actuation
+        If any required policy/runtime data is missing, do NOT recommend execute.
+      - Never output or request secret material. If secrets appear in the request, mark sensitive + redact.
+      - If the user request involves wrongdoing (credential theft, malware, DoS, surveillance),
+        set decision.mode="deny" and provide safe alternatives (defensive, auditing, compliance).
+        Do NOT provide operational steps or code that enables harm.
+      - Respect safety-critical and regulated profiles: tighter gates, egress disabled, approvals required.
+
+      Planning rubric (in priority order):
+      1) Safety and policy compliance
+      2) Determinism and observability
+      3) Minimal blast radius (least privilege)
+      4) Operator ergonomics (clear steps and gates)
+      5) Forward-compatibility (tolerate API evolution)
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      RUNTIME:
+      {{runtime}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      CONTEXT:
+      {{context}}
+
+      Task:
+      1) Decide autonomy mode:
+         - deny / ask / propose / require_approval / execute
+      2) Produce a plan with explicit gates, preconditions, and expected effects.
+      3) Ensure every step is observable (audit events + metrics).
+      4) Keep it safe: fail closed if uncertain for high-risk operations.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.1
+  max_output_tokens: 2200
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  # Determinism / governance
+  - "OK_READ_ONLY_EXECUTION"
+  - "PROPOSE_ONLY_MISSING_POLICY_SUMMARY"
+  - "PROPOSE_ONLY_LOW_CONFIDENCE"
+  - "ASK_MISSING_PARAMETERS"
+  - "REQUIRES_APPROVAL_BY_POLICY"
+  - "REQUIRES_QUORUM_BY_POLICY"
+  - "DENY_GUARD_LOCKDOWN"
+  - "DENY_SANDBOX_UNAVAILABLE"
+  - "DENY_POLICY_DISABLED_FEATURE"
+  - "DENY_UNKNOWN_CAPABILITY"
+  - "DENY_FAIL_CLOSED"
+
+  # Safety
+  - "BLOCKED_WRONGDOING_REQUEST"
+  - "SENSITIVE_SECRETS_DETECTED"
+  - "SENSITIVE_PII_DETECTED"
+  - "REGULATED_SIGNAL_DETECTED"
+
+  # Runtime readiness
+  - "READINESS_SYSTEM_HEALTH_NOT_OK"
+  - "READINESS_REQUIRED_FOR_ACTION_CATEGORY"
+  - "NETWORK_EGRESS_DISABLED_BY_PROFILE"
+  - "WEB_ACCESS_DISABLED_BY_PROFILE"

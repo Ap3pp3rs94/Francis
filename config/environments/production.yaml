@@ -1,0 +1,361 @@
+# ==============================================================================
+# Francis Environment Profile: PRODUCTION
+# File: config/environments/production.yaml
+#
+# INTENT:
+#   Production baseline:
+#     - Secure defaults (JWT auth, strict config)
+#     - Strong audit/observability (jsonl logs, required audit + explanations)
+#     - Governance-first (strict approvals for high/critical actions)
+#     - Externalized state (Postgres/Redis/Qdrant) where available
+#     - Explicit network posture (deny-by-default egress, allowlist only)
+#
+# ASSUMPTIONS:
+#   - Deployed behind a reverse proxy/load balancer with TLS termination.
+#   - Secrets (JWT keys, tokens, DSN passwords) come from env/vault, never here.
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: production
+  name: Production
+  description: >
+    Production baseline profile: strict governance, required audit trails,
+    external state, and explicit allowlist-based networking.
+
+  invariants:
+    - "Authenticated API access only."
+    - "Audit and explanations enabled (required)."
+    - "Strict approvals for high/critical operations."
+    - "No uncontrolled outbound egress."
+    - "No debug mode."
+
+  operator_notes:
+    - "Run behind TLS reverse proxy; do not expose API directly without TLS."
+    - "Set allowed CORS origins explicitly to your UI domain(s)."
+    - "Use vault/env for secrets; rotate regularly."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: production
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+  concurrency:
+    api_workers: 2
+    worker_threads: 8
+    daemon_concurrency: 4
+
+# ------------------------------------------------------------------------------
+# API posture
+# ------------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+  security:
+    auth_mode: jwt
+    allow_anonymous: false
+    trust_proxy_headers: true
+
+  cors:
+    enabled: true
+    # IMPORTANT:
+    #   Replace these with your real UI origin(s) in production.
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  timeouts:
+    read_s: 30
+    write_s: 45
+    idle_s: 60
+
+  limits:
+    max_request_mb: 10
+    max_json_mb: 5
+
+  websocket:
+    ping_interval_s: 20
+    ping_timeout_s: 10
+    max_message_kb: 256
+
+# ------------------------------------------------------------------------------
+# Observability (production-grade)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.2
+
+  metrics:
+    enabled: true
+    export:
+      format: prometheus
+      path: "/metrics"
+
+# ------------------------------------------------------------------------------
+# Governance (strict)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 2
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 25
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (explicit allowlists; deny by default)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: true
+
+  egress:
+    enabled: false
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+      # Add internal service subnets if needed:
+      # - "10.0.0.0/8"
+      # - "172.16.0.0/12"
+      # - "192.168.0.0/16"
+    denylist:
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (local-first; remote optional but explicit)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: false
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false
+
+  sampling:
+    temperature: 0.25
+    top_p: 0.9
+    max_tokens: 1024
+
+# ------------------------------------------------------------------------------
+# Memory / persistence (prefer external services; keep local paths for buffering)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+    pgvector:
+      enabled: false
+      dsn: ""
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+  continuity:
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 200
+      max_days: 30
+
+# ------------------------------------------------------------------------------
+# External services (expected in production)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: true
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 20
+    pool_timeout_s: 30
+    statement_timeout_s: 30
+
+  redis:
+    enabled: true
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 20
+    socket_timeout_s: 5
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Daemon / workers posture (production stability)
+# ------------------------------------------------------------------------------
+daemon:
+  enabled: true
+  tick_interval_ms: 500
+  heartbeat_interval_s: 10
+  concurrency: 4
+  fail_fast: true
+  jitter_ms: 75
+
+workers:
+  enabled: true
+  concurrency: 4
+  max_inflight: 50
+  retry:
+    max_attempts: 3
+    backoff_ms: 500
+    backoff_multiplier: 2.0
+    jitter_ms: 250
+
+# ------------------------------------------------------------------------------
+# Features (production defaults)
+# ------------------------------------------------------------------------------
+features:
+  web_learning:
+    # Production baseline defaults OFF.
+    # Enable explicitly only if you have policies, approvals, and allowlists set.
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      mode: static
+      static_peers: []
+    consensus:
+      enabled: false
+      algorithm: raft
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  industrial:
+    enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+  connectors:
+    cloud:
+      enabled: false
+    saas:
+      enabled: false
+    communication:
+      enabled: true
+      email_enabled: false
+      sms_enabled: false
+      push_enabled: false
+
+  resilience:
+    enabled: true
+    backup:
+      enabled: true
+      require_approval: true
+      schedule_hint: "daily"
+    restore:
+      enabled: true
+      require_approval: true
+
+# ------------------------------------------------------------------------------
+# Assertions (lint/fail-fast intent)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: debug_off
+    severity: error
+    expr: "{{runtime.debug == false}}"
+    message: "Production profile requires runtime.debug=false."
+
+  - id: auth_required
+    severity: error
+    expr: "{{api.security.allow_anonymous == false}}"
+    message: "Production profile requires authenticated API access."
+
+  - id: audit_required
+    severity: error
+    expr: "{{observability.audit.level == 'required'}}"
+    message: "Production profile requires audit level 'required'."
+
+  - id: strict_approvals
+    severity: error
+    expr: "{{governance.approvals.mode == 'strict'}}"
+    message: "Production profile requires strict approvals."
+
+  - id: no_uncontrolled_egress
+    severity: warn
+    expr: "{{network.egress.enabled == false}}"
+    message: "Production profile defaults egress disabled; enable only with explicit allowlist."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "PROD"
+  banner:
+    enabled: true
+    text: "PRODUCTION — STRICT GOVERNANCE / REQUIRED AUDIT"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

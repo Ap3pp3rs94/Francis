@@ -1,0 +1,352 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Modality Config
+# Domain: Code (generation, refactors, patches, reviews)
+# Path:   config/models/specialized/code.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file defines the CODE specialization policy:
+#   - Routing hints for code workloads (chat vs code vs tool_router)
+#   - Output contracts for code responses (diff-first, deterministic formatting)
+#   - Tool-use posture (lint/test/format gates; execution restrictions)
+#   - Governance gates for repo mutation (approvals/trust requirements)
+#   - Safety rails (no secret injection, no credential leakage)
+#
+# This is intentionally *policy + contract*, not implementation.
+# Enforcement happens in the code executor / governance / tool router layers.
+#
+# PRINCIPLES
+# ----------
+# - Patch-first: code changes should be expressed as diffs/patches unless explicitly
+#   asked for full-file drops.
+# - Deterministic: minimize randomness in code tasks for reproducibility.
+# - Observable: emit structured metadata for code changes (files touched, risk).
+# - Governed mutation: destructive changes require approval and/or trust thresholds.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "code_specialization"
+  repo_root_hint: "C:/Francis"
+  notes:
+    - "Defaults tuned for repo-scale refactors and safe patch workflows."
+    - "No secrets in code outputs."
+    - "Prefer diffs and explicit file paths."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+code:
+  enabled: true
+
+  # Local-first posture for code tasks (especially in regulated/safety profiles).
+  local_first_models: true
+
+  # Default workload class for code-oriented tasks.
+  default_workload: "code"
+
+  # If the router cannot classify, choose conservative behavior.
+  unknown_request_policy: "fallback_to_review" # fallback_to_review | deny | fallback_to_chat
+
+# ------------------------------------------------------------------------------
+# Routing hints (how to choose models and modes for code tasks)
+# ------------------------------------------------------------------------------
+routing:
+  preferred_workloads:
+    # When tasks include actual edits/refactors: code workload.
+    mutation: "code"
+    # When tasks require selecting/executing tools: tool_router workload.
+    tool_planning: "tool_router"
+    # When tasks are explanation-only: reasoning workload.
+    explanation: "reasoning"
+
+  tags:
+    classify_as_code_if_any:
+      - "code"
+      - "refactor"
+      - "patch"
+      - "diff"
+      - "lint"
+      - "format"
+      - "tests"
+      - "mypy"
+      - "ruff"
+      - "typescript"
+      - "vite"
+      - "react"
+      - "python"
+
+  # Candidate preference bias (hint-level)
+  prefer_coder_model_for:
+    - "mutation"
+    - "refactor"
+    - "patch"
+    - "review_with_suggestions"
+
+# ------------------------------------------------------------------------------
+# Output contracts (diff-first, structured)
+# ------------------------------------------------------------------------------
+output:
+  # Default response style for code changes:
+  # - "unified_diff": preferred for patch application
+  # - "file_drop": only when explicitly requested or for new files
+  default_format: "unified_diff" # unified_diff | file_drop | explanation_only
+
+  # When providing diffs, require minimal metadata so tools can apply safely.
+  diff:
+    unified:
+      enabled: true
+      include_file_headers: true
+      include_hunk_headers: true
+      context_lines: 3
+
+    # Prevent accidental whitespace churn unless intentional.
+    whitespace_policy:
+      avoid_unrelated_formatting: true
+      allow_formatting_if_requested: true
+
+  # When providing full file drops, require explicit path and full content.
+  file_drop:
+    require_absolute_repo_relative_path: true
+    path_format: "posix_or_windows" # accept both; enforcement normalizes
+    require_complete_file: true
+
+  # Require explicit "what changed" summary when mutation occurs.
+  change_summary:
+    required: true
+    include:
+      - "files_touched"
+      - "risk_assessment"
+      - "tests_recommended"
+      - "rollback_plan"
+
+  # Discourage hallucinating files/paths that don't exist.
+  repo_awareness:
+    discourage_unknown_paths: true
+    require_confirmation_for_new_top_level_dirs: true
+
+# ------------------------------------------------------------------------------
+# Tool usage posture (lint/test/format gates, execution safety)
+# ------------------------------------------------------------------------------
+tools:
+  enabled: true
+
+  # Tool planning may happen without execution. Execution is governed separately.
+  planning:
+    allowed: true
+    require_schema: true
+    prefer_small_plans: true
+    max_steps: 12
+
+  execution:
+    enabled: true
+
+    # Default is "dry-run posture": prefer checks and previews before mutation.
+    default_mode: "dry_run_first" # dry_run_first | execute | disabled
+
+    # Command execution rails (defensive)
+    command_policy:
+      allow_shell: true
+      allow_powershell: true
+      allow_python: true
+
+      # Hard blocks for obviously dangerous commands (hint-level; actual enforcement in executor).
+      deny_patterns:
+        - "(?i)rm\\s+-rf\\s+/"
+        - "(?i)del\\s+/f\\s+/s\\s+/q\\s+C:\\\\"
+        - "(?i)format\\s+"
+        - "(?i)diskpart"
+        - "(?i)shutdown"
+        - "(?i)reg\\s+delete"
+        - "(?i)Invoke-WebRequest\\s+.*\\|\\s+iex"
+        - "(?i)curl\\s+.*\\|\\s+sh"
+
+    # Suggested checks after code mutation (hint-level).
+    recommended_checks:
+      python:
+        - "python -m compileall -q ."
+        - "python -m ruff check ."
+      typescript:
+        - "npm run build"
+        - "npm run typecheck"
+      generic:
+        - "git diff --stat"
+
+    # If checks fail, system should prefer revert / stop rather than continue mutating.
+    on_check_failure: "stop" # stop | continue | rollback
+
+# ------------------------------------------------------------------------------
+# Governance gates (trust + approvals)
+# ------------------------------------------------------------------------------
+governance:
+  enabled: true
+  fail_closed: true
+
+  # Trust floors for code operations (hint-level; enforcement in governance layer).
+  trust:
+    min_trust:
+      read_only_review: 0
+      suggest_patch: 1
+      apply_patch: 3
+      run_tests: 3
+      run_shell_commands: 4
+      repo_wide_refactor: 5
+
+  approvals:
+    # What code operations require approvals by default.
+    require_approval_for:
+      - "apply_patch"
+      - "repo_wide_refactor"
+      - "dependency_changes"
+      - "lockfile_regeneration"
+      - "run_shell_commands"
+      - "modify_security_policy"
+      - "credential_related_code"
+
+    # Risk mapping for code actions (used by broader governance systems).
+    risk_by_action:
+      read_only_review: low
+      suggest_patch: low
+      apply_patch: medium
+      dependency_changes: high
+      lockfile_regeneration: medium
+      repo_wide_refactor: high
+      run_shell_commands: high
+      modify_security_policy: critical
+      credential_related_code: critical
+
+  # If a task touches certain areas, elevate risk.
+  risk_escalation:
+    paths:
+      critical_if_touches_any:
+        - "config/security"
+        - "config/environments"
+        - "config/models"
+        - "infra"
+        - ".github"
+        - "src/francis/trust"
+        - "src/francis/governance"
+      high_if_touches_any:
+        - "apps/api"
+        - "apps/daemon"
+        - "apps/workers"
+        - "plugins"
+
+# ------------------------------------------------------------------------------
+# Secret safety (prevent accidental credential injection)
+# ------------------------------------------------------------------------------
+secrets:
+  enabled: true
+
+  # Output-level redaction / blocking heuristics.
+  block_if_patterns_detected:
+    - "(?i)FRANCIS_.*_API_KEY\\s*="
+    - "(?i)OPENAI_API_KEY\\s*="
+    - "(?i)AWS_SECRET_ACCESS_KEY\\s*="
+    - "(?i)BEGIN\\s+PRIVATE\\s+KEY"
+    - "(?i)sk-[a-z0-9]{10,}"
+
+  # If secret-like material is detected, recommended posture:
+  on_detect: "require_approval" # deny | require_approval | redact_and_warn
+
+# ------------------------------------------------------------------------------
+# Dependency management policy (Node/Python)
+# ------------------------------------------------------------------------------
+dependencies:
+  node:
+    # Lockfiles should be tracked, but changes are governance-gated.
+    lockfile_policy:
+      track_lockfiles: true
+      require_approval_for_changes: true
+      allow_auto_fix_vulnerabilities: false
+
+    # npm audit fix --force is dangerous; require approval.
+    npm_audit_fix_force_requires_approval: true
+
+  python:
+    # uv.lock (if used) should be tracked; regeneration requires approval.
+    lockfile_policy:
+      track_uv_lock: true
+      require_approval_for_changes: true
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    output:
+      default_format: "unified_diff"
+    tools:
+      execution:
+        default_mode: "execute"
+    governance:
+      approvals:
+        require_approval_for:
+          - "modify_security_policy"
+          - "credential_related_code"
+
+  workstation:
+    output:
+      default_format: "unified_diff"
+    tools:
+      execution:
+        default_mode: "dry_run_first"
+    governance:
+      trust:
+        min_trust:
+          apply_patch: 3
+          run_shell_commands: 4
+
+  regulated:
+    output:
+      default_format: "unified_diff"
+    tools:
+      execution:
+        enabled: true
+        default_mode: "dry_run_first"
+    governance:
+      approvals:
+        # Increase gating in regulated environments.
+        require_approval_for:
+          - "apply_patch"
+          - "repo_wide_refactor"
+          - "dependency_changes"
+          - "lockfile_regeneration"
+          - "run_shell_commands"
+          - "modify_security_policy"
+          - "credential_related_code"
+      trust:
+        min_trust:
+          apply_patch: 4
+          run_shell_commands: 5
+
+  safety_critical:
+    output:
+      default_format: "unified_diff"
+    tools:
+      execution:
+        # In safety-critical, default to NO execution without explicit override.
+        enabled: true
+        default_mode: "dry_run_first"
+        on_check_failure: "stop"
+    governance:
+      approvals:
+        require_approval_for:
+          - "apply_patch"
+          - "repo_wide_refactor"
+          - "dependency_changes"
+          - "lockfile_regeneration"
+          - "run_shell_commands"
+          - "modify_security_policy"
+          - "credential_related_code"
+      trust:
+        min_trust:
+          apply_patch: 5
+          run_shell_commands: 6
+          repo_wide_refactor: 7
+    secrets:
+      on_detect: "deny"

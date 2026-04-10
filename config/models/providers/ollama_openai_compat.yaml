@@ -1,0 +1,299 @@
+# ==============================================================================
+#  FRANCIS — ollama_openai_compat.yaml
+#  Cone Layer 2: Model Provider Profile (OpenAI-Compatible Gateway to Ollama)
+# ==============================================================================
+#
+#  Purpose:
+#    Configure a provider that speaks the OpenAI API shape while routing requests
+#    to an Ollama server (or any OpenAI-compatible proxy in front of it).
+#
+#  Typical use-cases:
+#    - Keep your code “OpenAI-shaped” while swapping local/edge models.
+#    - Run in regulated/offline environments with a local inference stack.
+#    - Use the same routing/guardrails across multiple providers.
+#
+#  Notes:
+#    - Ollama’s OpenAI-compat endpoints are usually under /v1 (e.g. :11434/v1).
+#    - Many setups accept any Bearer token; we still provide a key field so
+#      the rest of the system can treat providers consistently.
+#    - Keep request/response body logging OFF by default (privacy + secrets).
+#
+# ==============================================================================
+
+schema_version: 1
+
+provider:
+  id: ollama_openai_compat
+  display_name: "Ollama (OpenAI-Compatible)"
+  enabled: true
+
+  # Provider “type” is intentionally descriptive; your loader can map it to the
+  # python class (e.g., src/francis/llm/providers/ollama_openai_compat.py).
+  type: openai_compat
+
+  # ---------------------------------------------------------------------------
+  # CONNECTION / TRANSPORT
+  # ---------------------------------------------------------------------------
+  transport:
+    # Base URL to the OpenAI-compatible API root.
+    # Common local default:
+    #   http://localhost:11434/v1
+    #
+    # If you front Ollama with a gateway/reverse-proxy, point at that instead.
+    base_url: "http://localhost:11434/v1"
+
+    # If your proxy uses a different prefix, keep base_url at host and set:
+    # api_prefix: "/v1"
+    api_prefix: ""
+
+    # TLS options (only relevant for https)
+    tls:
+      verify: true
+      # Optional CA bundle path if you run your own PKI.
+      ca_bundle_path: null
+
+    # Proxy support (optional)
+    proxy:
+      http: null
+      https: null
+      no_proxy: null
+
+    # Request timeouts (seconds)
+    timeouts:
+      connect_s: 5
+      read_s: 180
+      write_s: 180
+      total_s: 180
+
+    # Keepalive / pooling (client-side)
+    pooling:
+      enabled: true
+      max_connections: 128
+      max_keepalive_connections: 32
+      keepalive_expiry_s: 60
+
+    # Optional HTTP/2 toggle (depends on your client implementation)
+    http2: false
+
+    # Default headers attached to every request
+    headers:
+      # Many Ollama OpenAI-compat setups accept any bearer token.
+      # Use a real secret if you put a gateway in front of Ollama.
+      Authorization: "Bearer ollama"
+      User-Agent: "FRANCIS/ollama-openai-compat"
+      X-Client-Name: "francis"
+      X-Provider-ID: "ollama_openai_compat"
+
+  # ---------------------------------------------------------------------------
+  # OPENAI-COMPAT ENDPOINT MAP
+  # ---------------------------------------------------------------------------
+  endpoints:
+    models: "/models"
+    chat_completions: "/chat/completions"
+    completions: "/completions"
+    embeddings: "/embeddings"
+
+  # ---------------------------------------------------------------------------
+  # CAPABILITIES (what this provider is expected to support)
+  # ---------------------------------------------------------------------------
+  capabilities:
+    chat: true
+    completions: true
+    embeddings: true
+
+    # Set these true only if your OpenAI-compat gateway supports them.
+    streaming: true
+    tool_calls: true
+
+    # Some gateways support JSON mode or schema-ish constraints; keep conservative.
+    json_mode: true
+    json_schema: false
+
+    # Ollama can do vision depending on model + gateway support; default off.
+    vision: false
+    audio: false
+
+  # ---------------------------------------------------------------------------
+  # MODEL ALIASES (system-wide “names” mapped to concrete provider model ids)
+  # ---------------------------------------------------------------------------
+  # These are your canonical handles used by routing.yaml / task routers.
+  # Update the right-hand side to match `ollama list` model names or the names
+  # your gateway exposes via /v1/models.
+  model_aliases:
+    default_chat: "llama3.1:8b-instruct"
+    deliberate_chat: "llama3.1:70b-instruct"
+    coder_chat: "qwen2.5-coder:7b-instruct"
+    fast_chat: "phi3:mini"
+    default_embed: "nomic-embed-text"
+
+  # Optional per-model capability hints (helps routing/guardrails)
+  model_profiles:
+    - alias: default_chat
+      context_window_tokens: 8192
+      supports_tools: true
+      supports_streaming: true
+      intended_use: "general_assistant"
+    - alias: deliberate_chat
+      context_window_tokens: 8192
+      supports_tools: true
+      supports_streaming: true
+      intended_use: "high_accuracy_reasoning"
+    - alias: coder_chat
+      context_window_tokens: 8192
+      supports_tools: true
+      supports_streaming: true
+      intended_use: "code_generation"
+    - alias: fast_chat
+      context_window_tokens: 4096
+      supports_tools: false
+      supports_streaming: true
+      intended_use: "low_latency"
+    - alias: default_embed
+      context_window_tokens: 8192
+      intended_use: "embeddings"
+
+  # ---------------------------------------------------------------------------
+  # DEFAULT GENERATION PARAMETERS (safe global defaults)
+  # ---------------------------------------------------------------------------
+  defaults:
+    chat:
+      temperature: 0.3
+      top_p: 0.9
+      max_output_tokens: 1024
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+    embeddings:
+      # Some gateways ignore these; they’re here for consistency.
+      batch_size: 64
+
+  # ---------------------------------------------------------------------------
+  # RESILIENCE (retries, backoff, circuit breaker)
+  # ---------------------------------------------------------------------------
+  resilience:
+    retries:
+      enabled: true
+      max_retries: 4
+
+      # Exponential backoff with jitter to avoid thundering herds.
+      backoff:
+        strategy: exponential
+        base_delay_ms: 250
+        max_delay_ms: 8000
+        jitter: full
+
+      # Retry on transient errors / overloaded server
+      retry_on_status:
+        - 408   # Request Timeout
+        - 409   # Conflict (sometimes transient)
+        - 425   # Too Early (rare)
+        - 429   # Rate limited / overloaded
+        - 500
+        - 502
+        - 503
+        - 504
+
+      # If your client surfaces exception names, these are typical retryables.
+      retry_on_exceptions:
+        - TimeoutError
+        - ConnectionError
+
+    circuit_breaker:
+      enabled: true
+      window_s: 60
+      min_requests: 10
+      failure_ratio_threshold: 0.5
+      open_state_s: 30
+      half_open_max_calls: 3
+
+  # ---------------------------------------------------------------------------
+  # RATE LIMITING / CONCURRENCY
+  # ---------------------------------------------------------------------------
+  # Local models can still be overwhelmed; keep modest defaults.
+  throttling:
+    enabled: true
+    max_concurrency: 4
+    max_queue_depth: 200
+    requests_per_minute: 240
+    tokens_per_minute: 200000
+
+  # ---------------------------------------------------------------------------
+  # SAFETY / GOVERNANCE ADAPTERS (provider-specific guardrails)
+  # ---------------------------------------------------------------------------
+  safety:
+    # Block obviously risky model names if they exist in your registry.
+    model_denylist:
+      - "*uncensored*"
+      - "*jailbreak*"
+      - "*nsfw*"
+
+    # Optional: allowlist takes precedence if you want tight control.
+    model_allowlist: []
+
+    # Prompt injection handling hooks (system-level policies should also apply)
+    prompt_injection:
+      enabled: true
+      mode: strict
+      # If strict, you typically:
+      #   - isolate tools behind approval gates
+      #   - prevent system prompt exfiltration
+      #   - reject tool-call arguments containing secrets or policy text
+      suspicious_signal_threshold: 0.75
+
+    # Redaction rules for logs/telemetry (defense-in-depth)
+    redaction:
+      enabled: true
+      patterns:
+        - name: bearer_token
+          regex: "(?i)bearer\\s+[a-z0-9._\\-]+"
+          replacement: "Bearer [REDACTED]"
+        - name: openai_like_key
+          regex: "(?i)sk-[a-z0-9]{16,}"
+          replacement: "[REDACTED_KEY]"
+        - name: jwt
+          regex: "eyJ[a-zA-Z0-9_\\-]+=*\\.[a-zA-Z0-9_\\-]+=*\\.[a-zA-Z0-9_\\-]+=*"
+          replacement: "[REDACTED_JWT]"
+
+  # ---------------------------------------------------------------------------
+  # OBSERVABILITY (logging, metrics, tracing)
+  # ---------------------------------------------------------------------------
+  observability:
+    logging:
+      level: info
+
+      # Keep bodies OFF by default; flip only for controlled debugging.
+      log_request_headers: true
+      log_request_body: false
+      log_response_headers: true
+      log_response_body: false
+
+      # Sampling prevents log floods when streaming or high-volume.
+      sample_rate: 0.05
+
+    metrics:
+      enabled: true
+      tags:
+        provider: "ollama_openai_compat"
+
+    tracing:
+      enabled: true
+      propagate_headers:
+        - traceparent
+        - baggage
+
+  # ---------------------------------------------------------------------------
+  # FEATURE FLAGS (provider-specific behavior toggles)
+  # ---------------------------------------------------------------------------
+  feature_flags:
+    # Prefer chat_completions when available.
+    prefer_chat_completions: true
+
+    # Cache /v1/models for a short TTL to avoid repeated calls.
+    models_endpoint_cache:
+      enabled: true
+      ttl_s: 60
+
+    # Embedding batching behavior (if your client supports it)
+    embedding_batching:
+      enabled: true
+      max_batch_size: 128
+      max_chars_per_item: 8000

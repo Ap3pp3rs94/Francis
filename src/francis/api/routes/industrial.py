@@ -1,0 +1,1342 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+import os
+import re
+import time
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Query
+from fastapi.responses import Response
+
+from francis.governance import approvals as approval_store
+from francis.kernel.paths import data_dir
+
+router = APIRouter()
+_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def _slug(value: str) -> str:
+    out = []
+    last_sep = False
+    for ch in value.strip().lower():
+        if ch.isalnum():
+            out.append(ch)
+            last_sep = False
+            continue
+        if ch in {" ", "-", "_", ".", ":"} and not last_sep:
+            out.append("-")
+            last_sep = True
+    slug = "".join(out).strip("-")
+    return slug[:64] or "item"
+
+
+def _new_id(prefix: str, seed: str) -> str:
+    return f"{prefix}_{_slug(seed)}_{uuid.uuid4().hex[:8]}"
+
+
+def _parse_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        return [_safe_str(item).strip() for item in value if _safe_str(item).strip()]
+    return []
+
+
+def _normalize_meta(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _validate_id(value: str, field: str = "id") -> str:
+    text = value.strip()
+    if not text:
+        raise ValueError(f"{field} is required")
+    if not _ID_RE.match(text):
+        raise ValueError(f"invalid {field}")
+    return text
+
+
+def _industrial_dir() -> Path:
+    return data_dir() / "industrial"
+
+
+def _registry_path() -> Path:
+    return _industrial_dir() / "_registry.json"
+
+
+def _default_registry() -> dict[str, Any]:
+    return {
+        "version": 1,
+        "updated_at": _now_s(),
+        "assets": {},
+        "processes": {},
+        "simulations": {},
+        "runs": {},
+        "safety_validations": {},
+        "telemetry": [],
+        "interventions": [],
+    }
+
+
+def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _load_registry() -> dict[str, Any]:
+    path = _registry_path()
+    if not path.exists():
+        return _default_registry()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return _default_registry()
+    if not isinstance(raw, dict):
+        return _default_registry()
+    out = _default_registry()
+    out["version"] = int(raw.get("version") or 1)
+    out["updated_at"] = int(raw.get("updated_at") or _now_s())
+    for key in ("assets", "processes", "simulations", "runs", "safety_validations"):
+        if isinstance(raw.get(key), dict):
+            out[key] = raw[key]
+    for key in ("telemetry", "interventions"):
+        if isinstance(raw.get(key), list):
+            out[key] = raw[key]
+    return out
+
+
+def _save_registry(registry: dict[str, Any]) -> None:
+    normalized = {
+        "version": int(registry.get("version") or 1),
+        "updated_at": _now_s(),
+        "assets": registry.get("assets") if isinstance(registry.get("assets"), dict) else {},
+        "processes": registry.get("processes") if isinstance(registry.get("processes"), dict) else {},
+        "simulations": registry.get("simulations") if isinstance(registry.get("simulations"), dict) else {},
+        "runs": registry.get("runs") if isinstance(registry.get("runs"), dict) else {},
+        "safety_validations": registry.get("safety_validations") if isinstance(registry.get("safety_validations"), dict) else {},
+        "telemetry": registry.get("telemetry") if isinstance(registry.get("telemetry"), list) else [],
+        "interventions": registry.get("interventions") if isinstance(registry.get("interventions"), list) else [],
+    }
+    if len(normalized["telemetry"]) > 5000:
+        normalized["telemetry"] = normalized["telemetry"][-5000:]
+    if len(normalized["interventions"]) > 5000:
+        normalized["interventions"] = normalized["interventions"][-5000:]
+    _atomic_write(_registry_path(), normalized)
+
+
+def _read_section(registry: dict[str, Any], section: str, entity_id: str) -> dict[str, Any] | None:
+    section_obj = registry.get(section)
+    if not isinstance(section_obj, dict):
+        return None
+    raw = section_obj.get(entity_id)
+    return raw if isinstance(raw, dict) else None
+
+
+def _write_section(registry: dict[str, Any], section: str, entity_id: str, item: dict[str, Any]) -> None:
+    section_obj = registry.get(section)
+    if not isinstance(section_obj, dict):
+        section_obj = {}
+        registry[section] = section_obj
+    section_obj[entity_id] = item
+
+
+def _delete_section(registry: dict[str, Any], section: str, entity_id: str) -> bool:
+    section_obj = registry.get(section)
+    if not isinstance(section_obj, dict):
+        return False
+    if entity_id not in section_obj:
+        return False
+    del section_obj[entity_id]
+    return True
+
+
+def _normalize_asset(entity_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    created_ts = int(raw.get("created_ts") or _now_s())
+    updated_ts = int(raw.get("updated_ts") or created_ts)
+    return {
+        "id": entity_id,
+        "name": _safe_str(raw.get("name")).strip() or entity_id,
+        "asset_type": _safe_str(raw.get("asset_type")).strip(),
+        "status": _safe_str(raw.get("status")).strip() or "active",
+        "risk": _safe_str(raw.get("risk")).strip(),
+        "location": _safe_str(raw.get("location")).strip(),
+        "tags": _parse_list(raw.get("tags")),
+        "created_ts": created_ts,
+        "updated_ts": updated_ts,
+        "last_seen_ts": int(raw.get("last_seen_ts") or 0),
+        "model_ref": _safe_str(raw.get("model_ref")).strip(),
+        "connector_ref": _safe_str(raw.get("connector_ref")).strip(),
+        "meta": _normalize_meta(raw.get("meta")),
+    }
+
+
+def _normalize_process(entity_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    created_ts = int(raw.get("created_ts") or _now_s())
+    updated_ts = int(raw.get("updated_ts") or created_ts)
+    return {
+        "id": entity_id,
+        "name": _safe_str(raw.get("name")).strip() or entity_id,
+        "status": _safe_str(raw.get("status")).strip() or "active",
+        "risk": _safe_str(raw.get("risk")).strip(),
+        "description": _safe_str(raw.get("description")).strip(),
+        "domain": _safe_str(raw.get("domain")).strip(),
+        "tags": _parse_list(raw.get("tags")),
+        "inputs": _parse_list(raw.get("inputs")),
+        "outputs": _parse_list(raw.get("outputs")),
+        "created_ts": created_ts,
+        "updated_ts": updated_ts,
+        "meta": _normalize_meta(raw.get("meta")),
+    }
+
+
+def _normalize_simulation(entity_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    created_ts = int(raw.get("created_ts") or _now_s())
+    updated_ts = int(raw.get("updated_ts") or created_ts)
+    return {
+        "id": entity_id,
+        "name": _safe_str(raw.get("name")).strip() or entity_id,
+        "status": _safe_str(raw.get("status")).strip() or "active",
+        "risk": _safe_str(raw.get("risk")).strip(),
+        "description": _safe_str(raw.get("description")).strip(),
+        "engine": _safe_str(raw.get("engine")).strip(),
+        "scenario": _safe_str(raw.get("scenario")).strip(),
+        "default_params": _normalize_meta(raw.get("default_params")),
+        "asset_id": _safe_str(raw.get("asset_id")).strip(),
+        "process_id": _safe_str(raw.get("process_id")).strip(),
+        "digital_twin_id": _safe_str(raw.get("digital_twin_id")).strip(),
+        "tags": _parse_list(raw.get("tags")),
+        "created_ts": created_ts,
+        "updated_ts": updated_ts,
+        "meta": _normalize_meta(raw.get("meta")),
+    }
+
+
+def _normalize_run(entity_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": entity_id,
+        "simulation_id": _safe_str(raw.get("simulation_id")).strip(),
+        "status": _safe_str(raw.get("status")).strip() or "queued",
+        "requested_ts": int(raw.get("requested_ts") or _now_s()),
+        "started_ts": int(raw.get("started_ts") or 0),
+        "completed_ts": int(raw.get("completed_ts") or 0),
+        "requested_by": _safe_str(raw.get("requested_by")).strip(),
+        "reason": _safe_str(raw.get("reason")).strip(),
+        "params": _normalize_meta(raw.get("params")),
+        "metrics": {k: v for k, v in _normalize_meta(raw.get("metrics")).items() if isinstance(v, (int, float))},
+        "summary": _safe_str(raw.get("summary")).strip(),
+        "artifacts": raw.get("artifacts") if isinstance(raw.get("artifacts"), list) else [],
+        "meta": _normalize_meta(raw.get("meta")),
+    }
+
+
+def _normalize_validation(entity_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+    violations = raw.get("violations") if isinstance(raw.get("violations"), list) else []
+    artifacts = raw.get("artifacts") if isinstance(raw.get("artifacts"), list) else []
+    return {
+        "id": entity_id,
+        "ts": int(raw.get("ts") or _now_s()),
+        "target_kind": _safe_str(raw.get("target_kind")).strip(),
+        "target_id": _safe_str(raw.get("target_id")).strip(),
+        "status": _safe_str(raw.get("status")).strip() or "unknown",
+        "risk": _safe_str(raw.get("risk")).strip(),
+        "summary": _safe_str(raw.get("summary")).strip(),
+        "violations": violations,
+        "artifacts": artifacts,
+        "meta": _normalize_meta(raw.get("meta")),
+    }
+
+
+def _normalize_telemetry(raw: dict[str, Any]) -> dict[str, Any] | None:
+    fields = raw.get("fields")
+    if not isinstance(fields, dict):
+        return None
+    normalized_fields: dict[str, Any] = {}
+    for key, value in fields.items():
+        if isinstance(value, (int, float, bool, str)) or value is None:
+            normalized_fields[_safe_str(key)] = value
+    return {
+        "ts": int(raw.get("ts") or _now_s()),
+        "source_id": _safe_str(raw.get("source_id")).strip(),
+        "fields": normalized_fields,
+        "quality": _safe_str(raw.get("quality")).strip(),
+        "meta": _normalize_meta(raw.get("meta")),
+    }
+
+
+def _append_telemetry(registry: dict[str, Any], source_id: str, fields: dict[str, Any], meta: dict[str, Any] | None = None) -> None:
+    telemetry = registry.get("telemetry")
+    if not isinstance(telemetry, list):
+        telemetry = []
+        registry["telemetry"] = telemetry
+    point = _normalize_telemetry({"ts": _now_s(), "source_id": source_id, "fields": fields, "quality": "estimated", "meta": meta or {}})
+    if point is not None:
+        telemetry.append(point)
+
+
+def _apply_filters(
+    items: list[dict[str, Any]],
+    *,
+    status: str = "",
+    risk: str = "",
+    search: str = "",
+    tags: list[str] | None = None,
+    include_archived: bool = False,
+    extra: dict[str, str] | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    time_key: str = "updated_ts",
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    tag_set = set(tags or [])
+    for item in items:
+        current_status = _safe_str(item.get("status")).strip().lower()
+        if status and current_status != status:
+            continue
+        if not include_archived and current_status == "archived":
+            continue
+        if risk and _safe_str(item.get("risk")).strip().lower() != risk:
+            continue
+        if tag_set and not tag_set.issubset(set(_parse_list(item.get("tags")))):
+            continue
+        if extra:
+            mismatch = False
+            for key, value in extra.items():
+                if value and _safe_str(item.get(key)).strip().lower() != value:
+                    mismatch = True
+                    break
+            if mismatch:
+                continue
+        if start_ts is not None or end_ts is not None:
+            ts = int(item.get(time_key) or 0)
+            if start_ts is not None and ts < int(start_ts):
+                continue
+            if end_ts is not None and ts > int(end_ts):
+                continue
+        if search:
+            haystack = json.dumps(item, ensure_ascii=False, default=str).lower()
+            if search not in haystack:
+                continue
+        out.append(item)
+    return out
+
+
+def _paginate(items: list[dict[str, Any]], limit: int, offset: int, cursor: str | None = None) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
+    safe_limit = max(1, min(int(limit), 5000))
+    safe_offset = max(0, int(offset))
+    if cursor and cursor.isdigit():
+        safe_offset = int(cursor)
+    total = len(items)
+    page = items[safe_offset : safe_offset + safe_limit]
+    next_cursor = str(safe_offset + safe_limit) if safe_offset + safe_limit < total else None
+    return page, total, safe_limit, safe_offset, next_cursor
+
+
+def _list_section(registry: dict[str, Any], section: str, normalizer: Any) -> list[dict[str, Any]]:
+    section_obj = registry.get(section)
+    out: list[dict[str, Any]] = []
+    if isinstance(section_obj, dict):
+        for entity_id, raw in section_obj.items():
+            if isinstance(raw, dict):
+                out.append(normalizer(_safe_str(entity_id), raw))
+    return out
+
+
+def _request_approval(action: str, reason: str, payload: dict[str, Any]) -> str:
+    try:
+        item = approval_store.request(action, reason, payload)
+    except Exception:
+        return ""
+    return _safe_str(item.get("id")).strip()
+
+
+@router.get("/status")
+def status() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        return {
+            "ok": True,
+            "route": "industrial",
+            "status": "ready",
+            "ts": _now_s(),
+            "counts": {
+                "assets": len(registry.get("assets") or {}),
+                "processes": len(registry.get("processes") or {}),
+                "simulations": len(registry.get("simulations") or {}),
+                "runs": len(registry.get("runs") or {}),
+                "safety_validations": len(registry.get("safety_validations") or {}),
+                "telemetry": len(registry.get("telemetry") or []),
+            },
+        }
+    except Exception:
+        return {"ok": False, "route": "industrial", "status": "error"}
+
+
+@router.get("/health")
+def health() -> dict[str, object]:
+    body = status()
+    body["route"] = "industrial.health"
+    return body
+
+@router.get("/assets")
+def list_assets(
+    limit: int = 200,
+    offset: int = 0,
+    cursor: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+    risk: str | None = None,
+    include_archived: bool = False,
+    asset_type: str | None = None,
+    tags: list[str] | None = Query(default=None),
+) -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        items = _list_section(registry, "assets", _normalize_asset)
+        items = _apply_filters(
+            items,
+            status=_safe_str(status).strip().lower(),
+            risk=_safe_str(risk).strip().lower(),
+            search=_safe_str(search).strip().lower(),
+            tags=tags or [],
+            include_archived=include_archived,
+            extra={"asset_type": _safe_str(asset_type).strip().lower()},
+        )
+        items.sort(key=lambda item: (int(item.get("updated_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
+        return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
+    except Exception as exc:
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+
+
+@router.get("/assets/{asset_id}")
+def get_asset(asset_id: str) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(asset_id, "asset id")
+        registry = _load_registry()
+        raw = _read_section(registry, "assets", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found"}
+        return {"ok": True, "item": _normalize_asset(entity_id, raw)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/assets")
+def create_asset(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        name = _safe_str(payload.get("name")).strip()
+        if not name:
+            return {"ok": False, "error": "name_required"}
+        entity_id = _safe_str(payload.get("id")).strip() or _new_id("asset", name)
+        entity_id = _validate_id(entity_id, "asset id")
+        registry = _load_registry()
+        if _read_section(registry, "assets", entity_id) is not None:
+            return {"ok": False, "error": "already_exists", "id": entity_id}
+        now_s = _now_s()
+        item = _normalize_asset(
+            entity_id,
+            {
+                "id": entity_id,
+                "name": name,
+                "asset_type": payload.get("asset_type"),
+                "status": payload.get("status"),
+                "risk": payload.get("risk"),
+                "location": payload.get("location"),
+                "tags": payload.get("tags"),
+                "created_ts": now_s,
+                "updated_ts": now_s,
+                "model_ref": payload.get("model_ref"),
+                "connector_ref": payload.get("connector_ref"),
+                "meta": payload.get("meta"),
+            },
+        )
+        _write_section(registry, "assets", entity_id, item)
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.patch("/assets/{asset_id}")
+def update_asset(asset_id: str, payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(asset_id, "asset id")
+        registry = _load_registry()
+        current = _read_section(registry, "assets", entity_id)
+        if current is None:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        item = _normalize_asset(entity_id, current)
+        for key in ("name", "asset_type", "status", "risk", "location", "model_ref", "connector_ref"):
+            if key in payload and payload[key] is not None:
+                item[key] = _safe_str(payload[key]).strip()
+        if "tags" in payload:
+            item["tags"] = _parse_list(payload.get("tags"))
+        if "last_seen_ts" in payload:
+            item["last_seen_ts"] = int(payload.get("last_seen_ts") or 0)
+        if isinstance(payload.get("meta"), dict):
+            merged = dict(item.get("meta") or {})
+            merged.update(payload["meta"])
+            item["meta"] = merged
+        item["updated_ts"] = _now_s()
+        _write_section(registry, "assets", entity_id, _normalize_asset(entity_id, item))
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.delete("/assets/{asset_id}")
+def delete_asset(asset_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(asset_id, "asset id")
+        registry = _load_registry()
+        removed = _delete_section(registry, "assets", entity_id)
+        if not removed:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "status": "deleted", "reason": _safe_str((payload or {}).get("reason")).strip()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+@router.get("/processes")
+def list_processes(
+    limit: int = 200,
+    offset: int = 0,
+    cursor: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+    risk: str | None = None,
+    include_archived: bool = False,
+    tags: list[str] | None = Query(default=None),
+) -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        items = _list_section(registry, "processes", _normalize_process)
+        items = _apply_filters(
+            items,
+            status=_safe_str(status).strip().lower(),
+            risk=_safe_str(risk).strip().lower(),
+            search=_safe_str(search).strip().lower(),
+            tags=tags or [],
+            include_archived=include_archived,
+        )
+        items.sort(key=lambda item: (int(item.get("updated_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
+        return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
+    except Exception as exc:
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+
+
+@router.get("/processes/{process_id}")
+def get_process(process_id: str) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(process_id, "process id")
+        registry = _load_registry()
+        raw = _read_section(registry, "processes", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found"}
+        return {"ok": True, "item": _normalize_process(entity_id, raw)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/processes")
+def create_process(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        name = _safe_str(payload.get("name")).strip()
+        if not name:
+            return {"ok": False, "error": "name_required"}
+        entity_id = _safe_str(payload.get("id")).strip() or _new_id("process", name)
+        entity_id = _validate_id(entity_id, "process id")
+        registry = _load_registry()
+        if _read_section(registry, "processes", entity_id) is not None:
+            return {"ok": False, "error": "already_exists", "id": entity_id}
+        now_s = _now_s()
+        item = _normalize_process(
+            entity_id,
+            {
+                "id": entity_id,
+                "name": name,
+                "status": payload.get("status"),
+                "risk": payload.get("risk"),
+                "description": payload.get("description"),
+                "domain": payload.get("domain"),
+                "tags": payload.get("tags"),
+                "inputs": payload.get("inputs"),
+                "outputs": payload.get("outputs"),
+                "created_ts": now_s,
+                "updated_ts": now_s,
+                "meta": payload.get("meta"),
+            },
+        )
+        _write_section(registry, "processes", entity_id, item)
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.patch("/processes/{process_id}")
+def update_process(process_id: str, payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(process_id, "process id")
+        registry = _load_registry()
+        current = _read_section(registry, "processes", entity_id)
+        if current is None:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        item = _normalize_process(entity_id, current)
+        for key in ("name", "status", "risk", "description", "domain"):
+            if key in payload and payload[key] is not None:
+                item[key] = _safe_str(payload[key]).strip()
+        for key in ("tags", "inputs", "outputs"):
+            if key in payload:
+                item[key] = _parse_list(payload.get(key))
+        if isinstance(payload.get("meta"), dict):
+            merged = dict(item.get("meta") or {})
+            merged.update(payload["meta"])
+            item["meta"] = merged
+        item["updated_ts"] = _now_s()
+        _write_section(registry, "processes", entity_id, _normalize_process(entity_id, item))
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.delete("/processes/{process_id}")
+def delete_process(process_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(process_id, "process id")
+        registry = _load_registry()
+        removed = _delete_section(registry, "processes", entity_id)
+        if not removed:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "status": "deleted", "reason": _safe_str((payload or {}).get("reason")).strip()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+@router.get("/simulations")
+def list_simulations(
+    limit: int = 200,
+    offset: int = 0,
+    cursor: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+    risk: str | None = None,
+    include_archived: bool = False,
+    engine: str | None = None,
+    asset_id: str | None = None,
+    process_id: str | None = None,
+    digital_twin_id: str | None = None,
+    tags: list[str] | None = Query(default=None),
+) -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        items = _list_section(registry, "simulations", _normalize_simulation)
+        items = _apply_filters(
+            items,
+            status=_safe_str(status).strip().lower(),
+            risk=_safe_str(risk).strip().lower(),
+            search=_safe_str(search).strip().lower(),
+            tags=tags or [],
+            include_archived=include_archived,
+            extra={
+                "engine": _safe_str(engine).strip().lower(),
+                "asset_id": _safe_str(asset_id).strip().lower(),
+                "process_id": _safe_str(process_id).strip().lower(),
+                "digital_twin_id": _safe_str(digital_twin_id).strip().lower(),
+            },
+        )
+        items.sort(key=lambda item: (int(item.get("updated_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
+        return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
+    except Exception as exc:
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+
+
+@router.get("/simulations/{simulation_id}")
+def get_simulation(simulation_id: str) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(simulation_id, "simulation id")
+        registry = _load_registry()
+        raw = _read_section(registry, "simulations", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found"}
+        return {"ok": True, "item": _normalize_simulation(entity_id, raw)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/simulations")
+def create_simulation(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        name = _safe_str(payload.get("name")).strip()
+        if not name:
+            return {"ok": False, "error": "name_required"}
+        entity_id = _safe_str(payload.get("id")).strip() or _new_id("sim", name)
+        entity_id = _validate_id(entity_id, "simulation id")
+        registry = _load_registry()
+        if _read_section(registry, "simulations", entity_id) is not None:
+            return {"ok": False, "error": "already_exists", "id": entity_id}
+        now_s = _now_s()
+        item = _normalize_simulation(
+            entity_id,
+            {
+                "id": entity_id,
+                "name": name,
+                "status": payload.get("status"),
+                "risk": payload.get("risk"),
+                "description": payload.get("description"),
+                "engine": payload.get("engine"),
+                "scenario": payload.get("scenario"),
+                "default_params": payload.get("default_params"),
+                "asset_id": payload.get("asset_id"),
+                "process_id": payload.get("process_id"),
+                "digital_twin_id": payload.get("digital_twin_id"),
+                "tags": payload.get("tags"),
+                "created_ts": now_s,
+                "updated_ts": now_s,
+                "meta": payload.get("meta"),
+            },
+        )
+        _write_section(registry, "simulations", entity_id, item)
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.patch("/simulations/{simulation_id}")
+def update_simulation(simulation_id: str, payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(simulation_id, "simulation id")
+        registry = _load_registry()
+        current = _read_section(registry, "simulations", entity_id)
+        if current is None:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        item = _normalize_simulation(entity_id, current)
+        for key in ("name", "status", "risk", "description", "engine", "scenario", "asset_id", "process_id", "digital_twin_id"):
+            if key in payload and payload[key] is not None:
+                item[key] = _safe_str(payload[key]).strip()
+        if "tags" in payload:
+            item["tags"] = _parse_list(payload.get("tags"))
+        if "default_params" in payload:
+            item["default_params"] = _normalize_meta(payload.get("default_params"))
+        if isinstance(payload.get("meta"), dict):
+            merged = dict(item.get("meta") or {})
+            merged.update(payload["meta"])
+            item["meta"] = merged
+        item["updated_ts"] = _now_s()
+        _write_section(registry, "simulations", entity_id, _normalize_simulation(entity_id, item))
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.delete("/simulations/{simulation_id}")
+def delete_simulation(simulation_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(simulation_id, "simulation id")
+        registry = _load_registry()
+        removed = _delete_section(registry, "simulations", entity_id)
+        if not removed:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "status": "deleted", "reason": _safe_str((payload or {}).get("reason")).strip()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+@router.get("/runs")
+def list_runs(
+    limit: int = 200,
+    offset: int = 0,
+    cursor: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+    include_archived: bool = False,
+    simulation_id: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        items = _list_section(registry, "runs", _normalize_run)
+        items = _apply_filters(
+            items,
+            status=_safe_str(status).strip().lower(),
+            search=_safe_str(search).strip().lower(),
+            include_archived=include_archived,
+            extra={"simulation_id": _safe_str(simulation_id).strip().lower()},
+            start_ts=start_ts,
+            end_ts=end_ts,
+            time_key="requested_ts",
+        )
+        items.sort(key=lambda item: (int(item.get("requested_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
+        return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
+    except Exception as exc:
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+
+
+@router.get("/runs/export")
+def export_runs(
+    format: str = "json",
+    simulation_id: str | None = None,
+    status: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> Response:
+    registry = _load_registry()
+    items = _list_section(registry, "runs", _normalize_run)
+    items = _apply_filters(
+        items,
+        status=_safe_str(status).strip().lower(),
+        include_archived=True,
+        extra={"simulation_id": _safe_str(simulation_id).strip().lower()},
+        start_ts=start_ts,
+        end_ts=end_ts,
+        time_key="requested_ts",
+    )
+    items.sort(key=lambda item: (int(item.get("requested_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+
+    kind = _safe_str(format).strip().lower()
+    if kind == "csv":
+        out = io.StringIO()
+        writer = csv.writer(out)
+        writer.writerow(["id", "simulation_id", "status", "requested_ts", "started_ts", "completed_ts", "requested_by", "reason", "summary"])
+        for item in items:
+            writer.writerow(
+                [
+                    _safe_str(item.get("id")),
+                    _safe_str(item.get("simulation_id")),
+                    _safe_str(item.get("status")),
+                    int(item.get("requested_ts") or 0),
+                    int(item.get("started_ts") or 0),
+                    int(item.get("completed_ts") or 0),
+                    _safe_str(item.get("requested_by")),
+                    _safe_str(item.get("reason")),
+                    _safe_str(item.get("summary")),
+                ]
+            )
+        return Response(content=out.getvalue(), media_type="text/csv")
+
+    return Response(content=json.dumps({"items": items, "total": len(items)}, ensure_ascii=False), media_type="application/json")
+
+
+@router.get("/runs/{run_id}")
+def get_run(run_id: str) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(run_id, "run id")
+        registry = _load_registry()
+        raw = _read_section(registry, "runs", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found"}
+        return {"ok": True, "item": _normalize_run(entity_id, raw)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/runs/start")
+def start_run(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        simulation_id = _validate_id(_safe_str(payload.get("simulation_id")).strip(), "simulation id")
+        registry = _load_registry()
+        if _read_section(registry, "simulations", simulation_id) is None:
+            return {"ok": False, "error": "simulation_not_found", "simulation_id": simulation_id}
+
+        dry_run = bool(payload.get("dry_run", False))
+        now_s = _now_s()
+        run_id = _new_id("run", simulation_id)
+        run = _normalize_run(
+            run_id,
+            {
+                "id": run_id,
+                "simulation_id": simulation_id,
+                "status": "succeeded" if dry_run else "running",
+                "requested_ts": now_s,
+                "started_ts": now_s,
+                "completed_ts": now_s if dry_run else 0,
+                "requested_by": _safe_str(payload.get("requested_by")).strip() or "industrial_api",
+                "reason": _safe_str(payload.get("reason")).strip() or "requested",
+                "params": _normalize_meta(payload.get("params")),
+                "metrics": {"dry_run": 1.0 if dry_run else 0.0},
+                "summary": "Dry-run completed without external actuation." if dry_run else "Run started.",
+                "artifacts": [{"id": _new_id("artifact", run_id), "kind": "run_report", "path": f"data/artifacts/simulations/{run_id}.json"}],
+                "meta": {"created_at": _now_iso(), "dry_run": dry_run},
+            },
+        )
+        _write_section(registry, "runs", run_id, run)
+        _append_telemetry(registry, simulation_id, {"run_status": run.get("status"), "dry_run": dry_run}, {"event": "runs.start", "run_id": run_id})
+        _save_registry(registry)
+        return {"ok": True, "id": run_id, "run": run, "status": run.get("status")}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/runs/{run_id}/cancel")
+def cancel_run(run_id: str, payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(run_id, "run id")
+        registry = _load_registry()
+        raw = _read_section(registry, "runs", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found", "id": entity_id}
+        run = _normalize_run(entity_id, raw)
+        if _safe_str(run.get("status")).strip().lower() not in {"succeeded", "failed", "canceled"}:
+            run["status"] = "canceled"
+            run["completed_ts"] = _now_s()
+            run["summary"] = _safe_str(payload.get("reason")).strip() or "Run canceled."
+        meta = dict(run.get("meta") or {})
+        meta["cancel_reason"] = _safe_str(payload.get("reason")).strip() or "requested"
+        run["meta"] = meta
+        _write_section(registry, "runs", entity_id, run)
+        _append_telemetry(registry, _safe_str(run.get("simulation_id")).strip(), {"run_status": run.get("status"), "canceled": True}, {"event": "runs.cancel", "run_id": entity_id})
+        _save_registry(registry)
+        return {"ok": True, "id": entity_id, "status": run.get("status")}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+@router.get("/safety/validations")
+def list_safety_validations(
+    limit: int = 200,
+    offset: int = 0,
+    cursor: str | None = None,
+    status: str | None = None,
+    target_kind: str | None = None,
+    target_id: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        items = _list_section(registry, "safety_validations", _normalize_validation)
+        items = _apply_filters(
+            items,
+            status=_safe_str(status).strip().lower(),
+            include_archived=True,
+            extra={"target_kind": _safe_str(target_kind).strip().lower(), "target_id": _safe_str(target_id).strip().lower()},
+            start_ts=start_ts,
+            end_ts=end_ts,
+            time_key="ts",
+        )
+        items.sort(key=lambda item: (int(item.get("ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
+        return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
+    except Exception as exc:
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+
+
+@router.post("/safety/validate")
+def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        target_kind = _safe_str(payload.get("target_kind")).strip().lower()
+        target_id = _validate_id(_safe_str(payload.get("target_id")).strip(), "target id")
+        if not target_kind:
+            return {"ok": False, "error": "target_kind_required"}
+
+        reason = _safe_str(payload.get("reason")).strip() or "requested"
+        params = _normalize_meta(payload.get("params"))
+        dry_run = bool(payload.get("dry_run", True))
+        risk = _safe_str(params.get("risk")).strip().lower() or "medium"
+
+        validation_id = _new_id("validation", f"{target_kind}_{target_id}")
+        status = "warn" if dry_run else "pass"
+        summary = "Dry-run safety validation completed." if dry_run else "Safety validation passed."
+        violations: list[dict[str, Any]] = []
+        approval_id = ""
+        request_id = ""
+
+        if risk in {"high", "safety_critical"} and not dry_run:
+            status = "warn"
+            summary = "High-risk validation requires approval."
+            violations.append({"code": "HIGH_RISK_APPROVAL_REQUIRED", "message": "Approval required for high-risk validation.", "severity": "warning"})
+            request_id = _new_id("safety_req", target_id)
+            approval_id = _request_approval(
+                "industrial.safety.validate",
+                reason,
+                {
+                    "request_id": request_id,
+                    "validation_id": validation_id,
+                    "target_kind": target_kind,
+                    "target_id": target_id,
+                    "risk": risk,
+                },
+            )
+
+        validation = _normalize_validation(
+            validation_id,
+            {
+                "id": validation_id,
+                "ts": _now_s(),
+                "target_kind": target_kind,
+                "target_id": target_id,
+                "status": status,
+                "risk": risk,
+                "summary": summary,
+                "violations": violations,
+                "meta": {"reason": reason, "params": params, "dry_run": dry_run},
+            },
+        )
+
+        registry = _load_registry()
+        _write_section(registry, "safety_validations", validation_id, validation)
+        _append_telemetry(registry, target_id, {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])}, {"event": "safety.validate", "validation_id": validation_id})
+        _save_registry(registry)
+        return {"ok": True, "id": validation_id, "validation": validation, "status": validation.get("status"), "approval_id": approval_id, "request_id": request_id}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.get("/telemetry")
+def query_telemetry(
+    source_id: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    limit: int = 200,
+    metric_keys: list[str] | None = Query(default=None),
+) -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        telemetry = registry.get("telemetry")
+        if not isinstance(telemetry, list):
+            telemetry = []
+        source = _safe_str(source_id).strip()
+        keys = [key for key in (metric_keys or []) if key]
+
+        items: list[dict[str, Any]] = []
+        for raw in telemetry:
+            if not isinstance(raw, dict):
+                continue
+            point = _normalize_telemetry(raw)
+            if point is None:
+                continue
+            ts = int(point.get("ts") or 0)
+            if source and _safe_str(point.get("source_id")).strip() != source:
+                continue
+            if start_ts is not None and ts < int(start_ts):
+                continue
+            if end_ts is not None and ts > int(end_ts):
+                continue
+            if keys:
+                fields = point.get("fields")
+                if isinstance(fields, dict):
+                    point["fields"] = {k: v for k, v in fields.items() if k in keys}
+            items.append(point)
+        items.sort(key=lambda item: int(item.get("ts") or 0), reverse=True)
+        safe_limit = max(1, min(int(limit), 5000))
+        page = items[:safe_limit]
+        next_cursor = str(safe_limit) if safe_limit < len(items) else None
+        return {"items": page, "total": len(items), "limit": safe_limit, "next_cursor": next_cursor}
+    except Exception as exc:
+        return {"items": [], "total": 0, "error": str(exc)}
+
+
+@router.post("/interventions/request")
+def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        target_kind = _safe_str(payload.get("target_kind")).strip().lower()
+        target_id = _validate_id(_safe_str(payload.get("target_id")).strip(), "target id")
+        action = _safe_str(payload.get("action")).strip()
+        if not target_kind:
+            return {"ok": False, "error": "target_kind_required"}
+        if not action:
+            return {"ok": False, "error": "action_required"}
+        reason = _safe_str(payload.get("reason")).strip() or "requested"
+        request_id = _new_id("ireq", f"{target_kind}_{target_id}")
+        approval_id = _request_approval(
+            "industrial.intervention",
+            reason,
+            {
+                "request_id": request_id,
+                "target_kind": target_kind,
+                "target_id": target_id,
+                "action": action,
+                "dry_run": bool(payload.get("dry_run", True)),
+                "risk": _safe_str(payload.get("risk")).strip(),
+                "params": _normalize_meta(payload.get("params")),
+                "domain": _safe_str(payload.get("domain")).strip(),
+                "actor": _safe_str(payload.get("actor")).strip(),
+                "meta": _normalize_meta(payload.get("meta")),
+            },
+        )
+
+        registry = _load_registry()
+        interventions = registry.get("interventions")
+        if not isinstance(interventions, list):
+            interventions = []
+            registry["interventions"] = interventions
+        interventions.append(
+            {
+                "id": _new_id("intervention", target_id),
+                "ts": _now_s(),
+                "mode": "request",
+                "target_kind": target_kind,
+                "target_id": target_id,
+                "action": action,
+                "status": "pending",
+                "reason": reason,
+                "dry_run": bool(payload.get("dry_run", True)),
+                "risk": _safe_str(payload.get("risk")).strip(),
+                "domain": _safe_str(payload.get("domain")).strip(),
+                "actor": _safe_str(payload.get("actor")).strip(),
+                "request_id": request_id,
+                "approval_id": approval_id,
+                "params": _normalize_meta(payload.get("params")),
+                "meta": _normalize_meta(payload.get("meta")),
+            }
+        )
+        _append_telemetry(registry, target_id, {"intervention_requested": True}, {"event": "interventions.request"})
+        _save_registry(registry)
+        return {
+            "ok": True,
+            "status": "pending",
+            "request_id": request_id,
+            "approval_id": approval_id,
+            "message": "Intervention request submitted for approval.",
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/interventions/execute")
+def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        target_kind = _safe_str(payload.get("target_kind")).strip().lower()
+        target_id = _validate_id(_safe_str(payload.get("target_id")).strip(), "target id")
+        action = _safe_str(payload.get("action")).strip()
+        if not target_kind:
+            return {"ok": False, "error": "target_kind_required"}
+        if not action:
+            return {"ok": False, "error": "action_required"}
+
+        risk = _safe_str(payload.get("risk")).strip().lower()
+        dry_run = bool(payload.get("dry_run", False))
+        reason = _safe_str(payload.get("reason")).strip() or "requested"
+        request_id = _new_id("iexec", f"{target_kind}_{target_id}")
+        approval_id = ""
+        result_id = ""
+        status = "dry_run" if dry_run else "executed"
+        message = "Intervention executed."
+
+        if risk in {"high", "safety_critical"} and not dry_run:
+            approval_id = _request_approval(
+                "industrial.intervention.execute",
+                reason,
+                {
+                    "request_id": request_id,
+                    "target_kind": target_kind,
+                    "target_id": target_id,
+                    "action": action,
+                    "risk": risk,
+                    "params": _normalize_meta(payload.get("params")),
+                    "meta": _normalize_meta(payload.get("meta")),
+                },
+            )
+            status = "pending"
+            message = "High-risk intervention requires approval."
+        else:
+            result_id = _new_id("ires", f"{target_kind}_{target_id}_{action}")
+
+        registry = _load_registry()
+        interventions = registry.get("interventions")
+        if not isinstance(interventions, list):
+            interventions = []
+            registry["interventions"] = interventions
+        interventions.append(
+            {
+                "id": _new_id("intervention", target_id),
+                "ts": _now_s(),
+                "mode": "execute",
+                "target_kind": target_kind,
+                "target_id": target_id,
+                "action": action,
+                "status": status,
+                "reason": reason,
+                "dry_run": dry_run,
+                "risk": risk,
+                "domain": _safe_str(payload.get("domain")).strip(),
+                "actor": _safe_str(payload.get("actor")).strip(),
+                "request_id": request_id,
+                "approval_id": approval_id,
+                "result_id": result_id,
+                "params": _normalize_meta(payload.get("params")),
+                "meta": _normalize_meta(payload.get("meta")),
+            }
+        )
+        _append_telemetry(registry, target_id, {"intervention_executed": status in {"executed", "dry_run"}, "dry_run": dry_run}, {"event": "interventions.execute"})
+        _save_registry(registry)
+        return {"ok": True, "status": status, "request_id": request_id, "approval_id": approval_id, "result_id": result_id, "message": message}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+@router.get("/digital_twins/list")
+def list_digital_twins() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        assets = _list_section(registry, "assets", _normalize_asset)
+        items: list[dict[str, Any]] = []
+        for asset in assets:
+            meta = asset.get("meta") if isinstance(asset.get("meta"), dict) else {}
+            items.append(
+                {
+                    "id": asset.get("id"),
+                    "name": asset.get("name"),
+                    "kind": asset.get("asset_type") or "asset",
+                    "status": asset.get("status") or "unknown",
+                    "domain": _safe_str(meta.get("domain")).strip(),
+                    "created_ts": asset.get("created_ts"),
+                    "updated_ts": asset.get("updated_ts"),
+                    "risk": asset.get("risk"),
+                    "requires_approval": _safe_str(asset.get("risk")).strip().lower() in {"high", "safety_critical"},
+                    "tags": asset.get("tags") or [],
+                    "meta": meta,
+                }
+            )
+        items.sort(key=lambda item: (int(item.get("updated_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        return {"items": items, "twins": items, "total": len(items)}
+    except Exception as exc:
+        return {"items": [], "twins": [], "total": 0, "error": str(exc)}
+
+
+@router.get("/digital_twins/get")
+def get_digital_twin(id: str) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(id, "twin id")
+        registry = _load_registry()
+        raw = _read_section(registry, "assets", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found"}
+        asset = _normalize_asset(entity_id, raw)
+        meta = asset.get("meta") if isinstance(asset.get("meta"), dict) else {}
+        item = {
+            "id": asset.get("id"),
+            "name": asset.get("name"),
+            "kind": asset.get("asset_type") or "asset",
+            "status": asset.get("status") or "unknown",
+            "domain": _safe_str(meta.get("domain")).strip(),
+            "created_ts": asset.get("created_ts"),
+            "updated_ts": asset.get("updated_ts"),
+            "risk": asset.get("risk"),
+            "requires_approval": _safe_str(asset.get("risk")).strip().lower() in {"high", "safety_critical"},
+            "tags": asset.get("tags") or [],
+            "meta": meta,
+        }
+        return {"ok": True, "item": item}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.get("/digital_twins/snapshot")
+def get_digital_twin_snapshot(id: str) -> dict[str, object]:
+    try:
+        entity_id = _validate_id(id, "twin id")
+        registry = _load_registry()
+        raw = _read_section(registry, "assets", entity_id)
+        if raw is None:
+            return {"ok": False, "error": "not_found"}
+        asset = _normalize_asset(entity_id, raw)
+
+        telemetry = registry.get("telemetry")
+        source_points: list[dict[str, Any]] = []
+        if isinstance(telemetry, list):
+            for point_raw in telemetry:
+                if isinstance(point_raw, dict) and _safe_str(point_raw.get("source_id")).strip() == entity_id:
+                    point = _normalize_telemetry(point_raw)
+                    if point is not None:
+                        source_points.append(point)
+        source_points.sort(key=lambda item: int(item.get("ts") or 0), reverse=True)
+        latest = source_points[0] if source_points else None
+
+        runs = _list_section(registry, "runs", _normalize_run)
+        run_count = len([run for run in runs if _safe_str(run.get("simulation_id")).strip() == entity_id])
+        running_count = len([run for run in runs if _safe_str(run.get("simulation_id")).strip() == entity_id and _safe_str(run.get("status")).strip() == "running"])
+
+        snapshot = {
+            "id": entity_id,
+            "ts": _now_s(),
+            "status": asset.get("status") or "unknown",
+            "summary": f"Twin snapshot for {asset.get('name') or entity_id}.",
+            "state": {"asset": asset, "latest_telemetry": latest, "run_count": run_count, "running_count": running_count},
+            "health": {"telemetry_points": len(source_points), "has_recent_telemetry": bool(latest and int(latest.get("ts") or 0) >= _now_s() - 3600)},
+        }
+        return {"ok": True, "snapshot": snapshot}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/digital_twins/action")
+def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
+    try:
+        twin_id = _validate_id(_safe_str(payload.get("twin_id")).strip(), "twin id")
+        action = _safe_str(payload.get("action")).strip()
+        if not action:
+            return {"ok": False, "error": "action_required", "twin_id": twin_id}
+        registry = _load_registry()
+        if _read_section(registry, "assets", twin_id) is None:
+            return {"ok": False, "error": "not_found", "twin_id": twin_id}
+
+        request_id = _new_id("dtreq", twin_id)
+        approval_id = ""
+        status = "pending"
+
+        if action == "validate_safety":
+            validation_id = _new_id("validation", f"twin_{twin_id}")
+            _write_section(
+                registry,
+                "safety_validations",
+                validation_id,
+                _normalize_validation(
+                    validation_id,
+                    {
+                        "id": validation_id,
+                        "ts": _now_s(),
+                        "target_kind": "asset",
+                        "target_id": twin_id,
+                        "status": "warn",
+                        "risk": "medium",
+                        "summary": "Digital twin safety validation requested.",
+                        "meta": {"reason": _safe_str(payload.get("reason")).strip(), "params": _normalize_meta(payload.get("params"))},
+                    },
+                ),
+            )
+            status = "validated"
+        else:
+            approval_id = _request_approval(
+                "industrial.digital_twin.action",
+                _safe_str(payload.get("reason")).strip() or "requested",
+                {"request_id": request_id, "twin_id": twin_id, "action": action, "params": _normalize_meta(payload.get("params"))},
+            )
+
+        _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action"})
+        _save_registry(registry)
+        return {"ok": True, "twin_id": twin_id, "action": action, "request_id": request_id, "approval_id": approval_id, "status": status}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}

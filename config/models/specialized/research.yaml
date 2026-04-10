@@ -1,0 +1,331 @@
+# ==============================================================================
+# Francis 2.0 — Specialized Policy Config
+# Domain: Research (web learning, evidence synthesis, comparisons)
+# Path:   config/models/specialized/research.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# This file governs "research mode":
+#   - when and how Francis uses web learning / external sources
+#   - evidence requirements (citations, provenance, freshness)
+#   - source trust ranking and filtering
+#   - artifact capture (snapshots, hashes, extracted facts)
+#   - governance gates for external network egress and export
+#
+# PRINCIPLES
+# ----------
+# - Verify before asserting: no invented facts.
+# - Prefer primary sources and official docs.
+# - Capture provenance: store what was consulted and when.
+# - Obey environment posture: airgapped/regulated/safety-critical restrict egress.
+# ==============================================================================
+
+version: 1
+
+meta:
+  owner: "francis"
+  intent: "research_specialization"
+  notes:
+    - "Research mode is evidence-driven; citations are part of the contract."
+    - "Web learning is gated and profile-sensitive."
+
+# ------------------------------------------------------------------------------
+# Enablement
+# ------------------------------------------------------------------------------
+research:
+  enabled: true
+
+  # Default workload for research tasks:
+  # - Use reasoning for synthesis and decision framing
+  # - Use tool_router when multi-step retrieval/verification is required
+  default_workload: "reasoning"
+  allow_tool_router: true
+
+  # If ambiguous, prefer reasoning with verification prompts.
+  unknown_request_policy: "fallback_to_reasoning"
+
+# ------------------------------------------------------------------------------
+# Routing hints (classification)
+# ------------------------------------------------------------------------------
+routing:
+  tags:
+    classify_as_research_if_any:
+      - "research"
+      - "investigate"
+      - "compare"
+      - "sources"
+      - "citations"
+      - "evidence"
+      - "web"
+      - "lookup"
+      - "verify"
+      - "latest"
+      - "current"
+      - "news"
+      - "docs"
+      - "spec"
+      - "regulation"
+
+  promote_to_tool_router_if_any:
+    - "multi_step"
+    - "verification_required"
+    - "web_learning"
+    - "crawl"
+    - "extract"
+    - "ingest"
+
+# ------------------------------------------------------------------------------
+# Evidence contract (no hallucinations, citations required when appropriate)
+# ------------------------------------------------------------------------------
+evidence:
+  enabled: true
+
+  # Hard rule: do not assert unverified facts as true.
+  forbid_unverified_factual_claims: true
+
+  # Require an explicit "unknown / needs verification" statement when evidence is missing.
+  require_disclaimer_when_missing: true
+
+  # Citation rules
+  citations:
+    # If any web learning is used for the answer, citations must be present.
+    required_when_web_used: true
+
+    # If the user asks for "latest", "today", "most recent", citations are required.
+    required_for_freshness_queries: true
+
+    # Citation density hints (UI readable)
+    max_citations_hint: 10
+    min_citations_hint: 2
+
+    # Cite primary sources when possible.
+    prefer_primary_sources: true
+
+  # Evidence types the system should reference
+  provenance:
+    include:
+      - "source_title"
+      - "source_publisher"
+      - "source_url"
+      - "retrieved_at"
+      - "relevance_note"
+      - "freshness_note"
+
+# ------------------------------------------------------------------------------
+# Web learning posture (gated network egress)
+# ------------------------------------------------------------------------------
+web_learning:
+  enabled: true
+
+  # Master permission gate for egress; profiles can force this false.
+  allow_network_egress: false
+
+  # Approval/trust gates
+  governance:
+    require_approval_to_enable: true
+    require_approval_per_ingest: true
+    require_approval_for_bulk_crawl: true
+
+  trust:
+    min_trust:
+      search: 2
+      fetch: 3
+      ingest: 4
+      bulk_crawl: 6
+      export: 4
+
+  # Query behavior hints
+  behavior:
+    # Prefer fewer, higher-quality sources over many.
+    source_count_target: 4
+    source_count_max: 10
+
+    # Prefer recency when user asks for freshness; otherwise balance for authority.
+    freshness_bias_default: "balanced"  # low | balanced | high
+    freshness_bias_for_queries:
+      contains_any:
+        - "latest"
+        - "today"
+        - "this week"
+        - "current"
+        - "recent"
+      set_to: "high"
+
+    # Avoid scraping aggressively by default.
+    polite_mode: true
+    max_fetches_per_request: 8
+
+# ------------------------------------------------------------------------------
+# Source trust policy (ranking + filtering)
+# ------------------------------------------------------------------------------
+sources:
+  enabled: true
+
+  # Trust tiers are hints; implementation can map domains/publishers to tiers.
+  tiers:
+    tier_1:
+      label: "Primary / official"
+      weight: 1.0
+      examples:
+        - "official documentation"
+        - "standards bodies"
+        - "vendor docs"
+        - "government sites"
+    tier_2:
+      label: "Reputable secondary"
+      weight: 0.8
+      examples:
+        - "major news outlets"
+        - "peer-reviewed journals"
+        - "well-known engineering blogs"
+    tier_3:
+      label: "Community / tertiary"
+      weight: 0.5
+      examples:
+        - "forums"
+        - "reddit"
+        - "personal blogs"
+
+  # If enabled, the system should down-rank or exclude low-trust sources.
+  filtering:
+    exclude_tier_3_by_default: true
+    allow_tier_3_if_user_requests: true
+
+    # Always exclude obvious low-signal sources unless explicitly requested.
+    exclude_patterns:
+      - "(?i)pastebin"
+      - "(?i)download.*free"
+      - "(?i)crack"
+      - "(?i)keygen"
+
+# ------------------------------------------------------------------------------
+# Artifact capture (snapshots + extracted facts)
+# ------------------------------------------------------------------------------
+artifacts:
+  enabled: true
+
+  # Where research artifacts should be stored (repo-relative default).
+  paths:
+    research_dir: "./data/artifacts/research"
+    snapshots_dir: "./data/artifacts/research/snapshots"
+    extracts_dir: "./data/artifacts/research/extracts"
+    logs_dir: "./data/logs/web_learning"
+
+  capture:
+    # Store a lightweight snapshot of consulted sources for reproducibility.
+    store_source_snapshots: true
+
+    # Store extracted facts/quotes with provenance.
+    store_fact_extracts: true
+
+    # Hashing allows integrity checks later.
+    store_hashes: true
+    hash_algorithm: "sha256"
+
+  retention:
+    snapshots_days: 30
+    extracts_days: 90
+    auto_purge_enabled: true
+    purge_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Export controls (research outputs can be sensitive)
+# ------------------------------------------------------------------------------
+export:
+  enabled: true
+
+  # Default posture: allow exporting summaries, but not raw snapshots in regulated profiles.
+  allow_export_summaries: true
+  allow_export_raw_snapshots: false
+
+  governance:
+    export_requires_approval: true
+    min_trust_to_export: 4
+
+# ------------------------------------------------------------------------------
+# Observability
+# ------------------------------------------------------------------------------
+observability:
+  enabled: true
+
+  # Emit a structured record for explanation/audit systems.
+  decision_record:
+    enabled: true
+    include:
+      - "profile"
+      - "workload"
+      - "web_learning_used"
+      - "source_count"
+      - "tiers_used"
+      - "freshness_bias"
+      - "citations_included"
+      - "artifacts_written"
+      - "gates_triggered"
+
+  log_policy:
+    include_queries: false
+    include_urls: true
+    include_titles: true
+    include_timings: true
+    include_full_text: false
+
+# ------------------------------------------------------------------------------
+# Profile overlays (environment-specific posture)
+# ------------------------------------------------------------------------------
+profiles:
+
+  dev:
+    web_learning:
+      allow_network_egress: true
+      governance:
+        require_approval_per_ingest: false
+    sources:
+      filtering:
+        exclude_tier_3_by_default: false
+    observability:
+      log_policy:
+        include_queries: true
+
+  workstation:
+    web_learning:
+      allow_network_egress: true
+      governance:
+        require_approval_per_ingest: true
+    sources:
+      filtering:
+        exclude_tier_3_by_default: true
+
+  airgapped:
+    web_learning:
+      allow_network_egress: false
+    export:
+      allow_export_raw_snapshots: false
+
+  regulated:
+    web_learning:
+      allow_network_egress: false
+    sources:
+      filtering:
+        exclude_tier_3_by_default: true
+    export:
+      allow_export_raw_snapshots: false
+      governance:
+        export_requires_approval: true
+        min_trust_to_export: 5
+
+  safety_critical:
+    web_learning:
+      allow_network_egress: false
+    evidence:
+      citations:
+        required_when_web_used: true
+    export:
+      allow_export_raw_snapshots: false
+      governance:
+        export_requires_approval: true
+        min_trust_to_export: 6
+    artifacts:
+      retention:
+        snapshots_days: 7
+        extracts_days: 30

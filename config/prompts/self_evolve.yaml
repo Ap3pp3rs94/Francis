@@ -1,0 +1,569 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Self Evolve (governed repo improvement via minimal patch sets)
+# Path:   config/prompts/self_evolve.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Generates a deterministic, auditable, reviewable changeset to improve Francis.
+#
+# This prompt is a *proposal generator*, not an executor:
+#   - It produces a patch plan and diffs.
+#   - Governance decides if/when to apply.
+#   - CI/pre-commit/test harnesses verify.
+#
+# TARGET USE CASES
+# ----------------
+# - Fix a concrete bug with reproduction steps
+# - Improve reliability / observability
+# - Tighten correctness / type safety
+# - Incremental refactors (small, reversible)
+# - Align implementation with policies/capabilities contracts
+#
+# NON-GOALS
+# ---------
+# - No repo/tree redesign.
+# - No mass rewrites.
+# - No "autonomous updating" or bypassing approvals.
+# - No creation of new files unless explicitly allowed by the caller.
+# - No secrets, no credential material, no token prompts.
+# - No wrongdoing enablement: credential theft/phishing, malware, DoS, surveillance.
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching schema. No markdown. No code fences.
+# - Patch-first: propose small diffs, not broad changes.
+# - Fail-closed:
+#     * If critical context is missing -> ask targeted followups.
+#     * If request is unsafe or violates policy -> deny.
+# - Preserve compatibility with running services:
+#     * python -m francis api
+#     * python -m francis daemon
+# - Observability-first:
+#     * every proposal includes preflight + verification + rollback
+# - Forward-minded but not speculative:
+#     * include extension points where natural, do not invent frameworks.
+# ==============================================================================
+version: 1
+
+id: "self.evolve"
+title: "Self Evolve"
+owner: "francis"
+intent: "compile_changeset"
+mode: "strict" # policy | strict
+
+meta:
+  notes:
+    - "Produces patch proposals for operator review."
+    - "Intended to be gated by approvals + safety_review for any mutating change."
+    - "Default posture is conservative: minimal diffs, reversible, test-backed."
+  compatibility:
+    - "Consumers should ignore unknown fields."
+    - "Diff format is unified (git apply compatible)."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      conversation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | daemon | worker
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | workstation | ...
+      message: { type: string, required: true } # improvement goal
+
+      # Optional: tight scoping hints
+      target_paths:
+        type: array
+        required: false
+        items: { type: string }
+
+      # Optional: constraints
+      constraints_text: { type: string, required: false }
+      allow_new_files: { type: boolean, required: false } # default false unless explicitly true
+      max_files_touched: { type: number, required: false } # default small (e.g., 5)
+
+      # Optional: reproduction details
+      repro_steps:
+        type: array
+        required: false
+        items: { type: string }
+      expected_behavior: { type: string, required: false }
+      observed_behavior: { type: string, required: false }
+
+  repo:
+    type: object
+    required: false
+    fields:
+      # Snapshot of tree or relevant sections (paths only; no secrets)
+      file_index:
+        type: array
+        required: false
+        items: { type: string }
+
+      # Optional: excerpts of key files (current content)
+      files:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            path: { type: string, required: true }
+            content: { type: string, required: true }
+
+      # Optional: current versions
+      versions:
+        type: object
+        required: false
+        additionalProperties: true
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          summary: { type: string, required: false }
+
+      # Optional: logs/errors already captured (sanitized)
+      error_summary: { type: string, required: false }
+      recent_logs:
+        type: array
+        required: false
+        items: { type: string }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          quorum_required_by_default: { type: boolean, required: false }
+
+      policy_summary:
+        type: object
+        required: false
+        fields:
+          notes: { type: array, required: false }
+          blocked_topics: { type: array, required: false }
+          posture: { type: string, required: false }
+
+  policy_controls:
+    type: object
+    required: false
+    fields:
+      # Hard denies are default-true; can be configured but never allow enablement output.
+      hard_denies:
+        type: object
+        required: false
+        fields:
+          credential_attack_enablement: { type: boolean, required: false }
+          malware_enablement: { type: boolean, required: false }
+          dos_enablement: { type: boolean, required: false }
+          surveillance_enablement: { type: boolean, required: false }
+
+      # Discussion is allowed (defensive-only) if true, but never enablement.
+      allow_hypothetical_discussion: { type: boolean, required: false }
+
+      # Enforce patch discipline
+      require_patch_format: { type: boolean, required: false } # default true
+      require_tests: { type: boolean, required: false } # default true in production/regulated
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - changeset
+      - verification
+      - rollback
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_followup
+          - followup_questions
+          - reason_codes
+          - summary
+        properties:
+          # - deny: unsafe or violates constraints
+          # - ask: missing context blocks safe patch proposal
+          # - propose: changeset ready for review
+          mode:
+            type: string
+            enum: ["deny", "ask", "propose"]
+
+          confidence: { type: number } # 0..1
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          summary: { type: string }
+
+      changeset:
+        type: object
+        additionalProperties: false
+        required:
+          - title
+          - intent
+          - scope
+          - files_touched
+          - new_files_requested
+          - diffs
+          - notes
+          - risks
+          - gates
+        properties:
+          title: { type: string }
+          intent: { type: string }
+
+          scope:
+            type: object
+            additionalProperties: false
+            required: ["max_files_touched", "allow_new_files", "assumptions"]
+            properties:
+              max_files_touched: { type: number }
+              allow_new_files: { type: boolean }
+              assumptions:
+                type: array
+                items: { type: string }
+
+          files_touched:
+            type: array
+            items: { type: string }
+
+          # If new files are needed but not allowed, list them here.
+          new_files_requested:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["path", "reason", "blocked"]
+              properties:
+                path: { type: string }
+                reason: { type: string }
+                blocked: { type: boolean }
+
+          diffs:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["path", "operation", "diff", "requires_review"]
+              properties:
+                path: { type: string }
+                operation: { type: string, enum: ["patch", "modify"] }
+                diff: { type: string } # unified diff (git apply compatible)
+                requires_review: { type: boolean }
+
+          notes:
+            type: array
+            items: { type: string }
+
+          risks:
+            type: object
+            additionalProperties: false
+            required: ["risk_level", "risk_factors", "blast_radius", "compatibility_notes"]
+            properties:
+              risk_level: { type: string, enum: ["low", "medium", "high", "critical"] }
+              risk_factors:
+                type: array
+                items: { type: string }
+              blast_radius: { type: string }
+              compatibility_notes:
+                type: array
+                items: { type: string }
+
+          gates:
+            type: object
+            additionalProperties: false
+            required: ["min_trust", "requires_approval", "requires_quorum", "notes"]
+            properties:
+              min_trust: { type: number }
+              requires_approval: { type: boolean }
+              requires_quorum: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      verification:
+        type: object
+        additionalProperties: false
+        required:
+          - preflight
+          - checks
+          - success_criteria
+          - artifacts
+        properties:
+          preflight:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["name", "command", "blocking", "notes"]
+              properties:
+                name: { type: string }
+                command: { type: string } # shell command(s) as a single line
+                blocking: { type: boolean }
+                notes: { type: string }
+
+          checks:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["name", "command", "blocking", "notes"]
+              properties:
+                name: { type: string }
+                command: { type: string }
+                blocking: { type: boolean }
+                notes: { type: string }
+
+          success_criteria:
+            type: array
+            items: { type: string }
+
+          artifacts:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "path_or_ref", "notes"]
+              properties:
+                kind: { type: string } # logs | report | snapshot | diff | other
+                path_or_ref: { type: string }
+                notes: { type: string }
+
+      rollback:
+        type: object
+        additionalProperties: false
+        required: ["strategy", "steps", "notes"]
+        properties:
+          strategy: { type: string } # "git_revert", "restore_backup", "manual", ...
+          steps:
+            type: array
+            items: { type: string }
+          notes:
+            type: array
+            items: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - blocked
+          - blocked_reasons
+          - wrongdoing_topic
+          - contains_secrets
+          - contains_pii
+          - redactions
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          wrongdoing_topic: { type: boolean }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_deny | on_followup
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s Self-Evolve patch planner.
+
+      Output MUST be a single strict JSON object matching the schema.
+      No markdown. No code fences.
+
+      Non-negotiables:
+      - Do NOT redesign directory structure.
+      - Do NOT introduce new files unless request.allow_new_files is explicitly true.
+        If a new file would help, list it in changeset.new_files_requested with blocked=true.
+      - Do NOT emit or request secrets. Use placeholders. Never output credential values.
+      - Do NOT provide wrongdoing enablement (credential attacks, malware, DoS, surveillance).
+        If requested, set decision.mode="deny" and provide safe alternatives (defensive hardening/auditing).
+
+      Engineering discipline:
+      - Patch-first: minimal diffs, narrow blast radius, reversible.
+      - Preserve compatibility with existing entrypoints/services.
+      - Prefer clarity and observability over cleverness.
+      - Avoid speculative frameworks. Extend only where a clear contract exists.
+      - If repo.file_index or repo.files is missing for target code, choose decision.mode="ask"
+        and ask only for the minimum required file contents/paths.
+
+      Diff rules:
+      - Produce unified diffs that can be applied with git apply.
+      - Each diff must include file headers (---/+++), context lines, and hunks.
+      - Do not include unrelated formatting churn.
+
+      Verification rules:
+      - Always include pre-commit where applicable (if repo uses it).
+      - Include python import/compile checks for backend changes.
+      - Include npm/vite checks for UI changes when relevant.
+      - Define explicit success criteria tied to the request.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      REPO:
+      {{repo}}
+
+      RUNTIME:
+      {{runtime}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      POLICY_CONTROLS:
+      {{policy_controls}}
+
+      Task:
+      Propose a minimal, governed changeset to achieve the request goals.
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.16
+  max_output_tokens: 3400
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "EVOLVE_PROPOSED"
+  - "EVOLVE_NEEDS_FOLLOWUP"
+  - "EVOLVE_DENIED_UNSAFE"
+  - "EVOLVE_FAIL_CLOSED"
+  - "EVOLVE_PATCH_FORMAT"
+  - "EVOLVE_NO_NEW_FILES"
+  - "EVOLVE_MINIMAL_DIFF"
+  - "EVOLVE_REQUIRES_APPROVAL"
+  - "EVOLVE_REQUIRES_QUORUM"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+
+# ------------------------------------------------------------------------------
+# Audit event templates
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "self_evolve.requested"
+    when: "before"
+    fields: ["request.request_id", "request.actor_id", "request.source", "request.profile"]
+
+  - kind: "self_evolve.proposed"
+    when: "after"
+    fields: ["changeset.title", "changeset.files_touched", "changeset.risks.risk_level", "observability.reason_codes"]
+
+  - kind: "self_evolve.denied"
+    when: "on_deny"
+    fields: ["safety.blocked_reasons"]
+
+  - kind: "self_evolve.followup_required"
+    when: "on_followup"
+    fields: ["decision.followup_questions"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays (tighten posture)
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    mode: "policy"
+    generation_hints:
+      temperature: 0.2
+      max_output_tokens: 3600
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.14
+      max_output_tokens: 3400
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
+      max_output_tokens: 3400
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.1
+      max_output_tokens: 3400

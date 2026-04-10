@@ -1,0 +1,355 @@
+# ==============================================================================
+# Francis Environment Profile: HIGH AVAILABILITY
+# File: config/environments/high_availability.yaml
+#
+# INTENT:
+#   Production HA posture:
+#     - Designed for uptime, concurrency, and predictable operations
+#     - Externalizes state to durable services (Postgres/Redis/Qdrant)
+#     - Strong observability (jsonl logs + required audit)
+#     - Strict governance for high/critical actions
+#     - Conservative network policy (explicit allowlists)
+#
+# ASSUMPTIONS:
+#   - This profile is typically deployed behind a reverse proxy / load balancer.
+#   - TLS termination occurs at the proxy.
+#   - Horizontal scaling is expected (multiple API workers / nodes).
+#
+# SECURITY NOTE:
+#   - No secrets in this file (JWT secrets, tokens, DSNs w/ passwords, etc. come
+#     from env/vault).
+# ==============================================================================
+
+version: 1
+
+profile:
+  id: high_availability
+  name: High Availability
+  description: >
+    HA production profile: external services, strong audit/observability,
+    strict governance, and tuned timeouts/backpressure for stable uptime.
+
+  invariants:
+    - "Audit is required."
+    - "State is externalized to durable services."
+    - "Strict approvals for high/critical actions."
+    - "Prefer fail-closed security defaults."
+
+  operator_notes:
+    - "Run behind a reverse proxy with TLS."
+    - "Use JWT auth and rotate secrets via vault."
+    - "Use health checks and readiness probes at the proxy/orchestrator."
+
+# ------------------------------------------------------------------------------
+# Runtime posture
+# ------------------------------------------------------------------------------
+runtime:
+  mode: high_availability
+  strict_config: true
+  debug: false
+  deterministic_mode: true
+  fail_fast: true
+  safe_defaults: true
+
+  # Concurrency hints; actual values may be enforced by process manager.
+  concurrency:
+    api_workers: 4               # e.g., uvicorn workers (proxy/load balanced)
+    worker_threads: 8
+    daemon_concurrency: 4
+
+# ------------------------------------------------------------------------------
+# API posture (built for load balancers)
+# ------------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+  # HA strongly prefers JWT auth; proxies terminate TLS and forward headers.
+  security:
+    auth_mode: jwt
+    allow_anonymous: false
+    trust_proxy_headers: true
+
+  cors:
+    enabled: true
+    # In HA, origins should be explicit (your UI domain(s)).
+    # Keep localhost for breakglass ops only; remove in real production.
+    allowed_origins:
+      - "http://127.0.0.1:5173"
+      - "http://localhost:5173"
+
+  # HA timeouts: tuned for stability. Keep requests bounded.
+  timeouts:
+    read_s: 30
+    write_s: 45
+    idle_s: 60
+
+  # Request sizing hints (defensive; backend may enforce separately).
+  limits:
+    max_request_mb: 10
+    max_json_mb: 5
+
+  # WebSocket settings (chat): keepalive helps across proxies.
+  websocket:
+    ping_interval_s: 20
+    ping_timeout_s: 10
+    max_message_kb: 256
+
+# ------------------------------------------------------------------------------
+# Observability (HA = structured logs + required audit)
+# ------------------------------------------------------------------------------
+observability:
+  logging:
+    level: INFO
+    format: jsonl
+    include_pid: true
+    include_thread: true
+    include_source: true
+
+  audit:
+    enabled: true
+    level: required
+    emit_ledger_events: true
+    emit_explanations: true
+
+  tracing:
+    enabled: true
+    sample_rate: 0.25
+
+  metrics:
+    enabled: true
+    export:
+      # Hint only. Real metrics export is implementation-specific.
+      format: prometheus
+      path: "/metrics"
+
+# ------------------------------------------------------------------------------
+# Governance (strict; HA has higher blast radius)
+# ------------------------------------------------------------------------------
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+    default_requires_approval_for_risk:
+      low: false
+      medium: false
+      high: true
+      critical: true
+
+  trust:
+    tracking_enabled: true
+    minimum_operational_trust: 2
+    decay_enabled: true
+    growth_enabled: true
+
+  exports:
+    require_approval: true
+    default_max_bundle_size_mb: 25
+    redact_secrets: true
+    redact_credentials: true
+
+# ------------------------------------------------------------------------------
+# Network posture (explicit allowlists; HA often sits in controlled networks)
+# ------------------------------------------------------------------------------
+network:
+  deny_by_default: true
+
+  # Egress should be explicit; in HA, prefer no ad-hoc outbound traffic.
+  egress:
+    enabled: false
+    allowlist:
+      - "127.0.0.1/32"
+      - "::1/128"
+      - "localhost"
+      # Operators may allow private subnets for internal services if needed:
+      # - "10.0.0.0/8"
+      # - "172.16.0.0/12"
+      # - "192.168.0.0/16"
+    denylist:
+      - "169.254.169.254/32"
+      - "100.100.100.200/32"
+      - "metadata.google.internal"
+
+  dns:
+    enabled: true
+    internal_resolvers: []
+  tls:
+    verify_certificates: true
+    allow_insecure: false
+
+# ------------------------------------------------------------------------------
+# Models (HA prefers local-first; remote optional but explicit)
+# ------------------------------------------------------------------------------
+models:
+  allow_remote_providers: false
+  allow_internet_fallback: false
+
+  default_provider: ollama
+  providers:
+    ollama:
+      enabled: true
+      base_url: "http://127.0.0.1:11434"
+      allow_model_pull: false
+      preferred_models:
+        reasoning: "qwen2.5:14b-instruct"
+        code: "qwen2.5-coder:14b"
+        safety: "llama3.1:8b-instruct"
+        retrieval: "nomic-embed-text"
+
+    openai:
+      enabled: false
+
+  sampling:
+    temperature: 0.25
+    top_p: 0.9
+    max_tokens: 1024
+
+# ------------------------------------------------------------------------------
+# Memory / persistence (HA externalizes state)
+# ------------------------------------------------------------------------------
+memory:
+  vectors:
+    backend: qdrant
+    qdrant:
+      enabled: true
+      url: "http://127.0.0.1:6333"
+      collection: "francis_vectors"
+    pgvector:
+      enabled: false
+      dsn: ""
+    # Keep local dirs as fallback only.
+    local_index_dir: "./data/vectors/indexes"
+    cache_dir: "./data/vectors/embeddings_cache"
+
+  continuity:
+    # Even if ledger is persisted elsewhere, local paths can exist for buffering.
+    ledger_path: "./data/conversations/ledger/ledger.jsonl"
+    rolling_summary_path: "./data/conversations/summaries/rolling_summary.md"
+    rotation:
+      enabled: true
+      max_mb: 200
+      max_days: 30
+
+# ------------------------------------------------------------------------------
+# External services (expected in HA)
+# ------------------------------------------------------------------------------
+external_services:
+  postgres:
+    enabled: true
+    # DSN should come from env/vault in production; this is a placeholder.
+    dsn: "postgresql://postgres:postgres@127.0.0.1:5432/francis"
+    pool_size: 20
+    pool_timeout_s: 30
+    statement_timeout_s: 30
+
+  redis:
+    enabled: true
+    url: "redis://127.0.0.1:6379/0"
+    pool_size: 20
+    socket_timeout_s: 5
+
+  qdrant:
+    enabled: true
+    url: "http://127.0.0.1:6333"
+
+# ------------------------------------------------------------------------------
+# Daemon / workers posture (HA reliability)
+# ------------------------------------------------------------------------------
+daemon:
+  enabled: true
+  tick_interval_ms: 500
+  heartbeat_interval_s: 10
+  concurrency: 4
+  fail_fast: true
+  jitter_ms: 75
+
+workers:
+  enabled: true
+  concurrency: 4
+  max_inflight: 50
+  retry:
+    max_attempts: 3
+    backoff_ms: 500
+    backoff_multiplier: 2.0
+    jitter_ms: 250
+
+# ------------------------------------------------------------------------------
+# Resilience posture (backup/restore are critical)
+# ------------------------------------------------------------------------------
+resilience:
+  enabled: true
+  backup:
+    enabled: true
+    require_approval: true
+    schedule_hint: "daily"         # hint; actual scheduling uses schedules.yaml
+  restore:
+    enabled: true
+    require_approval: true
+
+# ------------------------------------------------------------------------------
+# Optional federation support (common in HA clusters)
+# ------------------------------------------------------------------------------
+features:
+  federation:
+    enabled: false
+    discovery:
+      enabled: false
+      mode: static
+      static_peers: []
+    consensus:
+      enabled: false
+      algorithm: raft
+
+  web_learning:
+    # HA production should default off unless explicitly needed.
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+    require_approval: true
+    audit_enabled: true
+    log_enabled: true
+
+  plugins:
+    enabled: true
+    allow_remote_registry: false
+    allow_remote_install: false
+    allow_generated_plugins: true
+    install_requires_approval: true
+
+  industrial:
+    enabled: true
+    control_actions_enabled: false
+    require_approval_for_control: true
+    emergency_stop_requires_approval: true
+
+# ------------------------------------------------------------------------------
+# Assertions (lint/fail-fast intent)
+# ------------------------------------------------------------------------------
+assertions:
+  - id: audit_required
+    severity: error
+    expr: "{{observability.audit.level == 'required'}}"
+    message: "HA profile requires audit level 'required'."
+
+  - id: strict_approvals
+    severity: error
+    expr: "{{governance.approvals.mode == 'strict'}}"
+    message: "HA profile requires strict approvals."
+
+  - id: external_state_expected
+    severity: warn
+    expr: "{{external_services.postgres.enabled == true}}"
+    message: "HA profile expects Postgres enabled for durable state."
+
+# ------------------------------------------------------------------------------
+# UI hints
+# ------------------------------------------------------------------------------
+ui:
+  label: "HA"
+  banner:
+    enabled: true
+    text: "HIGH AVAILABILITY — STRICT GOVERNANCE / EXTERNAL STATE"
+  endpoints:
+    api_base_url: "http://127.0.0.1:8000"
+    ws_url: "ws://127.0.0.1:8000/chat/ws"

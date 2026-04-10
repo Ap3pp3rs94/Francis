@@ -1,0 +1,664 @@
+# ==============================================================================
+# Francis 2.0 — Prompt Config
+# Prompt: Domain Induction (create a governable domain spec from intent)
+# Path:   config/prompts/domain_induction.yaml
+# ==============================================================================
+#
+# ROLE IN THE SYSTEM
+# ------------------
+# Domain induction takes a messy human request ("make a domain for X") and
+# generates a structured, auditable "domain spec draft" that can be reviewed,
+# approved, and then materialized by the domain registry/workbench.
+#
+# Outputs include:
+#   - domain identity + description
+#   - scope boundaries (in/out), objectives, success criteria
+#   - governance gates (trust, approvals, quorum) by action type
+#   - capability surface (read/mutation/destructive) using known capability ids
+#   - memory strategy (what to store, what to retrieve, retention hints)
+#   - safety/regulated classification and hard constraints
+#   - follow-up questions when needed (minimal, high-signal)
+#
+# DESIGN CONTRACT
+# ---------------
+# - Output strict JSON matching the schema. No markdown, no code fences.
+# - Fail-closed on high-risk domains or missing policy/runtime context.
+# - Do not invent capabilities when a catalog/allowlist is provided.
+# - Do not output secrets or request secret material.
+# - Never enable wrongdoing:
+#     * credential theft/phishing
+#     * malware or exploit development
+#     * denial-of-service
+#     * surveillance of individuals
+#   If user intent is offensive/harmful, deny or reshape into defensive governance-only framing.
+#
+# COMPATIBILITY NOTES
+# -------------------
+# - Domain specs are drafts; final enforcement is implemented in governance/policy layers.
+# - This prompt is intentionally forward-compatible: optional fields are allowed and
+#   unknown fields should be ignored by consumers if not implemented yet.
+# ==============================================================================
+version: 1
+
+id: "domain.induction"
+title: "Domain Induction"
+owner: "francis"
+intent: "draft_domain_spec"
+mode: "policy" # policy | strict
+
+meta:
+  notes:
+    - "Produces a domain spec draft suitable for domain registry/workbench ingestion."
+    - "Designed for conical dependency build: domain spec precedes domain-specific plugins."
+    - "No execution: output is a proposal + gates + questions."
+  compatibility:
+    - "Safe defaults; denies unsafe or ambiguous high-risk intents."
+    - "Works with or without catalog/allowlist; behavior tightens when present."
+
+# ------------------------------------------------------------------------------
+# Input contract (runner-provided context)
+# ------------------------------------------------------------------------------
+inputs:
+
+  request:
+    type: object
+    required: true
+    fields:
+      request_id: { type: string, required: false }
+      correlation_id: { type: string, required: false }
+      actor_id: { type: string, required: false }
+      actor_role: { type: string, required: false } # operator | admin | user | service
+      source: { type: string, required: false } # ui | api | cli | worker | federation
+      profile: { type: string, required: false } # dev | production | regulated | safety_critical | ...
+      message: { type: string, required: true } # user's domain request
+      time_utc_iso: { type: string, required: false }
+
+      # Optional hints to reduce followups.
+      suggested_domain_id: { type: string, required: false }
+      suggested_name: { type: string, required: false }
+      success_criteria: { type: string, required: false }
+      constraints_text: { type: string, required: false }
+      risk_tolerance: { type: string, required: false } # low | medium | high
+
+  runtime:
+    type: object
+    required: false
+    fields:
+      guard_state: { type: string, required: false } # normal | restricted | lockdown
+      system_health:
+        type: object
+        required: false
+        fields:
+          ok: { type: boolean, required: false }
+          summary: { type: string, required: false }
+
+      network:
+        type: object
+        required: false
+        fields:
+          web_access_enabled: { type: boolean, required: false }
+          egress_allowed: { type: boolean, required: false }
+
+  governance:
+    type: object
+    required: false
+    fields:
+      trust:
+        type: object
+        required: false
+        fields:
+          level: { type: number, required: false }
+          label: { type: string, required: false }
+
+      approvals:
+        type: object
+        required: false
+        fields:
+          enabled: { type: boolean, required: false }
+          quorum_required_by_default: { type: boolean, required: false }
+
+      # Optional policy summary from enforcement layer.
+      policy_summary:
+        type: object
+        required: false
+        fields:
+          allowed_capabilities: { type: array, required: false }
+          blocked_capabilities: { type: array, required: false }
+          gates_by_capability: { type: object, required: false }
+          notes: { type: array, required: false }
+
+  taxonomy:
+    type: object
+    required: false
+    fields:
+      # Optional: domain taxonomy tree or tags.
+      tags: { type: array, required: false }
+      regulated_tags: { type: array, required: false }
+
+  domains:
+    type: object
+    required: false
+    fields:
+      existing:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            domain_id: { type: string, required: true }
+            name: { type: string, required: false }
+            status: { type: string, required: false }
+            tags: { type: array, required: false }
+
+  capabilities_catalog:
+    type: object
+    required: false
+    fields:
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            id: { type: string, required: true }
+            category: { type: string, required: false } # read_only | mutation | destructive | network_egress | credential_ops | industrial_actuation | ...
+            description: { type: string, required: false }
+
+  attachments:
+    type: object
+    required: false
+    fields:
+      present: { type: boolean, required: false }
+      items:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            attachment_id: { type: string, required: true }
+            filename: { type: string, required: false }
+            mime_type: { type: string, required: false }
+            content_text: { type: string, required: false } # if available (already extracted)
+            meta: { type: object, required: false }
+
+  memory:
+    type: object
+    required: false
+    fields:
+      provided: { type: boolean, required: false }
+      chunks:
+        type: array
+        required: false
+        items:
+          type: object
+          fields:
+            source: { type: string, required: false }
+            content: { type: string, required: true }
+            score: { type: number, required: false }
+            meta: { type: object, required: false }
+
+# ------------------------------------------------------------------------------
+# Output schema (STRICT JSON)
+# ------------------------------------------------------------------------------
+output:
+  format: "json"
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+      - prompt_id
+      - request_id
+      - decision
+      - domain_spec
+      - safety
+      - observability
+    properties:
+      prompt_id: { type: string }
+      request_id: { type: string }
+
+      decision:
+        type: object
+        additionalProperties: false
+        required:
+          - mode
+          - confidence
+          - needs_followup
+          - reason_codes
+          - summary
+        properties:
+          # Modes:
+          # - deny: unsafe or disallowed intent
+          # - ask: missing critical information to draft safely
+          # - propose: draft domain spec (default)
+          mode:
+            type: string
+            enum: ["deny", "ask", "propose"]
+
+          confidence: { type: number } # 0..1
+          needs_followup: { type: boolean }
+          followup_questions:
+            type: array
+            items: { type: string }
+
+          reason_codes:
+            type: array
+            items: { type: string }
+
+          summary: { type: string }
+
+      domain_spec:
+        type: object
+        additionalProperties: false
+        required:
+          - domain_id
+          - name
+          - status
+          - description
+          - objectives
+          - scope
+          - governance
+          - capabilities
+          - data_model
+          - memory_strategy
+          - integrations
+          - risks
+        properties:
+          domain_id: { type: string }   # stable id/slug, e.g. "inventory_ops"
+          name: { type: string }        # display name
+          status: { type: string }      # draft | active | paused | retired
+          description: { type: string }
+
+          tags:
+            type: array
+            items: { type: string }
+
+          regulated_tags:
+            type: array
+            items: { type: string }
+
+          objectives:
+            type: array
+            items: { type: string }
+
+          success_criteria:
+            type: array
+            items: { type: string }
+
+          scope:
+            type: object
+            additionalProperties: false
+            required: ["in_scope", "out_of_scope", "constraints"]
+            properties:
+              in_scope:
+                type: array
+                items: { type: string }
+              out_of_scope:
+                type: array
+                items: { type: string }
+              constraints:
+                type: array
+                items: { type: string }
+
+          governance:
+            type: object
+            additionalProperties: false
+            required:
+              - posture
+              - trust_gates
+              - approval_gates
+              - quorum_gates
+              - logging_expectations
+            properties:
+              posture: { type: string } # permissive | standard | strict | regulated | safety_critical
+
+              trust_gates:
+                type: object
+                additionalProperties: false
+                required: ["read_only", "mutation", "destructive", "network_egress", "credential_ops", "industrial_actuation"]
+                properties:
+                  read_only: { type: number }
+                  mutation: { type: number }
+                  destructive: { type: number }
+                  network_egress: { type: number }
+                  credential_ops: { type: number }
+                  industrial_actuation: { type: number }
+
+              approval_gates:
+                type: object
+                additionalProperties: false
+                required: ["create", "update", "delete", "export", "egress", "credential_ops", "industrial_actuation"]
+                properties:
+                  create: { type: boolean }
+                  update: { type: boolean }
+                  delete: { type: boolean }
+                  export: { type: boolean }
+                  egress: { type: boolean }
+                  credential_ops: { type: boolean }
+                  industrial_actuation: { type: boolean }
+
+              quorum_gates:
+                type: object
+                additionalProperties: false
+                required: ["mutation", "destructive", "industrial_actuation", "credential_ops"]
+                properties:
+                  mutation: { type: boolean }
+                  destructive: { type: boolean }
+                  industrial_actuation: { type: boolean }
+                  credential_ops: { type: boolean }
+
+              logging_expectations:
+                type: array
+                items: { type: string } # e.g., "ledger entries for every mutation", "export requires attribution"
+
+          capabilities:
+            type: object
+            additionalProperties: false
+            required:
+              - read_only
+              - mutation
+              - destructive
+              - requested_but_unknown
+              - prohibited_categories
+            properties:
+              # Lists of capability ids (strings). Consumers may treat as allowlist hints.
+              read_only:
+                type: array
+                items: { type: string }
+              mutation:
+                type: array
+                items: { type: string }
+              destructive:
+                type: array
+                items: { type: string }
+
+              # Any requested capability names/phrases that could not be mapped to known IDs.
+              requested_but_unknown:
+                type: array
+                items: { type: string }
+
+              # Explicitly prohibited categories for the domain (defense-in-depth).
+              prohibited_categories:
+                type: array
+                items: { type: string } # credential_attack | malware | dos | surveillance | physical_harm | etc.
+
+          data_model:
+            type: object
+            additionalProperties: false
+            required: ["entities", "events", "artifacts"]
+            properties:
+              entities:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["name", "purpose", "key_fields"]
+                  properties:
+                    name: { type: string }
+                    purpose: { type: string }
+                    key_fields:
+                      type: array
+                      items: { type: string }
+                    relationships:
+                      type: array
+                      items: { type: string }
+
+              events:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["name", "emitted_when", "fields"]
+                  properties:
+                    name: { type: string }
+                    emitted_when: { type: string }
+                    fields:
+                      type: array
+                      items: { type: string }
+
+              artifacts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: ["kind", "examples", "retention_hint"]
+                  properties:
+                    kind: { type: string }
+                    examples:
+                      type: array
+                      items: { type: string }
+                    retention_hint: { type: string } # short | standard | long | regulated
+
+          memory_strategy:
+            type: object
+            additionalProperties: false
+            required: ["what_to_store", "what_to_retrieve", "retention", "redaction_rules"]
+            properties:
+              what_to_store:
+                type: array
+                items: { type: string }
+              what_to_retrieve:
+                type: array
+                items: { type: string }
+              retention:
+                type: object
+                additionalProperties: false
+                required: ["ledger", "vectors", "artifacts"]
+                properties:
+                  ledger: { type: string }   # e.g., "jsonl rotation: 90d"
+                  vectors: { type: string }  # e.g., "embedding store: 30d hot + archive"
+                  artifacts: { type: string }
+
+              redaction_rules:
+                type: array
+                items: { type: string } # e.g., "strip tokens", "hash identifiers"
+
+          integrations:
+            type: object
+            additionalProperties: false
+            required: ["ui_panels", "observability", "dependencies"]
+            properties:
+              ui_panels:
+                type: array
+                items: { type: string } # e.g., "domain_workbench", "explanation_explorer"
+              observability:
+                type: array
+                items: { type: string } # e.g., "emit ledger entries", "metrics tags domain_id"
+              dependencies:
+                type: array
+                items: { type: string } # e.g., "approvals", "trust", "web_learning"
+
+          risks:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "severity", "message", "mitigation"]
+              properties:
+                kind: { type: string } # security | compliance | technical | ops | ux | unknown
+                severity: { type: string, enum: ["low", "medium", "high", "critical"] }
+                message: { type: string }
+                mitigation: { type: string }
+
+      safety:
+        type: object
+        additionalProperties: false
+        required:
+          - blocked
+          - blocked_reasons
+          - wrongdoing_requested
+          - contains_secrets
+          - contains_pii
+          - regulated_tags
+          - redactions
+        properties:
+          blocked: { type: boolean }
+          blocked_reasons:
+            type: array
+            items: { type: string }
+          wrongdoing_requested: { type: boolean }
+          contains_secrets: { type: boolean }
+          contains_pii: { type: boolean }
+          regulated_tags:
+            type: array
+            items: { type: string }
+          redactions:
+            type: object
+            additionalProperties: false
+            required: ["performed", "notes"]
+            properties:
+              performed: { type: boolean }
+              notes:
+                type: array
+                items: { type: string }
+
+      observability:
+        type: object
+        additionalProperties: false
+        required: ["correlation_id", "reason_codes", "audit_events"]
+        properties:
+          correlation_id: { type: string }
+          reason_codes:
+            type: array
+            items: { type: string }
+          audit_events:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: ["kind", "when", "fields"]
+              properties:
+                kind: { type: string }
+                when: { type: string } # before | after | on_error
+                fields:
+                  type: array
+                  items: { type: string }
+
+# ------------------------------------------------------------------------------
+# Prompt messages
+# ------------------------------------------------------------------------------
+messages:
+  - role: "system"
+    content: |-
+      You are Francis’s domain induction engine.
+
+      Output MUST be a single strict JSON object matching the schema.
+      Do not output markdown or code fences.
+
+      Core rules:
+      - Fail-closed for high-risk categories. If any critical governance/runtime info is missing,
+        use decision.mode="ask" (minimal questions) or "propose" without execution and with conservative gates.
+      - Capability discipline:
+          * If governance.policy_summary.allowed_capabilities exists, you may only use those capability ids.
+          * Else if capabilities_catalog.items exists, you may only use those ids.
+          * Otherwise, populate requested_but_unknown and keep capability lists minimal.
+      - Safety non-negotiables:
+          * If the request is offensive wrongdoing (credential theft/phishing, malware, DoS, surveillance),
+            set decision.mode="deny" OR reshape into a defensive governance-only domain spec
+            that explicitly prohibits harmful categories. Do NOT provide actionable offensive workflows.
+      - Do not request or emit secrets. If the user includes secrets, mark contains_secrets=true and add redactions.
+
+      Domain spec quality bar:
+      - domain_id: stable slug (lowercase, digits, underscores; no spaces)
+      - name: readable title case
+      - scope boundaries: explicit in_scope and out_of_scope
+      - governance gates: explicit defaults for read/mutation/destructive/egress/credential_ops/industrial
+      - memory strategy: what to store vs retrieve, plus retention hints and redaction rules
+      - risks: realistic, with mitigations
+
+      Follow-up discipline:
+      - Ask only questions that block a safe spec.
+      - Never ask for secret values; ask for references/metadata instead.
+
+  - role: "user"
+    content: |-
+      REQUEST:
+      {{request}}
+
+      RUNTIME:
+      {{runtime}}
+
+      GOVERNANCE:
+      {{governance}}
+
+      TAXONOMY:
+      {{taxonomy}}
+
+      DOMAINS:
+      {{domains}}
+
+      CAPABILITIES_CATALOG:
+      {{capabilities_catalog}}
+
+      ATTACHMENTS:
+      {{attachments}}
+
+      MEMORY:
+      {{memory}}
+
+      Task:
+      Draft a domain spec suitable for review and registration.
+
+      Return strict JSON only.
+
+# ------------------------------------------------------------------------------
+# Generation hints
+# ------------------------------------------------------------------------------
+generation_hints:
+  temperature: 0.25
+  max_output_tokens: 2600
+  response_format: "json_strict"
+
+# ------------------------------------------------------------------------------
+# Stable reason codes (UI + audit)
+# ------------------------------------------------------------------------------
+reason_code_catalog:
+  - "DOMAIN_INDUCTION_PROPOSED"
+  - "DOMAIN_INDUCTION_NEEDS_FOLLOWUP"
+  - "DOMAIN_INDUCTION_DENIED_UNSAFE"
+  - "DOMAIN_INDUCTION_FAIL_CLOSED"
+  - "CAPABILITIES_ALLOWLIST_ENFORCED"
+  - "CAPABILITIES_CATALOG_USED"
+  - "CAPABILITIES_UNKNOWN_REQUESTS_PRESENT"
+  - "PROFILE_STRICT_POSTURE"
+  - "REDACT_SECRETS"
+  - "REDACT_PII"
+  - "REGULATED_TAGS_PRESENT"
+
+# ------------------------------------------------------------------------------
+# Audit event templates (intent; runtime decides actual emission)
+# ------------------------------------------------------------------------------
+audit_event_templates:
+  - kind: "domain.induction.requested"
+    when: "before"
+    fields: ["request_id", "correlation_id", "actor_id", "actor_role", "source", "profile"]
+
+  - kind: "domain.induction.generated"
+    when: "after"
+    fields: ["decision.mode", "decision.reason_codes", "domain_spec.domain_id", "domain_spec.status"]
+
+  - kind: "domain.induction.denied"
+    when: "after"
+    fields: ["safety.blocked_reasons"]
+
+# ------------------------------------------------------------------------------
+# Profile overlays (tighten posture)
+# ------------------------------------------------------------------------------
+profiles:
+  dev:
+    generation_hints:
+      temperature: 0.3
+
+  production:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.2
+
+  regulated:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.18
+
+  safety_critical:
+    mode: "strict"
+    generation_hints:
+      temperature: 0.12
