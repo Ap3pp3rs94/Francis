@@ -22,6 +22,7 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert built_body["validation"]["valid"] is True
     assert Path(str(built_body["spec_path"])).exists()
     assert Path(str(built_body["registry_snapshot"])).exists()
+    assert Path(str(built_body["catalog"]["path"])).exists()
 
     listed = client.get("/plugins/list")
     assert listed.status_code == 200
@@ -65,6 +66,9 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     run_enabled_body = run_enabled.json()
     assert run_enabled_body["ok"] is True
     assert str(run_enabled_body["output"]) == "Plugin response: hello"
+    assert run_enabled_body["receipt"]["ok"] is True
+    assert run_enabled_body["receipt"]["run_id"]
+    assert run_enabled_body["receipt"]["trace_id"]
 
     downloaded = client.get(f"/plugins/download/{plugin_id}")
     assert downloaded.status_code == 200
@@ -99,6 +103,8 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
     installed_body = installed.json()
     assert installed_body["ok"] is True
     plugin_id = str(installed_body["plugin_id"])
+    assert installed_body["validation"]["valid"] is True
+    assert Path(str(installed_body["catalog"]["path"])).exists()
 
     fetched = client.get(f"/plugins/get?id={plugin_id}")
     assert fetched.status_code == 200
@@ -106,6 +112,8 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
     assert fetched_body["ok"] is True
     assert fetched_body["item"]["source_kind"] == "registry"
     assert fetched_body["item"]["source_ref"] == "acme/toolkit"
+    assert fetched_body["item"]["contract"]["origin"] == "registry"
+    assert fetched_body["item"]["contract"]["tool_count"] >= 1
 
     filtered = client.get("/plugins/list?source_kind=registry&search=tool")
     assert filtered.status_code == 200
@@ -136,6 +144,7 @@ def test_plugins_install_uninstall_reload_and_filters(monkeypatch, tmp_path: Pat
     reloaded_body = reloaded.json()
     assert reloaded_body["ok"] is True
     assert "total" in reloaded_body
+    assert Path(str(reloaded_body["catalog"]["path"])).exists()
 
 
 def test_plugins_tools_catalog_and_action_validation(monkeypatch, tmp_path: Path) -> None:
