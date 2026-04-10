@@ -20,6 +20,14 @@ class ValidationResult:
     errors: tuple[str, ...] = field(default_factory=tuple)
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "valid": self.valid,
+            "reason": self.reason,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+        }
+
 
 class PluginValidator:
     def validate(self, spec: PluginSpec) -> ValidationResult:
