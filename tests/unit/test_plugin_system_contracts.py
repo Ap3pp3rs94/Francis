@@ -4,6 +4,11 @@ import json
 from pathlib import Path
 
 from francis.plugin_system import PluginLoader, PluginRegistry, PluginSpec, PluginValidator, ToolSpec
+from francis.plugin_system.execution.dispatcher import PluginDispatcher
+from francis.plugin_system.execution.lifecycle import PluginLifecycle
+from francis.plugin_system.sandbox.limits import SandboxLimits
+from francis.plugin_system.sandbox.runner import SandboxRunner
+from francis.telemetry.audit import read_events
 
 
 def test_plugin_loader_normalizes_canonical_json_and_legacy_yaml(tmp_path: Path) -> None:
@@ -157,3 +162,62 @@ def test_plugin_registry_compiles_directory_deterministically(tmp_path: Path) ->
 
     assert [item["plugin_id"] for item in catalog["plugins"]] == ["alpha.tools", "zeta.tools"]
     assert [item["tool_name"] for item in catalog["tool_index"]] == ["alpha.tools.run", "zeta.tools.run"]
+
+
+def test_sandbox_runner_emits_receipts_and_blocks_large_payload(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    runner = SandboxRunner(SandboxLimits(max_payload_bytes=32))
+
+    ok = runner.run_with_receipt(lambda text: {"echo": text}, "hi", payload={"text": "hi"})
+    assert ok.ok is True
+    assert ok.status == "ok"
+    assert ok.output == {"echo": "hi"}
+    assert ok.run_id
+    assert ok.trace_id
+
+    blocked = runner.run_with_receipt(lambda text: text, "x" * 64, payload={"text": "x" * 64})
+    assert blocked.ok is False
+    assert blocked.status == "blocked"
+    assert blocked.error == "payload_too_large"
+
+    events = read_events(limit=10, event="plugin.sandbox.run")
+    statuses = [item["status"] for item in events]
+    assert "ok" in statuses
+    assert "blocked" in statuses
+
+
+def test_dispatcher_and_lifecycle_produce_audit_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    dispatcher = PluginDispatcher(sandbox=SandboxRunner(SandboxLimits(max_payload_bytes=256)))
+    dispatched = dispatcher.dispatch_with_receipt(
+        lambda name: f"hello {name}",
+        "francis",
+        plugin_id="builtin.echo",
+        tool_name="builtin.echo.run",
+    )
+
+    assert dispatched.ok is True
+    assert dispatched.status == "ok"
+    assert dispatched.output == "hello francis"
+    assert dispatched.plugin_id == "builtin.echo"
+    assert dispatched.tool_name == "builtin.echo.run"
+    assert dispatched.run_id
+    assert dispatched.trace_id
+
+    lifecycle = PluginLifecycle(name="builtin.echo")
+    lifecycle.on_start()
+    lifecycle.on_stop(reason="completed")
+    snapshot = lifecycle.snapshot()
+
+    assert snapshot["status"] == "stopped"
+    assert snapshot["starts"] == 1
+    assert snapshot["stops"] == 1
+
+    dispatch_events = read_events(limit=10, event="plugin.dispatch")
+    lifecycle_events = read_events(limit=10, event="plugin.lifecycle.stop")
+    assert any(item["tool_name"] == "builtin.echo.run" for item in dispatch_events)
+    assert any(item["plugin_name"] == "builtin.echo" for item in lifecycle_events)
