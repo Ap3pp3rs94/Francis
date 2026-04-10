@@ -18,9 +18,12 @@ from pydantic import BaseModel, Field
 from francis.governance import approvals as approval_store
 from francis.kernel.paths import data_dir, repo_root
 from francis.plugin_factory.spec_builder import build_plugin
+from francis.plugin_system import PluginLoader, PluginSpec, ToolSpec
 from francis.trust.levels import get_state
 
 router = APIRouter()
+
+_PLUGIN_LOADER = PluginLoader()
 
 
 def _art_dir() -> Path:
@@ -575,6 +578,132 @@ def _manifest_for_plugin_dir(plugin_dir: Path) -> dict[str, str]:
     return manifest
 
 
+def _generated_contract_path(plugin_dir: Path) -> Path:
+    return plugin_dir / "plugin.spec.json"
+
+
+def _generated_registry_snapshot_path(plugin_dir: Path) -> Path:
+    return plugin_dir / "plugin.registry.json"
+
+
+def _load_generated_contract(plugin_dir: Path) -> PluginSpec | None:
+    spec_path = _generated_contract_path(plugin_dir)
+    if not spec_path.exists() or not spec_path.is_file():
+        return None
+    return _PLUGIN_LOADER.load(spec_path)
+
+
+def _read_generated_registry_snapshot(plugin_dir: Path) -> dict[str, Any]:
+    snapshot_path = _generated_registry_snapshot_path(plugin_dir)
+    if not snapshot_path.exists() or not snapshot_path.is_file():
+        return {}
+    try:
+        raw = json.loads(snapshot_path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _merge_unique_tags(*groups: Any) -> list[str]:
+    out: list[str] = []
+    for group in groups:
+        for tag in _parse_tags(group):
+            if tag and tag not in out:
+                out.append(tag)
+    return out
+
+
+def _capability_from_contract_tool(plugin_id: str, tool: ToolSpec, plugin_tags: list[str]) -> dict[str, Any] | None:
+    suffix = _slugify(tool.action or tool.tool_name.split(".")[-1]).replace("-", "_") or "run"
+    meta = dict(tool.metadata)
+    meta.setdefault("risk_tier", tool.risk_class)
+    meta.setdefault("approvals_required", tool.requires_approvals)
+    if tool.requires_trust_level:
+        meta.setdefault("required_trust", tool.requires_trust_level)
+    if tool.rate_limits:
+        meta["rate_limits"] = dict(tool.rate_limits)
+    meta["tool_name"] = tool.tool_name
+    if tool.resources:
+        meta["resources"] = list(tool.resources)
+    if tool.policy_tags:
+        meta["policy_tags"] = list(tool.policy_tags)
+    meta["dry_run_supported"] = bool(tool.dry_run_supported)
+    meta["idempotency"] = bool(tool.idempotency)
+
+    return _normalize_capability(
+        plugin_id,
+        {
+            "id": f"{plugin_id}.{suffix}",
+            "kind": "tool",
+            "name": tool.action or suffix,
+            "action": tool.action or suffix,
+            "description": tool.description or tool.summary,
+            "tags": _merge_unique_tags(plugin_tags, list(tool.policy_tags)),
+            "meta": meta,
+            "input_schema": dict(tool.input_schema or {"type": "object", "additionalProperties": True}),
+            "output_schema": dict(tool.output_schema or {}),
+        },
+    )
+
+
+def _capabilities_from_contract(plugin_id: str, spec: PluginSpec) -> list[dict[str, Any]]:
+    plugin_tags = _merge_unique_tags([spec.origin], list(spec.capabilities))
+    capabilities: list[dict[str, Any]] = []
+    for tool in spec.tools:
+        capability = _capability_from_contract_tool(plugin_id, tool, plugin_tags)
+        if isinstance(capability, dict):
+            capabilities.append(capability)
+    return capabilities or _default_capabilities(plugin_id)
+
+
+def _record_from_generated_contract(
+    plugin_id: str,
+    *,
+    current: dict[str, Any],
+    plugin_dir: Path,
+    artifact_path: Path,
+    spec: PluginSpec,
+) -> dict[str, Any]:
+    now_s = _now_s()
+    snapshot_path = _generated_registry_snapshot_path(plugin_dir)
+    merged_meta = {
+        **(dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}),
+        "entrypoint": spec.entrypoint or "plugin.py",
+        "sandbox_profile": spec.sandbox_profile,
+        "permissions": spec.permissions,
+        "constraints": spec.constraints,
+        "telemetry": spec.telemetry,
+        "compatibility": spec.compatibility,
+        "attestation": spec.attestation,
+        "contract_source_path": spec.source_path or str(_generated_contract_path(plugin_dir)),
+        "registry_snapshot_path": str(snapshot_path.resolve()) if snapshot_path.exists() else "",
+    }
+    tags = _merge_unique_tags(current.get("tags"), [spec.origin], list(spec.capabilities), ["generated"])
+    return _normalize_plugin_record(
+        plugin_id,
+        {
+            **current,
+            "id": plugin_id,
+            "name": spec.name or _safe_str(current.get("name")).strip() or plugin_id,
+            "version": spec.version or _safe_str(current.get("version")).strip(),
+            "description": spec.description or _safe_str(current.get("description")).strip(),
+            "status": current.get("status") or "enabled",
+            "enabled": current.get("enabled", True),
+            "source_kind": _safe_str(current.get("source_kind")).strip() or spec.origin or "generated",
+            "source_ref": _safe_str(current.get("source_ref")).strip() or (spec.source_path or plugin_id),
+            "installed_ts": int(current.get("installed_ts") or now_s),
+            "updated_ts": now_s,
+            "generated_dir": str(plugin_dir.resolve()),
+            "artifact_zip": str(artifact_path.resolve()) if artifact_path.exists() else "",
+            "capabilities": _capabilities_from_contract(plugin_id, spec),
+            "tags": tags,
+            "meta": merged_meta,
+            "verified": bool(current.get("verified", False)),
+            "signed": bool(current.get("signed", False)),
+        },
+    )
+
+
 def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str, Any]:
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
     plugin_dir = Path(generated_dir) if generated_dir else (_gen_dir() / plugin_id)
@@ -582,6 +711,15 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
         return {}
 
     manifest = _manifest_for_plugin_dir(plugin_dir)
+    contract_spec = _load_generated_contract(plugin_dir)
+    registry_snapshot = _read_generated_registry_snapshot(plugin_dir)
+    if contract_spec is not None:
+        manifest = {
+            "id": contract_spec.plugin_id or plugin_id,
+            "name": contract_spec.name or _safe_str(plugin.get("name")).strip() or plugin_id,
+            "description": contract_spec.description or _safe_str(plugin.get("description")).strip(),
+            "entrypoint": contract_spec.entrypoint or "plugin.py",
+        }
     entrypoint = _safe_str(manifest.get("entrypoint")).strip() or "plugin.py"
     readme_path = plugin_dir / "README.md"
     readme = readme_path.read_text(encoding="utf-8", errors="replace") if readme_path.exists() else ""
@@ -595,6 +733,26 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
                 continue
     files.sort()
 
+    contract_summary: dict[str, Any] = {}
+    if contract_spec is not None:
+        contract_summary = {
+            "plugin_id": contract_spec.plugin_id,
+            "version": contract_spec.version,
+            "origin": contract_spec.origin,
+            "tool_count": len(contract_spec.tools),
+            "capabilities": list(contract_spec.capabilities),
+            "sandbox_profile": contract_spec.sandbox_profile,
+            "source_path": contract_spec.source_path or str(_generated_contract_path(plugin_dir)),
+        }
+
+    registry_summary: dict[str, Any] = {}
+    if registry_snapshot:
+        registry_summary = {
+            "path": str(_generated_registry_snapshot_path(plugin_dir)),
+            "total_plugins": int(registry_snapshot.get("total_plugins") or 0),
+            "total_tools": int(registry_snapshot.get("total_tools") or 0),
+        }
+
     return {
         "manifest": {
             "id": _safe_str(manifest.get("id")).strip() or plugin_id,
@@ -605,6 +763,8 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
         "entrypoint": entrypoint,
         "readme": readme,
         "files": files,
+        "contract": contract_summary,
+        "registry_snapshot": registry_summary,
     }
 
 
@@ -614,32 +774,41 @@ def _ensure_plugin_from_generated(registry: dict[str, Any], plugin_id: str) -> b
         return False
 
     current = _read_plugin(registry, plugin_id) or {}
-    manifest = _manifest_for_plugin_dir(plugin_dir)
-    now_s = _now_s()
-
     artifact_path = _art_dir() / f"{plugin_id}.zip"
-    record = _normalize_plugin_record(
-        plugin_id,
-        {
-            **current,
-            "id": plugin_id,
-            "name": _safe_str(manifest.get("name")).strip() or _safe_str(current.get("name")).strip() or plugin_id,
-            "description": _safe_str(manifest.get("description")).strip() or _safe_str(current.get("description")).strip(),
-            "status": current.get("status") or "enabled",
-            "enabled": current.get("enabled", True),
-            "source_kind": _safe_str(current.get("source_kind")).strip() or "generated",
-            "source_ref": _safe_str(current.get("source_ref")).strip() or plugin_id,
-            "installed_ts": int(current.get("installed_ts") or now_s),
-            "updated_ts": now_s,
-            "generated_dir": str(plugin_dir.resolve()),
-            "artifact_zip": str(artifact_path.resolve()) if artifact_path.exists() else "",
-            "tags": _parse_tags(current.get("tags")) or ["generated"],
-            "meta": {
-                **(dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}),
-                "entrypoint": _safe_str(manifest.get("entrypoint")).strip() or "plugin.py",
+    contract_spec = _load_generated_contract(plugin_dir)
+    if contract_spec is not None:
+        record = _record_from_generated_contract(
+            plugin_id,
+            current=current,
+            plugin_dir=plugin_dir,
+            artifact_path=artifact_path,
+            spec=contract_spec,
+        )
+    else:
+        manifest = _manifest_for_plugin_dir(plugin_dir)
+        now_s = _now_s()
+        record = _normalize_plugin_record(
+            plugin_id,
+            {
+                **current,
+                "id": plugin_id,
+                "name": _safe_str(manifest.get("name")).strip() or _safe_str(current.get("name")).strip() or plugin_id,
+                "description": _safe_str(manifest.get("description")).strip() or _safe_str(current.get("description")).strip(),
+                "status": current.get("status") or "enabled",
+                "enabled": current.get("enabled", True),
+                "source_kind": _safe_str(current.get("source_kind")).strip() or "generated",
+                "source_ref": _safe_str(current.get("source_ref")).strip() or plugin_id,
+                "installed_ts": int(current.get("installed_ts") or now_s),
+                "updated_ts": now_s,
+                "generated_dir": str(plugin_dir.resolve()),
+                "artifact_zip": str(artifact_path.resolve()) if artifact_path.exists() else "",
+                "tags": _parse_tags(current.get("tags")) or ["generated"],
+                "meta": {
+                    **(dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}),
+                    "entrypoint": _safe_str(manifest.get("entrypoint")).strip() or "plugin.py",
+                },
             },
-        },
-    )
+        )
     _write_plugin(registry, record)
     return True
 
@@ -930,6 +1099,8 @@ def build(payload: PluginBuildIn) -> dict[str, object]:
         _save_registry(registry)
 
         artifact_zip = _safe_str(res.get("artifact_zip")).strip()
+        spec_path = _safe_str(res.get("spec_path")).strip()
+        registry_snapshot = _safe_str(res.get("registry_snapshot")).strip()
         return {
             "ok": True,
             "plugin_id": plugin_id,
@@ -937,6 +1108,9 @@ def build(payload: PluginBuildIn) -> dict[str, object]:
             "status": "enabled",
             "enabled": True,
             "artifact_zip": artifact_zip,
+            "spec_path": spec_path,
+            "registry_snapshot": registry_snapshot,
+            "validation": res.get("validation") if isinstance(res.get("validation"), dict) else {},
             "download_url": f"/plugins/download/{plugin_id}",
         }
     except Exception as exc:
@@ -1024,10 +1198,16 @@ def get_plugin(id: str) -> dict[str, object]:
                 item["manifest"] = details_manifest
             item["readme"] = _safe_str(details.get("readme")).strip()
             item["files"] = details.get("files") if isinstance(details.get("files"), list) else []
+            if isinstance(details.get("contract"), dict) and details.get("contract"):
+                item["contract"] = details.get("contract")
+            if isinstance(details.get("registry_snapshot"), dict) and details.get("registry_snapshot"):
+                item["registry_snapshot"] = details.get("registry_snapshot")
             item["runtime"] = {
                 "entrypoint": _safe_str(details.get("entrypoint")).strip() or "plugin.py",
                 "generated_dir": _safe_str(item.get("generated_dir")).strip(),
                 "artifact_exists": bool(_safe_str(item.get("artifact_zip")).strip() and Path(_safe_str(item.get("artifact_zip"))).exists()),
+                "spec_exists": bool(isinstance(details.get("contract"), dict) and details.get("contract")),
+                "registry_snapshot_exists": bool(isinstance(details.get("registry_snapshot"), dict) and details.get("registry_snapshot")),
             }
         else:
             item["runtime"] = {"generated_dir": _safe_str(item.get("generated_dir")).strip(), "artifact_exists": False}

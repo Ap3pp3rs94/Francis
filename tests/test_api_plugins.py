@@ -19,6 +19,9 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     built_body = built.json()
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
+    assert built_body["validation"]["valid"] is True
+    assert Path(str(built_body["spec_path"])).exists()
+    assert Path(str(built_body["registry_snapshot"])).exists()
 
     listed = client.get("/plugins/list")
     assert listed.status_code == 200
@@ -32,6 +35,11 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert fetched_body["ok"] is True
     assert fetched_body["item"]["id"] == plugin_id
     assert fetched_body["item"]["source_kind"] in {"generated", "unknown"}
+    assert fetched_body["item"]["contract"]["plugin_id"] == plugin_id
+    assert fetched_body["item"]["contract"]["tool_count"] >= 1
+    assert fetched_body["item"]["registry_snapshot"]["total_plugins"] >= 1
+    assert fetched_body["item"]["runtime"]["spec_exists"] is True
+    assert fetched_body["item"]["runtime"]["registry_snapshot_exists"] is True
 
     disabled = client.post("/plugins/disable", json={"id": plugin_id, "reason": "test_disable"})
     assert disabled.status_code == 200
