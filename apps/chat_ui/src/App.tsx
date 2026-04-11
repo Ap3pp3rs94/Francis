@@ -8,7 +8,7 @@ import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
-import type { OrbStatusSnapshot, SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
+import type { OperatorModeSnapshot, OrbStatusSnapshot, SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -483,6 +483,112 @@ function SettingsPanel(props: { settings: UiSettings; onChange: (next: UiSetting
     </section>
   );
 }
+
+function OperatorModeBanner(props: {
+  mode: OperatorModeSnapshot | null;
+  error: string | null;
+  onOpenApprovals: () => void;
+  onOpenOperations: () => void;
+  onOpenOrb: () => void;
+}) {
+  const environment = props.mode?.environment;
+  const posture = props.mode?.posture;
+  const focus = props.mode?.focus;
+  const backlog = props.mode?.backlog;
+  const notes = props.mode?.notes ?? [];
+
+  const writes = safeString(posture?.writes);
+  const environmentId = safeString(environment?.id).trim().toLowerCase();
+  const tone =
+    writes === "blocked"
+      ? { bg: "#2a0f0f", border: "#5a1a1a", color: "#ffaaaa" }
+      : environmentId === "airgapped"
+        ? { bg: "#10212a", border: "#2b5a74", color: "#b7e9ff" }
+        : writes === "restricted"
+          ? { bg: "#1f1a0b", border: "#5a4c18", color: "#f4d27a" }
+          : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
+
+  const pendingApprovals = safeNumber(backlog?.pending_approvals, 0);
+  const approvalPendingTasks = safeNumber(backlog?.approval_pending_tasks, 0);
+  const blockedTasks = safeNumber(backlog?.blocked_tasks, 0);
+  const queuedTasks = safeNumber(backlog?.queued_tasks, 0);
+  const runningTasks = safeNumber(backlog?.running_tasks, 0);
+
+  let actionLabel = "Open ORB";
+  let action = props.onOpenOrb;
+  if (pendingApprovals > 0) {
+    actionLabel = "Open approvals";
+    action = props.onOpenApprovals;
+  } else if (approvalPendingTasks > 0 || blockedTasks > 0 || queuedTasks > 0 || runningTasks > 0) {
+    actionLabel = "Open operations";
+    action = props.onOpenOperations;
+  }
+
+  return (
+    <section
+      style={{
+        ...panelStyle,
+        padding: 14,
+        background: tone.bg,
+        border: `1px solid ${tone.border}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle(environment?.label || environment?.id || "mode")}>
+              {environment?.label || environment?.id || "mode"}
+            </span>
+            {environment?.runtime_mode ? <span style={badgeStyle(environment.runtime_mode)}>{environment.runtime_mode}</span> : null}
+            {focus?.label ? <span style={badgeStyle(focus.label)}>{focus.label}</span> : null}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: tone.color }}>
+            {safeString(environment?.banner_text) || `${environment?.name || "Francis"} operator mode`}
+          </div>
+          <div style={{ fontSize: 12, color: THEME.text }}>
+            {safeString(focus?.reason) || "Loading operator posture."}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button style={buttonStyle} onClick={action}>
+            {actionLabel}
+          </button>
+          <button style={buttonStyle} onClick={props.onOpenOrb}>
+            ORB
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        {posture?.governance_mode ? <span style={badgeStyle(posture.governance_mode)}>{posture.governance_mode}</span> : null}
+        {posture?.trust_posture ? <span style={badgeStyle(posture.trust_posture)}>{posture.trust_posture}</span> : null}
+        <span style={badgeStyle(posture?.web_access || "unknown")}>web {posture?.web_access || "unknown"}</span>
+        <span style={badgeStyle(posture?.writes || "unknown")}>writes {posture?.writes || "unknown"}</span>
+        <span style={badgeStyle(posture?.network_egress || "unknown")}>egress {posture?.network_egress || "unknown"}</span>
+        <span style={badgeStyle("trust")}>
+          trust {String(posture?.trust_level ?? 0)}/{String(posture?.minimum_operational_trust ?? 0)}
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        <span style={badgeStyle("approvals")}>approvals {pendingApprovals}</span>
+        <span style={badgeStyle("queued")}>queued {queuedTasks}</span>
+        <span style={badgeStyle("blocked")}>blocked {blockedTasks}</span>
+        <span style={badgeStyle("needs_approval")}>awaiting approval {approvalPendingTasks}</span>
+        <span style={badgeStyle("running")}>running {runningTasks}</span>
+      </div>
+
+      {notes.length > 0 || props.error ? (
+        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 10 }}>
+          {notes[0] ? notes[0] : null}
+          {notes[0] && props.error ? " / " : null}
+          {props.error ? `status: ${props.error}` : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function App() {
   const [settings, setSettings] = useState<UiSettings>(() => loadSettings());
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
@@ -492,12 +598,18 @@ export default function App() {
   const [panel, setPanel] = useState<TabKey>("approvals");
   const [focusedApprovalId, setFocusedApprovalId] = useState("");
   const [focusedOperationId, setFocusedOperationId] = useState("");
+  const [operatorMode, setOperatorMode] = useState<OperatorModeSnapshot | null>(null);
+  const [operatorModeError, setOperatorModeError] = useState<string | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [baseUrl, setBaseUrl] = useState(() => {
     const env = safeString(import.meta.env.VITE_FRANCIS_API_BASE_URL, DEFAULT_API);
     return normalizeBaseUrl(env);
   });
   const width = useWindowWidth();
+  const modeClient = useMemo(() => {
+    const normalized = normalizeBaseUrl(baseUrl);
+    return normalized ? new SettingsClient(normalized) : null;
+  }, [baseUrl]);
 
   useEffect(() => {
     if (sessions.length === 0) {
@@ -615,6 +727,53 @@ export default function App() {
     setPanel("operations");
   }, []);
 
+  const openOperationsPanel = useCallback(() => {
+    setFocusedOperationId("");
+    setPanel("operations");
+  }, []);
+
+  const openOrbPanel = useCallback(() => {
+    setPanel("system");
+  }, []);
+
+  useEffect(() => {
+    if (!modeClient) {
+      setOperatorMode(null);
+      setOperatorModeError("API base URL is required.");
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshOperatorMode = async () => {
+      try {
+        const next = await modeClient.getOperatorMode({ timeoutMs: 10_000 });
+        if (cancelled) return;
+        setOperatorMode(next);
+        setOperatorModeError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const msg =
+          err instanceof SettingsApiError
+            ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+            : err instanceof Error
+              ? err.message
+              : "Operator mode request failed.";
+        setOperatorModeError(msg);
+      }
+    };
+
+    void refreshOperatorMode();
+    const intervalId = window.setInterval(() => {
+      void refreshOperatorMode();
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [modeClient]);
+
   const isNarrow = width < 1100;
 
   return (
@@ -691,6 +850,14 @@ export default function App() {
               />
             </div>
           </header>
+
+          <OperatorModeBanner
+            mode={operatorMode}
+            error={operatorModeError}
+            onOpenApprovals={() => openApprovalsPanel()}
+            onOpenOperations={openOperationsPanel}
+            onOpenOrb={openOrbPanel}
+          />
 
           <div style={{ display: "flex", gap: 18, flex: 1, minHeight: 0 }}>
             <section style={{ ...panelStyle, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>

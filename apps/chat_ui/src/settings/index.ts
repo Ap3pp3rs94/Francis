@@ -198,6 +198,53 @@ export type OrbStatusSnapshot = {
   meta?: Record<string, unknown>;
 };
 
+export type OperatorModeEnvironment = {
+  id: string;
+  name?: string;
+  description?: string;
+  label?: string;
+  banner_text?: string;
+  run_mode?: string;
+  runtime_mode?: string;
+  profile_path?: string;
+};
+
+export type OperatorModePosture = {
+  governance_mode?: string;
+  trust_posture?: string;
+  trust_level?: number;
+  minimum_operational_trust?: number;
+  web_access?: string;
+  writes?: string;
+  network_egress?: string;
+};
+
+export type OperatorModeFocus = {
+  plane_id: string;
+  label?: string;
+  reason?: string;
+};
+
+export type OperatorModeBacklog = {
+  pending_approvals?: number;
+  approval_pending_tasks?: number;
+  blocked_tasks?: number;
+  queued_tasks?: number;
+  running_tasks?: number;
+};
+
+export type OperatorModeSnapshot = {
+  ok: boolean;
+  subsystem?: string;
+  generated_at?: number;
+  environment?: OperatorModeEnvironment;
+  posture?: OperatorModePosture;
+  focus?: OperatorModeFocus;
+  backlog?: OperatorModeBacklog;
+  notes?: string[];
+  meta?: Record<string, unknown>;
+};
+
 /**
  * A controlled server mutation request.
  * The backend is expected to enforce approvals/policy; the UI just submits intent.
@@ -795,6 +842,61 @@ function parseOrbStatusSnapshot(raw: unknown): OrbStatusSnapshot {
   return snapshot;
 }
 
+function parseOperatorModeSnapshot(raw: unknown): OperatorModeSnapshot {
+  if (!isRecord(raw)) return { ok: false };
+
+  const environmentRaw = isRecord(raw.environment) ? (raw.environment as Record<string, unknown>) : {};
+  const postureRaw = isRecord(raw.posture) ? (raw.posture as Record<string, unknown>) : {};
+  const focusRaw = isRecord(raw.focus) ? (raw.focus as Record<string, unknown>) : {};
+  const backlogRaw = isRecord(raw.backlog) ? (raw.backlog as Record<string, unknown>) : {};
+
+  const snapshot: OperatorModeSnapshot = {
+    ok: safeBoolean(raw.ok, false),
+    subsystem: safeString(raw.subsystem, ""),
+    generated_at: safeNumber(raw.generated_at, 0),
+    environment: {
+      id: safeString(environmentRaw.id, ""),
+      name: safeString(environmentRaw.name, ""),
+      description: safeString(environmentRaw.description, ""),
+      label: safeString(environmentRaw.label, ""),
+      banner_text: safeString(environmentRaw.banner_text, ""),
+      run_mode: safeString(environmentRaw.run_mode, ""),
+      runtime_mode: safeString(environmentRaw.runtime_mode, ""),
+      profile_path: safeString(environmentRaw.profile_path, ""),
+    },
+    posture: {
+      governance_mode: safeString(postureRaw.governance_mode, ""),
+      trust_posture: safeString(postureRaw.trust_posture, ""),
+      trust_level: safeNumber(postureRaw.trust_level, 0),
+      minimum_operational_trust: safeNumber(postureRaw.minimum_operational_trust, 0),
+      web_access: safeString(postureRaw.web_access, ""),
+      writes: safeString(postureRaw.writes, ""),
+      network_egress: safeString(postureRaw.network_egress, ""),
+    },
+    focus: {
+      plane_id: safeString(focusRaw.plane_id, ""),
+      label: safeString(focusRaw.label, ""),
+      reason: safeString(focusRaw.reason, ""),
+    },
+    backlog: {
+      pending_approvals: safeNumber(backlogRaw.pending_approvals, 0),
+      approval_pending_tasks: safeNumber(backlogRaw.approval_pending_tasks, 0),
+      blocked_tasks: safeNumber(backlogRaw.blocked_tasks, 0),
+      queued_tasks: safeNumber(backlogRaw.queued_tasks, 0),
+      running_tasks: safeNumber(backlogRaw.running_tasks, 0),
+    },
+    notes: safeStringArray(raw.notes),
+  };
+
+  if (!snapshot.subsystem) delete snapshot.subsystem;
+  if (!snapshot.generated_at) delete snapshot.generated_at;
+  if (!snapshot.environment?.id) delete snapshot.environment;
+  if (!snapshot.focus?.plane_id) delete snapshot.focus;
+  if (isRecord(raw.meta)) snapshot.meta = raw.meta as Record<string, unknown>;
+
+  return snapshot;
+}
+
 export type SettingsEndpoints = {
   /**
    * Each endpoint returns a *priority-ordered* list of candidate paths.
@@ -804,6 +906,7 @@ export type SettingsEndpoints = {
   health: () => string[];
   worldState: () => string[];
   orbStatus: () => string[];
+  operatorMode: () => string[];
   featureFlags: () => string[];
   effectiveConfig: () => string[];
 
@@ -822,6 +925,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     health: () => ["/system/health", "/health", "/system/ping", "/ping"],
     worldState: () => ["/system/world_state", "/system/world-state"],
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
+    operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
     featureFlags: () => ["/system/flags", "/system/feature_flags", "/system/features", "/flags"],
     effectiveConfig: () => ["/system/config/effective", "/system/effective_config", "/system/config", "/config/effective"],
 
@@ -942,6 +1046,11 @@ export class SettingsClient {
   async getOrbStatus(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<OrbStatusSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.orbStatus(), this.init(opts));
     return parseOrbStatusSnapshot(json);
+  }
+
+  async getOperatorMode(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<OperatorModeSnapshot> {
+    const { json } = await this.fetchFirstOk(this.endpoints.operatorMode(), this.init(opts));
+    return parseOperatorModeSnapshot(json);
   }
 
   async listFeatureFlags(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FeatureFlagsResponse> {

@@ -178,6 +178,108 @@ controls:
     assert body["transitions"]["forbidden"][0]["to"] == "P7_EXECUTION"
 
 
+def test_system_operator_mode_reports_environment_posture_and_focus(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+    tasks_root = data_root / "tasks"
+    approvals_root = data_root / "approvals" / "pending"
+    trust_root = data_root / "trust" / "levels"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    tasks_root.mkdir(parents=True, exist_ok=True)
+    approvals_root.mkdir(parents=True, exist_ok=True)
+    trust_root.mkdir(parents=True, exist_ok=True)
+
+    (env_root / "edge.yaml").write_text(
+        """
+version: 1
+profile:
+  id: edge
+  name: Edge
+  operator_notes:
+    - "Edge profile note."
+runtime:
+  mode: edge
+governance:
+  approvals:
+    enabled: true
+    mode: strict
+  trust:
+    minimum_operational_trust: 2
+network:
+  egress:
+    enabled: false
+features:
+  web_learning:
+    enabled: false
+    allow_search: false
+    allow_fetch: false
+    allow_ingest: false
+ui:
+  label: "EDGE"
+  banner:
+    text: "EDGE MODE - LOCAL-FIRST / STRICT GOVERNANCE"
+""".strip(),
+        encoding="utf-8",
+    )
+    (approvals_root / "appr-1.json").write_text(
+        '{"id":"appr-1","action":"plugin.run","reason":"deploy","status":"pending","ts":10}',
+        encoding="utf-8",
+    )
+    blocked_task_dir = tasks_root / "tsk_blocked"
+    blocked_task_dir.mkdir(parents=True, exist_ok=True)
+    (blocked_task_dir / "record.json").write_text(
+        """
+{
+  "task_id": "tsk_blocked",
+  "status": "accepted",
+  "capability": "plugin.run",
+  "objective": "Blocked task",
+  "result": {
+    "kind": "task.result",
+    "data": {
+      "status": "blocked",
+      "error": "insufficient_trust"
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (trust_root / "current_state.json").write_text(
+        '{"global_level": 1, "domain_levels": {}, "last_updated": 10}',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "edge")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/system/operator_mode")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["subsystem"] == "operator_mode"
+    assert body["environment"]["id"] == "edge"
+    assert body["environment"]["label"] == "EDGE"
+    assert body["posture"]["governance_mode"] == "strict"
+    assert body["posture"]["trust_posture"] == "strict"
+    assert body["posture"]["web_access"] == "disabled"
+    assert body["posture"]["writes"] == "restricted"
+    assert body["backlog"]["pending_approvals"] == 1
+    assert body["backlog"]["blocked_tasks"] == 1
+    assert body["focus"]["plane_id"] == "P3_GOVERNANCE"
+    assert "approval" in body["focus"]["reason"].lower()
+
+
 def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
