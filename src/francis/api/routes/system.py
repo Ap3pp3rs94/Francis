@@ -20,7 +20,7 @@ from francis.kernel.paths import data_dir
 from francis.kernel.services import services_action, services_status
 from francis.kernel.stack import stack_status
 from francis.settings import Settings
-from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
+from francis.world_state.operator_mode import set_control_mode, snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
 from francis.world_state.snapshot import snapshot as world_state_snapshot
 
@@ -316,6 +316,13 @@ class FlagSetNamedIn(FlagSetIn):
     key: str
 
 
+class ControlModeSetIn(BaseModel):
+    mode: str
+    reason: str | None = None
+    actor: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/health")
 def health() -> dict[str, object]:
     try:
@@ -385,6 +392,31 @@ def operator_mode() -> dict[str, object]:
         return operator_mode_snapshot()
     except Exception as exc:
         return {"ok": False, "error": str(exc), "subsystem": "operator_mode"}
+
+
+@router.post("/operator_mode")
+@router.post("/operator-mode")
+def update_operator_mode(payload: ControlModeSetIn) -> dict[str, object]:
+    try:
+        set_control_mode(
+            payload.mode,
+            reason=payload.reason or "",
+            actor=payload.actor or "",
+            meta=payload.meta,
+        )
+        state = operator_mode_snapshot()
+        state["applied"] = True
+        state["status"] = "applied"
+        state["message"] = "control_mode_updated"
+        return state
+    except Exception as exc:
+        return {
+            "ok": False,
+            "applied": False,
+            "status": "error",
+            "message": str(exc),
+            "subsystem": "operator_mode",
+        }
 
 
 @router.post("/services/action")

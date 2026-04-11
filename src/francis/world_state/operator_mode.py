@@ -22,6 +22,35 @@ _PLANE_LABELS = {
     "P8_MEMORY": "Memory",
 }
 
+_CONTROL_MODE_DEFS: dict[str, dict[str, str]] = {
+    "observe": {
+        "id": "observe",
+        "label": "Observe",
+        "summary": "Read-only posture. Francis watches, briefs, and keeps authority visibly constrained.",
+        "implementation_status": "active",
+    },
+    "assist": {
+        "id": "assist",
+        "label": "Assist",
+        "summary": "Collaborative posture. Francis can prepare work and route bounded actions through governance.",
+        "implementation_status": "active",
+    },
+    "pilot": {
+        "id": "pilot",
+        "label": "Pilot",
+        "summary": "Declared takeover posture. Live handoff rituals still remain approval-bounded in this build.",
+        "implementation_status": "groundwork",
+    },
+    "away": {
+        "id": "away",
+        "label": "Away",
+        "summary": "Declared away posture. Continuity stays visible while full away automation remains gated.",
+        "implementation_status": "groundwork",
+    },
+}
+
+_DEFAULT_CONTROL_MODE = "assist"
+
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -68,6 +97,61 @@ def _read_json(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return raw if isinstance(raw, dict) else {}
+
+
+def _control_mode_state_path(data: Path) -> Path:
+    return data / "runtime" / "control_mode.json"
+
+
+def _normalize_control_mode(value: Any) -> str:
+    normalized = _safe_str(value).strip().lower()
+    if normalized in _CONTROL_MODE_DEFS:
+        return normalized
+    return _DEFAULT_CONTROL_MODE
+
+
+def _read_control_mode_state(data: Path) -> dict[str, Any]:
+    path = _control_mode_state_path(data)
+    state = _read_json(path)
+    return {
+        "mode": _normalize_control_mode(state.get("mode")),
+        "changed_at": _safe_int(state.get("changed_at")),
+        "changed_by": _safe_str(state.get("changed_by")).strip(),
+        "reason": _safe_str(state.get("reason")).strip(),
+        "source": _safe_str(state.get("source")).strip() or ("persisted" if state else "default"),
+    }
+
+
+def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def set_control_mode(
+    mode: str,
+    *,
+    reason: str = "",
+    actor: str = "",
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_mode = _safe_str(mode).strip().lower()
+    if normalized_mode not in _CONTROL_MODE_DEFS:
+        allowed = ", ".join(sorted(_CONTROL_MODE_DEFS))
+        raise ValueError(f"unsupported control mode: {mode} (allowed: {allowed})")
+
+    payload = {
+        "version": 1,
+        "mode": normalized_mode,
+        "reason": _safe_str(reason).strip(),
+        "changed_by": _safe_str(actor).strip(),
+        "changed_at": int(time.time()),
+        "source": "operator_override",
+        "meta": meta if isinstance(meta, dict) else {},
+    }
+    _atomic_write_json(_control_mode_state_path(data_dir()), payload)
+    return payload
 
 
 def _environment_profile_path(root: Path, profile_id: str) -> Path | None:
@@ -187,6 +271,55 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
     }
 
 
+def _control_mode_detail(mode_id: str, writes_state: str, backlog: dict[str, int], state: dict[str, Any]) -> dict[str, Any]:
+    definition = _CONTROL_MODE_DEFS.get(mode_id, _CONTROL_MODE_DEFS[_DEFAULT_CONTROL_MODE])
+    pending_approvals = int(backlog.get("pending_approvals") or 0)
+    approval_pending_tasks = int(backlog.get("approval_pending_tasks") or 0)
+    queued_tasks = int(backlog.get("queued_tasks") or 0)
+    blocked_tasks = int(backlog.get("blocked_tasks") or 0)
+
+    summary = definition["summary"]
+    if mode_id == "observe":
+        summary = "Read-only posture. Francis stays visible, cites state, and does not claim write authority."
+    elif mode_id == "assist" and pending_approvals > 0:
+        summary = f"Assist posture with {pending_approvals} {_pluralize(pending_approvals, 'approval')} waiting for review."
+    elif mode_id == "pilot":
+        summary = "Pilot is declared and visible. Approval gates still hold until the takeover flow ships."
+    elif mode_id == "away":
+        summary = "Away is declared and visible. Francis can hold continuity, but risky work remains approval-gated."
+    elif queued_tasks > 0 or approval_pending_tasks > 0 or blocked_tasks > 0:
+        total = queued_tasks + approval_pending_tasks + blocked_tasks
+        summary = f"{definition['summary']} {total} {_pluralize(total, 'task')} currently sit in the governed backlog."
+
+    return {
+        "id": definition["id"],
+        "label": definition["label"],
+        "summary": summary,
+        "writes": "blocked" if mode_id == "observe" else writes_state,
+        "implementation_status": definition["implementation_status"],
+        "changed_at": _safe_int(state.get("changed_at")),
+        "changed_by": _safe_str(state.get("changed_by")).strip(),
+        "reason": _safe_str(state.get("reason")).strip(),
+        "source": _safe_str(state.get("source")).strip() or "default",
+    }
+
+
+def _available_control_modes(active_mode_id: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for mode_id in ("observe", "assist", "pilot", "away"):
+        definition = _CONTROL_MODE_DEFS[mode_id]
+        items.append(
+            {
+                "id": definition["id"],
+                "label": definition["label"],
+                "summary": definition["summary"],
+                "implementation_status": definition["implementation_status"],
+                "active": mode_id == active_mode_id,
+            }
+        )
+    return items
+
+
 def _trust_posture(governance_mode: str, minimum_trust: int) -> str:
     normalized = governance_mode.strip().lower()
     if normalized == "strict" or minimum_trust >= 2:
@@ -258,6 +391,9 @@ def snapshot() -> dict[str, Any]:
 
     backlog = _backlog_snapshot(data / "tasks", data / "approvals")
     focus = _focus_plane(backlog)
+    control_mode_state = _read_control_mode_state(data)
+    writes_state = _writes_state(run_mode, runtime_mode, governance_mode, minimum_trust)
+    control_mode = _control_mode_detail(control_mode_state["mode"], writes_state, backlog, control_mode_state)
 
     operator_notes = profile_meta.get("operator_notes") if isinstance(profile_meta.get("operator_notes"), list) else []
     notes = [_safe_str(item).strip() for item in operator_notes if _safe_str(item).strip()][:3]
@@ -282,9 +418,11 @@ def snapshot() -> dict[str, Any]:
             "trust_level": trust_level,
             "minimum_operational_trust": minimum_trust,
             "web_access": _web_access_state(profile),
-            "writes": _writes_state(run_mode, runtime_mode, governance_mode, minimum_trust),
+            "writes": writes_state,
             "network_egress": "enabled" if bool(egress.get("enabled")) else "disabled",
         },
+        "control_mode": control_mode,
+        "available_modes": _available_control_modes(control_mode["id"]),
         "focus": focus,
         "backlog": backlog,
         "notes": notes,

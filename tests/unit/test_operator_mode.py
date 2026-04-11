@@ -97,8 +97,81 @@ ui:
     assert state["posture"]["minimum_operational_trust"] == 2
     assert state["posture"]["web_access"] == "disabled"
     assert state["posture"]["writes"] == "restricted"
+    assert state["control_mode"]["id"] == "assist"
+    assert state["control_mode"]["implementation_status"] == "active"
+    assert state["available_modes"][0]["id"] == "observe"
+    assert state["available_modes"][1]["active"] is True
     assert state["backlog"]["pending_approvals"] == 1
     assert state["backlog"]["blocked_tasks"] == 1
     assert state["focus"]["plane_id"] == "P3_GOVERNANCE"
     assert "approval" in state["focus"]["reason"].lower()
     assert state["notes"] == ["Use authenticated access only."]
+
+
+def test_operator_mode_snapshot_reads_persisted_control_mode(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (data_root / "runtime").mkdir(parents=True, exist_ok=True)
+
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+    (data_root / "runtime" / "control_mode.json").write_text(
+        """
+{
+  "version": 1,
+  "mode": "away",
+  "reason": "night shift coverage",
+  "changed_by": "operator@test",
+  "changed_at": 42,
+  "source": "operator_override"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from francis.world_state.operator_mode import snapshot
+
+    state = snapshot()
+    assert state["control_mode"]["id"] == "away"
+    assert state["control_mode"]["changed_by"] == "operator@test"
+    assert state["control_mode"]["reason"] == "night shift coverage"
+    assert state["control_mode"]["source"] == "operator_override"
+    active_modes = [item for item in state["available_modes"] if item["active"]]
+    assert len(active_modes) == 1
+    assert active_modes[0]["id"] == "away"

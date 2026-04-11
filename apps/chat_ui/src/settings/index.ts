@@ -237,12 +237,36 @@ export type OperatorModeBacklog = {
   running_tasks?: number;
 };
 
+export type OperatorControlModeId = "observe" | "assist" | "pilot" | "away" | string;
+
+export type OperatorControlMode = {
+  id: OperatorControlModeId;
+  label?: string;
+  summary?: string;
+  writes?: string;
+  implementation_status?: string;
+  changed_at?: number;
+  changed_by?: string;
+  reason?: string;
+  source?: string;
+};
+
+export type OperatorControlModeOption = {
+  id: OperatorControlModeId;
+  label?: string;
+  summary?: string;
+  implementation_status?: string;
+  active?: boolean;
+};
+
 export type OperatorModeSnapshot = {
   ok: boolean;
   subsystem?: string;
   generated_at?: number;
   environment?: OperatorModeEnvironment;
   posture?: OperatorModePosture;
+  control_mode?: OperatorControlMode;
+  available_modes?: OperatorControlModeOption[];
   focus?: OperatorModeFocus;
   backlog?: OperatorModeBacklog;
   notes?: string[];
@@ -298,6 +322,21 @@ export type ConfigMutationResponse = {
 
   message?: string;
   meta?: Record<string, unknown>;
+};
+
+export type OperatorModeMutationRequest = {
+  mode: OperatorControlModeId;
+  reason?: string;
+  actor?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type OperatorModeMutationResponse = {
+  ok: boolean;
+  applied?: boolean;
+  status?: string;
+  message?: string;
+  snapshot?: OperatorModeSnapshot;
 };
 
 export class SettingsApiError extends Error {
@@ -855,6 +894,8 @@ function parseOperatorModeSnapshot(raw: unknown): OperatorModeSnapshot {
 
   const environmentRaw = isRecord(raw.environment) ? (raw.environment as Record<string, unknown>) : {};
   const postureRaw = isRecord(raw.posture) ? (raw.posture as Record<string, unknown>) : {};
+  const controlModeRaw = isRecord(raw.control_mode) ? (raw.control_mode as Record<string, unknown>) : {};
+  const availableModesRaw = Array.isArray(raw.available_modes) ? raw.available_modes : [];
   const focusRaw = isRecord(raw.focus) ? (raw.focus as Record<string, unknown>) : {};
   const backlogRaw = isRecord(raw.backlog) ? (raw.backlog as Record<string, unknown>) : {};
 
@@ -881,6 +922,30 @@ function parseOperatorModeSnapshot(raw: unknown): OperatorModeSnapshot {
       writes: safeString(postureRaw.writes, ""),
       network_egress: safeString(postureRaw.network_egress, ""),
     },
+    control_mode: {
+      id: safeString(controlModeRaw.id, ""),
+      label: safeString(controlModeRaw.label, ""),
+      summary: safeString(controlModeRaw.summary, ""),
+      writes: safeString(controlModeRaw.writes, ""),
+      implementation_status: safeString(controlModeRaw.implementation_status, ""),
+      changed_at: safeNumber(controlModeRaw.changed_at, 0),
+      changed_by: safeString(controlModeRaw.changed_by, ""),
+      reason: safeString(controlModeRaw.reason, ""),
+      source: safeString(controlModeRaw.source, ""),
+    },
+    available_modes: availableModesRaw
+      .filter((item) => isRecord(item))
+      .map((item) => {
+        const mode = item as Record<string, unknown>;
+        return {
+          id: safeString(mode.id, ""),
+          label: safeString(mode.label, ""),
+          summary: safeString(mode.summary, ""),
+          implementation_status: safeString(mode.implementation_status, ""),
+          active: safeBoolean(mode.active, false),
+        };
+      })
+      .filter((item) => item.id),
     focus: {
       plane_id: safeString(focusRaw.plane_id, ""),
       label: safeString(focusRaw.label, ""),
@@ -899,6 +964,8 @@ function parseOperatorModeSnapshot(raw: unknown): OperatorModeSnapshot {
   if (!snapshot.subsystem) delete snapshot.subsystem;
   if (!snapshot.generated_at) delete snapshot.generated_at;
   if (!snapshot.environment?.id) delete snapshot.environment;
+  if (!snapshot.control_mode?.id) delete snapshot.control_mode;
+  if (!snapshot.available_modes?.length) delete snapshot.available_modes;
   if (!snapshot.focus?.plane_id) delete snapshot.focus;
   if (isRecord(raw.meta)) snapshot.meta = raw.meta as Record<string, unknown>;
 
@@ -915,6 +982,7 @@ export type SettingsEndpoints = {
   worldState: () => string[];
   orbStatus: () => string[];
   operatorMode: () => string[];
+  setOperatorMode: () => string[];
   featureFlags: () => string[];
   effectiveConfig: () => string[];
 
@@ -934,6 +1002,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     worldState: () => ["/system/world_state", "/system/world-state"],
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
+    setOperatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
     featureFlags: () => ["/system/flags", "/system/feature_flags", "/system/features", "/flags"],
     effectiveConfig: () => ["/system/config/effective", "/system/effective_config", "/system/config", "/config/effective"],
 
@@ -1059,6 +1128,30 @@ export class SettingsClient {
   async getOperatorMode(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<OperatorModeSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.operatorMode(), this.init(opts));
     return parseOperatorModeSnapshot(json);
+  }
+
+  async setOperatorMode(
+    req: OperatorModeMutationRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<OperatorModeMutationResponse> {
+    if (!this.mutationsEnabled) {
+      throw new Error("SettingsClient.setOperatorMode is disabled (mutationsEnabled=false).");
+    }
+
+    const { json } = await this.fetchFirstOk(this.endpoints.setOperatorMode(), {
+      ...this.init(opts),
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+
+    if (!isRecord(json)) return { ok: false };
+    return {
+      ok: safeBoolean(json.ok, false),
+      applied: safeBoolean(json.applied, false),
+      status: safeString(json.status, ""),
+      message: safeString(json.message, ""),
+      snapshot: parseOperatorModeSnapshot(json),
+    };
   }
 
   async listFeatureFlags(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FeatureFlagsResponse> {

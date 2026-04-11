@@ -8,7 +8,14 @@ import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
-import type { OperatorModeSnapshot, OrbStatusSnapshot, SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
+import type {
+  OperatorControlModeId,
+  OperatorModeSnapshot,
+  OrbStatusSnapshot,
+  SystemHealth,
+  SystemInfo,
+  WorldStateSnapshot,
+} from "./settings";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -487,12 +494,16 @@ function SettingsPanel(props: { settings: UiSettings; onChange: (next: UiSetting
 function OperatorModeBanner(props: {
   mode: OperatorModeSnapshot | null;
   error: string | null;
+  busy: boolean;
   onOpenApprovals: () => void;
   onOpenOperations: () => void;
   onOpenOrb: () => void;
+  onSetControlMode: (modeId: OperatorControlModeId) => void;
 }) {
   const environment = props.mode?.environment;
   const posture = props.mode?.posture;
+  const controlMode = props.mode?.control_mode;
+  const availableModes = props.mode?.available_modes ?? [];
   const focus = props.mode?.focus;
   const backlog = props.mode?.backlog;
   const notes = props.mode?.notes ?? [];
@@ -578,6 +589,44 @@ function OperatorModeBanner(props: {
         <span style={badgeStyle("running")}>running {runningTasks}</span>
       </div>
 
+      <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: THEME.muted }}>
+            Control mode
+          </span>
+          {controlMode?.label ? <span style={badgeStyle(controlMode.label)}>{controlMode.label}</span> : null}
+          {controlMode?.implementation_status ? (
+            <span style={badgeStyle(controlMode.implementation_status)}>{controlMode.implementation_status}</span>
+          ) : null}
+          {props.busy ? <span style={badgeStyle("updating")}>updating</span> : null}
+        </div>
+        <div style={{ fontSize: 12, color: THEME.text }}>
+          {safeString(controlMode?.summary) || "Control mode sets the visible legal posture for Francis."}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {availableModes.map((item) => {
+            const isActive = item.id === controlMode?.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => props.onSetControlMode(item.id)}
+                disabled={props.busy || isActive}
+                style={{
+                  ...buttonStyle,
+                  padding: "6px 10px",
+                  border: isActive ? `1px solid ${THEME.text}` : `1px solid ${THEME.buttonBorder}`,
+                  background: isActive ? THEME.buttonActive : THEME.buttonBg,
+                  opacity: props.busy || isActive ? 0.8 : 1,
+                }}
+                title={item.summary || item.label || item.id}
+              >
+                {item.label || item.id}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {notes.length > 0 || props.error ? (
         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 10 }}>
           {notes[0] ? notes[0] : null}
@@ -600,6 +649,7 @@ export default function App() {
   const [focusedOperationId, setFocusedOperationId] = useState("");
   const [operatorMode, setOperatorMode] = useState<OperatorModeSnapshot | null>(null);
   const [operatorModeError, setOperatorModeError] = useState<string | null>(null);
+  const [operatorModeBusy, setOperatorModeBusy] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [baseUrl, setBaseUrl] = useState(() => {
     const env = safeString(import.meta.env.VITE_FRANCIS_API_BASE_URL, DEFAULT_API);
@@ -608,7 +658,7 @@ export default function App() {
   const width = useWindowWidth();
   const modeClient = useMemo(() => {
     const normalized = normalizeBaseUrl(baseUrl);
-    return normalized ? new SettingsClient(normalized) : null;
+    return normalized ? new SettingsClient(normalized, { mutationsEnabled: true }) : null;
   }, [baseUrl]);
 
   useEffect(() => {
@@ -774,6 +824,59 @@ export default function App() {
     };
   }, [modeClient]);
 
+  const setControlMode = useCallback(
+    async (modeId: OperatorControlModeId) => {
+      if (!modeClient) {
+        setOperatorModeError("API base URL is required.");
+        return;
+      }
+      const normalizedMode = safeString(modeId).trim().toLowerCase();
+      if (!normalizedMode) return;
+      if (normalizedMode === safeString(operatorMode?.control_mode?.id).trim().toLowerCase()) return;
+
+      if (
+        (normalizedMode === "pilot" || normalizedMode === "away") &&
+        !window.confirm(
+          `${
+            normalizedMode === "pilot" ? "Pilot" : "Away"
+          } mode is a visible legal posture. Approval gates still remain active in this build. Continue?`,
+        )
+      ) {
+        return;
+      }
+
+      setOperatorModeBusy(true);
+      try {
+        const response = await modeClient.setOperatorMode(
+          {
+            mode: normalizedMode,
+            reason: `console_mode_switch:${normalizedMode}`,
+            actor: "chat_ui.banner",
+          },
+          { timeoutMs: 10_000 },
+        );
+        if (!response.ok) {
+          throw new Error(response.message || "Control mode update failed.");
+        }
+        if (response.snapshot) {
+          setOperatorMode(response.snapshot);
+        }
+        setOperatorModeError(null);
+      } catch (err) {
+        const msg =
+          err instanceof SettingsApiError
+            ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+            : err instanceof Error
+              ? err.message
+              : "Control mode update failed.";
+        setOperatorModeError(msg);
+      } finally {
+        setOperatorModeBusy(false);
+      }
+    },
+    [modeClient, operatorMode?.control_mode?.id],
+  );
+
   const isNarrow = width < 1100;
 
   return (
@@ -854,9 +957,11 @@ export default function App() {
           <OperatorModeBanner
             mode={operatorMode}
             error={operatorModeError}
+            busy={operatorModeBusy}
             onOpenApprovals={() => openApprovalsPanel()}
             onOpenOperations={openOperationsPanel}
             onOpenOrb={openOrbPanel}
+            onSetControlMode={setControlMode}
           />
 
           <div style={{ display: "flex", gap: 18, flex: 1, minHeight: 0 }}>

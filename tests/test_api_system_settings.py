@@ -349,10 +349,86 @@ ui:
     assert body["posture"]["trust_posture"] == "strict"
     assert body["posture"]["web_access"] == "disabled"
     assert body["posture"]["writes"] == "restricted"
+    assert body["control_mode"]["id"] == "assist"
+    assert body["available_modes"][1]["id"] == "assist"
+    assert body["available_modes"][1]["active"] is True
     assert body["backlog"]["pending_approvals"] == 1
     assert body["backlog"]["blocked_tasks"] == 1
     assert body["focus"]["plane_id"] == "P3_GOVERNANCE"
     assert "approval" in body["focus"]["reason"].lower()
+
+
+def test_system_operator_mode_update_persists_control_mode(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (data_root / "runtime").mkdir(parents=True, exist_ok=True)
+
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    update = client.post(
+        "/system/operator_mode",
+        json={
+            "mode": "away",
+            "reason": "night shift coverage",
+            "actor": "chat_ui",
+        },
+    )
+    assert update.status_code == 200
+    update_body = update.json()
+    assert update_body["ok"] is True
+    assert update_body["applied"] is True
+    assert update_body["control_mode"]["id"] == "away"
+    assert update_body["control_mode"]["reason"] == "night shift coverage"
+    assert update_body["control_mode"]["changed_by"] == "chat_ui"
+
+    follow_up = client.get("/system/operator_mode")
+    assert follow_up.status_code == 200
+    body = follow_up.json()
+    assert body["control_mode"]["id"] == "away"
+    assert body["available_modes"][3]["active"] is True
 
 
 def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
