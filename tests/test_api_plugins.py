@@ -233,6 +233,8 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     assert blocked_body["error"] == "insufficient_trust"
     assert blocked_body["status"] == "blocked"
     assert blocked_body["required_trust"] == 5
+    assert blocked_body["governance"]["gate"] == "trust_gate"
+    assert blocked_body["governance"]["next_step"] == "raise_trust_or_reduce_risk"
 
     raised = client.post("/trust/set", json={"level": 6, "reason": "plugin-risk-test"})
     assert raised.status_code == 200
@@ -243,6 +245,8 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     pending_body = pending.json()
     assert pending_body["ok"] is True
     assert pending_body["status"] == "pending"
+    assert pending_body["governance"]["gate"] == "approvals_gate"
+    assert pending_body["governance"]["approval_status"] == "pending"
     approval_id = str(pending_body["approval_id"])
     assert approval_id
 
@@ -254,6 +258,8 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     still_pending_body = still_pending.json()
     assert still_pending_body["ok"] is True
     assert still_pending_body["status"] == "pending"
+    assert still_pending_body["governance"]["gate"] == "approvals_gate"
+    assert still_pending_body["governance"]["approval_status"] == "pending"
 
     approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
     assert approved.status_code == 200
@@ -327,6 +333,7 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     deploy_pending_body = deploy_pending.json()
     assert deploy_pending_body["ok"] is True
     assert deploy_pending_body["status"] == "pending"
+    assert deploy_pending_body["governance"]["gate"] == "approvals_gate"
     deploy_approval_id = str(deploy_pending_body["approval_id"])
     assert deploy_pending_body["tool_id"] == deploy_tool_id
 
@@ -335,6 +342,7 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     restart_pending_body = restart_pending.json()
     assert restart_pending_body["ok"] is True
     assert restart_pending_body["status"] == "pending"
+    assert restart_pending_body["governance"]["gate"] == "approvals_gate"
     restart_approval_id = str(restart_pending_body["approval_id"])
     assert restart_pending_body["tool_id"] == restart_tool_id
 
@@ -351,6 +359,8 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     assert mismatched_body["ok"] is False
     assert mismatched_body["status"] == "needs_approval"
     assert mismatched_body["error"] == "approval_payload_mismatch"
+    assert mismatched_body["governance"]["gate"] == "approvals_gate"
+    assert mismatched_body["governance"]["next_step"] == "approve_exact_action"
     assert mismatched_body["tool_id"] == deploy_tool_id
 
     approved_deploy = client.post("/approvals/decision", json={"id": deploy_approval_id, "action": "approve"})

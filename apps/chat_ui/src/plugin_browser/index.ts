@@ -299,6 +299,18 @@ export type PluginRunRequest = {
   meta?: Record<string, unknown>;
 };
 
+export type PluginGovernanceResult = {
+  plane?: string;
+  gate?: string;
+  next_step?: string;
+  operator_hint?: string;
+  action?: string;
+  risk_tier?: string;
+  required_trust?: number;
+  current_trust?: number;
+  approval_status?: string;
+};
+
 export type PluginRunResponse = {
   ok: boolean;
 
@@ -324,6 +336,7 @@ export type PluginRunResponse = {
   error?: string;
   message?: string;
   tool_id?: string;
+  governance?: PluginGovernanceResult;
 
   meta?: Record<string, unknown>;
 };
@@ -1055,6 +1068,22 @@ export class PluginBrowserClient {
       };
     }
     const record = json as Record<string, unknown>;
+    const governanceRaw = isRecord(record.governance) ? (record.governance as Record<string, unknown>) : null;
+    const governance =
+      governanceRaw
+        ? {
+            plane: safeString(governanceRaw.plane, "") || undefined,
+            gate: safeString(governanceRaw.gate, "") || undefined,
+            next_step: safeString(governanceRaw.next_step, "") || undefined,
+            operator_hint: safeString(governanceRaw.operator_hint, "") || undefined,
+            action: safeString(governanceRaw.action, "") || undefined,
+            risk_tier: safeString(governanceRaw.risk_tier, "") || undefined,
+            required_trust: safeNumber(governanceRaw.required_trust, NaN),
+            current_trust: safeNumber(governanceRaw.current_trust, NaN),
+            approval_status: safeString(governanceRaw.approval_status, "") || undefined,
+          }
+        : undefined;
+
     return {
       ok: Boolean(record.ok ?? true),
       output: record.output,
@@ -1064,6 +1093,19 @@ export class PluginBrowserClient {
       status: safeString(record.status, "") || undefined,
       error: safeString(record.error, "") || undefined,
       message: safeString(record.message, "") || undefined,
+      governance: governance
+        ? {
+            ...governance,
+            required_trust:
+              typeof governance.required_trust === "number" && Number.isFinite(governance.required_trust)
+                ? governance.required_trust
+                : undefined,
+            current_trust:
+              typeof governance.current_trust === "number" && Number.isFinite(governance.current_trust)
+                ? governance.current_trust
+                : undefined,
+          }
+        : undefined,
       meta: isRecord(record.meta) ? (record.meta as Record<string, unknown>) : undefined,
     };
   }

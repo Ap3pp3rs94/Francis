@@ -514,6 +514,33 @@ def _plugin_run_approval_id(payload: "PluginRunIn") -> str:
     return _safe_str(meta_obj.get("approval_id")).strip()
 
 
+def _plugin_governance(
+    *,
+    gate: str,
+    next_step: str,
+    operator_hint: str,
+    action: str,
+    risk_tier: str,
+    required_trust: int,
+    current_trust: int | None = None,
+    approval_status: str = "",
+) -> dict[str, object]:
+    out: dict[str, object] = {
+        "plane": "P3_GOVERNANCE",
+        "gate": gate,
+        "next_step": next_step,
+        "operator_hint": operator_hint,
+        "action": action,
+        "risk_tier": risk_tier,
+        "required_trust": required_trust,
+    }
+    if current_trust is not None:
+        out["current_trust"] = current_trust
+    if approval_status:
+        out["approval_status"] = approval_status
+    return out
+
+
 def _tool_item(plugin: dict[str, Any], capability: dict[str, Any]) -> dict[str, Any]:
     plugin_id = _safe_str(plugin.get("id")).strip()
     cap_id = _safe_str(capability.get("id")).strip() or _safe_str(capability.get("action")).strip() or "run"
@@ -1839,6 +1866,16 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                 "status": "blocked",
                 "required_trust": required_trust,
                 "current_trust": trust_level,
+                "message": f"Trust level {trust_level} is below the required level {required_trust}.",
+                "governance": _plugin_governance(
+                    gate="trust_gate",
+                    next_step="raise_trust_or_reduce_risk",
+                    operator_hint=f"Raise trust to {required_trust} or choose a lower-risk action.",
+                    action=action,
+                    risk_tier=risk_tier,
+                    required_trust=required_trust,
+                    current_trust=trust_level,
+                ),
                 "meta": {"action": action, "risk_tier": risk_tier},
             }
 
@@ -1866,6 +1903,16 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     "status": "pending",
                     "approval_id": created_id,
                     "message": "Plugin action requires approval.",
+                    "governance": _plugin_governance(
+                        gate="approvals_gate",
+                        next_step="review_pending_approval",
+                        operator_hint="Open approvals and review this plugin action before rerunning it.",
+                        action=action,
+                        risk_tier=risk_tier,
+                        required_trust=required_trust,
+                        current_trust=trust_level,
+                        approval_status="pending",
+                    ),
                     "meta": {"action": action, "risk_tier": risk_tier, "required_trust": required_trust},
                 }
 
@@ -1877,6 +1924,16 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     "status": "pending",
                     "approval_id": approval_id,
                     "message": "Plugin action is awaiting approval.",
+                    "governance": _plugin_governance(
+                        gate="approvals_gate",
+                        next_step="review_pending_approval",
+                        operator_hint="This action is still waiting on approval. Review or approve it before rerunning.",
+                        action=action,
+                        risk_tier=risk_tier,
+                        required_trust=required_trust,
+                        current_trust=trust_level,
+                        approval_status="pending",
+                    ),
                     "meta": {"action": action, "risk_tier": risk_tier, "required_trust": required_trust},
                 }
             if approval_status in {"rejected", "emergency"}:
@@ -1886,6 +1943,17 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     "status": "denied",
                     "error": "approval_denied",
                     "approval_id": approval_id,
+                    "message": "Approval was denied for this plugin action.",
+                    "governance": _plugin_governance(
+                        gate="approvals_gate",
+                        next_step="request_new_approval_or_change_scope",
+                        operator_hint="Request a new approval or narrow the requested action before rerunning.",
+                        action=action,
+                        risk_tier=risk_tier,
+                        required_trust=required_trust,
+                        current_trust=trust_level,
+                        approval_status=approval_status,
+                    ),
                     "meta": {
                         "action": action,
                         "risk_tier": risk_tier,
@@ -1901,6 +1969,16 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     "status": "needs_approval",
                     "error": "approval_not_found",
                     "approval_id": approval_id,
+                    "message": "A matching approved request was not found for this plugin action.",
+                    "governance": _plugin_governance(
+                        gate="approvals_gate",
+                        next_step="provide_matching_approval",
+                        operator_hint="Use a valid approval for this exact action or request a new approval.",
+                        action=action,
+                        risk_tier=risk_tier,
+                        required_trust=required_trust,
+                        current_trust=trust_level,
+                    ),
                     "meta": {"action": action, "risk_tier": risk_tier, "required_trust": required_trust},
                 }
             if not _approval_matches_plugin_action(approval_record, plugin_id, action):
@@ -1911,6 +1989,16 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     "error": "approval_payload_mismatch",
                     "approval_id": approval_id,
                     "message": "Approval does not match this plugin action.",
+                    "governance": _plugin_governance(
+                        gate="approvals_gate",
+                        next_step="approve_exact_action",
+                        operator_hint="Approve this exact plugin action, not a different tool or payload.",
+                        action=action,
+                        risk_tier=risk_tier,
+                        required_trust=required_trust,
+                        current_trust=trust_level,
+                        approval_status=approval_status,
+                    ),
                     "meta": {
                         "action": action,
                         "risk_tier": risk_tier,

@@ -5,7 +5,7 @@ import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
-import type { PluginRef, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
+import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
 import type { OrbStatusSnapshot, SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
@@ -731,7 +731,7 @@ export default function App() {
                 </div>
 
                 {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
-                {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} /> : null}
+                {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} onOpenApprovals={openApprovalsPanel} /> : null}
                 {panel === "system" ? (
                   <SystemPanel
                     baseUrl={baseUrl}
@@ -772,7 +772,7 @@ export default function App() {
               </div>
 
               {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
-              {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} /> : null}
+              {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} onOpenApprovals={openApprovalsPanel} /> : null}
               {panel === "system" ? (
                 <SystemPanel
                   baseUrl={baseUrl}
@@ -1305,7 +1305,7 @@ function SystemPanel(props: {
   );
 }
 
-function PluginsPanel(props: { baseUrl: string }) {
+function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: string) => void }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new PluginBrowserClient(resolvedBaseUrl), [resolvedBaseUrl]);
 
@@ -1319,6 +1319,7 @@ function PluginsPanel(props: { baseUrl: string }) {
   const [runInput, setRunInput] = useState("{\"input\": \"hello\"}");
   const [runReason, setRunReason] = useState("requested");
   const [approvalId, setApprovalId] = useState("");
+  const [runResponse, setRunResponse] = useState<PluginRunResponse | null>(null);
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1423,6 +1424,18 @@ function PluginsPanel(props: { baseUrl: string }) {
     })();
   }, [selectedToolId, loadToolDetail]);
 
+  useEffect(() => {
+    setRunResponse(null);
+    setResult("");
+  }, [selectedPluginId, selectedToolId]);
+
+  const governanceTone = useMemo(() => {
+    const status = safeString(runResponse?.status).trim().toLowerCase();
+    if (["blocked", "denied", "error", "failed", "disabled"].includes(status)) return "error";
+    if (["pending", "needs_approval"].includes(status)) return "warn";
+    return "info";
+  }, [runResponse]);
+
   function parseRunInput(text: string): unknown {
     const trimmed = text.trim();
     if (!trimmed) return "";
@@ -1441,6 +1454,7 @@ function PluginsPanel(props: { baseUrl: string }) {
     }
     setBusy(true);
     setError(null);
+    setRunResponse(null);
     setResult("");
 
     try {
@@ -1466,6 +1480,7 @@ function PluginsPanel(props: { baseUrl: string }) {
   async function reloadRegistry() {
     setBusy(true);
     setError(null);
+    setRunResponse(null);
     try {
       const res = await client.reload();
       setResult(JSON.stringify(res, null, 2));
@@ -1481,6 +1496,7 @@ function PluginsPanel(props: { baseUrl: string }) {
   async function exportToolsCsv() {
     setBusy(true);
     setError(null);
+    setRunResponse(null);
     try {
       const exportParams: { plugin_id?: string } = {};
       if (selectedPluginId) exportParams.plugin_id = selectedPluginId;
@@ -1517,6 +1533,7 @@ function PluginsPanel(props: { baseUrl: string }) {
 
     setBusy(true);
     setError(null);
+    setRunResponse(null);
     try {
       const req: PluginToolRunRequest = {
         id: tool.id,
@@ -1529,6 +1546,7 @@ function PluginsPanel(props: { baseUrl: string }) {
 
       const res = await client.runTool(req);
       if (res.approval_id) setApprovalId(res.approval_id);
+      setRunResponse(res);
       setResult(JSON.stringify(res, null, 2));
       await refreshPlugins();
       await refreshTools(selectedPluginId);
@@ -1642,6 +1660,56 @@ function PluginsPanel(props: { baseUrl: string }) {
           {busy ? "Running." : "Run selected action"}
         </button>
       </div>
+
+      {runResponse ? (
+        <div
+          style={{
+            marginTop: 12,
+            border: `1px solid ${governanceTone === "error" ? THEME.errorBorder : THEME.panelBorder}`,
+            background: governanceTone === "error" ? THEME.errorBg : governanceTone === "warn" ? "#1f1a0b" : "#111819",
+            color: governanceTone === "error" ? "#ffaaaa" : governanceTone === "warn" ? "#f4d27a" : "#aee6df",
+            borderRadius: 12,
+            padding: 12,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Governance Outcome</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(runResponse.status || (runResponse.ok ? "ok" : "error"))}>
+                {runResponse.status || (runResponse.ok ? "ok" : "error")}
+              </span>
+              {runResponse.governance?.gate ? (
+                <span style={badgeStyle(runResponse.governance.gate)}>{runResponse.governance.gate}</span>
+              ) : null}
+            </div>
+          </div>
+          {runResponse.message ? <div style={{ fontSize: 12, marginTop: 8 }}>{runResponse.message}</div> : null}
+          {runResponse.governance?.operator_hint ? (
+            <div style={{ fontSize: 12, marginTop: 8 }}>{runResponse.governance.operator_hint}</div>
+          ) : null}
+          {runResponse.governance?.next_step ? (
+            <div style={{ fontSize: 11, marginTop: 8 }}>
+              Next step: <code>{runResponse.governance.next_step}</code>
+            </div>
+          ) : null}
+          {(runResponse.governance?.required_trust !== undefined || runResponse.governance?.current_trust !== undefined) ? (
+            <div style={{ fontSize: 11, marginTop: 6 }}>
+              trust <code>{String(runResponse.governance?.current_trust ?? "unknown")}</code> / required{" "}
+              <code>{String(runResponse.governance?.required_trust ?? "unknown")}</code>
+            </div>
+          ) : null}
+          {runResponse.approval_id ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 11 }}>
+                approval <code>{runResponse.approval_id}</code>
+              </div>
+              <button style={buttonStyle} onClick={() => props.onOpenApprovals(runResponse.approval_id)}>
+                Open approval
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {error ? (
         <div style={{ marginTop: 10, fontSize: 12, color: "#ffaaaa" }}>
