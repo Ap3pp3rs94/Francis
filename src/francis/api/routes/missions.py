@@ -65,6 +65,21 @@ class MissionPatchIn(BaseModel):
     meta: dict[str, Any] | None = None
 
 
+class MissionTickIn(BaseModel):
+    actor: str | None = None
+    note: str | None = None
+
+
+class MissionTickManyIn(MissionTickIn):
+    limit: int = 200
+
+
+class MissionDeadletterIn(BaseModel):
+    reason: str = "manual_deadletter"
+    actor: str | None = None
+    note: str | None = None
+
+
 @router.post("/create")
 def create_mission(payload: MissionCreateIn) -> dict[str, object]:
     try:
@@ -102,6 +117,26 @@ def list_missions(limit: int = 200, status: str | None = None) -> dict[str, obje
         return {"items": [_serialize_mission(record) for record in records], "total": len(records), "limit": safe_limit}
     except Exception as exc:
         return {"items": [], "total": 0, "limit": 0, "error": str(exc)}
+
+
+@router.post("/tick")
+def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
+    try:
+        safe_limit = max(1, min(int(payload.limit), 5000))
+        records, applied, errors = mission_store.tick_all_missions(
+            limit=safe_limit,
+            actor=_safe_str(payload.actor).strip() or None,
+            note=_safe_str(payload.note).strip() or None,
+        )
+        return {
+            "ok": not errors,
+            "items": [_serialize_mission(record) for record in records],
+            "total": len(records),
+            "applied": applied,
+            "errors": errors,
+        }
+    except Exception as exc:
+        return {"ok": False, "items": [], "total": 0, "applied": 0, "errors": [{"error": str(exc)}]}
 
 
 @router.get("/{mission_id}")
@@ -142,6 +177,49 @@ def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]
             "mission": _serialize_mission(record),
             "history": mission_store.read_history(mission_id),
             "message": "updated",
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/{mission_id}/tick")
+def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
+    try:
+        record, applied, err = mission_store.tick_mission(
+            mission_id,
+            actor=_safe_str(payload.actor).strip() or None,
+            note=_safe_str(payload.note).strip() or None,
+        )
+        if not record:
+            return {"ok": False, "applied": False, "error": err or "tick_failed"}
+        return {
+            "ok": True,
+            "applied": applied,
+            "mission": _serialize_mission(record),
+            "history": mission_store.read_history(mission_id),
+            "message": "ticked" if applied else "no_change",
+        }
+    except Exception as exc:
+        return {"ok": False, "applied": False, "error": str(exc)}
+
+
+@router.post("/{mission_id}/deadletter")
+def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[str, object]:
+    try:
+        record, err = mission_store.deadletter_mission(
+            mission_id,
+            payload.reason,
+            actor=_safe_str(payload.actor).strip() or None,
+            note=_safe_str(payload.note).strip() or None,
+        )
+        if not record:
+            return {"ok": False, "error": err or "deadletter_failed"}
+        return {
+            "ok": True,
+            "status": record.status.value,
+            "mission": _serialize_mission(record),
+            "history": mission_store.read_history(mission_id),
+            "message": "deadlettered",
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

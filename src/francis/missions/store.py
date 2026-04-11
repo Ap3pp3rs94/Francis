@@ -17,7 +17,10 @@ __all__ = [
     "MissionCreateRequest",
     "MissionRecord",
     "create_mission",
+    "deadletter_mission",
     "record_linked_task_transition",
+    "tick_all_missions",
+    "tick_mission",
     "read_mission",
     "list_missions",
     "read_history",
@@ -78,6 +81,19 @@ def _normalize_task_status(value: Any) -> str:
     return raw
 
 
+def _parse_ts(value: Any) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.timestamp()
+    except Exception:
+        return 0.0
+
+
 def _missions_dir(repo_root: Path | None = None) -> Path:
     if repo_root is not None:
         return repo_root.resolve() / "data" / "missions"
@@ -94,6 +110,16 @@ def _record_path(mission_id: str, repo_root: Path | None = None) -> Path:
 
 def _history_path(mission_id: str, repo_root: Path | None = None) -> Path:
     return _mission_dir(mission_id, repo_root) / "history.jsonl"
+
+
+def _tasks_dir(repo_root: Path | None = None) -> Path:
+    if repo_root is not None:
+        return repo_root.resolve() / "data" / "tasks"
+    return data_dir() / "tasks"
+
+
+def _task_record_path(task_id: str, repo_root: Path | None = None) -> Path:
+    return _tasks_dir(repo_root) / task_id / "record.json"
 
 
 def _safe_mkdir(path: Path) -> None:
@@ -141,6 +167,106 @@ def _normalize_task_ids(task_ids: list[str] | tuple[str, ...] | None) -> list[st
 
 def _new_mission_id() -> str:
     return f"msn_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}"
+
+
+def _read_json_dict(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[str, Any]:
+    task = _read_json_dict(_task_record_path(task_id, repo_root))
+    if not task:
+        return {}
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    payload = result.get("data") if isinstance(result.get("data"), dict) else {}
+    governance = payload.get("governance") if isinstance(payload.get("governance"), dict) else {}
+    updated_at = str(task.get("updated_at") or "")
+    created_at = str(task.get("created_at") or "")
+    return {
+        "task_id": str(task.get("task_id") or task_id).strip(),
+        "task_status": _normalize_task_status(task.get("status")),
+        "result_status": _normalize_task_status(payload.get("status")),
+        "status_reason": str(task.get("status_reason") or payload.get("error") or payload.get("message") or "").strip(),
+        "gate": str(governance.get("gate") or "").strip(),
+        "next_step": str(governance.get("next_step") or "").strip(),
+        "updated_at": updated_at,
+        "created_at": created_at,
+        "_sort_ts": _parse_ts(updated_at) or _parse_ts(created_at),
+    }
+
+
+def _latest_linked_snapshot(task_ids: list[str], repo_root: Path | None = None) -> dict[str, Any]:
+    snapshots = [_linked_task_snapshot(task_id, repo_root) for task_id in task_ids]
+    snapshots = [item for item in snapshots if item]
+    if not snapshots:
+        return {}
+    snapshots.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+    latest = dict(snapshots[0])
+    latest.pop("_sort_ts", None)
+    return latest
+
+
+def _derive_mission_status_from_tasks(task_ids: list[str], repo_root: Path | None = None) -> tuple[MissionStatus | None, dict[str, Any]]:
+    snapshots = [_linked_task_snapshot(task_id, repo_root) for task_id in task_ids]
+    snapshots = [item for item in snapshots if item]
+    if not snapshots:
+        return None, {}
+
+    blocked = [
+        item
+        for item in snapshots
+        if str(item.get("result_status") or "").strip().lower() in {"pending", "needs_approval", "blocked", "denied"}
+    ]
+    if blocked:
+        blocked.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        latest = dict(blocked[0])
+        latest.pop("_sort_ts", None)
+        return MissionStatus.BLOCKED, latest
+
+    running = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "running"]
+    if running:
+        running.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        latest = dict(running[0])
+        latest.pop("_sort_ts", None)
+        return MissionStatus.ACTIVE, latest
+
+    queued = [
+        item for item in snapshots if str(item.get("task_status") or "").strip().lower() in {"pending", "accepted"}
+    ]
+    if queued:
+        queued.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        latest = dict(queued[0])
+        latest.pop("_sort_ts", None)
+        return MissionStatus.QUEUED, latest
+
+    failed = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "failed"]
+    if failed:
+        failed.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        latest = dict(failed[0])
+        latest.pop("_sort_ts", None)
+        return MissionStatus.FAILED, latest
+
+    cancelled = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "cancelled"]
+    if cancelled and len(cancelled) == len(snapshots):
+        cancelled.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        latest = dict(cancelled[0])
+        latest.pop("_sort_ts", None)
+        return MissionStatus.CANCELLED, latest
+
+    completed = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "completed"]
+    if completed and len(completed) == len(snapshots):
+        completed.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        latest = dict(completed[0])
+        latest.pop("_sort_ts", None)
+        return MissionStatus.COMPLETED, latest
+
+    return None, _latest_linked_snapshot(task_ids, repo_root)
 
 
 @dataclass(frozen=True)
@@ -534,3 +660,118 @@ def record_linked_task_transition(
         return record, None
     except Exception as exc:
         return None, f"update_failed:{type(exc).__name__}"
+
+
+def tick_mission(
+    mission_id: str,
+    repo_root: Path | None = None,
+    *,
+    actor: str | None = None,
+    note: str | None = None,
+) -> tuple[MissionRecord | None, bool, str | None]:
+    record, err = read_mission(mission_id, repo_root)
+    if not record:
+        return None, False, err
+
+    derived_status, latest = _derive_mission_status_from_tasks(record.linked_task_ids, repo_root)
+    if not latest:
+        return record, False, None
+
+    meta_updates = {
+        "last_task_id": str(latest.get("task_id") or "").strip() or None,
+        "last_task_status": str(latest.get("task_status") or "").strip() or None,
+        "last_task_result_status": str(latest.get("result_status") or "").strip() or None,
+        "last_task_reason": str(latest.get("status_reason") or "").strip() or None,
+        "last_task_gate": str(latest.get("gate") or "").strip() or None,
+        "last_task_next_step": str(latest.get("next_step") or "").strip() or None,
+        "last_task_updated_at": str(latest.get("updated_at") or latest.get("created_at") or "").strip() or None,
+    }
+
+    status_changed = False
+    previous_status = record.status
+    if derived_status is not None and record.status not in _TERMINAL_STATUSES and derived_status != record.status:
+        record.status = derived_status
+        status_changed = True
+
+    record.meta = dict(record.meta)
+    meta_changed = False
+    for key, value in meta_updates.items():
+        if record.meta.get(key) != value:
+            record.meta[key] = value
+            meta_changed = True
+
+    if not status_changed and not meta_changed:
+        return record, False, None
+
+    record.updated_at = _now()
+
+    try:
+        _atomic_write_text(
+            _record_path(record.mission_id, repo_root),
+            json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False),
+        )
+        _append_history(
+            record.mission_id,
+            "mission_ticked",
+            {
+                "actor": str(actor or "").strip() or None,
+                "note": str(note or "").strip() or None,
+                "mission_status_before": previous_status.value,
+                "mission_status_after": record.status.value,
+                "latest_task_id": meta_updates["last_task_id"],
+                "latest_task_status": meta_updates["last_task_status"],
+                "latest_task_result_status": meta_updates["last_task_result_status"],
+                "latest_task_gate": meta_updates["last_task_gate"],
+                "latest_task_next_step": meta_updates["last_task_next_step"],
+                "latest_task_reason": meta_updates["last_task_reason"],
+            },
+            repo_root,
+        )
+        return record, True, None
+    except Exception as exc:
+        return None, False, f"update_failed:{type(exc).__name__}"
+
+
+def tick_all_missions(
+    repo_root: Path | None = None,
+    *,
+    limit: int = 200,
+    actor: str | None = None,
+    note: str | None = None,
+) -> tuple[list[MissionRecord], int, list[dict[str, Any]]]:
+    records: list[MissionRecord] = []
+    applied_count = 0
+    errors: list[dict[str, Any]] = []
+    for record in list_missions(repo_root, limit=limit):
+        updated, applied, err = tick_mission(record.mission_id, repo_root, actor=actor, note=note)
+        if updated:
+            records.append(updated)
+        if applied:
+            applied_count += 1
+        if err:
+            errors.append({"mission_id": record.mission_id, "error": err})
+    return records, applied_count, errors
+
+
+def deadletter_mission(
+    mission_id: str,
+    reason: str,
+    repo_root: Path | None = None,
+    *,
+    actor: str | None = None,
+    note: str | None = None,
+) -> tuple[MissionRecord | None, str | None]:
+    record, err = read_mission(mission_id, repo_root)
+    if not record:
+        return None, err
+    if record.status in {MissionStatus.COMPLETED, MissionStatus.CANCELLED, MissionStatus.DEADLETTERED}:
+        return None, "invalid_deadletter_source_status"
+    cleaned_reason = str(reason or "").strip() or "manual_deadletter"
+    return update_mission(
+        mission_id,
+        repo_root,
+        status=MissionStatus.DEADLETTERED.value,
+        deadletter_reason=cleaned_reason,
+        actor=actor,
+        note=note or "mission_deadlettered",
+    )

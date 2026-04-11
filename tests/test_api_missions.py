@@ -235,3 +235,154 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert transition_events
     assert transition_events[-1]["details"]["gate"] == "trust_gate"
     assert transition_events[-1]["details"]["mission_status_after"] == "blocked"
+
+
+def test_mission_tick_reconciles_pending_link_and_is_idempotent(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Reconcile mission from linked queued work",
+            "summary": "Tick should project the latest linked task into mission continuity.",
+            "requester_id": "test.missions.tick",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "queued mission tick",
+            "mission_id": mission_id,
+            "input": {"goal": "Create a queued linked operation"},
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    operation_id = str(created_body["operation_id"])
+
+    first_tick = client.post(
+        f"/missions/{mission_id}/tick",
+        json={"actor": "test.missions.tick", "note": "reconcile queued task"},
+    )
+    assert first_tick.status_code == 200
+    first_tick_body = first_tick.json()
+    assert first_tick_body["ok"] is True
+    assert first_tick_body["applied"] is True
+    assert first_tick_body["mission"]["status"] == "queued"
+    assert first_tick_body["mission"]["meta"]["last_task_id"] == operation_id
+    assert first_tick_body["mission"]["meta"]["last_task_status"] == "pending"
+    tick_events = [item for item in first_tick_body["history"] if item.get("event") == "mission_ticked"]
+    assert tick_events
+    assert tick_events[-1]["details"]["latest_task_status"] == "pending"
+
+    second_tick = client.post(
+        f"/missions/{mission_id}/tick",
+        json={"actor": "test.missions.tick", "note": "repeat reconcile"},
+    )
+    assert second_tick.status_code == 200
+    second_tick_body = second_tick.json()
+    assert second_tick_body["ok"] is True
+    assert second_tick_body["applied"] is False
+    second_tick_events = [item for item in second_tick_body["history"] if item.get("event") == "mission_ticked"]
+    assert len(second_tick_events) == len(tick_events)
+
+
+def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Deadletter a blocked mission",
+            "summary": "Governed mission should move cleanly into deadletter.",
+            "requester_id": "test.missions.deadletter",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "blocked for deadletter",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.missions.deadletter"})
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+
+    deadlettered = client.post(
+        f"/missions/{mission_id}/deadletter",
+        json={
+            "reason": "operator_abandoned_after_governance_hold",
+            "actor": "test.missions.deadletter",
+            "note": "Mission will not be retried.",
+        },
+    )
+    assert deadlettered.status_code == 200
+    deadlettered_body = deadlettered.json()
+    assert deadlettered_body["ok"] is True
+    assert deadlettered_body["mission"]["status"] == "deadlettered"
+    assert deadlettered_body["mission"]["deadletter_reason"] == "operator_abandoned_after_governance_hold"
+
+    history_events = [str(item.get("event")) for item in deadlettered_body["history"]]
+    assert "status_changed" in history_events
+    assert "continuity_updated" in history_events
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["status"] == "deadlettered"
+    assert fetched_body["mission"]["meta"]["last_task_result_status"] == "blocked"
+
+    ticked = client.post(f"/missions/{mission_id}/tick", json={"actor": "test.missions.deadletter"})
+    assert ticked.status_code == 200
+    ticked_body = ticked.json()
+    assert ticked_body["ok"] is True
+    assert ticked_body["applied"] is False
+    assert ticked_body["mission"]["status"] == "deadlettered"
