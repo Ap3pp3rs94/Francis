@@ -2302,7 +2302,9 @@ function SystemPanel(props: {
   if (leadMission) {
     const linkedTaskId = firstLinkedTaskId(leadMission);
     const missionDetail =
+      safeString(leadMission.last_task_next_step).trim() ||
       safeString(leadMission.next_step).trim() ||
+      safeString(leadMission.last_task_reason).trim() ||
       safeString(leadMission.summary).trim() ||
       safeString(leadMission.deadletter_reason).trim() ||
       "Mission continuity exists, but the next-step note is still blank.";
@@ -2907,10 +2909,28 @@ function SystemPanel(props: {
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                     next_step=<code>{mission.next_step || "unset"}</code>
                   </div>
+                  {mission.last_task_status || mission.last_task_result_status ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      latest_run=<code>{mission.last_task_status || "unknown"}</code>
+                      {mission.last_task_result_status ? (
+                        <>
+                          {" / "}result=<code>{mission.last_task_result_status}</code>
+                        </>
+                      ) : null}
+                      {mission.last_task_gate ? (
+                        <>
+                          {" / "}gate=<code>{mission.last_task_gate}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                     linked_tasks=<code>{String(mission.linked_task_count ?? mission.linked_task_ids?.length ?? 0)}</code>
                     {" / "}risk=<code>{mission.risk_tier || "unknown"}</code>
                   </div>
+                  {mission.last_task_reason ? (
+                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.last_task_reason}</div>
+                  ) : null}
                   {mission.deadletter_reason ? (
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.deadletter_reason}</div>
                   ) : null}

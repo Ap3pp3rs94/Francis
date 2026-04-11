@@ -17,6 +17,7 @@ __all__ = [
     "MissionCreateRequest",
     "MissionRecord",
     "create_mission",
+    "record_linked_task_transition",
     "read_mission",
     "list_missions",
     "read_history",
@@ -66,6 +67,15 @@ def _coerce_status(value: Any) -> MissionStatus:
     raw = str(value or MissionStatus.QUEUED.value).strip().lower()
     normalized = _STATUS_ALIASES.get(raw, MissionStatus.QUEUED.value)
     return MissionStatus(normalized)
+
+
+def _normalize_task_status(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw == "complete":
+        return "completed"
+    if raw == "canceled":
+        return "cancelled"
+    return raw
 
 
 def _missions_dir(repo_root: Path | None = None) -> Path:
@@ -436,3 +446,91 @@ def link_task(
         actor=actor,
         note=note,
     )
+
+
+def record_linked_task_transition(
+    mission_id: str,
+    task_id: str,
+    repo_root: Path | None = None,
+    *,
+    task_status: str,
+    result_status: str = "",
+    status_reason: str = "",
+    governance: dict[str, Any] | None = None,
+    actor: str | None = None,
+    note: str | None = None,
+) -> tuple[MissionRecord | None, str | None]:
+    record, err = read_mission(mission_id, repo_root)
+    if not record:
+        return None, err
+
+    governance_payload = dict(governance or {})
+    normalized_task_status = _normalize_task_status(task_status)
+    normalized_result_status = _normalize_task_status(result_status)
+    cleaned_task_id = str(task_id or "").strip()
+    if not cleaned_task_id:
+        return None, "task_id_required"
+
+    if cleaned_task_id not in record.linked_task_ids:
+        record.linked_task_ids.append(cleaned_task_id)
+        record.linked_task_ids = _normalize_task_ids(record.linked_task_ids)
+
+    previous_status = record.status
+    next_status = record.status
+    if normalized_result_status in {"pending", "needs_approval", "blocked", "denied"}:
+        next_status = MissionStatus.BLOCKED
+    elif normalized_task_status == "running":
+        next_status = MissionStatus.ACTIVE
+    elif normalized_task_status in {"pending", "accepted"}:
+        next_status = MissionStatus.QUEUED
+    elif len(record.linked_task_ids) <= 1:
+        if normalized_task_status == "completed":
+            next_status = MissionStatus.COMPLETED
+        elif normalized_task_status == "failed":
+            next_status = MissionStatus.FAILED
+        elif normalized_task_status == "cancelled":
+            next_status = MissionStatus.CANCELLED
+
+    record.meta = dict(record.meta)
+    record.meta.update(
+        {
+            "last_task_id": cleaned_task_id,
+            "last_task_status": normalized_task_status or None,
+            "last_task_result_status": normalized_result_status or None,
+            "last_task_reason": str(status_reason or "").strip() or None,
+            "last_task_gate": str(governance_payload.get("gate") or "").strip() or None,
+            "last_task_next_step": str(governance_payload.get("next_step") or "").strip() or None,
+            "last_task_updated_at": _now(),
+        }
+    )
+
+    if record.status not in _TERMINAL_STATUSES and next_status != record.status:
+        record.status = next_status
+
+    record.updated_at = _now()
+
+    try:
+        _atomic_write_text(
+            _record_path(record.mission_id, repo_root),
+            json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False),
+        )
+        _append_history(
+            record.mission_id,
+            "linked_task_transition",
+            {
+                "task_id": cleaned_task_id,
+                "task_status": normalized_task_status or None,
+                "result_status": normalized_result_status or None,
+                "status_reason": str(status_reason or "").strip() or None,
+                "gate": str(governance_payload.get("gate") or "").strip() or None,
+                "next_step": str(governance_payload.get("next_step") or "").strip() or None,
+                "actor": str(actor or "").strip() or None,
+                "note": str(note or "").strip() or None,
+                "mission_status_before": previous_status.value,
+                "mission_status_after": record.status.value,
+            },
+            repo_root,
+        )
+        return record, None
+    except Exception as exc:
+        return None, f"update_failed:{type(exc).__name__}"

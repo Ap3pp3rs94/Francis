@@ -167,6 +167,13 @@ export type WorldStateMissionSummary = {
   linked_task_ids?: string[];
   linked_task_count?: number;
   deadletter_reason?: string;
+  last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_reason?: string;
+  last_task_gate?: string;
+  last_task_next_step?: string;
+  last_task_updated_at?: string;
   created_at?: string;
   updated_at?: string;
   terminal?: boolean;
@@ -833,6 +840,13 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
           : [],
         linked_task_count: safeNumber(item.linked_task_count, 0),
         deadletter_reason: safeString(item.deadletter_reason, ""),
+        last_task_id: safeString(item.last_task_id, ""),
+        last_task_status: safeString(item.last_task_status, ""),
+        last_task_result_status: safeString(item.last_task_result_status, ""),
+        last_task_reason: safeString(item.last_task_reason, ""),
+        last_task_gate: safeString(item.last_task_gate, ""),
+        last_task_next_step: safeString(item.last_task_next_step, ""),
+        last_task_updated_at: safeString(item.last_task_updated_at, ""),
         created_at: safeString(item.created_at, ""),
         updated_at: safeString(item.updated_at, ""),
         terminal: safeBoolean(item.terminal, false),

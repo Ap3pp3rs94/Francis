@@ -17,6 +17,7 @@ from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
 from francis.agent.delegation import DelegationRequest
 from francis.kernel.paths import data_dir
+from francis.missions import store as mission_store
 from francis.workers.runner import run_workers
 
 router = APIRouter()
@@ -60,6 +61,7 @@ class OperationCreateIn(BaseModel):
     reason: str = "requested"
     domain: str | None = None
     actor: str | None = None
+    mission_id: str | None = None
     idempotency_key: str | None = None
     input: dict[str, Any] = Field(default_factory=dict)
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -226,6 +228,19 @@ def _result_approval_id(task: dict[str, Any]) -> str:
     return _safe_str(payload.get("approval_id")).strip()
 
 
+def _task_mission_id(task: dict[str, Any]) -> str:
+    inputs = task.get("inputs")
+    if not isinstance(inputs, dict):
+        return ""
+    mission_id = _safe_str(inputs.get("mission_id")).strip()
+    if mission_id:
+        return mission_id
+    meta = inputs.get("meta")
+    if isinstance(meta, dict):
+        return _safe_str(meta.get("mission_id")).strip()
+    return ""
+
+
 def _operation_status_for_task(task: dict[str, Any], raw_status: str) -> str:
     result_status = _result_status(task)
     if result_status in {"blocked", "denied"}:
@@ -298,6 +313,18 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
                 "reason": updated.get("status_reason"),
             },
         )
+    mission_id = _task_mission_id(updated)
+    if mission_id:
+        mission_store.record_linked_task_transition(
+            mission_id,
+            task_id,
+            task_status=_safe_str(updated.get("status")).strip(),
+            result_status=result_status,
+            status_reason=_safe_str(updated.get("status_reason")).strip(),
+            governance=governance,
+            actor="api.operations",
+            note="governance_hold",
+        )
     return updated
 
 
@@ -320,6 +347,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         error = error or None
     result_message = _safe_str((result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else "")
     orb_plane = _operation_plane(raw_status, result_status, governance)
+    mission_id = _task_mission_id(task)
 
     return {
         "id": task_id,
@@ -346,6 +374,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
             "result_status": result_status or None,
             "result_message": result_message or None,
             "approval_id": approval_id or None,
+            "mission_id": mission_id or None,
             "governance": governance or None,
             "orb_plane": orb_plane,
         },
@@ -617,20 +646,29 @@ def create_operation(payload: OperationCreateIn) -> dict[str, object]:
 
         requester_id = _safe_str(payload.actor).strip() or "api"
         objective = _safe_str(payload.objective).strip() or _safe_str(payload.reason).strip() or payload.action.strip()
+        mission_id = _safe_str(payload.mission_id).strip()
+
+        if mission_id:
+            linked_mission, mission_err = mission_store.read_mission(mission_id)
+            if not linked_mission:
+                return {"ok": False, "error": mission_err or "invalid_mission_id"}
 
         inputs = dict(payload.input or {})
         if payload.domain and "domain" not in inputs:
             inputs["domain"] = payload.domain
         if payload.idempotency_key and "idempotency_key" not in inputs:
             inputs["idempotency_key"] = payload.idempotency_key
+        existing_meta = inputs.get("meta")
+        merged_meta = dict(existing_meta) if isinstance(existing_meta, dict) else {}
         if payload.meta:
-            existing_meta = inputs.get("meta")
-            if isinstance(existing_meta, dict):
-                merged = dict(existing_meta)
-                merged.update(payload.meta)
-                inputs["meta"] = merged
-            else:
-                inputs["meta"] = dict(payload.meta)
+            merged_meta.update(payload.meta)
+        if mission_id:
+            inputs["mission_id"] = mission_id
+            merged_meta["mission_id"] = mission_id
+        if merged_meta:
+            inputs["meta"] = merged_meta
+        else:
+            inputs.pop("meta", None)
 
         record, err = delegation_store.create_delegation(
             DelegationRequest(
@@ -645,13 +683,29 @@ def create_operation(payload: OperationCreateIn) -> dict[str, object]:
         if not record:
             return {"ok": False, "error": err or "create_failed"}
 
+        mission_linked = True
+        mission_link_error = ""
+        if mission_id:
+            _, mission_link_err = mission_store.link_task(
+                mission_id,
+                record.task_id,
+                actor=requester_id,
+                note="operation_created",
+            )
+            if mission_link_err:
+                mission_linked = False
+                mission_link_error = mission_link_err
+
         operation = _task_to_operation(record.to_json_dict())
         return {
-            "ok": True,
+            "ok": mission_linked,
             "operation_id": record.task_id,
             "status": operation.get("status", "queued"),
             "operation": operation,
-            "message": "created",
+            "message": "created" if mission_linked else "created_with_mission_link_error",
+            "mission_id": mission_id or None,
+            "mission_linked": mission_linked,
+            "mission_link_error": mission_link_error or None,
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

@@ -13,6 +13,7 @@ from typing import Any, Callable
 from francis.agent import delegation as delegation_store
 from francis.deliberation.planner import PlanStateMachine, create_plan, plan_from_dict, revise_plan
 from francis.kernel.paths import data_dir
+from francis.missions import store as mission_store
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,39 @@ def _append_task_audit(task_id: str, event: str, details: dict[str, Any]) -> Non
             append(task_id, event, details)
     except Exception:
         pass
+
+
+def _task_mission_id(task: dict[str, Any]) -> str:
+    inputs = task.get("inputs")
+    if not isinstance(inputs, dict):
+        return ""
+    mission_id = _safe_str(inputs.get("mission_id")).strip()
+    if mission_id:
+        return mission_id
+    meta = inputs.get("meta")
+    if isinstance(meta, dict):
+        return _safe_str(meta.get("mission_id")).strip()
+    return ""
+
+
+def _sync_task_transition_to_mission(task: dict[str, Any], *, note: str) -> None:
+    mission_id = _task_mission_id(task)
+    if not mission_id:
+        return
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    payload = result.get("data") if isinstance(result.get("data"), dict) else {}
+    result_status = _safe_str(payload.get("status")).strip().lower()
+    governance = payload.get("governance") if isinstance(payload.get("governance"), dict) else {}
+    mission_store.record_linked_task_transition(
+        mission_id,
+        _safe_str(task.get("task_id")).strip(),
+        task_status=_safe_str(task.get("status")).strip(),
+        result_status=result_status,
+        status_reason=_safe_str(task.get("status_reason")).strip(),
+        governance=governance,
+        actor=_safe_str(task.get("assigned_to")).strip() or "executor",
+        note=note,
+    )
 
 
 def _register_capabilities() -> None:
@@ -691,6 +725,7 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
     task["status_reason"] = None
     save_task(task)
     _append_task_audit(task_id, "status_updated", {"to": "running", "assigned_to": worker_id, "reason": None})
+    _sync_task_transition_to_mission(task, note="task_started")
 
     ok = True
     payload: dict[str, Any] | None = None
@@ -732,6 +767,11 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
     }
     save_task(task)
     _append_task_audit(task_id, "status_updated", {"to": task["status"], "assigned_to": worker_id, "reason": task["status_reason"]})
+    payload_status = ""
+    if isinstance(payload, dict):
+        payload_status = _safe_str(payload.get("status")).strip().lower()
+    if payload_status not in {"pending", "needs_approval", "blocked", "denied"}:
+        _sync_task_transition_to_mission(task, note="task_finished")
     return task
 
 

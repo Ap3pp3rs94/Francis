@@ -197,6 +197,7 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
     recent: list[dict[str, Any]] = []
     for record in mission_store.list_missions(limit=10_000):
         status = str(record.status.value or "").strip().lower() or "queued"
+        meta = dict(record.meta) if isinstance(record.meta, dict) else {}
         if status in status_counts:
             status_counts[status] += 1
         else:
@@ -214,6 +215,13 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
                 "linked_task_ids": list(record.linked_task_ids),
                 "linked_task_count": len(record.linked_task_ids),
                 "deadletter_reason": record.deadletter_reason,
+                "last_task_id": str(meta.get("last_task_id") or "").strip(),
+                "last_task_status": str(meta.get("last_task_status") or "").strip(),
+                "last_task_result_status": str(meta.get("last_task_result_status") or "").strip(),
+                "last_task_reason": str(meta.get("last_task_reason") or "").strip(),
+                "last_task_gate": str(meta.get("last_task_gate") or "").strip(),
+                "last_task_next_step": str(meta.get("last_task_next_step") or "").strip(),
+                "last_task_updated_at": str(meta.get("last_task_updated_at") or "").strip(),
                 "created_at": record.created_at,
                 "updated_at": record.updated_at,
                 "terminal": status in _TERMINAL_MISSION_STATUSES,
