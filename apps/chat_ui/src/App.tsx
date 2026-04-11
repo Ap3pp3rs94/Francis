@@ -148,6 +148,16 @@ function summaryCardStyle(): React.CSSProperties {
   };
 }
 
+function prettyData(value: unknown): string {
+  if (value === undefined) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function loadSettings(): UiSettings {
   try {
     const raw = localStorage.getItem("francis_ui_settings");
@@ -476,6 +486,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<TabKey>("approvals");
+  const [focusedApprovalId, setFocusedApprovalId] = useState("");
   const [focusedOperationId, setFocusedOperationId] = useState("");
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [baseUrl, setBaseUrl] = useState(() => {
@@ -590,7 +601,8 @@ export default function App() {
     setActiveId(s.id);
   }, []);
 
-  const openApprovalsPanel = useCallback(() => {
+  const openApprovalsPanel = useCallback((approvalId?: string) => {
+    setFocusedApprovalId(approvalId ? approvalId : "");
     setPanel("approvals");
   }, []);
 
@@ -718,7 +730,7 @@ export default function App() {
                   ))}
                 </div>
 
-                {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} /> : null}
+                {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
                 {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} /> : null}
                 {panel === "system" ? (
                   <SystemPanel
@@ -759,7 +771,7 @@ export default function App() {
                 ))}
               </div>
 
-              {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} /> : null}
+              {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
               {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} /> : null}
               {panel === "system" ? (
                 <SystemPanel
@@ -777,11 +789,12 @@ export default function App() {
     </div>
   );
 }
-function ApprovalsPanel(props: { baseUrl: string }) {
+function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new ApprovalsClient(resolvedBaseUrl), [resolvedBaseUrl]);
 
   const [items, setItems] = useState<ApprovalItem[]>([]);
+  const [selectedApprovalId, setSelectedApprovalId] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [decisionBusy, setDecisionBusy] = useState<Record<string, boolean>>({});
@@ -792,7 +805,15 @@ function ApprovalsPanel(props: { baseUrl: string }) {
     setLoadError(null);
     try {
       const res = await client.list({ status: "pending", limit: 50 });
-      setItems(res.items ?? []);
+      const nextItems = res.items ?? [];
+      setItems(nextItems);
+      setSelectedApprovalId((prev) => {
+        if (props.focusApprovalId && nextItems.some((item) => item.id === props.focusApprovalId)) {
+          return props.focusApprovalId;
+        }
+        if (prev && nextItems.some((item) => item.id === prev)) return prev;
+        return nextItems[0]?.id ?? "";
+      });
     } catch (err) {
       if (err instanceof ApprovalsApiError) {
         const detail = err.status ? `HTTP ${err.status}` : "request failed";
@@ -805,11 +826,16 @@ function ApprovalsPanel(props: { baseUrl: string }) {
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, props.focusApprovalId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!props.focusApprovalId) return;
+    setSelectedApprovalId(props.focusApprovalId);
+  }, [props.focusApprovalId]);
 
   async function performDecision(id: string, action: string) {
     setDecisionError((prev) => ({ ...prev, [id]: null }));
@@ -829,6 +855,8 @@ function ApprovalsPanel(props: { baseUrl: string }) {
       setDecisionBusy((prev) => ({ ...prev, [id]: false }));
     }
   }
+
+  const selectedApproval = items.find((item) => item.id === selectedApprovalId) ?? items[0] ?? null;
 
   return (
     <section style={panelStyle}>
@@ -853,22 +881,80 @@ function ApprovalsPanel(props: { baseUrl: string }) {
         </div>
       ) : null}
 
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Selected Approval</div>
+        {!selectedApproval ? (
+          <div style={{ marginTop: 8, fontSize: 12, color: THEME.muted }}>No approval selected.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{selectedApproval.action || "(unknown action)"}</div>
+              <span style={badgeStyle(selectedApproval.status || "pending")}>{selectedApproval.status || "pending"}</span>
+            </div>
+            <div style={{ fontSize: 11, color: THEME.muted }}>
+              <code>{selectedApproval.id}</code>
+            </div>
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              {selectedApproval.reason || "No reason provided."}
+            </div>
+            <div style={{ fontSize: 12 }}>
+              Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
+            </div>
+            {selectedApproval.payload !== undefined ? (
+              <pre
+                style={{
+                  margin: 0,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${THEME.panelBorder}`,
+                  background: "#0d0d0d",
+                  whiteSpace: "pre-wrap",
+                  fontSize: 11,
+                  maxHeight: 220,
+                  overflow: "auto",
+                }}
+              >
+{prettyData(selectedApproval.payload)}
+              </pre>
+            ) : null}
+          </div>
+        )}
+      </div>
+
       <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10, maxHeight: 300, overflow: "auto" }}>
         {loading && items.length === 0 ? <i>Loading approvals.</i> : null}
         {!loading && items.length === 0 ? <i>No approvals found.</i> : null}
         {items.map((a) => {
           const busy = Boolean(decisionBusy[a.id]);
           const err = decisionError[a.id];
+          const selected = a.id === selectedApproval?.id;
           return (
-            <div key={a.id} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 12, padding: 10 }}>
-              <div style={{ fontWeight: 600 }}>{a.action || "(unknown action)"}</div>
+            <div
+              key={a.id}
+              style={{
+                border: selected ? `1px solid ${THEME.text}` : `1px solid ${THEME.panelBorder}`,
+                borderRadius: 12,
+                padding: 10,
+                background: selected ? THEME.buttonActive : "transparent",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontWeight: 600 }}>{a.action || "(unknown action)"}</div>
+                <span style={badgeStyle(a.status || "pending")}>{a.status || "pending"}</span>
+              </div>
               <div style={{ fontSize: 12, color: THEME.muted, marginTop: 4 }}>{a.reason || "No reason provided."}</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                <code>{a.id}</code>
+              </div>
               {err ? (
                 <div style={{ marginTop: 6, fontSize: 12, color: "#ffaaaa" }}>
                   <b>Decision error:</b> {err}
                 </div>
               ) : null}
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                <button style={buttonStyle} onClick={() => setSelectedApprovalId(a.id)}>
+                  Inspect
+                </button>
                 <button style={buttonStyle} disabled={busy} onClick={() => void performDecision(a.id, "approve")}>
                   Approve
                 </button>
@@ -889,7 +975,7 @@ function ApprovalsPanel(props: { baseUrl: string }) {
 
 function SystemPanel(props: {
   baseUrl: string;
-  onOpenApprovals: () => void;
+  onOpenApprovals: (approvalId?: string) => void;
   onOpenOperation: (operationId: string) => void;
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
@@ -1048,7 +1134,7 @@ function SystemPanel(props: {
       <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Pending Approvals</div>
-          <button style={buttonStyle} onClick={props.onOpenApprovals}>
+          <button style={buttonStyle} onClick={() => props.onOpenApprovals()}>
             Open approvals
           </button>
         </div>
@@ -1070,7 +1156,7 @@ function SystemPanel(props: {
                   <code>{item.id}</code>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-                  <button style={buttonStyle} onClick={props.onOpenApprovals}>
+                  <button style={buttonStyle} onClick={() => props.onOpenApprovals(item.id)}>
                     Review
                   </button>
                 </div>
