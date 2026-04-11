@@ -19,7 +19,9 @@ __all__ = [
     "create_mission",
     "deadletter_mission",
     "deadletter_queue_items",
+    "mission_queue_item",
     "mission_queue_items",
+    "record_advance_receipt",
     "record_linked_task_transition",
     "run_queue_once",
     "tick_all_missions",
@@ -348,6 +350,16 @@ def _queue_item(record: "MissionRecord") -> dict[str, Any]:
         "deadletter_reason": record.deadletter_reason,
         "updated_at": record.updated_at,
     }
+
+
+def mission_queue_item(
+    mission_id: str,
+    repo_root: Path | None = None,
+) -> tuple[MissionRecord | None, dict[str, Any] | None, str | None]:
+    record, err = read_mission(mission_id, repo_root)
+    if not record:
+        return None, None, err
+    return record, _queue_item(record), None
 
 
 @dataclass(frozen=True)
@@ -890,6 +902,63 @@ def run_queue_once(
         "counts": counts,
         "processed": len(records),
     }
+
+
+def record_advance_receipt(
+    mission_id: str,
+    repo_root: Path | None = None,
+    *,
+    action: str,
+    outcome: str,
+    actor: str | None = None,
+    note: str | None = None,
+    operation_id: str = "",
+    operation_status: str = "",
+    message: str = "",
+    applied: bool = False,
+) -> tuple[MissionRecord | None, str | None]:
+    record, err = read_mission(mission_id, repo_root)
+    if not record:
+        return None, err
+
+    record.meta = dict(record.meta)
+    record.meta.update(
+        {
+            "last_advance_action": str(action or "").strip() or None,
+            "last_advance_outcome": str(outcome or "").strip() or None,
+            "last_advance_operation_id": str(operation_id or "").strip() or None,
+            "last_advance_operation_status": str(operation_status or "").strip() or None,
+            "last_advance_message": str(message or "").strip() or None,
+            "last_advance_actor": str(actor or "").strip() or None,
+            "last_advance_applied": bool(applied),
+            "last_advance_at": _now(),
+        }
+    )
+    record.updated_at = _now()
+
+    try:
+        _atomic_write_text(
+            _record_path(record.mission_id, repo_root),
+            json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False),
+        )
+        _append_history(
+            record.mission_id,
+            "advance_receipt",
+            {
+                "action": str(action or "").strip() or None,
+                "outcome": str(outcome or "").strip() or None,
+                "actor": str(actor or "").strip() or None,
+                "note": str(note or "").strip() or None,
+                "operation_id": str(operation_id or "").strip() or None,
+                "operation_status": str(operation_status or "").strip() or None,
+                "message": str(message or "").strip() or None,
+                "applied": bool(applied),
+            },
+            repo_root,
+        )
+        return record, None
+    except Exception as exc:
+        return None, f"update_failed:{type(exc).__name__}"
 
 
 def deadletter_mission(

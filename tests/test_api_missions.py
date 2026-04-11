@@ -472,3 +472,176 @@ def test_mission_run_once_surfaces_queue_actions(monkeypatch, tmp_path: Path) ->
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "create_first_operation"
     assert ready_item["linked_task_count"] == 0
+
+
+def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Build the first mission plan",
+            "summary": "Mission needs its first linked operation.",
+            "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.missions.advance", "note": "spawn first linked run"},
+    )
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is True
+    assert advanced_body["applied"] is True
+    assert advanced_body["action"] == "create_first_operation"
+    operation_id = str(advanced_body["operation_id"])
+    assert operation_id
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["linked_task_ids"] == [operation_id]
+    assert fetched_body["mission"]["meta"]["last_advance_action"] == "create_first_operation"
+    assert fetched_body["mission"]["meta"]["last_advance_operation_id"] == operation_id
+    history_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
+    assert history_events
+    assert history_events[-1]["details"]["applied"] is True
+
+
+def test_mission_advance_runs_linked_queued_operation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Advance a queued linked operation",
+            "summary": "Mission runner should execute the queued linked task.",
+            "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "advance linked run",
+            "mission_id": mission_id,
+            "input": {"goal": "Create a linked queued plan"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.missions.advance", "worker_id": "test.missions.advance"},
+    )
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is True
+    assert advanced_body["applied"] is True
+    assert advanced_body["action"] == "run_linked_operation"
+    assert advanced_body["operation_id"] == operation_id
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["status"] == "completed"
+    assert fetched_body["mission"]["meta"]["last_advance_action"] == "run_linked_operation"
+    advance_events = [item for item in fetched_body["history"] if item.get("event") == "advance_receipt"]
+    assert advance_events
+    assert advance_events[-1]["details"]["operation_id"] == operation_id
+
+
+def test_mission_advance_respects_governance_blockers(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission should not auto-advance",
+            "summary": "Mission runner must not bypass governance.",
+            "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "blocked advance",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.missions.advance"})
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.missions.advance"},
+    )
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is True
+    assert advanced_body["applied"] is False
+    assert advanced_body["action"] == "raise_trust_or_reduce_risk"
+    assert advanced_body["operation_id"] == operation_id
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["status"] == "blocked"
+    assert fetched_body["mission"]["meta"]["last_advance_outcome"] == "requires_operator"

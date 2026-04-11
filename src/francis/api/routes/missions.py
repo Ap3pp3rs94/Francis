@@ -78,6 +78,10 @@ class MissionRunOnceIn(MissionTickIn):
     limit: int = 50
 
 
+class MissionAdvanceIn(MissionTickIn):
+    worker_id: str | None = None
+
+
 class MissionDeadletterIn(BaseModel):
     reason: str = "manual_deadletter"
     actor: str | None = None
@@ -265,3 +269,134 @@ def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[st
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
+
+@router.post("/{mission_id}/advance")
+def advance_mission(mission_id: str, payload: MissionAdvanceIn) -> dict[str, object]:
+    try:
+        actor = _safe_str(payload.actor).strip() or "missions.runner"
+        note = _safe_str(payload.note).strip() or "mission_advance"
+        worker_id = _safe_str(payload.worker_id).strip() or actor
+
+        record, _, tick_err = mission_store.tick_mission(
+            mission_id,
+            actor=actor,
+            note="advance_preflight",
+        )
+        if not record and tick_err:
+            return {"ok": False, "applied": False, "error": tick_err}
+
+        record, queue_item, queue_err = mission_store.mission_queue_item(mission_id)
+        if not record or not queue_item:
+            return {"ok": False, "applied": False, "error": queue_err or "not_found"}
+
+        action = _safe_str(queue_item.get("recommended_action")).strip() or "review_mission"
+        action_target_id = _safe_str(queue_item.get("action_target_id")).strip()
+        operator_hint = _safe_str(queue_item.get("operator_hint")).strip()
+
+        if action == "create_first_operation":
+            from francis.api.routes import operations as operations_routes
+
+            created = operations_routes.create_operation(
+                operations_routes.OperationCreateIn(
+                    action="plan.create",
+                    reason=f"mission.advance:{mission_id}",
+                    actor=actor,
+                    mission_id=mission_id,
+                    objective=record.objective,
+                    input={
+                        "goal": record.objective,
+                        "constraints": {
+                            "mission_id": mission_id,
+                            "summary": record.summary,
+                            "next_step": record.next_step,
+                        },
+                    },
+                )
+            )
+            operation_id = _safe_str(created.get("operation_id")).strip()
+            operation_status = _safe_str(created.get("status")).strip()
+            message = _safe_str(created.get("message")).strip() or "operation_created"
+            mission_store.tick_mission(mission_id, actor=actor, note="advance_post_create")
+            updated_record, receipt_err = mission_store.record_advance_receipt(
+                mission_id,
+                action=action,
+                outcome="applied" if bool(created.get("ok")) else "error",
+                actor=actor,
+                note=note,
+                operation_id=operation_id,
+                operation_status=operation_status,
+                message=message,
+                applied=bool(created.get("ok")),
+            )
+            if receipt_err:
+                return {"ok": False, "applied": False, "error": receipt_err}
+            return {
+                "ok": bool(created.get("ok")),
+                "applied": bool(created.get("ok")),
+                "action": action,
+                "mission": _serialize_mission(updated_record),
+                "operation": created.get("operation"),
+                "operation_id": operation_id or None,
+                "status": operation_status or updated_record.status.value,
+                "message": message,
+            }
+
+        if action == "run_linked_operation" and action_target_id:
+            from francis.api.routes import operations as operations_routes
+
+            run_result = operations_routes.run_operation(
+                action_target_id,
+                operations_routes.OperationRunIn(worker_id=worker_id),
+            )
+            mission_store.tick_mission(mission_id, actor=actor, note="advance_post_run")
+            operation_status = _safe_str(run_result.get("status")).strip()
+            message = _safe_str(run_result.get("message")).strip() or "operation_run"
+            updated_record, receipt_err = mission_store.record_advance_receipt(
+                mission_id,
+                action=action,
+                outcome=operation_status or ("applied" if bool(run_result.get("ok")) else "error"),
+                actor=actor,
+                note=note,
+                operation_id=action_target_id,
+                operation_status=operation_status,
+                message=message,
+                applied=bool(run_result.get("ok")),
+            )
+            if receipt_err:
+                return {"ok": False, "applied": False, "error": receipt_err}
+            return {
+                "ok": bool(run_result.get("ok")),
+                "applied": bool(run_result.get("ok")),
+                "action": action,
+                "mission": _serialize_mission(updated_record),
+                "operation": run_result.get("operation"),
+                "operation_id": action_target_id,
+                "status": operation_status or updated_record.status.value,
+                "message": message,
+            }
+
+        updated_record, receipt_err = mission_store.record_advance_receipt(
+            mission_id,
+            action=action,
+            outcome="requires_operator",
+            actor=actor,
+            note=note,
+            operation_id=action_target_id,
+            operation_status=_safe_str(queue_item.get("last_task_status")).strip(),
+            message=operator_hint or "Mission cannot be advanced automatically from the current queue state.",
+            applied=False,
+        )
+        if receipt_err:
+            return {"ok": False, "applied": False, "error": receipt_err}
+        return {
+            "ok": True,
+            "applied": False,
+            "action": action,
+            "mission": _serialize_mission(updated_record),
+            "operation_id": action_target_id or None,
+            "status": updated_record.status.value,
+            "message": operator_hint or "Mission requires operator intervention.",
+        }
+    except Exception as exc:
+        return {"ok": False, "applied": False, "error": str(exc)}
