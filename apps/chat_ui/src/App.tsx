@@ -788,6 +788,112 @@ function CommandPalette(props: {
   );
 }
 
+function ResidentHud(props: {
+  mode: OperatorModeSnapshot | null;
+  panel: TabKey;
+  paletteOpen: boolean;
+  isNarrow: boolean;
+  onTogglePalette: () => void;
+  onOpenApprovals: () => void;
+  onOpenOperations: () => void;
+  onOpenOrb: () => void;
+  onNewChat: () => void;
+}) {
+  const environment = props.mode?.environment;
+  const controlMode = props.mode?.control_mode;
+  const backlog = props.mode?.backlog;
+  const pendingApprovals = safeNumber(backlog?.pending_approvals, 0);
+  const blockedTasks = safeNumber(backlog?.blocked_tasks, 0);
+  const runningTasks = safeNumber(backlog?.running_tasks, 0);
+  const approvalPendingTasks = safeNumber(backlog?.approval_pending_tasks, 0);
+  const controlModeId = safeString(controlMode?.id).trim().toLowerCase();
+  const tone =
+    controlModeId === "pilot"
+      ? { bg: "rgba(36, 22, 10, 0.94)", border: "#7a541b", color: "#ffd38a" }
+      : controlModeId === "away"
+        ? { bg: "rgba(16, 33, 42, 0.94)", border: "#2b5a74", color: "#b7e9ff" }
+        : controlModeId === "observe"
+          ? { bg: "rgba(20, 20, 20, 0.94)", border: "#4c4c4c", color: "#d8d8d8" }
+          : { bg: "rgba(16, 24, 18, 0.94)", border: "#244d31", color: "#9de2ad" };
+
+  const shellStyle: React.CSSProperties = props.isNarrow
+    ? {
+        position: "fixed",
+        left: 14,
+        right: 14,
+        bottom: 14,
+        zIndex: 35,
+      }
+    : {
+        position: "fixed",
+        right: 18,
+        bottom: 18,
+        width: 300,
+        zIndex: 35,
+      };
+
+  return (
+    <aside
+      style={{
+        ...shellStyle,
+        borderRadius: 18,
+        border: `1px solid ${tone.border}`,
+        background: tone.bg,
+        boxShadow: "0 22px 60px rgba(0, 0, 0, 0.42)",
+        backdropFilter: "blur(14px)",
+        padding: 12,
+        display: "grid",
+        gap: 10,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: THEME.muted }}>HUD</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: tone.color }}>
+            {environment?.label || environment?.id || "Francis"} / {controlMode?.label || controlMode?.id || "mode"}
+          </div>
+        </div>
+        <span style={badgeStyle(props.panel)}>{props.panel}</span>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <span style={badgeStyle("approvals")}>approvals {pendingApprovals}</span>
+        <span style={badgeStyle("blocked")}>blocked {blockedTasks}</span>
+        <span style={badgeStyle("running")}>running {runningTasks}</span>
+        <span style={badgeStyle("needs_approval")}>awaiting {approvalPendingTasks}</span>
+      </div>
+
+      <div style={{ fontSize: 11, color: THEME.muted }}>
+        {controlMode?.summary || "Resident operator HUD active."}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: props.isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
+          gap: 8,
+        }}
+      >
+        <button style={buttonStyle} onClick={props.onTogglePalette}>
+          {props.paletteOpen ? "Close" : "Summon"}
+        </button>
+        <button style={buttonStyle} onClick={props.onOpenApprovals}>
+          Approvals
+        </button>
+        <button style={buttonStyle} onClick={props.onOpenOperations}>
+          Ops
+        </button>
+        <button style={buttonStyle} onClick={props.onOpenOrb}>
+          ORB
+        </button>
+        <button style={buttonStyle} onClick={props.onNewChat}>
+          New chat
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 export default function App() {
   const [settings, setSettings] = useState<UiSettings>(() => loadSettings());
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
@@ -944,6 +1050,11 @@ export default function App() {
 
   const openOrbPanel = useCallback(() => {
     setPanel("system");
+  }, []);
+
+  const togglePalette = useCallback(() => {
+    setPaletteQuery("");
+    setPaletteOpen((prev) => !prev);
   }, []);
 
   useEffect(() => {
@@ -1128,6 +1239,7 @@ export default function App() {
       const normalizedKey = event.key.toLowerCase();
       if ((event.metaKey || event.ctrlKey) && normalizedKey === "k") {
         event.preventDefault();
+        setPaletteQuery("");
         setPaletteOpen((prev) => !prev);
         return;
       }
@@ -1244,7 +1356,7 @@ export default function App() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button style={buttonStyle} onClick={() => setPaletteOpen(true)}>
+              <button style={buttonStyle} onClick={togglePalette}>
                 Command
               </button>
               <span style={{ fontSize: 12, color: THEME.muted }}>API</span>
@@ -1384,6 +1496,17 @@ export default function App() {
         commands={paletteCommands}
         onQueryChange={setPaletteQuery}
         onClose={() => setPaletteOpen(false)}
+      />
+      <ResidentHud
+        mode={operatorMode}
+        panel={panel}
+        paletteOpen={paletteOpen}
+        isNarrow={isNarrow}
+        onTogglePalette={togglePalette}
+        onOpenApprovals={() => openApprovalsPanel()}
+        onOpenOperations={openOperationsPanel}
+        onOpenOrb={openOrbPanel}
+        onNewChat={createNewChat}
       />
     </div>
   );
