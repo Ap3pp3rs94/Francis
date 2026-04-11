@@ -108,6 +108,76 @@ def test_world_state_snapshot_reports_repo_and_data(monkeypatch, tmp_path: Path)
     assert state["overview"]["recent_tasks"][0]["assigned_to"] == "worker-1"
 
 
+def test_world_state_snapshot_derives_governance_backlog_states(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    blocked_task_dir = data_root / "tasks" / "tsk_blocked"
+    approval_task_dir = data_root / "tasks" / "tsk_approval"
+    blocked_task_dir.mkdir(parents=True, exist_ok=True)
+    approval_task_dir.mkdir(parents=True, exist_ok=True)
+
+    (
+        blocked_task_dir / "record.json"
+    ).write_text(
+        """
+{
+  "task_id": "tsk_blocked",
+  "status": "accepted",
+  "capability": "plugin.run",
+  "objective": "Blocked task",
+  "updated_at": "2026-04-11T12:05:00+00:00",
+  "result": {
+    "kind": "task.result",
+    "data": {
+      "status": "blocked",
+      "error": "insufficient_trust"
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (
+        approval_task_dir / "record.json"
+    ).write_text(
+        """
+{
+  "task_id": "tsk_approval",
+  "status": "accepted",
+  "capability": "plugin.run",
+  "objective": "Awaiting approval",
+  "updated_at": "2026-04-11T12:10:00+00:00",
+  "result": {
+    "kind": "task.result",
+    "data": {
+      "status": "needs_approval",
+      "message": "Approval required before rerun."
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.world_state.snapshot import snapshot
+
+    state = snapshot()
+    assert state["counts"]["tasks"] == 2
+    assert state["counts"]["queued_tasks"] == 0
+    assert state["counts"]["blocked_tasks"] == 1
+    assert state["counts"]["approval_pending_tasks"] == 1
+    assert state["overview"]["task_status_counts"]["blocked"] == 1
+    assert state["overview"]["task_status_counts"]["needs_approval"] == 1
+    assert state["overview"]["recent_tasks"][0]["id"] == "tsk_approval"
+    assert state["overview"]["recent_tasks"][0]["status"] == "needs_approval"
+    assert state["overview"]["recent_tasks"][0]["status_reason"] == "Approval required before rerun."
+    assert state["overview"]["recent_tasks"][1]["status"] == "blocked"
+    assert state["overview"]["recent_tasks"][1]["status_reason"] == "insufficient_trust"
+
+
 def test_orb_snapshot_reports_planes_and_forbidden_transitions(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     meta_root = repo_root / "meta"

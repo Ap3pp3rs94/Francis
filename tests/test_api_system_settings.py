@@ -70,6 +70,81 @@ def test_system_world_state_reports_nested_task_records(monkeypatch, tmp_path: P
     assert body["overview"]["pending_approvals"][0]["id"] == "appr"
 
 
+def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    blocked_task_dir = data_root / "tasks" / "tsk_blocked"
+    approval_task_dir = data_root / "tasks" / "tsk_approval"
+    blocked_task_dir.mkdir(parents=True, exist_ok=True)
+    approval_task_dir.mkdir(parents=True, exist_ok=True)
+
+    (
+        blocked_task_dir / "record.json"
+    ).write_text(
+        """
+{
+  "task_id": "tsk_blocked",
+  "status": "accepted",
+  "capability": "plugin.run",
+  "objective": "Blocked deploy",
+  "updated_at": "2026-04-11T12:05:00+00:00",
+  "result": {
+    "kind": "task.result",
+    "data": {
+      "status": "blocked",
+      "error": "insufficient_trust"
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (
+        approval_task_dir / "record.json"
+    ).write_text(
+        """
+{
+  "task_id": "tsk_approval",
+  "status": "accepted",
+  "capability": "plugin.run",
+  "objective": "Awaiting approval",
+  "updated_at": "2026-04-11T12:10:00+00:00",
+  "result": {
+    "kind": "task.result",
+    "data": {
+      "status": "needs_approval",
+      "message": "Approval required before rerun."
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["counts"]["tasks"] == 2
+    assert body["counts"]["queued_tasks"] == 0
+    assert body["counts"]["blocked_tasks"] == 1
+    assert body["counts"]["approval_pending_tasks"] == 1
+    assert body["counts"]["running_tasks"] == 0
+    assert body["overview"]["task_status_counts"]["blocked"] == 1
+    assert body["overview"]["task_status_counts"]["needs_approval"] == 1
+    assert body["overview"]["recent_tasks"][0]["status"] == "needs_approval"
+    assert body["overview"]["recent_tasks"][1]["status"] == "blocked"
+
+
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

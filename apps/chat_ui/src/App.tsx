@@ -1206,6 +1206,10 @@ function SystemPanel(props: {
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
   const pendingApprovals = overview?.pending_approvals ?? [];
+  const queuedTasks = safeNumber(counts?.queued_tasks, safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0));
+  const approvalPendingTasks = safeNumber(counts?.approval_pending_tasks, safeNumber(taskStatusCounts.needs_approval, 0));
+  const blockedTasks = safeNumber(counts?.blocked_tasks, safeNumber(taskStatusCounts.blocked, 0));
+  const runningTasks = safeNumber(counts?.running_tasks, safeNumber(taskStatusCounts.running, 0));
   const servicesRaw =
     worldState?.services && typeof worldState.services === "object" && !Array.isArray(worldState.services)
       ? worldState.services
@@ -1213,12 +1217,6 @@ function SystemPanel(props: {
   const serviceItems = Array.isArray(servicesRaw?.services)
     ? servicesRaw.services.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
     : [];
-  const stackRaw =
-    worldState?.stack && typeof worldState.stack === "object" && !Array.isArray(worldState.stack) ? worldState.stack : null;
-  const stackCounts =
-    stackRaw?.counts && typeof stackRaw.counts === "object" && !Array.isArray(stackRaw.counts)
-      ? (stackRaw.counts as Record<string, unknown>)
-      : {};
   const orbModel = orbStatus?.model;
   const coreLoop = orbStatus?.core_loop ?? [];
   const gateStack = orbStatus?.gates ?? [];
@@ -1261,22 +1259,30 @@ function SystemPanel(props: {
         </div>
       ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
         <div style={summaryCardStyle()}>
           <div style={{ fontSize: 11, color: THEME.muted }}>Pending approvals</div>
           <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{counts?.pending_approvals ?? 0}</div>
         </div>
         <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Awaiting approval</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{approvalPendingTasks}</div>
+        </div>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Blocked tasks</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{blockedTasks}</div>
+        </div>
+        <div style={summaryCardStyle()}>
           <div style={{ fontSize: 11, color: THEME.muted }}>Queued tasks</div>
-          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{counts?.tasks ?? 0}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{queuedTasks}</div>
         </div>
         <div style={summaryCardStyle()}>
           <div style={{ fontSize: 11, color: THEME.muted }}>Running now</div>
-          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{taskStatusCounts.running ?? 0}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{runningTasks}</div>
         </div>
         <div style={summaryCardStyle()}>
-          <div style={{ fontSize: 11, color: THEME.muted }}>Feature flags</div>
-          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{stackCounts.feature_flags ?? 0}</div>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Total tasks</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{counts?.tasks ?? 0}</div>
         </div>
       </div>
 

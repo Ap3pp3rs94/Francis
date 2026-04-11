@@ -108,6 +108,10 @@ export type WorldStateCounts = {
   approved_approvals?: number;
   rejected_approvals?: number;
   tasks?: number;
+  queued_tasks?: number;
+  approval_pending_tasks?: number;
+  blocked_tasks?: number;
+  running_tasks?: number;
   generated_plugins?: number;
 };
 
@@ -669,6 +673,10 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
     approved_approvals: safeNumber(countsRaw.approved_approvals, 0),
     rejected_approvals: safeNumber(countsRaw.rejected_approvals, 0),
     tasks: safeNumber(countsRaw.tasks, 0),
+    queued_tasks: safeNumber(countsRaw.queued_tasks, 0),
+    approval_pending_tasks: safeNumber(countsRaw.approval_pending_tasks, 0),
+    blocked_tasks: safeNumber(countsRaw.blocked_tasks, 0),
+    running_tasks: safeNumber(countsRaw.running_tasks, 0),
     generated_plugins: safeNumber(countsRaw.generated_plugins, 0),
   };
 
