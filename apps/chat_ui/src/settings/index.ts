@@ -179,12 +179,35 @@ export type WorldStateMissionSummary = {
   terminal?: boolean;
 };
 
+export type WorldStateMissionQueueItem = {
+  id: string;
+  status?: string;
+  objective?: string;
+  summary?: string;
+  next_step?: string;
+  priority?: number;
+  risk_tier?: string;
+  linked_task_count?: number;
+  linked_task_ids?: string[];
+  last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_gate?: string;
+  recommended_action?: string;
+  operator_hint?: string;
+  action_target_id?: string;
+  deadletter_reason?: string;
+  updated_at?: string;
+};
+
 export type WorldStateOverview = {
   pending_approvals: WorldStateApprovalSummary[];
   task_status_counts: Record<string, number>;
   recent_tasks: WorldStateTaskSummary[];
   mission_status_counts: Record<string, number>;
   recent_missions: WorldStateMissionSummary[];
+  mission_queue: WorldStateMissionQueueItem[];
+  deadletter_missions: WorldStateMissionQueueItem[];
   incidents: WorldStateIncidentSummary[];
 };
 
@@ -784,6 +807,10 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
   const approvalsRaw = Array.isArray(overviewRaw.pending_approvals) ? (overviewRaw.pending_approvals as unknown[]) : [];
   const recentTasksRaw = Array.isArray(overviewRaw.recent_tasks) ? (overviewRaw.recent_tasks as unknown[]) : [];
   const recentMissionsRaw = Array.isArray(overviewRaw.recent_missions) ? (overviewRaw.recent_missions as unknown[]) : [];
+  const missionQueueRaw = Array.isArray(overviewRaw.mission_queue) ? (overviewRaw.mission_queue as unknown[]) : [];
+  const deadletterMissionsRaw = Array.isArray(overviewRaw.deadletter_missions)
+    ? (overviewRaw.deadletter_missions as unknown[])
+    : [];
   const incidentsRaw = Array.isArray(overviewRaw.incidents) ? (overviewRaw.incidents as unknown[]) : [];
   const taskStatusCountsRaw = isRecord(overviewRaw.task_status_counts)
     ? (overviewRaw.task_status_counts as Record<string, unknown>)
@@ -850,6 +877,56 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         created_at: safeString(item.created_at, ""),
         updated_at: safeString(item.updated_at, ""),
         terminal: safeBoolean(item.terminal, false),
+      }))
+      .filter((item) => item.id),
+    mission_queue: missionQueueRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        status: safeString(item.status, ""),
+        objective: safeString(item.objective, ""),
+        summary: safeString(item.summary, ""),
+        next_step: safeString(item.next_step, ""),
+        priority: safeNumber(item.priority, 0),
+        risk_tier: safeString(item.risk_tier, ""),
+        linked_task_count: safeNumber(item.linked_task_count, 0),
+        linked_task_ids: Array.isArray(item.linked_task_ids)
+          ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
+          : [],
+        last_task_id: safeString(item.last_task_id, ""),
+        last_task_status: safeString(item.last_task_status, ""),
+        last_task_result_status: safeString(item.last_task_result_status, ""),
+        last_task_gate: safeString(item.last_task_gate, ""),
+        recommended_action: safeString(item.recommended_action, ""),
+        operator_hint: safeString(item.operator_hint, ""),
+        action_target_id: safeString(item.action_target_id, ""),
+        deadletter_reason: safeString(item.deadletter_reason, ""),
+        updated_at: safeString(item.updated_at, ""),
+      }))
+      .filter((item) => item.id),
+    deadletter_missions: deadletterMissionsRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        status: safeString(item.status, ""),
+        objective: safeString(item.objective, ""),
+        summary: safeString(item.summary, ""),
+        next_step: safeString(item.next_step, ""),
+        priority: safeNumber(item.priority, 0),
+        risk_tier: safeString(item.risk_tier, ""),
+        linked_task_count: safeNumber(item.linked_task_count, 0),
+        linked_task_ids: Array.isArray(item.linked_task_ids)
+          ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
+          : [],
+        last_task_id: safeString(item.last_task_id, ""),
+        last_task_status: safeString(item.last_task_status, ""),
+        last_task_result_status: safeString(item.last_task_result_status, ""),
+        last_task_gate: safeString(item.last_task_gate, ""),
+        recommended_action: safeString(item.recommended_action, ""),
+        operator_hint: safeString(item.operator_hint, ""),
+        action_target_id: safeString(item.action_target_id, ""),
+        deadletter_reason: safeString(item.deadletter_reason, ""),
+        updated_at: safeString(item.updated_at, ""),
       }))
       .filter((item) => item.id),
     incidents: incidentsRaw

@@ -18,7 +18,10 @@ __all__ = [
     "MissionRecord",
     "create_mission",
     "deadletter_mission",
+    "deadletter_queue_items",
+    "mission_queue_items",
     "record_linked_task_transition",
+    "run_queue_once",
     "tick_all_missions",
     "tick_mission",
     "read_mission",
@@ -58,6 +61,15 @@ _TERMINAL_STATUSES = {
     MissionStatus.FAILED,
     MissionStatus.DEADLETTERED,
     MissionStatus.CANCELLED,
+}
+_QUEUE_STATUS_ORDER = {
+    MissionStatus.BLOCKED.value: 0,
+    MissionStatus.QUEUED.value: 1,
+    MissionStatus.FAILED.value: 2,
+    MissionStatus.ACTIVE.value: 3,
+    MissionStatus.COMPLETED.value: 9,
+    MissionStatus.CANCELLED.value: 9,
+    MissionStatus.DEADLETTERED.value: 10,
 }
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 
@@ -267,6 +279,75 @@ def _derive_mission_status_from_tasks(task_ids: list[str], repo_root: Path | Non
         return MissionStatus.COMPLETED, latest
 
     return None, _latest_linked_snapshot(task_ids, repo_root)
+
+
+def _queue_sort_key(record: "MissionRecord") -> tuple[int, int, float, str]:
+    status = str(record.status.value or "").strip().lower()
+    status_rank = _QUEUE_STATUS_ORDER.get(status, 99)
+    priority = int(record.priority or 0)
+    updated_ts = _parse_ts(record.updated_at) or _parse_ts(record.created_at)
+    return (status_rank, -priority, -updated_ts, record.mission_id)
+
+
+def _queue_action(record: "MissionRecord") -> tuple[str, str, str]:
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    status = str(record.status.value or "").strip().lower()
+    last_task_id = str(meta.get("last_task_id") or "").strip()
+    last_task_status = str(meta.get("last_task_status") or "").strip().lower()
+    last_task_result_status = str(meta.get("last_task_result_status") or "").strip().lower()
+    last_task_gate = str(meta.get("last_task_gate") or "").strip().lower()
+    next_step = str(meta.get("last_task_next_step") or record.next_step or "").strip()
+
+    if status == MissionStatus.BLOCKED.value:
+        if last_task_gate == "approvals_gate" or last_task_result_status in {"pending", "needs_approval"}:
+            return "review_pending_approval", next_step or "A linked task is waiting on approval before the mission can continue.", last_task_id
+        if last_task_gate == "trust_gate":
+            return "raise_trust_or_reduce_risk", next_step or "A linked task is blocked by trust posture.", last_task_id
+        return "resolve_blocker", next_step or "A linked task is blocked and needs operator intervention.", last_task_id
+
+    if status == MissionStatus.QUEUED.value:
+        if not record.linked_task_ids:
+            return "create_first_operation", next_step or "Mission has no linked work yet. Create the first governed operation.", ""
+        return "run_linked_operation", next_step or "A linked task is queued but not advancing yet.", last_task_id or record.linked_task_ids[0]
+
+    if status == MissionStatus.ACTIVE.value:
+        return "observe_running_operation", next_step or "A linked task is already running. Observe before changing mission posture.", last_task_id
+
+    if status == MissionStatus.FAILED.value:
+        return "retry_or_deadletter", next_step or "The latest linked task failed. Retry the work or deadletter the mission.", last_task_id
+
+    if status == MissionStatus.DEADLETTERED.value:
+        return "review_deadletter", record.deadletter_reason or "Mission has been deadlettered.", last_task_id
+
+    if status == MissionStatus.COMPLETED.value:
+        return "review_completion", next_step or "Mission completed. Review outcome and decide whether follow-up work is needed.", last_task_id
+
+    return "review_mission", next_step or "Mission needs operator review.", last_task_id
+
+
+def _queue_item(record: "MissionRecord") -> dict[str, Any]:
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    recommended_action, operator_hint, action_target_id = _queue_action(record)
+    return {
+        "id": record.mission_id,
+        "status": record.status.value,
+        "objective": record.objective,
+        "summary": record.summary,
+        "next_step": record.next_step,
+        "priority": int(record.priority or 0),
+        "risk_tier": record.risk_tier,
+        "linked_task_count": len(record.linked_task_ids),
+        "linked_task_ids": list(record.linked_task_ids),
+        "last_task_id": str(meta.get("last_task_id") or "").strip(),
+        "last_task_status": str(meta.get("last_task_status") or "").strip(),
+        "last_task_result_status": str(meta.get("last_task_result_status") or "").strip(),
+        "last_task_gate": str(meta.get("last_task_gate") or "").strip(),
+        "recommended_action": recommended_action,
+        "operator_hint": operator_hint,
+        "action_target_id": action_target_id,
+        "deadletter_reason": record.deadletter_reason,
+        "updated_at": record.updated_at,
+    }
 
 
 @dataclass(frozen=True)
@@ -751,6 +832,64 @@ def tick_all_missions(
         if err:
             errors.append({"mission_id": record.mission_id, "error": err})
     return records, applied_count, errors
+
+
+def mission_queue_items(
+    repo_root: Path | None = None,
+    *,
+    limit: int = 50,
+    include_terminal: bool = False,
+) -> list[dict[str, Any]]:
+    records = list_missions(repo_root, limit=10_000)
+    if not include_terminal:
+        records = [record for record in records if record.status not in _TERMINAL_STATUSES]
+    records.sort(key=_queue_sort_key)
+    return [_queue_item(record) for record in records[: max(0, int(limit))]]
+
+
+def deadletter_queue_items(repo_root: Path | None = None, *, limit: int = 50) -> list[dict[str, Any]]:
+    records = list_missions(repo_root, limit=10_000, status=MissionStatus.DEADLETTERED.value)
+    records.sort(key=lambda record: (-_parse_ts(record.updated_at), record.mission_id))
+    return [_queue_item(record) for record in records[: max(0, int(limit))]]
+
+
+def run_queue_once(
+    repo_root: Path | None = None,
+    *,
+    limit: int = 50,
+    actor: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    safe_limit = max(1, int(limit))
+    records, applied_count, errors = tick_all_missions(
+        repo_root,
+        limit=max(safe_limit, 200),
+        actor=actor,
+        note=note or "mission_queue_run_once",
+    )
+    queue_items = mission_queue_items(repo_root, limit=safe_limit, include_terminal=False)
+    deadletter_items = deadletter_queue_items(repo_root, limit=min(safe_limit, 20))
+    counts = {
+        "queued": 0,
+        "active": 0,
+        "blocked": 0,
+        "failed": 0,
+        "deadlettered": len(deadletter_items),
+    }
+    for item in queue_items:
+        status = str(item.get("status") or "").strip().lower()
+        if status in counts:
+            counts[status] += 1
+    return {
+        "ok": not errors,
+        "items": queue_items,
+        "deadletter": deadletter_items,
+        "total": len(queue_items),
+        "applied": applied_count,
+        "errors": errors,
+        "counts": counts,
+        "processed": len(records),
+    }
 
 
 def deadletter_mission(

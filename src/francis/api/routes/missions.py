@@ -74,6 +74,10 @@ class MissionTickManyIn(MissionTickIn):
     limit: int = 200
 
 
+class MissionRunOnceIn(MissionTickIn):
+    limit: int = 50
+
+
 class MissionDeadletterIn(BaseModel):
     reason: str = "manual_deadletter"
     actor: str | None = None
@@ -119,6 +123,22 @@ def list_missions(limit: int = 200, status: str | None = None) -> dict[str, obje
         return {"items": [], "total": 0, "limit": 0, "error": str(exc)}
 
 
+@router.get("/queue")
+def mission_queue(limit: int = 50, include_terminal: bool = False) -> dict[str, object]:
+    try:
+        safe_limit = max(1, min(int(limit), 5000))
+        items = mission_store.mission_queue_items(limit=safe_limit, include_terminal=include_terminal)
+        deadletter = mission_store.deadletter_queue_items(limit=min(safe_limit, 20))
+        return {
+            "ok": True,
+            "items": items,
+            "total": len(items),
+            "deadletter": deadletter,
+        }
+    except Exception as exc:
+        return {"ok": False, "items": [], "total": 0, "deadletter": [], "error": str(exc)}
+
+
 @router.post("/tick")
 def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
     try:
@@ -137,6 +157,28 @@ def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "items": [], "total": 0, "applied": 0, "errors": [{"error": str(exc)}]}
+
+
+@router.post("/run_once")
+def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
+    try:
+        safe_limit = max(1, min(int(payload.limit), 5000))
+        return mission_store.run_queue_once(
+            limit=safe_limit,
+            actor=_safe_str(payload.actor).strip() or None,
+            note=_safe_str(payload.note).strip() or None,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "items": [],
+            "deadletter": [],
+            "total": 0,
+            "applied": 0,
+            "processed": 0,
+            "errors": [{"error": str(exc)}],
+            "counts": {},
+        }
 
 
 @router.get("/{mission_id}")

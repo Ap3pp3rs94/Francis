@@ -211,6 +211,110 @@ def test_system_world_state_reports_mission_counts_and_continuity(monkeypatch, t
     assert body["overview"]["recent_missions"][0]["last_task_result_status"] == ""
 
 
+def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    ready = client.post(
+        "/missions/create",
+        json={
+            "objective": "Queue first mission action",
+            "summary": "Mission has no linked work yet.",
+            "priority": 7,
+            "requester_id": "test.system.queue",
+        },
+    )
+    assert ready.status_code == 200
+    ready_id = str(ready.json()["mission_id"])
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission for queue preview",
+            "summary": "Mission should surface a governed blocker.",
+            "priority": 9,
+            "requester_id": "test.system.queue",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    dead = client.post(
+        "/missions/create",
+        json={
+            "objective": "Deadletter preview mission",
+            "summary": "Mission should appear in deadletter preview.",
+            "requester_id": "test.system.queue",
+        },
+    )
+    assert dead.status_code == 200
+    dead_id = str(dead.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    blocked_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "queue preview blocker",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert blocked_operation.status_code == 200
+    blocked_operation_id = str(blocked_operation.json()["operation_id"])
+
+    blocked_run = client.post(f"/operations/{blocked_operation_id}/run", json={"worker_id": "test.system.queue"})
+    assert blocked_run.status_code == 200
+    assert blocked_run.json()["status"] == "blocked"
+
+    deadlettered = client.post(
+        f"/missions/{dead_id}/deadletter",
+        json={"reason": "manual_cleanup", "actor": "test.system.queue"},
+    )
+    assert deadlettered.status_code == 200
+    assert deadlettered.json()["ok"] is True
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    queue_items = body["overview"]["mission_queue"]
+    assert queue_items
+    assert queue_items[0]["id"] == blocked_id
+    assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    ready_item = next(item for item in queue_items if item["id"] == ready_id)
+    assert ready_item["recommended_action"] == "create_first_operation"
+    deadletter_items = body["overview"]["deadletter_missions"]
+    assert deadletter_items
+    assert deadletter_items[0]["id"] == dead_id
+    assert deadletter_items[0]["recommended_action"] == "review_deadletter"
+
+
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

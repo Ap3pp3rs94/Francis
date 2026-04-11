@@ -2215,6 +2215,8 @@ function SystemPanel(props: {
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
   const recentMissions = overview?.recent_missions ?? [];
+  const missionQueue = overview?.mission_queue ?? [];
+  const deadletterPreview = overview?.deadletter_missions ?? [];
   const incidents = overview?.incidents ?? [];
   const pendingApprovals = overview?.pending_approvals ?? [];
   const queuedTasks = safeNumber(counts?.queued_tasks, safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0));
@@ -2255,6 +2257,7 @@ function SystemPanel(props: {
         ? { bg: "#1a1a1a", border: "#4c4c4c", color: "#d8d8d8" }
         : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
   const missionFeedDeclared = declaredMissionCount > 0 || recentMissions.length > 0;
+  const queueLead = missionQueue[0] ?? null;
   const leadMission =
     recentMissions.find((mission) => ["deadlettered", "blocked"].includes(safeString(mission.status).trim().toLowerCase())) ??
     recentMissions.find((mission) => safeString(mission.status).trim().toLowerCase() === "active") ??
@@ -2299,7 +2302,21 @@ function SystemPanel(props: {
     onAction?: () => void;
   }> = [];
 
-  if (leadMission) {
+  if (queueLead) {
+    const queueTargetId = safeString(queueLead.action_target_id).trim() || safeString(queueLead.last_task_id).trim();
+    returnToWorkItems.push({
+      id: `queue:${queueLead.id}`,
+      label: "Queue",
+      title: queueLead.objective || queueLead.id,
+      detail:
+        safeString(queueLead.operator_hint).trim() ||
+        safeString(queueLead.next_step).trim() ||
+        "Mission queue item needs operator review.",
+      tone: queueLead.status || "queued",
+      actionLabel: queueTargetId ? "Open linked task" : undefined,
+      onAction: queueTargetId ? () => props.onOpenOperation(queueTargetId) : undefined,
+    });
+  } else if (leadMission) {
     const linkedTaskId = firstLinkedTaskId(leadMission);
     const missionDetail =
       safeString(leadMission.last_task_next_step).trim() ||
@@ -2847,6 +2864,45 @@ function SystemPanel(props: {
 
         <div style={{ fontSize: 12, color: controlTone.color, marginTop: 10 }}>{controlModeGuidance}</div>
 
+        {missionQueue.length > 0 ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Mission Queue</div>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {missionQueue.slice(0, 4).map((item) => {
+                const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
+                return (
+                  <div
+                    key={`mission-queue-${item.id}`}
+                    style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{item.objective || item.id}</div>
+                      <span style={badgeStyle(item.status || "unknown")}>{item.status || "unknown"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      action=<code>{item.recommended_action || "review_mission"}</code>
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      {item.operator_hint || item.next_step || "Mission queue item needs operator review."}
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      priority=<code>{String(item.priority ?? 0)}</code>
+                      {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
+                    </div>
+                    {queueTargetId ? (
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(queueTargetId)}>
+                          Open linked task
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+
         <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Return-to-Work Recommendations</div>
         <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
           {returnToWorkItems.map((item) => (
@@ -2882,6 +2938,28 @@ function SystemPanel(props: {
                   <div style={{ fontSize: 11, fontWeight: 600 }}>{task.objective || task.capability || task.id}</div>
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                     assigned_to=<code>{task.assigned_to || "unknown"}</code>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {deadletterPreview.length > 0 ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Deadletter</div>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {deadletterPreview.slice(0, 2).map((item) => (
+                <div
+                  key={`mission-deadletter-${item.id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{item.objective || item.id}</div>
+                    <span style={badgeStyle(item.status || "deadlettered")}>{item.status || "deadlettered"}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                    {item.deadletter_reason || item.operator_hint || "Mission has been deadlettered."}
                   </div>
                 </div>
               ))}

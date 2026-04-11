@@ -386,3 +386,89 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert ticked_body["ok"] is True
     assert ticked_body["applied"] is False
     assert ticked_body["mission"]["status"] == "deadlettered"
+
+
+def test_mission_run_once_surfaces_queue_actions(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    ready = client.post(
+        "/missions/create",
+        json={
+            "objective": "Create the first linked operation",
+            "summary": "Mission has no linked task yet.",
+            "priority": 8,
+            "requester_id": "test.missions.queue",
+        },
+    )
+    assert ready.status_code == 200
+    ready_id = str(ready.json()["mission_id"])
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Resolve governed blocker",
+            "summary": "Mission should surface a trust blocker.",
+            "priority": 9,
+            "requester_id": "test.missions.queue",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    blocked_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "queue blocker",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert blocked_operation.status_code == 200
+    blocked_operation_id = str(blocked_operation.json()["operation_id"])
+
+    blocked_run = client.post(f"/operations/{blocked_operation_id}/run", json={"worker_id": "test.missions.queue"})
+    assert blocked_run.status_code == 200
+    assert blocked_run.json()["status"] == "blocked"
+
+    run_once = client.post("/missions/run_once", json={"actor": "test.missions.queue", "note": "queue reconcile", "limit": 10})
+    assert run_once.status_code == 200
+    run_once_body = run_once.json()
+    assert run_once_body["ok"] is True
+    assert run_once_body["processed"] >= 2
+    assert run_once_body["counts"]["blocked"] >= 1
+    assert run_once_body["counts"]["queued"] >= 1
+    queue_items = run_once_body["items"]
+    assert queue_items[0]["id"] == blocked_id
+    assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert queue_items[0]["action_target_id"] == blocked_operation_id
+    ready_item = next(item for item in queue_items if item["id"] == ready_id)
+    assert ready_item["recommended_action"] == "create_first_operation"
+    assert ready_item["linked_task_count"] == 0

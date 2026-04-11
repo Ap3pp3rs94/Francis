@@ -485,6 +485,8 @@ def snapshot() -> dict[str, Any]:
     recent_tasks = task_summary["recent"] if isinstance(task_summary.get("recent"), list) else []
     mission_status_counts = mission_summary["status_counts"] if isinstance(mission_summary.get("status_counts"), dict) else {}
     recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
+    mission_queue = mission_store.mission_queue_items(limit=5, include_terminal=False)
+    deadletter_missions = mission_store.deadletter_queue_items(limit=5)
     pending_approval_items = _pending_approval_summary(approvals_root / "pending")
     pending_approvals = _count_json_entries(approvals_root / "pending")
     incidents = [
@@ -534,6 +536,8 @@ def snapshot() -> dict[str, Any]:
             "recent_tasks": recent_tasks,
             "mission_status_counts": mission_status_counts,
             "recent_missions": recent_missions,
+            "mission_queue": mission_queue,
+            "deadletter_missions": deadletter_missions,
             "incidents": incidents,
         },
     }
