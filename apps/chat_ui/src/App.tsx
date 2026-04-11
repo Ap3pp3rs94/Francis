@@ -340,6 +340,133 @@ function operationMessage(record: OperationRecord | null | undefined): string {
   );
 }
 
+type TelemetryPosture = {
+  label: string;
+  tone: string;
+  scopeLabel: string;
+  detail: string;
+  voiceLabel: string;
+  proactiveLabel: string;
+};
+
+type ContinuationPosture = {
+  label: string;
+  tone: string;
+  detail: string;
+};
+
+function describeTelemetry(settings: UiSettings): TelemetryPosture {
+  const voiceLabel = settings.voiceEnabled ? "Voice enabled" : "Voice silent";
+  const proactiveLabel = settings.proactive ? "Proactive enabled" : "Proactive manual";
+
+  if (settings.sensingMode === "camera_mic") {
+    return {
+      label: "Telemetry Armed",
+      tone: "warning",
+      scopeLabel: "Camera + mic",
+      detail: "Camera and mic scope are configured in settings. This build shows approved posture here; it does not claim hidden live capture by itself.",
+      voiceLabel,
+      proactiveLabel,
+    };
+  }
+
+  if (settings.sensingMode === "input_only") {
+    return {
+      label: "Telemetry Armed",
+      tone: "ready",
+      scopeLabel: "Keyboard + mouse",
+      detail: "Input telemetry is configured for keyboard and mouse scope. This is a visible configuration surface, not a claim of unattended capture.",
+      voiceLabel,
+      proactiveLabel,
+    };
+  }
+
+  return {
+    label: "Telemetry Dormant",
+    tone: "dormant",
+    scopeLabel: "Text only",
+    detail: "No ambient sensing is configured. Francis is operating through explicit text input only.",
+    voiceLabel,
+    proactiveLabel,
+  };
+}
+
+function describeContinuation(mode: OperatorModeSnapshot | null): ContinuationPosture {
+  const controlModeId = safeString(mode?.control_mode?.id).trim().toLowerCase();
+  const backlog = mode?.backlog;
+  const pendingApprovals = safeNumber(backlog?.pending_approvals, 0);
+  const approvalPendingTasks = safeNumber(backlog?.approval_pending_tasks, 0);
+  const blockedTasks = safeNumber(backlog?.blocked_tasks, 0);
+  const queuedTasks = safeNumber(backlog?.queued_tasks, 0);
+  const runningTasks = safeNumber(backlog?.running_tasks, 0);
+
+  if (controlModeId === "pilot" && runningTasks > 0) {
+    return {
+      label: "Delegated Execution",
+      tone: "running",
+      detail: `${runningTasks} delegated ${runningTasks === 1 ? "task is" : "tasks are"} actively executing under Pilot posture.`,
+    };
+  }
+  if (controlModeId === "pilot") {
+    return {
+      label: "Pilot Standing By",
+      tone: "pilot_active",
+      detail: "Pilot is declared and visible, but no live delegated run is currently recorded.",
+    };
+  }
+  if (controlModeId === "away" && runningTasks + queuedTasks + blockedTasks + approvalPendingTasks + pendingApprovals > 0) {
+    return {
+      label: "Actively Continuing",
+      tone: "away_active",
+      detail: "Away continuation is active with governed work still running, queued, or waiting on review.",
+    };
+  }
+  if (controlModeId === "away") {
+    return {
+      label: "Away Standby",
+      tone: "away_active",
+      detail: "Away is declared, but no active continuation work is currently moving.",
+    };
+  }
+  if (pendingApprovals > 0 || approvalPendingTasks > 0) {
+    const total = pendingApprovals + approvalPendingTasks;
+    return {
+      label: "Waiting For Input",
+      tone: "needs_approval",
+      detail: `${total} governed ${total === 1 ? "item is" : "items are"} waiting for operator review or approval.`,
+    };
+  }
+  if (blockedTasks > 0 || controlModeId === "observe") {
+    return {
+      label: "Constrained By Mode",
+      tone: "blocked",
+      detail:
+        controlModeId === "observe"
+          ? "Observe keeps Francis read-only. The console is visible, but write authority remains blocked."
+          : `${blockedTasks} ${blockedTasks === 1 ? "task is" : "tasks are"} blocked by current policy or trust constraints.`,
+    };
+  }
+  if (runningTasks > 0) {
+    return {
+      label: "Active Execution",
+      tone: "running",
+      detail: `${runningTasks} ${runningTasks === 1 ? "task is" : "tasks are"} currently running through the execution plane.`,
+    };
+  }
+  if (queuedTasks > 0) {
+    return {
+      label: "Ready Queue",
+      tone: "queued",
+      detail: `${queuedTasks} ${queuedTasks === 1 ? "task is" : "tasks are"} queued and ready for execution.`,
+    };
+  }
+  return {
+    label: "Ready",
+    tone: "ready",
+    detail: "No governed backlog is currently visible. Francis is ready for the next operator request.",
+  };
+}
+
 function loadSettings(): UiSettings {
   try {
     const raw = localStorage.getItem("francis_ui_settings");
@@ -953,6 +1080,7 @@ function CommandPalette(props: {
 
 function ResidentHud(props: {
   mode: OperatorModeSnapshot | null;
+  settings: UiSettings;
   panel: TabKey;
   paletteOpen: boolean;
   isNarrow: boolean;
@@ -970,6 +1098,8 @@ function ResidentHud(props: {
   const runningTasks = safeNumber(backlog?.running_tasks, 0);
   const approvalPendingTasks = safeNumber(backlog?.approval_pending_tasks, 0);
   const controlModeId = safeString(controlMode?.id).trim().toLowerCase();
+  const telemetry = describeTelemetry(props.settings);
+  const continuation = describeContinuation(props.mode);
   const tone =
     controlModeId === "pilot"
       ? { bg: "rgba(36, 22, 10, 0.94)", border: "#7a541b", color: "#ffd38a" }
@@ -1028,6 +1158,15 @@ function ResidentHud(props: {
 
       <div style={{ fontSize: 11, color: THEME.muted }}>
         {controlMode?.summary || "Resident operator HUD active."}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <span style={badgeStyle(telemetry.tone)}>{telemetry.label}</span>
+        <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
+      </div>
+
+      <div style={{ fontSize: 11, color: THEME.muted }}>
+        {telemetry.scopeLabel} / {telemetry.voiceLabel.toLowerCase()} / {telemetry.proactiveLabel.toLowerCase()}
       </div>
 
       <div
@@ -1233,6 +1372,15 @@ export default function App() {
     });
   }, []);
 
+  const openTelemetryStatus = useCallback(() => {
+    setPanel("system");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById("francis-telemetry-status")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }, []);
+
   const togglePalette = useCallback(() => {
     setPaletteQuery("");
     setPaletteOpen((prev) => !prev);
@@ -1349,6 +1497,14 @@ export default function App() {
         run: () => openTakeoverFeed(),
       },
       {
+        id: "nav.telemetry",
+        label: "Open Telemetry Status",
+        description: "Inspect visible sensing posture and continuation state.",
+        group: "Navigation",
+        keywords: "telemetry away sensing continuation status posture",
+        run: () => openTelemetryStatus(),
+      },
+      {
         id: "nav.approvals",
         label: pendingApprovals > 0 ? `Open Approvals (${pendingApprovals})` : "Open Approvals",
         description: "Review the approval queue and make governance decisions.",
@@ -1434,6 +1590,7 @@ export default function App() {
     openApprovalsPanel,
     openMissionFeed,
     openTakeoverFeed,
+    openTelemetryStatus,
     openOperationsPanel,
     openOrbPanel,
     openPluginsPanel,
@@ -1461,6 +1618,8 @@ export default function App() {
 
   const isNarrow = width < 1100;
   const controlModeId = safeString(operatorMode?.control_mode?.id).trim().toLowerCase();
+  const telemetry = describeTelemetry(settings);
+  const continuation = describeContinuation(operatorMode);
   const indicatorTone =
     controlModeId === "pilot"
       ? { bg: "#3a150d", border: "#8f5221", color: "#ffd38a" }
@@ -1559,6 +1718,10 @@ export default function App() {
                     Away Active
                   </span>
                 ) : null}
+                <span style={badgeStyle(telemetry.tone)}>
+                  {telemetry.label} / {telemetry.scopeLabel}
+                </span>
+                <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
                 <span style={{ fontSize: 11, color: THEME.muted }}>Summon with Ctrl/Cmd K</span>
               </div>
             </div>
@@ -1631,12 +1794,13 @@ export default function App() {
                 {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
                 {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} onOpenApprovals={openApprovalsPanel} /> : null}
                 {panel === "system" ? (
-                  <SystemPanel
-                    baseUrl={baseUrl}
-                    operatorMode={operatorMode}
-                    onOpenApprovals={openApprovalsPanel}
-                    onOpenOperation={openOperationPanel}
-                  />
+                <SystemPanel
+                  baseUrl={baseUrl}
+                  settings={settings}
+                  operatorMode={operatorMode}
+                  onOpenApprovals={openApprovalsPanel}
+                  onOpenOperation={openOperationPanel}
+                />
                 ) : null}
                 {panel === "operations" ? (
                   <OperationsPanel
@@ -1681,6 +1845,7 @@ export default function App() {
               {panel === "system" ? (
                 <SystemPanel
                   baseUrl={baseUrl}
+                  settings={settings}
                   operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
                   onOpenOperation={openOperationPanel}
@@ -1707,6 +1872,7 @@ export default function App() {
       />
       <ResidentHud
         mode={operatorMode}
+        settings={settings}
         panel={panel}
         paletteOpen={paletteOpen}
         isNarrow={isNarrow}
@@ -1970,6 +2136,7 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
 
 function SystemPanel(props: {
   baseUrl: string;
+  settings: UiSettings;
   operatorMode: OperatorModeSnapshot | null;
   onOpenApprovals: (approvalId?: string) => void;
   onOpenOperation: (operationId: string) => void;
@@ -2057,6 +2224,8 @@ function SystemPanel(props: {
   const runtimeState = health?.ok ? "healthy" : "attention";
   const controlMode = props.operatorMode?.control_mode;
   const controlModeId = safeString(controlMode?.id).trim().toLowerCase();
+  const telemetry = describeTelemetry(props.settings);
+  const continuation = describeContinuation(props.operatorMode);
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -2335,6 +2504,48 @@ function SystemPanel(props: {
           ) : null}
         </div>
       ) : null}
+
+      <div id="francis-telemetry-status" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Telemetry & Continuation</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Visible sensing posture and continuity state. This surface reports configured scope and governed state without claiming hidden capture.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <span style={badgeStyle(telemetry.tone)}>{telemetry.label}</span>
+            <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Telemetry scope</div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{telemetry.scopeLabel}</div>
+          </div>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Voice posture</div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{telemetry.voiceLabel}</div>
+          </div>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Proactive mode</div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{telemetry.proactiveLabel}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12, color: THEME.text, marginTop: 10 }}>{telemetry.detail}</div>
+        <div style={{ fontSize: 12, color: continuation.tone === "blocked" ? "#ffcf9d" : THEME.muted, marginTop: 6 }}>
+          {continuation.detail}
+        </div>
+      </div>
 
       <div
         id="francis-takeover-feed"
