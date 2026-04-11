@@ -1052,6 +1052,15 @@ export default function App() {
     setPanel("system");
   }, []);
 
+  const openMissionFeed = useCallback(() => {
+    setPanel("system");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById("francis-mission-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }, []);
+
   const togglePalette = useCallback(() => {
     setPaletteQuery("");
     setPaletteOpen((prev) => !prev);
@@ -1152,6 +1161,14 @@ export default function App() {
     const pendingApprovals = safeNumber(operatorMode?.backlog?.pending_approvals, 0);
     return [
       {
+        id: "nav.briefing",
+        label: "Request Continuity Briefing",
+        description: "Open the mission feed and return-to-work recommendations.",
+        group: "Navigation",
+        keywords: "briefing continuity mission return to work handoff",
+        run: () => openMissionFeed(),
+      },
+      {
         id: "nav.approvals",
         label: pendingApprovals > 0 ? `Open Approvals (${pendingApprovals})` : "Open Approvals",
         description: "Review the approval queue and make governance decisions.",
@@ -1232,7 +1249,17 @@ export default function App() {
         run: () => setControlMode("away"),
       },
     ];
-  }, [createNewChat, openApprovalsPanel, openOperationsPanel, openOrbPanel, openPluginsPanel, openSettingsPanel, operatorMode?.backlog?.pending_approvals, setControlMode]);
+  }, [
+    createNewChat,
+    openApprovalsPanel,
+    openMissionFeed,
+    openOperationsPanel,
+    openOrbPanel,
+    openPluginsPanel,
+    openSettingsPanel,
+    operatorMode?.backlog?.pending_approvals,
+    setControlMode,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1771,9 +1798,124 @@ function SystemPanel(props: {
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
       : controlModeId === "away"
         ? { bg: "#10212a", border: "#2b5a74", color: "#b7e9ff" }
-        : controlModeId === "observe"
-          ? { bg: "#1a1a1a", border: "#4c4c4c", color: "#d8d8d8" }
-          : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
+      : controlModeId === "observe"
+        ? { bg: "#1a1a1a", border: "#4c4c4c", color: "#d8d8d8" }
+        : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
+  const stalledTasks = safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0);
+  const activeTask = recentTasks.find((task) => safeString(task.status).trim().toLowerCase() === "running");
+  const blockedTask = recentTasks.find((task) => {
+    const status = safeString(task.status).trim().toLowerCase();
+    return status === "blocked" || status === "needs_approval";
+  });
+  const stalledTask = recentTasks.find((task) => {
+    const status = safeString(task.status).trim().toLowerCase();
+    return status === "pending" || status === "accepted";
+  });
+  const recentMissionProgress = recentTasks.slice(0, 4);
+  const handoffTasks = recentTasks
+    .filter((task) => {
+      const assignedTo = safeString(task.assigned_to).trim().toLowerCase();
+      return assignedTo !== "" && assignedTo !== "unassigned";
+    })
+    .slice(0, 3);
+  const missionSummaryItems = [
+    { label: "Active missions", value: runningTasks, tone: runningTasks > 0 ? "running" : "clear" },
+    { label: "Stalled missions", value: stalledTasks, tone: stalledTasks > 0 ? "pending" : "clear" },
+    { label: "Blocked missions", value: blockedTasks, tone: blockedTasks > 0 ? "blocked" : "clear" },
+    {
+      label: "Pending approvals",
+      value: Math.max(pendingApprovals.length, approvalPendingTasks),
+      tone: pendingApprovals.length > 0 || approvalPendingTasks > 0 ? "needs_approval" : "clear",
+    },
+  ];
+  const returnToWorkItems: Array<{
+    id: string;
+    label: string;
+    title: string;
+    detail: string;
+    tone: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  }> = [];
+
+  if (incidents.length > 0) {
+    const incident = incidents[0];
+    const approvalId = safeString(incident.approval_id);
+    const taskId = safeString(incident.task_id);
+    returnToWorkItems.push({
+      id: `incident:${incident.id}`,
+      label: "Incident",
+      title: incident.title || incident.id,
+      detail: incident.detail || "Local runtime drift needs operator review before additional action.",
+      tone: incident.severity || "warning",
+      actionLabel: approvalId ? "Review approval" : taskId ? "Open task" : undefined,
+      onAction: approvalId ? () => props.onOpenApprovals(approvalId) : taskId ? () => props.onOpenOperation(taskId) : undefined,
+    });
+  }
+
+  if (pendingApprovals.length > 0) {
+    const approval = pendingApprovals[0];
+    returnToWorkItems.push({
+      id: `approval:${approval.id}`,
+      label: "Approval",
+      title: approval.action || "Pending approval",
+      detail: approval.reason || "A governed action is queued and waiting for operator review.",
+      tone: approval.status || "needs_approval",
+      actionLabel: "Open approvals",
+      onAction: () => props.onOpenApprovals(approval.id),
+    });
+  }
+
+  if (blockedTask) {
+    returnToWorkItems.push({
+      id: `blocked:${blockedTask.id}`,
+      label: "Blocked",
+      title: blockedTask.objective || blockedTask.capability || blockedTask.id,
+      detail: blockedTask.status_reason || "This work unit cannot proceed until an operator clears the blocker.",
+      tone: blockedTask.status || "blocked",
+      actionLabel: "Open task",
+      onAction: () => props.onOpenOperation(blockedTask.id),
+    });
+  } else if (activeTask) {
+    returnToWorkItems.push({
+      id: `active:${activeTask.id}`,
+      label: "Active",
+      title: activeTask.objective || activeTask.capability || activeTask.id,
+      detail: activeTask.status_reason || "Execution is active; review progress before introducing new work.",
+      tone: activeTask.status || "running",
+      actionLabel: "Open task",
+      onAction: () => props.onOpenOperation(activeTask.id),
+    });
+  } else if (stalledTask) {
+    returnToWorkItems.push({
+      id: `stalled:${stalledTask.id}`,
+      label: "Stalled",
+      title: stalledTask.objective || stalledTask.capability || stalledTask.id,
+      detail: stalledTask.status_reason || "This work is queued but not advancing yet.",
+      tone: stalledTask.status || "pending",
+      actionLabel: "Open task",
+      onAction: () => props.onOpenOperation(stalledTask.id),
+    });
+  }
+
+  if (returnToWorkItems.length === 0) {
+    returnToWorkItems.push({
+      id: "clear",
+      label: "Clear",
+      title: "No immediate continuity blockers",
+      detail: "Local task, approval, and incident state are clear. Use the palette to ask, inspect, or delegate.",
+      tone: "clear",
+    });
+  }
+
+  const controlModeGuidance =
+    controlModeId === "observe"
+      ? "Observe keeps Francis read-only. Review incidents and approvals before you deliberately change posture."
+      : controlModeId === "pilot"
+        ? "Pilot is visibly active. Review the mission feed before approving additional work."
+        : controlModeId === "away"
+          ? "Away keeps continuity visible while you step out. Prioritize handoffs and pending approvals."
+          : "Assist keeps the operator in the loop while Francis surfaces the next governed step.";
 
   return (
     <section style={panelStyle}>
@@ -1890,6 +2032,115 @@ function SystemPanel(props: {
           ) : null}
         </div>
       ) : null}
+
+      <div id="francis-mission-feed" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Mission Feed</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Derived continuity briefing from tracked tasks, approvals, and local incidents in this build.
+            </div>
+          </div>
+          <span style={badgeStyle(returnToWorkItems[0]?.tone || "clear")}>{returnToWorkItems[0]?.label || "Clear"}</span>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          {missionSummaryItems.map((item) => {
+            const tone = statusBadgeColors(item.tone);
+            return (
+              <div
+                key={item.label}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ fontSize: 11, color: THEME.muted }}>{item.label}</div>
+                <div style={{ fontSize: 21, fontWeight: 700, marginTop: 4, color: tone.color }}>{item.value}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ fontSize: 12, color: controlTone.color, marginTop: 10 }}>{controlModeGuidance}</div>
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Return-to-Work Recommendations</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {returnToWorkItems.map((item) => (
+            <div
+              key={item.id}
+              style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{item.title}</div>
+                <span style={badgeStyle(item.tone)}>{item.label}</span>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.detail}</div>
+              {item.onAction && item.actionLabel ? (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button style={buttonStyle} onClick={item.onAction}>
+                    {item.actionLabel}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        {handoffTasks.length > 0 ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Handoffs</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              {handoffTasks.map((task) => (
+                <div
+                  key={`handoff-${task.id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 999, padding: "8px 10px", background: "#121212" }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 600 }}>{task.objective || task.capability || task.id}</div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    assigned_to=<code>{task.assigned_to || "unknown"}</code>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Recent Mission Progress</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {recentMissionProgress.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No mission progress has been recorded yet.</div>
+          ) : (
+            recentMissionProgress.map((task) => (
+              <div
+                key={`mission-progress-${task.id}`}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{task.objective || task.capability || task.id}</div>
+                  <span style={badgeStyle(task.status || "unknown")}>{task.status || "unknown"}</span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  capability=<code>{task.capability || "unknown"}</code>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  assigned_to=<code>{task.assigned_to || "unassigned"}</code>
+                </div>
+                {task.status_reason ? <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{task.status_reason}</div> : null}
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation(task.id)}>
+                    Open task
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
