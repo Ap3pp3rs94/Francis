@@ -315,6 +315,31 @@ function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspect
   };
 }
 
+function operationStatus(record: OperationRecord | null | undefined): string {
+  return safeString(record?.status).trim().toLowerCase() || "unknown";
+}
+
+function operationLabel(record: OperationRecord | null | undefined): string {
+  return operationMetaString(record, "objective") || safeString(record?.name).trim() || safeString(record?.id).trim() || "operation";
+}
+
+function operationAssignedTo(record: OperationRecord | null | undefined): string {
+  return operationMetaString(record, "assigned_to", "unassigned");
+}
+
+function operationPlane(record: OperationRecord | null | undefined): string {
+  return operationMetaString(record, "orb_plane");
+}
+
+function operationMessage(record: OperationRecord | null | undefined): string {
+  return (
+    safeString(record?.error).trim() ||
+    operationMetaString(record, "result_message") ||
+    operationMetaString(record, "note") ||
+    ""
+  );
+}
+
 function loadSettings(): UiSettings {
   try {
     const raw = localStorage.getItem("francis_ui_settings");
@@ -1199,6 +1224,15 @@ export default function App() {
     });
   }, []);
 
+  const openTakeoverFeed = useCallback(() => {
+    setPanel("system");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById("francis-takeover-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }, []);
+
   const togglePalette = useCallback(() => {
     setPaletteQuery("");
     setPaletteOpen((prev) => !prev);
@@ -1307,6 +1341,14 @@ export default function App() {
         run: () => openMissionFeed(),
       },
       {
+        id: "nav.takeover",
+        label: "Open Takeover Feed",
+        description: "Inspect active Pilot scope, live execution, and hand-back guidance.",
+        group: "Navigation",
+        keywords: "takeover pilot delegated execution interrupt hand back",
+        run: () => openTakeoverFeed(),
+      },
+      {
         id: "nav.approvals",
         label: pendingApprovals > 0 ? `Open Approvals (${pendingApprovals})` : "Open Approvals",
         description: "Review the approval queue and make governance decisions.",
@@ -1391,6 +1433,7 @@ export default function App() {
     createNewChat,
     openApprovalsPanel,
     openMissionFeed,
+    openTakeoverFeed,
     openOperationsPanel,
     openOrbPanel,
     openPluginsPanel,
@@ -1933,10 +1976,13 @@ function SystemPanel(props: {
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [worldState, setWorldState] = useState<WorldStateSnapshot | null>(null);
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
+  const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
+  const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1944,16 +1990,31 @@ function SystemPanel(props: {
     setBusy(true);
     setError(null);
     try {
+      setTakeoverOperationsError(null);
       const [nextInfo, nextHealth, nextWorldState, nextOrbStatus] = await Promise.all([
         client.getSystemInfo(),
         client.getHealth(),
         client.getWorldState(),
         client.getOrbStatus(),
       ]);
+      const nextOperations = await operationsClient
+        .list({ limit: 16 })
+        .then((response) => response.items ?? [])
+        .catch((err) => {
+          const msg =
+            err instanceof OperationsApiError
+              ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+              : err instanceof Error
+                ? err.message
+                : "Operations request failed.";
+          setTakeoverOperationsError(msg);
+          return [] as OperationRecord[];
+        });
       setInfo(nextInfo);
       setHealth(nextHealth);
       setWorldState(nextWorldState);
       setOrbStatus(nextOrbStatus);
+      setTakeoverOperations(nextOperations);
     } catch (err) {
       const msg =
         err instanceof SettingsApiError
@@ -1965,7 +2026,7 @@ function SystemPanel(props: {
     } finally {
       setBusy(false);
     }
-  }, [client]);
+  }, [client, operationsClient]);
 
   useEffect(() => {
     void refresh();
@@ -2119,6 +2180,45 @@ function SystemPanel(props: {
         : controlModeId === "away"
           ? "Away keeps continuity visible while you step out. Prioritize handoffs and pending approvals."
           : "Assist keeps the operator in the loop while Francis surfaces the next governed step.";
+  const focusPlaneId = safeString(props.operatorMode?.focus?.plane_id).trim();
+  const focusLabel = safeString(props.operatorMode?.focus?.label).trim() || focusPlaneId || "No active scope";
+  const focusReason = safeString(props.operatorMode?.focus?.reason).trim() || "No active operator focus has been recorded.";
+  const pilotActive = controlModeId === "pilot";
+  const activeTakeoverOperations = takeoverOperations.filter((operation) =>
+    ["running", "queued", "blocked"].includes(operationStatus(operation)),
+  );
+  const currentTakeoverOperation = activeTakeoverOperations[0] ?? null;
+  const completedTakeoverOperations = takeoverOperations
+    .filter((operation) => ["succeeded", "failed", "canceled"].includes(operationStatus(operation)))
+    .slice(0, 3);
+  const interruptibleOperations = activeTakeoverOperations.slice(0, 3);
+  const activePlanes = Array.from(
+    new Set(activeTakeoverOperations.map((operation) => operationPlane(operation)).filter(Boolean)),
+  ).slice(0, 3);
+  const remainingTakeoverItems = [
+    { label: "Queued", value: queuedTasks, tone: queuedTasks > 0 ? "queued" : "clear" },
+    { label: "Blocked", value: blockedTasks, tone: blockedTasks > 0 ? "blocked" : "clear" },
+    {
+      label: "Awaiting approval",
+      value: Math.max(approvalPendingTasks, pendingApprovals.length),
+      tone: approvalPendingTasks > 0 || pendingApprovals.length > 0 ? "needs_approval" : "clear",
+    },
+  ].filter((item) => item.value > 0);
+  const takeoverLead =
+    currentTakeoverOperation !== null
+      ? operationMessage(currentTakeoverOperation) ||
+        `Status ${operationStatus(currentTakeoverOperation)} on ${operationLabel(currentTakeoverOperation)}.`
+      : pilotActive
+        ? "Pilot is active, but no live delegated operation is currently recorded."
+        : "Pilot is not active. This feed remains observational until delegated execution is declared.";
+  const handBackGuidance =
+    interruptibleOperations.length > 0
+      ? "Open Operations to cancel or let live work finish, then return to Assist from the control banner once the active run is settled."
+      : pendingApprovals.length > 0 || blockedTasks > 0 || approvalPendingTasks > 0
+        ? "Pilot is clear of active execution, but governance backlog remains. Resolve approvals and blocked work before handing back."
+        : pilotActive
+          ? "No live run is active. Review recent outcomes, then return to Assist when you want Francis back in collaborative posture."
+          : "Declare Pilot only when you want Francis in delegated execution. Until then, this surface stays advisory.";
 
   return (
     <section style={panelStyle}>
@@ -2235,6 +2335,221 @@ function SystemPanel(props: {
           ) : null}
         </div>
       ) : null}
+
+      <div
+        id="francis-takeover-feed"
+        style={{
+          ...summaryCardStyle(),
+          marginTop: 12,
+          background: pilotActive ? controlTone.bg : "#101010",
+          border: `1px solid ${pilotActive ? controlTone.border : THEME.panelBorder}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Takeover Feed</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Live execution surface for delegated work, active scope, interruption options, and clean hand-back guidance.
+            </div>
+          </div>
+          <span
+            style={
+              pilotActive
+                ? {
+                    ...badgeStyle("pilot_active"),
+                    background: controlTone.bg,
+                    border: `1px solid ${controlTone.border}`,
+                    color: controlTone.color,
+                  }
+                : badgeStyle("standby")
+            }
+          >
+            {pilotActive ? "Pilot Active" : "Pilot Standby"}
+          </span>
+        </div>
+
+        {takeoverOperationsError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Live operations unavailable: {takeoverOperationsError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Active Scope</div>
+              {focusPlaneId ? <span style={badgeStyle(focusPlaneId)}>{focusPlaneId}</span> : null}
+            </div>
+            <div style={{ fontSize: 12, color: pilotActive ? controlTone.color : THEME.text, marginTop: 6 }}>{focusLabel}</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{focusReason}</div>
+            {activePlanes.length > 0 ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {activePlanes.map((plane) => (
+                  <span key={plane} style={badgeStyle(plane)}>
+                    {plane}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Current Run</div>
+              {currentTakeoverOperation ? (
+                <span style={badgeStyle(operationStatus(currentTakeoverOperation))}>{operationStatus(currentTakeoverOperation)}</span>
+              ) : null}
+            </div>
+            {currentTakeoverOperation ? (
+              <>
+                <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>{operationLabel(currentTakeoverOperation)}</div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  assigned_to=<code>{operationAssignedTo(currentTakeoverOperation)}</code>
+                  {operationPlane(currentTakeoverOperation) ? (
+                    <>
+                      {" / "}plane=<code>{operationPlane(currentTakeoverOperation)}</code>
+                    </>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{takeoverLead}</div>
+            {currentTakeoverOperation ? (
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                <button style={buttonStyle} onClick={() => props.onOpenOperation(currentTakeoverOperation.id)}>
+                  Open live operation
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Actions Underway</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {activeTakeoverOperations.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              {pilotActive
+                ? "No queued, blocked, or running delegated operations are currently visible."
+                : "No live takeover work is visible because Pilot is not currently active."}
+            </div>
+          ) : (
+            activeTakeoverOperations.slice(0, 4).map((operation) => (
+              <div
+                key={`takeover-live-${operation.id}`}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{operationLabel(operation)}</div>
+                  <span style={badgeStyle(operationStatus(operation))}>{operationStatus(operation)}</span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  assigned_to=<code>{operationAssignedTo(operation)}</code>
+                  {operationPlane(operation) ? (
+                    <>
+                      {" / "}plane=<code>{operationPlane(operation)}</code>
+                    </>
+                  ) : null}
+                </div>
+                {operationMessage(operation) ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{operationMessage(operation)}</div>
+                ) : null}
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation(operation.id)}>
+                    Open task
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Recently Completed</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {completedTakeoverOperations.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No recent completed operations are available in the current feed window.</div>
+          ) : (
+            completedTakeoverOperations.map((operation) => (
+              <div
+                key={`takeover-complete-${operation.id}`}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{operationLabel(operation)}</div>
+                  <span style={badgeStyle(operationStatus(operation))}>{operationStatus(operation)}</span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  actor=<code>{operation.actor || "unknown"}</code>
+                  {" / "}assigned_to=<code>{operationAssignedTo(operation)}</code>
+                </div>
+                {operationMessage(operation) ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{operationMessage(operation)}</div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>What Remains</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          {remainingTakeoverItems.length === 0 ? (
+            <span style={{ fontSize: 12, color: THEME.muted }}>No remaining governed backlog is currently visible.</span>
+          ) : (
+            remainingTakeoverItems.map((item) => (
+              <span key={`remaining-${item.label}`} style={badgeStyle(item.tone)}>
+                {item.label} {item.value}
+              </span>
+            ))
+          )}
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Interruptible Now</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {interruptibleOperations.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No live operation is currently in a cancelable state.</div>
+          ) : (
+            interruptibleOperations.map((operation) => (
+              <div
+                key={`interrupt-${operation.id}`}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{operationLabel(operation)}</div>
+                  <span style={badgeStyle(operationStatus(operation))}>{operationStatus(operation)}</span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  Open the operation detail to run, cancel, or inspect governance state cleanly.
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation(operation.id)}>
+                    Open controls
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>Hand Back Cleanly</div>
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{handBackGuidance}</div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+            {pendingApprovals.length > 0 ? (
+              <button style={buttonStyle} onClick={() => props.onOpenApprovals()}>
+                Review approvals
+              </button>
+            ) : null}
+            <button
+              style={buttonStyle}
+              disabled={!currentTakeoverOperation}
+              onClick={() => {
+                if (currentTakeoverOperation) props.onOpenOperation(currentTakeoverOperation.id);
+              }}
+            >
+              Open current run
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div id="francis-mission-feed" style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
