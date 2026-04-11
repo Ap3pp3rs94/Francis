@@ -114,10 +114,14 @@ function statusBadgeColors(status: string): { bg: string; border: string; color:
   if (["ready", "ok", "approved", "completed", "succeeded"].includes(normalized)) {
     return { bg: "#102417", border: "#244d31", color: "#9de2ad" };
   }
-  if (["running", "pending", "accepted", "queued"].includes(normalized)) {
+  if (["running", "pending", "accepted", "queued", "needs_approval"].includes(normalized)) {
     return { bg: "#1f1a0b", border: "#5a4c18", color: "#f4d27a" };
   }
-  if (["failed", "rejected", "cancelled", "canceled", "missing", "error", "degraded"].includes(normalized)) {
+  if (
+    ["blocked", "denied", "failed", "rejected", "cancelled", "canceled", "missing", "error", "degraded", "disabled"].includes(
+      normalized,
+    )
+  ) {
     return { bg: "#2a0f0f", border: "#5a1a1a", color: "#ffaaaa" };
   }
   return { bg: "#171717", border: "#333333", color: THEME.muted };
@@ -739,7 +743,13 @@ export default function App() {
                     onOpenOperation={openOperationPanel}
                   />
                 ) : null}
-                {panel === "operations" ? <OperationsPanel baseUrl={baseUrl} focusOperationId={focusedOperationId} /> : null}
+                {panel === "operations" ? (
+                  <OperationsPanel
+                    baseUrl={baseUrl}
+                    focusOperationId={focusedOperationId}
+                    onOpenApprovals={openApprovalsPanel}
+                  />
+                ) : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
               </aside>
             )}
@@ -780,7 +790,13 @@ export default function App() {
                   onOpenOperation={openOperationPanel}
                 />
               ) : null}
-              {panel === "operations" ? <OperationsPanel baseUrl={baseUrl} focusOperationId={focusedOperationId} /> : null}
+              {panel === "operations" ? (
+                <OperationsPanel
+                  baseUrl={baseUrl}
+                  focusOperationId={focusedOperationId}
+                  onOpenApprovals={openApprovalsPanel}
+                />
+              ) : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
             </section>
           ) : null}
@@ -1722,7 +1738,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   );
 }
 
-function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) {
+function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; onOpenApprovals: (approvalId?: string) => void }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [items, setItems] = useState<OperationRecord[]>([]);
@@ -1828,8 +1844,24 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
   const selectedOperation =
     detail?.operation ?? items.find((item) => item.id === selectedOperationId) ?? null;
   const selectedStatus = safeString(selectedOperation?.status).trim().toLowerCase();
-  const canRunSelected = selectedStatus === "queued";
-  const canCancelSelected = selectedStatus === "queued" || selectedStatus === "running";
+  const selectedMeta = isRecord(selectedOperation?.meta) ? selectedOperation.meta : {};
+  const selectedOutput = isRecord(selectedOperation?.output) ? selectedOperation.output : {};
+  const selectedGovernance = isRecord(selectedMeta.governance) ? selectedMeta.governance : {};
+  const selectedApprovalId =
+    safeString(selectedMeta.approval_id) || safeString(selectedOutput.approval_id) || "";
+  const selectedOrbPlane = safeString(selectedMeta.orb_plane);
+  const selectedResultMessage = safeString(selectedMeta.result_message);
+  const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
+  const hasGovernance =
+    Object.keys(selectedGovernance).length > 0 || Boolean(selectedApprovalId) || Boolean(selectedOrbPlane);
+  const governanceTone =
+    ["blocked", "denied", "failed", "error"].includes(selectedStatus)
+      ? "error"
+      : ["queued", "pending", "needs_approval"].includes(selectedStatus)
+        ? "warn"
+        : "info";
+  const canRunSelected = selectedStatus === "queued" || selectedStatus === "blocked";
+  const canCancelSelected = selectedStatus === "queued" || selectedStatus === "running" || selectedStatus === "blocked";
 
   const runSelectedOperation = useCallback(async () => {
     if (!selectedOperationId || !canRunSelected) return;
@@ -1899,6 +1931,7 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <span style={badgeStyle("queued")}>queued {statusCounts.queued ?? 0}</span>
+          <span style={badgeStyle("blocked")}>blocked {statusCounts.blocked ?? 0}</span>
           <span style={badgeStyle("running")}>running {statusCounts.running ?? 0}</span>
           <span style={badgeStyle("succeeded")}>succeeded {statusCounts.succeeded ?? 0}</span>
           <span style={badgeStyle("failed")}>failed {statusCounts.failed ?? 0}</span>
@@ -1911,6 +1944,7 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
           >
             <option value="all">All statuses</option>
             <option value="queued">Queued</option>
+            <option value="blocked">Blocked</option>
             <option value="running">Running</option>
             <option value="succeeded">Succeeded</option>
             <option value="failed">Failed</option>
@@ -2046,6 +2080,62 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
                   {actionNotice.text}
                 </div>
               ) : null}
+              {hasGovernance ? (
+                <div
+                  style={{
+                    border: `1px solid ${governanceTone === "error" ? THEME.errorBorder : THEME.panelBorder}`,
+                    background:
+                      governanceTone === "error" ? THEME.errorBg : governanceTone === "warn" ? "#1f1a0b" : "#111819",
+                    color: governanceTone === "error" ? "#ffaaaa" : governanceTone === "warn" ? "#f4d27a" : "#aee6df",
+                    padding: 12,
+                    borderRadius: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Governance Outcome</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span style={badgeStyle(selectedOperation.status || "unknown")}>
+                        {selectedOperation.status || "unknown"}
+                      </span>
+                      {safeString(selectedGovernance.gate) ? (
+                        <span style={badgeStyle(safeString(selectedGovernance.gate))}>
+                          {safeString(selectedGovernance.gate)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {selectedResultMessage ? <div style={{ fontSize: 12, marginTop: 8 }}>{selectedResultMessage}</div> : null}
+                  {safeString(selectedGovernance.operator_hint) ? (
+                    <div style={{ fontSize: 12, marginTop: 8 }}>{safeString(selectedGovernance.operator_hint)}</div>
+                  ) : null}
+                  {safeString(selectedGovernance.next_step) ? (
+                    <div style={{ fontSize: 11, marginTop: 8 }}>
+                      Next step: <code>{safeString(selectedGovernance.next_step)}</code>
+                    </div>
+                  ) : null}
+                  {(selectedGovernance.required_trust !== undefined || selectedGovernance.current_trust !== undefined) ? (
+                    <div style={{ fontSize: 11, marginTop: 6 }}>
+                      trust <code>{String(selectedGovernance.current_trust ?? "unknown")}</code> / required{" "}
+                      <code>{String(selectedGovernance.required_trust ?? "unknown")}</code>
+                    </div>
+                  ) : null}
+                  {selectedOrbPlane ? (
+                    <div style={{ fontSize: 11, marginTop: 6 }}>
+                      ORB plane <code>{selectedOrbPlane}</code>
+                    </div>
+                  ) : null}
+                  {selectedApprovalId ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 11 }}>
+                        approval <code>{selectedApprovalId}</code>
+                      </div>
+                      <button style={buttonStyle} onClick={() => props.onOpenApprovals(selectedApprovalId)}>
+                        Open approval
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {selectedOperation.error ? (
                 <div
                   style={{
@@ -2060,9 +2150,58 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
                   <b>Error:</b> {safeString(selectedOperation.error, JSON.stringify(selectedOperation.error))}
                 </div>
               ) : null}
-              {detail?.logs && detail.logs.length > 0 ? (
-                <div style={{ fontSize: 12, color: THEME.muted }}>
-                  Audit events: <code>{String(detail.logs.length)}</code>
+              {selectedLogs.length > 0 ? (
+                <div
+                  style={{
+                    border: `1px solid ${THEME.panelBorder}`,
+                    background: "#101010",
+                    padding: 10,
+                    borderRadius: 10,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>Audit Trail</div>
+                  <div style={{ display: "grid", gap: 8, marginTop: 8, maxHeight: 220, overflow: "auto" }}>
+                    {selectedLogs.map((entry) => {
+                      const entryMeta = isRecord(entry.meta) ? entry.meta : {};
+                      const reason = safeString(entryMeta.reason);
+                      const gate = safeString(entryMeta.gate);
+                      const nextStep = safeString(entryMeta.next_step);
+                      return (
+                        <div
+                          key={entry.id}
+                          style={{
+                            border: `1px solid ${THEME.panelBorder}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            background: "#121212",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>{entry.name || entry.id}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              {entry.status && entry.status !== "unknown" ? (
+                                <span style={badgeStyle(entry.status)}>{entry.status}</span>
+                              ) : null}
+                              <span style={{ fontSize: 11, color: THEME.muted }}>
+                                {toLocaleTime(entry.ts)}
+                              </span>
+                            </div>
+                          </div>
+                          {reason ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{reason}</div> : null}
+                          {gate ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                              gate <code>{gate}</code>
+                              {nextStep ? (
+                                <>
+                                  {" / "}next <code>{nextStep}</code>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
               {(selectedOperation.output !== undefined || selectedOperation.input !== undefined) ? (

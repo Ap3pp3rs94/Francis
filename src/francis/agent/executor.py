@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from francis.agent import delegation as delegation_store
 from francis.deliberation.planner import PlanStateMachine, create_plan, plan_from_dict, revise_plan
 from francis.kernel.paths import data_dir
 
@@ -45,6 +46,8 @@ def _utc_now_iso() -> str:
 
 
 def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
     try:
         return str(value)
     except Exception:
@@ -157,6 +160,15 @@ def _release_lock(task_id: str) -> None:
     try:
         if path.exists():
             path.unlink()  # type: ignore[arg-type]
+    except Exception:
+        pass
+
+
+def _append_task_audit(task_id: str, event: str, details: dict[str, Any]) -> None:
+    try:
+        append = getattr(delegation_store, "_append_audit", None)
+        if callable(append):
+            append(task_id, event, details)
     except Exception:
         pass
 
@@ -631,6 +643,7 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         task["assigned_to"] = worker_id
         task["attempts"] = int(task.get("attempts", 0) or 0) + 1
         save_task(task)
+        _append_task_audit(task_id, "status_updated", {"to": "failed", "assigned_to": worker_id, "reason": "expired_ttl"})
         return task
 
     capability = _safe_str(task.get("capability", ""))
@@ -643,6 +656,7 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         task["assigned_to"] = worker_id
         task["attempts"] = int(task.get("attempts", 0) or 0) + 1
         save_task(task)
+        _append_task_audit(task_id, "status_updated", {"to": "failed", "assigned_to": worker_id, "reason": "invalid_inputs"})
         return task
 
     _register_capabilities()
@@ -663,6 +677,11 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
             "data": {"kind": "error", "error": f"capability_not_allowed:{capability}"},
         }
         save_task(task)
+        _append_task_audit(
+            task_id,
+            "status_updated",
+            {"to": "failed", "assigned_to": worker_id, "reason": f"capability_not_allowed:{capability}"},
+        )
         return task
 
     started = _utc_now_iso()
@@ -671,6 +690,7 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
     task["assigned_to"] = worker_id
     task["status_reason"] = None
     save_task(task)
+    _append_task_audit(task_id, "status_updated", {"to": "running", "assigned_to": worker_id, "reason": None})
 
     ok = True
     payload: dict[str, Any] | None = None
@@ -711,6 +731,7 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         "data": payload,
     }
     save_task(task)
+    _append_task_audit(task_id, "status_updated", {"to": task["status"], "assigned_to": worker_id, "reason": task["status_reason"]})
     return task
 
 

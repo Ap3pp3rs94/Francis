@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _TASK_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 _TERMINAL_STATUSES = {"complete", "completed", "failed", "canceled", "cancelled"}
+_RETRYABLE_GOVERNANCE_STATUSES = {"pending", "needs_approval", "blocked", "denied"}
 
 _ACTION_TO_CAPABILITY: dict[str, str] = {
     "chat.summarize": "chat.summarize",
@@ -201,21 +202,124 @@ def _load_task(task_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _result_payload(task: dict[str, Any]) -> dict[str, Any]:
+    result = task.get("result")
+    if not isinstance(result, dict):
+        return {}
+    payload = result.get("data")
+    return payload if isinstance(payload, dict) else {}
+
+
+def _result_status(task: dict[str, Any]) -> str:
+    payload = _result_payload(task)
+    return _safe_str(payload.get("status")).strip().lower()
+
+
+def _result_governance(task: dict[str, Any]) -> dict[str, Any]:
+    payload = _result_payload(task)
+    governance = payload.get("governance")
+    return governance if isinstance(governance, dict) else {}
+
+
+def _result_approval_id(task: dict[str, Any]) -> str:
+    payload = _result_payload(task)
+    return _safe_str(payload.get("approval_id")).strip()
+
+
+def _operation_status_for_task(task: dict[str, Any], raw_status: str) -> str:
+    result_status = _result_status(task)
+    if result_status in {"blocked", "denied"}:
+        return "blocked"
+    if result_status in {"pending", "needs_approval"}:
+        return "queued"
+    return _to_operation_status(raw_status)
+
+
+def _operation_plane(raw_status: str, result_status: str, governance: dict[str, Any]) -> str:
+    if governance or result_status in _RETRYABLE_GOVERNANCE_STATUSES:
+        return "P3_GOVERNANCE"
+    if raw_status in {"pending", "accepted", "running"}:
+        return "P7_EXECUTION"
+    return "P9_OBSERVABILITY"
+
+
+def _operation_request_ok(status: Any) -> bool:
+    normalized = _safe_str(status).strip().lower()
+    return normalized not in {"", "failed", "unknown"}
+
+
+def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[str, Any]:
+    result_status = _result_status(task)
+    if result_status not in _RETRYABLE_GOVERNANCE_STATUSES:
+        return task
+
+    updated = dict(task)
+    updated["status"] = "accepted"
+    updated["updated_at"] = _now_iso()
+    payload = _result_payload(task)
+    updated["status_reason"] = (
+        _safe_str(payload.get("error")).strip()
+        or _safe_str(payload.get("message")).strip()
+        or result_status
+        or _safe_str(task.get("status_reason")).strip()
+        or None
+    )
+
+    inputs = dict(updated.get("inputs") or {}) if isinstance(updated.get("inputs"), dict) else {}
+    input_meta = dict(inputs.get("meta") or {}) if isinstance(inputs.get("meta"), dict) else {}
+    approval_id = _result_approval_id(task)
+
+    if result_status in {"pending", "needs_approval"} and approval_id:
+        inputs["approval_id"] = approval_id
+        input_meta["approval_id"] = approval_id
+    elif result_status == "denied":
+        inputs.pop("approval_id", None)
+        input_meta.pop("approval_id", None)
+
+    if input_meta:
+        inputs["meta"] = input_meta
+    else:
+        inputs.pop("meta", None)
+    updated["inputs"] = inputs
+
+    _write_json(_record_path(task_id), updated)
+
+    governance = _result_governance(task)
+    append = getattr(delegation_store, "_append_audit", None)
+    if callable(append):
+        append(
+            task_id,
+            "governance_hold",
+            {
+                "status": result_status,
+                "approval_id": approval_id or None,
+                "gate": _safe_str(governance.get("gate")).strip() or None,
+                "next_step": _safe_str(governance.get("next_step")).strip() or None,
+                "reason": updated.get("status_reason"),
+            },
+        )
+    return updated
+
+
 def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     task_id = _safe_str(task.get("task_id")).strip()
     raw_status = _normalize_internal_status(task.get("status"))
-    op_status = _to_operation_status(raw_status)
+    op_status = _operation_status_for_task(task, raw_status)
     created_at = _safe_str(task.get("created_at"))
     updated_at = _safe_str(task.get("updated_at"))
     ts = _parse_iso_to_unix(updated_at) or _parse_iso_to_unix(created_at) or int(datetime.now(UTC).timestamp())
 
-    result = task.get("result")
-    result_obj = result if isinstance(result, dict) else {}
+    result_obj = task.get("result") if isinstance(task.get("result"), dict) else {}
     output = result_obj.get("data")
+    result_status = _result_status(task)
+    governance = _result_governance(task)
+    approval_id = _result_approval_id(task)
     error = _safe_str(task.get("status_reason")).strip() or None
     if not error:
         error = _safe_str((result_obj.get("data") or {}).get("error") if isinstance(result_obj.get("data"), dict) else "")
         error = error or None
+    result_message = _safe_str((result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else "")
+    orb_plane = _operation_plane(raw_status, result_status, governance)
 
     return {
         "id": task_id,
@@ -223,7 +327,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         "kind": "delegated_task",
         "name": _safe_str(task.get("capability")).strip() or None,
         "status": op_status,
-        "level": "error" if op_status == "failed" else "info",
+        "level": "error" if op_status in {"failed", "blocked"} else "warning" if governance else "info",
         "actor": _safe_str(task.get("requester_id")).strip() or "unknown",
         "duration_ms": None,
         "input": task.get("inputs"),
@@ -239,22 +343,45 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
             "attempts": task.get("attempts"),
             "created_at": created_at,
             "updated_at": updated_at,
+            "result_status": result_status or None,
+            "result_message": result_message or None,
+            "approval_id": approval_id or None,
+            "governance": governance or None,
+            "orb_plane": orb_plane,
         },
     }
 
 
 def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[str, Any]:
     ts = _parse_iso_to_unix(event.get("ts")) or int(datetime.now(UTC).timestamp())
+    event_name = _safe_str(event.get("event")).strip() or "event"
+    details = event.get("details") if isinstance(event.get("details"), dict) else {}
+    status = "unknown"
+    level = "info"
+    if event_name == "status_updated":
+        status = _to_operation_status(details.get("to"))
+        if status in {"failed", "blocked"}:
+            level = "error"
+    elif event_name == "governance_hold":
+        held_status = _safe_str(details.get("status")).strip().lower()
+        status = "blocked" if held_status in {"blocked", "denied"} else "queued"
+        level = "warning"
     return {
         "id": f"{task_id}:evt:{idx}",
         "ts": ts,
         "kind": "audit_event",
-        "name": _safe_str(event.get("event")).strip() or "event",
-        "status": "unknown",
-        "level": "info",
+        "name": event_name,
+        "status": status,
+        "level": level,
         "actor": "system",
-        "output": event.get("details"),
-        "meta": {"task_id": task_id},
+        "output": details or event.get("details"),
+        "meta": {
+            "task_id": task_id,
+            "reason": details.get("reason") if isinstance(details, dict) else None,
+            "gate": details.get("gate") if isinstance(details, dict) else None,
+            "next_step": details.get("next_step") if isinstance(details, dict) else None,
+            "orb_plane": "P3_GOVERNANCE" if event_name == "governance_hold" else None,
+        },
     }
 
 
@@ -705,14 +832,16 @@ def run_operation(operation_id: str, payload: OperationRunIn) -> dict[str, objec
         task = _load_task(op_id)
         if not isinstance(task, dict):
             return {"ok": False, "error": "not_found"}
-        if _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES:
+        if _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES and _result_status(task) not in _RETRYABLE_GOVERNANCE_STATUSES:
             operation = _task_to_operation(task)
             return {
-                "ok": operation.get("status") == "succeeded",
+                "ok": _operation_request_ok(operation.get("status")),
                 "status": operation.get("status", "unknown"),
                 "operation": operation,
                 "message": "already_terminal",
             }
+        if _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES:
+            task = _hold_retryable_governance_task(op_id, task)
 
         worker_id = _safe_str(payload.worker_id).strip() or "api.operations"
         if not agent_executor._try_acquire_lock(op_id, worker_id):
@@ -722,9 +851,11 @@ def run_operation(operation_id: str, payload: OperationRunIn) -> dict[str, objec
         finally:
             agent_executor._release_lock(op_id)
 
+        if isinstance(updated, dict):
+            updated = _hold_retryable_governance_task(op_id, updated)
         operation = _task_to_operation(updated)
         return {
-            "ok": operation.get("status") == "succeeded",
+            "ok": _operation_request_ok(operation.get("status")),
             "status": operation.get("status", "unknown"),
             "operation": operation,
         }
