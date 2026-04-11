@@ -315,6 +315,151 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert deadletter_items[0]["recommended_action"] == "review_deadletter"
 
 
+def test_system_world_state_projects_mission_briefing_and_advance_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    queued = client.post(
+        "/missions/create",
+        json={
+            "objective": "Queued mission with recorded advance",
+            "summary": "This mission should show the first advance receipt in the queue briefing.",
+            "priority": 8,
+            "requester_id": "test.system.briefing",
+        },
+    )
+    assert queued.status_code == 200
+    queued_id = str(queued.json()["mission_id"])
+
+    queued_advance = client.post(
+        f"/missions/{queued_id}/advance",
+        json={"actor": "test.system.briefing", "note": "create initial linked operation"},
+    )
+    assert queued_advance.status_code == 200
+    assert queued_advance.json()["ok"] is True
+    assert queued_advance.json()["applied"] is True
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission for operator handback",
+            "summary": "This mission should lead the briefing focus.",
+            "priority": 9,
+            "requester_id": "test.system.briefing",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    blocked_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "blocked mission for briefing",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert blocked_operation.status_code == 200
+    blocked_operation_id = str(blocked_operation.json()["operation_id"])
+
+    blocked_run = client.post(f"/operations/{blocked_operation_id}/run", json={"worker_id": "test.system.briefing"})
+    assert blocked_run.status_code == 200
+    assert blocked_run.json()["status"] == "blocked"
+
+    blocked_advance = client.post(
+        f"/missions/{blocked_id}/advance",
+        json={"actor": "test.system.briefing", "note": "respect governance blocker"},
+    )
+    assert blocked_advance.status_code == 200
+    assert blocked_advance.json()["ok"] is True
+    assert blocked_advance.json()["applied"] is False
+
+    completed = client.post(
+        "/missions/create",
+        json={
+            "objective": "Completed mission for continuity briefing",
+            "summary": "This mission should appear in recently completed continuity.",
+            "requester_id": "test.system.briefing",
+        },
+    )
+    assert completed.status_code == 200
+    completed_id = str(completed.json()["mission_id"])
+
+    first_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.system.briefing"},
+    )
+    assert first_advance.status_code == 200
+    assert first_advance.json()["ok"] is True
+    assert first_advance.json()["applied"] is True
+
+    second_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.system.briefing", "worker_id": "test.system.briefing"},
+    )
+    assert second_advance.status_code == 200
+    assert second_advance.json()["ok"] is True
+    assert second_advance.json()["applied"] is True
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    briefing = body["overview"]["mission_briefing"]
+    assert briefing["counts"]["blocked"] == 1
+    assert briefing["counts"]["queued"] == 1
+    assert briefing["counts"]["completed"] == 1
+    assert "blocked mission" in briefing["headline"].lower()
+
+    focus = briefing["focus"]
+    assert focus
+    assert focus[0]["id"] == blocked_id
+    assert focus[0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert focus[0]["last_advance_outcome"] == "requires_operator"
+    queued_focus = next(item for item in focus if item["id"] == queued_id)
+    assert queued_focus["recommended_action"] == "run_linked_operation"
+    assert queued_focus["last_advance_action"] == "create_first_operation"
+    assert queued_focus["last_advance_applied"] is True
+
+    recent_completed = briefing["recently_completed"]
+    assert recent_completed
+    assert recent_completed[0]["id"] == completed_id
+    assert recent_completed[0]["last_advance_action"] == "run_linked_operation"
+    assert recent_completed[0]["last_advance_outcome"] == "succeeded"
+
+    completed_recent = next(item for item in body["overview"]["recent_missions"] if item["id"] == completed_id)
+    assert completed_recent["last_advance_action"] == "run_linked_operation"
+    assert completed_recent["last_advance_outcome"] == "succeeded"
+
+
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

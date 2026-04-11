@@ -222,6 +222,14 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
                 "last_task_gate": str(meta.get("last_task_gate") or "").strip(),
                 "last_task_next_step": str(meta.get("last_task_next_step") or "").strip(),
                 "last_task_updated_at": str(meta.get("last_task_updated_at") or "").strip(),
+                "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
+                "last_advance_outcome": str(meta.get("last_advance_outcome") or "").strip(),
+                "last_advance_operation_id": str(meta.get("last_advance_operation_id") or "").strip(),
+                "last_advance_operation_status": str(meta.get("last_advance_operation_status") or "").strip(),
+                "last_advance_message": str(meta.get("last_advance_message") or "").strip(),
+                "last_advance_actor": str(meta.get("last_advance_actor") or "").strip(),
+                "last_advance_applied": bool(meta.get("last_advance_applied")),
+                "last_advance_at": str(meta.get("last_advance_at") or "").strip(),
                 "created_at": record.created_at,
                 "updated_at": record.updated_at,
                 "terminal": status in _TERMINAL_MISSION_STATUSES,
@@ -239,6 +247,115 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
     return {
         "status_counts": status_counts,
         "recent": trimmed,
+    }
+
+
+def _mission_briefing(
+    mission_status_counts: dict[str, Any],
+    mission_queue: list[dict[str, Any]],
+    deadletter_missions: list[dict[str, Any]],
+    recent_missions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    blocked = int(mission_status_counts.get("blocked") or 0)
+    queued = int(mission_status_counts.get("queued") or 0)
+    active = int(mission_status_counts.get("active") or 0)
+    completed = int(mission_status_counts.get("completed") or 0)
+    deadlettered = int(mission_status_counts.get("deadlettered") or 0)
+
+    headline_parts: list[str] = []
+    if blocked > 0:
+        headline_parts.append(f"{blocked} blocked mission(s) need operator action.")
+    elif queued > 0:
+        headline_parts.append(f"{queued} queued mission(s) are ready for governed advancement.")
+    elif active > 0:
+        headline_parts.append(f"{active} mission(s) are currently in flight.")
+    elif completed > 0:
+        headline_parts.append(f"{completed} mission(s) have completed.")
+    else:
+        headline_parts.append("No mission backlog is currently active.")
+
+    if deadlettered > 0:
+        headline_parts.append(f"{deadlettered} mission(s) are sitting in deadletter.")
+
+    focus_items: list[dict[str, Any]] = []
+    for item in mission_queue[:3]:
+        if not isinstance(item, dict):
+            continue
+        focus_items.append(
+            {
+                "id": str(item.get("id") or "").strip(),
+                "status": str(item.get("status") or "").strip(),
+                "objective": str(item.get("objective") or "").strip(),
+                "summary": str(item.get("summary") or "").strip(),
+                "next_step": str(item.get("next_step") or "").strip(),
+                "priority": int(item.get("priority") or 0),
+                "risk_tier": str(item.get("risk_tier") or "").strip(),
+                "linked_task_count": int(item.get("linked_task_count") or 0),
+                "recommended_action": str(item.get("recommended_action") or "").strip(),
+                "operator_hint": str(item.get("operator_hint") or "").strip(),
+                "action_target_id": str(item.get("action_target_id") or "").strip(),
+                "last_task_id": str(item.get("last_task_id") or "").strip(),
+                "last_task_status": str(item.get("last_task_status") or "").strip(),
+                "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
+                "last_task_gate": str(item.get("last_task_gate") or "").strip(),
+                "last_advance_action": str(item.get("last_advance_action") or "").strip(),
+                "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
+                "last_advance_operation_id": str(item.get("last_advance_operation_id") or "").strip(),
+                "last_advance_operation_status": str(item.get("last_advance_operation_status") or "").strip(),
+                "last_advance_message": str(item.get("last_advance_message") or "").strip(),
+                "last_advance_actor": str(item.get("last_advance_actor") or "").strip(),
+                "last_advance_applied": bool(item.get("last_advance_applied")),
+                "last_advance_at": str(item.get("last_advance_at") or "").strip(),
+                "deadletter_reason": str(item.get("deadletter_reason") or "").strip(),
+                "updated_at": str(item.get("updated_at") or "").strip(),
+            }
+        )
+
+    recently_completed: list[dict[str, Any]] = []
+    for item in recent_missions:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("status") or "").strip().lower() != "completed":
+            continue
+        recently_completed.append(
+            {
+                "id": str(item.get("id") or "").strip(),
+                "objective": str(item.get("objective") or "").strip(),
+                "updated_at": str(item.get("updated_at") or "").strip(),
+                "last_task_id": str(item.get("last_task_id") or "").strip(),
+                "last_advance_action": str(item.get("last_advance_action") or "").strip(),
+                "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
+            }
+        )
+        if len(recently_completed) >= 2:
+            break
+
+    deadletter_preview: list[dict[str, Any]] = []
+    for item in deadletter_missions[:2]:
+        if not isinstance(item, dict):
+            continue
+        deadletter_preview.append(
+            {
+                "id": str(item.get("id") or "").strip(),
+                "objective": str(item.get("objective") or "").strip(),
+                "reason": str(item.get("deadletter_reason") or "").strip(),
+                "recommended_action": str(item.get("recommended_action") or "").strip(),
+                "updated_at": str(item.get("updated_at") or "").strip(),
+            }
+        )
+
+    return {
+        "headline": " ".join(part for part in headline_parts if part).strip(),
+        "counts": {
+            "blocked": blocked,
+            "queued": queued,
+            "active": active,
+            "completed": completed,
+            "deadlettered": deadlettered,
+        },
+        "focus": focus_items,
+        "recently_completed": recently_completed,
+        "deadletter_preview": deadletter_preview,
     }
 
 
@@ -487,6 +604,12 @@ def snapshot() -> dict[str, Any]:
     recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
     mission_queue = mission_store.mission_queue_items(limit=5, include_terminal=False)
     deadletter_missions = mission_store.deadletter_queue_items(limit=5)
+    mission_briefing = _mission_briefing(
+        mission_status_counts,
+        mission_queue,
+        deadletter_missions,
+        recent_missions,
+    )
     pending_approval_items = _pending_approval_summary(approvals_root / "pending")
     pending_approvals = _count_json_entries(approvals_root / "pending")
     incidents = [
@@ -538,6 +661,7 @@ def snapshot() -> dict[str, Any]:
             "recent_missions": recent_missions,
             "mission_queue": mission_queue,
             "deadletter_missions": deadletter_missions,
+            "mission_briefing": mission_briefing,
             "incidents": incidents,
         },
     }
