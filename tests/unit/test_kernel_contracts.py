@@ -67,12 +67,28 @@ def test_authority_boundaries_block_scope_escape() -> None:
 def test_world_state_snapshot_reports_repo_and_data(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
+    task_dir = data_root / "tasks" / "tsk_example"
+    second_task_dir = data_root / "tasks" / "tsk_running"
     (repo_root / "plugins" / "generated").mkdir(parents=True, exist_ok=True)
     (data_root / "approvals" / "pending").mkdir(parents=True, exist_ok=True)
-    (data_root / "tasks").mkdir(parents=True, exist_ok=True)
+    task_dir.mkdir(parents=True, exist_ok=True)
+    second_task_dir.mkdir(parents=True, exist_ok=True)
     (data_root / "logs").mkdir(parents=True, exist_ok=True)
-    (data_root / "approvals" / "pending" / "a.json").write_text("{}", encoding="utf-8")
-    (data_root / "tasks" / "task.json").write_text("{}", encoding="utf-8")
+    (
+        data_root / "approvals" / "pending" / "a.json"
+    ).write_text('{"id":"a","action":"plugin.run","reason":"test","status":"pending","ts":1}', encoding="utf-8")
+    (
+        task_dir / "record.json"
+    ).write_text(
+        '{"task_id":"tsk_example","status":"pending","capability":"plugin.run","objective":"First","created_at":"2026-04-11T10:00:00+00:00","updated_at":"2026-04-11T10:00:00+00:00"}',
+        encoding="utf-8",
+    )
+    (
+        second_task_dir / "record.json"
+    ).write_text(
+        '{"task_id":"tsk_running","status":"running","capability":"codex.supervised_exec","objective":"Second","created_at":"2026-04-11T11:00:00+00:00","updated_at":"2026-04-11T12:00:00+00:00","assigned_to":"worker-1"}',
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -84,7 +100,12 @@ def test_world_state_snapshot_reports_repo_and_data(monkeypatch, tmp_path: Path)
     assert state["repo_root"] == str(repo_root.resolve())
     assert state["data_dir"] == str(data_root.resolve())
     assert state["counts"]["pending_approvals"] == 1
-    assert state["counts"]["tasks"] == 1
+    assert state["counts"]["tasks"] == 2
+    assert state["overview"]["task_status_counts"]["pending"] == 1
+    assert state["overview"]["task_status_counts"]["running"] == 1
+    assert state["overview"]["pending_approvals"][0]["action"] == "plugin.run"
+    assert state["overview"]["recent_tasks"][0]["id"] == "tsk_running"
+    assert state["overview"]["recent_tasks"][0]["assigned_to"] == "worker-1"
 
 
 def test_stack_and_services_report_known_surfaces(monkeypatch, tmp_path: Path) -> None:

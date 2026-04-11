@@ -102,6 +102,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/system/info"),
         ("GET", "/system/status"),
         ("GET", "/system/health"),
+        ("GET", "/system/world_state"),
         ("GET", "/system/flags"),
         ("GET", "/system/config/effective"),
         ("POST", "/system/config/mutate"),

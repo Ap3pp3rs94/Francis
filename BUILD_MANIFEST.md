@@ -1,878 +1,418 @@
-# Francis 2.0 — Build Manifest (Phase 2)
+# Francis 2.0 - ORB Build Manifest (Phase 2)
 
-
-
-> **Authoritative scope:** This document is the build system’s human-readable control plane.
-
-> It defines **WHAT gets implemented**, **WHEN**, and **WHAT “done” means**, using the **conical dependency model**
-
-> (foundation → kernel → memory → governance → LLM → chat → plugins → higher systems).
-
+> Authoritative scope: this manifest is the human-readable control plane for Francis Phase 2.
 >
-
-> **Phase 2 rule:** File-by-file implementation only. No tree redesign. No speculative subsystems.
-
-
+> Canonical model: Francis is built around the ORB plane model defined in
+> `docs/PLANES.md` and `meta/plane_map.yaml`.
+>
+> Legacy cone/layer language is retained only as a translation aid. It is no longer
+> the primary build axis.
 
 ---
 
-
-
-## 0) Document Contract
-
-
+## 0. Document Contract
 
 ### 0.1 What this file is
 
-This manifest is the **authoritative implementation schedule** and the **quality-gate definition** for Francis.
-
-
+This manifest is the authoritative implementation schedule and quality-gate
+definition for Francis, expressed in ORB terms.
 
 It exists to prevent:
 
-- “scaffold drift” (empty files that never become real)
+- scaffold drift
+- hidden authority leaps between planes
+- UI polish landing on top of missing runtime guarantees
+- "AI behavior" being shipped without explainable gates, traces, or recovery paths
 
-- hidden coupling (features added above missing foundations)
+### 0.2 What this file is not
 
-- silent regression (features that run but aren’t observable, testable, or governed)
+- Not a replacement for architecture docs. Read `docs/PLANES.md` and
+  `meta/plane_map.yaml` first.
+- Not a CI file.
+- Not a wishlist.
+- Not permission to skip plane boundaries because a feature "already works locally."
 
+### 0.3 How this manifest should be updated
 
+Update this document only when one of the following is true:
 
-### 0.2 What this file is NOT
+- a plane gate materially changes
+- a milestone is genuinely reached
+- the canonical build order changes
+- a priority workstream is closed or re-sequenced
 
-- Not a replacement for architecture docs (see `docs/ARCHITECTURE.md`, `docs/BUILD_ORDER.md`)
-
-- Not a CI config (see `.pre-commit-config.yaml`, future CI workflows)
-
-- Not a roadmap “wishlist” (only list what we intend to implement)
-
-
-
-### 0.3 How to update this manifest
-
-- Update **only when**:
-
-  - a layer is completed
-
-  - a quality gate changes
-
-  - file-order changes are explicitly requested
-
-- When a file is completed, mark it ✅ in the relevant queue section.
-
-
+Implementation can remain file-by-file, but completion is tracked by plane readiness
+and transition enforcement, not by folder churn.
 
 ---
 
+## 1. ORB Canon
 
+### 1.1 What ORB means in this repository
 
-## 1) Operating Principles (Non‑Negotiables)
+In Francis, ORB is the plane-governed operating model:
 
+- work happens inside explicit planes
+- cross-plane transitions are structured, policy-checked, and audited
+- proposal is never execution
+- authority is granted by governance and identity, not by model confidence
+- the operator must be able to see the current plane, the active gate, and the next
+  allowed transition
 
+If the UI cannot explain where a request is in the ORB and why it is blocked, the
+system is not done no matter how much backend machinery exists.
 
-### 1.1 Build invariants (must always hold)
+### 1.2 Authoritative ORB sources
 
-1) **Determinism**
+The ORB is defined by:
 
-   - A cold start should behave the same given the same config + state.
+- `docs/PLANES.md` for plane responsibilities and invariants
+- `meta/plane_map.yaml` for canonical planes, transitions, forbidden transitions,
+  and validation invariants
 
-2) **Observability first**
+This manifest translates those sources into:
 
-   - Logging, audit events, and minimal metrics precede “clever behavior.”
+- build order
+- milestone gates
+- acceptance criteria
+- priority workstreams
 
-3) **Policy before power**
+### 1.3 Non-negotiables
 
-   - Any action that touches the world must be governed (trust, approvals, safety policies).
-
-4) **No secrets in UI**
-
-   - Browser/UI never receives raw secrets; only metadata + references.
-
-5) **Backwards compatibility**
-
-   - Public interfaces (API routes, event schemas, storage layouts) evolve with explicit versioning / compatibility shims.
-
-
-
-### 1.2 Phase 2 execution protocol (file-by-file)
-
-For each file:
-
-- Explain purpose in system
-
-- Provide **full drop** (complete file content)
-
-- Keep it advanced, correct, extensible
-
-- Do not introduce new files unless explicitly approved
-
-- Prefer clarity + correctness + observability over cleverness
-
-
+1. Determinism
+   - cold start plus identical config and state should produce materially identical
+     runtime behavior
+2. Observability before autonomy
+   - side effects must be inspectable before they are scaled up
+3. Policy before power
+   - no execution path may outrun governance, identity, and approval requirements
+4. Evidence is untrusted until re-derived
+   - web content, imported content, and model output are inputs to reasoning, not
+     executable authority
+5. No secrets in interface or telemetry
+   - only references, hashes, and redacted hints cross outward-facing boundaries
+6. ORB visibility is a product requirement
+   - Francis must expose plane, gate, and trace state in operator-facing surfaces
 
 ---
 
+## 2. Current Build Posture
 
+Francis is no longer a blank scaffold. It is a partial ORB runtime with a stronger
+control spine than product surface.
 
-## 2) Conical Dependency Model
+### 2.1 Plane readiness snapshot
 
+- `P0_FOUNDATION`: partial
+  - runtime bootstrapping, settings surfaces, and baseline service startup exist, but
+    the build contract still needed ORB alignment
+- `P1_INTERFACE`: partial
+  - API and chat UI exist, but the operator experience is not yet a complete ORB
+    console
+- `P2_IDENTITY`: partial
+  - credential and delegation surfaces exist, but identity enforcement is not yet the
+    unmistakable source of truth across every privileged route
+- `P3_GOVERNANCE`: materially real
+  - approvals, trust artifacts, policy surfaces, and audit expectations exist; recent
+    hardening removed obvious approval bypass behavior
+- `P4_COGNITION`: partial
+  - planning/orchestration structures exist, but not every user journey is clearly
+    routed through a visible plan-to-gate-to-execution loop
+- `P5_EVIDENCE`: early
+  - policy and evidence concepts exist, but the evidence workflow is not yet a
+    product-grade differentiator
+- `P6_SIMULATION`: early
+  - routes and artifacts exist, but this is not yet a trusted production surface
+- `P7_EXECUTION`: partial
+  - supervised and tool execution paths exist; the remaining gap is broader
+    authorization consistency, artifacting, and explanation
+- `P8_MEMORY`: partial
+  - continuity and snapshot concepts exist; memory still needs a stronger retrieval
+    and operator-facing story
+- `P9_OBSERVABILITY`: strongest plane today
+  - logging, audit, metrics, tracing, and state visibility are among the most real
+    parts of the system
+- `P10_FEDERATION`: roadmap-stage
+  - important to the vision, but not yet close to core-runtime readiness
 
+### 2.2 What that means
 
-### 2.1 Why “cone layers” exist
+The build is closest to a governed runtime kernel, not yet a polished operator
+product.
 
-Francis is a long-lived autonomous system. The cone model enforces:
-
-- strong foundations (config/logging/state)
-
-- explicit governance gates
-
-- modular evolution (plugins, specializations)
-
-- safe expansion into higher-risk domains (industrial, web learning, federation)
-
-
-
-### 2.2 Cone layers (authoritative)
-
-**Layer 0 — Foundation**
-
-- repo hygiene, formatting, environment surfaces, dev ergonomics, packaging invariants
-
-
-
-**Layer 1 — Kernel**
-
-- config loader, paths, process lifecycle, error model, base types, core utilities
-
-
-
-**Layer 2 — Memory**
-
-- ledger/continuity, storage backends, indexing, retrieval primitives, attachments pipeline
-
-
-
-**Layer 3 — Governance**
-
-- approvals, trust calculus, policy evaluation, audit, permissions, safety boundaries
-
-
-
-**Layer 4 — LLM Subsystem**
-
-- provider abstraction, routing, model constraints, tool invocation contracts
-
-
-
-**Layer 5 — Chat**
-
-- protocol, session orchestration, streaming, conversation state, UI integration
-
-
-
-**Layer 6 — Plugins**
-
-- plugin spec, registry, sandboxing, execution, artifact outputs, plugin building
-
-
-
-**Layer 7 — Higher Systems**
-
-- federation, industrial control, system profiling, self-heal/evolve loops, specialization layer
-
-
+The main risk is not "there is no architecture." The main risk is that higher-level
+surfaces could outrun ORB clarity and server-side enforcement. The next work must make
+the existing planes coherent, visible, and end-to-end functional before adding more
+surface area.
 
 ---
 
+## 3. Canonical ORB Order
 
+### 3.1 Runtime request flow
 
-## 3) Runtime Surfaces (What must keep working)
+The canonical request lifecycle remains:
 
+`P1_INTERFACE -> P4_COGNITION -> P5_EVIDENCE/P6_SIMULATION (optional) -> P3_GOVERNANCE -> P2_IDENTITY -> P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE`
 
+`P10_FEDERATION` is downstream and optional. It must never bypass the same gates.
 
-### 3.1 Services
+### 3.2 Build completion order
 
-- **API** (backend HTTP + WS)
+The canonical build order is not the same as the runtime request flow. To make
+Francis safe and real, the implementation sequence is:
 
-- **Daemon** (scheduler + autonomous loop runner)
+1. `P0_FOUNDATION`
+2. `P9_OBSERVABILITY`
+3. `P3_GOVERNANCE`
+4. `P2_IDENTITY`
+5. `P4_COGNITION`
+6. `P7_EXECUTION`
+7. `P8_MEMORY`
+8. `P1_INTERFACE`
+9. `P5_EVIDENCE`
+10. `P6_SIMULATION`
+11. `P10_FEDERATION`
 
-- **Workers** (background execution pool)
+Rationale:
 
-- **Chat UI** (operator console)
+- Foundation exists first so the system can fail closed.
+- Observability comes before "smartness" so every later plane is inspectable.
+- Governance and identity come before execution so authority is explicit.
+- Cognition exists to produce proposals, not direct power.
+- Execution only becomes product-worthy once it is fully governed and explainable.
+- Memory must be real before the UI claims continuity.
+- Interface polish comes after the core loop is trustworthy, but interface ingress
+  still exists from the start.
+- Evidence, simulation, and federation are differentiators only after the core ORB is
+  stable.
 
+### 3.3 Legacy translation map
 
+If older docs or discussions still use layer language, translate them like this:
 
-### 3.2 Minimum “always works” commands (baseline)
+- Foundation and kernel -> `P0_FOUNDATION`, parts of `P2_IDENTITY`, parts of
+  `P9_OBSERVABILITY`
+- Memory -> `P8_MEMORY`
+- Governance -> `P3_GOVERNANCE`
+- LLM and planning -> `P4_COGNITION`
+- Web and research -> `P5_EVIDENCE`
+- Chat and operator console -> `P1_INTERFACE`
+- Plugins and tool side effects -> `P7_EXECUTION`
+- Industrial and digital twin systems -> `P6_SIMULATION`
+- Federation and shared knowledge -> `P10_FEDERATION`
 
-These are **baseline acceptance checks** during Phase 2:
-
-- API: `python -m francis api`
-
-- Daemon: `python -m francis daemon`
-
-- UI: `npm run dev` (from `apps/chat_ui`)
-
-
-
-If any file change breaks these, the file is not “done.”
-
-
-
----
-
-
-
-## 4) Quality Gates (Definition of Done)
-
-
-
-### 4.1 Per-file “done” gate
-
-A file is considered ✅ complete when:
-
-- It has a clear purpose + contract (docstring/header comments where appropriate)
-
-- It is typed (Python typing / TS types) and defensively coded
-
-- It is observable (logs/errors are actionable; no silent failures)
-
-- It preserves compatibility with the current tree + running services
-
-- It has no obvious security footguns (secrets, unsafe defaults, missing redaction)
-
-- It passes local checks relevant to its layer:
-
-  - lint/format (ruff/prettier/etc as configured)
-
-  - unit tests (where applicable)
-
-  - runtime smoke (if it’s an entrypoint, protocol, or config surface)
-
-
-
-### 4.2 Layer completion gate
-
-A layer is considered complete when:
-
-- Its public contracts are stable (types, schemas, core APIs)
-
-- It has tests for critical invariants
-
-- It has instrumentation hooks (logging/audit/metrics) for core flows
-
-- Higher layers are not forced to “work around” missing behavior
-
-
+The translation is for orientation only. Roadmap decisions should be made in plane
+terms.
 
 ---
 
+## 4. ORB Milestones
 
+### M1. ORB Core
 
-## 5) Canonical Order Source
+Francis reaches ORB Core when:
 
+- forbidden transitions are enforced server-side
+- approvals are bound to the exact authorized action
+- identity and scope checks are part of every privileged path
+- every side effect emits a trace and audit record
+- the system can explain why an action was denied
 
+This milestone is about making the ORB real in code rather than rhetorical in docs.
 
-### 5.1 Canonical file list
+### M2. Functional Francis
 
-The canonical file ordering is derived from the repository’s enumerated file list:
+Francis becomes functionally usable when one complete operator request can:
 
-- `francis_tree_ps.filtered.txt`
+- enter through `P1_INTERFACE`
+- produce a visible plan in `P4_COGNITION`
+- request and satisfy gates in `P3_GOVERNANCE` and `P2_IDENTITY`
+- execute in `P7_EXECUTION`
+- return a result plus trace through `P9_OBSERVABILITY`
+- update continuity through `P8_MEMORY`
 
+This is the first milestone where Francis is a working governed agent rather than a
+well-instrumented shell.
 
+### M3. User-Friendly Francis
 
-### 5.2 Canonical ordering rule (deterministic)
+Francis becomes user-friendly when the operator no longer has to infer the ORB from
+logs or source code.
 
-Within a cone layer:
+Required outcomes:
 
-1) Prefer **interfaces/types/schemas** first
+- the UI shows the active plane for a request
+- blocked work shows the exact gate, policy, or approval that is waiting
+- approvals are understandable and scoped to the concrete action
+- tool traces and artifacts are discoverable without terminal spelunking
+- errors include recovery guidance instead of opaque stack traces
+- continuity and backlog state are visible and trustworthy
 
-2) Then **core utilities**
+The ORB should be visible as the product, not hidden as internal architecture.
 
-3) Then **providers/adapters**
+### M4. Differentiated Francis
 
-4) Then **service wiring / entrypoints**
+Francis becomes distinct from a generic agent shell when:
 
-5) Then **UI bindings**
+- `P5_EVIDENCE` produces provenance-rich evidence packs
+- `P6_SIMULATION` can validate high-risk plans before execution
+- `P10_FEDERATION` shares sanitized knowledge under trust and policy gates
+- the UI lets the operator inspect cross-plane reasoning, gating, and outcomes as a
+  first-class experience
 
-
-
-Tie-breaker is stable lexicographic order by path.
-
-
-
----
-
-
-
-## 6) System Map (Orientation)
-
-
-
-### 6.1 Top-level directories (what they are)
-
-- `apps/` — runnable entrypoints (api/daemon/workers/chat_ui)
-
-- `src/francis/` — main Python package (core runtime)
-
-- `config/` — runtime configuration (profiles, policies, prompts, models)
-
-- `meta/` — foundational models (axioms, risk, trust, governance principles)
-
-- `schemas/` — JSON schemas for contracts (messages, actions, domains, etc.)
-
-- `plugins/` — plugin system (registry/spec/templates/packs)
-
-- `connectors/` — external integration adapters (cloud, protocols, comms)
-
-- `runtimes/` — model runtimes and execution environments (ollama, etc.)
-
-- `scripts/` — operational scripts (doctor, reset, deploy, trust reset, etc.)
-
-- `data/` — runtime state (ignored by git; templates allowed)
-
-- `docs/` — deep documentation set
-
-- `specializations/` — domain specialization manifests + assets
-
-- `infra/` — docker/k8s/terraform deployment artifacts
-
-- `sdk/` — integration SDKs (polyglot)
-
-
-
-### 6.2 State + artifacts (do not commit)
-
-- `data/conversations/ledger/ledger.jsonl` — continuity ledger
-
-- `data/approvals/*` — approval queues
-
-- `data/artifacts/*` — generated outputs
-
-- `data/vectors/*` — vector indices/cache
-
-- `data/credentials/vault.db` — credential vault database
-
-
+This milestone is where the ORB becomes the recognizable differentiator.
 
 ---
 
+## 5. Priority Workstreams
 
+### Workstream A. Close the server-side ORB contract
 
-## 7) Implementation Queue (Phase 2)
+Goal: make forbidden transitions impossible in code, not just disallowed in theory.
 
+Anchor surfaces:
 
+- `src/francis/governance/*`
+- `src/francis/api/routes/approvals.py`
+- `src/francis/agent/supervised_exec.py`
+- `src/francis/credentials/*`
+- `src/francis/telemetry/*`
 
-> **Important:** This queue is grouped by cone layer.  
+Done when:
 
-> We execute **one file at a time**. Each completed file becomes ✅ here.
+- approved requests are cryptographically or structurally bound to the authorized
+  payload and scope
+- remote or unauthenticated callers cannot decide approvals
+- execution paths always carry request identifiers, decision identifiers, and actor
+  identity
+- audit records are complete enough to reconstruct who authorized what and why
 
+### Workstream B. Make the core loop functional
 
+Goal: make the canonical ORB loop work end to end for real operator tasks.
 
----
+Anchor surfaces:
 
+- `src/francis/agent/*`
+- `src/francis/chat/router.py`
+- `src/francis/agent/executor.py`
+- `src/francis/world_state/snapshot.py`
+- `src/francis/memory/*`
 
+Done when:
 
-### Layer 0 — Foundation ✅/⬜
+- a request can be planned, gated, executed, and persisted without manual patching
+- backlog and world state reflect real queued work
+- results and failures flow back through a stable operator-facing contract
+- continuity updates are visible and do not silently drop context
 
+### Workstream C. Make the ORB user-friendly
 
+Goal: turn the existing backend planes into an operator console that explains itself.
 
-#### L0 goals
+Anchor surfaces:
 
-- Establish consistent formatting + safe ignores
+- `apps/chat_ui/src/App.tsx`
+- `apps/chat_ui/src/chat/*`
+- `apps/chat_ui/src/approvals/*`
+- `apps/chat_ui/src/credential_manager/*`
+- `apps/chat_ui/src/explanation_explorer/*`
+- `apps/chat_ui/src/trust_dashboard/*`
 
-- Lock down environment surfaces
+Done when:
 
-- Ensure developer workflows are fast and reproducible
+- the UI shows plane, gate, approval state, and execution result as one coherent flow
+- reconnect, retry, and pending-work states are visible
+- trust and approval decisions are explained in plain language
+- artifacts, traces, and ledger entries are reachable from the active conversation
 
+### Workstream D. Build the differentiators on top of the stable core
 
+Goal: add the features that make Francis distinct only after the ORB core is stable.
 
-#### L0 queue
+Anchor surfaces:
 
-- ✅ `.editorconfig`
+- `src/francis/internet/*`
+- `src/francis/explanation/*`
+- `src/francis/api/routes/simulation.py`
+- `src/francis/api/routes/industrial.py`
+- `src/francis/collective/federation/*`
+- `src/francis/collective/knowledge_sharing/*`
 
-- ✅ `.env.example`
+Done when:
 
-- ✅ `.gitignore`
-
-- ✅ `.pre-commit-config.yaml`
-
-- ⬜ `.python-version`
-
-- ⬜ `pyproject.toml` (only if changes are required; otherwise treat as locked)
-
-- ⬜ `ruff.toml` (only if changes are required; otherwise treat as locked)
-
-- ⬜ `mypy.ini` / `pytest.ini` (only if changes are required; otherwise treat as locked)
-
-- ⬜ `BUILD_MANIFEST.md` (this file)
-
-
-
----
-
-
-
-### Layer 1 — Kernel ⬜
-
-
-
-#### L1 goals
-
-- Make the package runtime deterministic and inspectable
-
-- Provide canonical config, logging, error model, and path handling
-
-- Define core types used everywhere else
-
-
-
-#### L1 queue (representative / anchor files; expand as we reach them)
-
-- ✅ `src/francis/telemetry/logging.py`
-
-- ✅ `src/francis/telemetry/audit.py`
-
-- ✅ `src/francis/telemetry/metrics.py`
-
-- ✅ `src/francis/telemetry/tracing.py`
-
-- ⬜ `src/francis/temporal/versioning/backward_compatibility.py`
-
-- ✅ `src/francis/world_state/snapshot.py`
-
-
-
-**Kernel acceptance tests (layer gate):**
-
-- import-time sanity: `python -c "import francis"`
-
-- API/daemon start without stack traces
-
-- logs contain clear startup banners and configuration redaction
-
-
+- evidence is provenance-rich and injection-safe
+- simulation can validate plans before they are allowed to execute
+- federation shares only sanitized, policy-approved knowledge
+- none of these capabilities open a shortcut around governance or observability
 
 ---
 
+## 6. Cross-Plane Gates
 
+These gates are always on. A feature is not done if it weakens them.
 
-### Layer 2 — Memory ⬜
+### 6.1 Transition gates
 
+- no `P1_INTERFACE -> P7_EXECUTION`
+- no `P5_EVIDENCE -> P7_EXECUTION`
+- no `P10_FEDERATION -> P7_EXECUTION`
+- no privileged action without `P3_GOVERNANCE` plus `P2_IDENTITY`
 
+### 6.2 Data gates
 
-#### L2 goals
+- no secrets in UI payloads
+- no secrets in audit or metrics
+- no memory write without provenance or retention alignment
+- no raw untrusted external content treated as executable authority
 
-- Make continuity, storage, and retrieval real (and safe)
+### 6.3 UX gates
 
-- Ensure attachments + ingestion pipeline is deterministic and governed
-
-- Make memory timelines queryable and exportable
-
-
-
-#### L2 queue (representative / anchor files)
-
-- ✅ `schemas/memory.schema.json` (contract)
-
-- ✅ `schemas/conversation_state.schema.json` (contract)
-
-- ⬜ `data/conversations/ledger/ledger.jsonl` (runtime artifact; format contract only)
-
-- ⬜ `docs/CONVERSATION_CONTINUITY.md` (validate reality vs doc)
-
-
-
-**Memory acceptance tests:**
-
-- ledger read/write paths stable
-
-- export path produces redacted output if needed
-
-- no UI receives raw sensitive payloads from attachments
-
-
+- every operator-visible action must map to a plane
+- every blocked action must explain the active gate
+- every completed side effect must expose a trace or artifact handle
+- every important failure must be recoverable without source diving
 
 ---
 
+## 7. Release Readiness
 
+A production-ish release is allowed only if:
 
-### Layer 3 — Governance ⬜
+- `M1 ORB Core` is complete
+- the `M2 Functional Francis` loop works on the primary operator journey
+- `P9_OBSERVABILITY` can reconstruct privileged actions and denials
+- `P1_INTERFACE` exposes approvals, traces, and recovery paths clearly
+- `P5_EVIDENCE`, `P6_SIMULATION`, and `P10_FEDERATION` remain disabled or gated
+  unless they have met their own ORB acceptance requirements
 
-
-
-#### L3 goals
-
-- Approvals are enforceable, not decorative
-
-- Trust is computed, stored, and used to gate actions
-
-- Audit is complete enough to support compliance narratives
-
-
-
-#### L3 queue (representative / anchor files)
-
-- ✅ `schemas/risk_assessment.schema.json`
-
-- ✅ `schemas/authority_model.schema.json`
-
-- ✅ `schemas/action_request.schema.json`
-
-- ✅ `schemas/action_result.schema.json`
-
-- ✅ `src/francis/trust/calculator.py`
-
-- ✅ `src/francis/trust/levels.py`
-
-- ✅ `src/francis/trust/tracker.py`
-
-- ✅ `src/francis/trust/boundaries.py`
-
-
-
-**Governance acceptance tests:**
-
-- approvals cannot be bypassed by API calls
-
-- audit events are emitted for decisions and tool invocations
-
-- trust state persists and is explainable
-
-
+If the ORB is invisible to the operator or unenforced on the server, the release is
+not ready.
 
 ---
 
-
-
-### Layer 4 — LLM Subsystem ⬜
-
-
-
-#### L4 goals
-
-- Provider abstraction, routing, constraints, fallbacks
-
-- Tool invocation contract + structured outputs
-
-- Safe sampling and prompt hygiene
-
-
-
-#### L4 queue (representative / anchor files)
-
-- ⬜ `config/models/providers/openai.yaml`
-
-- ⬜ `config/models/providers/ollama.yaml`
-
-- ⬜ `config/models/routing.yaml`
-
-- ⬜ `runtimes/ollama/model_roster.yaml`
-
-- ✅ `schemas/chat_message.schema.json`
-
-
-
-**LLM acceptance tests:**
-
-- provider routing deterministically selects a model
-
-- timeouts/fallbacks behave predictably
-
-- structured tool calls validated against schemas
-
-
-
----
-
-
-
-### Layer 5 — Chat ⬜
-
-
-
-#### L5 goals
-
-- Stable chat protocol (WS events, message schemas, streaming)
-
-- Conversation orchestration ties into memory + governance
-
-- UI becomes a faithful operator console (not a demo)
-
-
-
-#### L5 queue (UI-focused; expand as backend contracts stabilize)
-
-- ✅ `apps/chat_ui/index.html`
-
-- ⬜ `apps/chat_ui/public/manifest.json` (PWA shell; add if used)
-
-- ✅ `apps/chat_ui/src/App.tsx`
-
-- ⬜ `apps/chat_ui/src/chat/*` (protocol + client)
-
-- ⬜ `apps/chat_ui/src/attachments/*`
-
-- ✅ `apps/chat_ui/src/approvals/*`
-
-- ✅ `apps/chat_ui/src/credential_manager/*`
-
-
-
-**Chat acceptance tests:**
-
-- WS reconnects cleanly with backoff
-
-- events parse defensively (plain text / JSON / structured)
-
-- sending a message updates continuity ledger (end-to-end)
-
-
-
----
-
-
-
-### Layer 6 — Plugins ⬜
-
-
-
-#### L6 goals
-
-- Plugin spec is enforceable (schemas + validators)
-
-- Plugin registry is deterministic
-
-- Plugin execution is sandboxed and audited
-
-
-
-#### L6 queue (representative / anchor files)
-
-- ✅ `schemas/plugins.schema.json`
-
-- ✅ `plugins/spec/*`
-
-- ✅ `plugins/registry/*`
-
-- ⬜ `plugins/templates/*`
-
-- ⬜ `scripts/plugin-build.ps1`
-
-
-
-**Plugin acceptance tests:**
-
-- plugin build produces artifacts into `data/artifacts/plugins/`
-
-- plugin execution emits audit records
-
-- policy gates apply before plugin side effects
-
-
-
----
-
-
-
-### Layer 7 — Higher Systems ⬜
-
-
-
-#### L7 goals
-
-- Federation (multi-instance coordination)
-
-- Industrial control \& digital twins
-
-- System profiling, self-heal/evolve loops
-
-- Domain workbench + specialization expansion
-
-
-
-#### L7 queue (UI + contracts; expand as backend is implemented)
-
-- ⬜ `apps/chat_ui/src/federation_hub/*`
-
-- ⬜ `apps/chat_ui/src/industrial_control/*`
-
-- ⬜ `apps/chat_ui/src/digital_twin_center/*`
-
-- ⬜ `apps/chat_ui/src/domain_workbench/*`
-
-- ⬜ `apps/chat_ui/src/explanation_explorer/*`
-
-- ⬜ `apps/chat_ui/src/trust_dashboard/*`
-
-- ⬜ `apps/chat_ui/src/web_learning_monitor/*`
-
-- ⬜ `tests/industrial/*`
-
-- ⬜ `tests/resilience/*`
-
-- ⬜ `docs/INDUSTRIAL_SIMULATIONS.md`
-
-- ⬜ `docs/FEDERATION.md` (if present; otherwise keep governance/policies aligned)
-
-
-
-**Higher-systems acceptance tests:**
-
-- no “control” action bypasses governance
-
-- industrial safety validations are logged and reproducible
-
-- federation consensus logs are append-only and auditable
-
-
-
----
-
-
-
-## 8) Cross-Cutting Gates (Always On)
-
-
-
-### 8.1 Security gates
-
-- UI never receives secrets (only refs + redacted hints)
-
-- Approval required for risky actions by default
-
-- Web learning must honor `config/policies/web_access.yaml` and `meta/internet_safety_model.yaml`
-
-
-
-### 8.2 Observability gates
-
-- Every important action produces:
-
-  - structured logs (component, action, outcome)
-
-  - audit record (who/what/why)
-
-  - correlation identifiers where feasible
-
-
-
-### 8.3 Compatibility gates
-
-- Schema evolution is additive unless explicitly versioned
-
-- Storage files are append-only where possible (ledger, logs)
-
-- Backwards-compat shims exist if any contract changes
-
-
-
----
-
-
-
-## 9) Known Hotspots (Build Forward Mindset)
-
-
-
-These are areas where “works locally” often hides future failure modes:
-
-
-
-1) **Windows path + CRLF handling**
-
-   - Ensure scripts and PowerShell files remain CRLF where appropriate.
-
-2) **State deletion safety**
-
-   - Never require deleting `data/` to fix correctness; build migrations and resets.
-
-3) **UI/Backend contract drift**
-
-   - Prefer schemas under `schemas/` and validate payloads at both ends.
-
-4) **Web learning and compliance**
-
-   - Treat browsing as a governed capability with logging + approvals.
-
-5) **Industrial control**
-
-   - All actuation is safety-critical; policy gates must be enforced server-side.
-
-
-
----
-
-
-
-## 10) Release Readiness Checklist (Future, but grounded)
-
-
-
-A “production-ish” release is allowed only if:
-
-- API + daemon can restart cleanly (no manual state hacks)
-
-- logs/audit are sufficient to reconstruct actions
-
-- approvals and trust gates are effective
-
-- plugin execution is sandboxed + auditable
-
-- UI is a reliable operator console, not a toy
-
-
-
----
-
-
-
-## Appendix A — What to read when implementing a layer
-
-
-
-- Build order philosophy: `docs/BUILD_ORDER.md`
-
-- Architecture: `docs/ARCHITECTURE.md`
-
-- Policies: `docs/POLICIES.md`
-
-- Governance: `docs/GOVERNANCE.md`
-
-- Trust model: `docs/TRUST_MODEL.md`
-
-- Memory model: `docs/MEMORY.md`
-
-- Plugins: `docs/PLUGINS.md`
-
-- Industrial: `docs/INDUSTRIAL_SIMULATIONS.md`
-
-- Runbook: `docs/RUNBOOK.md`
-
-
-
----
-
-
-
-## Appendix B — Minimal operator workflow (UI)
-
-
-
-UI should support:
-
-- view chat status + reconnect state
-
-- send/receive messages
-
-- view continuity ledger
-
-- view pending approvals + decide (when enabled)
-
-- inspect errors with enough context to fix root cause
-
-
-
-Everything beyond that is layered on top of governance and memory, not beside them.
-
-
-
+## Appendix A. What to read while building
+
+- `docs/PLANES.md`
+- `meta/plane_map.yaml`
+- `docs/BUILD_ORDER.md`
+- `docs/ARCHITECTURE.md`
+- `docs/GOVERNANCE.md`
+- `docs/TRUST_MODEL.md`
+- `docs/MEMORY.md`
+- `docs/POLICIES.md`
+- `docs/WEB_ACCESS.md`
+
+## Appendix B. Minimal operator workflow
+
+The minimal operator experience must support:
+
+- submit a request
+- see the active plane and next gate
+- approve or deny the exact action being requested
+- inspect the resulting trace, artifact, or denial reason
+- view continuity and pending work state
+- recover cleanly from reconnects and failures
+
+Everything else is built on top of that loop, not beside it.

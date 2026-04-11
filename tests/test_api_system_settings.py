@@ -30,6 +30,46 @@ def test_system_info_and_status(monkeypatch, tmp_path: Path) -> None:
     assert status_body["status"] == "ready"
 
 
+def test_system_world_state_reports_nested_task_records(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    task_dir = data_root / "tasks" / "tsk_nested"
+    (data_root / "approvals" / "pending").mkdir(parents=True, exist_ok=True)
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (
+        data_root / "approvals" / "pending" / "appr.json"
+    ).write_text(
+        '{"id":"appr","action":"plugin.run","reason":"integration_test","status":"pending","ts":10}',
+        encoding="utf-8",
+    )
+    (
+        task_dir / "record.json"
+    ).write_text(
+        '{"task_id":"tsk_nested","status":"running","capability":"plugin.run","objective":"Test nested task","created_at":"2026-04-11T10:00:00+00:00","updated_at":"2026-04-11T10:05:00+00:00"}',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["subsystem"] == "world_state"
+    assert body["counts"]["tasks"] == 1
+    assert body["paths"]["tasks"]["path"] == str(data_root / "tasks")
+    assert body["overview"]["task_status_counts"]["running"] == 1
+    assert body["overview"]["recent_tasks"][0]["id"] == "tsk_nested"
+    assert body["overview"]["pending_approvals"][0]["id"] == "appr"
+
+
 def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -118,4 +158,3 @@ def test_system_config_mutate_reflects_in_effective_snapshot(monkeypatch, tmp_pa
     cfg = effective_body["config"]
     assert cfg["ui"]["preferences"]["theme"] == "light"
     assert cfg["ui"]["preferences"]["density"] == "compact"
-

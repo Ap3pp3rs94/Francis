@@ -97,6 +97,62 @@ export type EffectiveConfigSnapshot = {
   meta?: Record<string, unknown>;
 };
 
+export type WorldStatePathState = {
+  path?: string;
+  exists?: boolean;
+  is_dir?: boolean;
+};
+
+export type WorldStateCounts = {
+  pending_approvals?: number;
+  approved_approvals?: number;
+  rejected_approvals?: number;
+  tasks?: number;
+  generated_plugins?: number;
+};
+
+export type WorldStateApprovalSummary = {
+  id: string;
+  action?: string;
+  reason?: string;
+  status?: string;
+  ts?: UnixSeconds;
+};
+
+export type WorldStateTaskSummary = {
+  id: string;
+  status?: string;
+  capability?: string;
+  objective?: string;
+  requester_id?: string;
+  assigned_to?: string;
+  created_at?: string;
+  updated_at?: string;
+  status_reason?: string;
+  terminal?: boolean;
+};
+
+export type WorldStateOverview = {
+  pending_approvals: WorldStateApprovalSummary[];
+  task_status_counts: Record<string, number>;
+  recent_tasks: WorldStateTaskSummary[];
+};
+
+export type WorldStateSnapshot = {
+  ok: boolean;
+  subsystem?: string;
+  generated_at?: number;
+  repo_root?: string;
+  data_dir?: string;
+  counts?: WorldStateCounts;
+  paths?: Record<string, WorldStatePathState>;
+  overview?: WorldStateOverview;
+  trust?: Record<string, unknown>;
+  stack?: Record<string, unknown>;
+  services?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+};
+
 /**
  * A controlled server mutation request.
  * The backend is expected to enforce approvals/policy; the UI just submits intent.
@@ -504,6 +560,91 @@ function parseEffectiveConfigSnapshot(raw: unknown): EffectiveConfigSnapshot {
   return snap;
 }
 
+function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
+  if (!isRecord(raw)) return { ok: false };
+
+  const countsRaw = isRecord(raw.counts) ? (raw.counts as Record<string, unknown>) : {};
+  const pathsRaw = isRecord(raw.paths) ? (raw.paths as Record<string, unknown>) : {};
+  const overviewRaw = isRecord(raw.overview) ? (raw.overview as Record<string, unknown>) : {};
+
+  const counts: WorldStateCounts = {
+    pending_approvals: safeNumber(countsRaw.pending_approvals, 0),
+    approved_approvals: safeNumber(countsRaw.approved_approvals, 0),
+    rejected_approvals: safeNumber(countsRaw.rejected_approvals, 0),
+    tasks: safeNumber(countsRaw.tasks, 0),
+    generated_plugins: safeNumber(countsRaw.generated_plugins, 0),
+  };
+
+  const paths: Record<string, WorldStatePathState> = {};
+  for (const [key, value] of Object.entries(pathsRaw)) {
+    if (!isRecord(value)) continue;
+    paths[key] = {
+      path: safeString(value.path, ""),
+      exists: safeBoolean(value.exists, false),
+      is_dir: safeBoolean(value.is_dir, false),
+    };
+  }
+
+  const approvalsRaw = Array.isArray(overviewRaw.pending_approvals) ? (overviewRaw.pending_approvals as unknown[]) : [];
+  const recentTasksRaw = Array.isArray(overviewRaw.recent_tasks) ? (overviewRaw.recent_tasks as unknown[]) : [];
+  const taskStatusCountsRaw = isRecord(overviewRaw.task_status_counts)
+    ? (overviewRaw.task_status_counts as Record<string, unknown>)
+    : {};
+
+  const overview: WorldStateOverview = {
+    pending_approvals: approvalsRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        action: safeString(item.action, ""),
+        reason: safeString(item.reason, ""),
+        status: safeString(item.status, ""),
+        ts: normalizeUnixSeconds(item.ts),
+      }))
+      .filter((item) => item.id),
+    task_status_counts: Object.fromEntries(
+      Object.entries(taskStatusCountsRaw).map(([key, value]) => [key, safeNumber(value, 0)]),
+    ),
+    recent_tasks: recentTasksRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        status: safeString(item.status, ""),
+        capability: safeString(item.capability, ""),
+        objective: safeString(item.objective, ""),
+        requester_id: safeString(item.requester_id, ""),
+        assigned_to: safeString(item.assigned_to, ""),
+        created_at: safeString(item.created_at, ""),
+        updated_at: safeString(item.updated_at, ""),
+        status_reason: safeString(item.status_reason, ""),
+        terminal: safeBoolean(item.terminal, false),
+      }))
+      .filter((item) => item.id),
+  };
+
+  const snapshot: WorldStateSnapshot = {
+    ok: safeBoolean(raw.ok, false),
+    subsystem: safeString(raw.subsystem, ""),
+    generated_at: safeNumber(raw.generated_at, 0),
+    repo_root: safeString(raw.repo_root, ""),
+    data_dir: safeString(raw.data_dir, ""),
+    counts,
+    paths,
+    overview,
+  };
+
+  if (!snapshot.subsystem) delete snapshot.subsystem;
+  if (!snapshot.generated_at) delete snapshot.generated_at;
+  if (!snapshot.repo_root) delete snapshot.repo_root;
+  if (!snapshot.data_dir) delete snapshot.data_dir;
+  if (isRecord(raw.trust)) snapshot.trust = raw.trust as Record<string, unknown>;
+  if (isRecord(raw.stack)) snapshot.stack = raw.stack as Record<string, unknown>;
+  if (isRecord(raw.services)) snapshot.services = raw.services as Record<string, unknown>;
+  if (isRecord(raw.meta)) snapshot.meta = raw.meta as Record<string, unknown>;
+
+  return snapshot;
+}
+
 export type SettingsEndpoints = {
   /**
    * Each endpoint returns a *priority-ordered* list of candidate paths.
@@ -511,6 +652,7 @@ export type SettingsEndpoints = {
    */
   info: () => string[];
   health: () => string[];
+  worldState: () => string[];
   featureFlags: () => string[];
   effectiveConfig: () => string[];
 
@@ -527,6 +669,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     // Common candidates across FastAPI-style systems.
     info: () => ["/system/info", "/system/status", "/system", "/status"],
     health: () => ["/system/health", "/health", "/system/ping", "/ping"],
+    worldState: () => ["/system/world_state", "/system/world-state"],
     featureFlags: () => ["/system/flags", "/system/feature_flags", "/system/features", "/flags"],
     effectiveConfig: () => ["/system/config/effective", "/system/effective_config", "/system/config", "/config/effective"],
 
@@ -637,6 +780,11 @@ export class SettingsClient {
   async getHealth(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<SystemHealth> {
     const { json } = await this.fetchFirstOk(this.endpoints.health(), this.init(opts));
     return parseSystemHealth(json);
+  }
+
+  async getWorldState(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<WorldStateSnapshot> {
+    const { json } = await this.fetchFirstOk(this.endpoints.worldState(), this.init(opts));
+    return parseWorldStateSnapshot(json);
   }
 
   async listFeatureFlags(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FeatureFlagsResponse> {

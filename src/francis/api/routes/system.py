@@ -20,6 +20,7 @@ from francis.kernel.paths import data_dir
 from francis.kernel.services import services_action, services_status
 from francis.kernel.stack import stack_status
 from francis.settings import Settings
+from francis.world_state.snapshot import snapshot as world_state_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -354,6 +355,15 @@ def services() -> dict[str, object]:
         return {"ok": True, "report": services_status()}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
+
+@router.get("/world_state")
+@router.get("/world-state")
+def world_state() -> dict[str, object]:
+    try:
+        return world_state_snapshot()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "subsystem": "world_state"}
 
 
 @router.post("/services/action")

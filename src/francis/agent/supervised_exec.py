@@ -56,6 +56,14 @@ def _new_run_id() -> str:
     return f"run_{time.strftime('%Y%m%d_%H%M%S', time.gmtime())}_{secrets.token_hex(4)}"
 
 
+def _normalize_timeout_sec(value: Any) -> int:
+    try:
+        timeout_sec = int(value or 300)
+    except Exception:
+        timeout_sec = 300
+    return max(1, min(timeout_sec, 24 * 3600))
+
+
 def _normalize_cwd(cwd_raw: str) -> str:
     cwd_raw = _safe_str(cwd_raw).strip()
     if not cwd_raw:
@@ -68,6 +76,59 @@ def _normalize_cwd(cwd_raw: str) -> str:
         return str(p)
     except Exception:
         return str(repo_root())
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = _safe_str(item).strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def _approval_payload(
+    *,
+    objective: str,
+    user_command: str,
+    cwd: str,
+    timeout_sec: int,
+    expected_artifacts: list[str],
+    prechecks: list[str],
+) -> dict[str, Any]:
+    return {
+        "objective": _safe_str(objective),
+        "user_command": _safe_str(user_command),
+        "cwd": _normalize_cwd(cwd),
+        "timeout_sec": _normalize_timeout_sec(timeout_sec),
+        "expected_artifacts": _normalize_string_list(expected_artifacts),
+        "prechecks": _normalize_string_list(prechecks),
+    }
+
+
+def _approval_matches_request(approval_record: dict[str, Any] | None, expected_payload: dict[str, Any]) -> bool:
+    if not isinstance(approval_record, dict):
+        return False
+
+    approval_action = _safe_str(approval_record.get("action")).strip().lower()
+    if approval_action and approval_action != "codex.supervised_exec":
+        return False
+
+    payload = approval_record.get("payload")
+    if not isinstance(payload, dict):
+        return False
+
+    approved_payload = _approval_payload(
+        objective=_safe_str(payload.get("objective")),
+        user_command=_safe_str(payload.get("user_command")),
+        cwd=_safe_str(payload.get("cwd")),
+        timeout_sec=payload.get("timeout_sec"),
+        expected_artifacts=payload.get("expected_artifacts"),
+        prechecks=payload.get("prechecks"),
+    )
+    return approved_payload == expected_payload
 
 
 def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -87,15 +148,17 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": "missing_user_command"}
 
     cwd = _normalize_cwd(_safe_str(inputs.get("cwd")))
-    timeout_sec = int(inputs.get("timeout_sec") or 300)
-    timeout_sec = max(1, min(timeout_sec, 24 * 3600))
-
-    expected_artifacts = inputs.get("expected_artifacts")
-    if not isinstance(expected_artifacts, list):
-        expected_artifacts = []
-    prechecks = inputs.get("prechecks")
-    if not isinstance(prechecks, list):
-        prechecks = []
+    timeout_sec = _normalize_timeout_sec(inputs.get("timeout_sec"))
+    expected_artifacts = _normalize_string_list(inputs.get("expected_artifacts"))
+    prechecks = _normalize_string_list(inputs.get("prechecks"))
+    request_payload = _approval_payload(
+        objective=_safe_str(objective),
+        user_command=user_command,
+        cwd=cwd,
+        timeout_sec=timeout_sec,
+        expected_artifacts=expected_artifacts,
+        prechecks=prechecks,
+    )
 
     approval_id = _safe_str(inputs.get("approval_id")).strip()
 
@@ -104,14 +167,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         req = approvals.request(
             action="codex.supervised_exec",
             reason="supervised_exec_requested",
-            payload={
-                "objective": _safe_str(objective),
-                "user_command": user_command,
-                "cwd": cwd,
-                "timeout_sec": timeout_sec,
-                "expected_artifacts": expected_artifacts,
-                "prechecks": prechecks,
-            },
+            payload=request_payload,
         )
         approval_id = _safe_str(req.get("id")).strip() or _new_run_id()
         art = _artifact_dir(approval_id)
@@ -192,6 +248,28 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "run_id": approval_id,
             "artifact_dir": str(art),
             "error": f"unknown_approval_status:{status}",
+        }
+
+    if not _approval_matches_request(record, request_payload):
+        _write_json(
+            art / "mismatch.json",
+            {
+                "kind": "supervised_exec.mismatch",
+                "approval_id": approval_id,
+                "objective": objective,
+                "expected_payload": request_payload,
+                "approval_record": record,
+            },
+        )
+        return {
+            "kind": "supervised_exec.result",
+            "ok": False,
+            "status": "needs_approval",
+            "approval_id": approval_id,
+            "run_id": approval_id,
+            "artifact_dir": str(art),
+            "error": "approval_payload_mismatch",
+            "message": "Approval does not match this supervised execution request.",
         }
 
     # 3) Approved => execute.

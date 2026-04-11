@@ -47,3 +47,46 @@ def test_api_supervised_exec_flow(monkeypatch, tmp_path: Path) -> None:
     assert (art / "stdout.txt").exists()
     assert (art / "stderr.txt").exists()
     assert (art / "result.json").exists()
+
+
+def test_api_supervised_exec_rejects_approval_payload_mismatch(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    client = TestClient(create_app())
+
+    requested = client.post(
+        "/operations/supervised-exec/run",
+        json={"objective": "test", "user_command": "echo approved", "cwd": str(tmp_path)},
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    assert requested_body["status"] == "needs_approval"
+    approval_id = str(requested_body["approval_id"])
+
+    approved = approvals.decide(approval_id, "approve")
+    assert approved["ok"] is True
+
+    mismatched = client.post(
+        "/operations/supervised-exec/run",
+        json={
+            "objective": "test",
+            "user_command": "echo MALICIOUS",
+            "cwd": str(tmp_path),
+            "approval_id": approval_id,
+        },
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+
+    art = Path(str(mismatched_body["artifact_dir"]))
+    assert (art / "mismatch.json").exists()
+    assert not (art / "result.json").exists()

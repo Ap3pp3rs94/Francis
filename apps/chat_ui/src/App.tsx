@@ -3,8 +3,12 @@ import type { ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
+import { OperationsApiError, OperationsClient } from "./operations";
+import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
+import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
+import type { SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -90,6 +94,58 @@ function normalizeBaseUrl(url: string): string {
 
 function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
+}
+
+function safeNumber(v: unknown, fallback = 0): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
+  if (!record || !isRecord(record.meta)) return fallback;
+  return safeString(record.meta[key], fallback);
+}
+
+function statusBadgeColors(status: string): { bg: string; border: string; color: string } {
+  const normalized = safeString(status).trim().toLowerCase();
+  if (["ready", "ok", "approved", "completed", "succeeded"].includes(normalized)) {
+    return { bg: "#102417", border: "#244d31", color: "#9de2ad" };
+  }
+  if (["running", "pending", "accepted", "queued"].includes(normalized)) {
+    return { bg: "#1f1a0b", border: "#5a4c18", color: "#f4d27a" };
+  }
+  if (["failed", "rejected", "cancelled", "canceled", "missing", "error", "degraded"].includes(normalized)) {
+    return { bg: "#2a0f0f", border: "#5a1a1a", color: "#ffaaaa" };
+  }
+  return { bg: "#171717", border: "#333333", color: THEME.muted };
+}
+
+function badgeStyle(status: string): React.CSSProperties {
+  const tone = statusBadgeColors(status);
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 11,
+    padding: "4px 8px",
+    borderRadius: 999,
+    background: tone.bg,
+    border: `1px solid ${tone.border}`,
+    color: tone.color,
+    whiteSpace: "nowrap",
+  };
+}
+
+function summaryCardStyle(): React.CSSProperties {
+  return {
+    border: `1px solid ${THEME.panelBorder}`,
+    borderRadius: 12,
+    padding: 10,
+    background: "#101010",
+  };
 }
 
 function loadSettings(): UiSettings {
@@ -420,6 +476,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<TabKey>("approvals");
+  const [focusedOperationId, setFocusedOperationId] = useState("");
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [baseUrl, setBaseUrl] = useState(() => {
     const env = safeString(import.meta.env.VITE_FRANCIS_API_BASE_URL, DEFAULT_API);
@@ -531,6 +588,15 @@ export default function App() {
     const s = createSession();
     setSessions((prev) => [s, ...prev]);
     setActiveId(s.id);
+  }, []);
+
+  const openApprovalsPanel = useCallback(() => {
+    setPanel("approvals");
+  }, []);
+
+  const openOperationPanel = useCallback((operationId: string) => {
+    setFocusedOperationId(operationId);
+    setPanel("operations");
   }, []);
 
   const isNarrow = width < 1100;
@@ -654,8 +720,14 @@ export default function App() {
 
                 {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} /> : null}
                 {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} /> : null}
-                {panel === "system" ? <SystemPanel baseUrl={baseUrl} /> : null}
-                {panel === "operations" ? <OperationsPanel baseUrl={baseUrl} /> : null}
+                {panel === "system" ? (
+                  <SystemPanel
+                    baseUrl={baseUrl}
+                    onOpenApprovals={openApprovalsPanel}
+                    onOpenOperation={openOperationPanel}
+                  />
+                ) : null}
+                {panel === "operations" ? <OperationsPanel baseUrl={baseUrl} focusOperationId={focusedOperationId} /> : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
               </aside>
             )}
@@ -689,8 +761,14 @@ export default function App() {
 
               {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} /> : null}
               {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} /> : null}
-              {panel === "system" ? <SystemPanel baseUrl={baseUrl} /> : null}
-              {panel === "operations" ? <OperationsPanel baseUrl={baseUrl} /> : null}
+              {panel === "system" ? (
+                <SystemPanel
+                  baseUrl={baseUrl}
+                  onOpenApprovals={openApprovalsPanel}
+                  onOpenOperation={openOperationPanel}
+                />
+              ) : null}
+              {panel === "operations" ? <OperationsPanel baseUrl={baseUrl} focusOperationId={focusedOperationId} /> : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
             </section>
           ) : null}
@@ -809,49 +887,236 @@ function ApprovalsPanel(props: { baseUrl: string }) {
   );
 }
 
-function SystemPanel(props: { baseUrl: string }) {
-  const [data, setData] = useState<string>("");
+function SystemPanel(props: {
+  baseUrl: string;
+  onOpenApprovals: () => void;
+  onOpenOperation: (operationId: string) => void;
+}) {
+  const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
+  const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const [info, setInfo] = useState<SystemInfo | null>(null);
+  const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [worldState, setWorldState] = useState<WorldStateSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const refresh = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${props.baseUrl}/system/health`);
-      if (!res.ok) {
-        setError(`HTTP ${res.status}`);
-        return;
-      }
-      const json = await res.json();
-      setData(JSON.stringify(json, null, 2));
+      const [nextInfo, nextHealth, nextWorldState] = await Promise.all([
+        client.getSystemInfo(),
+        client.getHealth(),
+        client.getWorldState(),
+      ]);
+      setInfo(nextInfo);
+      setHealth(nextHealth);
+      setWorldState(nextWorldState);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed.");
+      const msg =
+        err instanceof SettingsApiError
+          ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+          : err instanceof Error
+            ? err.message
+            : "Request failed.";
+      setError(msg);
     } finally {
       setBusy(false);
     }
-  }
+  }, [client]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const counts = worldState?.counts;
+  const overview = worldState?.overview;
+  const taskStatusCounts = overview?.task_status_counts ?? {};
+  const recentTasks = overview?.recent_tasks ?? [];
+  const pendingApprovals = overview?.pending_approvals ?? [];
+  const servicesRaw =
+    worldState?.services && typeof worldState.services === "object" && !Array.isArray(worldState.services)
+      ? worldState.services
+      : null;
+  const serviceItems = Array.isArray(servicesRaw?.services)
+    ? servicesRaw.services.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    : [];
+  const stackRaw =
+    worldState?.stack && typeof worldState.stack === "object" && !Array.isArray(worldState.stack) ? worldState.stack : null;
+  const stackCounts =
+    stackRaw?.counts && typeof stackRaw.counts === "object" && !Array.isArray(stackRaw.counts)
+      ? (stackRaw.counts as Record<string, unknown>)
+      : {};
+  const runtimeState = health?.ok ? "healthy" : "attention";
 
   return (
     <section style={panelStyle}>
       <div style={{ fontSize: 16, fontWeight: 600 }}>System</div>
-      <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>Health and runtime status.</div>
+      <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>
+        ORB-facing runtime snapshot, pending approvals, and recent task activity.
+      </div>
 
-      <button onClick={() => void load()} disabled={busy} style={{ ...buttonStyle, marginTop: 10 }}>
-        {busy ? "Loading." : "Run health check"}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={badgeStyle(runtimeState)}>{runtimeState}</span>
+          {worldState?.subsystem ? <span style={badgeStyle(worldState.subsystem)}>{worldState.subsystem}</span> : null}
+          {worldState?.generated_at ? (
+            <span style={{ fontSize: 11, color: THEME.muted }}>Snapshot {toLocaleTime(worldState.generated_at)}</span>
+          ) : null}
+        </div>
+        <button onClick={() => void refresh()} disabled={busy} style={buttonStyle}>
+          {busy ? "Refreshing." : "Refresh"}
+        </button>
+      </div>
 
       {error ? (
-        <div style={{ marginTop: 10, fontSize: 12, color: "#ffaaaa" }}>
+        <div
+          style={{
+            marginTop: 10,
+            padding: 10,
+            borderRadius: 10,
+            border: `1px solid ${THEME.errorBorder}`,
+            background: THEME.errorBg,
+            fontSize: 12,
+            color: "#ffaaaa",
+          }}
+        >
           <b>Error:</b> {error}
         </div>
       ) : null}
 
-      {data ? (
-        <pre style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>{data}</pre>
-      ) : (
-        <div style={{ marginTop: 10, color: THEME.muted }}>No data loaded.</div>
-      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Pending approvals</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{counts?.pending_approvals ?? 0}</div>
+        </div>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Queued tasks</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{counts?.tasks ?? 0}</div>
+        </div>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Running now</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{taskStatusCounts.running ?? 0}</div>
+        </div>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Feature flags</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{stackCounts.feature_flags ?? 0}</div>
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Runtime</div>
+        <div style={{ display: "grid", gap: 6, marginTop: 8, fontSize: 12 }}>
+          <div>
+            Environment: <code>{info?.env_profile || "unknown"}</code> / mode <code>{info?.run_mode || "unknown"}</code>
+          </div>
+          <div>
+            Service: <code>{info?.service || "francis-api"}</code> / version <code>{info?.version || "unknown"}</code>
+          </div>
+          <div>
+            Host: <code>{info?.host || "unknown"}</code> / pid <code>{String(info?.pid ?? "unknown")}</code>
+          </div>
+          <div>
+            Repo: <code>{worldState?.repo_root || "unknown"}</code>
+          </div>
+          <div>
+            Data: <code>{worldState?.data_dir || "unknown"}</code>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Services</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          {serviceItems.length === 0 ? (
+            <span style={{ fontSize: 12, color: THEME.muted }}>No service data loaded.</span>
+          ) : (
+            serviceItems.map((item, index) => {
+              const name = safeString(item.name, `service-${index}`);
+              const status = safeString(item.status, "unknown");
+              return (
+                <div key={`${name}-${index}`} style={{ ...badgeStyle(status), maxWidth: "100%" }}>
+                  <span>{name}</span>
+                  <span style={{ color: THEME.muted }}>{status}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Pending Approvals</div>
+          <button style={buttonStyle} onClick={props.onOpenApprovals}>
+            Open approvals
+          </button>
+        </div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8, maxHeight: 160, overflow: "auto" }}>
+          {pendingApprovals.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No pending approvals.</div>
+          ) : (
+            pendingApprovals.map((item) => (
+              <div
+                key={item.id}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{item.action || "unknown_action"}</div>
+                  <span style={badgeStyle(item.status || "pending")}>{item.status || "pending"}</span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.reason || "No reason recorded."}</div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  <code>{item.id}</code>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button style={buttonStyle} onClick={props.onOpenApprovals}>
+                    Review
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Recent Tasks</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8, maxHeight: 220, overflow: "auto" }}>
+          {recentTasks.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No recent tasks found.</div>
+          ) : (
+            recentTasks.map((task) => (
+              <div
+                key={task.id}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{task.objective || task.capability || task.id}</div>
+                  <span style={badgeStyle(task.status || "unknown")}>{task.status || "unknown"}</span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  capability=<code>{task.capability || "unknown"}</code>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  assigned_to=<code>{task.assigned_to || "unassigned"}</code>
+                </div>
+                {task.status_reason ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{task.status_reason}</div>
+                ) : null}
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  updated {task.updated_at ? task.updated_at : task.created_at || "unknown"}
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation(task.id)}>
+                    Open task
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </section>
   );
 }
@@ -1205,49 +1470,274 @@ function PluginsPanel(props: { baseUrl: string }) {
   );
 }
 
-function OperationsPanel(props: { baseUrl: string }) {
-  const [data, setData] = useState<string>("");
+function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) {
+  const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
+  const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const [items, setItems] = useState<OperationRecord[]>([]);
+  const [selectedOperationId, setSelectedOperationId] = useState("");
+  const [detail, setDetail] = useState<OperationDetail | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [busy, setBusy] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const operationsError = useCallback((err: unknown): string => {
+    if (err instanceof OperationsApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Operations request failed.";
+  }, []);
+
+  const refresh = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${props.baseUrl}/operations/status`);
-      if (!res.ok) {
-        setError(`HTTP ${res.status}`);
-        return;
-      }
-      const json = await res.json();
-      setData(JSON.stringify(json, null, 2));
+      const response = await client.list({
+        limit: 50,
+        status: statusFilter === "all" ? undefined : statusFilter,
+      });
+      const nextItems = response.items ?? [];
+      setItems(nextItems);
+      setSelectedOperationId((prev) => {
+        if (props.focusOperationId) return props.focusOperationId;
+        if (prev && nextItems.some((item) => item.id === prev)) return prev;
+        return nextItems[0]?.id ?? "";
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed.");
+      setError(operationsError(err));
     } finally {
       setBusy(false);
     }
-  }
+  }, [client, operationsError, props.focusOperationId, statusFilter]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!props.focusOperationId) return;
+    setSelectedOperationId(props.focusOperationId);
+  }, [props.focusOperationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDetail() {
+      if (!selectedOperationId) {
+        setDetail(null);
+        return;
+      }
+      setDetailBusy(true);
+      setError(null);
+      try {
+        const nextDetail = await client.get(selectedOperationId);
+        if (cancelled) return;
+        setDetail(nextDetail);
+        if (nextDetail?.operation && !items.some((item) => item.id === nextDetail.operation.id)) {
+          setItems((prev) => [nextDetail.operation, ...prev]);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setDetail(null);
+        setError(operationsError(err));
+      } finally {
+        if (!cancelled) setDetailBusy(false);
+      }
+    }
+
+    void loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, items, operationsError, selectedOperationId]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of items) {
+      const key = safeString(item.status, "unknown") || "unknown";
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [items]);
+
+  const selectedOperation =
+    detail?.operation ?? items.find((item) => item.id === selectedOperationId) ?? null;
 
   return (
     <section style={panelStyle}>
       <div style={{ fontSize: 16, fontWeight: 600 }}>Operations</div>
-      <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>Ops status and telemetry.</div>
+      <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>
+        Queued task activity, lifecycle state, and operation detail.
+      </div>
 
-      <button onClick={() => void load()} disabled={busy} style={{ ...buttonStyle, marginTop: 10 }}>
-        {busy ? "Loading." : "Load status"}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={badgeStyle("queued")}>queued {statusCounts.queued ?? 0}</span>
+          <span style={badgeStyle("running")}>running {statusCounts.running ?? 0}</span>
+          <span style={badgeStyle("succeeded")}>succeeded {statusCounts.succeeded ?? 0}</span>
+          <span style={badgeStyle("failed")}>failed {statusCounts.failed ?? 0}</span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ ...inputStyle, padding: "8px 10px", minWidth: 130 }}
+          >
+            <option value="all">All statuses</option>
+            <option value="queued">Queued</option>
+            <option value="running">Running</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="failed">Failed</option>
+            <option value="canceled">Canceled</option>
+          </select>
+          <button onClick={() => void refresh()} disabled={busy} style={buttonStyle}>
+            {busy ? "Refreshing." : "Refresh"}
+          </button>
+        </div>
+      </div>
 
       {error ? (
-        <div style={{ marginTop: 10, fontSize: 12, color: "#ffaaaa" }}>
+        <div
+          style={{
+            marginTop: 10,
+            padding: 10,
+            borderRadius: 10,
+            border: `1px solid ${THEME.errorBorder}`,
+            background: THEME.errorBg,
+            fontSize: 12,
+            color: "#ffaaaa",
+          }}
+        >
           <b>Error:</b> {error}
         </div>
       ) : null}
 
-      {data ? (
-        <pre style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>{data}</pre>
-      ) : (
-        <div style={{ marginTop: 10, color: THEME.muted }}>No data loaded.</div>
-      )}
+      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+        <div style={{ ...summaryCardStyle(), maxHeight: 240, overflow: "auto" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Recent Operations</div>
+          <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+            {items.length === 0 ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>
+                {busy ? "Loading operations." : "No operations found."}
+              </div>
+            ) : (
+              items.map((item) => {
+                const selected = item.id === selectedOperationId;
+                const objective = operationMetaString(item, "objective");
+                const assignedTo = operationMetaString(item, "assigned_to");
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSelectedOperationId(item.id)}
+                    style={{
+                      ...buttonStyle,
+                      textAlign: "left",
+                      padding: 10,
+                      border: selected ? `1px solid ${THEME.text}` : `1px solid ${THEME.panelBorder}`,
+                      background: selected ? THEME.buttonActive : "#121212",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{objective || item.name || item.id}</div>
+                      <span style={badgeStyle(item.status || "unknown")}>{item.status || "unknown"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      <code>{item.id}</code>
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      actor=<code>{item.actor || "unknown"}</code>
+                      {" / "}
+                      assigned_to=<code>{assignedTo || "unassigned"}</code>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Operation Detail</div>
+          {!selectedOperation ? (
+            <div style={{ marginTop: 8, fontSize: 12, color: THEME.muted }}>
+              {detailBusy ? "Loading detail." : "Select an operation to inspect."}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>
+                  {operationMetaString(selectedOperation, "objective") || selectedOperation.name || selectedOperation.id}
+                </div>
+                <span style={badgeStyle(selectedOperation.status || "unknown")}>
+                  {selectedOperation.status || "unknown"}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted }}>
+                <code>{selectedOperation.id}</code>
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Capability: <code>{selectedOperation.name || "unknown"}</code>
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Actor: <code>{selectedOperation.actor || "unknown"}</code>
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Updated: <code>{toLocaleTime(selectedOperation.ts)}</code>
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Assigned to: <code>{operationMetaString(selectedOperation, "assigned_to", "unassigned")}</code>
+              </div>
+              <div style={{ fontSize: 12 }}>
+                Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
+              </div>
+              {selectedOperation.error ? (
+                <div
+                  style={{
+                    border: `1px solid ${THEME.errorBorder}`,
+                    background: THEME.errorBg,
+                    color: "#ffaaaa",
+                    padding: 10,
+                    borderRadius: 10,
+                    fontSize: 12,
+                  }}
+                >
+                  <b>Error:</b> {safeString(selectedOperation.error, JSON.stringify(selectedOperation.error))}
+                </div>
+              ) : null}
+              {detail?.logs && detail.logs.length > 0 ? (
+                <div style={{ fontSize: 12, color: THEME.muted }}>
+                  Audit events: <code>{String(detail.logs.length)}</code>
+                </div>
+              ) : null}
+              {(selectedOperation.output !== undefined || selectedOperation.input !== undefined) ? (
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 10,
+                    borderRadius: 10,
+                    border: `1px solid ${THEME.panelBorder}`,
+                    background: "#101010",
+                    whiteSpace: "pre-wrap",
+                    fontSize: 11,
+                    maxHeight: 220,
+                    overflow: "auto",
+                  }}
+                >
+{JSON.stringify(
+  {
+    input: selectedOperation.input,
+    output: selectedOperation.output,
+  },
+  null,
+  2,
+)}
+                </pre>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
