@@ -177,6 +177,144 @@ function prettyData(value: unknown): string {
   }
 }
 
+type ApprovalInspection = {
+  domain: string;
+  risk: string;
+  scopeLabel: string;
+  scopeItems: string[];
+  evidenceItems: string[];
+  approveEffect: string;
+  denyEffect: string;
+  missionRelation: string;
+};
+
+function approvalPayload(item: ApprovalItem | null | undefined): Record<string, unknown> {
+  return isRecord(item?.payload) ? item.payload : {};
+}
+
+function approvalTextField(payload: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = safeString(payload[key]).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function approvalActionField(payload: Record<string, unknown>, fallback: string): string {
+  return approvalTextField(payload, "action", "name") || fallback;
+}
+
+function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspection {
+  const payload = approvalPayload(item);
+  const meta = isRecord(payload.meta) ? payload.meta : {};
+  const action = safeString(item?.action).trim().toLowerCase();
+  const requestAction = approvalActionField(payload, safeString(item?.action).trim() || "requested action");
+  const risk =
+    approvalTextField(payload, "risk", "risk_tier") ||
+    approvalTextField(meta, "risk", "risk_tier") ||
+    safeString(item?.risk).trim() ||
+    "unknown";
+  const domain =
+    approvalTextField(payload, "domain", "provider") ||
+    safeString(item?.domain).trim() ||
+    (action.includes(".") ? action.split(".", 1)[0] : action || "approval");
+
+  const scopeItems: string[] = [];
+  const pushScope = (label: string, value: string) => {
+    const cleaned = value.trim();
+    if (cleaned) scopeItems.push(`${label}: ${cleaned}`);
+  };
+
+  pushScope("Plugin", approvalTextField(payload, "plugin_id"));
+  pushScope("Scope", approvalTextField(payload, "scope_id", "scope"));
+  const targetKind = approvalTextField(payload, "target_kind");
+  const targetId = approvalTextField(payload, "target_id", "twin_id", "validation_id");
+  if (targetKind || targetId) {
+    pushScope("Target", [targetKind, targetId].filter(Boolean).join(":"));
+  }
+  pushScope("Credential", approvalTextField(payload, "id"));
+  pushScope("Provider", approvalTextField(payload, "provider"));
+  pushScope("URL", approvalTextField(payload, "url"));
+  pushScope("Domain", approvalTextField(payload, "domain"));
+  pushScope("Record", approvalTextField(payload, "record_id", "request_id"));
+
+  const scopeLabel = scopeItems[0] || `Domain: ${domain}`;
+
+  const evidenceItems: string[] = [];
+  const pushEvidence = (label: string, value: string) => {
+    const cleaned = value.trim();
+    if (cleaned) evidenceItems.push(`${label}: ${cleaned}`);
+  };
+
+  pushEvidence("Requested action", requestAction);
+  pushEvidence("Reason", safeString(item?.reason).trim());
+  pushEvidence("Required trust", approvalTextField(payload, "required_trust"));
+  pushEvidence("Credential type", approvalTextField(payload, "type"));
+  pushEvidence("Label", approvalTextField(payload, "label"));
+  pushEvidence("Actor", approvalTextField(payload, "actor"));
+  pushEvidence("Enabled change", typeof payload.enabled === "boolean" ? String(payload.enabled) : "");
+  pushEvidence("Idempotency key", approvalTextField(payload, "idempotency_key"));
+  if (isRecord(payload.params) && Object.keys(payload.params).length > 0) {
+    evidenceItems.push(`Params: ${Object.keys(payload.params).length} recorded field(s)`);
+  }
+  if (Object.keys(meta).length > 0) {
+    evidenceItems.push(`Meta: ${Object.keys(meta).length} recorded field(s)`);
+  }
+
+  let approveEffect = "Approving allows the recorded action to proceed within the payload that was submitted for review.";
+  let denyEffect = "Rejecting keeps the action blocked and requires a narrower or replacement request.";
+  let missionRelation = "This pending approval is one of the governed blockers surfaced in the ORB mission feed.";
+
+  if (action === "plugin.run") {
+    approveEffect = `Approving allows plugin ${approvalTextField(payload, "plugin_id") || "unknown"} to run action ${requestAction}.`;
+    denyEffect = "Rejecting keeps the plugin action blocked until a new approval is requested or scope is narrowed.";
+    missionRelation = "Plugin execution remains parked in continuity briefing until this decision is resolved.";
+  } else if (action === "industrial.intervention.execute" || action === "industrial.intervention") {
+    approveEffect = `Approving allows industrial action ${requestAction} against ${[targetKind, targetId].filter(Boolean).join(":") || "the recorded target"}.`;
+    denyEffect = "Rejecting prevents the requested intervention from executing against the target.";
+    missionRelation = "This approval gates a real-world intervention path, so it should stay reviewable and visible.";
+  } else if (action === "industrial.safety.validate") {
+    approveEffect = `Approving allows high-risk validation for ${[targetKind, targetId].filter(Boolean).join(":") || "the recorded target"}.`;
+    denyEffect = "Rejecting keeps the high-risk validation from proceeding.";
+    missionRelation = "This validation remains a mission blocker until the operator accepts or denies the request.";
+  } else if (action === "industrial.digital_twin.action") {
+    approveEffect = `Approving allows digital twin action ${requestAction} for ${approvalTextField(payload, "twin_id") || "the recorded twin"}.`;
+    denyEffect = "Rejecting prevents the twin action from being applied.";
+    missionRelation = "This approval controls a simulated action path, which should remain visible alongside mission progress.";
+  } else if (action === "credential.request") {
+    approveEffect = `Approving allows credential issuance for scope ${approvalTextField(payload, "scope_id") || "unknown"} and provider ${approvalTextField(payload, "provider") || "unknown"}.`;
+    denyEffect = "Rejecting prevents the credential request from being fulfilled.";
+    missionRelation = "Credential access remains a dependency blocker until the request is reviewed.";
+  } else if (action === "credential.revoke") {
+    approveEffect = `Approving allows revocation of credential ${approvalTextField(payload, "id") || "unknown"}.`;
+    denyEffect = "Rejecting leaves the credential in place and clears the pending revocation path.";
+    missionRelation = "This request changes trust posture, so the approval should remain tied to continuity state.";
+  } else if (action === "web_learning.request") {
+    approveEffect = `Approving allows web learning to fetch and ingest ${approvalTextField(payload, "url") || approvalTextField(payload, "domain") || "the recorded source"}.`;
+    denyEffect = "Rejecting keeps the learn request from running until the source or policy scope changes.";
+    missionRelation = "Learning remains paused in the mission feed until the operator resolves this request.";
+  } else if (action === "web_learning.set_enabled") {
+    approveEffect = `Approving applies the requested web learning enabled state (${String(payload.enabled)}).`;
+    denyEffect = "Rejecting keeps web learning at its current enabled state.";
+    missionRelation = "This governs a capability toggle, so it affects future mission continuity rather than a single task.";
+  } else if (action === "web_learning.quarantine.delete") {
+    approveEffect = `Approving allows deletion of quarantine item ${approvalTextField(payload, "id") || "unknown"}.`;
+    denyEffect = "Rejecting keeps the quarantine item in place for continued review.";
+    missionRelation = "The quarantined artifact remains visible as an incident/continuity item until resolved.";
+  }
+
+  return {
+    domain,
+    risk,
+    scopeLabel,
+    scopeItems,
+    evidenceItems,
+    approveEffect,
+    denyEffect,
+    missionRelation,
+  };
+}
+
 function loadSettings(): UiSettings {
   try {
     const raw = localStorage.getItem("francis_ui_settings");
@@ -1606,6 +1744,12 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
   }
 
   const selectedApproval = items.find((item) => item.id === selectedApprovalId) ?? items[0] ?? null;
+  const selectedInspection = inspectApproval(selectedApproval);
+  const approvalStats = {
+    total: items.length,
+    highRisk: items.filter((item) => ["high", "critical", "safety_critical"].includes(inspectApproval(item).risk.toLowerCase())).length,
+    domains: new Set(items.map((item) => inspectApproval(item).domain.toLowerCase()).filter(Boolean)).size,
+  };
 
   return (
     <section style={panelStyle}>
@@ -1630,6 +1774,21 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
         </div>
       ) : null}
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Pending now</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{approvalStats.total}</div>
+        </div>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>High-risk queue</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{approvalStats.highRisk}</div>
+        </div>
+        <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Domains touched</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{approvalStats.domains}</div>
+        </div>
+      </div>
+
       <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>Selected Approval</div>
         {!selectedApproval ? (
@@ -1638,7 +1797,11 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
           <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{selectedApproval.action || "(unknown action)"}</div>
-              <span style={badgeStyle(selectedApproval.status || "pending")}>{selectedApproval.status || "pending"}</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <span style={badgeStyle(selectedApproval.status || "pending")}>{selectedApproval.status || "pending"}</span>
+                <span style={badgeStyle(selectedInspection.risk)}>{selectedInspection.risk}</span>
+                <span style={badgeStyle(selectedInspection.domain)}>{selectedInspection.domain}</span>
+              </div>
             </div>
             <div style={{ fontSize: 11, color: THEME.muted }}>
               <code>{selectedApproval.id}</code>
@@ -1649,22 +1812,57 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
             <div style={{ fontSize: 12 }}>
               Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
             </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Scope Touched</div>
+              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                {selectedInspection.scopeItems.length === 0 ? (
+                  <div style={{ fontSize: 12, color: THEME.muted }}>No structured scope fields were recorded for this approval.</div>
+                ) : (
+                  selectedInspection.scopeItems.map((item) => (
+                    <div key={item} style={{ fontSize: 12, color: THEME.muted }}>
+                      {item}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Evidence</div>
+              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                {selectedInspection.evidenceItems.length === 0 ? (
+                  <div style={{ fontSize: 12, color: THEME.muted }}>Only the raw payload is available for this approval.</div>
+                ) : (
+                  selectedInspection.evidenceItems.map((item) => (
+                    <div key={item} style={{ fontSize: 12, color: THEME.muted }}>
+                      {item}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Decision Consequences</div>
+              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: "#9de2ad" }}>Approve: {selectedInspection.approveEffect}</div>
+                <div style={{ fontSize: 12, color: "#ffcf9d" }}>Reject: {selectedInspection.denyEffect}</div>
+                <div style={{ fontSize: 12, color: THEME.muted }}>Mission state: {selectedInspection.missionRelation}</div>
+              </div>
+            </div>
             {selectedApproval.payload !== undefined ? (
-              <pre
-                style={{
-                  margin: 0,
-                  padding: 10,
-                  borderRadius: 10,
-                  border: `1px solid ${THEME.panelBorder}`,
-                  background: "#0d0d0d",
-                  whiteSpace: "pre-wrap",
-                  fontSize: 11,
-                  maxHeight: 220,
-                  overflow: "auto",
-                }}
-              >
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0d0d0d" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Raw Payload</div>
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: "pre-wrap",
+                    fontSize: 11,
+                    maxHeight: 220,
+                    overflow: "auto",
+                  }}
+                >
 {prettyData(selectedApproval.payload)}
-              </pre>
+                </pre>
+              </div>
             ) : null}
           </div>
         )}
@@ -1674,6 +1872,7 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
         {loading && items.length === 0 ? <i>Loading approvals.</i> : null}
         {!loading && items.length === 0 ? <i>No approvals found.</i> : null}
         {items.map((a) => {
+          const inspection = inspectApproval(a);
           const busy = Boolean(decisionBusy[a.id]);
           const err = decisionError[a.id];
           const selected = a.id === selectedApproval?.id;
@@ -1689,11 +1888,15 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ fontWeight: 600 }}>{a.action || "(unknown action)"}</div>
-                <span style={badgeStyle(a.status || "pending")}>{a.status || "pending"}</span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span style={badgeStyle(a.status || "pending")}>{a.status || "pending"}</span>
+                  <span style={badgeStyle(inspection.risk)}>{inspection.risk}</span>
+                </div>
               </div>
               <div style={{ fontSize: 12, color: THEME.muted, marginTop: 4 }}>{a.reason || "No reason provided."}</div>
+              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>{inspection.scopeLabel}</div>
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
-                <code>{a.id}</code>
+                <code>{a.id}</code> / domain=<code>{inspection.domain}</code>
               </div>
               {err ? (
                 <div style={{ marginTop: 6, fontSize: 12, color: "#ffaaaa" }}>
