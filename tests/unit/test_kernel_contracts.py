@@ -108,6 +108,67 @@ def test_world_state_snapshot_reports_repo_and_data(monkeypatch, tmp_path: Path)
     assert state["overview"]["recent_tasks"][0]["assigned_to"] == "worker-1"
 
 
+def test_orb_snapshot_reports_planes_and_forbidden_transitions(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    meta_root = repo_root / "meta"
+    data_root = repo_root / "data"
+    meta_root.mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+
+    (meta_root / "plane_map.yaml").write_text(
+        """
+meta:
+  model_id: francis.plane_map
+  version: 2
+planes:
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: Capture requests
+    side_effects_allowed: false
+    default_risk_class: low
+  - id: P7_EXECUTION
+    name: Execution
+    category: execution
+    purpose: Run tools
+    side_effects_allowed: true
+    default_risk_class: critical
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: direct shortcut forbidden
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "action_taxonomy.yaml").write_text(
+        """
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 3
+controls:
+  - id: permission_gate
+    description: Require identity validation
+  - id: approvals_gate
+    description: Require approvals
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.world_state.orb import snapshot
+
+    state = snapshot()
+    assert state["ok"] is True
+    assert state["subsystem"] == "orb_status"
+    assert state["model"]["plane_map_version"] == 2
+    assert state["model"]["action_taxonomy_version"] == 3
+    assert state["planes"][0]["id"] == "P1_INTERFACE"
+    assert state["gates"][0]["id"] == "permission_gate"
+    assert state["transitions"]["forbidden"][0]["reason"] == "direct shortcut forbidden"
+
+
 def test_stack_and_services_report_known_surfaces(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

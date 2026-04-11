@@ -70,6 +70,114 @@ def test_system_world_state_reports_nested_task_records(monkeypatch, tmp_path: P
     assert body["overview"]["pending_approvals"][0]["id"] == "appr"
 
 
+def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    meta_root = repo_root / "meta"
+    (repo_root / "src" / "francis").mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+    meta_root.mkdir(parents=True, exist_ok=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='francis-test'\nversion='0.0.0'\n", encoding="utf-8")
+    (meta_root / "plane_map.yaml").write_text(
+        """
+meta:
+  model_id: francis.plane_map
+  version: 1
+planes:
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: Capture operator intent
+    side_effects_allowed: false
+    default_risk_class: low
+  - id: P4_COGNITION
+    name: Cognition
+    category: cognition
+    purpose: Produce plans
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P3_GOVERNANCE
+    name: Governance
+    category: governance
+    purpose: Evaluate policy gates
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P2_IDENTITY
+    name: Identity
+    category: security
+    purpose: Validate scopes
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P7_EXECUTION
+    name: Execution
+    category: execution
+    purpose: Perform side effects
+    side_effects_allowed: true
+    default_risk_class: critical
+  - id: P9_OBSERVABILITY
+    name: Observability
+    category: observability
+    purpose: Emit audit traces
+    side_effects_allowed: true
+    default_risk_class: medium
+  - id: P8_MEMORY
+    name: Memory
+    category: data
+    purpose: Persist continuity
+    side_effects_allowed: true
+    default_risk_class: high
+transitions:
+  - from: P1_INTERFACE
+    to: P4_COGNITION
+    conditions: [session_valid, request_parsed]
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: direct execution is forbidden
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "action_taxonomy.yaml").write_text(
+        """
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 1
+controls:
+  - id: permission_gate
+    description: Validate identity and scopes
+  - id: trust_gate
+    description: Check trust thresholds
+  - id: approvals_gate
+    description: Require approval when policy demands it
+  - id: audit_log
+    description: Emit an auditable trail
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/system/orb_status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["subsystem"] == "orb_status"
+    assert body["model"]["plane_map_id"] == "francis.plane_map"
+    assert body["model"]["action_taxonomy_id"] == "francis.action_taxonomy"
+    assert body["core_loop"][0]["id"] == "P1_INTERFACE"
+    assert body["core_loop"][-1]["id"] == "P8_MEMORY"
+    assert body["gates"][0]["id"] == "permission_gate"
+    assert body["transitions"]["allowed"][0]["to"] == "P4_COGNITION"
+    assert body["transitions"]["forbidden"][0]["to"] == "P7_EXECUTION"
+
+
 def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

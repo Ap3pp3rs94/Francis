@@ -108,6 +108,7 @@ CORE_TARGETS: tuple[ImportTarget, ...] = (
     ImportTarget("francis.trust.tracker", reason="Trust persistence subsystem"),
     ImportTarget("francis.trust.boundaries", reason="Authority boundary subsystem"),
     ImportTarget("francis.kernel.health", reason="Kernel health reporting"),
+    ImportTarget("francis.world_state.orb", reason="ORB status snapshot"),
     ImportTarget("francis.world_state.snapshot", reason="World state snapshot"),
     ImportTarget("francis.api.app", reason="API app factory/definition"),
     ImportTarget("francis.daemon.runner", reason="Daemon runner (entry module)"),

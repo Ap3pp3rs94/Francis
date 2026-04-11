@@ -153,6 +153,51 @@ export type WorldStateSnapshot = {
   meta?: Record<string, unknown>;
 };
 
+export type OrbPlaneSummary = {
+  id: string;
+  name?: string;
+  category?: string;
+  purpose?: string;
+  side_effects_allowed?: boolean;
+  default_risk_class?: string;
+  primary_modules?: string[];
+};
+
+export type OrbGateSummary = {
+  id: string;
+  description?: string;
+};
+
+export type OrbTransitionSummary = {
+  from: string;
+  to: string;
+  conditions: string[];
+  reason?: string;
+};
+
+export type OrbModelInfo = {
+  plane_map_id?: string;
+  plane_map_version?: number;
+  action_taxonomy_id?: string;
+  action_taxonomy_version?: number;
+};
+
+export type OrbStatusSnapshot = {
+  ok: boolean;
+  subsystem?: string;
+  generated_at?: number;
+  repo_root?: string;
+  model?: OrbModelInfo;
+  core_loop?: OrbPlaneSummary[];
+  planes?: OrbPlaneSummary[];
+  gates?: OrbGateSummary[];
+  transitions?: {
+    allowed: OrbTransitionSummary[];
+    forbidden: OrbTransitionSummary[];
+  };
+  meta?: Record<string, unknown>;
+};
+
 /**
  * A controlled server mutation request.
  * The backend is expected to enforce approvals/policy; the UI just submits intent.
@@ -239,6 +284,11 @@ function safeBoolean(v: unknown, fallback = false): boolean {
 
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function safeStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((item) => safeString(item, "").trim()).filter((item) => item.length > 0);
 }
 
 function normalizeUnixSeconds(ts: unknown): UnixSeconds | undefined {
@@ -645,6 +695,106 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
   return snapshot;
 }
 
+function parseOrbPlaneSummary(raw: unknown): OrbPlaneSummary | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw.id, "").trim();
+  if (!id) return null;
+
+  const plane: OrbPlaneSummary = {
+    id,
+    name: safeString(raw.name, ""),
+    category: safeString(raw.category, ""),
+    purpose: safeString(raw.purpose, ""),
+    side_effects_allowed: safeBoolean(raw.side_effects_allowed, false),
+    default_risk_class: safeString(raw.default_risk_class, ""),
+    primary_modules: safeStringArray(raw.primary_modules),
+  };
+
+  if (!plane.name) delete plane.name;
+  if (!plane.category) delete plane.category;
+  if (!plane.purpose) delete plane.purpose;
+  if (!plane.default_risk_class) delete plane.default_risk_class;
+  if (!plane.primary_modules?.length) delete plane.primary_modules;
+
+  return plane;
+}
+
+function parseOrbGateSummary(raw: unknown): OrbGateSummary | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw.id, "").trim();
+  if (!id) return null;
+  const gate: OrbGateSummary = {
+    id,
+    description: safeString(raw.description, ""),
+  };
+  if (!gate.description) delete gate.description;
+  return gate;
+}
+
+function parseOrbTransitionSummary(raw: unknown): OrbTransitionSummary | null {
+  if (!isRecord(raw)) return null;
+  const from = safeString(raw.from, "").trim();
+  const to = safeString(raw.to, "").trim();
+  if (!from || !to) return null;
+  const transition: OrbTransitionSummary = {
+    from,
+    to,
+    conditions: safeStringArray(raw.conditions),
+    reason: safeString(raw.reason, ""),
+  };
+  if (!transition.reason) delete transition.reason;
+  return transition;
+}
+
+function parseOrbStatusSnapshot(raw: unknown): OrbStatusSnapshot {
+  if (!isRecord(raw)) return { ok: false };
+
+  const modelRaw = isRecord(raw.model) ? (raw.model as Record<string, unknown>) : {};
+  const transitionsRaw = isRecord(raw.transitions) ? (raw.transitions as Record<string, unknown>) : {};
+
+  const snapshot: OrbStatusSnapshot = {
+    ok: safeBoolean(raw.ok, false),
+    subsystem: safeString(raw.subsystem, ""),
+    generated_at: safeNumber(raw.generated_at, 0),
+    repo_root: safeString(raw.repo_root, ""),
+    model: {
+      plane_map_id: safeString(modelRaw.plane_map_id, ""),
+      plane_map_version: safeNumber(modelRaw.plane_map_version, 0),
+      action_taxonomy_id: safeString(modelRaw.action_taxonomy_id, ""),
+      action_taxonomy_version: safeNumber(modelRaw.action_taxonomy_version, 0),
+    },
+    core_loop: (Array.isArray(raw.core_loop) ? raw.core_loop : [])
+      .map(parseOrbPlaneSummary)
+      .filter((item): item is OrbPlaneSummary => item !== null),
+    planes: (Array.isArray(raw.planes) ? raw.planes : [])
+      .map(parseOrbPlaneSummary)
+      .filter((item): item is OrbPlaneSummary => item !== null),
+    gates: (Array.isArray(raw.gates) ? raw.gates : [])
+      .map(parseOrbGateSummary)
+      .filter((item): item is OrbGateSummary => item !== null),
+    transitions: {
+      allowed: (Array.isArray(transitionsRaw.allowed) ? transitionsRaw.allowed : [])
+        .map(parseOrbTransitionSummary)
+        .filter((item): item is OrbTransitionSummary => item !== null),
+      forbidden: (Array.isArray(transitionsRaw.forbidden) ? transitionsRaw.forbidden : [])
+        .map(parseOrbTransitionSummary)
+        .filter((item): item is OrbTransitionSummary => item !== null),
+    },
+  };
+
+  if (!snapshot.subsystem) delete snapshot.subsystem;
+  if (!snapshot.generated_at) delete snapshot.generated_at;
+  if (!snapshot.repo_root) delete snapshot.repo_root;
+  if (!snapshot.model?.plane_map_id && !snapshot.model?.action_taxonomy_id) delete snapshot.model;
+  if (!snapshot.core_loop?.length) delete snapshot.core_loop;
+  if (!snapshot.planes?.length) delete snapshot.planes;
+  if (!snapshot.gates?.length) delete snapshot.gates;
+  if (!snapshot.transitions?.allowed.length && !snapshot.transitions?.forbidden.length) delete snapshot.transitions;
+  if (isRecord(raw.meta)) snapshot.meta = raw.meta as Record<string, unknown>;
+
+  return snapshot;
+}
+
 export type SettingsEndpoints = {
   /**
    * Each endpoint returns a *priority-ordered* list of candidate paths.
@@ -653,6 +803,7 @@ export type SettingsEndpoints = {
   info: () => string[];
   health: () => string[];
   worldState: () => string[];
+  orbStatus: () => string[];
   featureFlags: () => string[];
   effectiveConfig: () => string[];
 
@@ -670,6 +821,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     info: () => ["/system/info", "/system/status", "/system", "/status"],
     health: () => ["/system/health", "/health", "/system/ping", "/ping"],
     worldState: () => ["/system/world_state", "/system/world-state"],
+    orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     featureFlags: () => ["/system/flags", "/system/feature_flags", "/system/features", "/flags"],
     effectiveConfig: () => ["/system/config/effective", "/system/effective_config", "/system/config", "/config/effective"],
 
@@ -785,6 +937,11 @@ export class SettingsClient {
   async getWorldState(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<WorldStateSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.worldState(), this.init(opts));
     return parseWorldStateSnapshot(json);
+  }
+
+  async getOrbStatus(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<OrbStatusSnapshot> {
+    const { json } = await this.fetchFirstOk(this.endpoints.orbStatus(), this.init(opts));
+    return parseOrbStatusSnapshot(json);
   }
 
   async listFeatureFlags(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FeatureFlagsResponse> {

@@ -8,7 +8,7 @@ import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
-import type { SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
+import type { OrbStatusSnapshot, SystemHealth, SystemInfo, WorldStateSnapshot } from "./settings";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -711,7 +711,7 @@ export default function App() {
                     [
                       ["approvals", "Approvals"],
                       ["plugins", "Plugins"],
-                      ["system", "System"],
+                      ["system", "ORB"],
                       ["operations", "Operations"],
                       ["settings", "Settings"],
                     ] as Array<[TabKey, string]>
@@ -752,7 +752,7 @@ export default function App() {
                   [
                     ["approvals", "Approvals"],
                     ["plugins", "Plugins"],
-                    ["system", "System"],
+                    ["system", "ORB"],
                     ["operations", "Operations"],
                     ["settings", "Settings"],
                   ] as Array<[TabKey, string]>
@@ -983,6 +983,7 @@ function SystemPanel(props: {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [worldState, setWorldState] = useState<WorldStateSnapshot | null>(null);
+  const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -990,14 +991,16 @@ function SystemPanel(props: {
     setBusy(true);
     setError(null);
     try {
-      const [nextInfo, nextHealth, nextWorldState] = await Promise.all([
+      const [nextInfo, nextHealth, nextWorldState, nextOrbStatus] = await Promise.all([
         client.getSystemInfo(),
         client.getHealth(),
         client.getWorldState(),
+        client.getOrbStatus(),
       ]);
       setInfo(nextInfo);
       setHealth(nextHealth);
       setWorldState(nextWorldState);
+      setOrbStatus(nextOrbStatus);
     } catch (err) {
       const msg =
         err instanceof SettingsApiError
@@ -1033,13 +1036,17 @@ function SystemPanel(props: {
     stackRaw?.counts && typeof stackRaw.counts === "object" && !Array.isArray(stackRaw.counts)
       ? (stackRaw.counts as Record<string, unknown>)
       : {};
+  const orbModel = orbStatus?.model;
+  const coreLoop = orbStatus?.core_loop ?? [];
+  const gateStack = orbStatus?.gates ?? [];
+  const forbiddenTransitions = orbStatus?.transitions?.forbidden ?? [];
   const runtimeState = health?.ok ? "healthy" : "attention";
 
   return (
     <section style={panelStyle}>
-      <div style={{ fontSize: 16, fontWeight: 600 }}>System</div>
+      <div style={{ fontSize: 16, fontWeight: 600 }}>ORB</div>
       <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>
-        ORB-facing runtime snapshot, pending approvals, and recent task activity.
+        Canonical ORB flow, gate stack, runtime snapshot, pending approvals, and recent task activity.
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10 }}>
@@ -1087,6 +1094,97 @@ function SystemPanel(props: {
         <div style={summaryCardStyle()}>
           <div style={{ fontSize: 11, color: THEME.muted }}>Feature flags</div>
           <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{stackCounts.feature_flags ?? 0}</div>
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Canonical Flow</div>
+          <div style={{ fontSize: 11, color: THEME.muted }}>
+            plane_map {orbModel?.plane_map_version ? `v${String(orbModel.plane_map_version)}` : "unknown"} / taxonomy{" "}
+            {orbModel?.action_taxonomy_version ? `v${String(orbModel.action_taxonomy_version)}` : "unknown"}
+          </div>
+        </div>
+        {coreLoop.length === 0 ? (
+          <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>ORB model data not loaded.</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+              {coreLoop.map((plane) => (
+                <span key={plane.id} style={badgeStyle(plane.id)}>
+                  {plane.name || plane.id}
+                </span>
+              ))}
+            </div>
+            <div style={{ display: "grid", gap: 8, marginTop: 10, maxHeight: 180, overflow: "auto" }}>
+              {coreLoop.map((plane) => (
+                <div
+                  key={`plane-${plane.id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{plane.name || plane.id}</div>
+                    <span style={badgeStyle(plane.default_risk_class || "unknown")}>
+                      {plane.default_risk_class || "unknown"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    <code>{plane.id}</code> / {plane.category || "uncategorized"}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    side effects <code>{plane.side_effects_allowed ? "allowed" : "blocked"}</code>
+                  </div>
+                  {plane.purpose ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{plane.purpose}</div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Gate Stack</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          {gateStack.length === 0 ? (
+            <span style={{ fontSize: 12, color: THEME.muted }}>No gate metadata loaded.</span>
+          ) : (
+            gateStack.slice(0, 5).map((gate) => (
+              <div
+                key={gate.id}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: "8px 10px", background: "#121212" }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 600 }}>{gate.id}</div>
+                {gate.description ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4, maxWidth: 220 }}>{gate.description}</div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Forbidden Shortcuts</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {forbiddenTransitions.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No forbidden transitions loaded.</div>
+          ) : (
+            forbiddenTransitions.slice(0, 4).map((transition) => (
+              <div
+                key={`${transition.from}-${transition.to}`}
+                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600 }}>
+                  <code>{transition.from}</code> to <code>{transition.to}</code>
+                </div>
+                {transition.reason ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{transition.reason}</div>
+                ) : null}
+              </div>
+            ))
+          )}
         </div>
       </div>
 

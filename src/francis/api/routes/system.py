@@ -20,6 +20,7 @@ from francis.kernel.paths import data_dir
 from francis.kernel.services import services_action, services_status
 from francis.kernel.stack import stack_status
 from francis.settings import Settings
+from francis.world_state.orb import snapshot as orb_status_snapshot
 from francis.world_state.snapshot import snapshot as world_state_snapshot
 
 router = APIRouter()
@@ -364,6 +365,16 @@ def world_state() -> dict[str, object]:
         return world_state_snapshot()
     except Exception as exc:
         return {"ok": False, "error": str(exc), "subsystem": "world_state"}
+
+
+@router.get("/orb_status")
+@router.get("/orb-status")
+@router.get("/orb")
+def orb_status() -> dict[str, object]:
+    try:
+        return orb_status_snapshot()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "subsystem": "orb_status"}
 
 
 @router.post("/services/action")
