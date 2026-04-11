@@ -388,7 +388,7 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert ticked_body["mission"]["status"] == "deadlettered"
 
 
-def test_mission_run_once_surfaces_queue_actions(monkeypatch, tmp_path: Path) -> None:
+def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
@@ -463,15 +463,77 @@ def test_mission_run_once_surfaces_queue_actions(monkeypatch, tmp_path: Path) ->
     run_once_body = run_once.json()
     assert run_once_body["ok"] is True
     assert run_once_body["processed"] >= 2
+    assert run_once_body["advanced"] == 1
     assert run_once_body["counts"]["blocked"] >= 1
     assert run_once_body["counts"]["queued"] >= 1
+    results = run_once_body["results"]
+    blocked_result = next(item for item in results if item["mission_id"] == blocked_id)
+    assert blocked_result["applied"] is False
+    assert blocked_result["action"] == "raise_trust_or_reduce_risk"
+    ready_result = next(item for item in results if item["mission_id"] == ready_id)
+    assert ready_result["applied"] is True
+    assert ready_result["action"] == "create_first_operation"
+    assert ready_result["operation_id"]
     queue_items = run_once_body["items"]
     assert queue_items[0]["id"] == blocked_id
     assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
     assert queue_items[0]["action_target_id"] == blocked_operation_id
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
-    assert ready_item["recommended_action"] == "create_first_operation"
-    assert ready_item["linked_task_count"] == 0
+    assert ready_item["recommended_action"] == "run_linked_operation"
+    assert ready_item["linked_task_count"] == 1
+    assert ready_item["last_advance_action"] == "create_first_operation"
+
+
+def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Run the linked queued operation",
+            "summary": "Queue runner should execute the linked task in one bounded pass.",
+            "requester_id": "test.missions.queue",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "run_once linked operation",
+            "mission_id": mission_id,
+            "input": {"goal": "Create a queued plan for the queue runner"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    run_once = client.post("/missions/run_once", json={"actor": "test.missions.queue", "limit": 10})
+    assert run_once.status_code == 200
+    run_once_body = run_once.json()
+    assert run_once_body["ok"] is True
+    assert run_once_body["advanced"] == 1
+    results = run_once_body["results"]
+    mission_result = next(item for item in results if item["mission_id"] == mission_id)
+    assert mission_result["applied"] is True
+    assert mission_result["action"] == "run_linked_operation"
+    assert mission_result["operation_id"] == operation_id
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["status"] == "completed"
+    assert fetched_body["mission"]["meta"]["last_advance_action"] == "run_linked_operation"
+    assert fetched_body["mission"]["meta"]["last_advance_outcome"] == "succeeded"
 
 
 def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_path: Path) -> None:
