@@ -1011,6 +1011,7 @@ export default function App() {
                 {panel === "system" ? (
                   <SystemPanel
                     baseUrl={baseUrl}
+                    operatorMode={operatorMode}
                     onOpenApprovals={openApprovalsPanel}
                     onOpenOperation={openOperationPanel}
                   />
@@ -1058,6 +1059,7 @@ export default function App() {
               {panel === "system" ? (
                 <SystemPanel
                   baseUrl={baseUrl}
+                  operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
                   onOpenOperation={openOperationPanel}
                 />
@@ -1263,6 +1265,7 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
 
 function SystemPanel(props: {
   baseUrl: string;
+  operatorMode: OperatorModeSnapshot | null;
   onOpenApprovals: (approvalId?: string) => void;
   onOpenOperation: (operationId: string) => void;
 }) {
@@ -1310,11 +1313,13 @@ function SystemPanel(props: {
   const overview = worldState?.overview;
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
+  const incidents = overview?.incidents ?? [];
   const pendingApprovals = overview?.pending_approvals ?? [];
   const queuedTasks = safeNumber(counts?.queued_tasks, safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0));
   const approvalPendingTasks = safeNumber(counts?.approval_pending_tasks, safeNumber(taskStatusCounts.needs_approval, 0));
   const blockedTasks = safeNumber(counts?.blocked_tasks, safeNumber(taskStatusCounts.blocked, 0));
   const runningTasks = safeNumber(counts?.running_tasks, safeNumber(taskStatusCounts.running, 0));
+  const activeIncidents = safeNumber(counts?.active_incidents, incidents.length);
   const servicesRaw =
     worldState?.services && typeof worldState.services === "object" && !Array.isArray(worldState.services)
       ? worldState.services
@@ -1327,6 +1332,16 @@ function SystemPanel(props: {
   const gateStack = orbStatus?.gates ?? [];
   const forbiddenTransitions = orbStatus?.transitions?.forbidden ?? [];
   const runtimeState = health?.ok ? "healthy" : "attention";
+  const controlMode = props.operatorMode?.control_mode;
+  const controlModeId = safeString(controlMode?.id).trim().toLowerCase();
+  const controlTone =
+    controlModeId === "pilot"
+      ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
+      : controlModeId === "away"
+        ? { bg: "#10212a", border: "#2b5a74", color: "#b7e9ff" }
+        : controlModeId === "observe"
+          ? { bg: "#1a1a1a", border: "#4c4c4c", color: "#d8d8d8" }
+          : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
 
   return (
     <section style={panelStyle}>
@@ -1386,8 +1401,113 @@ function SystemPanel(props: {
           <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{runningTasks}</div>
         </div>
         <div style={summaryCardStyle()}>
+          <div style={{ fontSize: 11, color: THEME.muted }}>Active incidents</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{activeIncidents}</div>
+        </div>
+        <div
+          style={{
+            ...summaryCardStyle(),
+            background: controlTone.bg,
+            border: `1px solid ${controlTone.border}`,
+          }}
+        >
+          <div style={{ fontSize: 11, color: THEME.muted }}>Control mode</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4, color: controlTone.color }}>
+            {controlMode?.label || "Unknown"}
+          </div>
+        </div>
+        <div style={summaryCardStyle()}>
           <div style={{ fontSize: 11, color: THEME.muted }}>Total tasks</div>
           <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{counts?.tasks ?? 0}</div>
+        </div>
+      </div>
+
+      {controlMode ? (
+        <div
+          style={{
+            ...summaryCardStyle(),
+            marginTop: 12,
+            background: controlTone.bg,
+            border: `1px solid ${controlTone.border}`,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Control Posture</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <span style={badgeStyle(controlMode.label || controlMode.id || "mode")}>
+                {controlMode.label || controlMode.id || "mode"}
+              </span>
+              {controlMode.implementation_status ? (
+                <span style={badgeStyle(controlMode.implementation_status)}>{controlMode.implementation_status}</span>
+              ) : null}
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: controlTone.color, marginTop: 8 }}>
+            {controlMode.summary || "Current legal control mode not available."}
+          </div>
+          {controlMode.reason ? (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+              reason <code>{controlMode.reason}</code>
+            </div>
+          ) : null}
+          {controlMode.changed_by || controlMode.changed_at ? (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              {controlMode.changed_by ? `by ${controlMode.changed_by}` : "mode change recorded"}
+              {controlMode.changed_at ? ` at ${toLocaleTime(controlMode.changed_at)}` : ""}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Incident View</div>
+          <span style={badgeStyle(activeIncidents > 0 ? "warning" : "clear")}>
+            {activeIncidents > 0 ? `${activeIncidents} active` : "clear"}
+          </span>
+        </div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8, maxHeight: 220, overflow: "auto" }}>
+          {incidents.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No active incidents derived from local runtime state.</div>
+          ) : (
+            incidents.map((incident) => {
+              const approvalId = safeString(incident.approval_id);
+              const taskId = safeString(incident.task_id);
+              return (
+                <div
+                  key={incident.id}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{incident.title || incident.id}</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {incident.severity ? <span style={badgeStyle(incident.severity)}>{incident.severity}</span> : null}
+                      {incident.category ? <span style={badgeStyle(incident.category)}>{incident.category}</span> : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    {incident.detail || "Incident detail unavailable."}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    source=<code>{incident.source || "unknown"}</code>
+                    {typeof incident.count === "number" ? ` / count=${String(incident.count)}` : ""}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+                    {approvalId ? (
+                      <button style={buttonStyle} onClick={() => props.onOpenApprovals(approvalId)}>
+                        Review approval
+                      </button>
+                    ) : null}
+                    {taskId ? (
+                      <button style={buttonStyle} onClick={() => props.onOpenOperation(taskId)}>
+                        Open task
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

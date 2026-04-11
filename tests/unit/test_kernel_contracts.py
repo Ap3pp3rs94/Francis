@@ -104,6 +104,8 @@ def test_world_state_snapshot_reports_repo_and_data(monkeypatch, tmp_path: Path)
     assert state["overview"]["task_status_counts"]["pending"] == 1
     assert state["overview"]["task_status_counts"]["running"] == 1
     assert state["overview"]["pending_approvals"][0]["action"] == "plugin.run"
+    incident_ids = {item["id"] for item in state["overview"]["incidents"]}
+    assert "governance.pending_approvals" in incident_ids
     assert state["overview"]["recent_tasks"][0]["id"] == "tsk_running"
     assert state["overview"]["recent_tasks"][0]["assigned_to"] == "worker-1"
 
@@ -176,6 +178,10 @@ def test_world_state_snapshot_derives_governance_backlog_states(monkeypatch, tmp
     assert state["overview"]["recent_tasks"][0]["status_reason"] == "Approval required before rerun."
     assert state["overview"]["recent_tasks"][1]["status"] == "blocked"
     assert state["overview"]["recent_tasks"][1]["status_reason"] == "insufficient_trust"
+    assert state["counts"]["active_incidents"] >= 2
+    incident_ids = {item["id"] for item in state["overview"]["incidents"]}
+    assert "governance.awaiting_approval" in incident_ids
+    assert "governance.blocked_tasks" in incident_ids
 
 
 def test_orb_snapshot_reports_planes_and_forbidden_transitions(monkeypatch, tmp_path: Path) -> None:

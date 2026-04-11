@@ -14,6 +14,7 @@ from francis.trust.levels import get_state
 
 
 _TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
+_INCIDENT_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
 
 
 def _count_json_entries(path: Path) -> int:
@@ -213,6 +214,199 @@ def _path_state(path: Path) -> dict[str, Any]:
     }
 
 
+def _incident_record(
+    incident_id: str,
+    *,
+    severity: str,
+    category: str,
+    title: str,
+    detail: str,
+    source: str,
+    count: int = 0,
+    approval_id: str = "",
+    task_id: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": incident_id,
+        "severity": severity,
+        "category": category,
+        "status": "active",
+        "title": title,
+        "detail": detail,
+        "source": source,
+        "count": max(0, int(count)),
+        "approval_id": approval_id,
+        "task_id": task_id,
+    }
+
+
+def _first_task_for_status(recent_tasks: list[dict[str, Any]], status: str) -> dict[str, Any]:
+    for item in recent_tasks:
+        if str(item.get("status") or "").strip().lower() == status:
+            return item
+    return {}
+
+
+def _stack_incidents(stack_report: dict[str, Any]) -> list[dict[str, Any]]:
+    items = stack_report.get("items")
+    if not isinstance(items, list):
+        return []
+
+    missing_core = [
+        item
+        for item in items
+        if isinstance(item, dict)
+        and item.get("status") == "missing"
+        and str(item.get("kind") or "").strip().lower() in {"root", "code", "config", "state"}
+    ]
+    if not missing_core:
+        return []
+
+    labels = [str(item.get("name") or item.get("kind") or "unknown").strip() for item in missing_core]
+    labels = [label for label in labels if label]
+    preview = ", ".join(labels[:3])
+    if len(labels) > 3:
+        preview = f"{preview}, +{len(labels) - 3} more"
+    return [
+        _incident_record(
+            "runtime.stack_missing",
+            severity="critical",
+            category="runtime",
+            title="Core stack surfaces are missing",
+            detail=f"Missing stack surfaces: {preview}.",
+            source="stack",
+            count=len(labels),
+        )
+    ]
+
+
+def _service_incidents(services_report: dict[str, Any]) -> list[dict[str, Any]]:
+    items = services_report.get("services")
+    if not isinstance(items, list):
+        return []
+
+    degraded = [
+        item
+        for item in items
+        if isinstance(item, dict) and str(item.get("status") or "").strip().lower() in {"missing", "disabled"}
+    ]
+    if not degraded:
+        return []
+
+    missing = [str(item.get("name") or "").strip() for item in degraded if str(item.get("status") or "").strip().lower() == "missing"]
+    disabled = [str(item.get("name") or "").strip() for item in degraded if str(item.get("status") or "").strip().lower() == "disabled"]
+    missing = [item for item in missing if item]
+    disabled = [item for item in disabled if item]
+
+    parts: list[str] = []
+    if missing:
+        preview = ", ".join(missing[:3])
+        if len(missing) > 3:
+            preview = f"{preview}, +{len(missing) - 3} more"
+        parts.append(f"missing: {preview}")
+    if disabled:
+        preview = ", ".join(disabled[:3])
+        if len(disabled) > 3:
+            preview = f"{preview}, +{len(disabled) - 3} more"
+        parts.append(f"disabled: {preview}")
+
+    return [
+        _incident_record(
+            "runtime.services_degraded",
+            severity="critical" if missing else "warning",
+            category="runtime",
+            title="Service surfaces need attention",
+            detail="; ".join(parts) or "One or more services are not ready.",
+            source="services",
+            count=len(degraded),
+        )
+    ]
+
+
+def _governance_incidents(
+    pending_approvals: list[dict[str, Any]],
+    task_status_counts: dict[str, Any],
+    recent_tasks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    incidents: list[dict[str, Any]] = []
+
+    pending_approval_count = int(task_status_counts.get("needs_approval") or 0)
+    blocked_count = int(task_status_counts.get("blocked") or 0)
+    failed_count = int(task_status_counts.get("failed") or 0)
+    queued_approval_count = len(pending_approvals)
+
+    if queued_approval_count > 0:
+        approval_id = str((pending_approvals[0] or {}).get("id") or "").strip()
+        incidents.append(
+            _incident_record(
+                "governance.pending_approvals",
+                severity="warning",
+                category="governance",
+                title="Approvals are waiting on operator review",
+                detail=f"{queued_approval_count} pending approval(s) are queued for a decision.",
+                source="approvals",
+                count=queued_approval_count,
+                approval_id=approval_id,
+            )
+        )
+
+    if pending_approval_count > 0:
+        task = _first_task_for_status(recent_tasks, "needs_approval")
+        incidents.append(
+            _incident_record(
+                "governance.awaiting_approval",
+                severity="warning",
+                category="governance",
+                title="Tasks are paused behind approval gates",
+                detail=f"{pending_approval_count} task(s) cannot proceed until approval is granted.",
+                source="tasks",
+                count=pending_approval_count,
+                task_id=str(task.get("id") or "").strip(),
+            )
+        )
+
+    if blocked_count > 0:
+        task = _first_task_for_status(recent_tasks, "blocked")
+        detail = str(task.get("status_reason") or "").strip() or "Policy or trust gates blocked execution."
+        incidents.append(
+            _incident_record(
+                "governance.blocked_tasks",
+                severity="error",
+                category="governance",
+                title="Tasks are blocked by governance",
+                detail=f"{blocked_count} task(s) are blocked. {detail}",
+                source="tasks",
+                count=blocked_count,
+                task_id=str(task.get("id") or "").strip(),
+            )
+        )
+
+    if failed_count > 0:
+        task = _first_task_for_status(recent_tasks, "failed")
+        detail = str(task.get("status_reason") or "").strip() or "Execution failed and needs review."
+        incidents.append(
+            _incident_record(
+                "execution.failed_tasks",
+                severity="error",
+                category="execution",
+                title="Recent task failures need review",
+                detail=f"{failed_count} task(s) failed. {detail}",
+                source="tasks",
+                count=failed_count,
+                task_id=str(task.get("id") or "").strip(),
+            )
+        )
+
+    incidents.sort(
+        key=lambda item: (
+            _INCIDENT_SEVERITY_ORDER.get(str(item.get("severity") or "").strip().lower(), 99),
+            -int(item.get("count") or 0),
+            str(item.get("id") or ""),
+        )
+    )
+    return incidents
+
+
 def snapshot() -> dict[str, Any]:
     root = repo_root()
     data = data_dir()
@@ -221,9 +415,18 @@ def snapshot() -> dict[str, Any]:
     tasks_root = data / "tasks"
     logs_root = data / "logs"
     plugins_root = root / "plugins" / "generated"
+    stack_report = stack_status()
+    services_report = services_status()
     task_summary = _task_summary(tasks_root)
     task_status_counts = task_summary["status_counts"] if isinstance(task_summary.get("status_counts"), dict) else {}
+    recent_tasks = task_summary["recent"] if isinstance(task_summary.get("recent"), list) else []
+    pending_approval_items = _pending_approval_summary(approvals_root / "pending")
     pending_approvals = _count_json_entries(approvals_root / "pending")
+    incidents = [
+        *_stack_incidents(stack_report),
+        *_service_incidents(services_report),
+        *_governance_incidents(pending_approval_items, task_status_counts, recent_tasks),
+    ]
 
     return {
         "ok": True,
@@ -232,8 +435,8 @@ def snapshot() -> dict[str, Any]:
         "repo_root": str(root),
         "data_dir": str(data),
         "trust": get_state(),
-        "stack": stack_status(),
-        "services": services_status(),
+        "stack": stack_report,
+        "services": services_report,
         "feature_flags": list_flags(),
         "paths": {
             "data": _path_state(data),
@@ -251,11 +454,13 @@ def snapshot() -> dict[str, Any]:
             "approval_pending_tasks": int(task_status_counts.get("needs_approval") or 0),
             "blocked_tasks": int(task_status_counts.get("blocked") or 0),
             "running_tasks": int(task_status_counts.get("running") or 0),
+            "active_incidents": len(incidents),
             "generated_plugins": _count_json_entries(plugins_root),
         },
         "overview": {
-            "pending_approvals": _pending_approval_summary(approvals_root / "pending"),
+            "pending_approvals": pending_approval_items,
             "task_status_counts": task_status_counts,
-            "recent_tasks": task_summary["recent"],
+            "recent_tasks": recent_tasks,
+            "incidents": incidents,
         },
     }

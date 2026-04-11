@@ -68,6 +68,8 @@ def test_system_world_state_reports_nested_task_records(monkeypatch, tmp_path: P
     assert body["overview"]["task_status_counts"]["running"] == 1
     assert body["overview"]["recent_tasks"][0]["id"] == "tsk_nested"
     assert body["overview"]["pending_approvals"][0]["id"] == "appr"
+    incident_ids = {item["id"] for item in body["overview"]["incidents"]}
+    assert "governance.pending_approvals" in incident_ids
 
 
 def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_path: Path) -> None:
@@ -139,10 +141,14 @@ def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_p
     assert body["counts"]["blocked_tasks"] == 1
     assert body["counts"]["approval_pending_tasks"] == 1
     assert body["counts"]["running_tasks"] == 0
+    assert body["counts"]["active_incidents"] >= 2
     assert body["overview"]["task_status_counts"]["blocked"] == 1
     assert body["overview"]["task_status_counts"]["needs_approval"] == 1
     assert body["overview"]["recent_tasks"][0]["status"] == "needs_approval"
     assert body["overview"]["recent_tasks"][1]["status"] == "blocked"
+    incident_ids = {item["id"] for item in body["overview"]["incidents"]}
+    assert "governance.awaiting_approval" in incident_ids
+    assert "governance.blocked_tasks" in incident_ids
 
 
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:

@@ -112,6 +112,7 @@ export type WorldStateCounts = {
   approval_pending_tasks?: number;
   blocked_tasks?: number;
   running_tasks?: number;
+  active_incidents?: number;
   generated_plugins?: number;
 };
 
@@ -136,10 +137,24 @@ export type WorldStateTaskSummary = {
   terminal?: boolean;
 };
 
+export type WorldStateIncidentSummary = {
+  id: string;
+  severity?: string;
+  category?: string;
+  status?: string;
+  title?: string;
+  detail?: string;
+  source?: string;
+  count?: number;
+  approval_id?: string;
+  task_id?: string;
+};
+
 export type WorldStateOverview = {
   pending_approvals: WorldStateApprovalSummary[];
   task_status_counts: Record<string, number>;
   recent_tasks: WorldStateTaskSummary[];
+  incidents: WorldStateIncidentSummary[];
 };
 
 export type WorldStateSnapshot = {
@@ -716,6 +731,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
     approval_pending_tasks: safeNumber(countsRaw.approval_pending_tasks, 0),
     blocked_tasks: safeNumber(countsRaw.blocked_tasks, 0),
     running_tasks: safeNumber(countsRaw.running_tasks, 0),
+    active_incidents: safeNumber(countsRaw.active_incidents, 0),
     generated_plugins: safeNumber(countsRaw.generated_plugins, 0),
   };
 
@@ -731,6 +747,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
 
   const approvalsRaw = Array.isArray(overviewRaw.pending_approvals) ? (overviewRaw.pending_approvals as unknown[]) : [];
   const recentTasksRaw = Array.isArray(overviewRaw.recent_tasks) ? (overviewRaw.recent_tasks as unknown[]) : [];
+  const incidentsRaw = Array.isArray(overviewRaw.incidents) ? (overviewRaw.incidents as unknown[]) : [];
   const taskStatusCountsRaw = isRecord(overviewRaw.task_status_counts)
     ? (overviewRaw.task_status_counts as Record<string, unknown>)
     : {};
@@ -762,6 +779,21 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         updated_at: safeString(item.updated_at, ""),
         status_reason: safeString(item.status_reason, ""),
         terminal: safeBoolean(item.terminal, false),
+      }))
+      .filter((item) => item.id),
+    incidents: incidentsRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        severity: safeString(item.severity, ""),
+        category: safeString(item.category, ""),
+        status: safeString(item.status, ""),
+        title: safeString(item.title, ""),
+        detail: safeString(item.detail, ""),
+        source: safeString(item.source, ""),
+        count: safeNumber(item.count, 0),
+        approval_id: safeString(item.approval_id, ""),
+        task_id: safeString(item.task_id, ""),
       }))
       .filter((item) => item.id),
   };
