@@ -1565,6 +1565,8 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
   const [statusFilter, setStatusFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [detailBusy, setDetailBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState<"" | "run" | "cancel">("");
+  const [actionNotice, setActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const operationsError = useCallback((err: unknown): string => {
@@ -1574,6 +1576,40 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
     if (err instanceof Error) return err.message;
     return "Operations request failed.";
   }, []);
+
+  const upsertOperation = useCallback((operation: OperationRecord) => {
+    setItems((prev) => {
+      const index = prev.findIndex((item) => item.id === operation.id);
+      if (index === -1) return [operation, ...prev];
+      const next = [...prev];
+      next[index] = operation;
+      return next;
+    });
+  }, []);
+
+  const loadDetail = useCallback(
+    async (operationId: string) => {
+      if (!operationId) {
+        setDetail(null);
+        return null;
+      }
+      setDetailBusy(true);
+      setError(null);
+      try {
+        const nextDetail = await client.get(operationId);
+        setDetail(nextDetail);
+        if (nextDetail?.operation) upsertOperation(nextDetail.operation);
+        return nextDetail;
+      } catch (err) {
+        setDetail(null);
+        setError(operationsError(err));
+        return null;
+      } finally {
+        setDetailBusy(false);
+      }
+    },
+    [client, operationsError, upsertOperation],
+  );
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -1607,36 +1643,12 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
   }, [props.focusOperationId]);
 
   useEffect(() => {
-    let cancelled = false;
+    setActionNotice(null);
+  }, [selectedOperationId]);
 
-    async function loadDetail() {
-      if (!selectedOperationId) {
-        setDetail(null);
-        return;
-      }
-      setDetailBusy(true);
-      setError(null);
-      try {
-        const nextDetail = await client.get(selectedOperationId);
-        if (cancelled) return;
-        setDetail(nextDetail);
-        if (nextDetail?.operation && !items.some((item) => item.id === nextDetail.operation.id)) {
-          setItems((prev) => [nextDetail.operation, ...prev]);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setDetail(null);
-        setError(operationsError(err));
-      } finally {
-        if (!cancelled) setDetailBusy(false);
-      }
-    }
-
-    void loadDetail();
-    return () => {
-      cancelled = true;
-    };
-  }, [client, items, operationsError, selectedOperationId]);
+  useEffect(() => {
+    void loadDetail(selectedOperationId);
+  }, [loadDetail, selectedOperationId]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1649,6 +1661,67 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
 
   const selectedOperation =
     detail?.operation ?? items.find((item) => item.id === selectedOperationId) ?? null;
+  const selectedStatus = safeString(selectedOperation?.status).trim().toLowerCase();
+  const canRunSelected = selectedStatus === "queued";
+  const canCancelSelected = selectedStatus === "queued" || selectedStatus === "running";
+
+  const runSelectedOperation = useCallback(async () => {
+    if (!selectedOperationId || !canRunSelected) return;
+    setActionBusy("run");
+    setActionNotice(null);
+    setError(null);
+    try {
+      const response = await client.run(selectedOperationId, { worker_id: "chat_ui.operations" });
+      if (response.operation) upsertOperation(response.operation);
+      const nextDetail = await loadDetail(selectedOperationId);
+      const nextStatus = safeString(
+        nextDetail?.operation.status ?? response.operation?.status ?? response.status,
+        "unknown",
+      );
+      if (!response.ok) {
+        setActionNotice({
+          tone: "error",
+          text: response.message ? `Run failed: ${response.message}` : `Run failed with status ${nextStatus}.`,
+        });
+        return;
+      }
+      setActionNotice({
+        tone: "info",
+        text:
+          response.message === "already_terminal"
+            ? `Operation is already ${nextStatus}.`
+            : `Operation status is now ${nextStatus}.`,
+      });
+    } catch (err) {
+      setActionNotice({ tone: "error", text: operationsError(err) });
+    } finally {
+      setActionBusy("");
+    }
+  }, [canRunSelected, client, loadDetail, operationsError, selectedOperationId, upsertOperation]);
+
+  const cancelSelectedOperation = useCallback(async () => {
+    if (!selectedOperationId || !canCancelSelected) return;
+    setActionBusy("cancel");
+    setActionNotice(null);
+    setError(null);
+    try {
+      const response = await client.cancel(selectedOperationId, { reason: "cancelled_from_chat_ui" });
+      const nextDetail = await loadDetail(selectedOperationId);
+      const nextStatus = safeString(nextDetail?.operation.status ?? response.status, "unknown");
+      if (!response.ok) {
+        setActionNotice({
+          tone: "error",
+          text: response.message ? `Cancel failed: ${response.message}` : `Cancel failed with status ${nextStatus}.`,
+        });
+        return;
+      }
+      setActionNotice({ tone: "info", text: `Operation status is now ${nextStatus}.` });
+    } catch (err) {
+      setActionNotice({ tone: "error", text: operationsError(err) });
+    } finally {
+      setActionBusy("");
+    }
+  }, [canCancelSelected, client, loadDetail, operationsError, selectedOperationId]);
 
   return (
     <section style={panelStyle}>
@@ -1677,7 +1750,7 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
             <option value="failed">Failed</option>
             <option value="canceled">Canceled</option>
           </select>
-          <button onClick={() => void refresh()} disabled={busy} style={buttonStyle}>
+          <button onClick={() => void refresh()} disabled={busy || actionBusy !== ""} style={buttonStyle}>
             {busy ? "Refreshing." : "Refresh"}
           </button>
         </div>
@@ -1777,6 +1850,36 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string }) 
               <div style={{ fontSize: 12 }}>
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => void runSelectedOperation()}
+                  disabled={!canRunSelected || actionBusy !== ""}
+                  style={buttonStyle}
+                >
+                  {actionBusy === "run" ? "Running." : "Run now"}
+                </button>
+                <button
+                  onClick={() => void cancelSelectedOperation()}
+                  disabled={!canCancelSelected || actionBusy !== ""}
+                  style={buttonStyle}
+                >
+                  {actionBusy === "cancel" ? "Canceling." : "Cancel"}
+                </button>
+              </div>
+              {actionNotice ? (
+                <div
+                  style={{
+                    border: `1px solid ${actionNotice.tone === "error" ? THEME.errorBorder : THEME.panelBorder}`,
+                    background: actionNotice.tone === "error" ? THEME.errorBg : "#111819",
+                    color: actionNotice.tone === "error" ? "#ffaaaa" : "#aee6df",
+                    padding: 10,
+                    borderRadius: 10,
+                    fontSize: 12,
+                  }}
+                >
+                  {actionNotice.text}
+                </div>
+              ) : null}
               {selectedOperation.error ? (
                 <div
                   style={{

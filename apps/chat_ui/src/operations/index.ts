@@ -217,6 +217,17 @@ export type OperationCancelResponse = {
   message?: string;
 };
 
+export type OperationRunRequest = {
+  worker_id?: string;
+};
+
+export type OperationRunResponse = {
+  ok: boolean;
+  operation?: OperationRecord;
+  status?: OperationStatus;
+  message?: string;
+};
+
 export type OperationDeleteRequest = {
   reason?: string;
 };
@@ -664,6 +675,7 @@ export type OperationsEndpoints = {
   create?: () => string;
   update?: (operationId: string) => string;
   cancel?: (operationId: string) => string;
+  run?: (operationId: string) => string;
   delete?: (operationId: string) => string;
 
   export?: () => string;
@@ -678,6 +690,7 @@ export function defaultOperationsEndpoints(): OperationsEndpoints {
     create: () => "/operations/create",
     update: (id: string) => `/operations/${encodeURIComponent(id)}`,
     cancel: (id: string) => `/operations/${encodeURIComponent(id)}/cancel`,
+    run: (id: string) => `/operations/${encodeURIComponent(id)}/run`,
     delete: (id: string) => `/operations/${encodeURIComponent(id)}`,
     export: () => "/operations/export",
   };
@@ -940,6 +953,41 @@ export class OperationsClient {
 
     return {
       ok: Boolean(json.ok ?? true),
+      status: (safeString(json.status) || undefined) as OperationStatus | undefined,
+      message: safeString(json.message) || undefined,
+    };
+  }
+
+  /**
+   * Run an operation immediately (backend-dependent).
+   */
+  async run(
+    operationId: string,
+    req?: OperationRunRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<OperationRunResponse> {
+    if (!this.endpoints.run) {
+      throw new Error("OperationsClient.run is not configured (endpoints.run missing)");
+    }
+
+    const id = (operationId || "").trim();
+    if (!id) throw new Error("OperationsClient.run requires a non-empty operationId");
+
+    const url = this.url(this.endpoints.run(id));
+    const json = await fetchAny(url, {
+      method: "POST",
+      body: JSON.stringify(req ?? {}),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+
+    if (!isRecord(json)) return { ok: true };
+
+    const op = parseOperationRecord(isRecord(json.operation) ? json.operation : json.operation);
+
+    return {
+      ok: Boolean(json.ok ?? true),
+      operation: op ?? undefined,
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
       message: safeString(json.message) || undefined,
     };
