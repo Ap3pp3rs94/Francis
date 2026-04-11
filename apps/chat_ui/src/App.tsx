@@ -14,6 +14,7 @@ import type {
   OrbStatusSnapshot,
   SystemHealth,
   SystemInfo,
+  WorldStateMissionSummary,
   WorldStateSnapshot,
 } from "./settings";
 
@@ -117,6 +118,15 @@ function safeNumber(v: unknown, fallback = 0): number {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+function firstLinkedTaskId(mission: WorldStateMissionSummary | null | undefined): string {
+  if (!mission || !Array.isArray(mission.linked_task_ids)) return "";
+  for (const taskId of mission.linked_task_ids) {
+    const cleaned = safeString(taskId).trim();
+    if (cleaned) return cleaned;
+  }
+  return "";
 }
 
 function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
@@ -2202,13 +2212,23 @@ function SystemPanel(props: {
   const counts = worldState?.counts;
   const overview = worldState?.overview;
   const taskStatusCounts = overview?.task_status_counts ?? {};
+  const missionStatusCounts = overview?.mission_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
+  const recentMissions = overview?.recent_missions ?? [];
   const incidents = overview?.incidents ?? [];
   const pendingApprovals = overview?.pending_approvals ?? [];
   const queuedTasks = safeNumber(counts?.queued_tasks, safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0));
   const approvalPendingTasks = safeNumber(counts?.approval_pending_tasks, safeNumber(taskStatusCounts.needs_approval, 0));
   const blockedTasks = safeNumber(counts?.blocked_tasks, safeNumber(taskStatusCounts.blocked, 0));
   const runningTasks = safeNumber(counts?.running_tasks, safeNumber(taskStatusCounts.running, 0));
+  const queuedMissions = safeNumber(counts?.queued_missions, safeNumber(missionStatusCounts.queued, 0));
+  const activeMissions = safeNumber(counts?.active_missions, safeNumber(missionStatusCounts.active, 0));
+  const blockedMissions = safeNumber(counts?.blocked_missions, safeNumber(missionStatusCounts.blocked, 0));
+  const deadletteredMissions = safeNumber(
+    counts?.deadlettered_missions,
+    safeNumber(missionStatusCounts.deadlettered, 0),
+  );
+  const declaredMissionCount = safeNumber(counts?.missions, recentMissions.length);
   const activeIncidents = safeNumber(counts?.active_incidents, incidents.length);
   const servicesRaw =
     worldState?.services && typeof worldState.services === "object" && !Array.isArray(worldState.services)
@@ -2234,7 +2254,13 @@ function SystemPanel(props: {
       : controlModeId === "observe"
         ? { bg: "#1a1a1a", border: "#4c4c4c", color: "#d8d8d8" }
         : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
-  const stalledTasks = safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0);
+  const missionFeedDeclared = declaredMissionCount > 0 || recentMissions.length > 0;
+  const leadMission =
+    recentMissions.find((mission) => ["deadlettered", "blocked"].includes(safeString(mission.status).trim().toLowerCase())) ??
+    recentMissions.find((mission) => safeString(mission.status).trim().toLowerCase() === "active") ??
+    recentMissions.find((mission) => safeString(mission.status).trim().toLowerCase() === "queued") ??
+    recentMissions[0] ??
+    null;
   const activeTask = recentTasks.find((task) => safeString(task.status).trim().toLowerCase() === "running");
   const blockedTask = recentTasks.find((task) => {
     const status = safeString(task.status).trim().toLowerCase();
@@ -2244,7 +2270,8 @@ function SystemPanel(props: {
     const status = safeString(task.status).trim().toLowerCase();
     return status === "pending" || status === "accepted";
   });
-  const recentMissionProgress = recentTasks.slice(0, 4);
+  const recentDeclaredMissions = recentMissions.slice(0, 4);
+  const recentTaskProgress = recentTasks.slice(0, 4);
   const handoffTasks = recentTasks
     .filter((task) => {
       const assignedTo = safeString(task.assigned_to).trim().toLowerCase();
@@ -2252,9 +2279,10 @@ function SystemPanel(props: {
     })
     .slice(0, 3);
   const missionSummaryItems = [
-    { label: "Active missions", value: runningTasks, tone: runningTasks > 0 ? "running" : "clear" },
-    { label: "Stalled missions", value: stalledTasks, tone: stalledTasks > 0 ? "pending" : "clear" },
-    { label: "Blocked missions", value: blockedTasks, tone: blockedTasks > 0 ? "blocked" : "clear" },
+    { label: "Active missions", value: activeMissions, tone: activeMissions > 0 ? "running" : "clear" },
+    { label: "Queued missions", value: queuedMissions, tone: queuedMissions > 0 ? "pending" : "clear" },
+    { label: "Blocked missions", value: blockedMissions, tone: blockedMissions > 0 ? "blocked" : "clear" },
+    { label: "Deadlettered", value: deadletteredMissions, tone: deadletteredMissions > 0 ? "failed" : "clear" },
     {
       label: "Pending approvals",
       value: Math.max(pendingApprovals.length, approvalPendingTasks),
@@ -2270,6 +2298,24 @@ function SystemPanel(props: {
     actionLabel?: string;
     onAction?: () => void;
   }> = [];
+
+  if (leadMission) {
+    const linkedTaskId = firstLinkedTaskId(leadMission);
+    const missionDetail =
+      safeString(leadMission.next_step).trim() ||
+      safeString(leadMission.summary).trim() ||
+      safeString(leadMission.deadletter_reason).trim() ||
+      "Mission continuity exists, but the next-step note is still blank.";
+    returnToWorkItems.push({
+      id: `mission:${leadMission.id}`,
+      label: "Mission",
+      title: leadMission.objective || leadMission.id,
+      detail: missionDetail,
+      tone: leadMission.status || "queued",
+      actionLabel: linkedTaskId ? "Open linked task" : undefined,
+      onAction: linkedTaskId ? () => props.onOpenOperation(linkedTaskId) : undefined,
+    });
+  }
 
   if (incidents.length > 0) {
     const incident = incidents[0];
@@ -2767,7 +2813,9 @@ function SystemPanel(props: {
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Mission Feed</div>
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-              Derived continuity briefing from tracked tasks, approvals, and local incidents in this build.
+              {missionFeedDeclared
+                ? "Declared continuity from local mission records, linked tasks, approvals, and incidents."
+                : "No declared mission records yet. Falling back to task, approval, and incident continuity in this build."}
             </div>
           </div>
           <span style={badgeStyle(returnToWorkItems[0]?.tone || "clear")}>{returnToWorkItems[0]?.label || "Clear"}</span>
@@ -2841,10 +2889,45 @@ function SystemPanel(props: {
 
         <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Recent Mission Progress</div>
         <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-          {recentMissionProgress.length === 0 ? (
+          {missionFeedDeclared && recentDeclaredMissions.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>No mission progress has been recorded yet.</div>
+          ) : missionFeedDeclared ? (
+            recentDeclaredMissions.map((mission) => {
+              const linkedTaskId = firstLinkedTaskId(mission);
+              return (
+                <div
+                  key={`mission-progress-${mission.id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{mission.objective || mission.id}</div>
+                    <span style={badgeStyle(mission.status || "unknown")}>{mission.status || "unknown"}</span>
+                  </div>
+                  {mission.summary ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{mission.summary}</div> : null}
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    next_step=<code>{mission.next_step || "unset"}</code>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    linked_tasks=<code>{String(mission.linked_task_count ?? mission.linked_task_ids?.length ?? 0)}</code>
+                    {" / "}risk=<code>{mission.risk_tier || "unknown"}</code>
+                  </div>
+                  {mission.deadletter_reason ? (
+                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.deadletter_reason}</div>
+                  ) : null}
+                  {linkedTaskId ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                      <button style={buttonStyle} onClick={() => props.onOpenOperation(linkedTaskId)}>
+                        Open linked task
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          ) : recentTaskProgress.length === 0 ? (
             <div style={{ fontSize: 12, color: THEME.muted }}>No mission progress has been recorded yet.</div>
           ) : (
-            recentMissionProgress.map((task) => (
+            recentTaskProgress.map((task) => (
               <div
                 key={`mission-progress-${task.id}`}
                 style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}

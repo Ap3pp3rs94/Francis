@@ -112,6 +112,11 @@ export type WorldStateCounts = {
   approval_pending_tasks?: number;
   blocked_tasks?: number;
   running_tasks?: number;
+  missions?: number;
+  queued_missions?: number;
+  active_missions?: number;
+  blocked_missions?: number;
+  deadlettered_missions?: number;
   active_incidents?: number;
   generated_plugins?: number;
 };
@@ -150,10 +155,29 @@ export type WorldStateIncidentSummary = {
   task_id?: string;
 };
 
+export type WorldStateMissionSummary = {
+  id: string;
+  status?: string;
+  objective?: string;
+  summary?: string;
+  next_step?: string;
+  requester_id?: string;
+  priority?: number;
+  risk_tier?: string;
+  linked_task_ids?: string[];
+  linked_task_count?: number;
+  deadletter_reason?: string;
+  created_at?: string;
+  updated_at?: string;
+  terminal?: boolean;
+};
+
 export type WorldStateOverview = {
   pending_approvals: WorldStateApprovalSummary[];
   task_status_counts: Record<string, number>;
   recent_tasks: WorldStateTaskSummary[];
+  mission_status_counts: Record<string, number>;
+  recent_missions: WorldStateMissionSummary[];
   incidents: WorldStateIncidentSummary[];
 };
 
@@ -731,6 +755,11 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
     approval_pending_tasks: safeNumber(countsRaw.approval_pending_tasks, 0),
     blocked_tasks: safeNumber(countsRaw.blocked_tasks, 0),
     running_tasks: safeNumber(countsRaw.running_tasks, 0),
+    missions: safeNumber(countsRaw.missions, 0),
+    queued_missions: safeNumber(countsRaw.queued_missions, 0),
+    active_missions: safeNumber(countsRaw.active_missions, 0),
+    blocked_missions: safeNumber(countsRaw.blocked_missions, 0),
+    deadlettered_missions: safeNumber(countsRaw.deadlettered_missions, 0),
     active_incidents: safeNumber(countsRaw.active_incidents, 0),
     generated_plugins: safeNumber(countsRaw.generated_plugins, 0),
   };
@@ -747,9 +776,13 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
 
   const approvalsRaw = Array.isArray(overviewRaw.pending_approvals) ? (overviewRaw.pending_approvals as unknown[]) : [];
   const recentTasksRaw = Array.isArray(overviewRaw.recent_tasks) ? (overviewRaw.recent_tasks as unknown[]) : [];
+  const recentMissionsRaw = Array.isArray(overviewRaw.recent_missions) ? (overviewRaw.recent_missions as unknown[]) : [];
   const incidentsRaw = Array.isArray(overviewRaw.incidents) ? (overviewRaw.incidents as unknown[]) : [];
   const taskStatusCountsRaw = isRecord(overviewRaw.task_status_counts)
     ? (overviewRaw.task_status_counts as Record<string, unknown>)
+    : {};
+  const missionStatusCountsRaw = isRecord(overviewRaw.mission_status_counts)
+    ? (overviewRaw.mission_status_counts as Record<string, unknown>)
     : {};
 
   const overview: WorldStateOverview = {
@@ -778,6 +811,30 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         created_at: safeString(item.created_at, ""),
         updated_at: safeString(item.updated_at, ""),
         status_reason: safeString(item.status_reason, ""),
+        terminal: safeBoolean(item.terminal, false),
+      }))
+      .filter((item) => item.id),
+    mission_status_counts: Object.fromEntries(
+      Object.entries(missionStatusCountsRaw).map(([key, value]) => [key, safeNumber(value, 0)]),
+    ),
+    recent_missions: recentMissionsRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        status: safeString(item.status, ""),
+        objective: safeString(item.objective, ""),
+        summary: safeString(item.summary, ""),
+        next_step: safeString(item.next_step, ""),
+        requester_id: safeString(item.requester_id, ""),
+        priority: safeNumber(item.priority, 0),
+        risk_tier: safeString(item.risk_tier, ""),
+        linked_task_ids: Array.isArray(item.linked_task_ids)
+          ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
+          : [],
+        linked_task_count: safeNumber(item.linked_task_count, 0),
+        deadletter_reason: safeString(item.deadletter_reason, ""),
+        created_at: safeString(item.created_at, ""),
+        updated_at: safeString(item.updated_at, ""),
         terminal: safeBoolean(item.terminal, false),
       }))
       .filter((item) => item.id),

@@ -151,6 +151,71 @@ def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_p
     assert "governance.blocked_tasks" in incident_ids
 
 
+def test_system_world_state_reports_mission_counts_and_continuity(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": "Carry mission continuity across sessions",
+            "summary": "Stage 3 mission projection test.",
+            "next_step": "Link a task and mark the mission blocked.",
+            "requester_id": "test.system.world_state",
+            "risk_tier": "medium",
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    mission_id = str(created_body["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "world_state mission linkage",
+            "input": {"goal": "Linked operation for world-state mission summary"},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    patched = client.patch(
+        f"/missions/{mission_id}",
+        json={
+            "status": "blocked",
+            "next_step": "Resolve approval backlog and retry the linked work.",
+            "add_task_ids": [operation_id],
+            "actor": "test.system.world_state",
+        },
+    )
+    assert patched.status_code == 200
+    assert patched.json()["ok"] is True
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["paths"]["missions"]["path"] == str(data_root / "missions")
+    assert body["counts"]["missions"] == 1
+    assert body["counts"]["blocked_missions"] == 1
+    assert body["counts"]["queued_missions"] == 0
+    assert body["counts"]["active_missions"] == 0
+    assert body["counts"]["deadlettered_missions"] == 0
+    assert body["overview"]["mission_status_counts"]["blocked"] == 1
+    assert body["overview"]["recent_missions"][0]["id"] == mission_id
+    assert body["overview"]["recent_missions"][0]["linked_task_ids"] == [operation_id]
+    assert body["overview"]["recent_missions"][0]["linked_task_count"] == 1
+    assert body["overview"]["recent_missions"][0]["next_step"] == "Resolve approval backlog and retry the linked work."
+
+
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

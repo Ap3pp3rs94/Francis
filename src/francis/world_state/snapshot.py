@@ -10,10 +10,12 @@ from francis.kernel.feature_flags import list_flags
 from francis.kernel.paths import data_dir, repo_root
 from francis.kernel.services import services_status
 from francis.kernel.stack import stack_status
+from francis.missions import store as mission_store
 from francis.trust.levels import get_state
 
 
 _TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
+_TERMINAL_MISSION_STATUSES = {"completed", "failed", "deadlettered", "cancelled"}
 _INCIDENT_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
 
 
@@ -165,6 +167,57 @@ def _task_summary(path: Path, limit: int = 10) -> dict[str, Any]:
                 "status_reason": _task_status_reason(record),
                 "terminal": status in _TERMINAL_TASK_STATUSES,
                 "_sort_ts": _parse_ts(updated_at) or _parse_ts(created_at),
+            }
+        )
+
+    recent.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("id") or "")), reverse=True)
+    trimmed: list[dict[str, Any]] = []
+    for item in recent[: max(0, int(limit))]:
+        clean = dict(item)
+        clean.pop("_sort_ts", None)
+        trimmed.append(clean)
+
+    return {
+        "status_counts": status_counts,
+        "recent": trimmed,
+    }
+
+
+def _mission_summary(limit: int = 10) -> dict[str, Any]:
+    status_counts = {
+        "queued": 0,
+        "active": 0,
+        "blocked": 0,
+        "completed": 0,
+        "failed": 0,
+        "deadlettered": 0,
+        "cancelled": 0,
+        "unknown": 0,
+    }
+    recent: list[dict[str, Any]] = []
+    for record in mission_store.list_missions(limit=10_000):
+        status = str(record.status.value or "").strip().lower() or "queued"
+        if status in status_counts:
+            status_counts[status] += 1
+        else:
+            status_counts["unknown"] += 1
+        recent.append(
+            {
+                "id": record.mission_id,
+                "status": status,
+                "objective": record.objective,
+                "summary": record.summary,
+                "next_step": record.next_step,
+                "requester_id": record.requester_id,
+                "priority": record.priority,
+                "risk_tier": record.risk_tier,
+                "linked_task_ids": list(record.linked_task_ids),
+                "linked_task_count": len(record.linked_task_ids),
+                "deadletter_reason": record.deadletter_reason,
+                "created_at": record.created_at,
+                "updated_at": record.updated_at,
+                "terminal": status in _TERMINAL_MISSION_STATUSES,
+                "_sort_ts": _parse_ts(record.updated_at) or _parse_ts(record.created_at),
             }
         )
 
@@ -413,13 +466,17 @@ def snapshot() -> dict[str, Any]:
 
     approvals_root = data / "approvals"
     tasks_root = data / "tasks"
+    missions_root = data / "missions"
     logs_root = data / "logs"
     plugins_root = root / "plugins" / "generated"
     stack_report = stack_status()
     services_report = services_status()
     task_summary = _task_summary(tasks_root)
+    mission_summary = _mission_summary()
     task_status_counts = task_summary["status_counts"] if isinstance(task_summary.get("status_counts"), dict) else {}
     recent_tasks = task_summary["recent"] if isinstance(task_summary.get("recent"), list) else []
+    mission_status_counts = mission_summary["status_counts"] if isinstance(mission_summary.get("status_counts"), dict) else {}
+    recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
     pending_approval_items = _pending_approval_summary(approvals_root / "pending")
     pending_approvals = _count_json_entries(approvals_root / "pending")
     incidents = [
@@ -442,6 +499,7 @@ def snapshot() -> dict[str, Any]:
             "data": _path_state(data),
             "logs": _path_state(logs_root),
             "tasks": _path_state(tasks_root),
+            "missions": _path_state(missions_root),
             "approvals": _path_state(approvals_root),
             "plugins_generated": _path_state(plugins_root),
         },
@@ -454,6 +512,11 @@ def snapshot() -> dict[str, Any]:
             "approval_pending_tasks": int(task_status_counts.get("needs_approval") or 0),
             "blocked_tasks": int(task_status_counts.get("blocked") or 0),
             "running_tasks": int(task_status_counts.get("running") or 0),
+            "missions": sum(int(value or 0) for value in mission_status_counts.values()),
+            "queued_missions": int(mission_status_counts.get("queued") or 0),
+            "active_missions": int(mission_status_counts.get("active") or 0),
+            "blocked_missions": int(mission_status_counts.get("blocked") or 0),
+            "deadlettered_missions": int(mission_status_counts.get("deadlettered") or 0),
             "active_incidents": len(incidents),
             "generated_plugins": _count_json_entries(plugins_root),
         },
@@ -461,6 +524,8 @@ def snapshot() -> dict[str, Any]:
             "pending_approvals": pending_approval_items,
             "task_status_counts": task_status_counts,
             "recent_tasks": recent_tasks,
+            "mission_status_counts": mission_status_counts,
+            "recent_missions": recent_missions,
             "incidents": incidents,
         },
     }
