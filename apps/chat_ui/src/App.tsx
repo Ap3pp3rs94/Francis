@@ -21,6 +21,14 @@ const DEFAULT_API = "http://127.0.0.1:8000";
 
 type TabKey = "approvals" | "plugins" | "system" | "operations" | "settings";
 type SensingMode = "text_only" | "input_only" | "camera_mic";
+type PaletteCommand = {
+  id: string;
+  label: string;
+  description: string;
+  group: string;
+  keywords?: string;
+  run: () => void | Promise<void>;
+};
 
 type UiSettings = {
   proactive: boolean;
@@ -638,6 +646,148 @@ function OperatorModeBanner(props: {
   );
 }
 
+function CommandPalette(props: {
+  open: boolean;
+  query: string;
+  commands: PaletteCommand[];
+  onQueryChange: (value: string) => void;
+  onClose: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const filtered = useMemo(() => {
+    const query = props.query.trim().toLowerCase();
+    if (!query) return props.commands;
+    return props.commands.filter((command) => {
+      const haystack = [command.label, command.description, command.group, command.keywords || ""].join(" ").toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [props.commands, props.query]);
+
+  useEffect(() => {
+    if (!props.open) return;
+    setSelectedIndex(0);
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [props.open]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [props.query]);
+
+  if (!props.open) return null;
+
+  const runCommand = (command: PaletteCommand | null | undefined) => {
+    if (!command) return;
+    props.onClose();
+    props.onQueryChange("");
+    const result = command.run();
+    if (result && typeof (result as Promise<void>).then === "function") {
+      void result;
+    }
+  };
+
+  return (
+    <div
+      onClick={props.onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        background: "rgba(4, 4, 4, 0.72)",
+        backdropFilter: "blur(10px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "10vh 20px 20px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(760px, 100%)",
+          borderRadius: 18,
+          border: `1px solid ${THEME.panelBorder}`,
+          background: "#0f0f0f",
+          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.45)",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ padding: 14, borderBottom: `1px solid ${THEME.panelBorder}` }}>
+          <input
+            ref={inputRef}
+            value={props.query}
+            onChange={(e) => props.onQueryChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSelectedIndex((prev) => (filtered.length === 0 ? 0 : (prev + 1) % filtered.length));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSelectedIndex((prev) => (filtered.length === 0 ? 0 : (prev - 1 + filtered.length) % filtered.length));
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                runCommand(filtered[selectedIndex]);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                props.onClose();
+              }
+            }}
+            placeholder="Jump to approvals, switch to pilot, open ORB..."
+            style={{
+              ...inputStyle,
+              width: "100%",
+              padding: "12px 14px",
+              fontSize: 14,
+              borderRadius: 14,
+            }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 8, fontSize: 11, color: THEME.muted }}>
+            <span>Command palette</span>
+            <span>Summon with Ctrl/Cmd K</span>
+          </div>
+        </div>
+
+        <div style={{ maxHeight: 420, overflow: "auto", padding: 10, display: "grid", gap: 8 }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: 12, borderRadius: 12, background: "#121212", color: THEME.muted, fontSize: 12 }}>
+              No commands match this query.
+            </div>
+          ) : (
+            filtered.map((command, index) => {
+              const active = index === selectedIndex;
+              return (
+                <button
+                  key={command.id}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  onClick={() => runCommand(command)}
+                  style={{
+                    ...buttonStyle,
+                    textAlign: "left",
+                    padding: 12,
+                    borderRadius: 14,
+                    background: active ? "#1b1b1b" : "#121212",
+                    border: active ? `1px solid ${THEME.text}` : `1px solid ${THEME.panelBorder}`,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{command.label}</div>
+                    <span style={badgeStyle(command.group)}>{command.group}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted }}>{command.description}</div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [settings, setSettings] = useState<UiSettings>(() => loadSettings());
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
@@ -650,6 +800,8 @@ export default function App() {
   const [operatorMode, setOperatorMode] = useState<OperatorModeSnapshot | null>(null);
   const [operatorModeError, setOperatorModeError] = useState<string | null>(null);
   const [operatorModeBusy, setOperatorModeBusy] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [baseUrl, setBaseUrl] = useState(() => {
     const env = safeString(import.meta.env.VITE_FRANCIS_API_BASE_URL, DEFAULT_API);
@@ -782,6 +934,14 @@ export default function App() {
     setPanel("operations");
   }, []);
 
+  const openPluginsPanel = useCallback(() => {
+    setPanel("plugins");
+  }, []);
+
+  const openSettingsPanel = useCallback(() => {
+    setPanel("settings");
+  }, []);
+
   const openOrbPanel = useCallback(() => {
     setPanel("system");
   }, []);
@@ -877,7 +1037,116 @@ export default function App() {
     [modeClient, operatorMode?.control_mode?.id],
   );
 
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const pendingApprovals = safeNumber(operatorMode?.backlog?.pending_approvals, 0);
+    return [
+      {
+        id: "nav.approvals",
+        label: pendingApprovals > 0 ? `Open Approvals (${pendingApprovals})` : "Open Approvals",
+        description: "Review the approval queue and make governance decisions.",
+        group: "Navigation",
+        keywords: "approval review queue governance",
+        run: () => openApprovalsPanel(),
+      },
+      {
+        id: "nav.operations",
+        label: "Open Operations",
+        description: "Inspect queued, blocked, and running task activity.",
+        group: "Navigation",
+        keywords: "operations tasks backlog execution",
+        run: () => openOperationsPanel(),
+      },
+      {
+        id: "nav.orb",
+        label: "Open ORB",
+        description: "Inspect the canonical flow, incidents, and runtime posture.",
+        group: "Navigation",
+        keywords: "orb system incidents runtime",
+        run: () => openOrbPanel(),
+      },
+      {
+        id: "nav.plugins",
+        label: "Open Plugins",
+        description: "Inspect plugins, tools, and governance outcomes.",
+        group: "Navigation",
+        keywords: "plugins tools browser",
+        run: () => openPluginsPanel(),
+      },
+      {
+        id: "nav.settings",
+        label: "Open Settings",
+        description: "Adjust console preferences and voice settings.",
+        group: "Navigation",
+        keywords: "settings preferences voice",
+        run: () => openSettingsPanel(),
+      },
+      {
+        id: "chat.new",
+        label: "Start New Chat",
+        description: "Open a fresh Francis conversation.",
+        group: "Chat",
+        keywords: "new chat session",
+        run: () => createNewChat(),
+      },
+      {
+        id: "mode.observe",
+        label: "Switch to Observe",
+        description: "Declare read-only posture with no claimed write authority.",
+        group: "Control",
+        keywords: "observe readonly mode",
+        run: () => setControlMode("observe"),
+      },
+      {
+        id: "mode.assist",
+        label: "Switch to Assist",
+        description: "Return to collaborative operator posture.",
+        group: "Control",
+        keywords: "assist collaborative mode",
+        run: () => setControlMode("assist"),
+      },
+      {
+        id: "mode.pilot",
+        label: "Switch to Pilot",
+        description: "Declare takeover posture and light the pilot indicator.",
+        group: "Control",
+        keywords: "pilot takeover active indicator",
+        run: () => setControlMode("pilot"),
+      },
+      {
+        id: "mode.away",
+        label: "Switch to Away",
+        description: "Declare away posture for continuity while you step out.",
+        group: "Control",
+        keywords: "away night shift mode",
+        run: () => setControlMode("away"),
+      },
+    ];
+  }, [createNewChat, openApprovalsPanel, openOperationsPanel, openOrbPanel, openPluginsPanel, openSettingsPanel, operatorMode?.backlog?.pending_approvals, setControlMode]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const normalizedKey = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && normalizedKey === "k") {
+        event.preventDefault();
+        setPaletteOpen((prev) => !prev);
+        return;
+      }
+      if (normalizedKey === "escape") {
+        setPaletteOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const isNarrow = width < 1100;
+  const controlModeId = safeString(operatorMode?.control_mode?.id).trim().toLowerCase();
+  const indicatorTone =
+    controlModeId === "pilot"
+      ? { bg: "#3a150d", border: "#8f5221", color: "#ffd38a" }
+      : controlModeId === "away"
+        ? { bg: "#10212a", border: "#2b5a74", color: "#b7e9ff" }
+        : { bg: "#171717", border: "#333333", color: THEME.muted };
 
   return (
     <div
@@ -942,9 +1211,42 @@ export default function App() {
               <div style={{ fontSize: 12, color: THEME.muted }}>
                 Chat, approvals, plugins, system checks, and operations.
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                <span style={badgeStyle(operatorMode?.control_mode?.label || operatorMode?.control_mode?.id || "mode")}>
+                  {operatorMode?.control_mode?.label || operatorMode?.control_mode?.id || "mode"}
+                </span>
+                {controlModeId === "pilot" ? (
+                  <span
+                    style={{
+                      ...badgeStyle("pilot_active"),
+                      background: indicatorTone.bg,
+                      border: `1px solid ${indicatorTone.border}`,
+                      color: indicatorTone.color,
+                    }}
+                  >
+                    Pilot Active
+                  </span>
+                ) : null}
+                {controlModeId === "away" ? (
+                  <span
+                    style={{
+                      ...badgeStyle("away_active"),
+                      background: indicatorTone.bg,
+                      border: `1px solid ${indicatorTone.border}`,
+                      color: indicatorTone.color,
+                    }}
+                  >
+                    Away Active
+                  </span>
+                ) : null}
+                <span style={{ fontSize: 11, color: THEME.muted }}>Summon with Ctrl/Cmd K</span>
+              </div>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button style={buttonStyle} onClick={() => setPaletteOpen(true)}>
+                Command
+              </button>
               <span style={{ fontSize: 12, color: THEME.muted }}>API</span>
               <input
                 value={baseUrl}
@@ -1076,6 +1378,13 @@ export default function App() {
           ) : null}
         </main>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        query={paletteQuery}
+        commands={paletteCommands}
+        onQueryChange={setPaletteQuery}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }
