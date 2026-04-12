@@ -14,11 +14,11 @@ from francis.missions.store import (
     record_linked_task_transition,
     read_history,
     read_mission,
-    run_queue_once,
     tick_all_missions,
     tick_mission,
     update_mission,
 )
+from francis.missions.runtime import run_queue_once
 
 __all__ = [
     "MissionStatus",

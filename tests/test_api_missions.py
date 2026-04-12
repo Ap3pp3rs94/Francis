@@ -536,6 +536,42 @@ def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path
     assert fetched_body["mission"]["meta"]["last_advance_outcome"] == "succeeded"
 
 
+def test_mission_store_run_once_uses_bounded_runtime_path(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.missions import run_queue_once as mission_run_queue_once
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Store queue runner should create bounded progress",
+            "summary": "Top-level mission runner should use the same safe queue behavior as the API route.",
+            "requester_id": "test.missions.store",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    result = mission_run_queue_once(limit=10, actor="test.missions.store", note="store queue run")
+    assert result["ok"] is True
+    assert result["advanced"] == 1
+    mission_result = next(item for item in result["results"] if item["mission_id"] == mission_id)
+    assert mission_result["applied"] is True
+    assert mission_result["action"] == "create_first_operation"
+    assert mission_result["operation_id"]
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["meta"]["last_advance_action"] == "create_first_operation"
+
+
 def test_mission_advance_creates_first_operation_with_receipt(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

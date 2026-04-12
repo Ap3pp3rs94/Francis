@@ -880,36 +880,44 @@ def run_queue_once(
     actor: str | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
-    safe_limit = max(1, int(limit))
-    records, applied_count, errors = tick_all_missions(
-        repo_root,
-        limit=max(safe_limit, 200),
-        actor=actor,
-        note=note or "mission_queue_run_once",
+    if repo_root is not None:
+        safe_limit = max(1, int(limit))
+        records, applied_count, errors = tick_all_missions(
+            repo_root,
+            limit=max(safe_limit, 200),
+            actor=actor,
+            note=note or "mission_queue_run_once",
+        )
+        queue_items = mission_queue_items(repo_root, limit=safe_limit, include_terminal=False)
+        deadletter_items = deadletter_queue_items(repo_root, limit=min(safe_limit, 20))
+        counts = {
+            "queued": 0,
+            "active": 0,
+            "blocked": 0,
+            "failed": 0,
+            "deadlettered": len(deadletter_items),
+        }
+        for item in queue_items:
+            status = str(item.get("status") or "").strip().lower()
+            if status in counts:
+                counts[status] += 1
+        return {
+            "ok": not errors,
+            "items": queue_items,
+            "deadletter": deadletter_items,
+            "total": len(queue_items),
+            "applied": applied_count,
+            "errors": errors,
+            "counts": counts,
+            "processed": len(records),
+        }
+    from francis.missions import runtime as mission_runtime
+
+    return mission_runtime.run_queue_once(
+        limit=limit,
+        actor=str(actor or "").strip() or "missions.runner",
+        note=str(note or "").strip() or "mission_queue_run_once",
     )
-    queue_items = mission_queue_items(repo_root, limit=safe_limit, include_terminal=False)
-    deadletter_items = deadletter_queue_items(repo_root, limit=min(safe_limit, 20))
-    counts = {
-        "queued": 0,
-        "active": 0,
-        "blocked": 0,
-        "failed": 0,
-        "deadlettered": len(deadletter_items),
-    }
-    for item in queue_items:
-        status = str(item.get("status") or "").strip().lower()
-        if status in counts:
-            counts[status] += 1
-    return {
-        "ok": not errors,
-        "items": queue_items,
-        "deadletter": deadletter_items,
-        "total": len(queue_items),
-        "applied": applied_count,
-        "errors": errors,
-        "counts": counts,
-        "processed": len(records),
-    }
 
 
 def record_advance_receipt(
