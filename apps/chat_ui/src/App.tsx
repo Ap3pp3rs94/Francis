@@ -1903,6 +1903,7 @@ export default function App() {
                   operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
                   onOpenOperation={openOperationPanel}
+                  onOpenOperations={openOperationsPanel}
                 />
                 ) : null}
                 {panel === "operations" ? (
@@ -1952,6 +1953,7 @@ export default function App() {
                   operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
                   onOpenOperation={openOperationPanel}
+                  onOpenOperations={openOperationsPanel}
                 />
               ) : null}
               {panel === "operations" ? (
@@ -2243,6 +2245,7 @@ function SystemPanel(props: {
   operatorMode: OperatorModeSnapshot | null;
   onOpenApprovals: (approvalId?: string) => void;
   onOpenOperation: (operationId: string) => void;
+  onOpenOperations: () => void;
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
@@ -2274,6 +2277,7 @@ function SystemPanel(props: {
   const [lastRefreshAttemptedAt, setLastRefreshAttemptedAt] = useState<number | null>(null);
   const [lastRefreshCompletedAt, setLastRefreshCompletedAt] = useState<number | null>(null);
   const [nowTs, setNowTs] = useState(() => nowUnixSeconds());
+  const autoRefreshIntervalMs = 30_000;
 
   const settingsError = useCallback((err: unknown, fallback = "Request failed."): string => {
     if (err instanceof SettingsApiError) {
@@ -2289,6 +2293,12 @@ function SystemPanel(props: {
     }
     if (err instanceof Error) return err.message;
     return "Operations request failed.";
+  }, []);
+
+  const scrollOrbSection = useCallback((sectionId: string) => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }, []);
 
   const missionError = useCallback((err: unknown): string => {
@@ -2387,6 +2397,15 @@ function SystemPanel(props: {
     }, 15_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (busy) return;
+      if (document.visibilityState !== "visible") return;
+      void refresh();
+    }, autoRefreshIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [autoRefreshIntervalMs, busy, refresh]);
 
   const loadMissionDetail = useCallback(
     async (missionId: string) => {
@@ -2802,6 +2821,8 @@ function SystemPanel(props: {
       observedAt: health?.ts,
       error: healthError,
       staleAfterSeconds: 90,
+      actionLabel: undefined,
+      onAction: undefined,
       detail: healthError
         ? `Runtime heartbeat is degraded: ${healthError}`
         : `Service reports ${safeString(health?.status, health?.ok ? "ok" : "attention") || "unknown"}.`,
@@ -2812,6 +2833,8 @@ function SystemPanel(props: {
       observedAt: worldState?.generated_at,
       error: worldStateError,
       staleAfterSeconds: 180,
+      actionLabel: "Inspect missions",
+      onAction: () => scrollOrbSection("francis-mission-feed"),
       detail: worldStateError
         ? `Showing the last retained local snapshot while refresh is failing: ${worldStateError}`
         : `${counts?.tasks ?? 0} tasks and ${declaredMissionCount} missions are visible in the local state snapshot.`,
@@ -2822,6 +2845,8 @@ function SystemPanel(props: {
       observedAt: continuityBriefing?.generated_at,
       error: continuityBriefingError,
       staleAfterSeconds: 240,
+      actionLabel: "Inspect briefing",
+      onAction: () => scrollOrbSection("francis-shift-briefing"),
       detail: continuityBriefingError
         ? `Continuity briefing refresh failed: ${continuityBriefingError}`
         : safeString(shiftBriefing?.headline).trim() || "Shift briefing is available for return-to-work continuity.",
@@ -2832,6 +2857,8 @@ function SystemPanel(props: {
       observedAt: orbStatus?.generated_at,
       error: orbStatusError,
       staleAfterSeconds: 300,
+      actionLabel: "Inspect takeover",
+      onAction: () => scrollOrbSection("francis-takeover-feed"),
       detail: orbStatusError
         ? `ORB model status could not refresh: ${orbStatusError}`
         : `${coreLoop.length} core loop planes and ${gateStack.length} governance gates are exposed in this snapshot.`,
@@ -2842,6 +2869,8 @@ function SystemPanel(props: {
       observedAt: takeoverOperationsLoadedAt,
       error: takeoverOperationsError,
       staleAfterSeconds: 120,
+      actionLabel: "Open operations",
+      onAction: () => props.onOpenOperations(),
       detail: takeoverOperationsError
         ? `Showing the last retained execution feed while refresh is failing: ${takeoverOperationsError}`
         : `${takeoverOperations.length} recent operation${takeoverOperations.length === 1 ? "" : "s"} are cached from the execution feed.`,
@@ -2916,6 +2945,9 @@ function SystemPanel(props: {
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Snapshot Freshness</div>
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{freshnessGuidance}</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Auto-refresh runs every {Math.floor(autoRefreshIntervalMs / 1000)}s while the ORB panel is open and visible.
+            </div>
           </div>
           <div style={{ fontSize: 11, color: THEME.muted, textAlign: "right" }}>
             <div>{lastRefreshCompletedAt ? `Settled ${toLocaleTime(lastRefreshCompletedAt)}` : "Refresh not completed yet"}</div>
@@ -2948,6 +2980,16 @@ function SystemPanel(props: {
                 {item.observedAt ? `Observed ${toLocaleTime(item.observedAt)}` : "No successful snapshot recorded yet."}
               </div>
               <div style={{ fontSize: 11, color: item.error ? "#ffcf9d" : THEME.muted, marginTop: 6 }}>{item.detail}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                <button style={buttonStyle} disabled={busy} onClick={() => void refresh()}>
+                  {busy ? "Refreshing." : item.state === "live" ? "Refresh now" : "Retry now"}
+                </button>
+                {item.onAction && item.actionLabel ? (
+                  <button style={buttonStyle} onClick={item.onAction}>
+                    {item.actionLabel}
+                  </button>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
