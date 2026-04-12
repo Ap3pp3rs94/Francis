@@ -577,6 +577,231 @@ controls:
     assert body["gates"][0]["id"] == "permission_gate"
     assert body["transitions"]["allowed"][0]["to"] == "P4_COGNITION"
     assert body["transitions"]["forbidden"][0]["to"] == "P7_EXECUTION"
+    assert body["state"]["mode"]["id"] == "assist"
+    assert body["state"]["execution_focus"]["plane_id"] == "P1_INTERFACE"
+    assert body["state"]["render_state"] == "ambient_rest"
+    assert body["state"]["handback_state"]["state"] == "none"
+
+
+def test_system_orb_status_surfaces_live_continuity_handoff(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    meta_root = repo_root / "meta"
+    env_root = repo_root / "config" / "environments"
+    (repo_root / "src" / "francis").mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+    meta_root.mkdir(parents=True, exist_ok=True)
+    env_root.mkdir(parents=True, exist_ok=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='francis-test'\nversion='0.0.0'\n", encoding="utf-8")
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "plane_map.yaml").write_text(
+        """
+meta:
+  model_id: francis.plane_map
+  version: 1
+planes:
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: Handle interaction
+    side_effects_allowed: false
+    default_risk_class: low
+  - id: P4_COGNITION
+    name: Cognition
+    category: cognition
+    purpose: Reason over context
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P3_GOVERNANCE
+    name: Governance
+    category: governance
+    purpose: Enforce law
+    side_effects_allowed: false
+    default_risk_class: high
+  - id: P2_IDENTITY
+    name: Identity
+    category: identity
+    purpose: Maintain stateful posture
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P7_EXECUTION
+    name: Execution
+    category: execution
+    purpose: Carry out bounded work
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P9_OBSERVABILITY
+    name: Observability
+    category: observability
+    purpose: Emit receipts
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P8_MEMORY
+    name: Memory
+    category: data
+    purpose: Persist continuity
+    side_effects_allowed: true
+    default_risk_class: high
+transitions:
+  - from: P1_INTERFACE
+    to: P4_COGNITION
+    conditions: [session_valid, request_parsed]
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: direct execution is forbidden
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "action_taxonomy.yaml").write_text(
+        """
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 1
+controls:
+  - id: permission_gate
+    description: Validate identity and scopes
+  - id: trust_gate
+    description: Check trust thresholds
+  - id: approvals_gate
+    description: Require approval when policy demands it
+  - id: audit_log
+    description: Emit an auditable trail
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission for orb handback",
+            "summary": "The orb should surface this as an operator handback.",
+            "priority": 9,
+            "requester_id": "test.system.orb",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    blocked_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "orb continuity handback",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert blocked_operation.status_code == 200
+    blocked_operation_id = str(blocked_operation.json()["operation_id"])
+
+    blocked_run = client.post(f"/operations/{blocked_operation_id}/run", json={"worker_id": "test.system.orb"})
+    assert blocked_run.status_code == 200
+    assert blocked_run.json()["status"] == "blocked"
+
+    completed = client.post(
+        "/missions/create",
+        json={
+            "objective": "Completed mission for orb continuity",
+            "summary": "The orb should surface a completion handback too.",
+            "requester_id": "test.system.orb",
+        },
+    )
+    assert completed.status_code == 200
+    completed_id = str(completed.json()["mission_id"])
+
+    first_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.system.orb"},
+    )
+    assert first_advance.status_code == 200
+    assert first_advance.json()["ok"] is True
+    assert first_advance.json()["applied"] is True
+
+    second_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.system.orb", "worker_id": "test.system.orb"},
+    )
+    assert second_advance.status_code == 200
+    assert second_advance.json()["ok"] is True
+    assert second_advance.json()["applied"] is True
+
+    response = client.get("/system/orb_status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["state"]["mode"]["id"] == "assist"
+    assert body["state"]["incident_pressure"]["level"] == "error"
+    assert body["state"]["activity_intensity"]["level"] == "handoff"
+    assert body["state"]["execution_focus"]["plane_id"] == "P3_GOVERNANCE"
+    assert body["state"]["interjection_state"]["state"] == "attention_required"
+    assert body["state"]["render_state"] == "handback"
+    assert body["state"]["handback_state"]["state"] == "operator_action_required"
+    assert body["state"]["handback_state"]["focus"]["id"] == blocked_id
+    assert body["state"]["handback_state"]["focus"]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert body["state"]["handback_state"]["focus"]["latest_activity"]["name"] == "governance_hold"
+    assert body["state"]["handback_state"]["focus"]["latest_activity"]["status"] == "blocked"
+    assert body["state"]["handback_state"]["recently_completed_count"] >= 1
 
 
 def test_system_operator_mode_uses_mission_continuity_when_tasks_are_idle(monkeypatch, tmp_path: Path) -> None:

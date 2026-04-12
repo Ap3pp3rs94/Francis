@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from francis.kernel.paths import repo_root
+from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 
 _CORE_LOOP_IDS = (
@@ -147,6 +148,151 @@ def _gate_summaries(action_taxonomy: dict[str, Any]) -> list[dict[str, Any]]:
     return ordered
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _incident_pressure(backlog: dict[str, Any]) -> dict[str, Any]:
+    pending_approvals = _safe_int(backlog.get("pending_approvals"))
+    approval_pending_tasks = _safe_int(backlog.get("approval_pending_tasks"))
+    blocked_tasks = _safe_int(backlog.get("blocked_tasks"))
+    blocked_missions = _safe_int(backlog.get("blocked_missions"))
+    deadlettered_missions = _safe_int(backlog.get("deadlettered_missions"))
+
+    if blocked_tasks > 0 or blocked_missions > 0 or deadlettered_missions > 0:
+        level = "error"
+    elif pending_approvals > 0 or approval_pending_tasks > 0:
+        level = "warning"
+    else:
+        level = "info"
+
+    return {
+        "level": level,
+        "pending_approvals": pending_approvals,
+        "approval_pending_tasks": approval_pending_tasks,
+        "blocked_tasks": blocked_tasks,
+        "blocked_missions": blocked_missions,
+        "deadlettered_missions": deadlettered_missions,
+    }
+
+
+def _activity_intensity(backlog: dict[str, Any]) -> dict[str, Any]:
+    running_tasks = _safe_int(backlog.get("running_tasks"))
+    active_missions = _safe_int(backlog.get("active_missions"))
+    queued_tasks = _safe_int(backlog.get("queued_tasks"))
+    queued_missions = _safe_int(backlog.get("queued_missions"))
+    blocked_missions = _safe_int(backlog.get("blocked_missions"))
+    deadlettered_missions = _safe_int(backlog.get("deadlettered_missions"))
+    completed_missions = _safe_int(backlog.get("completed_missions"))
+
+    if running_tasks > 0 or active_missions > 0:
+        level = "active_execution"
+    elif blocked_missions > 0 or deadlettered_missions > 0:
+        level = "handoff"
+    elif queued_tasks > 0 or queued_missions > 0:
+        level = "staged"
+    elif completed_missions > 0:
+        level = "handoff"
+    else:
+        level = "ambient"
+
+    return {
+        "level": level,
+        "running_tasks": running_tasks,
+        "active_missions": active_missions,
+        "queued_tasks": queued_tasks,
+        "queued_missions": queued_missions,
+        "blocked_missions": blocked_missions,
+        "deadlettered_missions": deadlettered_missions,
+        "completed_missions": completed_missions,
+    }
+
+
+def _interjection_state(incident_pressure: dict[str, Any], focus: dict[str, Any]) -> dict[str, Any]:
+    level = _safe_str(incident_pressure.get("level")).strip().lower()
+    if level in {"warning", "error"}:
+        return {
+            "state": "attention_required",
+            "reason": _safe_str(focus.get("reason")).strip(),
+        }
+    return {
+        "state": "ambient",
+        "reason": "",
+    }
+
+
+def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
+    headline = _safe_str(continuity.get("headline")).strip()
+    focus_items = [item for item in _as_list(continuity.get("focus")) if isinstance(item, dict)]
+    recently_completed = [item for item in _as_list(continuity.get("recently_completed")) if isinstance(item, dict)]
+    deadletter_preview = [item for item in _as_list(continuity.get("deadletter_preview")) if isinstance(item, dict)]
+
+    focus_item = dict(focus_items[0]) if focus_items else {}
+    if focus_item:
+        status = _safe_str(focus_item.get("status")).strip().lower()
+        state = "operator_action_required" if status in {"blocked", "failed", "deadlettered"} else "continuity_ready"
+    elif deadletter_preview:
+        state = "deadletter_review"
+    elif recently_completed:
+        state = "completion_review"
+    else:
+        state = "none"
+
+    return {
+        "state": state,
+        "headline": headline,
+        "focus": focus_item,
+        "recently_completed_count": len(recently_completed),
+        "deadletter_count": len(deadletter_preview),
+    }
+
+
+def _render_state(
+    incident_pressure: dict[str, Any], activity_intensity: dict[str, Any], handback_state: dict[str, Any]
+) -> str:
+    if _safe_str(activity_intensity.get("level")).strip().lower() == "active_execution":
+        return "active_execution"
+    if _safe_str(handback_state.get("state")).strip().lower() != "none":
+        return "handback"
+    if _safe_str(incident_pressure.get("level")).strip().lower() in {"warning", "error"}:
+        return "handback"
+    return "ambient_rest"
+
+
+def _orb_live_state(operator_report: dict[str, Any]) -> dict[str, Any]:
+    control_mode = _as_dict(operator_report.get("control_mode"))
+    focus = _as_dict(operator_report.get("focus"))
+    backlog = _as_dict(operator_report.get("backlog"))
+    continuity = _as_dict(operator_report.get("continuity"))
+
+    incident_pressure = _incident_pressure(backlog)
+    activity_intensity = _activity_intensity(backlog)
+    handback_state = _handback_state(continuity)
+
+    return {
+        "mode": {
+            "id": _safe_str(control_mode.get("id")).strip(),
+            "label": _safe_str(control_mode.get("label")).strip(),
+            "writes": _safe_str(control_mode.get("writes")).strip(),
+            "implementation_status": _safe_str(control_mode.get("implementation_status")).strip(),
+        },
+        "incident_pressure": incident_pressure,
+        "activity_intensity": activity_intensity,
+        "execution_focus": {
+            "plane_id": _safe_str(focus.get("plane_id")).strip(),
+            "label": _safe_str(focus.get("label")).strip(),
+            "reason": _safe_str(focus.get("reason")).strip(),
+        },
+        "interjection_state": _interjection_state(incident_pressure, focus),
+        "handback_state": handback_state,
+        "render_state": _render_state(incident_pressure, activity_intensity, handback_state),
+    }
+
+
 def snapshot() -> dict[str, Any]:
     root = repo_root()
     plane_map_path = root / "meta" / "plane_map.yaml"
@@ -157,6 +303,7 @@ def snapshot() -> dict[str, Any]:
 
     planes = _plane_summaries(plane_map)
     plane_by_id = {item["id"]: item for item in planes if item.get("id")}
+    operator_report = operator_mode_snapshot()
 
     return {
         "ok": True,
@@ -164,10 +311,20 @@ def snapshot() -> dict[str, Any]:
         "generated_at": time.time(),
         "repo_root": str(root),
         "model": {
-            "plane_map_id": _safe_str(plane_map.get("meta", {}).get("model_id") if isinstance(plane_map.get("meta"), dict) else ""),
-            "plane_map_version": _safe_int(plane_map.get("meta", {}).get("version")) if isinstance(plane_map.get("meta"), dict) else 0,
-            "action_taxonomy_id": _safe_str(action_taxonomy.get("meta", {}).get("taxonomy_id") if isinstance(action_taxonomy.get("meta"), dict) else ""),
-            "action_taxonomy_version": _safe_int(action_taxonomy.get("meta", {}).get("version")) if isinstance(action_taxonomy.get("meta"), dict) else 0,
+            "plane_map_id": _safe_str(
+                plane_map.get("meta", {}).get("model_id") if isinstance(plane_map.get("meta"), dict) else ""
+            ),
+            "plane_map_version": _safe_int(plane_map.get("meta", {}).get("version"))
+            if isinstance(plane_map.get("meta"), dict)
+            else 0,
+            "action_taxonomy_id": _safe_str(
+                action_taxonomy.get("meta", {}).get("taxonomy_id")
+                if isinstance(action_taxonomy.get("meta"), dict)
+                else ""
+            ),
+            "action_taxonomy_version": _safe_int(action_taxonomy.get("meta", {}).get("version"))
+            if isinstance(action_taxonomy.get("meta"), dict)
+            else 0,
         },
         "core_loop": [plane_by_id[plane_id] for plane_id in _CORE_LOOP_IDS if plane_id in plane_by_id],
         "planes": planes,
@@ -176,4 +333,5 @@ def snapshot() -> dict[str, Any]:
             "allowed": _transition_summaries(plane_map.get("transitions")),
             "forbidden": _transition_summaries(plane_map.get("forbidden_transitions")),
         },
+        "state": _orb_live_state(operator_report),
     }
