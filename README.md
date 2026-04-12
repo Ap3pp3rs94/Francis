@@ -14,6 +14,8 @@ cd C:\Francis
 .\scripts\check.ps1
 ```
 
+Branch workflow and contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ### Daemon
 ```powershell
 .\scripts\francis.ps1 daemon

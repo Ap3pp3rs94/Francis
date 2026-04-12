@@ -27,6 +27,8 @@ try {
     Invoke-Py -m ruff --version
     Invoke-Py -m mypy --version
 
+    & (Join-Path $PSScriptRoot "check-branch-state.ps1") -Root $Root
+
     Invoke-Py -m ruff check .
     Invoke-Py -m ruff format --check .
     Invoke-Py -m mypy src
@@ -35,4 +37,3 @@ try {
 finally {
     Pop-Location
 }
-

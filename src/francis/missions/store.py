@@ -226,7 +226,9 @@ def _latest_linked_snapshot(task_ids: list[str], repo_root: Path | None = None) 
     return latest
 
 
-def _derive_mission_status_from_tasks(task_ids: list[str], repo_root: Path | None = None) -> tuple[MissionStatus | None, dict[str, Any]]:
+def _derive_mission_status_from_tasks(
+    task_ids: list[str], repo_root: Path | None = None
+) -> tuple[MissionStatus | None, dict[str, Any]]:
     snapshots = [_linked_task_snapshot(task_id, repo_root) for task_id in task_ids]
     snapshots = [item for item in snapshots if item]
     if not snapshots:
@@ -238,14 +240,18 @@ def _derive_mission_status_from_tasks(task_ids: list[str], repo_root: Path | Non
         if str(item.get("result_status") or "").strip().lower() in {"pending", "needs_approval", "blocked", "denied"}
     ]
     if blocked:
-        blocked.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        blocked.sort(
+            key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True
+        )
         latest = dict(blocked[0])
         latest.pop("_sort_ts", None)
         return MissionStatus.BLOCKED, latest
 
     running = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "running"]
     if running:
-        running.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        running.sort(
+            key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True
+        )
         latest = dict(running[0])
         latest.pop("_sort_ts", None)
         return MissionStatus.ACTIVE, latest
@@ -268,14 +274,18 @@ def _derive_mission_status_from_tasks(task_ids: list[str], repo_root: Path | Non
 
     cancelled = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "cancelled"]
     if cancelled and len(cancelled) == len(snapshots):
-        cancelled.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        cancelled.sort(
+            key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True
+        )
         latest = dict(cancelled[0])
         latest.pop("_sort_ts", None)
         return MissionStatus.CANCELLED, latest
 
     completed = [item for item in snapshots if str(item.get("task_status") or "").strip().lower() == "completed"]
     if completed and len(completed) == len(snapshots):
-        completed.sort(key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True)
+        completed.sort(
+            key=lambda item: (float(item.get("_sort_ts") or 0.0), str(item.get("task_id") or "")), reverse=True
+        )
         latest = dict(completed[0])
         latest.pop("_sort_ts", None)
         return MissionStatus.COMPLETED, latest
@@ -295,34 +305,57 @@ def _queue_action(record: "MissionRecord") -> tuple[str, str, str]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     status = str(record.status.value or "").strip().lower()
     last_task_id = str(meta.get("last_task_id") or "").strip()
-    last_task_status = str(meta.get("last_task_status") or "").strip().lower()
     last_task_result_status = str(meta.get("last_task_result_status") or "").strip().lower()
     last_task_gate = str(meta.get("last_task_gate") or "").strip().lower()
     next_step = str(meta.get("last_task_next_step") or record.next_step or "").strip()
 
     if status == MissionStatus.BLOCKED.value:
         if last_task_gate == "approvals_gate" or last_task_result_status in {"pending", "needs_approval"}:
-            return "review_pending_approval", next_step or "A linked task is waiting on approval before the mission can continue.", last_task_id
+            return (
+                "review_pending_approval",
+                next_step or "A linked task is waiting on approval before the mission can continue.",
+                last_task_id,
+            )
         if last_task_gate == "trust_gate":
             return "raise_trust_or_reduce_risk", next_step or "A linked task is blocked by trust posture.", last_task_id
         return "resolve_blocker", next_step or "A linked task is blocked and needs operator intervention.", last_task_id
 
     if status == MissionStatus.QUEUED.value:
         if not record.linked_task_ids:
-            return "create_first_operation", next_step or "Mission has no linked work yet. Create the first governed operation.", ""
-        return "run_linked_operation", next_step or "A linked task is queued but not advancing yet.", last_task_id or record.linked_task_ids[0]
+            return (
+                "create_first_operation",
+                next_step or "Mission has no linked work yet. Create the first governed operation.",
+                "",
+            )
+        return (
+            "run_linked_operation",
+            next_step or "A linked task is queued but not advancing yet.",
+            last_task_id or record.linked_task_ids[0],
+        )
 
     if status == MissionStatus.ACTIVE.value:
-        return "observe_running_operation", next_step or "A linked task is already running. Observe before changing mission posture.", last_task_id
+        return (
+            "observe_running_operation",
+            next_step or "A linked task is already running. Observe before changing mission posture.",
+            last_task_id,
+        )
 
     if status == MissionStatus.FAILED.value:
-        return "retry_or_deadletter", next_step or "The latest linked task failed. Retry the work or deadletter the mission.", last_task_id
+        return (
+            "retry_or_deadletter",
+            next_step or "The latest linked task failed. Retry the work or deadletter the mission.",
+            last_task_id,
+        )
 
     if status == MissionStatus.DEADLETTERED.value:
         return "review_deadletter", record.deadletter_reason or "Mission has been deadlettered.", last_task_id
 
     if status == MissionStatus.COMPLETED.value:
-        return "review_completion", next_step or "Mission completed. Review outcome and decide whether follow-up work is needed.", last_task_id
+        return (
+            "review_completion",
+            next_step or "Mission completed. Review outcome and decide whether follow-up work is needed.",
+            last_task_id,
+        )
 
     return "review_mission", next_step or "Mission needs operator review.", last_task_id
 
@@ -424,7 +457,9 @@ class MissionRecord:
         )
 
 
-def create_mission(request: MissionCreateRequest, repo_root: Path | None = None) -> tuple[MissionRecord | None, str | None]:
+def create_mission(
+    request: MissionCreateRequest, repo_root: Path | None = None
+) -> tuple[MissionRecord | None, str | None]:
     objective = str(request.objective or "").strip()
     if not objective:
         return None, "objective_required"
@@ -448,7 +483,9 @@ def create_mission(request: MissionCreateRequest, repo_root: Path | None = None)
     )
 
     try:
-        _atomic_write_text(_record_path(mission_id, repo_root), json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False))
+        _atomic_write_text(
+            _record_path(mission_id, repo_root), json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False)
+        )
         _append_history(
             mission_id,
             "created",

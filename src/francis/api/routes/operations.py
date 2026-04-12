@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 
 from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
-from francis.agent.delegation import DelegationRequest
 from francis.kernel.paths import data_dir
 from francis.missions import store as mission_store
 from francis.operations import runtime as operations_runtime
@@ -344,9 +343,13 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     approval_id = _result_approval_id(task)
     error = _safe_str(task.get("status_reason")).strip() or None
     if not error:
-        error = _safe_str((result_obj.get("data") or {}).get("error") if isinstance(result_obj.get("data"), dict) else "")
+        error = _safe_str(
+            (result_obj.get("data") or {}).get("error") if isinstance(result_obj.get("data"), dict) else ""
+        )
         error = error or None
-    result_message = _safe_str((result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else "")
+    result_message = _safe_str(
+        (result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else ""
+    )
     orb_plane = _operation_plane(raw_status, result_status, governance)
     mission_id = _task_mission_id(task)
 
