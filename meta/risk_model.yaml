@@ -6,7 +6,7 @@ taxonomy:
   data_sensitivity: [Public, Internal, Confidential, Regulated]
 
 gating_rules:
-  reference: "PHILOSOPHY.md#gating-rules"
+  reference: "docs/canonical/PHILOSOPHY.md#gating-rules"
 
 tiers:
   - id: low

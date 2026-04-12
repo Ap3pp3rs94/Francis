@@ -56,7 +56,7 @@ Capability manifests and delegation tokens:
 - Capability scope is defined in `meta/capabilities.yaml` (canonical).
 - Delegation token structure is defined in `schemas/delegation_token.schema.json`.
 - Approvals and gating reference these artifacts: approvals authorize capability use within scoped resources and constraints; gating enforces approval_class before execution.
-- Canonical gating rules: [PHILOSOPHY.md#gating-rules](../PHILOSOPHY.md#gating-rules).
+- Canonical gating rules: [PHILOSOPHY.md#gating-rules](./canonical/PHILOSOPHY.md#gating-rules).
 
 
 ## 1. Threat model

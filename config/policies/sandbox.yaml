@@ -246,8 +246,8 @@ filesystem:
       - "C:\\Francis\\config"
       - "C:\\Francis\\src"
       - "C:\\Francis\\apps"
-      - "C:\\Francis\\CAPABILITIES.md"
-      - "C:\\Francis\\BUILD_MANIFEST.md"
+      - "C:\\Francis\\docs\\canonical\\CAPABILITIES.md"
+      - "C:\\Francis\\docs\\canonical\\BUILD_MANIFEST.md"
       - "C:\\Francis\\CHANGELOG.md"
 
     # Writable roots (RW)

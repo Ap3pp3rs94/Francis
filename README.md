@@ -15,6 +15,7 @@ cd C:\Francis
 ```
 
 Branch workflow and contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md)
+Canonical build and vision docs: [docs/canonical/README.md](docs/canonical/README.md)
 
 ### Daemon
 ```powershell

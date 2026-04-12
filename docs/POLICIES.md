@@ -61,7 +61,7 @@ Read alongside:
 Where to look
 -------------
 
-   - PHILOSOPHY.md (Canonical source of truth for taxonomy + gates)
+   - docs/canonical/PHILOSOPHY.md (Canonical source of truth for taxonomy + gates)
    - meta/risk_model.yaml (computable taxonomy mirror)
    - meta/capabilities.yaml (capability registry)
    - schemas/delegation_token.schema.json (delegation token shape)
@@ -297,7 +297,7 @@ A proposed action (tool call) must pass:
 
    - Determine environment mode (dev/regulated/airgapped/etc.)
 
-Risk taxonomy and gating rules: see [PHILOSOPHY.md#Gating rules](../PHILOSOPHY.md#gating-rules) (canonical source of truth). Key gates include: high-impact requests with evidence below Primary require review/block; irreversible actions with authority confidence below Certain are blocked except for carefully controlled dry-runs; and regulated-data web accesses demand explicit approvals plus a redaction path.
+Risk taxonomy and gating rules: see [PHILOSOPHY.md#Gating rules](./canonical/PHILOSOPHY.md#gating-rules) (canonical source of truth). Key gates include: high-impact requests with evidence below Primary require review/block; irreversible actions with authority confidence below Certain are blocked except for carefully controlled dry-runs; and regulated-data web accesses demand explicit approvals plus a redaction path.
 
 
 
@@ -414,7 +414,7 @@ A practical rule format (conceptual):
 
 When multiple policies apply:
 
-Policy precedence: see `PHILOSOPHY.md` (Canonical source of truth; section 7.5).
+Policy precedence: see `docs/canonical/PHILOSOPHY.md` (Canonical source of truth; section 7.5).
 
 
 
@@ -912,8 +912,8 @@ When policy allows:
 ## 14. Consent and capabilities (aligned to PHILOSOPHY)
 
 - Consent is operational and capability-based.
-- Canonical capability manifest and delegation token shape: see `PHILOSOPHY.md` (Canonical source of truth).
-- Risk taxonomy and gates: see `PHILOSOPHY.md` (Canonical source of truth).
+- Canonical capability manifest and delegation token shape: see `docs/canonical/PHILOSOPHY.md` (Canonical source of truth).
+- Risk taxonomy and gates: see `docs/canonical/PHILOSOPHY.md` (Canonical source of truth).
 - Policy must check capability + risk tier before execution.
 
 ## 15. Implementation pointers (code map)
@@ -1002,8 +1002,8 @@ python tools/policy_term_lint.py
 
 Checks:
 
-- Canonical enumerations match PHILOSOPHY.md and meta/risk_model.yaml.
-- The three gating rules are present in PHILOSOPHY.md and referenced here.
+- Canonical enumerations match `docs/canonical/PHILOSOPHY.md` and `meta/risk_model.yaml`.
+- The three gating rules are present in `docs/canonical/PHILOSOPHY.md` and referenced here.
 - Capability manifest required fields are canonical (ignores `*_legacy`).
 - Capabilities use canonical tier casing in meta/capabilities.yaml.
 
@@ -1019,13 +1019,13 @@ Location: `tools/policy_term_lint.py`.
 - Canonical capability manifest: `meta/capabilities.yaml`.
 - Legacy alias: `meta/capability_manifest.yaml` (pointer only; do not edit).
 - Tools and docs should reference `meta/capabilities.yaml` for capability definitions.
-- Gating rules (must be reflected in implementation and lint): see [PHILOSOPHY.md#Gating rules](../PHILOSOPHY.md#gating-rules) for the canonical text.
+- Gating rules (must be reflected in implementation and lint): see [PHILOSOPHY.md#Gating rules](./canonical/PHILOSOPHY.md#gating-rules) for the canonical text.
 
 ## 18. Policy sanity check (read-only)
 
 - Run locally (PowerShell): `powershell -ExecutionPolicy Bypass -File tools/policy_check.ps1`
 - What it validates (read-only):
-  - Canonical enumerations and gating rules align with PHILOSOPHY.md and meta/risk_model.yaml.
+  - Canonical enumerations and gating rules align with `docs/canonical/PHILOSOPHY.md` and `meta/risk_model.yaml`.
   - Capability manifest uses the canonical `meta/capabilities.yaml` (alias file is pointer-only).
   - Delegation token schema title/description references capabilities/consent/delegation terms.
   - Legacy alias (`meta/capability_manifest.yaml`) does not contain duplicate capability data.
@@ -1038,5 +1038,4 @@ Location: `tools/policy_term_lint.py`.
 - Require-eval readiness: needs at least N scenarios and non-empty knowledge sections (`procedures.md`, `hazards.md`, `compliance.md`, `models.md`); empty/TODO fails fast with a structured error and non-zero exit.
 - Artifacts: `data/knowledge/{domain}/` (evaluation_report.json/md, tests/scenarios.json) plus logs under `data/logs/operations/`.
 - Activity: domain_learner events include domain, score, pass/fail, scenario count, and evaluation report path; visible in Activity screen and backend logs.
-
 

@@ -6,7 +6,7 @@ The authoritative architectural sources are:
 
 - `docs/PLANES.md`
 - `meta/plane_map.yaml`
-- `BUILD_MANIFEST.md`
+- `docs/canonical/BUILD_MANIFEST.md`
 
 ## 1. Rule
 

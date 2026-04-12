@@ -27,7 +27,7 @@ def _looks_banner_commented(text: str) -> bool:
 def _strip_hash_prefix_lines(text: str) -> str:
     """Strip a leading '# ' from every line when the whole file is hash-prefixed.
 
-    This is used for BUILD_MANIFEST.md, which currently has every line prefixed
+    This is used for docs/canonical/BUILD_MANIFEST.md, which currently has every line prefixed
     with '# ' (as if it were copied from a comment block).
     """
     lines = text.splitlines(keepends=True)
