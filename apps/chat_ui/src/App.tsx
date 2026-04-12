@@ -164,6 +164,10 @@ function operationResultMessage(record: OperationRecord | null | undefined): str
   return operationMetaString(record, "result_message") || safeString(operationOutputRecord(record).message).trim();
 }
 
+function operationTraceId(record: OperationRecord | null | undefined): string {
+  return safeString(record?.trace_id).trim() || operationMetaString(record, "trace_id");
+}
+
 function statusBadgeColors(status: string): { bg: string; border: string; color: string } {
   const normalized = safeString(status).trim().toLowerCase();
   if (["ready", "ok", "approved", "completed", "succeeded"].includes(normalized)) {
@@ -2199,6 +2203,9 @@ function SystemPanel(props: {
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
   const [missionDetailError, setMissionDetailError] = useState<string | null>(null);
+  const [missionActionBusy, setMissionActionBusy] = useState<"" | "run" | "cancel">("");
+  const [missionActionOperationId, setMissionActionOperationId] = useState("");
+  const [missionActionNotice, setMissionActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2547,6 +2554,19 @@ function SystemPanel(props: {
   const missionLinkedOperations = missionDetail?.linked_operations ?? [];
   const missionRunLedger = missionDetail?.run_ledger ?? [];
   const missionHistory = missionDetail?.history ?? [];
+  const primaryMissionOperation = missionLinkedOperations[0]?.operation ?? null;
+  const primaryMissionOperationStatus = operationStatus(primaryMissionOperation);
+  const primaryMissionOperationApprovalId = operationApprovalId(primaryMissionOperation);
+  const primaryMissionRecoverySummary =
+    primaryMissionOperationStatus === "running"
+      ? "Execution is live for this mission. You can monitor the linked task here or cancel it if the plan needs to stop."
+      : primaryMissionOperationApprovalId
+        ? "This mission is waiting on an explicit approval. Review the exact approval or retry after the blocker is resolved."
+        : ["queued", "blocked"].includes(primaryMissionOperationStatus)
+          ? "This mission has retryable work parked in the queue or governance path. You can retry it directly from the ORB panel."
+          : primaryMissionOperationStatus === "failed"
+            ? "The latest linked operation failed. Review the ledger and linked task before deciding whether to rerun or revise the plan."
+            : "This mission is currently in a steady state. Review continuity and linked traces before changing course.";
   const selectedMissionLatestTaskId =
     selectedMission?.linked_task_ids?.find((taskId) => safeString(taskId).trim().length > 0) ?? "";
   const inspectMission = useCallback((missionId: string) => {
@@ -2565,6 +2585,79 @@ function SystemPanel(props: {
   useEffect(() => {
     void loadMissionDetail(selectedMissionId);
   }, [loadMissionDetail, selectedMissionId]);
+
+  useEffect(() => {
+    setMissionActionNotice(null);
+  }, [selectedMissionId]);
+
+  const runMissionOperation = useCallback(
+    async (operationId: string) => {
+      const cleaned = operationId.trim();
+      if (!cleaned) return;
+      setMissionActionBusy("run");
+      setMissionActionOperationId(cleaned);
+      setMissionActionNotice(null);
+      try {
+        const response = await operationsClient.run(cleaned, { worker_id: "chat_ui.orb" });
+        await loadMissionDetail(selectedMissionId || safeString(selectedMission?.id));
+        await refresh();
+        const nextStatus = safeString(response.operation?.status || response.status, "unknown");
+        if (!response.ok) {
+          setMissionActionNotice({
+            tone: "error",
+            text: response.message ? `Retry failed: ${response.message}` : `Retry failed with status ${nextStatus}.`,
+          });
+          return;
+        }
+        setMissionActionNotice({
+          tone: "info",
+          text:
+            response.message === "already_terminal"
+              ? `Operation is already ${nextStatus}.`
+              : `Operation status is now ${nextStatus}.`,
+        });
+      } catch (err) {
+        setMissionActionNotice({ tone: "error", text: operationsError(err) });
+      } finally {
+        setMissionActionBusy("");
+        setMissionActionOperationId("");
+      }
+    },
+    [loadMissionDetail, operationsClient, operationsError, refresh, selectedMission?.id, selectedMissionId],
+  );
+
+  const cancelMissionOperation = useCallback(
+    async (operationId: string) => {
+      const cleaned = operationId.trim();
+      if (!cleaned) return;
+      setMissionActionBusy("cancel");
+      setMissionActionOperationId(cleaned);
+      setMissionActionNotice(null);
+      try {
+        const response = await operationsClient.cancel(cleaned, { reason: "cancelled_from_orb_panel" });
+        await loadMissionDetail(selectedMissionId || safeString(selectedMission?.id));
+        await refresh();
+        const nextStatus = safeString(response.status, "unknown");
+        if (!response.ok) {
+          setMissionActionNotice({
+            tone: "error",
+            text: response.message ? `Cancel failed: ${response.message}` : `Cancel failed with status ${nextStatus}.`,
+          });
+          return;
+        }
+        setMissionActionNotice({
+          tone: "info",
+          text: `Operation status is now ${nextStatus}.`,
+        });
+      } catch (err) {
+        setMissionActionNotice({ tone: "error", text: operationsError(err) });
+      } finally {
+        setMissionActionBusy("");
+        setMissionActionOperationId("");
+      }
+    },
+    [loadMissionDetail, operationsClient, operationsError, refresh, selectedMission?.id, selectedMissionId],
+  );
   const remainingTakeoverItems = [
     { label: "Queued", value: queuedTasks, tone: queuedTasks > 0 ? "queued" : "clear" },
     { label: "Blocked", value: blockedTasks, tone: blockedTasks > 0 ? "blocked" : "clear" },
@@ -3248,6 +3341,62 @@ function SystemPanel(props: {
               {selectedMission.deadletter_reason ? (
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{selectedMission.deadletter_reason}</div>
               ) : null}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${
+                    primaryMissionOperationApprovalId
+                      ? "#5a4c18"
+                      : primaryMissionOperationStatus === "running"
+                        ? "#244d31"
+                        : ["queued", "blocked", "failed"].includes(primaryMissionOperationStatus)
+                          ? THEME.panelBorder
+                          : THEME.panelBorder
+                  }`,
+                  background:
+                    primaryMissionOperationApprovalId
+                      ? "#1f1a0b"
+                      : primaryMissionOperationStatus === "running"
+                        ? "#102417"
+                        : ["queued", "blocked", "failed"].includes(primaryMissionOperationStatus)
+                          ? "#111819"
+                          : "#101010",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Recovery Posture</div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    marginTop: 6,
+                    color:
+                      primaryMissionOperationApprovalId
+                        ? "#f4d27a"
+                        : primaryMissionOperationStatus === "running"
+                          ? "#9de2ad"
+                          : THEME.muted,
+                  }}
+                >
+                  {primaryMissionRecoverySummary}
+                </div>
+              </div>
+
+              {missionActionNotice ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 10,
+                    border: `1px solid ${missionActionNotice.tone === "error" ? THEME.errorBorder : THEME.panelBorder}`,
+                    background: missionActionNotice.tone === "error" ? THEME.errorBg : "#111819",
+                    color: missionActionNotice.tone === "error" ? "#ffaaaa" : "#aee6df",
+                    fontSize: 12,
+                  }}
+                >
+                  {missionActionNotice.text}
+                </div>
+              ) : null}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 <button style={buttonStyle} onClick={() => void loadMissionDetail(selectedMission.id)} disabled={missionDetailBusy}>
@@ -3296,6 +3445,11 @@ function SystemPanel(props: {
                             {operationResultMessage(operation) ? (
                               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{operationResultMessage(operation)}</div>
                             ) : null}
+                            {operationTraceId(operation) ? (
+                              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                                trace <code>{operationTraceId(operation)}</code>
+                              </div>
+                            ) : null}
                             {gate ? (
                               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                                 gate <code>{gate}</code>
@@ -3310,6 +3464,24 @@ function SystemPanel(props: {
                               {approvalId ? (
                                 <button style={buttonStyle} onClick={() => props.onOpenApprovals(approvalId)}>
                                   Review approval
+                                </button>
+                              ) : null}
+                              {["queued", "blocked"].includes(operationStatus(operation)) ? (
+                                <button
+                                  style={buttonStyle}
+                                  onClick={() => void runMissionOperation(operation.id)}
+                                  disabled={missionActionBusy !== "" && missionActionOperationId === operation.id}
+                                >
+                                  {missionActionBusy === "run" && missionActionOperationId === operation.id ? "Retrying." : "Retry now"}
+                                </button>
+                              ) : null}
+                              {["queued", "running", "blocked"].includes(operationStatus(operation)) ? (
+                                <button
+                                  style={buttonStyle}
+                                  onClick={() => void cancelMissionOperation(operation.id)}
+                                  disabled={missionActionBusy !== "" && missionActionOperationId === operation.id}
+                                >
+                                  {missionActionBusy === "cancel" && missionActionOperationId === operation.id ? "Canceling." : "Cancel"}
                                 </button>
                               ) : null}
                               <button style={buttonStyle} onClick={() => props.onOpenOperation(operation.id)}>
@@ -3361,6 +3533,11 @@ function SystemPanel(props: {
                           ) : null}
                           {safeString(entry.message).trim() ? (
                             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{safeString(entry.message).trim()}</div>
+                          ) : null}
+                          {operationTraceId(entry) ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                              trace <code>{operationTraceId(entry)}</code>
+                            </div>
                           ) : null}
                           {operationMetaString(entry, "operation_id") ? (
                             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
