@@ -324,6 +324,74 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[str, Any]:
+    ts = _parse_iso_to_unix(event.get("ts")) or int(datetime.now(UTC).timestamp())
+    event_name = _safe_str(event.get("event")).strip() or "event"
+    details = event.get("details") if isinstance(event.get("details"), dict) else {}
+    status = "unknown"
+    level = "info"
+    if event_name == "status_updated":
+        status = _to_operation_status(details.get("to"))
+        if status in {"failed", "blocked"}:
+            level = "error"
+    elif event_name == "governance_hold":
+        held_status = _safe_str(details.get("status")).strip().lower()
+        status = "blocked" if held_status in {"blocked", "denied"} else "queued"
+        level = "warning"
+    return {
+        "id": f"{task_id}:evt:{idx}",
+        "ts": ts,
+        "kind": "audit_event",
+        "name": event_name,
+        "status": status,
+        "level": level,
+        "actor": "system",
+        "output": details or event.get("details"),
+        "meta": {
+            "task_id": task_id,
+            "reason": details.get("reason") if isinstance(details, dict) else None,
+            "gate": details.get("gate") if isinstance(details, dict) else None,
+            "next_step": details.get("next_step") if isinstance(details, dict) else None,
+            "orb_plane": "P3_GOVERNANCE" if event_name == "governance_hold" else None,
+        },
+    }
+
+
+def operation_logs(operation_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+    op_id = _safe_str(operation_id).strip()
+    if not _validate_operation_id(op_id):
+        return []
+    events = delegation_store.read_audit(op_id, limit=limit)
+    out: list[dict[str, Any]] = []
+    for idx, event in enumerate(events):
+        if isinstance(event, dict):
+            out.append(_event_to_operation(op_id, idx, event))
+    return out
+
+
+def get_operation_detail(
+    operation_id: str,
+    *,
+    include_logs: bool = True,
+    log_limit: int = 200,
+) -> dict[str, object]:
+    op_id = _safe_str(operation_id).strip()
+    if not _validate_operation_id(op_id):
+        return {"ok": False, "error": "invalid_operation_id"}
+
+    task = _load_task(op_id)
+    if not isinstance(task, dict):
+        return {"ok": False, "error": "not_found"}
+
+    payload: dict[str, object] = {
+        "ok": True,
+        "operation": _task_to_operation(task),
+        "meta": {"task": task},
+    }
+    payload["logs"] = operation_logs(op_id, limit=log_limit) if include_logs else []
+    return payload
+
+
 def _validate_operation_id(operation_id: str) -> bool:
     if not operation_id:
         return False

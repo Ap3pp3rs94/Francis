@@ -153,6 +153,16 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert fetched_body["mission"]["status"] == "completed"
     assert fetched_body["mission"]["meta"]["last_task_id"] == operation_id
     assert fetched_body["mission"]["meta"]["last_task_status"] == "completed"
+    linked_operations = fetched_body["linked_operations"]
+    assert len(linked_operations) == 1
+    assert linked_operations[0]["ok"] is True
+    assert linked_operations[0]["operation"]["id"] == operation_id
+    linked_logs = linked_operations[0]["logs"]
+    assert any(item["status"] == "running" for item in linked_logs)
+    assert any(item["status"] == "succeeded" for item in linked_logs)
+    run_ledger = fetched_body["run_ledger"]
+    assert any(item["operation_id"] == operation_id and item["status"] == "running" for item in run_ledger)
+    assert any(item["operation_id"] == operation_id and item["status"] == "succeeded" for item in run_ledger)
     history_events = [str(item.get("event")) for item in fetched_body["history"]]
     assert "linked_task_transition" in history_events
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]
@@ -231,6 +241,13 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert fetched_body["mission"]["meta"]["last_task_result_status"] == "blocked"
     assert fetched_body["mission"]["meta"]["last_task_gate"] == "trust_gate"
     assert fetched_body["mission"]["meta"]["last_task_next_step"] == "raise_trust_or_reduce_risk"
+    linked_operations = fetched_body["linked_operations"]
+    assert len(linked_operations) == 1
+    assert linked_operations[0]["operation"]["id"] == operation_id
+    assert any(item["name"] == "governance_hold" for item in linked_operations[0]["logs"])
+    run_ledger = fetched_body["run_ledger"]
+    assert any(item["operation_id"] == operation_id and item["name"] == "governance_hold" for item in run_ledger)
+    assert any(item["operation_id"] == operation_id and item["status"] == "blocked" for item in run_ledger)
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]
     assert transition_events
     assert transition_events[-1]["details"]["gate"] == "trust_gate"

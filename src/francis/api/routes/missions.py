@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
+from francis.operations import runtime as operations_runtime
 
 router = APIRouter()
 
@@ -40,6 +41,53 @@ def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, 
         "updated_at": record.updated_at,
         "meta": dict(record.meta),
     }
+
+
+def _linked_operation_details(record: mission_store.MissionRecord | None, *, log_limit: int = 50) -> list[dict[str, Any]]:
+    if record is None:
+        return []
+    items: list[dict[str, Any]] = []
+    for operation_id in record.linked_task_ids:
+        detail = operations_runtime.get_operation_detail(operation_id, include_logs=True, log_limit=log_limit)
+        if bool(detail.get("ok")):
+            items.append(detail)
+            continue
+        items.append(
+            {
+                "ok": False,
+                "operation": {"id": operation_id},
+                "logs": [],
+                "error": _safe_str(detail.get("error")).strip() or "not_found",
+            }
+        )
+    return items
+
+
+def _mission_run_ledger(mission_id: str, linked_operations: list[dict[str, Any]], *, limit: int = 200) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for detail in linked_operations:
+        operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+        operation_id = _safe_str(operation.get("id")).strip()
+        operation_name = _safe_str(operation.get("name")).strip()
+        operation_status = _safe_str(operation.get("status")).strip()
+        logs = detail.get("logs") if isinstance(detail.get("logs"), list) else []
+        for log in logs:
+            if not isinstance(log, dict):
+                continue
+            entry = dict(log)
+            entry["mission_id"] = mission_id
+            entry["operation_id"] = operation_id or None
+            entry["operation_name"] = operation_name or None
+            entry["operation_status"] = operation_status or None
+            entries.append(entry)
+    entries.sort(
+        key=lambda item: (
+            int(item.get("ts") or 0),
+            _safe_str(item.get("id")),
+        ),
+        reverse=True,
+    )
+    return entries[: max(0, int(limit))]
 
 
 class MissionCreateIn(BaseModel):
@@ -192,10 +240,13 @@ def get_mission(mission_id: str) -> dict[str, object]:
         record, err = mission_store.read_mission(mission_id)
         if not record:
             return {"ok": False, "error": err or "not_found"}
+        linked_operations = _linked_operation_details(record)
         return {
             "ok": True,
             "mission": _serialize_mission(record),
             "history": mission_store.read_history(mission_id),
+            "linked_operations": linked_operations,
+            "run_ledger": _mission_run_ledger(record.mission_id, linked_operations),
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
