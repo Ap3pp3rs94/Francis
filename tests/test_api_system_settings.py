@@ -36,15 +36,11 @@ def test_system_world_state_reports_nested_task_records(monkeypatch, tmp_path: P
     task_dir = data_root / "tasks" / "tsk_nested"
     (data_root / "approvals" / "pending").mkdir(parents=True, exist_ok=True)
     task_dir.mkdir(parents=True, exist_ok=True)
-    (
-        data_root / "approvals" / "pending" / "appr.json"
-    ).write_text(
+    (data_root / "approvals" / "pending" / "appr.json").write_text(
         '{"id":"appr","action":"plugin.run","reason":"integration_test","status":"pending","ts":10}',
         encoding="utf-8",
     )
-    (
-        task_dir / "record.json"
-    ).write_text(
+    (task_dir / "record.json").write_text(
         '{"task_id":"tsk_nested","status":"running","capability":"plugin.run","objective":"Test nested task","created_at":"2026-04-11T10:00:00+00:00","updated_at":"2026-04-11T10:05:00+00:00"}',
         encoding="utf-8",
     )
@@ -80,9 +76,7 @@ def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_p
     blocked_task_dir.mkdir(parents=True, exist_ok=True)
     approval_task_dir.mkdir(parents=True, exist_ok=True)
 
-    (
-        blocked_task_dir / "record.json"
-    ).write_text(
+    (blocked_task_dir / "record.json").write_text(
         """
 {
   "task_id": "tsk_blocked",
@@ -101,9 +95,7 @@ def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_p
 """.strip(),
         encoding="utf-8",
     )
-    (
-        approval_task_dir / "record.json"
-    ).write_text(
+    (approval_task_dir / "record.json").write_text(
         """
 {
   "task_id": "tsk_approval",
@@ -585,6 +577,227 @@ controls:
     assert body["gates"][0]["id"] == "permission_gate"
     assert body["transitions"]["allowed"][0]["to"] == "P4_COGNITION"
     assert body["transitions"]["forbidden"][0]["to"] == "P7_EXECUTION"
+
+
+def test_system_operator_mode_uses_mission_continuity_when_tasks_are_idle(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": "Queued mission should keep continuity visible",
+            "summary": "No task is running yet, but the mission still matters.",
+            "requester_id": "test.system.operator_mode",
+            "priority": 8,
+        },
+    )
+    assert created.status_code == 200
+    mission_id = str(created.json()["mission_id"])
+
+    response = client.get("/system/operator_mode")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["backlog"]["queued_tasks"] == 0
+    assert body["backlog"]["queued_missions"] == 1
+    assert body["focus"]["plane_id"] == "P8_MEMORY"
+    assert "mission" in body["focus"]["reason"].lower()
+    assert body["continuity"]["mission_counts"]["queued"] == 1
+    assert body["continuity"]["focus"][0]["id"] == mission_id
+    assert body["continuity"]["focus"][0]["recommended_action"] == "create_first_operation"
+    assert body["continuity"]["focus"][0]["latest_activity"] == {}
+
+
+def test_system_operator_mode_surfaces_mission_continuity_handoff(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission for continuity handoff",
+            "summary": "This mission should be the first continuity focus item.",
+            "priority": 9,
+            "requester_id": "test.system.operator_mode",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    blocked_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "blocked operator_mode continuity",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert blocked_operation.status_code == 200
+    blocked_operation_id = str(blocked_operation.json()["operation_id"])
+
+    blocked_run = client.post(
+        f"/operations/{blocked_operation_id}/run", json={"worker_id": "test.system.operator_mode"}
+    )
+    assert blocked_run.status_code == 200
+    assert blocked_run.json()["status"] == "blocked"
+
+    completed = client.post(
+        "/missions/create",
+        json={
+            "objective": "Completed mission for operator continuity",
+            "summary": "This mission should show up in recently completed handback.",
+            "requester_id": "test.system.operator_mode",
+        },
+    )
+    assert completed.status_code == 200
+    completed_id = str(completed.json()["mission_id"])
+
+    first_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.system.operator_mode"},
+    )
+    assert first_advance.status_code == 200
+    assert first_advance.json()["ok"] is True
+    assert first_advance.json()["applied"] is True
+
+    second_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.system.operator_mode", "worker_id": "test.system.operator_mode"},
+    )
+    assert second_advance.status_code == 200
+    assert second_advance.json()["ok"] is True
+    assert second_advance.json()["applied"] is True
+
+    response = client.get("/system/operator_mode")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["backlog"]["blocked_missions"] == 1
+    assert body["backlog"]["completed_missions"] == 1
+    assert body["focus"]["plane_id"] == "P3_GOVERNANCE"
+
+    continuity = body["continuity"]
+    assert continuity["focus"]
+    assert continuity["focus"][0]["id"] == blocked_id
+    assert continuity["focus"][0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert continuity["focus"][0]["latest_activity"]["name"] == "governance_hold"
+    assert continuity["focus"][0]["latest_activity"]["status"] == "blocked"
+
+    recent_completed = continuity["recently_completed"]
+    assert recent_completed
+    assert recent_completed[0]["id"] == completed_id
+    assert recent_completed[0]["latest_activity"]["source"] == "run_ledger"
+    assert recent_completed[0]["latest_activity"]["status"] == "succeeded"
 
 
 def test_system_operator_mode_reports_environment_posture_and_focus(monkeypatch, tmp_path: Path) -> None:

@@ -10,6 +10,7 @@ import yaml
 
 from francis.kernel.paths import data_dir, repo_root
 from francis.trust.levels import get_state
+from francis.world_state.snapshot import mission_continuity_snapshot
 
 
 _PLANE_LABELS = {
@@ -244,6 +245,11 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
     blocked_tasks = int(backlog.get("blocked_tasks") or 0)
     running_tasks = int(backlog.get("running_tasks") or 0)
     queued_tasks = int(backlog.get("queued_tasks") or 0)
+    blocked_missions = int(backlog.get("blocked_missions") or 0)
+    deadlettered_missions = int(backlog.get("deadlettered_missions") or 0)
+    active_missions = int(backlog.get("active_missions") or 0)
+    queued_missions = int(backlog.get("queued_missions") or 0)
+    completed_missions = int(backlog.get("completed_missions") or 0)
 
     if pending_approvals > 0:
         plane_id = "P3_GOVERNANCE"
@@ -260,6 +266,23 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
     elif queued_tasks > 0:
         plane_id = "P7_EXECUTION"
         reason = f"{queued_tasks} {_pluralize(queued_tasks, 'task')} queued for execution."
+    elif blocked_missions > 0:
+        plane_id = "P3_GOVERNANCE"
+        reason = (
+            f"{blocked_missions} {_pluralize(blocked_missions, 'mission')} blocked and waiting for operator handback."
+        )
+    elif deadlettered_missions > 0:
+        plane_id = "P3_GOVERNANCE"
+        reason = f"{deadlettered_missions} {_pluralize(deadlettered_missions, 'mission')} sitting in deadletter review."
+    elif active_missions > 0:
+        plane_id = "P7_EXECUTION"
+        reason = f"{active_missions} {_pluralize(active_missions, 'mission')} actively carrying work forward."
+    elif queued_missions > 0:
+        plane_id = "P8_MEMORY"
+        reason = f"{queued_missions} {_pluralize(queued_missions, 'mission')} queued and carrying continuity forward."
+    elif completed_missions > 0:
+        plane_id = "P8_MEMORY"
+        reason = f"{completed_missions} completed {_pluralize(completed_missions, 'mission')} ready for review."
     else:
         plane_id = "P1_INTERFACE"
         reason = "Console is idle and ready for the next operator request."
@@ -271,7 +294,9 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
     }
 
 
-def _control_mode_detail(mode_id: str, writes_state: str, backlog: dict[str, int], state: dict[str, Any]) -> dict[str, Any]:
+def _control_mode_detail(
+    mode_id: str, writes_state: str, backlog: dict[str, int], state: dict[str, Any]
+) -> dict[str, Any]:
     definition = _CONTROL_MODE_DEFS.get(mode_id, _CONTROL_MODE_DEFS[_DEFAULT_CONTROL_MODE])
     pending_approvals = int(backlog.get("pending_approvals") or 0)
     approval_pending_tasks = int(backlog.get("approval_pending_tasks") or 0)
@@ -282,7 +307,9 @@ def _control_mode_detail(mode_id: str, writes_state: str, backlog: dict[str, int
     if mode_id == "observe":
         summary = "Read-only posture. Francis stays visible, cites state, and does not claim write authority."
     elif mode_id == "assist" and pending_approvals > 0:
-        summary = f"Assist posture with {pending_approvals} {_pluralize(pending_approvals, 'approval')} waiting for review."
+        summary = (
+            f"Assist posture with {pending_approvals} {_pluralize(pending_approvals, 'approval')} waiting for review."
+        )
     elif mode_id == "pilot":
         summary = "Pilot is declared and visible. Approval gates still hold until the takeover flow ships."
     elif mode_id == "away":
@@ -390,6 +417,19 @@ def snapshot() -> dict[str, Any]:
     runtime_mode = _safe_str(runtime.get("mode")).strip() or env_profile
 
     backlog = _backlog_snapshot(data / "tasks", data / "approvals")
+    continuity = mission_continuity_snapshot(recent_limit=5, queue_limit=3, deadletter_limit=2, activity_log_limit=20)
+    mission_counts = (
+        continuity.get("mission_status_counts") if isinstance(continuity.get("mission_status_counts"), dict) else {}
+    )
+    backlog.update(
+        {
+            "queued_missions": _safe_int(mission_counts.get("queued")),
+            "blocked_missions": _safe_int(mission_counts.get("blocked")),
+            "active_missions": _safe_int(mission_counts.get("active")),
+            "completed_missions": _safe_int(mission_counts.get("completed")),
+            "deadlettered_missions": _safe_int(mission_counts.get("deadlettered")),
+        }
+    )
     focus = _focus_plane(backlog)
     control_mode_state = _read_control_mode_state(data)
     writes_state = _writes_state(run_mode, runtime_mode, governance_mode, minimum_trust)
@@ -425,5 +465,23 @@ def snapshot() -> dict[str, Any]:
         "available_modes": _available_control_modes(control_mode["id"]),
         "focus": focus,
         "backlog": backlog,
+        "continuity": {
+            "headline": _safe_str((continuity.get("mission_briefing") or {}).get("headline")).strip(),
+            "mission_counts": (continuity.get("mission_briefing") or {}).get("counts")
+            if isinstance((continuity.get("mission_briefing") or {}).get("counts"), dict)
+            else {},
+            "focus": continuity.get("mission_briefing", {}).get("focus")
+            if isinstance(continuity.get("mission_briefing"), dict)
+            and isinstance(continuity.get("mission_briefing", {}).get("focus"), list)
+            else [],
+            "recently_completed": continuity.get("mission_briefing", {}).get("recently_completed")
+            if isinstance(continuity.get("mission_briefing"), dict)
+            and isinstance(continuity.get("mission_briefing", {}).get("recently_completed"), list)
+            else [],
+            "deadletter_preview": continuity.get("mission_briefing", {}).get("deadletter_preview")
+            if isinstance(continuity.get("mission_briefing"), dict)
+            and isinstance(continuity.get("mission_briefing", {}).get("deadletter_preview"), list)
+            else [],
+        },
         "notes": notes,
     }

@@ -470,6 +470,9 @@ def _mission_briefing(
                 "reason": str(item.get("deadletter_reason") or "").strip(),
                 "recommended_action": str(item.get("recommended_action") or "").strip(),
                 "updated_at": str(item.get("updated_at") or "").strip(),
+                "latest_activity": dict(item.get("latest_activity") or {})
+                if isinstance(item.get("latest_activity"), dict)
+                else {},
             }
         )
 
@@ -488,11 +491,50 @@ def _mission_briefing(
     }
 
 
+def mission_continuity_snapshot(
+    *,
+    recent_limit: int = 10,
+    queue_limit: int = 5,
+    deadletter_limit: int = 5,
+    activity_log_limit: int = 20,
+) -> dict[str, Any]:
+    mission_summary = _mission_summary(limit=recent_limit)
+    mission_status_counts = (
+        mission_summary["status_counts"] if isinstance(mission_summary.get("status_counts"), dict) else {}
+    )
+    recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
+    mission_queue = mission_store.mission_queue_items(limit=queue_limit, include_terminal=False)
+    deadletter_missions = mission_store.deadletter_queue_items(limit=deadletter_limit)
+
+    activity_cache: dict[str, dict[str, Any] | None] = {}
+    recent_missions = _attach_mission_activity(recent_missions, log_limit=activity_log_limit, cache=activity_cache)
+    mission_queue = _attach_mission_activity(mission_queue, log_limit=activity_log_limit, cache=activity_cache)
+    deadletter_missions = _attach_mission_activity(
+        deadletter_missions, log_limit=activity_log_limit, cache=activity_cache
+    )
+    mission_briefing = _mission_briefing(
+        mission_status_counts,
+        mission_queue,
+        deadletter_missions,
+        recent_missions,
+    )
+
+    return {
+        "mission_status_counts": mission_status_counts,
+        "recent_missions": recent_missions,
+        "mission_queue": mission_queue,
+        "deadletter_missions": deadletter_missions,
+        "mission_briefing": mission_briefing,
+    }
+
+
 def _pending_approval_summary(path: Path, limit: int = 10) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     try:
-        candidates = sorted(path.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[: max(0, int(limit))]
+        candidates = sorted(path.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[
+            : max(0, int(limit))
+        ]
     except Exception:
         return []
 
@@ -600,8 +642,16 @@ def _service_incidents(services_report: dict[str, Any]) -> list[dict[str, Any]]:
     if not degraded:
         return []
 
-    missing = [str(item.get("name") or "").strip() for item in degraded if str(item.get("status") or "").strip().lower() == "missing"]
-    disabled = [str(item.get("name") or "").strip() for item in degraded if str(item.get("status") or "").strip().lower() == "disabled"]
+    missing = [
+        str(item.get("name") or "").strip()
+        for item in degraded
+        if str(item.get("status") or "").strip().lower() == "missing"
+    ]
+    disabled = [
+        str(item.get("name") or "").strip()
+        for item in degraded
+        if str(item.get("status") or "").strip().lower() == "disabled"
+    ]
     missing = [item for item in missing if item]
     disabled = [item for item in disabled if item]
 
@@ -726,22 +776,18 @@ def snapshot() -> dict[str, Any]:
     stack_report = stack_status()
     services_report = services_status()
     task_summary = _task_summary(tasks_root)
-    mission_summary = _mission_summary()
     task_status_counts = task_summary["status_counts"] if isinstance(task_summary.get("status_counts"), dict) else {}
     recent_tasks = task_summary["recent"] if isinstance(task_summary.get("recent"), list) else []
-    mission_status_counts = mission_summary["status_counts"] if isinstance(mission_summary.get("status_counts"), dict) else {}
-    recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
-    mission_queue = mission_store.mission_queue_items(limit=5, include_terminal=False)
-    deadletter_missions = mission_store.deadletter_queue_items(limit=5)
-    activity_cache: dict[str, dict[str, Any] | None] = {}
-    recent_missions = _attach_mission_activity(recent_missions, log_limit=20, cache=activity_cache)
-    mission_queue = _attach_mission_activity(mission_queue, log_limit=20, cache=activity_cache)
-    mission_briefing = _mission_briefing(
-        mission_status_counts,
-        mission_queue,
-        deadletter_missions,
-        recent_missions,
+    continuity = mission_continuity_snapshot()
+    mission_status_counts = (
+        continuity["mission_status_counts"] if isinstance(continuity.get("mission_status_counts"), dict) else {}
     )
+    recent_missions = continuity["recent_missions"] if isinstance(continuity.get("recent_missions"), list) else []
+    mission_queue = continuity["mission_queue"] if isinstance(continuity.get("mission_queue"), list) else []
+    deadletter_missions = (
+        continuity["deadletter_missions"] if isinstance(continuity.get("deadletter_missions"), list) else []
+    )
+    mission_briefing = continuity["mission_briefing"] if isinstance(continuity.get("mission_briefing"), dict) else {}
     pending_approval_items = _pending_approval_summary(approvals_root / "pending")
     pending_approvals = _count_json_entries(approvals_root / "pending")
     incidents = [
