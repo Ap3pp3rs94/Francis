@@ -9,6 +9,7 @@ import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest 
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
 import type {
+  ContinuityBriefingSnapshot,
   OperatorControlModeId,
   OperatorModeSnapshot,
   OrbStatusSnapshot,
@@ -1368,7 +1369,9 @@ export default function App() {
     setPanel("system");
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        document.getElementById("francis-mission-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const target =
+          document.getElementById("francis-shift-briefing") ?? document.getElementById("francis-mission-feed");
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
   }, []);
@@ -1493,7 +1496,7 @@ export default function App() {
       {
         id: "nav.briefing",
         label: "Request Continuity Briefing",
-        description: "Open the mission feed and return-to-work recommendations.",
+        description: "Open the shift briefing and return-to-work recommendations.",
         group: "Navigation",
         keywords: "briefing continuity mission return to work handoff",
         run: () => openMissionFeed(),
@@ -2157,6 +2160,8 @@ function SystemPanel(props: {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [worldState, setWorldState] = useState<WorldStateSnapshot | null>(null);
+  const [continuityBriefing, setContinuityBriefing] = useState<ContinuityBriefingSnapshot | null>(null);
+  const [continuityBriefingError, setContinuityBriefingError] = useState<string | null>(null);
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
   const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
@@ -2168,10 +2173,20 @@ function SystemPanel(props: {
     setError(null);
     try {
       setTakeoverOperationsError(null);
-      const [nextInfo, nextHealth, nextWorldState, nextOrbStatus] = await Promise.all([
+      let nextContinuityBriefingError: string | null = null;
+      const [nextInfo, nextHealth, nextWorldState, nextContinuityBriefing, nextOrbStatus] = await Promise.all([
         client.getSystemInfo(),
         client.getHealth(),
         client.getWorldState(),
+        client.getContinuityBriefing().catch((err) => {
+          nextContinuityBriefingError =
+            err instanceof SettingsApiError
+              ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+              : err instanceof Error
+                ? err.message
+                : "Continuity briefing request failed.";
+          return null;
+        }),
         client.getOrbStatus(),
       ]);
       const nextOperations = await operationsClient
@@ -2190,6 +2205,8 @@ function SystemPanel(props: {
       setInfo(nextInfo);
       setHealth(nextHealth);
       setWorldState(nextWorldState);
+      setContinuityBriefing(nextContinuityBriefing);
+      setContinuityBriefingError(nextContinuityBriefingError);
       setOrbStatus(nextOrbStatus);
       setTakeoverOperations(nextOperations);
     } catch (err) {
@@ -2211,6 +2228,11 @@ function SystemPanel(props: {
 
   const counts = worldState?.counts;
   const overview = worldState?.overview;
+  const shiftBriefing = continuityBriefing?.briefing;
+  const shiftBriefingCounts = shiftBriefing?.counts ?? {};
+  const shiftBriefingFocus = shiftBriefing?.focus ?? [];
+  const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
+  const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
@@ -2232,6 +2254,10 @@ function SystemPanel(props: {
   );
   const declaredMissionCount = safeNumber(counts?.missions, recentMissions.length);
   const activeIncidents = safeNumber(counts?.active_incidents, incidents.length);
+  const shiftBriefingBlocked = safeNumber(shiftBriefingCounts["blocked"], 0);
+  const shiftBriefingQueued = safeNumber(shiftBriefingCounts["queued"], 0);
+  const shiftBriefingCompletedCount = safeNumber(shiftBriefingCounts["completed"], 0);
+  const shiftBriefingDeadletterCount = safeNumber(shiftBriefingCounts["deadlettered"], 0);
   const servicesRaw =
     worldState?.services && typeof worldState.services === "object" && !Array.isArray(worldState.services)
       ? worldState.services
@@ -2569,6 +2595,163 @@ function SystemPanel(props: {
           ) : null}
         </div>
       ) : null}
+
+      <div id="francis-shift-briefing" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Shift Briefing</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              {safeString(shiftBriefing?.headline).trim() || "Shift briefing is available once continuity state is recorded."}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(shiftBriefingBlocked > 0 ? "blocked" : "clear")}>blocked {shiftBriefingBlocked}</span>
+            <span style={badgeStyle(shiftBriefingQueued > 0 ? "queued" : "clear")}>queued {shiftBriefingQueued}</span>
+            <span style={badgeStyle(shiftBriefingCompletedCount > 0 ? "completed" : "clear")}>
+              completed {shiftBriefingCompletedCount}
+            </span>
+            <span style={badgeStyle(shiftBriefingDeadletterCount > 0 ? "deadlettered" : "clear")}>
+              deadlettered {shiftBriefingDeadletterCount}
+            </span>
+            {continuityBriefing?.generated_at ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Snapshot {toLocaleTime(continuityBriefing.generated_at)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {continuityBriefingError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Briefing feed unavailable: {continuityBriefingError}
+          </div>
+        ) : null}
+
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Focus Now</div>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {shiftBriefingFocus.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              No live continuity focus items are recorded yet. Francis is clear to accept the next governed objective.
+            </div>
+          ) : (
+            shiftBriefingFocus.slice(0, 3).map((item) => {
+              const targetOperationId =
+                safeString(item.action_target_id).trim() ||
+                safeString(item.last_task_id).trim() ||
+                safeString(item.last_advance_operation_id).trim();
+              const focusDetail =
+                safeString(item.operator_hint).trim() ||
+                safeString(item.next_step).trim() ||
+                safeString(item.last_advance_message).trim() ||
+                safeString(item.summary).trim() ||
+                safeString(item.deadletter_reason).trim() ||
+                "Mission continuity exists, but the next-step note is still blank.";
+              const latestActivity = item.latest_activity ?? {};
+              const latestActivityName = safeString(latestActivity["name"]).trim();
+              const latestActivityStatus = safeString(latestActivity["status"]).trim();
+              const latestActivityGate = safeString(latestActivity["gate"]).trim();
+              return (
+                <div
+                  key={`shift-focus-${item.id}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{item.objective || item.id}</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <span style={badgeStyle(item.status || "unknown")}>{item.status || "unknown"}</span>
+                      {item.recommended_action ? (
+                        <span style={badgeStyle(item.recommended_action)}>{item.recommended_action}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{focusDetail}</div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    priority=<code>{String(item.priority ?? 0)}</code>
+                    {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
+                    {" / "}linked_tasks=<code>{String(item.linked_task_count ?? 0)}</code>
+                  </div>
+                  {latestActivityName || latestActivityStatus || latestActivityGate ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      latest=
+                      <code>{latestActivityName || "activity"}</code>
+                      {" / "}status=<code>{latestActivityStatus || "unknown"}</code>
+                      {latestActivityGate ? (
+                        <>
+                          {" / "}gate=<code>{latestActivityGate}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {targetOperationId ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                      <button style={buttonStyle} onClick={() => props.onOpenOperation(targetOperationId)}>
+                        Open linked task
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {shiftBriefingCompleted.length > 0 || shiftBriefingDeadletter.length > 0 ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 8,
+              marginTop: 12,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Recently Completed</div>
+              <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                {shiftBriefingCompleted.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted }}>No recent completions recorded.</div>
+                ) : (
+                  shiftBriefingCompleted.slice(0, 2).map((item) => (
+                    <div key={`shift-complete-${item.id}`}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>{item.objective || item.id}</div>
+                        <span style={badgeStyle(item.last_advance_outcome || "completed")}>
+                          {item.last_advance_outcome || "completed"}
+                        </span>
+                      </div>
+                      {item.last_advance_action ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          action <code>{item.last_advance_action}</code>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Deadletter Review</div>
+              <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                {shiftBriefingDeadletter.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted }}>No deadlettered missions waiting for review.</div>
+                ) : (
+                  shiftBriefingDeadletter.slice(0, 2).map((item) => (
+                    <div key={`shift-deadletter-${item.id}`}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>{item.objective || item.id}</div>
+                        <span style={badgeStyle(item.recommended_action || "deadlettered")}>
+                          {item.recommended_action || "deadlettered"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
+                        {item.reason || "Mission has been deadlettered and needs review."}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <div id="francis-telemetry-status" style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>

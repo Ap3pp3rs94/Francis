@@ -342,6 +342,72 @@ export type OperatorModeSnapshot = {
   meta?: Record<string, unknown>;
 };
 
+export type ContinuityBriefingFocusItem = {
+  id: string;
+  status?: string;
+  objective?: string;
+  summary?: string;
+  next_step?: string;
+  priority?: number;
+  risk_tier?: string;
+  linked_task_count?: number;
+  recommended_action?: string;
+  operator_hint?: string;
+  action_target_id?: string;
+  last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_gate?: string;
+  last_advance_action?: string;
+  last_advance_outcome?: string;
+  last_advance_operation_id?: string;
+  last_advance_operation_status?: string;
+  last_advance_message?: string;
+  last_advance_actor?: string;
+  last_advance_applied?: boolean;
+  last_advance_at?: string;
+  deadletter_reason?: string;
+  updated_at?: string;
+  latest_activity?: Record<string, unknown>;
+};
+
+export type ContinuityBriefingCompletedItem = {
+  id: string;
+  objective?: string;
+  updated_at?: string;
+  last_task_id?: string;
+  last_advance_action?: string;
+  last_advance_outcome?: string;
+  latest_activity?: Record<string, unknown>;
+};
+
+export type ContinuityBriefingDeadletterItem = {
+  id: string;
+  objective?: string;
+  reason?: string;
+  recommended_action?: string;
+  updated_at?: string;
+  latest_activity?: Record<string, unknown>;
+};
+
+export type ContinuityBriefingPayload = {
+  headline?: string;
+  counts?: Record<string, number>;
+  focus?: ContinuityBriefingFocusItem[];
+  recently_completed?: ContinuityBriefingCompletedItem[];
+  deadletter_preview?: ContinuityBriefingDeadletterItem[];
+};
+
+export type ContinuityBriefingSnapshot = {
+  ok: boolean;
+  subsystem?: string;
+  generated_at?: number;
+  briefing?: ContinuityBriefingPayload;
+  mission_status_counts?: Record<string, number>;
+  recent_missions?: WorldStateMissionSummary[];
+  meta?: Record<string, unknown>;
+};
+
 /**
  * A controlled server mutation request.
  * The backend is expected to enforce approvals/policy; the UI just submits intent.
@@ -1152,6 +1218,123 @@ function parseOperatorModeSnapshot(raw: unknown): OperatorModeSnapshot {
   return snapshot;
 }
 
+function parseNumberMap(raw: unknown): Record<string, number> {
+  if (!isRecord(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    out[key] = safeNumber(value, 0);
+  }
+  return out;
+}
+
+function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw["id"], "").trim();
+  if (!id) return null;
+
+  const item: ContinuityBriefingFocusItem = {
+    id,
+    status: safeString(raw["status"], ""),
+    objective: safeString(raw["objective"], ""),
+    summary: safeString(raw["summary"], ""),
+    next_step: safeString(raw["next_step"], ""),
+    priority: safeNumber(raw["priority"], 0),
+    risk_tier: safeString(raw["risk_tier"], ""),
+    linked_task_count: safeNumber(raw["linked_task_count"], 0),
+    recommended_action: safeString(raw["recommended_action"], ""),
+    operator_hint: safeString(raw["operator_hint"], ""),
+    action_target_id: safeString(raw["action_target_id"], ""),
+    last_task_id: safeString(raw["last_task_id"], ""),
+    last_task_status: safeString(raw["last_task_status"], ""),
+    last_task_result_status: safeString(raw["last_task_result_status"], ""),
+    last_task_gate: safeString(raw["last_task_gate"], ""),
+    last_advance_action: safeString(raw["last_advance_action"], ""),
+    last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
+    last_advance_operation_id: safeString(raw["last_advance_operation_id"], ""),
+    last_advance_operation_status: safeString(raw["last_advance_operation_status"], ""),
+    last_advance_message: safeString(raw["last_advance_message"], ""),
+    last_advance_actor: safeString(raw["last_advance_actor"], ""),
+    last_advance_applied: safeBoolean(raw["last_advance_applied"], false),
+    last_advance_at: safeString(raw["last_advance_at"], ""),
+    deadletter_reason: safeString(raw["deadletter_reason"], ""),
+    updated_at: safeString(raw["updated_at"], ""),
+    latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
+  };
+
+  return item;
+}
+
+function parseContinuityCompletedItem(raw: unknown): ContinuityBriefingCompletedItem | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw["id"], "").trim();
+  if (!id) return null;
+
+  return {
+    id,
+    objective: safeString(raw["objective"], ""),
+    updated_at: safeString(raw["updated_at"], ""),
+    last_task_id: safeString(raw["last_task_id"], ""),
+    last_advance_action: safeString(raw["last_advance_action"], ""),
+    last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
+    latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
+  };
+}
+
+function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadletterItem | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw["id"], "").trim();
+  if (!id) return null;
+
+  return {
+    id,
+    objective: safeString(raw["objective"], ""),
+    reason: safeString(raw["reason"], ""),
+    recommended_action: safeString(raw["recommended_action"], ""),
+    updated_at: safeString(raw["updated_at"], ""),
+    latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
+  };
+}
+
+function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapshot {
+  if (!isRecord(raw)) return { ok: false };
+
+  const briefingRaw = isRecord(raw["briefing"]) ? (raw["briefing"] as Record<string, unknown>) : {};
+
+  const snapshot: ContinuityBriefingSnapshot = {
+    ok: safeBoolean(raw["ok"], false),
+    subsystem: safeString(raw["subsystem"], ""),
+    generated_at: safeNumber(raw["generated_at"], 0),
+    briefing: {
+      headline: safeString(briefingRaw["headline"], ""),
+      counts: parseNumberMap(briefingRaw["counts"]),
+      focus: (Array.isArray(briefingRaw["focus"]) ? briefingRaw["focus"] : [])
+        .map(parseContinuityFocusItem)
+        .filter((item): item is ContinuityBriefingFocusItem => item !== null),
+      recently_completed: (Array.isArray(briefingRaw["recently_completed"]) ? briefingRaw["recently_completed"] : [])
+        .map(parseContinuityCompletedItem)
+        .filter((item): item is ContinuityBriefingCompletedItem => item !== null),
+      deadletter_preview: (Array.isArray(briefingRaw["deadletter_preview"]) ? briefingRaw["deadletter_preview"] : [])
+        .map(parseContinuityDeadletterItem)
+        .filter((item): item is ContinuityBriefingDeadletterItem => item !== null),
+    },
+    mission_status_counts: parseNumberMap(raw["mission_status_counts"]),
+    recent_missions: (Array.isArray(raw["recent_missions"]) ? raw["recent_missions"] : [])
+      .map(parseWorldStateMissionSummary)
+      .filter((item): item is WorldStateMissionSummary => item !== null),
+  };
+
+  if (!snapshot.subsystem) delete snapshot.subsystem;
+  if (!snapshot.generated_at) delete snapshot.generated_at;
+  if (!snapshot.briefing?.headline && !snapshot.briefing?.focus?.length) delete snapshot.briefing;
+  if (!snapshot.mission_status_counts || Object.keys(snapshot.mission_status_counts).length === 0) {
+    delete snapshot.mission_status_counts;
+  }
+  if (!snapshot.recent_missions?.length) delete snapshot.recent_missions;
+  if (isRecord(raw["meta"])) snapshot.meta = raw["meta"] as Record<string, unknown>;
+
+  return snapshot;
+}
+
 export type SettingsEndpoints = {
   /**
    * Each endpoint returns a *priority-ordered* list of candidate paths.
@@ -1160,6 +1343,7 @@ export type SettingsEndpoints = {
   info: () => string[];
   health: () => string[];
   worldState: () => string[];
+  continuityBriefing: () => string[];
   orbStatus: () => string[];
   operatorMode: () => string[];
   setOperatorMode: () => string[];
@@ -1180,6 +1364,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     info: () => ["/system/info", "/system/status", "/system", "/status"],
     health: () => ["/system/health", "/health", "/system/ping", "/ping"],
     worldState: () => ["/system/world_state", "/system/world-state"],
+    continuityBriefing: () => ["/continuity/briefing", "/continuity/shift_briefing", "/continuity/shift-briefing"],
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
     setOperatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
@@ -1298,6 +1483,14 @@ export class SettingsClient {
   async getWorldState(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<WorldStateSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.worldState(), this.init(opts));
     return parseWorldStateSnapshot(json);
+  }
+
+  async getContinuityBriefing(opts?: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<ContinuityBriefingSnapshot> {
+    const { json } = await this.fetchFirstOk(this.endpoints.continuityBriefing(), this.init(opts));
+    return parseContinuityBriefingSnapshot(json);
   }
 
   async getOrbStatus(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<OrbStatusSnapshot> {
