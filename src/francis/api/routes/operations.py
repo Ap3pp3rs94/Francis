@@ -18,6 +18,7 @@ from francis.agent import executor as agent_executor
 from francis.agent.delegation import DelegationRequest
 from francis.kernel.paths import data_dir
 from francis.missions import store as mission_store
+from francis.operations import runtime as operations_runtime
 from francis.workers.runner import run_workers
 
 router = APIRouter()
@@ -635,78 +636,20 @@ def get_many_operations(payload: OperationGetManyIn) -> dict[str, object]:
 @router.post("/create")
 def create_operation(payload: OperationCreateIn) -> dict[str, object]:
     try:
-        capability = _resolve_capability(payload.action, payload.capability)
-        if not capability:
-            return {
-                "ok": False,
-                "error": "unsupported_action",
-                "message": "Action could not be mapped to an allowed capability.",
-                "supported_actions": _allowed_capabilities(),
-            }
-
-        requester_id = _safe_str(payload.actor).strip() or "api"
-        objective = _safe_str(payload.objective).strip() or _safe_str(payload.reason).strip() or payload.action.strip()
-        mission_id = _safe_str(payload.mission_id).strip()
-
-        if mission_id:
-            linked_mission, mission_err = mission_store.read_mission(mission_id)
-            if not linked_mission:
-                return {"ok": False, "error": mission_err or "invalid_mission_id"}
-
-        inputs = dict(payload.input or {})
-        if payload.domain and "domain" not in inputs:
-            inputs["domain"] = payload.domain
-        if payload.idempotency_key and "idempotency_key" not in inputs:
-            inputs["idempotency_key"] = payload.idempotency_key
-        existing_meta = inputs.get("meta")
-        merged_meta = dict(existing_meta) if isinstance(existing_meta, dict) else {}
-        if payload.meta:
-            merged_meta.update(payload.meta)
-        if mission_id:
-            inputs["mission_id"] = mission_id
-            merged_meta["mission_id"] = mission_id
-        if merged_meta:
-            inputs["meta"] = merged_meta
-        else:
-            inputs.pop("meta", None)
-
-        record, err = delegation_store.create_delegation(
-            DelegationRequest(
-                requester_id=requester_id,
-                capability=capability,
-                objective=objective,
-                inputs=inputs,
-                priority=max(1, min(int(payload.priority), 9)),
-                ttl_sec=max(1, min(int(payload.ttl_sec), 7 * 24 * 3600)),
-            )
+        return operations_runtime.create_operation(
+            action=payload.action,
+            reason=payload.reason,
+            domain=payload.domain,
+            actor=payload.actor,
+            mission_id=payload.mission_id,
+            idempotency_key=payload.idempotency_key,
+            input=dict(payload.input or {}),
+            meta=dict(payload.meta or {}),
+            capability=payload.capability,
+            objective=payload.objective,
+            priority=payload.priority,
+            ttl_sec=payload.ttl_sec,
         )
-        if not record:
-            return {"ok": False, "error": err or "create_failed"}
-
-        mission_linked = True
-        mission_link_error = ""
-        if mission_id:
-            _, mission_link_err = mission_store.link_task(
-                mission_id,
-                record.task_id,
-                actor=requester_id,
-                note="operation_created",
-            )
-            if mission_link_err:
-                mission_linked = False
-                mission_link_error = mission_link_err
-
-        operation = _task_to_operation(record.to_json_dict())
-        return {
-            "ok": mission_linked,
-            "operation_id": record.task_id,
-            "status": operation.get("status", "queued"),
-            "operation": operation,
-            "message": "created" if mission_linked else "created_with_mission_link_error",
-            "mission_id": mission_id or None,
-            "mission_linked": mission_linked,
-            "mission_link_error": mission_link_error or None,
-        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -879,40 +822,7 @@ def cancel_operation(operation_id: str, payload: OperationCancelIn) -> dict[str,
 @router.post("/{operation_id}/run")
 def run_operation(operation_id: str, payload: OperationRunIn) -> dict[str, object]:
     try:
-        op_id = _safe_str(operation_id).strip()
-        if not _validate_operation_id(op_id):
-            return {"ok": False, "error": "invalid_operation_id"}
-
-        task = _load_task(op_id)
-        if not isinstance(task, dict):
-            return {"ok": False, "error": "not_found"}
-        if _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES and _result_status(task) not in _RETRYABLE_GOVERNANCE_STATUSES:
-            operation = _task_to_operation(task)
-            return {
-                "ok": _operation_request_ok(operation.get("status")),
-                "status": operation.get("status", "unknown"),
-                "operation": operation,
-                "message": "already_terminal",
-            }
-        if _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES:
-            task = _hold_retryable_governance_task(op_id, task)
-
-        worker_id = _safe_str(payload.worker_id).strip() or "api.operations"
-        if not agent_executor._try_acquire_lock(op_id, worker_id):
-            return {"ok": False, "error": "locked", "status": "running"}
-        try:
-            updated = agent_executor.execute_task(task_id=op_id, worker_id=worker_id)
-        finally:
-            agent_executor._release_lock(op_id)
-
-        if isinstance(updated, dict):
-            updated = _hold_retryable_governance_task(op_id, updated)
-        operation = _task_to_operation(updated)
-        return {
-            "ok": _operation_request_ok(operation.get("status")),
-            "status": operation.get("status", "unknown"),
-            "operation": operation,
-        }
+        return operations_runtime.run_operation(operation_id, worker_id=payload.worker_id)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 

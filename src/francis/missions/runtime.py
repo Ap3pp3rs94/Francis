@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import francis.missions.store as mission_store
+from francis.operations import runtime as operations_runtime
 
 _AUTO_ADVANCE_ACTIONS = {"create_first_operation", "run_linked_operation"}
 
@@ -41,24 +42,20 @@ def advance_mission(
     operator_hint = _safe_str(queue_item.get("operator_hint")).strip()
 
     if action == "create_first_operation":
-        from francis.api.routes import operations as operations_routes
-
-        created = operations_routes.create_operation(
-            operations_routes.OperationCreateIn(
-                action="plan.create",
-                reason=f"mission.advance:{mission_id}",
-                actor=actor,
-                mission_id=mission_id,
-                objective=record.objective,
-                input={
-                    "goal": record.objective,
-                    "constraints": {
-                        "mission_id": mission_id,
-                        "summary": record.summary,
-                        "next_step": record.next_step,
-                    },
+        created = operations_runtime.create_operation(
+            action="plan.create",
+            reason=f"mission.advance:{mission_id}",
+            actor=actor,
+            mission_id=mission_id,
+            objective=record.objective,
+            input={
+                "goal": record.objective,
+                "constraints": {
+                    "mission_id": mission_id,
+                    "summary": record.summary,
+                    "next_step": record.next_step,
                 },
-            )
+            },
         )
         operation_id = _safe_str(created.get("operation_id")).strip()
         operation_status = _safe_str(created.get("status")).strip()
@@ -89,11 +86,9 @@ def advance_mission(
         }
 
     if action == "run_linked_operation" and action_target_id:
-        from francis.api.routes import operations as operations_routes
-
-        run_result = operations_routes.run_operation(
+        run_result = operations_runtime.run_operation(
             action_target_id,
-            operations_routes.OperationRunIn(worker_id=worker_id),
+            worker_id=worker_id,
         )
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_run")
         operation_status = _safe_str(run_result.get("status")).strip()
