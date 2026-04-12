@@ -59,6 +59,8 @@ if(-not $Root){
   $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
 
+& (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $Root
+
 # -----------------------------
 # Helpers
 # -----------------------------

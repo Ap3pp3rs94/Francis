@@ -19,6 +19,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $srcPath = (Join-Path $repoRoot 'src')
 
+& (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $repoRoot
+
 # Prefer repo venv if present and working; fall back to system python.
 $venvPy = Join-Path $repoRoot '.venv\Scripts\python.exe'
 function Test-VenvPython([string]$Path) {

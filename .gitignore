@@ -202,6 +202,9 @@ $RECYCLE.BIN/
 /--------
 /FullName
 
+# Local checkout role marker (used to mark mirror-only clones)
+.francis-mirror
+
 
 # ==============================================================================
 # 6) INFRASTRUCTURE (Terraform state + local compose overrides must never commit)

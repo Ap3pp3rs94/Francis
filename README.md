@@ -17,6 +17,10 @@ cd C:\Francis
 Branch workflow and contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md)
 Canonical build and vision docs: [docs/canonical/README.md](docs/canonical/README.md)
 
+Local checkout rule: if a repo root contains `.francis-mirror`, standard runtime
+entrypoints refuse to start there. Use that marker for mirror-only copies and run
+Francis from the primary checkout instead.
+
 ### Daemon
 ```powershell
 .\scripts\francis.ps1 daemon
