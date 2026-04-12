@@ -3,6 +3,8 @@ import type { ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
+import { MissionsApiError, MissionsClient } from "./missions";
+import type { MissionDetail } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
@@ -133,6 +135,33 @@ function firstLinkedTaskId(mission: WorldStateMissionSummary | null | undefined)
 function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
   if (!record || !isRecord(record.meta)) return fallback;
   return safeString(record.meta[key], fallback);
+}
+
+function operationOutputRecord(record: OperationRecord | null | undefined): Record<string, unknown> {
+  return isRecord(record?.output) ? record.output : {};
+}
+
+function operationGovernance(record: OperationRecord | null | undefined): Record<string, unknown> {
+  const metaGovernance = record && isRecord(record.meta) && isRecord(record.meta.governance) ? record.meta.governance : null;
+  if (metaGovernance) return metaGovernance;
+  const output = operationOutputRecord(record);
+  return isRecord(output.governance) ? output.governance : {};
+}
+
+function operationApprovalId(record: OperationRecord | null | undefined): string {
+  return operationMetaString(record, "approval_id") || safeString(operationOutputRecord(record).approval_id);
+}
+
+function operationGate(record: OperationRecord | null | undefined): string {
+  return safeString(operationGovernance(record).gate).trim();
+}
+
+function operationNextStep(record: OperationRecord | null | undefined): string {
+  return safeString(operationGovernance(record).next_step).trim();
+}
+
+function operationResultMessage(record: OperationRecord | null | undefined): string {
+  return operationMetaString(record, "result_message") || safeString(operationOutputRecord(record).message).trim();
 }
 
 function statusBadgeColors(status: string): { bg: string; border: string; color: string } {
@@ -2156,6 +2185,7 @@ function SystemPanel(props: {
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
@@ -2165,8 +2195,20 @@ function SystemPanel(props: {
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
   const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
+  const [selectedMissionId, setSelectedMissionId] = useState("");
+  const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
+  const [missionDetailBusy, setMissionDetailBusy] = useState(false);
+  const [missionDetailError, setMissionDetailError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const missionError = useCallback((err: unknown): string => {
+    if (err instanceof MissionsApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Mission request failed.";
+  }, []);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -2225,6 +2267,34 @@ function SystemPanel(props: {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const loadMissionDetail = useCallback(
+    async (missionId: string) => {
+      const cleaned = missionId.trim();
+      if (!cleaned) {
+        setMissionDetail(null);
+        setMissionDetailError(null);
+        return null;
+      }
+      setMissionDetailBusy(true);
+      setMissionDetailError(null);
+      try {
+        const nextDetail = await missionsClient.get(cleaned);
+        setMissionDetail(nextDetail);
+        if (!nextDetail.ok && nextDetail.error) {
+          setMissionDetailError(nextDetail.error);
+        }
+        return nextDetail;
+      } catch (err) {
+        setMissionDetail(null);
+        setMissionDetailError(missionError(err));
+        return null;
+      } finally {
+        setMissionDetailBusy(false);
+      }
+    },
+    [missionError, missionsClient],
+  );
 
   const counts = worldState?.counts;
   const overview = worldState?.overview;
@@ -2455,6 +2525,46 @@ function SystemPanel(props: {
   const activePlanes = Array.from(
     new Set(activeTakeoverOperations.map((operation) => operationPlane(operation)).filter(Boolean)),
   ).slice(0, 3);
+  const missionSelectionCandidates = useMemo(() => {
+    const ordered: string[] = [];
+    const push = (value: unknown) => {
+      const cleaned = safeString(value).trim();
+      if (!cleaned || ordered.includes(cleaned)) return;
+      ordered.push(cleaned);
+    };
+
+    shiftBriefingFocus.forEach((item) => push(item.id));
+    missionQueue.forEach((item) => push(item.id));
+    recentDeclaredMissions.forEach((mission) => push(mission.id));
+    shiftBriefingCompleted.forEach((item) => push(item.id));
+    shiftBriefingDeadletter.forEach((item) => push(item.id));
+    if (leadMission) push(leadMission.id);
+    return ordered;
+  }, [leadMission, missionQueue, recentDeclaredMissions, shiftBriefingCompleted, shiftBriefingDeadletter, shiftBriefingFocus]);
+  const missionSelectionKey = missionSelectionCandidates.join("|");
+  const selectedMission = missionDetail?.mission;
+  const selectedMissionMeta = isRecord(selectedMission?.meta) ? selectedMission.meta : {};
+  const missionLinkedOperations = missionDetail?.linked_operations ?? [];
+  const missionRunLedger = missionDetail?.run_ledger ?? [];
+  const missionHistory = missionDetail?.history ?? [];
+  const selectedMissionLatestTaskId =
+    selectedMission?.linked_task_ids?.find((taskId) => safeString(taskId).trim().length > 0) ?? "";
+  const inspectMission = useCallback((missionId: string) => {
+    const cleaned = missionId.trim();
+    if (!cleaned) return;
+    setSelectedMissionId(cleaned);
+  }, []);
+
+  useEffect(() => {
+    setSelectedMissionId((prev) => {
+      if (prev && missionSelectionCandidates.includes(prev)) return prev;
+      return missionSelectionCandidates[0] ?? "";
+    });
+  }, [missionSelectionKey, missionSelectionCandidates]);
+
+  useEffect(() => {
+    void loadMissionDetail(selectedMissionId);
+  }, [loadMissionDetail, selectedMissionId]);
   const remainingTakeoverItems = [
     { label: "Queued", value: queuedTasks, tone: queuedTasks > 0 ? "queued" : "clear" },
     { label: "Blocked", value: blockedTasks, tone: blockedTasks > 0 ? "blocked" : "clear" },
@@ -2680,13 +2790,16 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
-                  {targetOperationId ? (
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                      Inspect mission flow
+                    </button>
+                    {targetOperationId ? (
                       <button style={buttonStyle} onClick={() => props.onOpenOperation(targetOperationId)}>
                         Open linked task
                       </button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               );
             })
@@ -2721,6 +2834,11 @@ function SystemPanel(props: {
                           action <code>{item.last_advance_action}</code>
                         </div>
                       ) : null}
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                        <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                          Inspect
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -2743,6 +2861,11 @@ function SystemPanel(props: {
                       </div>
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                        <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                          Inspect
+                        </button>
                       </div>
                     </div>
                   ))
@@ -3047,6 +3170,241 @@ function SystemPanel(props: {
 
         <div style={{ fontSize: 12, color: controlTone.color, marginTop: 10 }}>{controlModeGuidance}</div>
 
+        <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Mission Flow Inspector</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                Linked operations and ledger entries for the selected mission. This keeps continuity, governance, and execution reachable from the active ORB surface.
+              </div>
+            </div>
+            {selectedMission ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <span style={badgeStyle(selectedMission.status || "unknown")}>{selectedMission.status || "unknown"}</span>
+                <span style={badgeStyle(selectedMission.risk_tier || "unknown")}>{selectedMission.risk_tier || "unknown"}</span>
+              </div>
+            ) : null}
+          </div>
+
+          {!selectedMissionId ? (
+            <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>
+              No declared mission is selected yet. Use any mission card in the shift briefing or mission feed to inspect its governed flow.
+            </div>
+          ) : missionDetailBusy && !selectedMission ? (
+            <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>Loading mission detail.</div>
+          ) : missionDetailError ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 10,
+                borderRadius: 10,
+                border: `1px solid ${THEME.errorBorder}`,
+                background: THEME.errorBg,
+                fontSize: 12,
+                color: "#ffaaaa",
+              }}
+            >
+              <b>Error:</b> {missionDetailError}
+            </div>
+          ) : selectedMission ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{selectedMission.objective || selectedMission.id}</div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    <code>{selectedMission.id}</code>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span style={badgeStyle(`priority-${String(selectedMission.priority ?? 0)}`)}>priority {selectedMission.priority ?? 0}</span>
+                  <span style={badgeStyle(operationMetaString(missionLinkedOperations[0]?.operation ?? null, "orb_plane") || "mission")}>
+                    {operationMetaString(missionLinkedOperations[0]?.operation ?? null, "orb_plane") || "mission"}
+                  </span>
+                </div>
+              </div>
+
+              {selectedMission.summary ? <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>{selectedMission.summary}</div> : null}
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                next_step=<code>{selectedMission.next_step || "unset"}</code>
+                {safeString(selectedMissionMeta.last_task_status).trim() ? (
+                  <>
+                    {" / "}latest_run=<code>{safeString(selectedMissionMeta.last_task_status).trim()}</code>
+                  </>
+                ) : null}
+                {safeString(selectedMissionMeta.last_task_result_status).trim() ? (
+                  <>
+                    {" / "}result=<code>{safeString(selectedMissionMeta.last_task_result_status).trim()}</code>
+                  </>
+                ) : null}
+                {safeString(selectedMissionMeta.last_task_gate).trim() ? (
+                  <>
+                    {" / "}gate=<code>{safeString(selectedMissionMeta.last_task_gate).trim()}</code>
+                  </>
+                ) : null}
+              </div>
+              {safeString(selectedMissionMeta.last_task_reason).trim() ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{safeString(selectedMissionMeta.last_task_reason).trim()}</div>
+              ) : null}
+              {selectedMission.deadletter_reason ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{selectedMission.deadletter_reason}</div>
+              ) : null}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <button style={buttonStyle} onClick={() => void loadMissionDetail(selectedMission.id)} disabled={missionDetailBusy}>
+                  {missionDetailBusy ? "Refreshing." : "Refresh mission flow"}
+                </button>
+                {selectedMissionLatestTaskId ? (
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionLatestTaskId)}>
+                    Open latest task
+                  </button>
+                ) : null}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8, marginTop: 12 }}>
+                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#101010" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>Linked Operations</div>
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {missionLinkedOperations.length === 0 ? (
+                      <div style={{ fontSize: 11, color: THEME.muted }}>No linked operations recorded for this mission yet.</div>
+                    ) : (
+                      missionLinkedOperations.slice(0, 4).map((detailItem) => {
+                        const operation = detailItem.operation;
+                        const approvalId = operationApprovalId(operation);
+                        const gate = operationGate(operation);
+                        const nextStep = operationNextStep(operation);
+                        return (
+                          <div
+                            key={`mission-op-${operation.id}`}
+                            style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                              <div style={{ fontSize: 11, fontWeight: 600 }}>
+                                {operationMetaString(operation, "objective") || operation.name || operation.id}
+                              </div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <span style={badgeStyle(operation.status || "unknown")}>{operation.status || "unknown"}</span>
+                                {operationMetaString(operation, "orb_plane") ? (
+                                  <span style={badgeStyle(operationMetaString(operation, "orb_plane"))}>
+                                    {operationMetaString(operation, "orb_plane")}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                              <code>{operation.id}</code>
+                            </div>
+                            {operationResultMessage(operation) ? (
+                              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{operationResultMessage(operation)}</div>
+                            ) : null}
+                            {gate ? (
+                              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                                gate <code>{gate}</code>
+                                {nextStep ? (
+                                  <>
+                                    {" / "}next <code>{nextStep}</code>
+                                  </>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                              {approvalId ? (
+                                <button style={buttonStyle} onClick={() => props.onOpenApprovals(approvalId)}>
+                                  Review approval
+                                </button>
+                              ) : null}
+                              <button style={buttonStyle} onClick={() => props.onOpenOperation(operation.id)}>
+                                Open task
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#101010" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>Run Ledger</div>
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {missionRunLedger.length === 0 ? (
+                      <div style={{ fontSize: 11, color: THEME.muted }}>No ledger entries are recorded for this mission yet.</div>
+                    ) : (
+                      missionRunLedger.slice(0, 6).map((entry) => (
+                        <div
+                          key={`mission-ledger-${entry.id}`}
+                          style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.name || entry.id}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              {entry.status ? <span style={badgeStyle(entry.status)}>{entry.status}</span> : null}
+                              <span style={{ fontSize: 11, color: THEME.muted }}>{toLocaleTime(entry.ts)}</span>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            operation=<code>{operationMetaString(entry, "operation_name") || operationMetaString(entry, "operation_id") || "unknown"}</code>
+                            {operationMetaString(entry, "operation_status") ? (
+                              <>
+                                {" / "}status=<code>{operationMetaString(entry, "operation_status")}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          {operationGate(entry) ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                              gate <code>{operationGate(entry)}</code>
+                              {operationNextStep(entry) ? (
+                                <>
+                                  {" / "}next <code>{operationNextStep(entry)}</code>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {safeString(entry.message).trim() ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{safeString(entry.message).trim()}</div>
+                          ) : null}
+                          {operationMetaString(entry, "operation_id") ? (
+                            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                              <button style={buttonStyle} onClick={() => props.onOpenOperation(operationMetaString(entry, "operation_id"))}>
+                                Open task
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {missionHistory.length > 0 ? (
+                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#101010", marginTop: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>Mission History</div>
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {missionHistory.slice(0, 5).map((entry, index) => (
+                      <div
+                        key={`mission-history-${entry.ts || "unknown"}-${entry.event || index}`}
+                        style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.event || "event"}</div>
+                          <div style={{ fontSize: 11, color: THEME.muted }}>{entry.ts || "unknown time"}</div>
+                        </div>
+                        {entry.details && Object.keys(entry.details).length > 0 ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{prettyData(entry.details)}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>
+              Mission detail is not available for the selected mission yet.
+            </div>
+          )}
+        </div>
+
         {missionQueue.length > 0 ? (
           <>
             <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Mission Queue</div>
@@ -3072,13 +3430,16 @@ function SystemPanel(props: {
                       priority=<code>{String(item.priority ?? 0)}</code>
                       {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
                     </div>
-                    {queueTargetId ? (
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                        Inspect mission flow
+                      </button>
+                      {queueTargetId ? (
                         <button style={buttonStyle} onClick={() => props.onOpenOperation(queueTargetId)}>
                           Open linked task
                         </button>
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}
@@ -3144,6 +3505,11 @@ function SystemPanel(props: {
                   <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                     {item.deadletter_reason || item.operator_hint || "Mission has been deadlettered."}
                   </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                    <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                      Inspect mission flow
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -3195,13 +3561,16 @@ function SystemPanel(props: {
                   {mission.deadletter_reason ? (
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.deadletter_reason}</div>
                   ) : null}
-                  {linkedTaskId ? (
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <button style={buttonStyle} onClick={() => inspectMission(mission.id)}>
+                      Inspect mission flow
+                    </button>
+                    {linkedTaskId ? (
                       <button style={buttonStyle} onClick={() => props.onOpenOperation(linkedTaskId)}>
                         Open linked task
                       </button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               );
             })

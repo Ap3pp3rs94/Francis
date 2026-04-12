@@ -455,7 +455,7 @@ async function fetchBlob(url: string, init?: TimeoutFetchInit): Promise<Blob> {
 
 /* ----------------------------- parsing (defensive) ----------------------------- */
 
-function parseOperationRecord(raw: unknown): OperationRecord | null {
+export function parseOperationRecord(raw: unknown): OperationRecord | null {
   if (!isRecord(raw)) return null;
 
   // id aliases
@@ -618,7 +618,7 @@ function parseOperationListResponse(json: unknown, params?: OperationListParams)
   };
 }
 
-function parseOperationDetail(json: unknown, idHint: string): OperationDetail | null {
+export function parseOperationDetail(json: unknown, idHint: string): OperationDetail | null {
   // Some backends return { operation: {...}, logs: [...] }
   if (isRecord(json)) {
     const opRaw = isRecord(json.operation) ? json.operation : isRecord(json.item) ? json.item : json;
