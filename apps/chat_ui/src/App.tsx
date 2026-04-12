@@ -170,14 +170,26 @@ function operationTraceId(record: OperationRecord | null | undefined): string {
 
 function statusBadgeColors(status: string): { bg: string; border: string; color: string } {
   const normalized = safeString(status).trim().toLowerCase();
-  if (["ready", "ok", "approved", "completed", "succeeded"].includes(normalized)) {
+  if (["ready", "ok", "approved", "completed", "succeeded", "healthy", "live"].includes(normalized)) {
     return { bg: "#102417", border: "#244d31", color: "#9de2ad" };
   }
-  if (["running", "pending", "accepted", "queued", "needs_approval"].includes(normalized)) {
+  if (["running", "pending", "accepted", "queued", "needs_approval", "attention", "stale"].includes(normalized)) {
     return { bg: "#1f1a0b", border: "#5a4c18", color: "#f4d27a" };
   }
   if (
-    ["blocked", "denied", "failed", "rejected", "cancelled", "canceled", "missing", "error", "degraded", "disabled"].includes(
+    [
+      "blocked",
+      "denied",
+      "failed",
+      "rejected",
+      "cancelled",
+      "canceled",
+      "missing",
+      "error",
+      "degraded",
+      "disabled",
+      "unavailable",
+    ].includes(
       normalized,
     )
   ) {
@@ -508,6 +520,51 @@ function describeContinuation(mode: OperatorModeSnapshot | null): ContinuationPo
     label: "Ready",
     tone: "ready",
     detail: "No governed backlog is currently visible. Francis is ready for the next operator request.",
+  };
+}
+
+type FeedFreshnessState = "live" | "stale" | "degraded" | "unavailable";
+
+function nowUnixSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function formatAgeLabel(ageSeconds: number): string {
+  const age = Math.max(0, Math.floor(ageSeconds));
+  if (age < 60) return `${age}s old`;
+  if (age < 3600) return `${Math.floor(age / 60)}m old`;
+  if (age < 86_400) return `${Math.floor(age / 3600)}h old`;
+  return `${Math.floor(age / 86_400)}d old`;
+}
+
+function deriveFeedFreshness(
+  observedAt: number | null | undefined,
+  nowTs: number,
+  opts?: { error?: string | null; staleAfterSeconds?: number },
+): { state: FeedFreshnessState; ageLabel: string } {
+  if (!observedAt) {
+    return {
+      state: "unavailable",
+      ageLabel: "No snapshot",
+    };
+  }
+
+  const ageSeconds = Math.max(0, nowTs - observedAt);
+  if (opts?.error) {
+    return {
+      state: "degraded",
+      ageLabel: formatAgeLabel(ageSeconds),
+    };
+  }
+  if (ageSeconds > safeNumber(opts?.staleAfterSeconds, 180)) {
+    return {
+      state: "stale",
+      ageLabel: formatAgeLabel(ageSeconds),
+    };
+  }
+  return {
+    state: "live",
+    ageLabel: formatAgeLabel(ageSeconds),
   };
 }
 
@@ -2192,13 +2249,18 @@ function SystemPanel(props: {
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
+  const [infoError, setInfoError] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
   const [worldState, setWorldState] = useState<WorldStateSnapshot | null>(null);
+  const [worldStateError, setWorldStateError] = useState<string | null>(null);
   const [continuityBriefing, setContinuityBriefing] = useState<ContinuityBriefingSnapshot | null>(null);
   const [continuityBriefingError, setContinuityBriefingError] = useState<string | null>(null);
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
+  const [orbStatusError, setOrbStatusError] = useState<string | null>(null);
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
   const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
+  const [takeoverOperationsLoadedAt, setTakeoverOperationsLoadedAt] = useState<number | null>(null);
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
@@ -2207,7 +2269,27 @@ function SystemPanel(props: {
   const [missionActionOperationId, setMissionActionOperationId] = useState("");
   const [missionActionNotice, setMissionActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefreshAttemptedAt, setLastRefreshAttemptedAt] = useState<number | null>(null);
+  const [lastRefreshCompletedAt, setLastRefreshCompletedAt] = useState<number | null>(null);
+  const [nowTs, setNowTs] = useState(() => nowUnixSeconds());
+
+  const settingsError = useCallback((err: unknown, fallback = "Request failed."): string => {
+    if (err instanceof SettingsApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return fallback;
+  }, []);
+
+  const operationsError = useCallback((err: unknown): string => {
+    if (err instanceof OperationsApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Operations request failed.";
+  }, []);
 
   const missionError = useCallback((err: unknown): string => {
     if (err instanceof MissionsApiError) {
@@ -2218,62 +2300,93 @@ function SystemPanel(props: {
   }, []);
 
   const refresh = useCallback(async () => {
+    const refreshStartedAt = nowUnixSeconds();
+    setLastRefreshAttemptedAt(refreshStartedAt);
     setBusy(true);
+    setRefreshNotice(null);
     setError(null);
     try {
-      setTakeoverOperationsError(null);
-      let nextContinuityBriefingError: string | null = null;
-      const [nextInfo, nextHealth, nextWorldState, nextContinuityBriefing, nextOrbStatus] = await Promise.all([
+      const [nextInfo, nextHealth, nextWorldState, nextContinuityBriefing, nextOrbStatus, nextOperations] = await Promise.allSettled([
         client.getSystemInfo(),
         client.getHealth(),
         client.getWorldState(),
-        client.getContinuityBriefing().catch((err) => {
-          nextContinuityBriefingError =
-            err instanceof SettingsApiError
-              ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
-              : err instanceof Error
-                ? err.message
-                : "Continuity briefing request failed.";
-          return null;
-        }),
+        client.getContinuityBriefing(),
         client.getOrbStatus(),
+        operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
       ]);
-      const nextOperations = await operationsClient
-        .list({ limit: 16 })
-        .then((response) => response.items ?? [])
-        .catch((err) => {
-          const msg =
-            err instanceof OperationsApiError
-              ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
-              : err instanceof Error
-                ? err.message
-                : "Operations request failed.";
-          setTakeoverOperationsError(msg);
-          return [] as OperationRecord[];
-        });
-      setInfo(nextInfo);
-      setHealth(nextHealth);
-      setWorldState(nextWorldState);
-      setContinuityBriefing(nextContinuityBriefing);
-      setContinuityBriefingError(nextContinuityBriefingError);
-      setOrbStatus(nextOrbStatus);
-      setTakeoverOperations(nextOperations);
+
+      const degradedFeeds: string[] = [];
+
+      if (nextInfo.status === "fulfilled") {
+        setInfo(nextInfo.value);
+        setInfoError(null);
+      } else {
+        setInfoError(settingsError(nextInfo.reason, "System info request failed."));
+        degradedFeeds.push("system info");
+      }
+
+      if (nextHealth.status === "fulfilled") {
+        setHealth(nextHealth.value);
+        setHealthError(null);
+      } else {
+        setHealthError(settingsError(nextHealth.reason, "Health request failed."));
+        degradedFeeds.push("health");
+      }
+
+      if (nextWorldState.status === "fulfilled") {
+        setWorldState(nextWorldState.value);
+        setWorldStateError(null);
+      } else {
+        setWorldStateError(settingsError(nextWorldState.reason, "World-state request failed."));
+        degradedFeeds.push("world state");
+      }
+
+      if (nextContinuityBriefing.status === "fulfilled") {
+        setContinuityBriefing(nextContinuityBriefing.value);
+        setContinuityBriefingError(null);
+      } else {
+        setContinuityBriefingError(settingsError(nextContinuityBriefing.reason, "Continuity briefing request failed."));
+        degradedFeeds.push("continuity briefing");
+      }
+
+      if (nextOrbStatus.status === "fulfilled") {
+        setOrbStatus(nextOrbStatus.value);
+        setOrbStatusError(null);
+      } else {
+        setOrbStatusError(settingsError(nextOrbStatus.reason, "ORB status request failed."));
+        degradedFeeds.push("orb status");
+      }
+
+      if (nextOperations.status === "fulfilled") {
+        setTakeoverOperations(nextOperations.value);
+        setTakeoverOperationsError(null);
+        setTakeoverOperationsLoadedAt(refreshStartedAt);
+      } else {
+        setTakeoverOperationsError(operationsError(nextOperations.reason));
+        degradedFeeds.push("live operations");
+      }
+
+      if (degradedFeeds.length > 0) {
+        setRefreshNotice(`Refresh completed with degraded feeds: ${degradedFeeds.join(", ")}.`);
+      }
     } catch (err) {
-      const msg =
-        err instanceof SettingsApiError
-          ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
-          : err instanceof Error
-            ? err.message
-            : "Request failed.";
-      setError(msg);
+      setError(settingsError(err));
     } finally {
+      setLastRefreshCompletedAt(nowUnixSeconds());
       setBusy(false);
     }
-  }, [client, operationsClient]);
+  }, [client, operationsClient, operationsError, settingsError]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNowTs(nowUnixSeconds());
+    }, 15_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const loadMissionDetail = useCallback(
     async (missionId: string) => {
@@ -2682,6 +2795,69 @@ function SystemPanel(props: {
         : pilotActive
           ? "No live run is active. Review recent outcomes, then return to Assist when you want Francis back in collaborative posture."
           : "Declare Pilot only when you want Francis in delegated execution. Until then, this surface stays advisory.";
+  const freshnessItems = [
+    {
+      id: "health",
+      label: "Health",
+      observedAt: health?.ts,
+      error: healthError,
+      staleAfterSeconds: 90,
+      detail: healthError
+        ? `Runtime heartbeat is degraded: ${healthError}`
+        : `Service reports ${safeString(health?.status, health?.ok ? "ok" : "attention") || "unknown"}.`,
+    },
+    {
+      id: "world-state",
+      label: "World State",
+      observedAt: worldState?.generated_at,
+      error: worldStateError,
+      staleAfterSeconds: 180,
+      detail: worldStateError
+        ? `Showing the last retained local snapshot while refresh is failing: ${worldStateError}`
+        : `${counts?.tasks ?? 0} tasks and ${declaredMissionCount} missions are visible in the local state snapshot.`,
+    },
+    {
+      id: "continuity",
+      label: "Continuity",
+      observedAt: continuityBriefing?.generated_at,
+      error: continuityBriefingError,
+      staleAfterSeconds: 240,
+      detail: continuityBriefingError
+        ? `Continuity briefing refresh failed: ${continuityBriefingError}`
+        : safeString(shiftBriefing?.headline).trim() || "Shift briefing is available for return-to-work continuity.",
+    },
+    {
+      id: "orb-status",
+      label: "ORB Model",
+      observedAt: orbStatus?.generated_at,
+      error: orbStatusError,
+      staleAfterSeconds: 300,
+      detail: orbStatusError
+        ? `ORB model status could not refresh: ${orbStatusError}`
+        : `${coreLoop.length} core loop planes and ${gateStack.length} governance gates are exposed in this snapshot.`,
+    },
+    {
+      id: "operations",
+      label: "Live Operations",
+      observedAt: takeoverOperationsLoadedAt,
+      error: takeoverOperationsError,
+      staleAfterSeconds: 120,
+      detail: takeoverOperationsError
+        ? `Showing the last retained execution feed while refresh is failing: ${takeoverOperationsError}`
+        : `${takeoverOperations.length} recent operation${takeoverOperations.length === 1 ? "" : "s"} are cached from the execution feed.`,
+    },
+  ].map((item) => ({
+    ...item,
+    ...deriveFeedFreshness(item.observedAt, nowTs, {
+      error: item.error,
+      staleAfterSeconds: item.staleAfterSeconds,
+    }),
+  }));
+  const degradedFreshnessItems = freshnessItems.filter((item) => item.state !== "live");
+  const freshnessGuidance =
+    degradedFreshnessItems.length > 0
+      ? "Refresh stale or degraded feeds before approving, rerouting, or judging continuity state."
+      : "All ORB feeds are fresh enough for operator review.";
 
   return (
     <section style={panelStyle}>
@@ -2718,6 +2894,64 @@ function SystemPanel(props: {
           <b>Error:</b> {error}
         </div>
       ) : null}
+
+      {refreshNotice ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #5a4c18",
+            background: "#1f1a0b",
+            fontSize: 12,
+            color: "#f4d27a",
+          }}
+        >
+          <b>Refresh:</b> {refreshNotice}
+        </div>
+      ) : null}
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Snapshot Freshness</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{freshnessGuidance}</div>
+          </div>
+          <div style={{ fontSize: 11, color: THEME.muted, textAlign: "right" }}>
+            <div>{lastRefreshCompletedAt ? `Settled ${toLocaleTime(lastRefreshCompletedAt)}` : "Refresh not completed yet"}</div>
+            <div>{lastRefreshAttemptedAt ? `Requested ${toLocaleTime(lastRefreshAttemptedAt)}` : "No refresh attempt recorded"}</div>
+          </div>
+        </div>
+
+        {infoError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            System info is degraded: {infoError}
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          {freshnessItems.map((item) => (
+            <div key={item.id} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{item.label}</div>
+                <span style={badgeStyle(item.state)}>{item.state}</span>
+              </div>
+              <div style={{ fontSize: 12, marginTop: 8 }}>{item.ageLabel}</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                {item.observedAt ? `Observed ${toLocaleTime(item.observedAt)}` : "No successful snapshot recorded yet."}
+              </div>
+              <div style={{ fontSize: 11, color: item.error ? "#ffcf9d" : THEME.muted, marginTop: 6 }}>{item.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
         <div style={summaryCardStyle()}>
