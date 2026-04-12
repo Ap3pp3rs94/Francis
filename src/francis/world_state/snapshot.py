@@ -11,6 +11,7 @@ from francis.kernel.paths import data_dir, repo_root
 from francis.kernel.services import services_status
 from francis.kernel.stack import stack_status
 from francis.missions import store as mission_store
+from francis.operations import runtime as operations_runtime
 from francis.trust.levels import get_state
 
 
@@ -250,6 +251,128 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
     }
 
 
+def _activity_sort_key(item: dict[str, Any]) -> tuple[float, int, str]:
+    return (
+        float(item.get("ts") or 0.0),
+        int(item.get("_seq") or 0),
+        str(item.get("operation_id") or ""),
+    )
+
+
+def _operation_latest_activity(
+    operation_id: str,
+    *,
+    log_limit: int = 20,
+    cache: dict[str, dict[str, Any] | None] | None = None,
+) -> dict[str, Any]:
+    op_id = str(operation_id or "").strip()
+    if not op_id:
+        return {}
+    if cache is not None and op_id in cache:
+        cached = cache.get(op_id) or {}
+        return dict(cached) if isinstance(cached, dict) else {}
+
+    detail = operations_runtime.get_operation_detail(op_id, include_logs=True, log_limit=log_limit)
+    if not bool(detail.get("ok")):
+        if cache is not None:
+            cache[op_id] = None
+        return {}
+
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    logs = detail.get("logs") if isinstance(detail.get("logs"), list) else []
+    latest: dict[str, Any] = {}
+
+    for seq, log in enumerate(logs):
+        if not isinstance(log, dict):
+            continue
+        meta = log.get("meta") if isinstance(log.get("meta"), dict) else {}
+        candidate = {
+            "source": "run_ledger",
+            "operation_id": op_id,
+            "operation_name": str(operation.get("name") or "").strip(),
+            "operation_status": str(operation.get("status") or "").strip(),
+            "id": str(log.get("id") or "").strip(),
+            "kind": str(log.get("kind") or "").strip(),
+            "name": str(log.get("name") or "").strip(),
+            "status": str(log.get("status") or "").strip(),
+            "level": str(log.get("level") or "").strip(),
+            "ts": int(log.get("ts") or 0),
+            "reason": str(meta.get("reason") or "").strip(),
+            "gate": str(meta.get("gate") or "").strip(),
+            "next_step": str(meta.get("next_step") or "").strip(),
+            "_seq": seq,
+        }
+        if not latest or _activity_sort_key(candidate) > _activity_sort_key(latest):
+            latest = candidate
+
+    if not latest and operation:
+        op_meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+        latest = {
+            "source": "operation_state",
+            "operation_id": op_id,
+            "operation_name": str(operation.get("name") or "").strip(),
+            "operation_status": str(operation.get("status") or "").strip(),
+            "id": f"{op_id}:state",
+            "kind": str(operation.get("kind") or "").strip() or "delegated_task",
+            "name": "operation_state",
+            "status": str(operation.get("status") or "").strip(),
+            "level": str(operation.get("level") or "").strip() or "info",
+            "ts": int(operation.get("ts") or 0),
+            "reason": str(operation.get("error") or op_meta.get("result_message") or "").strip(),
+            "gate": "",
+            "next_step": "",
+            "_seq": -1,
+        }
+
+    if latest:
+        latest.pop("_seq", None)
+    if cache is not None:
+        cache[op_id] = dict(latest) if latest else None
+    return dict(latest) if latest else {}
+
+
+def _mission_operation_ids(item: dict[str, Any]) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    linked_task_ids = item.get("linked_task_ids")
+    if isinstance(linked_task_ids, list):
+        for task_id in linked_task_ids:
+            value = str(task_id or "").strip()
+            if value and value not in seen:
+                seen.add(value)
+                candidates.append(value)
+
+    for field in ("last_task_id", "last_advance_operation_id", "action_target_id"):
+        value = str(item.get(field) or "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            candidates.append(value)
+
+    return candidates
+
+
+def _attach_mission_activity(
+    items: list[dict[str, Any]],
+    *,
+    log_limit: int = 20,
+    cache: dict[str, dict[str, Any] | None] | None = None,
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        latest: dict[str, Any] = {}
+        for operation_id in _mission_operation_ids(item):
+            activity = _operation_latest_activity(operation_id, log_limit=log_limit, cache=cache)
+            if activity and (not latest or _activity_sort_key(activity) > _activity_sort_key(latest)):
+                latest = activity
+        enriched_item = dict(item)
+        enriched_item["latest_activity"] = latest
+        enriched.append(enriched_item)
+    return enriched
+
+
 def _mission_briefing(
     mission_status_counts: dict[str, Any],
     mission_queue: list[dict[str, Any]],
@@ -308,6 +431,9 @@ def _mission_briefing(
                 "last_advance_at": str(item.get("last_advance_at") or "").strip(),
                 "deadletter_reason": str(item.get("deadletter_reason") or "").strip(),
                 "updated_at": str(item.get("updated_at") or "").strip(),
+                "latest_activity": dict(item.get("latest_activity") or {})
+                if isinstance(item.get("latest_activity"), dict)
+                else {},
             }
         )
 
@@ -325,6 +451,9 @@ def _mission_briefing(
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
+                "latest_activity": dict(item.get("latest_activity") or {})
+                if isinstance(item.get("latest_activity"), dict)
+                else {},
             }
         )
         if len(recently_completed) >= 2:
@@ -604,6 +733,9 @@ def snapshot() -> dict[str, Any]:
     recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
     mission_queue = mission_store.mission_queue_items(limit=5, include_terminal=False)
     deadletter_missions = mission_store.deadletter_queue_items(limit=5)
+    activity_cache: dict[str, dict[str, Any] | None] = {}
+    recent_missions = _attach_mission_activity(recent_missions, log_limit=20, cache=activity_cache)
+    mission_queue = _attach_mission_activity(mission_queue, log_limit=20, cache=activity_cache)
     mission_briefing = _mission_briefing(
         mission_status_counts,
         mission_queue,

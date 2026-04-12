@@ -209,6 +209,11 @@ def test_system_world_state_reports_mission_counts_and_continuity(monkeypatch, t
     assert body["overview"]["recent_missions"][0]["last_task_id"] == operation_id
     assert body["overview"]["recent_missions"][0]["last_task_status"] == "completed"
     assert body["overview"]["recent_missions"][0]["last_task_result_status"] == ""
+    latest_activity = body["overview"]["recent_missions"][0]["latest_activity"]
+    assert latest_activity["source"] == "run_ledger"
+    assert latest_activity["operation_id"] == operation_id
+    assert latest_activity["name"] == "status_updated"
+    assert latest_activity["status"] == "succeeded"
 
 
 def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkeypatch, tmp_path: Path) -> None:
@@ -307,8 +312,13 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert queue_items
     assert queue_items[0]["id"] == blocked_id
     assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert queue_items[0]["latest_activity"]["source"] == "run_ledger"
+    assert queue_items[0]["latest_activity"]["name"] == "governance_hold"
+    assert queue_items[0]["latest_activity"]["status"] == "blocked"
+    assert queue_items[0]["latest_activity"]["gate"] == "trust_gate"
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "create_first_operation"
+    assert ready_item["latest_activity"] == {}
     deadletter_items = body["overview"]["deadletter_missions"]
     assert deadletter_items
     assert deadletter_items[0]["id"] == dead_id
@@ -444,20 +454,29 @@ def test_system_world_state_projects_mission_briefing_and_advance_receipts(monke
     assert focus[0]["id"] == blocked_id
     assert focus[0]["recommended_action"] == "raise_trust_or_reduce_risk"
     assert focus[0]["last_advance_outcome"] == "requires_operator"
+    assert focus[0]["latest_activity"]["name"] == "governance_hold"
+    assert focus[0]["latest_activity"]["status"] == "blocked"
     queued_focus = next(item for item in focus if item["id"] == queued_id)
     assert queued_focus["recommended_action"] == "run_linked_operation"
     assert queued_focus["last_advance_action"] == "create_first_operation"
     assert queued_focus["last_advance_applied"] is True
+    assert queued_focus["latest_activity"]["source"] == "run_ledger"
+    assert queued_focus["latest_activity"]["name"] == "created"
+    assert queued_focus["latest_activity"]["status"] == "queued"
 
     recent_completed = briefing["recently_completed"]
     assert recent_completed
     assert recent_completed[0]["id"] == completed_id
     assert recent_completed[0]["last_advance_action"] == "run_linked_operation"
     assert recent_completed[0]["last_advance_outcome"] == "succeeded"
+    assert recent_completed[0]["latest_activity"]["source"] == "run_ledger"
+    assert recent_completed[0]["latest_activity"]["status"] == "succeeded"
 
     completed_recent = next(item for item in body["overview"]["recent_missions"] if item["id"] == completed_id)
     assert completed_recent["last_advance_action"] == "run_linked_operation"
     assert completed_recent["last_advance_outcome"] == "succeeded"
+    assert completed_recent["latest_activity"]["source"] == "run_ledger"
+    assert completed_recent["latest_activity"]["status"] == "succeeded"
 
 
 def test_system_orb_status_reports_core_loop_and_gates(monkeypatch, tmp_path: Path) -> None:

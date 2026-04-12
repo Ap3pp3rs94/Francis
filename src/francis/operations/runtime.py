@@ -330,7 +330,9 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
     details = event.get("details") if isinstance(event.get("details"), dict) else {}
     status = "unknown"
     level = "info"
-    if event_name == "status_updated":
+    if event_name == "created":
+        status = _to_operation_status(details.get("status"))
+    elif event_name == "status_updated":
         status = _to_operation_status(details.get("to"))
         if status in {"failed", "blocked"}:
             level = "error"
