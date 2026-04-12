@@ -1,0 +1,287 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+def _write_dev_environment(repo_root: Path) -> None:
+    env_root = repo_root / "config" / "environments"
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+
+def _write_orb_meta(repo_root: Path) -> None:
+    meta_root = repo_root / "meta"
+    meta_root.mkdir(parents=True, exist_ok=True)
+    (meta_root / "plane_map.yaml").write_text(
+        """
+meta:
+  model_id: francis.plane_map
+  version: 1
+planes:
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: Capture operator intent
+    side_effects_allowed: false
+    default_risk_class: low
+  - id: P4_COGNITION
+    name: Cognition
+    category: cognition
+    purpose: Produce plans
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P3_GOVERNANCE
+    name: Governance
+    category: governance
+    purpose: Evaluate policy gates
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P2_IDENTITY
+    name: Identity
+    category: security
+    purpose: Validate scopes
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P7_EXECUTION
+    name: Execution
+    category: execution
+    purpose: Perform side effects
+    side_effects_allowed: true
+    default_risk_class: critical
+  - id: P9_OBSERVABILITY
+    name: Observability
+    category: observability
+    purpose: Emit audit traces
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P8_MEMORY
+    name: Memory
+    category: memory
+    purpose: Preserve continuity
+    side_effects_allowed: false
+    default_risk_class: medium
+transitions:
+  - from: P1_INTERFACE
+    to: P4_COGNITION
+    reason: Operator intent enters planning
+    conditions:
+      - input_received
+  - from: P4_COGNITION
+    to: P3_GOVERNANCE
+    reason: Planned work enters policy evaluation
+    conditions:
+      - plan_ready
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: Execution must not bypass cognition and governance
+    conditions:
+      - governance_missing
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "action_taxonomy.yaml").write_text(
+        """
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 1
+controls:
+  - id: permission_gate
+    description: Validate identity and scopes
+  - id: trust_gate
+    description: Check trust thresholds
+  - id: approvals_gate
+    description: Require approval when policy demands it
+  - id: audit_log
+    description: Emit an auditable trail
+""".strip(),
+        encoding="utf-8",
+    )
+
+
+def _write_repo_scaffold(repo_root: Path) -> None:
+    (repo_root / "src" / "francis").mkdir(parents=True, exist_ok=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname='francis-test'\nversion='0.0.0'\n", encoding="utf-8")
+    _write_dev_environment(repo_root)
+    _write_orb_meta(repo_root)
+
+
+def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["ok"] is True
+    assert body["subsystem"] == "continuity_briefing"
+    assert body["briefing"]["headline"] == "No mission backlog is currently active."
+    assert body["briefing"]["focus"] == []
+    assert body["recent_missions"] == []
+    assert body["operator"]["available"] is True
+    assert body["operator"]["control_mode"]["id"] == "assist"
+    assert body["operator"]["focus"]["plane_id"] == "P1_INTERFACE"
+    assert body["orb"]["available"] is True
+    assert body["orb"]["state"]["mode"]["id"] == "assist"
+    assert body["orb"]["state"]["render_state"] == "ambient_rest"
+    assert body["orb"]["state"]["handback_state"]["state"] == "none"
+
+
+def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission for shift briefing",
+            "summary": "This mission should lead the continuity focus.",
+            "priority": 9,
+            "requester_id": "test.continuity.briefing",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    blocked_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "continuity briefing blocker",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert blocked_operation.status_code == 200
+    blocked_operation_id = str(blocked_operation.json()["operation_id"])
+
+    blocked_run = client.post(
+        f"/operations/{blocked_operation_id}/run",
+        json={"worker_id": "test.continuity.briefing"},
+    )
+    assert blocked_run.status_code == 200
+    assert blocked_run.json()["status"] == "blocked"
+
+    completed = client.post(
+        "/missions/create",
+        json={
+            "objective": "Completed mission for shift briefing",
+            "summary": "This mission should show up as recently completed.",
+            "requester_id": "test.continuity.briefing",
+        },
+    )
+    assert completed.status_code == 200
+    completed_id = str(completed.json()["mission_id"])
+
+    first_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.continuity.briefing"},
+    )
+    assert first_advance.status_code == 200
+    assert first_advance.json()["ok"] is True
+    assert first_advance.json()["applied"] is True
+
+    second_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.continuity.briefing", "worker_id": "test.continuity.briefing"},
+    )
+    assert second_advance.status_code == 200
+    assert second_advance.json()["ok"] is True
+    assert second_advance.json()["applied"] is True
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["ok"] is True
+    assert body["briefing"]["counts"]["blocked"] == 1
+    assert body["briefing"]["counts"]["completed"] == 1
+    assert "blocked mission" in body["briefing"]["headline"].lower()
+    assert body["briefing"]["focus"][0]["id"] == blocked_id
+    assert body["briefing"]["focus"][0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert body["briefing"]["focus"][0]["latest_activity"]["name"] == "governance_hold"
+    assert body["briefing"]["focus"][0]["latest_activity"]["status"] == "blocked"
+    assert body["mission_status_counts"]["completed"] == 1
+    assert body["recent_missions"][0]["id"] in {blocked_id, completed_id}
+    assert body["operator"]["available"] is True
+    assert body["operator"]["focus"]["plane_id"] == "P3_GOVERNANCE"
+    assert body["orb"]["available"] is True
+    assert body["orb"]["state"]["render_state"] == "handback"
+    assert body["orb"]["state"]["handback_state"]["focus"]["id"] == blocked_id
+    recent_completed = body["briefing"]["recently_completed"]
+    assert recent_completed
+    assert recent_completed[0]["id"] == completed_id
