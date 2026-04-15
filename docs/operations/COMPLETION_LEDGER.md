@@ -87,6 +87,11 @@ Directly inspected implementation truth:
   missing/corrupt or mismatched approvals into fresh approval ids with receipt
   artifacts, and only mutates web-learning state after a matching approval is
   present instead of reusing stale approval receipts.
+- `src/francis/api/routes/web_learning.py` now also binds approval-backed
+  `web_learning.request` ingestion to the exact requested URL/source/ingest
+  payload, refreshes missing/corrupt or mismatched approvals into fresh approval
+  ids with receipt artifacts, and reuses the same record on approved replay
+  instead of minting a new approval or leaving duplicate pending request state.
 - `tests/test_api_operations.py` now proves that changing the configured remote
   after approval does not silently push and instead forces a fresh exact-action
   approval before execution can continue.
@@ -105,6 +110,10 @@ Directly inspected implementation truth:
   mismatched enable requests and missing quarantine-delete approvals, with
   refreshed approval lineage and receipt artifacts before the mutation is
   allowed to proceed.
+- `tests/test_api_web_learning.py` now also proves exact-action approval refresh
+  on mismatched and missing `web_learning.request` approvals, with approved
+  replay ingesting against the same record id and preserving truthful approval
+  lineage.
 - `src/francis/settings.py` and `src/francis/llm/client.py` now resolve canonical
   `FRANCIS_*` environment aliases for repo/runtime/Ollama configuration while
   preserving legacy env-name fallback.
@@ -163,7 +172,7 @@ The following validations were run against the current working tree on
 - `git diff --check -- src/francis/api/routes/plugins.py tests/test_api_plugins.py tests/test_api_operations.py`
   Result: `passed`
 - `pytest tests/test_api_web_learning.py --disable-warnings`
-  Result: `5 passed in 2.28s`
+  Result: `7 passed in 2.87s`
 - `git diff --check -- src/francis/api/routes/web_learning.py tests/test_api_web_learning.py`
   Result: `passed` (Git emitted a line-ending warning only)
 - `pytest tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
@@ -184,6 +193,9 @@ Those validations specifically cover:
   requested actor/meta payload before the control mutation is applied
 - approval refresh when web-learning quarantine-delete approval records
   disappear before the destructive mutation is retried
+- approval refresh when `web_learning.request` approvals drift from the exact
+  requested ingest payload or disappear before the approved learn request is
+  replayed
 - operator-visible operations detail preserving the refreshed plugin approval id
   and `approvals_gate` posture after the held task is requeued
 - operator-visible operations detail preserving the refreshed supervised-exec

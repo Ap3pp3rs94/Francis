@@ -441,29 +441,316 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
         _save(registry)
         return {"ok": False, "request_id": request_id, "record_id": record_id, "status": record_status, "message": verdict_reason, "meta": {"quarantine_id": quarantine_id}}
 
-    approvals_required = _to_bool(policy.get("approvals_required"), default=True)
-    if approvals_required and not force:
-        approval_id = _request_approval("web_learning.request", reason, {"request_id": request_id, "url": normalized_url, "domain": domain, "actor": actor, "meta": req_meta})
-        records.append({"id": record_id, "ts": ts, "url": normalized_url, "status": "pending", "method": "GET", "http_status": 202, "domain": domain, "source": source, "approval_id": approval_id, "summary": "Pending approval before web learning execution.", "meta": {"reason": reason, "request_id": request_id, "force": force}})
-        registry["records"] = records
-        _append_event(registry, {"ts": ts, "kind": "approval_requested", "url": normalized_url, "record_id": record_id, "status": "pending", "message": "Learn request requires approval.", "approval_id": approval_id, "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
-        registry["last_run_ts"] = ts
-        _save(registry)
-        return {"ok": True, "request_id": request_id, "approval_id": approval_id, "status": "pending", "record_id": record_id, "message": "Submitted for approval.", "meta": {"force": force}}
-
     duration_ms = int(payload.get("duration_ms") or 120)
     byte_count = int(payload.get("bytes") or 0)
-    records.append({"id": record_id, "ts": ts, "url": normalized_url, "status": "ingested", "method": "GET", "http_status": 200, "content_type": _safe_str(payload.get("content_type")).strip() or "text/html", "bytes": byte_count, "duration_ms": duration_ms, "title": _safe_str(payload.get("title")).strip() or f"Learned from {domain}", "summary": _safe_str(payload.get("summary")).strip() or "Learn request accepted and ingested.", "domain": domain, "source": source, "meta": {"reason": reason, "request_id": request_id, "force": force}})
+    content_type = _safe_str(payload.get("content_type")).strip() or "text/html"
+    title = _safe_str(payload.get("title")).strip() or f"Learned from {domain}"
+    summary = _safe_str(payload.get("summary")).strip() or "Learn request accepted and ingested."
+    approvals_required = _to_bool(policy.get("approvals_required"), default=True)
+    approval_action = "web_learning.request"
+    approval_id = _approval_id_from_payload(payload)
+    request_payload = _approval_request_payload(
+        approval_action,
+        {
+            "url": normalized_url,
+            "domain": domain,
+            "actor": actor,
+            "source": source,
+            "content_type": content_type,
+            "bytes": byte_count,
+            "duration_ms": duration_ms,
+            "title": title,
+            "summary": summary,
+            "meta": _approval_meta(req_meta),
+        },
+    )
+    record_idx = next(
+        (
+            i
+            for i, item in enumerate(records)
+            if approval_id and _safe_str(item.get("approval_id")).strip() == approval_id
+        ),
+        -1,
+    )
+    if record_idx >= 0:
+        record_id = _safe_str(records[record_idx].get("id")).strip() or record_id
+
+    if approvals_required and not force:
+        if not approval_id:
+            approval_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+            )
+            records.append(
+                {
+                    "id": record_id,
+                    "ts": ts,
+                    "url": normalized_url,
+                    "status": "pending",
+                    "method": "GET",
+                    "http_status": 202,
+                    "domain": domain,
+                    "source": source,
+                    "approval_id": approval_id,
+                    "summary": "Pending approval before web learning execution.",
+                    "meta": {"reason": reason, "request_id": request_id, "force": force},
+                }
+            )
+            registry["records"] = records
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "url": normalized_url,
+                    "record_id": record_id,
+                    "status": "pending",
+                    "message": "Learn request requires approval.",
+                    "approval_id": approval_id,
+                    "actor": actor,
+                    "domain": domain,
+                    "source": source,
+                    "correlation_id": request_id,
+                },
+            )
+            registry["last_run_ts"] = ts
+            _save(registry)
+            return {
+                "ok": True,
+                "request_id": request_id,
+                "approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "pending",
+                "record_id": record_id,
+                "message": "Submitted for approval.",
+                "meta": {"force": force},
+            }
+
+        approval_status, approval_record = _approval_status(approval_id)
+        if approval_status in {"missing", "corrupt"}:
+            refreshed_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+                previous_approval_id=approval_id,
+                previous_status=approval_status,
+                previous_record=approval_record,
+            )
+            if record_idx >= 0:
+                records[record_idx]["approval_id"] = refreshed_id
+                registry["records"] = records
+            _atomic_write_json(
+                art / "error.json",
+                {
+                    "kind": "web_learning.request.error",
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "status": approval_status,
+                    "request": request_payload,
+                },
+            )
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "url": normalized_url,
+                    "record_id": record_id,
+                    "status": "needs_approval",
+                    "message": "Learn request approval was missing; a fresh exact-action approval is required.",
+                    "approval_id": refreshed_id,
+                    "actor": actor,
+                    "domain": domain,
+                    "source": source,
+                    "correlation_id": request_id,
+                    "meta": {
+                        "reason": reason,
+                        "action": approval_action,
+                        "previous_approval_id": approval_id,
+                        "previous_status": approval_status,
+                    },
+                },
+            )
+            registry["last_run_ts"] = ts
+            _save(registry)
+            return {
+                "ok": False,
+                "request_id": request_id,
+                "record_id": record_id,
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "needs_approval",
+                "error": "approval_not_found",
+                "message": "Approval was missing for this learn request; a fresh exact-action approval is required.",
+                "meta": {"force": force},
+            }
+        if approval_status == "pending":
+            return {
+                "ok": True,
+                "request_id": request_id,
+                "record_id": record_id,
+                "approval_id": approval_id,
+                "status": "pending",
+                "message": "Learn request is awaiting approval.",
+                "meta": {"force": force},
+            }
+        if approval_status in {"rejected", "emergency"}:
+            return {
+                "ok": False,
+                "request_id": request_id,
+                "record_id": record_id,
+                "approval_id": approval_id,
+                "status": "denied",
+                "error": "approval_denied",
+                "message": "Approval was denied for this learn request.",
+                "meta": {"force": force, "approval_status": approval_status},
+            }
+        if approval_status != "approved":
+            return {
+                "ok": False,
+                "request_id": request_id,
+                "record_id": record_id,
+                "approval_id": approval_id,
+                "status": "needs_approval",
+                "error": "approval_not_found",
+                "message": "A matching approved request was not found for this learn request.",
+                "meta": {"force": force},
+            }
+        if not _approval_matches(approval_record, action=approval_action, request_payload=request_payload):
+            refreshed_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+                previous_approval_id=approval_id,
+                previous_status=approval_status,
+                previous_record=approval_record,
+            )
+            if record_idx >= 0:
+                records[record_idx]["approval_id"] = refreshed_id
+                registry["records"] = records
+            mismatch_body = {
+                "kind": "web_learning.request.mismatch",
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "request": request_payload,
+                "approval_record": approval_record,
+            }
+            _atomic_write_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "url": normalized_url,
+                    "record_id": record_id,
+                    "status": "needs_approval",
+                    "message": "Learn request approval did not match the exact action and was refreshed.",
+                    "approval_id": refreshed_id,
+                    "actor": actor,
+                    "domain": domain,
+                    "source": source,
+                    "correlation_id": request_id,
+                    "meta": {
+                        "reason": reason,
+                        "action": approval_action,
+                        "previous_approval_id": approval_id,
+                        "previous_status": approval_status,
+                    },
+                },
+            )
+            registry["last_run_ts"] = ts
+            _save(registry)
+            return {
+                "ok": False,
+                "request_id": request_id,
+                "record_id": record_id,
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "needs_approval",
+                "error": "approval_payload_mismatch",
+                "message": "Approval does not match this exact learn request.",
+                "meta": {"force": force},
+            }
+
+    ingested_record = {
+        "id": record_id,
+        "ts": ts,
+        "url": normalized_url,
+        "status": "ingested",
+        "method": "GET",
+        "http_status": 200,
+        "content_type": content_type,
+        "bytes": byte_count,
+        "duration_ms": duration_ms,
+        "title": title,
+        "summary": summary,
+        "domain": domain,
+        "source": source,
+        "meta": {"reason": reason, "request_id": request_id, "force": force},
+    }
+    if approval_id:
+        ingested_record["approval_id"] = approval_id
+    if record_idx >= 0:
+        records[record_idx] = dict(records[record_idx] | ingested_record)
+    else:
+        records.append(ingested_record)
     registry["records"] = records
-    _append_event(registry, {"ts": ts, "kind": "fetch_start", "url": normalized_url, "record_id": record_id, "status": "running", "message": "Fetch started.", "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
-    _append_event(registry, {"ts": ts, "kind": "fetch_end", "url": normalized_url, "record_id": record_id, "status": "fetched", "message": "Fetch completed.", "http_status": 200, "bytes": byte_count, "duration_ms": duration_ms, "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
-    _append_event(registry, {"ts": ts, "kind": "ingest", "url": normalized_url, "record_id": record_id, "status": "ingested", "message": "Content ingested successfully.", "http_status": 200, "bytes": byte_count, "duration_ms": duration_ms, "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
+    event_meta = {
+        "ts": ts,
+        "url": normalized_url,
+        "record_id": record_id,
+        "actor": actor,
+        "domain": domain,
+        "source": source,
+        "correlation_id": request_id,
+    }
+    if approval_id:
+        event_meta["approval_id"] = approval_id
+    _append_event(registry, {"kind": "fetch_start", "status": "running", "message": "Fetch started.", **event_meta})
+    _append_event(
+        registry,
+        {
+            "kind": "fetch_end",
+            "status": "fetched",
+            "message": "Fetch completed.",
+            "http_status": 200,
+            "bytes": byte_count,
+            "duration_ms": duration_ms,
+            **event_meta,
+        },
+    )
+    _append_event(
+        registry,
+        {
+            "kind": "ingest",
+            "status": "ingested",
+            "message": "Content ingested successfully.",
+            "http_status": 200,
+            "bytes": byte_count,
+            "duration_ms": duration_ms,
+            **event_meta,
+        },
+    )
     registry["last_run_ts"] = ts
     registry["last_success_ts"] = ts
     registry["last_error_ts"] = 0
     registry["last_error"] = ""
     _save(registry)
-    return {"ok": True, "request_id": request_id, "record_id": record_id, "status": "ingested", "message": "Learn request accepted.", "meta": {"force": force}}
+    result = {
+        "ok": True,
+        "request_id": request_id,
+        "record_id": record_id,
+        "status": "ingested",
+        "message": "Learn request accepted.",
+        "meta": {"force": force},
+    }
+    if approval_id:
+        result["approval_id"] = approval_id
+    return result
 
 
 def _set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
