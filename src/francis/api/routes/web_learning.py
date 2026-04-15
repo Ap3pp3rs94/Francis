@@ -269,6 +269,125 @@ def _request_approval(action: str, reason: str, payload: dict[str, Any]) -> str:
         return ""
     return _safe_str(item.get("id")).strip()
 
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _approval_artifact_dir(approval_id: str) -> Path:
+    return data_dir() / "artifacts" / "web_learning" / "approvals" / _safe_str(approval_id).strip()
+
+
+def _approval_status(approval_id: str) -> tuple[str, dict[str, Any] | None]:
+    resolved_id = _safe_str(approval_id).strip()
+    if not resolved_id:
+        return "missing", None
+    candidates: list[tuple[str, Path]] = [
+        ("pending", approval_store.pending_dir() / f"{resolved_id}.json"),
+        ("approved", approval_store.approved_dir() / f"{resolved_id}.json"),
+        ("rejected", approval_store.rejected_dir() / f"{resolved_id}.json"),
+        ("emergency", approval_store.emergency_dir() / f"{resolved_id}.json"),
+    ]
+    for status, path in candidates:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return "corrupt", None
+        return status, payload if isinstance(payload, dict) else None
+    return "missing", None
+
+
+def _approval_id_from_payload(payload: dict[str, Any]) -> str:
+    explicit = _safe_str(payload.get("approval_id")).strip()
+    if explicit:
+        return explicit
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        return _safe_str(meta.get("approval_id")).strip()
+    return ""
+
+
+def _normalize_approval_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
+            normalized_key = _safe_str(key).strip()
+            if not normalized_key:
+                continue
+            normalized[normalized_key] = _normalize_approval_value(value.get(key))
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [_normalize_approval_value(item) for item in value]
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+    except Exception:
+        return _safe_str(value)
+
+
+def _approval_meta(meta: Any) -> dict[str, Any]:
+    if not isinstance(meta, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
+        normalized_key = _safe_str(key).strip()
+        if not normalized_key or normalized_key in {"approval_id", "force"}:
+            continue
+        normalized[normalized_key] = _normalize_approval_value(meta.get(key))
+    return normalized
+
+
+def _approval_request_payload(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": action,
+        "payload": _normalize_approval_value(payload),
+    }
+
+
+def _request_exact_approval(
+    *,
+    action: str,
+    reason: str,
+    request_payload: dict[str, Any],
+    previous_approval_id: str = "",
+    previous_status: str = "",
+    previous_record: dict[str, Any] | None = None,
+) -> tuple[str, Path]:
+    approval = approval_store.request(action, reason, request_payload)
+    approval_id = _safe_str(approval.get("id")).strip()
+    art = _approval_artifact_dir(approval_id)
+    request_body: dict[str, Any] = {
+        "kind": "web_learning.approval.request",
+        "approval": approval,
+        "action": action,
+        "request": request_payload,
+    }
+    if previous_approval_id:
+        request_body["previous_approval_id"] = previous_approval_id
+    if previous_status:
+        request_body["previous_status"] = previous_status
+    if isinstance(previous_record, dict):
+        request_body["previous_approval"] = previous_record
+    _atomic_write_json(art / "request.json", request_body)
+    return approval_id, art
+
+
+def _approval_matches(approval_record: dict[str, Any] | None, *, action: str, request_payload: dict[str, Any]) -> bool:
+    if not isinstance(approval_record, dict):
+        return False
+    if _safe_str(approval_record.get("action")).strip() != action:
+        return False
+    payload = approval_record.get("payload")
+    if not isinstance(payload, dict):
+        return False
+    return _normalize_approval_value(payload) == _normalize_approval_value(request_payload)
+
 def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     url = _safe_str(payload.get("url")).strip()
     if not url:
@@ -365,19 +484,217 @@ def _set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
     if desired == current:
         return {"ok": True, "status": "unchanged", "applied": True, "enabled": current, "ts": ts, "message": "No change."}
 
-    if desired and _to_bool(policy.get("approvals_required"), default=True) and not force:
-        approval_id = _request_approval("web_learning.set_enabled", reason, {"enabled": desired, "actor": actor, "domain": domain, "meta": meta})
-        _append_event(registry, {"ts": ts, "kind": "approval_requested", "status": "pending", "message": "Enable request requires approval.", "approval_id": approval_id, "actor": actor, "domain": domain, "source": actor, "meta": {"reason": reason}})
-        _save(registry)
-        return {"ok": True, "approval_id": approval_id, "status": "pending", "applied": False, "enabled": current, "ts": ts, "message": "Enable request submitted for approval.", "meta": {"force": force}}
+    approval_required = desired and _to_bool(policy.get("approvals_required"), default=True)
+    approval_action = "web_learning.set_enabled"
+    approval_id = _approval_id_from_payload(payload)
+    request_payload = _approval_request_payload(
+        approval_action,
+        {"enabled": desired, "actor": actor, "domain": domain, "meta": _approval_meta(meta)},
+    )
+
+    if approval_required and not force:
+        if not approval_id:
+            approval_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+            )
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "status": "pending",
+                    "message": "Enable request requires approval.",
+                    "approval_id": approval_id,
+                    "actor": actor,
+                    "domain": domain,
+                    "source": actor,
+                    "meta": {"reason": reason, "action": approval_action},
+                },
+            )
+            _save(registry)
+            return {
+                "ok": True,
+                "approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "pending",
+                "applied": False,
+                "enabled": current,
+                "ts": ts,
+                "message": "Enable request submitted for approval.",
+                "meta": {"force": force},
+            }
+
+        approval_status, approval_record = _approval_status(approval_id)
+        if approval_status in {"missing", "corrupt"}:
+            refreshed_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+                previous_approval_id=approval_id,
+                previous_status=approval_status,
+                previous_record=approval_record,
+            )
+            _atomic_write_json(
+                art / "error.json",
+                {
+                    "kind": "web_learning.set_enabled.error",
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "status": approval_status,
+                    "request": request_payload,
+                },
+            )
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "status": "needs_approval",
+                    "message": "Enable request approval was missing; a fresh exact-action approval is required.",
+                    "approval_id": refreshed_id,
+                    "actor": actor,
+                    "domain": domain,
+                    "source": actor,
+                    "meta": {
+                        "reason": reason,
+                        "action": approval_action,
+                        "previous_approval_id": approval_id,
+                        "previous_status": approval_status,
+                    },
+                },
+            )
+            _save(registry)
+            return {
+                "ok": False,
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "needs_approval",
+                "applied": False,
+                "enabled": current,
+                "ts": ts,
+                "error": "approval_not_found",
+                "message": "Approval was missing for this enable request; a fresh exact-action approval is required.",
+                "meta": {"force": force},
+            }
+        if approval_status == "pending":
+            return {
+                "ok": True,
+                "approval_id": approval_id,
+                "status": "pending",
+                "applied": False,
+                "enabled": current,
+                "ts": ts,
+                "message": "Enable request is awaiting approval.",
+                "meta": {"force": force},
+            }
+        if approval_status in {"rejected", "emergency"}:
+            return {
+                "ok": False,
+                "approval_id": approval_id,
+                "status": "denied",
+                "applied": False,
+                "enabled": current,
+                "ts": ts,
+                "error": "approval_denied",
+                "message": "Approval was denied for this enable request.",
+                "meta": {"force": force, "approval_status": approval_status},
+            }
+        if approval_status != "approved":
+            return {
+                "ok": False,
+                "approval_id": approval_id,
+                "status": "needs_approval",
+                "applied": False,
+                "enabled": current,
+                "ts": ts,
+                "error": "approval_not_found",
+                "message": "A matching approved request was not found for this enable request.",
+                "meta": {"force": force},
+            }
+        if not _approval_matches(approval_record, action=approval_action, request_payload=request_payload):
+            refreshed_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+                previous_approval_id=approval_id,
+                previous_status=approval_status,
+                previous_record=approval_record,
+            )
+            mismatch_body = {
+                "kind": "web_learning.set_enabled.mismatch",
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "request": request_payload,
+                "approval_record": approval_record,
+            }
+            _atomic_write_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "status": "needs_approval",
+                    "message": "Enable request approval did not match the exact action and was refreshed.",
+                    "approval_id": refreshed_id,
+                    "actor": actor,
+                    "domain": domain,
+                    "source": actor,
+                    "meta": {
+                        "reason": reason,
+                        "action": approval_action,
+                        "previous_approval_id": approval_id,
+                        "previous_status": approval_status,
+                    },
+                },
+            )
+            _save(registry)
+            return {
+                "ok": False,
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "needs_approval",
+                "applied": False,
+                "enabled": current,
+                "ts": ts,
+                "error": "approval_payload_mismatch",
+                "message": "Approval does not match this exact enable request.",
+                "meta": {"force": force},
+            }
 
     policy["enabled"] = desired
     policy["ts"] = ts
     registry["policy"] = policy
     registry["enabled"] = desired
-    _append_event(registry, {"ts": ts, "kind": "approval_resolved", "status": "applied", "message": f"Web learning {'enabled' if desired else 'disabled'}.", "actor": actor, "domain": domain, "source": actor, "meta": {"reason": reason, "force": force}})
+    _append_event(
+        registry,
+        {
+            "ts": ts,
+            "kind": "approval_resolved",
+            "status": "applied",
+            "message": f"Web learning {'enabled' if desired else 'disabled'}.",
+            "approval_id": approval_id or None,
+            "actor": actor,
+            "domain": domain,
+            "source": actor,
+            "meta": {"reason": reason, "force": force},
+        },
+    )
     _save(registry)
-    return {"ok": True, "status": "applied", "applied": True, "enabled": desired, "ts": ts, "message": f"Web learning {'enabled' if desired else 'disabled'}.", "meta": {"force": force}}
+    return {
+        "ok": True,
+        "approval_id": approval_id or None,
+        "status": "applied",
+        "applied": True,
+        "enabled": desired,
+        "ts": ts,
+        "message": f"Web learning {'enabled' if desired else 'disabled'}.",
+        "meta": {"force": force},
+    }
 
 
 def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -406,14 +723,197 @@ def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     q = quarantine[idx]
 
     policy = registry.get("policy") if isinstance(registry.get("policy"), dict) else _default_policy()
-    if action == "delete" and _to_bool(policy.get("approvals_required"), default=True) and not force:
-        approval_id = _request_approval("web_learning.quarantine.delete", reason, {"id": resolved_id, "url": q.get("url"), "record_id": q.get("record_id"), "actor": actor, "domain": domain or q.get("domain"), "meta": meta})
-        q["approval_id"] = approval_id
-        quarantine[idx] = q
-        registry["quarantine"] = quarantine
-        _append_event(registry, {"ts": ts, "kind": "approval_requested", "url": q.get("url"), "record_id": q.get("record_id"), "status": "pending", "message": "Delete quarantine item requires approval.", "approval_id": approval_id, "quarantine_id": resolved_id, "actor": actor, "domain": domain or q.get("domain"), "source": actor, "meta": {"reason": reason, "action": action}})
-        _save(registry)
-        return {"ok": True, "approval_id": approval_id, "status": "pending", "applied": False, "message": "Delete request submitted for approval."}
+    approval_required = action == "delete" and _to_bool(policy.get("approvals_required"), default=True)
+    approval_action = "web_learning.quarantine.delete"
+    approval_domain = domain or _safe_str(q.get("domain")).strip().lower()
+    approval_id = _approval_id_from_payload(payload)
+    request_payload = _approval_request_payload(
+        approval_action,
+        {
+            "id": resolved_id,
+            "url": _safe_str(q.get("url")).strip(),
+            "record_id": _safe_str(q.get("record_id")).strip(),
+            "actor": actor,
+            "domain": approval_domain,
+            "meta": _approval_meta(meta),
+        },
+    )
+    if approval_required and not force:
+        if not approval_id:
+            approval_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+            )
+            q["approval_id"] = approval_id
+            quarantine[idx] = q
+            registry["quarantine"] = quarantine
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "url": q.get("url"),
+                    "record_id": q.get("record_id"),
+                    "status": "pending",
+                    "message": "Delete quarantine item requires approval.",
+                    "approval_id": approval_id,
+                    "quarantine_id": resolved_id,
+                    "actor": actor,
+                    "domain": approval_domain,
+                    "source": actor,
+                    "meta": {"reason": reason, "action": action},
+                },
+            )
+            _save(registry)
+            return {
+                "ok": True,
+                "approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "pending",
+                "applied": False,
+                "message": "Delete request submitted for approval.",
+            }
+
+        approval_status, approval_record = _approval_status(approval_id)
+        if approval_status in {"missing", "corrupt"}:
+            refreshed_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+                previous_approval_id=approval_id,
+                previous_status=approval_status,
+                previous_record=approval_record,
+            )
+            q["approval_id"] = refreshed_id
+            quarantine[idx] = q
+            registry["quarantine"] = quarantine
+            _atomic_write_json(
+                art / "error.json",
+                {
+                    "kind": "web_learning.quarantine.delete.error",
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "quarantine_id": resolved_id,
+                    "status": approval_status,
+                    "request": request_payload,
+                },
+            )
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "url": q.get("url"),
+                    "record_id": q.get("record_id"),
+                    "status": "needs_approval",
+                    "message": "Delete approval was missing; a fresh exact-action approval is required.",
+                    "approval_id": refreshed_id,
+                    "quarantine_id": resolved_id,
+                    "actor": actor,
+                    "domain": approval_domain,
+                    "source": actor,
+                    "meta": {
+                        "reason": reason,
+                        "action": action,
+                        "previous_approval_id": approval_id,
+                        "previous_status": approval_status,
+                    },
+                },
+            )
+            _save(registry)
+            return {
+                "ok": False,
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "needs_approval",
+                "applied": False,
+                "error": "approval_not_found",
+                "message": "Approval was missing for this delete request; a fresh exact-action approval is required.",
+            }
+        if approval_status == "pending":
+            return {
+                "ok": True,
+                "approval_id": approval_id,
+                "status": "pending",
+                "applied": False,
+                "message": "Delete request is awaiting approval.",
+            }
+        if approval_status in {"rejected", "emergency"}:
+            return {
+                "ok": False,
+                "approval_id": approval_id,
+                "status": "denied",
+                "applied": False,
+                "error": "approval_denied",
+                "message": "Approval was denied for this delete request.",
+                "meta": {"approval_status": approval_status},
+            }
+        if approval_status != "approved":
+            return {
+                "ok": False,
+                "approval_id": approval_id,
+                "status": "needs_approval",
+                "applied": False,
+                "error": "approval_not_found",
+                "message": "A matching approved request was not found for this delete request.",
+            }
+        if not _approval_matches(approval_record, action=approval_action, request_payload=request_payload):
+            refreshed_id, art = _request_exact_approval(
+                action=approval_action,
+                reason=reason,
+                request_payload=request_payload,
+                previous_approval_id=approval_id,
+                previous_status=approval_status,
+                previous_record=approval_record,
+            )
+            q["approval_id"] = refreshed_id
+            quarantine[idx] = q
+            registry["quarantine"] = quarantine
+            mismatch_body = {
+                "kind": "web_learning.quarantine.delete.mismatch",
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "quarantine_id": resolved_id,
+                "request": request_payload,
+                "approval_record": approval_record,
+            }
+            _atomic_write_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _append_event(
+                registry,
+                {
+                    "ts": ts,
+                    "kind": "approval_requested",
+                    "url": q.get("url"),
+                    "record_id": q.get("record_id"),
+                    "status": "needs_approval",
+                    "message": "Delete approval did not match the exact action and was refreshed.",
+                    "approval_id": refreshed_id,
+                    "quarantine_id": resolved_id,
+                    "actor": actor,
+                    "domain": approval_domain,
+                    "source": actor,
+                    "meta": {
+                        "reason": reason,
+                        "action": action,
+                        "previous_approval_id": approval_id,
+                        "previous_status": approval_status,
+                    },
+                },
+            )
+            _save(registry)
+            return {
+                "ok": False,
+                "approval_id": refreshed_id,
+                "previous_approval_id": approval_id,
+                "artifact_dir": str(art),
+                "status": "needs_approval",
+                "applied": False,
+                "error": "approval_payload_mismatch",
+                "message": "Approval does not match this exact delete request.",
+            }
 
     records = registry.get("records") if isinstance(registry.get("records"), list) else []
     record_id = _safe_str(q.get("record_id")).strip()
@@ -449,9 +949,31 @@ def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
 
     registry["quarantine"] = quarantine
     registry["records"] = records
-    _append_event(registry, {"ts": ts, "kind": "approval_resolved" if action in {"release", "delete"} else "quarantine", "url": q.get("url"), "record_id": q.get("record_id"), "status": status, "message": message, "approval_id": _safe_str(q.get("approval_id")).strip(), "quarantine_id": resolved_id, "actor": actor, "domain": domain or q.get("domain"), "source": actor, "meta": {"reason": reason, "action": action, "force": force}})
+    _append_event(
+        registry,
+        {
+            "ts": ts,
+            "kind": "approval_resolved" if action in {"release", "delete"} else "quarantine",
+            "url": q.get("url"),
+            "record_id": q.get("record_id"),
+            "status": status,
+            "message": message,
+            "approval_id": approval_id or _safe_str(q.get("approval_id")).strip(),
+            "quarantine_id": resolved_id,
+            "actor": actor,
+            "domain": approval_domain,
+            "source": actor,
+            "meta": {"reason": reason, "action": action, "force": force},
+        },
+    )
     _save(registry)
-    return {"ok": True, "status": status, "applied": True, "message": message}
+    return {
+        "ok": True,
+        "approval_id": approval_id or _safe_str(q.get("approval_id")).strip() or None,
+        "status": status,
+        "applied": True,
+        "message": message,
+    }
 
 
 def _csv_fields(kind: str) -> list[str]:

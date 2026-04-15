@@ -152,6 +152,145 @@ def test_web_learning_exports_aliases_and_registry(monkeypatch, tmp_path: Path) 
     assert isinstance(registry.get("quarantine"), list)
 
 
+def test_web_learning_enable_refreshes_mismatched_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    disabled = client.post("/web_learning/enabled", json={"enabled": False, "reason": "maintenance"})
+    assert disabled.status_code == 200
+    assert disabled.json()["enabled"] is False
+
+    pending = client.post(
+        "/web_learning/enabled",
+        json={"enabled": True, "reason": "resume", "actor": "operator:a"},
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    assert pending_body["status"] == "pending"
+    approval_id = str(pending_body["approval_id"])
+    assert approval_id
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    mismatched = client.post(
+        "/web_learning/enabled",
+        json={"enabled": True, "reason": "resume", "actor": "operator:b", "approval_id": approval_id},
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatched_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != approval_id
+    assert mismatched_body["previous_approval_id"] == approval_id
+    artifact_dir = Path(str(mismatched_body["artifact_dir"]))
+    assert (artifact_dir / "mismatch.json").exists()
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    applied = client.post(
+        "/web_learning/enabled",
+        json={"enabled": True, "reason": "resume", "actor": "operator:b", "approval_id": refreshed_approval_id},
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["status"] == "applied"
+    assert applied_body["applied"] is True
+    assert applied_body["enabled"] is True
+    assert applied_body["approval_id"] == refreshed_approval_id
+
+
+def test_web_learning_quarantine_delete_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    blocked = client.post("/web_learning/request", json={"url": "https://127.0.0.1/internal", "reason": "blocked_path"})
+    assert blocked.status_code == 200
+    assert blocked.json()["ok"] is False
+
+    quarantine = client.get("/web_learning/quarantine")
+    assert quarantine.status_code == 200
+    quarantine_items = quarantine.json()["items"]
+    assert quarantine_items
+    quarantine_id = str(quarantine_items[0]["id"])
+
+    pending_delete = client.post(
+        f"/web_learning/quarantine/{quarantine_id}/decide",
+        json={"action": "delete", "reason": "cleanup", "actor": "operator:a"},
+    )
+    assert pending_delete.status_code == 200
+    pending_delete_body = pending_delete.json()
+    assert pending_delete_body["ok"] is True
+    assert pending_delete_body["status"] == "pending"
+    approval_id = str(pending_delete_body["approval_id"])
+    assert approval_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    assert pending_path.exists()
+    pending_path.unlink()
+
+    refreshed = client.post(
+        f"/web_learning/quarantine/{quarantine_id}/decide",
+        json={"action": "delete", "reason": "cleanup", "actor": "operator:a", "approval_id": approval_id},
+    )
+    assert refreshed.status_code == 200
+    refreshed_body = refreshed.json()
+    assert refreshed_body["ok"] is False
+    assert refreshed_body["status"] == "needs_approval"
+    assert refreshed_body["error"] == "approval_not_found"
+    refreshed_approval_id = str(refreshed_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != approval_id
+    assert refreshed_body["previous_approval_id"] == approval_id
+    artifact_dir = Path(str(refreshed_body["artifact_dir"]))
+    assert (artifact_dir / "error.json").exists()
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    deleted = client.post(
+        f"/web_learning/quarantine/{quarantine_id}/decide",
+        json={"action": "delete", "reason": "cleanup", "actor": "operator:a", "approval_id": refreshed_approval_id},
+    )
+    assert deleted.status_code == 200
+    deleted_body = deleted.json()
+    assert deleted_body["ok"] is True
+    assert deleted_body["status"] == "deleted"
+    assert deleted_body["applied"] is True
+    assert deleted_body["approval_id"] == refreshed_approval_id
+
+    remaining = client.get("/web_learning/quarantine")
+    assert remaining.status_code == 200
+    remaining_ids = {str(item.get("id")) for item in remaining.json()["items"]}
+    assert quarantine_id not in remaining_ids
+
+    records = client.get("/web_learning/records")
+    assert records.status_code == 200
+    matching_records = [item for item in records.json()["items"] if str(item.get("quarantine_id")) in {"", quarantine_id}]
+    assert any(str(item.get("status")) == "failed" and str(item.get("error")) == "Deleted from quarantine." for item in matching_records)
+
+
 def test_web_learning_dash_and_system_prefix_aliases(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

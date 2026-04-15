@@ -82,6 +82,11 @@ Directly inspected implementation truth:
   from the approval payload, and refreshes approvals when records are
   missing/corrupt or when the approved plugin request no longer matches the
   queued exact-action payload instead of reusing stale approval receipts.
+- `src/francis/api/routes/web_learning.py` now binds approval-backed enable and
+  quarantine-delete mutations to the exact requested action payload, refreshes
+  missing/corrupt or mismatched approvals into fresh approval ids with receipt
+  artifacts, and only mutates web-learning state after a matching approval is
+  present instead of reusing stale approval receipts.
 - `tests/test_api_operations.py` now proves that changing the configured remote
   after approval does not silently push and instead forces a fresh exact-action
   approval before execution can continue.
@@ -96,6 +101,10 @@ Directly inspected implementation truth:
   operation path refreshes exact-action approvals, rewrites the queued task to
   the new approval id, and preserves truthful governance-hold detail after the
   held task is requeued.
+- `tests/test_api_web_learning.py` now proves exact-action approval refresh on
+  mismatched enable requests and missing quarantine-delete approvals, with
+  refreshed approval lineage and receipt artifacts before the mutation is
+  allowed to proceed.
 - `src/francis/settings.py` and `src/francis/llm/client.py` now resolve canonical
   `FRANCIS_*` environment aliases for repo/runtime/Ollama configuration while
   preserving legacy env-name fallback.
@@ -153,6 +162,10 @@ The following validations were run against the current working tree on
   Result: `19 passed in 17.29s`
 - `git diff --check -- src/francis/api/routes/plugins.py tests/test_api_plugins.py tests/test_api_operations.py`
   Result: `passed`
+- `pytest tests/test_api_web_learning.py --disable-warnings`
+  Result: `5 passed in 2.28s`
+- `git diff --check -- src/francis/api/routes/web_learning.py tests/test_api_web_learning.py`
+  Result: `passed` (Git emitted a line-ending warning only)
 - `pytest tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
   Result: `15 passed in 6.71s`
 - `git diff --check -- src/francis/agent/git_push.py src/francis/agent/executor.py src/francis/api/routes/operations.py src/francis/operations/runtime.py src/francis/llm/client.py src/francis/settings.py tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
@@ -167,6 +180,10 @@ Those validations specifically cover:
   command payload drifts before execution
 - approval refresh when plugin approval records disappear or the approved
   plugin action/input payload drifts before execution
+- approval refresh when web-learning enable approvals drift from the exact
+  requested actor/meta payload before the control mutation is applied
+- approval refresh when web-learning quarantine-delete approval records
+  disappear before the destructive mutation is retried
 - operator-visible operations detail preserving the refreshed plugin approval id
   and `approvals_gate` posture after the held task is requeued
 - operator-visible operations detail preserving the refreshed supervised-exec
