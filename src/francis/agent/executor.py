@@ -224,8 +224,14 @@ def _register_capabilities() -> None:
         from . import supervised_exec
     except Exception as exc:
         logger.error("Failed to load supervised_exec capability: %s", exc)
-        return
-    CAPABILITY_ALLOWLIST.setdefault("codex.supervised_exec", supervised_exec.run_supervised_exec)
+    else:
+        CAPABILITY_ALLOWLIST.setdefault("codex.supervised_exec", supervised_exec.run_supervised_exec)
+    try:
+        from . import git_push
+    except Exception as exc:
+        logger.error("Failed to load git.push capability: %s", exc)
+    else:
+        CAPABILITY_ALLOWLIST.setdefault("git.push", git_push.run_git_push)
 
 
 def run_capability(capability: str, inputs: dict[str, Any], objective: str) -> dict[str, Any]:

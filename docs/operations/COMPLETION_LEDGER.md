@@ -58,10 +58,29 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 
 ## 3. High-confidence current slice
 
-As of `2026-04-14`, the highest-confidence surface touched in the current working
-tree is the operator-critical Chat UI/API continuity bridge for settings,
-ledger-backed re-entry, briefings, return-to-work ORB context, and bounded
-worker-cycle control.
+As of `2026-04-15`, the highest-confidence surface newly touched in the current
+working tree is the governed operations/runtime extension for exact-action
+`git.push` approvals plus canonical Francis environment alias resolution.
+
+Directly inspected implementation truth:
+
+- `src/francis/agent/git_push.py` now binds approval to the exact local repo root,
+  remote URL, branch, and upstream intent, and refreshes approval requests when
+  that payload changes after an approval was granted instead of reusing a stale
+  approval receipt.
+- `src/francis/agent/executor.py`, `src/francis/operations/runtime.py`, and
+  `src/francis/api/routes/operations.py` expose the same capability through the
+  governed operations loop without bypassing `P3_GOVERNANCE`.
+- `tests/test_api_operations.py` now proves that changing the configured remote
+  after approval does not silently push and instead forces a fresh exact-action
+  approval before execution can continue.
+- `src/francis/settings.py` and `src/francis/llm/client.py` now resolve canonical
+  `FRANCIS_*` environment aliases for repo/runtime/Ollama configuration while
+  preserving legacy env-name fallback.
+
+The `2026-04-14` operator-critical Chat UI/API continuity bridge remains
+materially true in the repo and is still part of the active `P1_INTERFACE`
+continuity line:
 
 Directly inspected implementation truth:
 
@@ -102,7 +121,22 @@ Directly inspected implementation truth:
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
-`2026-04-14`:
+`2026-04-15`:
+
+- `pytest tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
+  Result: `15 passed in 6.71s`
+- `git diff --check -- src/francis/agent/git_push.py src/francis/agent/executor.py src/francis/api/routes/operations.py src/francis/operations/runtime.py src/francis/llm/client.py src/francis/settings.py tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
+  Result: `passed`
+
+Those validations specifically cover:
+
+- governed `git.push` capability registration through the operations runtime
+- approval-bound local Git push execution
+- approval refresh when the approved remote payload becomes stale before execution
+- canonical `FRANCIS_*` settings alias resolution and Ollama client fallback order
+
+Earlier validation evidence from `2026-04-14` remains relevant for the continuity
+bridge slice:
 
 - `pytest tests/test_api_continuity.py tests/test_api_contract_chat_ui.py tests/test_api_operations.py tests/test_api_system_settings.py -q`
   Result: `28 passed`

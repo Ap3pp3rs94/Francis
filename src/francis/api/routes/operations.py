@@ -32,6 +32,8 @@ _ACTION_TO_CAPABILITY: dict[str, str] = {
     "chat.summarize": "chat.summarize",
     "plan.create": "plan.create",
     "plan.revise": "plan.revise",
+    "git.push": "git.push",
+    "operations.git.push": "git.push",
     "codex.supervised_exec": "codex.supervised_exec",
     "supervised_exec": "codex.supervised_exec",
     "operations.supervised_exec": "codex.supervised_exec",

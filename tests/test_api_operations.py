@@ -1,6 +1,19 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
 
 
 def test_operations_create_list_get_cancel(monkeypatch, tmp_path: Path) -> None:
@@ -379,3 +392,204 @@ def test_operations_governance_holds_are_visible_and_rerunnable(monkeypatch, tmp
     detail_executed_body = detail_executed.json()
     governance_holds = [item for item in detail_executed_body["logs"] if item.get("name") == "governance_hold"]
     assert len(governance_holds) >= 2
+
+
+def test_operations_git_push_requires_approval_and_pushes_branch(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    remote_root = tmp_path / "remote.git"
+    repo_root.mkdir()
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+
+    _git(repo_root, "init")
+    _git(repo_root, "config", "user.name", "Francis Tests")
+    _git(repo_root, "config", "user.email", "francis-tests@example.com")
+    _git(repo_root, "checkout", "-b", "main")
+    (repo_root / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo_root, "add", "README.md")
+    _git(repo_root, "commit", "-m", "Initial commit")
+    _git(repo_root, "init", "--bare", str(remote_root))
+    _git(repo_root, "remote", "add", "origin", str(remote_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    status = client.get("/operations/status")
+    assert status.status_code == 200
+    capabilities = status.json().get("capabilities") or []
+    assert "git.push" in capabilities
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "git.push",
+            "reason": "push current branch",
+            "input": {"cwd": str(repo_root), "remote": "origin"},
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    operation_id = str(created_body["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    assert pending_body["status"] == "queued"
+    pending_meta = pending_body["operation"]["meta"]
+    assert pending_meta["orb_plane"] == "P3_GOVERNANCE"
+    assert pending_meta["governance"]["gate"] == "approvals_gate"
+    approval_id = str(pending_meta["approval_id"])
+    assert approval_id
+
+    detail_pending = client.get(f"/operations/{operation_id}")
+    assert detail_pending.status_code == 200
+    detail_pending_body = detail_pending.json()
+    pending_inputs = detail_pending_body["meta"]["task"]["inputs"]
+    assert pending_inputs["approval_id"] == approval_id
+    assert pending_inputs["meta"]["approval_id"] == approval_id
+    log_names = [str(item.get("name")) for item in detail_pending_body["logs"]]
+    assert "governance_hold" in log_names
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    output = executed_body["operation"]["output"]
+    assert isinstance(output, dict)
+    assert output["status"] == "success"
+    assert output["branch"] == "main"
+    assert output["remote"] == "origin"
+    assert output["exit_code"] == 0
+
+    remote_branch = subprocess.run(
+        ["git", "--git-dir", str(remote_root), "rev-parse", "refs/heads/main"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert remote_branch.returncode == 0
+    assert remote_branch.stdout.strip()
+
+
+def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    origin_root = tmp_path / "origin.git"
+    mirror_root = tmp_path / "mirror.git"
+    repo_root.mkdir()
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+
+    _git(repo_root, "init")
+    _git(repo_root, "config", "user.name", "Francis Tests")
+    _git(repo_root, "config", "user.email", "francis-tests@example.com")
+    _git(repo_root, "checkout", "-b", "main")
+    (repo_root / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo_root, "add", "README.md")
+    _git(repo_root, "commit", "-m", "Initial commit")
+    _git(repo_root, "init", "--bare", str(origin_root))
+    _git(repo_root, "init", "--bare", str(mirror_root))
+    _git(repo_root, "remote", "add", "origin", str(origin_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "git.push",
+            "reason": "push current branch",
+            "input": {"cwd": str(repo_root), "remote": "origin"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    first_approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert first_approval_id
+
+    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    _git(repo_root, "remote", "set-url", "origin", str(mirror_root))
+
+    mismatched = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push"})
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is True
+    assert mismatched_body["status"] == "queued"
+    mismatch_output = mismatched_body["operation"]["output"]
+    assert isinstance(mismatch_output, dict)
+    assert mismatch_output["status"] == "needs_approval"
+    assert mismatch_output["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatch_output["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != first_approval_id
+    assert mismatch_output["previous_approval_id"] == first_approval_id
+    mismatch_meta = mismatched_body["operation"]["meta"]
+    assert mismatch_meta["orb_plane"] == "P3_GOVERNANCE"
+    assert mismatch_meta["governance"]["gate"] == "approvals_gate"
+    assert mismatch_meta["approval_id"] == refreshed_approval_id
+
+    art = Path(str(mismatch_output["artifact_dir"]))
+    assert (art / "request.json").exists()
+    assert (art / "mismatch.json").exists()
+    assert not (art / "result.json").exists()
+
+    mirror_branch_before = subprocess.run(
+        ["git", "--git-dir", str(mirror_root), "rev-parse", "refs/heads/main"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert mirror_branch_before.returncode != 0
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    output = executed_body["operation"]["output"]
+    assert isinstance(output, dict)
+    assert output["status"] == "success"
+    assert output["approval_id"] == refreshed_approval_id
+    assert output["remote_url"] == str(mirror_root)
+
+    mirror_branch_after = subprocess.run(
+        ["git", "--git-dir", str(mirror_root), "rev-parse", "refs/heads/main"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert mirror_branch_after.returncode == 0
+    assert mirror_branch_after.stdout.strip()
