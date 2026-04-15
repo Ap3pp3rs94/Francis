@@ -514,6 +514,96 @@ def _plugin_run_approval_id(payload: "PluginRunIn") -> str:
     return _safe_str(meta_obj.get("approval_id")).strip()
 
 
+def _normalize_approval_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
+            normalized_key = _safe_str(key).strip()
+            if not normalized_key:
+                continue
+            normalized[normalized_key] = _normalize_approval_value(value.get(key))
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [_normalize_approval_value(item) for item in value]
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+    except Exception:
+        return _safe_str(value)
+
+
+def _plugin_approval_meta(meta: Any) -> dict[str, Any]:
+    if not isinstance(meta, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
+        normalized_key = _safe_str(key).strip()
+        if not normalized_key or normalized_key in {"approval_id", "force"}:
+            continue
+        normalized[normalized_key] = _normalize_approval_value(meta.get(key))
+    return normalized
+
+
+def _plugin_approval_payload(
+    *,
+    plugin_id: str,
+    action: str,
+    risk_tier: str,
+    required_trust: int,
+    idempotency_key: str,
+    payload_input: Any,
+    meta: Any,
+) -> dict[str, Any]:
+    return {
+        "plugin_id": _safe_str(plugin_id).strip(),
+        "action": _safe_str(action).strip(),
+        "risk_tier": _safe_str(risk_tier).strip().lower() or "normal",
+        "required_trust": int(required_trust),
+        "idempotency_key": _safe_str(idempotency_key).strip(),
+        "input": _normalize_approval_value(payload_input),
+        "meta": _plugin_approval_meta(meta),
+    }
+
+
+def _plugin_approval_artifact_dir(approval_id: str) -> Path:
+    return _art_dir() / "approvals" / _safe_str(approval_id).strip()
+
+
+def _request_plugin_approval(
+    *,
+    plugin_id: str,
+    action: str,
+    request_payload: dict[str, Any],
+    reason: str,
+    previous_approval_id: str = "",
+    previous_status: str = "",
+    previous_record: dict[str, Any] | None = None,
+) -> tuple[str, Path]:
+    approval = approval_store.request(
+        action="plugin.run",
+        reason=reason,
+        payload=request_payload,
+    )
+    approval_id = _safe_str(approval.get("id")).strip()
+    art = _plugin_approval_artifact_dir(approval_id)
+    request_body: dict[str, Any] = {
+        "kind": "plugin.run.request",
+        "approval": approval,
+        "plugin_id": plugin_id,
+        "action": action,
+        "request": request_payload,
+    }
+    if previous_approval_id:
+        request_body["previous_approval_id"] = previous_approval_id
+    if previous_status:
+        request_body["previous_status"] = previous_status
+    if isinstance(previous_record, dict):
+        request_body["previous_approval"] = previous_record
+    _atomic_write_json(art / "request.json", request_body)
+    return approval_id, art
+
+
 def _plugin_governance(
     *,
     gate: str,
@@ -1241,7 +1331,7 @@ def _find_tool_by_id(registry: dict[str, Any], tool_id: str) -> dict[str, Any] |
     return None
 
 
-def _approval_matches_plugin_action(approval_record: dict[str, Any] | None, plugin_id: str, action: str) -> bool:
+def _approval_matches_plugin_action(approval_record: dict[str, Any] | None, expected_payload: dict[str, Any]) -> bool:
     if not isinstance(approval_record, dict):
         return False
 
@@ -1253,15 +1343,20 @@ def _approval_matches_plugin_action(approval_record: dict[str, Any] | None, plug
     if not isinstance(payload, dict):
         return False
 
-    approved_plugin = _safe_str(payload.get("plugin_id")).strip()
-    approved_action = _safe_str(payload.get("action")).strip()
-    if not approved_plugin or not approved_action:
-        return False
-    if approved_plugin.lower() != plugin_id.lower():
-        return False
-    if approved_action.lower() != action.lower():
-        return False
-    return True
+    approved_payload = _plugin_approval_payload(
+        plugin_id=_safe_str(payload.get("plugin_id")),
+        action=_safe_str(payload.get("action")),
+        risk_tier=_safe_str(payload.get("risk_tier")) or _safe_str(expected_payload.get("risk_tier")),
+        required_trust=(
+            int(payload.get("required_trust"))
+            if isinstance(payload.get("required_trust"), (int, float))
+            else int(expected_payload.get("required_trust") or 0)
+        ),
+        idempotency_key=_safe_str(payload.get("idempotency_key")),
+        payload_input=payload.get("input"),
+        meta=payload.get("meta"),
+    )
+    return approved_payload == expected_payload
 
 
 def _find_plugin_by_source(registry: dict[str, Any], source_kind: str, source_ref: str) -> dict[str, Any] | None:
@@ -1882,26 +1977,30 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
         force = _to_bool((payload.meta or {}).get("force"), default=False)
         approval_required = _approval_required_for_capability(capability, risk_tier)
         approval_id = _plugin_run_approval_id(payload)
+        request_payload = _plugin_approval_payload(
+            plugin_id=plugin_id,
+            action=action,
+            risk_tier=risk_tier,
+            required_trust=required_trust,
+            idempotency_key=_safe_str(payload.idempotency_key).strip(),
+            payload_input=payload.input,
+            meta=payload.meta,
+        )
+        approval_reason = _safe_str(payload.reason).strip() or "requested"
         if approval_required and not force:
             if not approval_id:
-                approval = approval_store.request(
-                    action="plugin.run",
-                    reason=_safe_str(payload.reason).strip() or "requested",
-                    payload={
-                        "plugin_id": plugin_id,
-                        "action": action,
-                        "risk_tier": risk_tier,
-                        "required_trust": required_trust,
-                        "idempotency_key": _safe_str(payload.idempotency_key).strip(),
-                        "meta": payload.meta if isinstance(payload.meta, dict) else {},
-                    },
+                created_id, art = _request_plugin_approval(
+                    plugin_id=plugin_id,
+                    action=action,
+                    request_payload=request_payload,
+                    reason=approval_reason,
                 )
-                created_id = _safe_str(approval.get("id")).strip()
                 return {
                     "ok": True,
                     "id": plugin_id,
                     "status": "pending",
                     "approval_id": created_id,
+                    "artifact_dir": str(art),
                     "message": "Plugin action requires approval.",
                     "governance": _plugin_governance(
                         gate="approvals_gate",
@@ -1917,6 +2016,47 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                 }
 
             approval_status, approval_record = _approval_status(approval_id)
+            if approval_status in {"missing", "corrupt"}:
+                refreshed_id, art = _request_plugin_approval(
+                    plugin_id=plugin_id,
+                    action=action,
+                    request_payload=request_payload,
+                    reason=approval_reason,
+                    previous_approval_id=approval_id,
+                    previous_status=approval_status,
+                    previous_record=approval_record,
+                )
+                _atomic_write_json(
+                    art / "error.json",
+                    {
+                        "kind": "plugin.run.error",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "plugin_id": plugin_id,
+                        "action": action,
+                        "status": approval_status,
+                    },
+                )
+                return {
+                    "ok": False,
+                    "id": plugin_id,
+                    "status": "needs_approval",
+                    "error": "approval_not_found",
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "artifact_dir": str(art),
+                    "message": "Approval was missing for this plugin action; a fresh exact-action approval is required.",
+                    "governance": _plugin_governance(
+                        gate="approvals_gate",
+                        next_step="approve_exact_action",
+                        operator_hint="Approve the refreshed plugin action request before rerunning it.",
+                        action=action,
+                        risk_tier=risk_tier,
+                        required_trust=required_trust,
+                        current_trust=trust_level,
+                    ),
+                    "meta": {"action": action, "risk_tier": risk_tier, "required_trust": required_trust},
+                }
             if approval_status == "pending":
                 return {
                     "ok": True,
@@ -1981,14 +2121,48 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     ),
                     "meta": {"action": action, "risk_tier": risk_tier, "required_trust": required_trust},
                 }
-            if not _approval_matches_plugin_action(approval_record, plugin_id, action):
+            if not _approval_matches_plugin_action(approval_record, request_payload):
+                refreshed_id, art = _request_plugin_approval(
+                    plugin_id=plugin_id,
+                    action=action,
+                    request_payload=request_payload,
+                    reason=approval_reason,
+                    previous_approval_id=approval_id,
+                    previous_status=approval_status,
+                    previous_record=approval_record,
+                )
+                _atomic_write_json(
+                    art / "mismatch.json",
+                    {
+                        "kind": "plugin.run.mismatch",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "plugin_id": plugin_id,
+                        "action": action,
+                        "expected_payload": request_payload,
+                        "approval_record": approval_record,
+                    },
+                )
+                _atomic_write_json(
+                    _plugin_approval_artifact_dir(approval_id) / "mismatch.json",
+                    {
+                        "kind": "plugin.run.mismatch",
+                        "approval_id": approval_id,
+                        "plugin_id": plugin_id,
+                        "action": action,
+                        "expected_payload": request_payload,
+                        "approval_record": approval_record,
+                    },
+                )
                 return {
                     "ok": False,
                     "id": plugin_id,
                     "status": "needs_approval",
                     "error": "approval_payload_mismatch",
-                    "approval_id": approval_id,
-                    "message": "Approval does not match this plugin action.",
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "artifact_dir": str(art),
+                    "message": "Approval does not match this exact plugin action request.",
                     "governance": _plugin_governance(
                         gate="approvals_gate",
                         next_step="approve_exact_action",

@@ -60,8 +60,9 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 
 As of `2026-04-15`, the highest-confidence surface newly touched in the current
 working tree is the governed operations/runtime extension for exact-action
-approval refresh on both `git.push` and `codex.supervised_exec`, with canonical
-Francis environment alias resolution still materially true in the repo.
+approval refresh on `git.push`, `codex.supervised_exec`, and approval-bound
+plugin execution, with canonical Francis environment alias resolution still
+materially true in the repo.
 
 Directly inspected implementation truth:
 
@@ -76,6 +77,11 @@ Directly inspected implementation truth:
 - `src/francis/agent/executor.py`, `src/francis/operations/runtime.py`, and
   `src/francis/api/routes/operations.py` expose the same capability through the
   governed operations loop without bypassing `P3_GOVERNANCE`.
+- `src/francis/api/routes/plugins.py` now binds `plugin.run` approvals to the
+  exact plugin/action/input/meta request, strips volatile approval-routing fields
+  from the approval payload, and refreshes approvals when records are
+  missing/corrupt or when the approved plugin request no longer matches the
+  queued exact-action payload instead of reusing stale approval receipts.
 - `tests/test_api_operations.py` now proves that changing the configured remote
   after approval does not silently push and instead forces a fresh exact-action
   approval before execution can continue.
@@ -83,6 +89,13 @@ Directly inspected implementation truth:
   prove that stale supervised-exec approvals are refreshed through both the
   direct API route and the governed operations detail path, with the new approval
   id surfaced back into the queued task state.
+- `tests/test_api_plugins.py` now proves plugin approval refresh on exact-input
+  drift, cross-tool approval mismatch, and missing approval records, with fresh
+  approval lineage and request/mismatch/error artifacts returned to the caller.
+- `tests/test_api_operations.py` now also proves the governed `plugin.run`
+  operation path refreshes exact-action approvals, rewrites the queued task to
+  the new approval id, and preserves truthful governance-hold detail after the
+  held task is requeued.
 - `src/francis/settings.py` and `src/francis/llm/client.py` now resolve canonical
   `FRANCIS_*` environment aliases for repo/runtime/Ollama configuration while
   preserving legacy env-name fallback.
@@ -136,6 +149,10 @@ The following validations were run against the current working tree on
   Result: `16 passed`
 - `git diff --check -- src/francis/agent/supervised_exec.py tests/test_api_operations.py tests/test_api_supervised_exec.py`
   Result: `passed`
+- `pytest tests/test_api_plugins.py tests/test_api_operations.py --disable-warnings`
+  Result: `19 passed in 17.29s`
+- `git diff --check -- src/francis/api/routes/plugins.py tests/test_api_plugins.py tests/test_api_operations.py`
+  Result: `passed`
 - `pytest tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
   Result: `15 passed in 6.71s`
 - `git diff --check -- src/francis/agent/git_push.py src/francis/agent/executor.py src/francis/api/routes/operations.py src/francis/operations/runtime.py src/francis/llm/client.py src/francis/settings.py tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
@@ -148,6 +165,10 @@ Those validations specifically cover:
 - approval refresh when the approved remote payload becomes stale before execution
 - approval refresh when supervised-exec approval records disappear or the approved
   command payload drifts before execution
+- approval refresh when plugin approval records disappear or the approved
+  plugin action/input payload drifts before execution
+- operator-visible operations detail preserving the refreshed plugin approval id
+  and `approvals_gate` posture after the held task is requeued
 - operator-visible operations detail preserving the refreshed supervised-exec
   approval id and `approvals_gate` posture after the hold is requeued
 - canonical `FRANCIS_*` settings alias resolution and Ollama client fallback order

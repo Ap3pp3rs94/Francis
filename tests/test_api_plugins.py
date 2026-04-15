@@ -267,9 +267,32 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     assert approved_body["ok"] is True
     assert approved_body["status"] == "approved"
 
+    mismatched = client.post(
+        "/plugins/run",
+        json={"id": plugin_id, "action": "deploy", "approval_id": approval_id, "input": {"target": "staging"}},
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatched_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != approval_id
+    assert mismatched_body["previous_approval_id"] == approval_id
+    assert mismatched_body["governance"]["gate"] == "approvals_gate"
+    assert mismatched_body["governance"]["next_step"] == "approve_exact_action"
+    refreshed_artifact_dir = Path(str(mismatched_body["artifact_dir"]))
+    assert (refreshed_artifact_dir / "request.json").exists()
+    assert (refreshed_artifact_dir / "mismatch.json").exists()
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
     executed = client.post(
         "/plugins/run",
-        json={"id": plugin_id, "action": "deploy", "approval_id": approval_id, "input": {"target": "prod"}},
+        json={"id": plugin_id, "action": "deploy", "approval_id": refreshed_approval_id, "input": {"target": "staging"}},
     )
     assert executed.status_code == 200
     executed_body = executed.json()
@@ -359,9 +382,16 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     assert mismatched_body["ok"] is False
     assert mismatched_body["status"] == "needs_approval"
     assert mismatched_body["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatched_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != restart_approval_id
+    assert mismatched_body["previous_approval_id"] == restart_approval_id
     assert mismatched_body["governance"]["gate"] == "approvals_gate"
     assert mismatched_body["governance"]["next_step"] == "approve_exact_action"
     assert mismatched_body["tool_id"] == deploy_tool_id
+    refreshed_artifact_dir = Path(str(mismatched_body["artifact_dir"]))
+    assert (refreshed_artifact_dir / "request.json").exists()
+    assert (refreshed_artifact_dir / "mismatch.json").exists()
 
     approved_deploy = client.post("/approvals/decision", json={"id": deploy_approval_id, "action": "approve"})
     assert approved_deploy.status_code == 200
@@ -377,3 +407,71 @@ def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_pa
     assert executed_body["status"] == "ok"
     assert executed_body["tool_id"] == deploy_tool_id
     assert executed_body["meta"]["tool_action"] == "deploy"
+
+
+def test_plugins_run_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/missing-approval",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Deploy to production.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "plugin-missing-approval-test"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    pending = client.post("/plugins/run", json={"id": plugin_id, "action": "deploy", "input": {"target": "prod"}})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    assert pending_body["status"] == "pending"
+    approval_id = str(pending_body["approval_id"])
+    assert approval_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    assert pending_path.exists()
+    pending_path.unlink()
+
+    retried = client.post(
+        "/plugins/run",
+        json={"id": plugin_id, "action": "deploy", "approval_id": approval_id, "input": {"target": "prod"}},
+    )
+    assert retried.status_code == 200
+    retried_body = retried.json()
+    assert retried_body["ok"] is False
+    assert retried_body["status"] == "needs_approval"
+    assert retried_body["error"] == "approval_not_found"
+    refreshed_approval_id = str(retried_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != approval_id
+    assert retried_body["previous_approval_id"] == approval_id
+    assert retried_body["governance"]["gate"] == "approvals_gate"
+    assert retried_body["governance"]["next_step"] == "approve_exact_action"
+    refreshed_artifact_dir = Path(str(retried_body["artifact_dir"]))
+    assert (refreshed_artifact_dir / "request.json").exists()
+    assert (refreshed_artifact_dir / "error.json").exists()
