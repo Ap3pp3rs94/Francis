@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test --experimental-strip-types src/settings/index.test.ts src/operations/index.test.ts",
     "build": "vite build",
     "preview": "vite preview"
   },

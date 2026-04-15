@@ -73,6 +73,100 @@ def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> Non
     assert fetched_body["operation"]["status"] in {"succeeded", "failed"}
 
 
+def test_operations_run_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/operations/create",
+        json={"action": "plan.create", "reason": "observe_block", "input": {"goal": "stay queued in observe"}},
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    set_control_mode("observe", reason="test_observe_block", actor="tests")
+
+    run_now = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations"})
+    assert run_now.status_code == 200
+    run_body = run_now.json()
+    assert run_body["ok"] is False
+    assert run_body["status"] == "queued"
+    assert "Observe mode keeps execution read-only." in run_body["message"]
+
+    fetched = client.get(f"/operations/{operation_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["operation"]["status"] == "queued"
+
+
+def test_operations_run_once_worker_route_completes_cleanly(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    run_once = client.post(
+        "/operations/run-once",
+        json={
+            "queue": "default",
+            "kind": "default",
+            "concurrency": 1,
+            "heartbeat_s": 0.1,
+            "profile": "dev",
+            "run_mode": "api",
+            "log_level": "INFO",
+        },
+    )
+    assert run_once.status_code == 200
+    body = run_once.json()
+    assert body["ok"] is True
+    assert body["exit_code"] == 0
+
+
+def test_operations_run_once_worker_route_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    set_control_mode("observe", reason="test_observe_worker_block", actor="tests")
+
+    client = TestClient(create_app())
+
+    run_once = client.post(
+        "/operations/run-once",
+        json={
+            "queue": "default",
+            "kind": "default",
+            "concurrency": 1,
+            "heartbeat_s": 0.1,
+            "profile": "dev",
+            "run_mode": "api",
+            "log_level": "INFO",
+        },
+    )
+    assert run_once.status_code == 200
+    body = run_once.json()
+    assert body["ok"] is False
+    assert body["exit_code"] == 1
+    assert body["status"] == "blocked"
+    assert "Observe mode keeps execution read-only." in body["error"]
+
+
 def test_operations_export_jsonl_contains_task(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

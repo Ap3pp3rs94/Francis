@@ -19,6 +19,7 @@ from francis.kernel.paths import data_dir
 from francis.missions import store as mission_store
 from francis.operations import runtime as operations_runtime
 from francis.workers.runner import run_workers
+from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -112,6 +113,33 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _execution_posture_guard(action_label: str) -> str:
+    try:
+        operator_state = operator_mode_snapshot()
+    except Exception as exc:
+        return f"Execution is blocked until operator posture can be verified: {exc}"
+
+    if not bool(operator_state.get("ok")):
+        return "Execution is blocked until operator posture can be verified."
+
+    control_mode = _as_dict(operator_state.get("control_mode"))
+    posture = _as_dict(operator_state.get("posture"))
+
+    control_mode_id = _safe_str(control_mode.get("id")).strip().lower()
+    control_writes = _safe_str(control_mode.get("writes")).strip().lower()
+    posture_writes = _safe_str(posture.get("writes")).strip().lower()
+
+    if control_mode_id == "observe" or control_writes == "blocked":
+        return f"Observe mode keeps execution read-only. Switch posture before {action_label}."
+    if posture_writes == "blocked":
+        return f"Current operator posture blocks writes. Adjust the environment before {action_label}."
+    return ""
 
 
 def _now_iso() -> str:
@@ -659,6 +687,9 @@ def create_operation(payload: OperationCreateIn) -> dict[str, object]:
 
 @router.post("/run-once")
 def run_workers_once(payload: WorkerRunOnceIn) -> dict[str, object]:
+    blocked_reason = _execution_posture_guard("running a worker cycle")
+    if blocked_reason:
+        return {"ok": False, "exit_code": 1, "error": blocked_reason, "status": "blocked"}
     try:
         exit_code = int(
             run_workers(
@@ -824,6 +855,17 @@ def cancel_operation(operation_id: str, payload: OperationCancelIn) -> dict[str,
 
 @router.post("/{operation_id}/run")
 def run_operation(operation_id: str, payload: OperationRunIn) -> dict[str, object]:
+    blocked_reason = _execution_posture_guard("running queued work")
+    if blocked_reason:
+        detail = operations_runtime.get_operation_detail(operation_id, include_logs=False)
+        operation = detail.get("operation") if isinstance(detail, dict) and isinstance(detail.get("operation"), dict) else None
+        status = _safe_str(operation.get("status") if isinstance(operation, dict) else "").strip() or "blocked"
+        return {
+            "ok": False,
+            "status": status,
+            "message": blocked_reason,
+            "operation": operation,
+        }
     try:
         return operations_runtime.run_operation(operation_id, worker_id=payload.worker_id)
     except Exception as exc:

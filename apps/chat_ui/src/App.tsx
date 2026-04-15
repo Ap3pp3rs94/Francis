@@ -12,6 +12,8 @@ import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
 import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
 import type {
   ContinuityBriefingSnapshot,
+  ContinuityLedgerEntry,
+  ContinuityLedgerSnapshot,
   OperatorControlModeId,
   OperatorModeSnapshot,
   OrbStatusSnapshot,
@@ -166,6 +168,45 @@ function operationResultMessage(record: OperationRecord | null | undefined): str
 
 function operationTraceId(record: OperationRecord | null | undefined): string {
   return safeString(record?.trace_id).trim() || operationMetaString(record, "trace_id");
+}
+
+function truncateText(value: string, maxChars = 180): string {
+  const cleaned = safeString(value).trim();
+  if (!cleaned) return "";
+  if (cleaned.length <= maxChars) return cleaned;
+  return `${cleaned.slice(0, maxChars).trimEnd()}…`;
+}
+
+function continuityLedgerMetaLabels(entry: ContinuityLedgerEntry): string[] {
+  const meta = isRecord(entry.meta) ? entry.meta : {};
+  const labels = [
+    safeString(meta.subsystem).trim(),
+    safeString(meta.session_id).trim(),
+    safeString(meta.mission_id).trim(),
+    safeString(meta.mode).trim() || safeString(meta.run_mode).trim(),
+    safeString(meta.profile).trim(),
+    safeString(meta.queue).trim() ? `queue ${safeString(meta.queue).trim()}` : "",
+    safeString(meta.kind).trim(),
+  ];
+  return labels.filter((label) => label.length > 0).slice(0, 4);
+}
+
+function executionBlockedReason(operatorMode: OperatorModeSnapshot | null, actionLabel: string): string {
+  if (!operatorMode?.ok) {
+    return "Execution controls remain disabled until operator posture is loaded.";
+  }
+
+  const controlModeId = safeString(operatorMode.control_mode?.id).trim().toLowerCase();
+  const controlModeWrites = safeString(operatorMode.control_mode?.writes).trim().toLowerCase();
+  const postureWrites = safeString(operatorMode.posture?.writes).trim().toLowerCase();
+
+  if (controlModeId === "observe" || controlModeWrites === "blocked") {
+    return `Observe mode keeps execution read-only. Switch posture before ${actionLabel}.`;
+  }
+  if (postureWrites === "blocked") {
+    return `Current operator posture blocks writes. Adjust the environment before ${actionLabel}.`;
+  }
+  return "";
 }
 
 function statusBadgeColors(status: string): { bg: string; border: string; color: string } {
@@ -1910,6 +1951,7 @@ export default function App() {
                   <OperationsPanel
                     baseUrl={baseUrl}
                     focusOperationId={focusedOperationId}
+                    operatorMode={operatorMode}
                     onOpenApprovals={openApprovalsPanel}
                   />
                 ) : null}
@@ -1960,6 +2002,7 @@ export default function App() {
                 <OperationsPanel
                   baseUrl={baseUrl}
                   focusOperationId={focusedOperationId}
+                  operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
                 />
               ) : null}
@@ -2257,6 +2300,8 @@ function SystemPanel(props: {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [worldState, setWorldState] = useState<WorldStateSnapshot | null>(null);
   const [worldStateError, setWorldStateError] = useState<string | null>(null);
+  const [continuityLedger, setContinuityLedger] = useState<ContinuityLedgerSnapshot | null>(null);
+  const [continuityLedgerError, setContinuityLedgerError] = useState<string | null>(null);
   const [continuityBriefing, setContinuityBriefing] = useState<ContinuityBriefingSnapshot | null>(null);
   const [continuityBriefingError, setContinuityBriefingError] = useState<string | null>(null);
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
@@ -2316,10 +2361,12 @@ function SystemPanel(props: {
     setRefreshNotice(null);
     setError(null);
     try {
-      const [nextInfo, nextHealth, nextWorldState, nextContinuityBriefing, nextOrbStatus, nextOperations] = await Promise.allSettled([
+      const [nextInfo, nextHealth, nextWorldState, nextContinuityLedger, nextContinuityBriefing, nextOrbStatus, nextOperations] =
+        await Promise.allSettled([
         client.getSystemInfo(),
         client.getHealth(),
         client.getWorldState(),
+        client.getContinuityLedger({ limit: 8 }),
         client.getContinuityBriefing(),
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
@@ -2349,6 +2396,14 @@ function SystemPanel(props: {
       } else {
         setWorldStateError(settingsError(nextWorldState.reason, "World-state request failed."));
         degradedFeeds.push("world state");
+      }
+
+      if (nextContinuityLedger.status === "fulfilled") {
+        setContinuityLedger(nextContinuityLedger.value);
+        setContinuityLedgerError(null);
+      } else {
+        setContinuityLedgerError(settingsError(nextContinuityLedger.reason, "Continuity ledger request failed."));
+        degradedFeeds.push("continuity ledger");
       }
 
       if (nextContinuityBriefing.status === "fulfilled") {
@@ -2438,10 +2493,32 @@ function SystemPanel(props: {
   const counts = worldState?.counts;
   const overview = worldState?.overview;
   const shiftBriefing = continuityBriefing?.briefing;
+  const continuityOperatorSurface = continuityBriefing?.operator;
+  const continuityOperatorMode = continuityOperatorSurface?.control_mode;
+  const continuityOperatorModeId = safeString(continuityOperatorMode?.id).trim().toLowerCase();
+  const continuityOperatorModeLabel =
+    safeString(continuityOperatorMode?.label).trim() || continuityOperatorModeId || "operator";
+  const continuityOperatorFocus =
+    safeString(continuityOperatorSurface?.focus?.label).trim() ||
+    safeString(continuityOperatorSurface?.focus?.plane_id).trim();
+  const continuityOperatorWrites = safeString(continuityOperatorSurface?.posture?.writes).trim();
+  const continuityOperatorTrustLevel = continuityOperatorSurface?.posture?.trust_level;
+  const continuityOrbSurface = continuityBriefing?.orb;
+  const continuityOrbState = isRecord(continuityOrbSurface?.state) ? continuityOrbSurface.state : null;
+  const continuityOrbRenderState =
+    safeString(continuityOrbState?.render_state).trim() || safeString(continuityOrbState?.current).trim();
+  const continuityOrbHandbackState = isRecord(continuityOrbState?.handback_state)
+    ? continuityOrbState.handback_state
+    : null;
+  const continuityOrbHandbackStatus = safeString(continuityOrbHandbackState?.state).trim();
+  const continuityOrbHandbackHeadline = safeString(continuityOrbHandbackState?.headline).trim();
   const shiftBriefingCounts = shiftBriefing?.counts ?? {};
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
   const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
+  const continuityLedgerEntries = [...(continuityLedger?.entries ?? [])].slice(-6).reverse();
+  const continuityLedgerCount = continuityLedger?.entries?.length ?? 0;
+  const continuityLedgerRouteError = safeString(continuityLedger?.error).trim();
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
@@ -3104,6 +3181,75 @@ function SystemPanel(props: {
           </div>
         ) : null}
 
+        {(continuityOperatorSurface || continuityOrbSurface) && !continuityBriefingError ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 8,
+              marginTop: 12,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Embedded Operator Surface</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                Continuity carries the last operator posture seen during the briefing snapshot.
+              </div>
+              {continuityOperatorSurface?.available ? (
+                <>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    <span style={badgeStyle(continuityOperatorModeLabel)}>{continuityOperatorModeLabel}</span>
+                    {continuityOperatorWrites ? (
+                      <span style={badgeStyle(continuityOperatorWrites)}>{continuityOperatorWrites}</span>
+                    ) : null}
+                    {continuityOperatorFocus ? <span style={badgeStyle(continuityOperatorFocus)}>{continuityOperatorFocus}</span> : null}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                    {safeString(continuityOperatorMode?.summary).trim() ||
+                      "Dedicated operator-mode polling can degrade; this briefing snapshot keeps the last declared posture visible."}
+                  </div>
+                  {typeof continuityOperatorTrustLevel === "number" && Number.isFinite(continuityOperatorTrustLevel) ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      trust <code>{continuityOperatorTrustLevel.toFixed(2)}</code>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+                  {safeString(continuityOperatorSurface?.error).trim() ||
+                    "Embedded operator posture is unavailable in this briefing snapshot."}
+                </div>
+              )}
+            </div>
+
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Embedded Orb Surface</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                Continuity also carries the last orb handback state so return-to-work context stays inspectable.
+              </div>
+              {continuityOrbSurface?.available ? (
+                <>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {continuityOrbRenderState ? <span style={badgeStyle(continuityOrbRenderState)}>{continuityOrbRenderState}</span> : null}
+                    {continuityOrbHandbackStatus ? (
+                      <span style={badgeStyle(continuityOrbHandbackStatus)}>{continuityOrbHandbackStatus}</span>
+                    ) : null}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                    {continuityOrbHandbackHeadline ||
+                      "Dedicated ORB model polling can degrade; this briefing snapshot keeps the last handback state visible."}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+                  {safeString(continuityOrbSurface?.error).trim() ||
+                    "Embedded orb handback state is unavailable in this briefing snapshot."}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
         <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Focus Now</div>
         <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
           {shiftBriefingFocus.length === 0 ? (
@@ -3243,6 +3389,72 @@ function SystemPanel(props: {
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div id="francis-continuity-ledger" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Continuity Ledger Tail</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Raw recent append records from the local continuity ledger. This is a receipt surface, not a synthesized memory claim.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(continuityLedgerCount > 0 ? "live" : "clear")}>entries {continuityLedgerCount}</span>
+            {continuityLedgerEntries[0]?.ts ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Latest {toLocaleTime(continuityLedgerEntries[0].ts)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {continuityLedgerError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Ledger feed unavailable: {continuityLedgerError}
+          </div>
+        ) : null}
+
+        {continuityLedgerRouteError && !continuityLedgerError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Ledger route reported: {continuityLedgerRouteError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {continuityLedgerEntries.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              No continuity ledger entries are recorded yet. Once chat, daemon, or governed runtime activity appends receipts, they will appear here.
+            </div>
+          ) : (
+            continuityLedgerEntries.map((entry, index) => {
+              const metaLabels = continuityLedgerMetaLabels(entry);
+              return (
+                <div
+                  key={`continuity-ledger-${entry.ts ?? "unknown"}-${entry.role}-${index}`}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={badgeStyle(entry.role || "unknown")}>{entry.role || "unknown"}</span>
+                      {entry.ts ? <span style={{ fontSize: 11, color: THEME.muted }}>{toLocaleTime(entry.ts)}</span> : null}
+                    </div>
+                    {metaLabels.length > 0 ? (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {metaLabels.map((label) => (
+                          <span key={`${entry.role}-${label}`} style={badgeStyle(label)}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div style={{ fontSize: 12, color: THEME.text, marginTop: 8 }}>
+                    {truncateText(entry.content, 220) || "Ledger entry recorded without content."}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       <div id="francis-telemetry-status" style={{ ...summaryCardStyle(), marginTop: 12 }}>
@@ -4734,7 +4946,12 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   );
 }
 
-function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; onOpenApprovals: (approvalId?: string) => void }) {
+function OperationsPanel(props: {
+  baseUrl: string;
+  focusOperationId?: string;
+  operatorMode: OperatorModeSnapshot | null;
+  onOpenApprovals: (approvalId?: string) => void;
+}) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [items, setItems] = useState<OperationRecord[]>([]);
@@ -4745,6 +4962,8 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; on
   const [detailBusy, setDetailBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState<"" | "run" | "cancel">("");
   const [actionNotice, setActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [workerCycleBusy, setWorkerCycleBusy] = useState(false);
+  const [workerCycleNotice, setWorkerCycleNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const operationsError = useCallback((err: unknown): string => {
@@ -4824,6 +5043,17 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; on
     setActionNotice(null);
   }, [selectedOperationId]);
 
+  const operatorEnvironment = props.operatorMode?.environment;
+  const runSelectedBlockedReason = executionBlockedReason(props.operatorMode, "running queued work");
+  const workerProfile = safeString(operatorEnvironment?.id).trim();
+  const workerRunMode = safeString(operatorEnvironment?.run_mode).trim();
+  const workerCycleBlockedReason =
+    executionBlockedReason(props.operatorMode, "running a worker cycle") ||
+    (!workerProfile || !workerRunMode
+      ? "Worker cycle remains disabled until operator environment posture is loaded."
+      : "");
+  const canRunWorkerCycle = workerCycleBlockedReason.length === 0;
+
   useEffect(() => {
     void loadDetail(selectedOperationId);
   }, [loadDetail, selectedOperationId]);
@@ -4856,13 +5086,54 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; on
       : ["queued", "pending", "needs_approval"].includes(selectedStatus)
         ? "warn"
         : "info";
-  const canRunSelected = selectedStatus === "queued" || selectedStatus === "blocked";
+  const canRunSelected = (selectedStatus === "queued" || selectedStatus === "blocked") && runSelectedBlockedReason.length === 0;
   const canCancelSelected = selectedStatus === "queued" || selectedStatus === "running" || selectedStatus === "blocked";
+
+  const runWorkerCycle = useCallback(async () => {
+    if (!canRunWorkerCycle) return;
+    setWorkerCycleBusy(true);
+    setWorkerCycleNotice(null);
+    setActionNotice(null);
+    setError(null);
+    try {
+      const response = await client.runOnce({
+        queue: "default",
+        kind: "default",
+        concurrency: 1,
+        heartbeat_s: 0.25,
+        profile: workerProfile,
+        run_mode: workerRunMode,
+        log_level: "INFO",
+      });
+      await refresh();
+      if (selectedOperationId) {
+        await loadDetail(selectedOperationId);
+      }
+      if (!response.ok) {
+        setWorkerCycleNotice({
+          tone: "error",
+          text:
+            response.error?.trim() ||
+            `Worker cycle exited with code ${String(response.exit_code ?? "unknown")}.`,
+        });
+        return;
+      }
+      setWorkerCycleNotice({
+        tone: "info",
+        text: `Worker cycle completed with exit code ${String(response.exit_code ?? 0)} in ${workerProfile}/${workerRunMode}.`,
+      });
+    } catch (err) {
+      setWorkerCycleNotice({ tone: "error", text: operationsError(err) });
+    } finally {
+      setWorkerCycleBusy(false);
+    }
+  }, [canRunWorkerCycle, client, loadDetail, operationsError, refresh, selectedOperationId, workerProfile, workerRunMode]);
 
   const runSelectedOperation = useCallback(async () => {
     if (!selectedOperationId || !canRunSelected) return;
     setActionBusy("run");
     setActionNotice(null);
+    setWorkerCycleNotice(null);
     setError(null);
     try {
       const response = await client.run(selectedOperationId, { worker_id: "chat_ui.operations" });
@@ -4897,6 +5168,7 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; on
     if (!selectedOperationId || !canCancelSelected) return;
     setActionBusy("cancel");
     setActionNotice(null);
+    setWorkerCycleNotice(null);
     setError(null);
     try {
       const response = await client.cancel(selectedOperationId, { reason: "cancelled_from_chat_ui" });
@@ -4946,8 +5218,52 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; on
             <option value="failed">Failed</option>
             <option value="canceled">Canceled</option>
           </select>
-          <button onClick={() => void refresh()} disabled={busy || actionBusy !== ""} style={buttonStyle}>
+          <button onClick={() => void refresh()} disabled={busy || actionBusy !== "" || workerCycleBusy} style={buttonStyle}>
             {busy ? "Refreshing." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Worker Cycle</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Run one bounded worker cycle through the existing queue. This preserves the current backend routing and keeps the action explicit in the operator console.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {workerProfile ? <span style={badgeStyle(workerProfile)}>{workerProfile}</span> : null}
+            {workerRunMode ? <span style={badgeStyle(workerRunMode)}>{workerRunMode}</span> : null}
+            <span style={badgeStyle("default")}>queue default</span>
+            <span style={badgeStyle("default")}>kind default</span>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: workerCycleBlockedReason ? "#ffcf9d" : THEME.muted, marginTop: 8 }}>
+          {workerCycleBlockedReason || "This cycle uses concurrency 1 and heartbeat 0.25s so the queue advances in a narrow, reviewable step."}
+        </div>
+        {workerCycleNotice ? (
+          <div
+            style={{
+              border: `1px solid ${workerCycleNotice.tone === "error" ? THEME.errorBorder : THEME.panelBorder}`,
+              background: workerCycleNotice.tone === "error" ? THEME.errorBg : "#111819",
+              color: workerCycleNotice.tone === "error" ? "#ffaaaa" : "#aee6df",
+              padding: 10,
+              borderRadius: 10,
+              fontSize: 12,
+              marginTop: 10,
+            }}
+          >
+            {workerCycleNotice.text}
+          </div>
+        ) : null}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+          <button
+            onClick={() => void runWorkerCycle()}
+            disabled={!canRunWorkerCycle || workerCycleBusy || busy || actionBusy !== ""}
+            style={buttonStyle}
+          >
+            {workerCycleBusy ? "Running cycle." : "Run worker cycle"}
           </button>
         </div>
       </div>
@@ -5046,17 +5362,20 @@ function OperationsPanel(props: { baseUrl: string; focusOperationId?: string; on
               <div style={{ fontSize: 12 }}>
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
+              {runSelectedBlockedReason && (selectedStatus === "queued" || selectedStatus === "blocked") ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d" }}>{runSelectedBlockedReason}</div>
+              ) : null}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   onClick={() => void runSelectedOperation()}
-                  disabled={!canRunSelected || actionBusy !== ""}
+                  disabled={!canRunSelected || actionBusy !== "" || workerCycleBusy}
                   style={buttonStyle}
                 >
                   {actionBusy === "run" ? "Running." : "Run now"}
                 </button>
                 <button
                   onClick={() => void cancelSelectedOperation()}
-                  disabled={!canCancelSelected || actionBusy !== ""}
+                  disabled={!canCancelSelected || actionBusy !== "" || workerCycleBusy}
                   style={buttonStyle}
                 >
                   {actionBusy === "cancel" ? "Canceling." : "Cancel"}

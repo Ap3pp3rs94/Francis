@@ -228,6 +228,22 @@ export type OperationRunResponse = {
   message?: string;
 };
 
+export type OperationRunOnceRequest = {
+  queue?: string;
+  kind?: string;
+  concurrency?: number;
+  heartbeat_s?: number;
+  profile?: string;
+  run_mode?: string;
+  log_level?: string;
+};
+
+export type OperationRunOnceResponse = {
+  ok: boolean;
+  exit_code?: number;
+  error?: string;
+};
+
 export type OperationDeleteRequest = {
   reason?: string;
 };
@@ -359,9 +375,9 @@ async function fetchWithTimeout(url: string, init?: TimeoutFetchInit): Promise<R
   const controller = new AbortController();
   let timedOut = false;
 
-  let timeoutId: number | null = null;
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   if (timeoutMs > 0) {
-    timeoutId = window.setTimeout(() => {
+    timeoutId = globalThis.setTimeout(() => {
       timedOut = true;
       controller.abort();
     }, timeoutMs);
@@ -398,7 +414,7 @@ async function fetchWithTimeout(url: string, init?: TimeoutFetchInit): Promise<R
     }
     throw err;
   } finally {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
+    if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     if (externalSignal && !externalSignal.aborted) {
       externalSignal.removeEventListener("abort", onExternalAbort);
     }
@@ -676,6 +692,7 @@ export type OperationsEndpoints = {
   update?: (operationId: string) => string;
   cancel?: (operationId: string) => string;
   run?: (operationId: string) => string;
+  runOnce?: () => string;
   delete?: (operationId: string) => string;
 
   export?: () => string;
@@ -691,6 +708,7 @@ export function defaultOperationsEndpoints(): OperationsEndpoints {
     update: (id: string) => `/operations/${encodeURIComponent(id)}`,
     cancel: (id: string) => `/operations/${encodeURIComponent(id)}/cancel`,
     run: (id: string) => `/operations/${encodeURIComponent(id)}/run`,
+    runOnce: () => "/operations/run-once",
     delete: (id: string) => `/operations/${encodeURIComponent(id)}`,
     export: () => "/operations/export",
   };
@@ -990,6 +1008,34 @@ export class OperationsClient {
       operation: op ?? undefined,
       status: (safeString(json.status) || undefined) as OperationStatus | undefined,
       message: safeString(json.message) || undefined,
+    };
+  }
+
+  /**
+   * Run a single bounded worker cycle (backend-dependent).
+   */
+  async runOnce(
+    req?: OperationRunOnceRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<OperationRunOnceResponse> {
+    if (!this.endpoints.runOnce) {
+      throw new Error("OperationsClient.runOnce is not configured (endpoints.runOnce missing)");
+    }
+
+    const url = this.url(this.endpoints.runOnce());
+    const json = await fetchAny(url, {
+      method: "POST",
+      body: JSON.stringify(req ?? {}),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+
+    if (!isRecord(json)) return { ok: true };
+
+    return {
+      ok: Boolean(json.ok ?? true),
+      exit_code: typeof json.exit_code === "number" && Number.isFinite(json.exit_code) ? json.exit_code : undefined,
+      error: safeString(json.error) || undefined,
     };
   }
 

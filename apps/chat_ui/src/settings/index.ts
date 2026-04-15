@@ -268,6 +268,7 @@ export type OrbStatusSnapshot = {
     allowed: OrbTransitionSummary[];
     forbidden: OrbTransitionSummary[];
   };
+  state?: Record<string, unknown>;
   meta?: Record<string, unknown>;
 };
 
@@ -398,6 +399,32 @@ export type ContinuityBriefingPayload = {
   deadletter_preview?: ContinuityBriefingDeadletterItem[];
 };
 
+export type ContinuityLedgerEntry = {
+  ts?: UnixSeconds;
+  role: string;
+  content: string;
+  meta?: Record<string, unknown>;
+};
+
+export type ContinuityLedgerSnapshot = {
+  entries: ContinuityLedgerEntry[];
+  error?: string;
+};
+
+export type ContinuityOperatorSurface = {
+  available: boolean;
+  error?: string;
+  control_mode?: OperatorControlMode;
+  focus?: OperatorModeFocus;
+  posture?: OperatorModePosture;
+};
+
+export type ContinuityOrbSurface = {
+  available: boolean;
+  error?: string;
+  state?: Record<string, unknown>;
+};
+
 export type ContinuityBriefingSnapshot = {
   ok: boolean;
   subsystem?: string;
@@ -405,6 +432,8 @@ export type ContinuityBriefingSnapshot = {
   briefing?: ContinuityBriefingPayload;
   mission_status_counts?: Record<string, number>;
   recent_missions?: WorldStateMissionSummary[];
+  operator?: ContinuityOperatorSurface;
+  orb?: ContinuityOrbSurface;
   meta?: Record<string, unknown>;
 };
 
@@ -569,10 +598,10 @@ async function fetchWithTimeout(url: string, init?: TimeoutFetchInit): Promise<R
   const { timeoutMs = 20_000, signal: externalSignal, bearerToken, headersExtra, ...fetchInit } = init ?? {};
 
   const controller = new AbortController();
-  let timeoutId: number | null = null;
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   if (timeoutMs > 0) {
-    timeoutId = window.setTimeout(() => {
+    timeoutId = globalThis.setTimeout(() => {
       controller.abort();
     }, timeoutMs);
   }
@@ -611,7 +640,7 @@ async function fetchWithTimeout(url: string, init?: TimeoutFetchInit): Promise<R
       signal: controller.signal,
     });
   } finally {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
+    if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
     if (externalSignal && !externalSignal.aborted) {
       externalSignal.removeEventListener("abort", onExternalAbort);
     }
@@ -748,13 +777,15 @@ function parseSystemHealth(raw: unknown): SystemHealth {
   // Accept aliases:
   //  - { ok, status, checks: [] }
   //  - { health: { ... } }
-  const obj = isRecord(raw.health) ? (raw.health as Record<string, unknown>) : raw;
+  //  - { ok, report: { ... } }
+  const report = isRecord(raw.report) ? (raw.report as Record<string, unknown>) : null;
+  const obj = isRecord(raw.health) ? (raw.health as Record<string, unknown>) : report ?? raw;
 
-  const ok = safeBoolean(obj.ok, false);
+  const ok = safeBoolean(raw.ok, safeBoolean(obj.ok, false));
   const health: SystemHealth = {
     ok,
-    status: safeString(obj.status, ""),
-    ts: normalizeUnixSeconds(obj.ts),
+    status: safeString(raw.status, "") || safeString(obj.status, "") || (ok ? "ok" : ""),
+    ts: normalizeUnixSeconds(raw.ts) ?? normalizeUnixSeconds(obj.ts),
   };
 
   if (!health.status) delete health.status;
@@ -764,7 +795,15 @@ function parseSystemHealth(raw: unknown): SystemHealth {
   const checks = checksRaw.map(parseHealthCheck).filter((c): c is HealthCheck => c !== null);
   if (checks.length > 0) health.checks = checks;
 
-  if (isRecord(obj.meta)) health.meta = obj.meta as Record<string, unknown>;
+  const meta: Record<string, unknown> = {};
+  if (isRecord(obj.meta)) Object.assign(meta, obj.meta as Record<string, unknown>);
+  if (report) {
+    for (const [key, value] of Object.entries(report)) {
+      if (key === "ok" || key === "status" || key === "ts" || key === "checks" || key === "meta") continue;
+      meta[key] = value;
+    }
+  }
+  if (Object.keys(meta).length > 0) health.meta = meta;
 
   return health;
 }
@@ -833,6 +872,38 @@ function parseEffectiveConfigSnapshot(raw: unknown): EffectiveConfigSnapshot {
   if (isRecord(raw.meta)) snap.meta = raw.meta as Record<string, unknown>;
 
   return snap;
+}
+
+function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw.id, "").trim();
+  if (!id) return null;
+
+  return {
+    id,
+    status: safeString(raw.status, ""),
+    objective: safeString(raw.objective, ""),
+    summary: safeString(raw.summary, ""),
+    next_step: safeString(raw.next_step, ""),
+    requester_id: safeString(raw.requester_id, ""),
+    priority: safeNumber(raw.priority, 0),
+    risk_tier: safeString(raw.risk_tier, ""),
+    linked_task_ids: Array.isArray(raw.linked_task_ids)
+      ? raw.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
+      : [],
+    linked_task_count: safeNumber(raw.linked_task_count, 0),
+    deadletter_reason: safeString(raw.deadletter_reason, ""),
+    last_task_id: safeString(raw.last_task_id, ""),
+    last_task_status: safeString(raw.last_task_status, ""),
+    last_task_result_status: safeString(raw.last_task_result_status, ""),
+    last_task_reason: safeString(raw.last_task_reason, ""),
+    last_task_gate: safeString(raw.last_task_gate, ""),
+    last_task_next_step: safeString(raw.last_task_next_step, ""),
+    last_task_updated_at: safeString(raw.last_task_updated_at, ""),
+    created_at: safeString(raw.created_at, ""),
+    updated_at: safeString(raw.updated_at, ""),
+    terminal: safeBoolean(raw.terminal, false),
+  };
 }
 
 function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
@@ -918,33 +989,8 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
       Object.entries(missionStatusCountsRaw).map(([key, value]) => [key, safeNumber(value, 0)]),
     ),
     recent_missions: recentMissionsRaw
-      .filter(isRecord)
-      .map((item) => ({
-        id: safeString(item.id, ""),
-        status: safeString(item.status, ""),
-        objective: safeString(item.objective, ""),
-        summary: safeString(item.summary, ""),
-        next_step: safeString(item.next_step, ""),
-        requester_id: safeString(item.requester_id, ""),
-        priority: safeNumber(item.priority, 0),
-        risk_tier: safeString(item.risk_tier, ""),
-        linked_task_ids: Array.isArray(item.linked_task_ids)
-          ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
-          : [],
-        linked_task_count: safeNumber(item.linked_task_count, 0),
-        deadletter_reason: safeString(item.deadletter_reason, ""),
-        last_task_id: safeString(item.last_task_id, ""),
-        last_task_status: safeString(item.last_task_status, ""),
-        last_task_result_status: safeString(item.last_task_result_status, ""),
-        last_task_reason: safeString(item.last_task_reason, ""),
-        last_task_gate: safeString(item.last_task_gate, ""),
-        last_task_next_step: safeString(item.last_task_next_step, ""),
-        last_task_updated_at: safeString(item.last_task_updated_at, ""),
-        created_at: safeString(item.created_at, ""),
-        updated_at: safeString(item.updated_at, ""),
-        terminal: safeBoolean(item.terminal, false),
-      }))
-      .filter((item) => item.id),
+      .map(parseWorldStateMissionSummary)
+      .filter((item): item is WorldStateMissionSummary => item !== null),
     mission_queue: missionQueueRaw
       .filter(isRecord)
       .map((item) => ({
@@ -1120,6 +1166,7 @@ function parseOrbStatusSnapshot(raw: unknown): OrbStatusSnapshot {
         .map(parseOrbTransitionSummary)
         .filter((item): item is OrbTransitionSummary => item !== null),
     },
+    state: isRecord(raw.state) ? (raw.state as Record<string, unknown>) : undefined,
   };
 
   if (!snapshot.subsystem) delete snapshot.subsystem;
@@ -1130,6 +1177,7 @@ function parseOrbStatusSnapshot(raw: unknown): OrbStatusSnapshot {
   if (!snapshot.planes?.length) delete snapshot.planes;
   if (!snapshot.gates?.length) delete snapshot.gates;
   if (!snapshot.transitions?.allowed.length && !snapshot.transitions?.forbidden.length) delete snapshot.transitions;
+  if (!snapshot.state) delete snapshot.state;
   if (isRecord(raw.meta)) snapshot.meta = raw.meta as Record<string, unknown>;
 
   return snapshot;
@@ -1295,6 +1343,103 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
   };
 }
 
+function parseContinuityLedgerEntry(raw: unknown): ContinuityLedgerEntry | null {
+  if (!isRecord(raw)) return null;
+
+  const role = safeString(raw["role"], "").trim();
+  const content = safeString(raw["content"], "");
+  if (!role && !content.trim()) return null;
+
+  const entry: ContinuityLedgerEntry = {
+    ts: normalizeUnixSeconds(raw["ts"]),
+    role: role || "unknown",
+    content,
+    meta: isRecord(raw["meta"]) ? (raw["meta"] as Record<string, unknown>) : undefined,
+  };
+
+  if (!entry.ts) delete entry.ts;
+  if (!entry.meta) delete entry.meta;
+
+  return entry;
+}
+
+function parseContinuityLedgerSnapshot(raw: unknown): ContinuityLedgerSnapshot {
+  if (!isRecord(raw)) return { entries: [] };
+
+  const snapshot: ContinuityLedgerSnapshot = {
+    entries: (Array.isArray(raw["entries"]) ? raw["entries"] : [])
+      .map(parseContinuityLedgerEntry)
+      .filter((item): item is ContinuityLedgerEntry => item !== null),
+    error: safeString(raw["error"], ""),
+  };
+
+  if (!snapshot.error) delete snapshot.error;
+
+  return snapshot;
+}
+
+function parseContinuityOperatorSurface(raw: unknown): ContinuityOperatorSurface | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const controlModeRaw = isRecord(raw["control_mode"]) ? (raw["control_mode"] as Record<string, unknown>) : {};
+  const focusRaw = isRecord(raw["focus"]) ? (raw["focus"] as Record<string, unknown>) : {};
+  const postureRaw = isRecord(raw["posture"]) ? (raw["posture"] as Record<string, unknown>) : {};
+
+  const surface: ContinuityOperatorSurface = {
+    available: safeBoolean(raw["available"], false),
+    error: safeString(raw["error"], ""),
+    control_mode: {
+      id: safeString(controlModeRaw["id"], ""),
+      label: safeString(controlModeRaw["label"], ""),
+      summary: safeString(controlModeRaw["summary"], ""),
+      writes: safeString(controlModeRaw["writes"], ""),
+      implementation_status: safeString(controlModeRaw["implementation_status"], ""),
+      changed_at: safeNumber(controlModeRaw["changed_at"], 0),
+      changed_by: safeString(controlModeRaw["changed_by"], ""),
+      reason: safeString(controlModeRaw["reason"], ""),
+      source: safeString(controlModeRaw["source"], ""),
+    },
+    focus: {
+      plane_id: safeString(focusRaw["plane_id"], ""),
+      label: safeString(focusRaw["label"], ""),
+      reason: safeString(focusRaw["reason"], ""),
+    },
+    posture: {
+      governance_mode: safeString(postureRaw["governance_mode"], ""),
+      trust_posture: safeString(postureRaw["trust_posture"], ""),
+      trust_level: safeNumber(postureRaw["trust_level"], 0),
+      minimum_operational_trust: safeNumber(postureRaw["minimum_operational_trust"], 0),
+      web_access: safeString(postureRaw["web_access"], ""),
+      writes: safeString(postureRaw["writes"], ""),
+      network_egress: safeString(postureRaw["network_egress"], ""),
+    },
+  };
+
+  if (!surface.error) delete surface.error;
+  if (!surface.control_mode?.id) delete surface.control_mode;
+  if (!surface.focus?.plane_id) delete surface.focus;
+  if (Object.keys(postureRaw).length === 0) {
+    delete surface.posture;
+  }
+
+  return surface;
+}
+
+function parseContinuityOrbSurface(raw: unknown): ContinuityOrbSurface | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const surface: ContinuityOrbSurface = {
+    available: safeBoolean(raw["available"], false),
+    error: safeString(raw["error"], ""),
+    state: isRecord(raw["state"]) ? (raw["state"] as Record<string, unknown>) : undefined,
+  };
+
+  if (!surface.error) delete surface.error;
+  if (!surface.state) delete surface.state;
+
+  return surface;
+}
+
 function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapshot {
   if (!isRecord(raw)) return { ok: false };
 
@@ -1321,15 +1466,25 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     recent_missions: (Array.isArray(raw["recent_missions"]) ? raw["recent_missions"] : [])
       .map(parseWorldStateMissionSummary)
       .filter((item): item is WorldStateMissionSummary => item !== null),
+    operator: parseContinuityOperatorSurface(raw["operator"]),
+    orb: parseContinuityOrbSurface(raw["orb"]),
   };
 
   if (!snapshot.subsystem) delete snapshot.subsystem;
   if (!snapshot.generated_at) delete snapshot.generated_at;
-  if (!snapshot.briefing?.headline && !snapshot.briefing?.focus?.length) delete snapshot.briefing;
+  const hasBriefingContent =
+    Boolean(snapshot.briefing?.headline) ||
+    Boolean(snapshot.briefing?.focus?.length) ||
+    Boolean(snapshot.briefing?.counts && Object.keys(snapshot.briefing.counts).length > 0) ||
+    Boolean(snapshot.briefing?.recently_completed?.length) ||
+    Boolean(snapshot.briefing?.deadletter_preview?.length);
+  if (!hasBriefingContent) delete snapshot.briefing;
   if (!snapshot.mission_status_counts || Object.keys(snapshot.mission_status_counts).length === 0) {
     delete snapshot.mission_status_counts;
   }
   if (!snapshot.recent_missions?.length) delete snapshot.recent_missions;
+  if (!snapshot.operator) delete snapshot.operator;
+  if (!snapshot.orb) delete snapshot.orb;
   if (isRecord(raw["meta"])) snapshot.meta = raw["meta"] as Record<string, unknown>;
 
   return snapshot;
@@ -1343,6 +1498,7 @@ export type SettingsEndpoints = {
   info: () => string[];
   health: () => string[];
   worldState: () => string[];
+  continuityLedger: () => string[];
   continuityBriefing: () => string[];
   orbStatus: () => string[];
   operatorMode: () => string[];
@@ -1364,6 +1520,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     info: () => ["/system/info", "/system/status", "/system", "/status"],
     health: () => ["/system/health", "/health", "/system/ping", "/ping"],
     worldState: () => ["/system/world_state", "/system/world-state"],
+    continuityLedger: () => ["/continuity/ledger"],
     continuityBriefing: () => ["/continuity/briefing", "/continuity/shift_briefing", "/continuity/shift-briefing"],
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
@@ -1483,6 +1640,17 @@ export class SettingsClient {
   async getWorldState(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<WorldStateSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.worldState(), this.init(opts));
     return parseWorldStateSnapshot(json);
+  }
+
+  async getContinuityLedger(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<ContinuityLedgerSnapshot> {
+    const safeLimit = Math.max(1, Math.min(Math.floor(opts?.limit ?? 20), 500));
+    const paths = this.endpoints.continuityLedger().map((path) => `${path}${buildQuery({ limit: safeLimit })}`);
+    const { json } = await this.fetchFirstOk(paths, this.init(opts));
+    return parseContinuityLedgerSnapshot(json);
   }
 
   async getContinuityBriefing(opts?: {

@@ -30,6 +30,123 @@ def test_system_info_and_status(monkeypatch, tmp_path: Path) -> None:
     assert status_body["status"] == "ready"
 
 
+def test_system_read_aliases_match_primary_routes(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    world_state = client.get("/system/world_state")
+    world_state_alias = client.get("/system/world-state")
+    assert world_state.status_code == 200
+    assert world_state_alias.status_code == 200
+    world_state_body = world_state.json()
+    world_state_alias_body = world_state_alias.json()
+    assert world_state_alias_body["ok"] == world_state_body["ok"]
+    assert world_state_alias_body["subsystem"] == world_state_body["subsystem"]
+    assert world_state_alias_body["counts"] == world_state_body["counts"]
+    assert world_state_alias_body["paths"] == world_state_body["paths"]
+    assert world_state_alias_body["overview"] == world_state_body["overview"]
+    assert world_state_alias_body["trust"] == world_state_body["trust"]
+
+    orb_status = client.get("/system/orb_status")
+    orb_status_alias = client.get("/system/orb-status")
+    orb_short_alias = client.get("/system/orb")
+    assert orb_status.status_code == 200
+    assert orb_status_alias.status_code == 200
+    assert orb_short_alias.status_code == 200
+    orb_status_body = orb_status.json()
+    for alias_body in (orb_status_alias.json(), orb_short_alias.json()):
+        assert alias_body["ok"] == orb_status_body["ok"]
+        assert alias_body["subsystem"] == orb_status_body["subsystem"]
+        assert alias_body.get("model") == orb_status_body.get("model")
+        assert alias_body.get("core_loop") == orb_status_body.get("core_loop")
+        assert alias_body.get("gates") == orb_status_body.get("gates")
+        assert alias_body.get("transitions") == orb_status_body.get("transitions")
+        assert alias_body.get("state") == orb_status_body.get("state")
+
+    operator_mode = client.get("/system/operator_mode")
+    operator_mode_alias = client.get("/system/operator-mode")
+    assert operator_mode.status_code == 200
+    assert operator_mode_alias.status_code == 200
+    operator_mode_body = operator_mode.json()
+    operator_mode_alias_body = operator_mode_alias.json()
+    assert operator_mode_alias_body["ok"] == operator_mode_body["ok"]
+    assert operator_mode_alias_body["subsystem"] == operator_mode_body["subsystem"]
+    assert operator_mode_alias_body["environment"] == operator_mode_body["environment"]
+    assert operator_mode_alias_body["posture"] == operator_mode_body["posture"]
+    assert operator_mode_alias_body["control_mode"] == operator_mode_body["control_mode"]
+    assert operator_mode_alias_body["available_modes"] == operator_mode_body["available_modes"]
+    assert operator_mode_alias_body["focus"] == operator_mode_body["focus"]
+    assert operator_mode_alias_body["backlog"] == operator_mode_body["backlog"]
+    assert operator_mode_alias_body.get("continuity") == operator_mode_body.get("continuity")
+    assert operator_mode_alias_body.get("notes") == operator_mode_body.get("notes")
+
+    flags = client.get("/system/flags")
+    feature_flags = client.get("/system/feature_flags")
+    features = client.get("/system/features")
+    assert flags.status_code == 200
+    assert feature_flags.status_code == 200
+    assert features.status_code == 200
+    assert feature_flags.json() == flags.json()
+    assert features.json() == flags.json()
+
+    effective_config = client.get("/system/config/effective")
+    effective_config_alias = client.get("/system/effective_config")
+    config_alias = client.get("/system/config")
+    assert effective_config.status_code == 200
+    assert effective_config_alias.status_code == 200
+    assert config_alias.status_code == 200
+    effective_config_body = effective_config.json()
+    for alias_body in (effective_config_alias.json(), config_alias.json()):
+        assert alias_body["env_profile"] == effective_config_body["env_profile"]
+        assert alias_body["run_mode"] == effective_config_body["run_mode"]
+        assert alias_body["config"] == effective_config_body["config"]
+        assert alias_body["sources"] == effective_config_body["sources"]
+
+
 def test_system_world_state_reports_nested_task_records(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
@@ -1201,6 +1318,135 @@ ui:
     body = follow_up.json()
     assert body["control_mode"]["id"] == "away"
     assert body["available_modes"][3]["active"] is True
+
+
+def test_system_mutation_aliases_share_canonical_state(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (data_root / "runtime").mkdir(parents=True, exist_ok=True)
+
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    operator_update = client.post(
+        "/system/operator-mode",
+        json={
+            "mode": "away",
+            "reason": "alias mutation coverage",
+            "actor": "chat_ui_alias_test",
+        },
+    )
+    assert operator_update.status_code == 200
+    operator_update_body = operator_update.json()
+    assert operator_update_body["ok"] is True
+    assert operator_update_body["applied"] is True
+    assert operator_update_body["control_mode"]["id"] == "away"
+
+    operator_follow_up = client.get("/system/operator_mode")
+    assert operator_follow_up.status_code == 200
+    assert operator_follow_up.json()["control_mode"]["id"] == "away"
+
+    set_alias = client.post(
+        "/system/settings",
+        json={
+            "op": "set",
+            "path": "ui.preferences.theme",
+            "value": "dark",
+            "reason": "alias_set",
+        },
+    )
+    assert set_alias.status_code == 200
+    assert set_alias.json()["ok"] is True
+    assert set_alias.json()["resulting_value"] == "dark"
+
+    merge_alias = client.post(
+        "/system/config/patch",
+        json={
+            "op": "merge",
+            "path": "ui.preferences",
+            "value": {"density": "compact"},
+            "reason": "alias_merge",
+        },
+    )
+    assert merge_alias.status_code == 200
+    assert merge_alias.json()["ok"] is True
+    assert merge_alias.json()["resulting_value"]["density"] == "compact"
+
+    config_follow_up = client.get("/system/config/effective")
+    assert config_follow_up.status_code == 200
+    config_body = config_follow_up.json()["config"]
+    assert config_body["ui"]["preferences"]["theme"] == "dark"
+    assert config_body["ui"]["preferences"]["density"] == "compact"
+
+    set_feature_flag = client.post(
+        "/system/feature_flags/set",
+        json={
+            "key": "ui.alias_mode",
+            "enabled": True,
+            "reason": "alias_enable",
+        },
+    )
+    assert set_feature_flag.status_code == 200
+    set_feature_flag_body = set_feature_flag.json()
+    assert set_feature_flag_body["ok"] is True
+    assert set_feature_flag_body["item"]["enabled"] is True
+
+    unset_feature_flag = client.post(
+        "/system/feature_flags/ui.alias_mode",
+        json={"enabled": False, "reason": "alias_disable"},
+    )
+    assert unset_feature_flag.status_code == 200
+    unset_feature_flag_body = unset_feature_flag.json()
+    assert unset_feature_flag_body["ok"] is True
+    assert unset_feature_flag_body["item"]["enabled"] is False
+
+    listed = client.get("/system/flags")
+    assert listed.status_code == 200
+    target = [item for item in listed.json()["items"] if item.get("key") == "ui.alias_mode"]
+    assert target
+    assert target[0]["enabled"] is False
 
 
 def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:

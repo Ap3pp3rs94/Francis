@@ -502,7 +502,68 @@ The Chat UI interacts with the API service (`apps/api/main.py` + `src/francis/ap
 
 
 
-### 8.1 Recommended HTTP endpoints (illustrative)
+### 8.1 Current compatibility contract for operator-critical reads and mutations
+
+The current implementation supports a small compatibility layer for operator-critical
+surfaces used by the Chat UI. This is intentional: route normalization may continue,
+but continuity, operator mode, orb truth, feature-flag state, and runtime settings
+must remain reachable through stable fallbacks while the UI and API evolve.
+
+The rule for these surfaces is:
+
+- choose one primary path per capability
+- keep additive aliases when they preserve live UI behavior
+- remove aliases only with an explicit migration and contract update
+- treat this as a compatibility bridge, not permission bypass
+
+Current implemented compatibility paths:
+
+- Continuity ledger:
+  primary `GET /continuity/ledger`
+  the chat UI consumes this as a raw local receipt tail so return-to-work context
+  can show actual appended continuity records instead of only synthesized mission
+  summaries
+- Continuity briefing:
+  primary `GET /continuity/briefing`
+  aliases `GET /continuity/shift_briefing`, `GET /continuity/shift-briefing`
+  payload also embeds `operator` and `orb` continuity surfaces so the UI can keep
+  handoff truth visible even when dedicated status polling degrades
+- World state:
+  primary `GET /system/world_state`
+  alias `GET /system/world-state`
+- Orb status:
+  primary `GET /system/orb_status`
+  aliases `GET /system/orb-status`, `GET /system/orb`
+- Operator mode:
+  primary `GET /system/operator_mode`
+  alias `GET /system/operator-mode`
+- Operator mode mutation:
+  primary `POST /system/operator_mode`
+  alias `POST /system/operator-mode`
+- Feature flags:
+  primary `GET /system/flags`
+  aliases `GET /system/feature_flags`, `GET /system/features`
+- Effective config snapshot:
+  primary `GET /system/config/effective`
+  aliases `GET /system/effective_config`, `GET /system/config`
+- Runtime config mutation:
+  primary `POST /system/config/mutate`
+  aliases `POST /system/config/patch`, `POST /system/settings/mutate`, `POST /system/settings`
+- Feature flag mutation:
+  primary `POST /system/flags/set` and `POST /system/flags/{key}`
+  aliases `POST /system/feature_flags/set` and `POST /system/feature_flags/{key}`
+- Operations execution:
+  primary `POST /operations/{operation_id}/run`
+  companion worker pump `POST /operations/run-once`
+  both routes are intentionally posture-aware and fail closed while operator mode
+  is `observe` or writes are otherwise blocked
+
+These aliases are contract-checked in `tests/test_api_contract_chat_ui.py` and
+behavior-checked in the targeted API tests for continuity, operations, and system
+settings. If the backend changes here, update the UI endpoint fallback lists and
+the contract tests in the same change.
+
+### 8.2 Recommended HTTP endpoints (illustrative)
 
 - `GET /health`
 
@@ -534,7 +595,7 @@ The Chat UI interacts with the API service (`apps/api/main.py` + `src/francis/ap
 
 
 
-### 8.2 WebSocket channels (illustrative)
+### 8.3 WebSocket channels (illustrative)
 
 - `/ws/chat/{session_id}` — message streaming + tool trace events
 
@@ -542,7 +603,7 @@ The Chat UI interacts with the API service (`apps/api/main.py` + `src/francis/ap
 
 
 
-### 8.3 Error model (strongly recommended)
+### 8.4 Error model (strongly recommended)
 
 All API errors should map into a stable shape:
 
@@ -567,6 +628,3 @@ All API errors should map into a stable shape:
   }
 
 }
-
-
-

@@ -169,6 +169,75 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["orb"]["state"]["handback_state"]["state"] == "none"
 
 
+def test_continuity_briefing_aliases_match_primary_route(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    primary = client.get("/continuity/briefing")
+    underscore_alias = client.get("/continuity/shift_briefing")
+    hyphen_alias = client.get("/continuity/shift-briefing")
+
+    assert primary.status_code == 200
+    assert underscore_alias.status_code == 200
+    assert hyphen_alias.status_code == 200
+
+    primary_body = primary.json()
+    for body in (underscore_alias.json(), hyphen_alias.json()):
+        assert body["ok"] == primary_body["ok"]
+        assert body["subsystem"] == primary_body["subsystem"]
+        assert body["briefing"] == primary_body["briefing"]
+        assert body["mission_status_counts"] == primary_body["mission_status_counts"]
+        assert body["recent_missions"] == primary_body["recent_missions"]
+        assert body["operator"] == primary_body["operator"]
+        assert body["orb"] == primary_body["orb"]
+
+
+def test_continuity_ledger_tail_returns_recent_entries(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat.continuity.ledger import append
+
+    append("user", "Carry forward the 8 AM continuity pass.", {"session_id": "chat_alpha", "mission_id": "mission_alpha"})
+    append("system", "daemon started", {"subsystem": "daemon", "profile": "dev", "run_mode": "api"})
+
+    client = TestClient(create_app())
+
+    response = client.get("/continuity/ledger?limit=1")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert "error" not in body
+    assert len(body["entries"]) == 1
+    latest = body["entries"][0]
+    assert latest["role"] == "system"
+    assert latest["content"] == "daemon started"
+    assert latest["meta"]["subsystem"] == "daemon"
+    assert latest["meta"]["profile"] == "dev"
+    assert latest["meta"]["run_mode"] == "api"
+
+
 def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

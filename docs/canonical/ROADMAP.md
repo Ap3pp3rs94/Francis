@@ -1,6 +1,6 @@
 This document is the canonical roadmap for Francis. It defines the end state, system law, build sequence, and quality gates in one place.
 
-It is a target-state document, not the shipped-state ledger. For the current repo posture, hardening progress, and productization gaps, use [`docs/operations/COMPLETION_LEDGER.md`](./docs/operations/COMPLETION_LEDGER.md).
+It is a target-state document, not the shipped-state ledger. For the current repo posture, hardening progress, and productization gaps, use [`docs/operations/COMPLETION_LEDGER.md`](../operations/COMPLETION_LEDGER.md).
 
 # 1.0 The End State
 
