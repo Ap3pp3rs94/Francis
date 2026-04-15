@@ -108,6 +108,38 @@ def _approval_payload(
     }
 
 
+def _request_approval(
+    *,
+    objective: str,
+    request_payload: dict[str, Any],
+    reason: str,
+    previous_approval_id: str = "",
+    previous_status: str = "",
+    previous_record: dict[str, Any] | None = None,
+) -> tuple[str, Path]:
+    req = approvals.request(
+        action="codex.supervised_exec",
+        reason=reason,
+        payload=request_payload,
+    )
+    approval_id = _safe_str(req.get("id")).strip() or _new_run_id()
+    art = _artifact_dir(approval_id)
+    request_body: dict[str, Any] = {
+        "kind": "supervised_exec.request",
+        "approval": req,
+        "objective": objective,
+        "request": request_payload,
+    }
+    if previous_approval_id:
+        request_body["previous_approval_id"] = previous_approval_id
+    if previous_status:
+        request_body["previous_status"] = previous_status
+    if isinstance(previous_record, dict):
+        request_body["previous_approval"] = previous_record
+    _write_json(art / "request.json", request_body)
+    return approval_id, art
+
+
 def _approval_matches_request(approval_record: dict[str, Any] | None, expected_payload: dict[str, Any]) -> bool:
     if not isinstance(approval_record, dict):
         return False
@@ -164,18 +196,39 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
 
     # 1) No approval_id => create an approval request.
     if not approval_id:
-        req = approvals.request(
-            action="codex.supervised_exec",
+        approval_id, art = _request_approval(
+            objective=objective,
+            request_payload=request_payload,
             reason="supervised_exec_requested",
-            payload=request_payload,
         )
-        approval_id = _safe_str(req.get("id")).strip() or _new_run_id()
-        art = _artifact_dir(approval_id)
+        return {
+            "kind": "supervised_exec.result",
+            "ok": False,
+            "status": "needs_approval",
+            "approval_id": approval_id,
+            "run_id": approval_id,
+            "artifact_dir": str(art),
+            "governance": {"gate": "approvals_gate", "next_step": "approve_exact_action"},
+        }
+
+    # 2) approval_id provided => inspect status and proceed accordingly.
+    status, record = _find_approval(approval_id)
+    if status in ("missing", "corrupt"):
+        refreshed_approval_id, art = _request_approval(
+            objective=objective,
+            request_payload=request_payload,
+            reason="supervised_exec_requested",
+            previous_approval_id=approval_id,
+            previous_status=status,
+            previous_record=record,
+        )
         _write_json(
-            art / "request.json",
+            art / "error.json",
             {
-                "kind": "supervised_exec.request",
-                "approval": req,
+                "kind": "supervised_exec.error",
+                "approval_id": refreshed_approval_id,
+                "previous_approval_id": approval_id,
+                "status": status,
                 "objective": objective,
             },
         )
@@ -183,29 +236,15 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "kind": "supervised_exec.result",
             "ok": False,
             "status": "needs_approval",
-            "approval_id": approval_id,
-            "run_id": approval_id,
-            "artifact_dir": str(art),
-        }
-
-    # 2) approval_id provided => inspect status and proceed accordingly.
-    status, record = _find_approval(approval_id)
-    art = _artifact_dir(approval_id)
-    if status in ("missing", "corrupt"):
-        _write_json(
-            art / "error.json",
-            {"kind": "supervised_exec.error", "approval_id": approval_id, "status": status, "objective": objective},
-        )
-        return {
-            "kind": "supervised_exec.result",
-            "ok": False,
-            "status": "needs_approval",
-            "approval_id": approval_id,
-            "run_id": approval_id,
+            "approval_id": refreshed_approval_id,
+            "run_id": refreshed_approval_id,
             "artifact_dir": str(art),
             "error": "approval_not_found",
+            "previous_approval_id": approval_id,
+            "governance": {"gate": "approvals_gate", "next_step": "approve_exact_action"},
         }
 
+    art = _artifact_dir(approval_id)
     if status == "pending":
         _write_json(
             art / "pending.json",
@@ -218,6 +257,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "approval_id": approval_id,
             "run_id": approval_id,
             "artifact_dir": str(art),
+            "governance": {"gate": "approvals_gate", "next_step": "approve_exact_action"},
         }
 
     if status in ("rejected", "emergency"):
@@ -233,6 +273,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "run_id": approval_id,
             "artifact_dir": str(art),
             "error": f"approval_{status}",
+            "governance": {"gate": "approvals_gate", "next_step": "approve_exact_action"},
         }
 
     if status != "approved":
@@ -248,9 +289,29 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "run_id": approval_id,
             "artifact_dir": str(art),
             "error": f"unknown_approval_status:{status}",
+            "governance": {"gate": "approvals_gate", "next_step": "approve_exact_action"},
         }
 
     if not _approval_matches_request(record, request_payload):
+        refreshed_approval_id, refreshed_art = _request_approval(
+            objective=objective,
+            request_payload=request_payload,
+            reason="supervised_exec_requested",
+            previous_approval_id=approval_id,
+            previous_status=status,
+            previous_record=record,
+        )
+        _write_json(
+            refreshed_art / "mismatch.json",
+            {
+                "kind": "supervised_exec.mismatch",
+                "approval_id": refreshed_approval_id,
+                "previous_approval_id": approval_id,
+                "objective": objective,
+                "expected_payload": request_payload,
+                "approval_record": record,
+            },
+        )
         _write_json(
             art / "mismatch.json",
             {
@@ -265,11 +326,13 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "kind": "supervised_exec.result",
             "ok": False,
             "status": "needs_approval",
-            "approval_id": approval_id,
-            "run_id": approval_id,
-            "artifact_dir": str(art),
+            "approval_id": refreshed_approval_id,
+            "run_id": refreshed_approval_id,
+            "artifact_dir": str(refreshed_art),
             "error": "approval_payload_mismatch",
             "message": "Approval does not match this supervised execution request.",
+            "previous_approval_id": approval_id,
+            "governance": {"gate": "approvals_gate", "next_step": "approve_exact_action"},
         }
 
     # 3) Approved => execute.
