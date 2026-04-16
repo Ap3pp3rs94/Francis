@@ -6,9 +6,10 @@ param(
   [string]$StopFile = ".tmp\codex-continue.stop",
   [string]$SessionId = "",
   [switch]$FollowLatestSession,
+  [string]$LogFile = "",
   [ValidateSet('ui', 'cli')]
   [string]$DeliveryMode = "ui",
-  [string]$WindowTitlePattern = '^Codex(?:$| )',
+  [string]$WindowTitlePattern = '^Codex(?:$| )|Francis$',
   [int]$MaxIterations = 0,
   [switch]$DryRun
 )
@@ -27,9 +28,30 @@ if ($stopDir -and -not (Test-Path -LiteralPath $stopDir)) {
   New-Item -ItemType Directory -Path $stopDir -Force | Out-Null
 }
 
+$logPath = if ([string]::IsNullOrWhiteSpace($LogFile)) {
+  $null
+} elseif ([System.IO.Path]::IsPathRooted($LogFile)) {
+  $LogFile
+} else {
+  Join-Path $repoRoot $LogFile
+}
+if ($logPath) {
+  $logDir = Split-Path -Parent $logPath
+  if ($logDir -and -not (Test-Path -LiteralPath $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+  }
+}
+
 function Write-LoopStatus([string]$Message) {
   $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  Write-Host "[$timestamp] $Message"
+  $line = "[$timestamp] $Message"
+  Write-Host $line
+  if ($logPath) {
+    try {
+      Add-Content -LiteralPath $logPath -Value $line -Encoding utf8
+    } catch {
+    }
+  }
 }
 
 function Resolve-CodexSessionFile([string]$TargetSessionId) {
@@ -281,6 +303,9 @@ if ($SessionId -and -not $resolvedSessionFile) {
 Write-LoopStatus "Codex continue loop started."
 Write-LoopStatus "Repo root: $repoRoot"
 Write-LoopStatus "Stop file: $stopPath"
+if ($logPath) {
+  Write-LoopStatus "Log file: $logPath"
+}
 if ($SessionId) {
   Write-LoopStatus "Session id: $SessionId"
 }
