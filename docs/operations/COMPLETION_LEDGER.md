@@ -158,6 +158,147 @@ Directly inspected implementation truth:
 - `docs/CHAT_UI.md` now defines the current compatibility contract for these
   operator-critical surfaces instead of leaving them implied.
 
+The `2026-04-15` operator-console ingress slice is now materially true in the
+repo and advances the same `P1_INTERFACE -> P7_EXECUTION` clarity line without
+claiming a finished ORB console:
+
+Directly inspected implementation truth:
+
+- `apps/chat_ui/src/missions/index.ts` now exposes typed `list` and `create`
+  client methods for `/missions/list` and `/missions/create`, so the browser can
+  declare mission continuity through the same stable contract the API already
+  exposes instead of staying read-only on mission state.
+- `apps/chat_ui/src/App.tsx` now includes a `Governed Request Composer` inside
+  the `Operations` panel that can:
+  - declare a mission with explicit objective/summary/next-step continuity
+  - create the first governed operation against that mission
+  - optionally advance the created task immediately through the existing
+    `POST /operations/{operation_id}/run` path
+  - surface the resulting mission id, task id, and approval id back to the
+    operator without inventing hidden progress
+- `apps/chat_ui/src/App.tsx` now also hands created mission ids directly into the
+  ORB mission inspector, so the operator can move from request ingress to mission
+  flow inspection without manual hunting across panels.
+- `apps/chat_ui/src/operations/index.test.ts` now proves the UI client preserves
+  operation-create approval handoff fields.
+- `apps/chat_ui/src/missions/index.test.ts` now proves mission list/create client
+  behavior for the new operator-ingress path.
+
+The `2026-04-15` bounded mission-control productivity slice is now also
+materially true in the repo and advances the same `P8_MEMORY -> P7_EXECUTION`
+continuity line without claiming hidden autonomy:
+
+- `apps/chat_ui/src/missions/index.ts` now exposes typed `advance` and
+  `runOnce` client methods for `/missions/{mission_id}/advance` and
+  `/missions/run_once`, so the browser can move mission continuity forward
+  through the same governed API contracts the backend already exposes.
+- `apps/chat_ui/src/App.tsx` now lets the operator advance a selected mission
+  once from the ORB mission inspector, with refreshed continuity/task state and
+  truthful notices when the mission remains blocked or requires operator review.
+- `apps/chat_ui/src/App.tsx` now exposes a bounded `Run mission queue once`
+  control inside the ORB mission queue surface, with a compact result summary
+  showing which missions moved, which action was applied, and which linked task
+  was created or reused.
+- `apps/chat_ui/src/App.tsx` now adds direct `Advance once` controls on mission
+  queue cards so high-priority continuity work can move forward without
+  requiring panel-hopping or manual task hunting.
+- `apps/chat_ui/src/missions/index.test.ts` now proves the mission-control
+  client preserves the bounded advance and queue-run request/response contracts
+  relied on by the new operator controls.
+
+The `2026-04-15` mission approval-handoff productivity slice is now materially
+true in the repo and closes another Phase 2 operator-friction gap in the same
+governed loop:
+
+- `src/francis/missions/runtime.py` now carries approval handoff fields
+  (`approval_id`, `gate`, `next_step`) through mission `advance` and
+  `run_queue_once` result envelopes when bounded mission progression lands in a
+  governance hold instead of leaving the operator to rediscover that approval by
+  re-inspecting mission/task detail.
+- `apps/chat_ui/src/missions/index.ts` now preserves those mission-runtime
+  approval handoff fields in its typed `advance` and `runOnce` responses.
+- `apps/chat_ui/src/App.tsx` now surfaces direct approval-review actions from
+  mission advance results and bounded mission queue summaries, so the operator
+  can jump straight from continuity advancement to the exact pending approval.
+- `tests/test_api_missions.py` now proves that mission advance and mission queue
+  execution surface truthful approval handoff when governed execution lands at
+  `approvals_gate` rather than requiring another manual lookup.
+- `apps/chat_ui/src/missions/index.test.ts` now proves the browser client
+  preserves the same approval handoff fields for the new UI actions.
+
+The `2026-04-15` approval-decision continuity handoff slice is now materially
+true in the repo and closes a second Phase 2 operator-friction gap on the same
+governed path without changing backend law:
+
+- `apps/chat_ui/src/App.tsx` now extracts approval continuity context
+  (`mission_id` and linked `task_id` / `operation_id`) from approval payload,
+  nested input, and recorded meta when that context is actually present instead
+  of forcing the operator to infer mission lineage from raw payload JSON.
+- `apps/chat_ui/src/App.tsx` now exposes direct `Open mission flow` and
+  `Open linked task` actions inside the approvals panel whenever that context is
+  present, so governed review no longer dead-ends the operator in the approval
+  queue.
+- `apps/chat_ui/src/App.tsx` now preserves return context when the ORB mission
+  inspector, mission queue summary, incident feed, or operations composer opens
+  a specific approval, and keeps that handoff available after the operator
+  approves/rejects/escalates the request instead of requiring panel-hopping and
+  manual mission/task rediscovery.
+
+The `2026-04-15` operation-detail mission continuity slice is now materially
+true in the repo and closes another `P1_INTERFACE` clarity gap on the same
+Phase 2 governed loop without changing backend law:
+
+- `apps/chat_ui/src/App.tsx` now derives mission lineage directly from the
+  selected operation record instead of leaving the operator to infer task
+  continuity from raw payload JSON.
+- `apps/chat_ui/src/App.tsx` now exposes direct `Open mission flow` actions from
+  the operation detail controls and governance outcome card whenever the task
+  actually carries a linked `mission_id`.
+- `apps/chat_ui/src/App.tsx` now renders trace id plus mission/task lineage
+  alongside operation detail and audit trail context, tightening the visible
+  `plan -> gate -> execute -> trace` path without fabricating memory state.
+
+The `2026-04-15` ORB mission loop actionability slice is now materially true
+in the repo and closes another `P1_INTERFACE` explanation gap on the same
+Phase 2 governed loop without bypassing backend law:
+
+- `src/francis/api/routes/missions.py` now carries governed `next_step`
+  guidance into mission `loop_state` stage receipts whenever the current linked
+  operation exposes a concrete next-step handoff through governance metadata.
+- `apps/chat_ui/src/missions/index.ts` now preserves that `next_step` field in
+  the typed mission loop-stage contract instead of dropping it during client
+  parsing.
+- `apps/chat_ui/src/App.tsx` now renders mission loop-stage metadata
+  (`count`, `gate`, `next_step`) directly inside the ORB mission inspector and
+  exposes direct `Review approval` / `Open linked task` actions from the active
+  plan-gate-execute loop cards so the operator can move from loop explanation to
+  the exact governed object without panel hopping.
+- `tests/test_api_missions.py` now proves the mission detail route carries
+  truthful `next_step` guidance through blocked mission loop-state receipts.
+- `apps/chat_ui/src/missions/index.test.ts` now proves the browser client
+  preserves the same `next_step` mission loop-stage field relied on by the ORB
+  mission inspector.
+
+The `2026-04-16` industrial intervention-request exact-action approval slice is
+now materially true in the repo and continues the same `Phase 2 / P3_GOVERNANCE`
+hardening line on a governed industrial mutation surface:
+
+- `src/francis/api/routes/industrial.py` now binds `industrial.intervention.request`
+  approvals to the exact requested target/action/risk/domain/actor/params/meta
+  payload instead of minting generic approvals that can be replayed after the
+  request meaning changed.
+- `src/francis/api/routes/industrial.py` now refreshes missing/corrupt or
+  mismatched intervention-request approvals into a fresh approval id, writes
+  receipt artifacts, preserves `previous_approval_id`, and reuses the same
+  intervention request record on replay instead of silently forking request
+  lineage.
+- `src/francis/api/routes/industrial.py` now marks the existing request record
+  `approved` only when a matching approved exact-action receipt exists, instead
+  of leaving replay truth ambiguous after approval is granted.
+- `tests/test_api_industrial.py` now proves exact-action approval refresh on
+  mismatched and missing `industrial.intervention.request` approvals, with
+  approved replay completing against the same `intervention_id`.
+
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
@@ -179,6 +320,32 @@ The following validations were run against the current working tree on
   Result: `15 passed in 6.71s`
 - `git diff --check -- src/francis/agent/git_push.py src/francis/agent/executor.py src/francis/api/routes/operations.py src/francis/operations/runtime.py src/francis/llm/client.py src/francis/settings.py tests/test_api_operations.py tests/test_llm_client.py tests/test_settings.py`
   Result: `passed`
+- `cd apps/chat_ui && npm test`
+  Result: `13 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `pytest tests/test_api_missions.py tests/test_api_operations.py --disable-warnings`
+  Result: `24 passed in 13.75s`
+- `pytest tests/test_api_missions.py --disable-warnings`
+  Result: `15 passed in 20.03s`
+- `pytest tests/test_api_missions.py --disable-warnings`
+  Result: `15 passed in 8.53s`
+- `cd apps/chat_ui && npm test`
+  Result: `13 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `14 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `git diff --check -- apps/chat_ui/src/App.tsx docs/operations/COMPLETION_LEDGER.md`
+  Result: `passed`
+- `git diff --check -- src/francis/api/routes/missions.py apps/chat_ui/src/missions/index.ts apps/chat_ui/src/missions/index.test.ts apps/chat_ui/src/App.tsx tests/test_api_missions.py`
+  Result: `passed`
+- `pytest tests/test_api_industrial.py --disable-warnings`
+  Result: `10 passed in 4.05s`
+- `git diff --check -- src/francis/api/routes/industrial.py tests/test_api_industrial.py`
+  Result: `passed` (Git emitted a line-ending warning only)
 
 Those validations specifically cover:
 
@@ -201,6 +368,27 @@ Those validations specifically cover:
 - operator-visible operations detail preserving the refreshed supervised-exec
   approval id and `approvals_gate` posture after the hold is requeued
 - canonical `FRANCIS_*` settings alias resolution and Ollama client fallback order
+- mission list/create client behavior for the operator-console ingress path
+- operation-create client behavior for mission-linked governed requests
+- mission-advance client behavior for bounded ORB progression
+- mission-queue run client behavior for bounded backlog advancement
+- mission-runtime approval handoff for bounded mission advance and queue
+  progression when governed execution yields a pending approval
+- operation-detail mission continuity visibility from task inspection back to
+  the linked mission flow
+- mission loop-state `next_step` continuity for governed holds and queued
+  linked operations
+- ORB mission loop cards exposing direct approval/task actions from the visible
+  loop state itself
+- chat UI production build integrity after adding the governed request composer
+- chat UI production build integrity after adding bounded mission advance and
+  queue-run controls
+- backend mission and operation contracts relied on by the new UI ingress flow
+- approval refresh when `industrial.intervention.request` approvals drift from
+  the exact requested target/action payload or disappear before the same request
+  is replayed
+- intervention-request lineage reusing the same governed request record after
+  approval refresh instead of minting duplicate request state
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:
