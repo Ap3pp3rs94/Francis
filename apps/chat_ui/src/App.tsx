@@ -19,6 +19,7 @@ import type {
   OrbStatusSnapshot,
   SystemHealth,
   SystemInfo,
+  WorldStateApprovalSummary,
   WorldStateMissionSummary,
   WorldStateSnapshot,
 } from "./settings";
@@ -285,6 +286,73 @@ function prettyData(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function worldStateApprovalTitle(item: WorldStateApprovalSummary | null | undefined): string {
+  const requestedAction = safeString(item?.payload_summary?.requested_action).trim();
+  if (requestedAction) return requestedAction;
+  const action = safeString(item?.action).trim();
+  if (action) return action;
+  const requestKind = safeString(item?.request_kind).trim();
+  if (requestKind) return requestKind;
+  return "Pending approval";
+}
+
+function worldStateApprovalFactLine(item: WorldStateApprovalSummary | null | undefined): string {
+  const summary = item?.payload_summary;
+  const facts: string[] = [];
+  const requestKind = safeString(item?.request_kind).trim();
+  if (requestKind) facts.push(requestKind);
+  if (safeString(summary?.plugin_id).trim()) {
+    facts.push(`plugin ${safeString(summary?.plugin_id).trim()}`);
+  } else if (safeString(summary?.scope_id).trim()) {
+    facts.push(`scope ${safeString(summary?.scope_id).trim()}`);
+  } else if (safeString(summary?.target_id).trim()) {
+    facts.push(`${safeString(summary?.target_kind).trim() || "target"} ${safeString(summary?.target_id).trim()}`);
+  } else if (safeString(summary?.credential_id).trim()) {
+    facts.push(`credential ${safeString(summary?.credential_id).trim()}`);
+  } else if (safeString(summary?.url).trim()) {
+    facts.push(safeString(summary?.url).trim());
+  } else if (safeString(summary?.domain).trim()) {
+    facts.push(safeString(summary?.domain).trim());
+  }
+  const risk = safeString(summary?.risk_tier).trim() || safeString(summary?.risk).trim();
+  if (risk) facts.push(`risk ${risk}`);
+  if (typeof summary?.required_trust === "number") facts.push(`trust ${summary.required_trust}`);
+  return facts.filter(Boolean).slice(0, 4).join(" · ");
+}
+
+function worldStateApprovalExactActionLine(item: WorldStateApprovalSummary | null | undefined): string {
+  const summary = item?.payload_summary;
+  const details: string[] = [];
+  if (Array.isArray(summary?.input_keys) && summary.input_keys.length > 0) {
+    details.push(`input ${summary.input_keys.join(", ")}`);
+  }
+  if (Array.isArray(summary?.params_keys) && summary.params_keys.length > 0) {
+    details.push(`params ${summary.params_keys.join(", ")}`);
+  }
+  if (typeof summary?.enabled === "boolean") {
+    details.push(`enabled ${summary.enabled ? "on" : "off"}`);
+  }
+  if (typeof summary?.dry_run === "boolean") {
+    details.push(`dry run ${summary.dry_run ? "yes" : "no"}`);
+  }
+  return details.slice(0, 4).join(" · ");
+}
+
+function worldStateApprovalLineage(item: WorldStateApprovalSummary | null | undefined): string {
+  const previousApprovalId = safeString(item?.previous_approval_id).trim();
+  if (!previousApprovalId) return "";
+  const previousStatus = safeString(item?.previous_approval_status).trim();
+  return previousStatus ? `refresh of ${previousApprovalId} (${previousStatus})` : `refresh of ${previousApprovalId}`;
+}
+
+function worldStateApprovalDetail(item: WorldStateApprovalSummary | null | undefined): string {
+  const factLine = worldStateApprovalFactLine(item);
+  if (factLine) return factLine;
+  const reason = safeString(item?.reason).trim();
+  if (reason) return reason;
+  return "A governed action is queued and waiting for operator review.";
 }
 
 function parseJsonObjectInput(value: string): { ok: true; parsed: Record<string, unknown> } | { ok: false; error: string } {
@@ -2868,8 +2936,8 @@ function SystemPanel(props: {
     returnToWorkItems.push({
       id: `approval:${approval.id}`,
       label: "Approval",
-      title: approval.action || "Pending approval",
-      detail: approval.reason || "A governed action is queued and waiting for operator review.",
+      title: worldStateApprovalTitle(approval),
+      detail: worldStateApprovalDetail(approval),
       tone: approval.status || "needs_approval",
       actionLabel: "Open approvals",
       onAction: () => props.onOpenApprovals(approval.id),
@@ -5038,24 +5106,41 @@ function SystemPanel(props: {
             <div style={{ fontSize: 12, color: THEME.muted }}>No pending approvals.</div>
           ) : (
             pendingApprovals.map((item) => (
-              <div
-                key={item.id}
-                style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{item.action || "unknown_action"}</div>
-                  <span style={badgeStyle(item.status || "pending")}>{item.status || "pending"}</span>
-                </div>
-                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.reason || "No reason recorded."}</div>
-                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
-                  <code>{item.id}</code>
-                </div>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-                  <button style={buttonStyle} onClick={() => props.onOpenApprovals(item.id)}>
-                    Review
-                  </button>
-                </div>
-              </div>
+              (() => {
+                const detail = worldStateApprovalDetail(item);
+                const exactAction = worldStateApprovalExactActionLine(item);
+                const lineage = worldStateApprovalLineage(item);
+                const reason = safeString(item.reason).trim();
+                return (
+                  <div
+                    key={item.id}
+                    style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{worldStateApprovalTitle(item)}</div>
+                      <span style={badgeStyle(item.status || "pending")}>{item.status || "pending"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{detail}</div>
+                    {reason && reason !== detail ? (
+                      <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{reason}</div>
+                    ) : null}
+                    {exactAction ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>exact action: {exactAction}</div>
+                    ) : null}
+                    {lineage ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div>
+                    ) : null}
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      <code>{item.id}</code>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                      <button style={buttonStyle} onClick={() => props.onOpenApprovals(item.id)}>
+                        Review
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()
             ))
           )}
         </div>

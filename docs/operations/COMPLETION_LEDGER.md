@@ -184,6 +184,26 @@ Directly inspected implementation truth:
 - `apps/chat_ui/src/missions/index.test.ts` now proves mission list/create client
   behavior for the new operator-ingress path.
 
+The `2026-04-16` world-state approval projection UI slice is now materially true
+in the repo and advances the same `P3_GOVERNANCE -> P1_INTERFACE` clarity line
+without changing backend approval law:
+
+- `apps/chat_ui/src/settings/index.ts` now preserves `request_kind`,
+  approval-refresh lineage (`previous_approval_id`, `previous_approval_status`),
+  and bounded `payload_summary` detail from `/system/world_state` instead of
+  collapsing pending approvals down to only id/action/reason/status.
+- `apps/chat_ui/src/App.tsx` now renders that truthful approval projection in the
+  ORB world-state surfaces, including:
+  - request kind and exact-action scope detail in the return-to-work approval
+    card
+  - request kind, bounded exact-action summary, and approval-refresh lineage in
+    the `Pending Approvals` list
+- `apps/chat_ui/src/settings/index.test.ts` now proves the browser parser keeps
+  the new approval projection fields intact through the compatibility alias path.
+- `apps/chat_ui` production build still succeeds after the UI rendering change,
+  so the new operator-visible approval context does not break the current chat
+  UI bundle.
+
 The `2026-04-15` bounded mission-control productivity slice is now also
 materially true in the repo and advances the same `P8_MEMORY -> P7_EXECUTION`
 continuity line without claiming hidden autonomy:

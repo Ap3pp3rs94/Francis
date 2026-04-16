@@ -127,6 +127,35 @@ export type WorldStateApprovalSummary = {
   reason?: string;
   status?: string;
   ts?: UnixSeconds;
+  request_kind?: string;
+  previous_approval_id?: string;
+  previous_approval_status?: string;
+  payload_summary?: WorldStateApprovalPayloadSummary;
+};
+
+export type WorldStateApprovalPayloadSummary = {
+  requested_action?: string;
+  plugin_id?: string;
+  scope_id?: string;
+  provider?: string;
+  credential_type?: string;
+  label?: string;
+  credential_id?: string;
+  target_kind?: string;
+  target_id?: string;
+  twin_id?: string;
+  url?: string;
+  domain?: string;
+  actor?: string;
+  risk?: string;
+  enabled?: boolean;
+  dry_run?: boolean;
+  risk_tier?: string;
+  required_trust?: number;
+  payload_keys?: string[];
+  input_keys?: string[];
+  meta_keys?: string[];
+  params_keys?: string[];
 };
 
 export type WorldStateTaskSummary = {
@@ -534,6 +563,59 @@ function safeString(v: unknown, fallback = ""): string {
 
 function safeBoolean(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
+}
+
+function safeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => safeString(item, "")).filter(Boolean);
+}
+
+function parseWorldStateApprovalPayloadSummary(raw: Record<string, unknown>): WorldStateApprovalPayloadSummary {
+  const summary: WorldStateApprovalPayloadSummary = {};
+  const requestedAction = safeString(raw.requested_action, "");
+  if (requestedAction) summary.requested_action = requestedAction;
+  const pluginId = safeString(raw.plugin_id, "");
+  if (pluginId) summary.plugin_id = pluginId;
+  const scopeId = safeString(raw.scope_id, "");
+  if (scopeId) summary.scope_id = scopeId;
+  const provider = safeString(raw.provider, "");
+  if (provider) summary.provider = provider;
+  const credentialType = safeString(raw.credential_type, "");
+  if (credentialType) summary.credential_type = credentialType;
+  const label = safeString(raw.label, "");
+  if (label) summary.label = label;
+  const credentialId = safeString(raw.credential_id, "");
+  if (credentialId) summary.credential_id = credentialId;
+  const targetKind = safeString(raw.target_kind, "");
+  if (targetKind) summary.target_kind = targetKind;
+  const targetId = safeString(raw.target_id, "");
+  if (targetId) summary.target_id = targetId;
+  const twinId = safeString(raw.twin_id, "");
+  if (twinId) summary.twin_id = twinId;
+  const url = safeString(raw.url, "");
+  if (url) summary.url = url;
+  const domain = safeString(raw.domain, "");
+  if (domain) summary.domain = domain;
+  const actor = safeString(raw.actor, "");
+  if (actor) summary.actor = actor;
+  const risk = safeString(raw.risk, "");
+  if (risk) summary.risk = risk;
+  if (typeof raw.enabled === "boolean") summary.enabled = raw.enabled;
+  if (typeof raw.dry_run === "boolean") summary.dry_run = raw.dry_run;
+  const riskTier = safeString(raw.risk_tier, "");
+  if (riskTier) summary.risk_tier = riskTier;
+  if (typeof raw.required_trust === "number" && Number.isFinite(raw.required_trust)) {
+    summary.required_trust = raw.required_trust;
+  }
+  const payloadKeys = safeStringList(raw.payload_keys);
+  if (payloadKeys.length > 0) summary.payload_keys = payloadKeys;
+  const inputKeys = safeStringList(raw.input_keys);
+  if (inputKeys.length > 0) summary.input_keys = inputKeys;
+  const metaKeys = safeStringList(raw.meta_keys);
+  if (metaKeys.length > 0) summary.meta_keys = metaKeys;
+  const paramsKeys = safeStringList(raw.params_keys);
+  if (paramsKeys.length > 0) summary.params_keys = paramsKeys;
+  return summary;
 }
 
 function safeNumber(v: unknown, fallback = 0): number {
@@ -965,6 +1047,12 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         reason: safeString(item.reason, ""),
         status: safeString(item.status, ""),
         ts: normalizeUnixSeconds(item.ts),
+        request_kind: safeString(item.request_kind, ""),
+        previous_approval_id: safeString(item.previous_approval_id, ""),
+        previous_approval_status: safeString(item.previous_approval_status, ""),
+        payload_summary: isRecord(item.payload_summary)
+          ? parseWorldStateApprovalPayloadSummary(item.payload_summary)
+          : undefined,
       }))
       .filter((item) => item.id),
     task_status_counts: Object.fromEntries(

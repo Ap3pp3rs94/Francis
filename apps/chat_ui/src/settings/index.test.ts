@@ -92,7 +92,26 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
           },
         },
         overview: {
-          pending_approvals: [],
+          pending_approvals: [
+            {
+              id: "apr_plugin_refresh",
+              action: "plugin.run",
+              reason: "Deploy production plugin step",
+              status: "pending",
+              ts: 1_710_000_456,
+              request_kind: "plugin.run.request",
+              previous_approval_id: "apr_plugin_old",
+              previous_approval_status: "approved",
+              payload_summary: {
+                requested_action: "deploy",
+                plugin_id: "plugin.deploy",
+                risk_tier: "critical",
+                required_trust: 5,
+                input_keys: ["target"],
+                params_keys: ["region"],
+              },
+            },
+          ],
           task_status_counts: { queued: 3 },
           recent_tasks: [],
           mission_status_counts: { queued: 1 },
@@ -199,6 +218,13 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.counts?.queued_tasks, 3);
     assert.equal(worldState.paths.data?.path, "C:/Francis/data");
     assert.equal(worldState.overview?.recent_missions?.[0]?.id, "mission_alpha");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.plugin_id, "plugin.deploy");
+    assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.required_trust, 5);
+    assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.payload_summary?.input_keys, ["target"]);
+    assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.payload_summary?.params_keys, ["region"]);
     assert.equal(worldState.trust?.global_level, 0.6);
     assert.equal(orbStatus.ok, true);
     assert.equal(orbStatus.model?.plane_map_id, "orb.map");
