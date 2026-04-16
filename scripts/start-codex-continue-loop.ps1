@@ -5,8 +5,8 @@ param(
   [int]$IdleSeconds = 60,
   [string]$SessionId = "",
   [switch]$FollowLatestSession,
-  [ValidateSet('ui', 'cli')]
-  [string]$DeliveryMode = "ui",
+  [ValidateSet('auto', 'ui', 'cli')]
+  [string]$DeliveryMode = "auto",
   [string]$WindowTitlePattern = '^Codex(?:$| )|Francis$',
   [string]$StopFile = ".tmp\codex-continue.stop",
   [string]$PidFile = ".tmp\codex-continue.pid",
@@ -68,6 +68,11 @@ $stopPath = Resolve-LoopPath $StopFile
 $pidPath = Resolve-LoopPath $PidFile
 $logPath = Resolve-LoopPath $LogFile
 $loopScript = Join-Path $repoRoot 'scripts\codex-continue-loop.ps1'
+$resolvedDeliveryMode = if ($DeliveryMode -eq 'auto') {
+  if ($SessionId) { 'cli' } else { 'ui' }
+} else {
+  $DeliveryMode
+}
 
 $existingProcess = Get-LoopProcess $pidPath
 if ($existingProcess) {
@@ -105,7 +110,7 @@ $startArgs = @(
   '-StopFile', $stopPath,
   '-PidFile', $pidPath,
   '-LogFile', $logPath,
-  '-DeliveryMode', $DeliveryMode,
+  '-DeliveryMode', $resolvedDeliveryMode,
   '-WindowTitlePattern', $WindowTitlePattern
 )
 if ($SessionId) {
@@ -126,6 +131,7 @@ Write-Host "Codex continue loop started."
 Write-Host ("PID: {0}" -f $processId)
 Write-Host ("IdleSeconds: {0}" -f $IdleSeconds)
 Write-Host ("PollSeconds: {0}" -f $PollSeconds)
+Write-Host ("DeliveryMode: {0}" -f $resolvedDeliveryMode)
 Write-Host ("Stop file: {0}" -f $stopPath)
 Write-Host ("PID file: {0}" -f $pidPath)
 Write-Host ("Log file: {0}" -f $logPath)
