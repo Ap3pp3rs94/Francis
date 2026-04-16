@@ -288,7 +288,9 @@ function prettyData(value: unknown): string {
   }
 }
 
-function worldStateApprovalTitle(item: WorldStateApprovalSummary | null | undefined): string {
+type ApprovalProjectionLike = ApprovalItem | WorldStateApprovalSummary;
+
+function approvalProjectionTitle(item: ApprovalProjectionLike | null | undefined): string {
   const requestedAction = safeString(item?.payload_summary?.requested_action).trim();
   if (requestedAction) return requestedAction;
   const action = safeString(item?.action).trim();
@@ -298,7 +300,7 @@ function worldStateApprovalTitle(item: WorldStateApprovalSummary | null | undefi
   return "Pending approval";
 }
 
-function worldStateApprovalFactLine(item: WorldStateApprovalSummary | null | undefined): string {
+function approvalProjectionFactLine(item: ApprovalProjectionLike | null | undefined): string {
   const summary = item?.payload_summary;
   const facts: string[] = [];
   const requestKind = safeString(item?.request_kind).trim();
@@ -322,7 +324,7 @@ function worldStateApprovalFactLine(item: WorldStateApprovalSummary | null | und
   return facts.filter(Boolean).slice(0, 4).join(" · ");
 }
 
-function worldStateApprovalExactActionLine(item: WorldStateApprovalSummary | null | undefined): string {
+function approvalProjectionExactActionLine(item: ApprovalProjectionLike | null | undefined): string {
   const summary = item?.payload_summary;
   const details: string[] = [];
   if (Array.isArray(summary?.input_keys) && summary.input_keys.length > 0) {
@@ -340,15 +342,15 @@ function worldStateApprovalExactActionLine(item: WorldStateApprovalSummary | nul
   return details.slice(0, 4).join(" · ");
 }
 
-function worldStateApprovalLineage(item: WorldStateApprovalSummary | null | undefined): string {
+function approvalProjectionLineage(item: ApprovalProjectionLike | null | undefined): string {
   const previousApprovalId = safeString(item?.previous_approval_id).trim();
   if (!previousApprovalId) return "";
   const previousStatus = safeString(item?.previous_approval_status).trim();
   return previousStatus ? `refresh of ${previousApprovalId} (${previousStatus})` : `refresh of ${previousApprovalId}`;
 }
 
-function worldStateApprovalDetail(item: WorldStateApprovalSummary | null | undefined): string {
-  const factLine = worldStateApprovalFactLine(item);
+function approvalProjectionDetail(item: ApprovalProjectionLike | null | undefined): string {
+  const factLine = approvalProjectionFactLine(item);
   if (factLine) return factLine;
   const reason = safeString(item?.reason).trim();
   if (reason) return reason;
@@ -424,16 +426,23 @@ function approvalContextField(item: ApprovalItem | null | undefined, ...keys: st
 function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspection {
   const payload = approvalPayload(item);
   const meta = isRecord(payload.meta) ? payload.meta : {};
+  const summary = item?.payload_summary;
   const action = safeString(item?.action).trim().toLowerCase();
-  const requestAction = approvalActionField(payload, safeString(item?.action).trim() || "requested action");
+  const requestAction =
+    safeString(summary?.requested_action).trim() ||
+    approvalActionField(payload, safeString(item?.action).trim() || "requested action");
   const missionId = approvalContextField(item, "mission_id");
   const operationId = approvalContextField(item, "operation_id", "task_id");
   const risk =
+    safeString(summary?.risk_tier).trim() ||
+    safeString(summary?.risk).trim() ||
     approvalTextField(payload, "risk", "risk_tier") ||
     approvalTextField(meta, "risk", "risk_tier") ||
     safeString(item?.risk).trim() ||
     "unknown";
   const domain =
+    safeString(summary?.domain).trim() ||
+    safeString(summary?.provider).trim() ||
     approvalTextField(payload, "domain", "provider") ||
     safeString(item?.domain).trim() ||
     (action.includes(".") ? action.split(".", 1)[0] : action || "approval");
@@ -441,20 +450,24 @@ function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspect
   const scopeItems: string[] = [];
   const pushScope = (label: string, value: string) => {
     const cleaned = value.trim();
-    if (cleaned) scopeItems.push(`${label}: ${cleaned}`);
+    const entry = cleaned ? `${label}: ${cleaned}` : "";
+    if (entry && !scopeItems.includes(entry)) scopeItems.push(entry);
   };
 
-  pushScope("Plugin", approvalTextField(payload, "plugin_id"));
-  pushScope("Scope", approvalTextField(payload, "scope_id", "scope"));
-  const targetKind = approvalTextField(payload, "target_kind");
-  const targetId = approvalTextField(payload, "target_id", "twin_id", "validation_id");
+  pushScope("Plugin", safeString(summary?.plugin_id).trim() || approvalTextField(payload, "plugin_id"));
+  pushScope("Scope", safeString(summary?.scope_id).trim() || approvalTextField(payload, "scope_id", "scope"));
+  const targetKind = safeString(summary?.target_kind).trim() || approvalTextField(payload, "target_kind");
+  const targetId =
+    safeString(summary?.target_id).trim() ||
+    safeString(summary?.twin_id).trim() ||
+    approvalTextField(payload, "target_id", "twin_id", "validation_id");
   if (targetKind || targetId) {
     pushScope("Target", [targetKind, targetId].filter(Boolean).join(":"));
   }
-  pushScope("Credential", approvalTextField(payload, "id"));
-  pushScope("Provider", approvalTextField(payload, "provider"));
-  pushScope("URL", approvalTextField(payload, "url"));
-  pushScope("Domain", approvalTextField(payload, "domain"));
+  pushScope("Credential", safeString(summary?.credential_id).trim() || approvalTextField(payload, "credential_id", "id"));
+  pushScope("Provider", safeString(summary?.provider).trim() || approvalTextField(payload, "provider"));
+  pushScope("URL", safeString(summary?.url).trim() || approvalTextField(payload, "url"));
+  pushScope("Domain", safeString(summary?.domain).trim() || approvalTextField(payload, "domain"));
   pushScope("Record", approvalTextField(payload, "record_id", "request_id"));
   pushScope("Mission", missionId);
   pushScope("Task", operationId);
@@ -464,17 +477,32 @@ function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspect
   const evidenceItems: string[] = [];
   const pushEvidence = (label: string, value: string) => {
     const cleaned = value.trim();
-    if (cleaned) evidenceItems.push(`${label}: ${cleaned}`);
+    const entry = cleaned ? `${label}: ${cleaned}` : "";
+    if (entry && !evidenceItems.includes(entry)) evidenceItems.push(entry);
   };
 
   pushEvidence("Requested action", requestAction);
+  pushEvidence("Request kind", safeString(item?.request_kind).trim());
   pushEvidence("Reason", safeString(item?.reason).trim());
-  pushEvidence("Required trust", approvalTextField(payload, "required_trust"));
-  pushEvidence("Credential type", approvalTextField(payload, "type"));
-  pushEvidence("Label", approvalTextField(payload, "label"));
-  pushEvidence("Actor", approvalTextField(payload, "actor"));
-  pushEvidence("Enabled change", typeof payload.enabled === "boolean" ? String(payload.enabled) : "");
+  pushEvidence(
+    "Required trust",
+    typeof summary?.required_trust === "number" ? String(summary.required_trust) : approvalTextField(payload, "required_trust"),
+  );
+  pushEvidence("Credential type", safeString(summary?.credential_type).trim() || approvalTextField(payload, "type"));
+  pushEvidence("Label", safeString(summary?.label).trim() || approvalTextField(payload, "label"));
+  pushEvidence("Actor", safeString(summary?.actor).trim() || approvalTextField(payload, "actor"));
+  pushEvidence(
+    "Enabled change",
+    typeof summary?.enabled === "boolean" ? String(summary.enabled) : typeof payload.enabled === "boolean" ? String(payload.enabled) : "",
+  );
+  pushEvidence("Dry run", typeof summary?.dry_run === "boolean" ? String(summary.dry_run) : "");
   pushEvidence("Idempotency key", approvalTextField(payload, "idempotency_key"));
+  if (Array.isArray(summary?.input_keys) && summary.input_keys.length > 0) {
+    evidenceItems.push(`Input keys: ${summary.input_keys.join(", ")}`);
+  }
+  if (Array.isArray(summary?.params_keys) && summary.params_keys.length > 0) {
+    evidenceItems.push(`Params keys: ${summary.params_keys.join(", ")}`);
+  }
   if (isRecord(payload.params) && Object.keys(payload.params).length > 0) {
     evidenceItems.push(`Params: ${Object.keys(payload.params).length} recorded field(s)`);
   }
@@ -2378,19 +2406,31 @@ function ApprovalsPanel(props: {
         ) : (
           <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>{selectedApproval.action || "(unknown action)"}</div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{approvalProjectionTitle(selectedApproval)}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <span style={badgeStyle(selectedApproval.status || "pending")}>{selectedApproval.status || "pending"}</span>
                 <span style={badgeStyle(selectedInspection.risk)}>{selectedInspection.risk}</span>
                 <span style={badgeStyle(selectedInspection.domain)}>{selectedInspection.domain}</span>
+                {selectedApproval.request_kind ? (
+                  <span style={badgeStyle("queued")}>{selectedApproval.request_kind}</span>
+                ) : null}
               </div>
             </div>
             <div style={{ fontSize: 11, color: THEME.muted }}>
               <code>{selectedApproval.id}</code>
             </div>
             <div style={{ fontSize: 12, color: THEME.muted }}>
-              {selectedApproval.reason || "No reason provided."}
+              {approvalProjectionDetail(selectedApproval)}
             </div>
+            {safeString(selectedApproval.reason).trim() && safeString(selectedApproval.reason).trim() !== approvalProjectionDetail(selectedApproval) ? (
+              <div style={{ fontSize: 12, color: "#ffcf9d" }}>{selectedApproval.reason}</div>
+            ) : null}
+            {approvalProjectionExactActionLine(selectedApproval) ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>Exact action: {approvalProjectionExactActionLine(selectedApproval)}</div>
+            ) : null}
+            {approvalProjectionLineage(selectedApproval) ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>Lineage: {approvalProjectionLineage(selectedApproval)}</div>
+            ) : null}
             <div style={{ fontSize: 12 }}>
               Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
             </div>
@@ -2472,6 +2512,10 @@ function ApprovalsPanel(props: {
           const busy = Boolean(decisionBusy[a.id]);
           const err = decisionError[a.id];
           const selected = a.id === selectedApproval?.id;
+          const detail = approvalProjectionDetail(a);
+          const exactAction = approvalProjectionExactActionLine(a);
+          const lineage = approvalProjectionLineage(a);
+          const reason = safeString(a.reason).trim();
           return (
             <div
               key={a.id}
@@ -2483,14 +2527,17 @@ function ApprovalsPanel(props: {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <div style={{ fontWeight: 600 }}>{a.action || "(unknown action)"}</div>
+                <div style={{ fontWeight: 600 }}>{approvalProjectionTitle(a)}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <span style={badgeStyle(a.status || "pending")}>{a.status || "pending"}</span>
                   <span style={badgeStyle(inspection.risk)}>{inspection.risk}</span>
                 </div>
               </div>
-              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 4 }}>{a.reason || "No reason provided."}</div>
+              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 4 }}>{detail}</div>
+              {reason && reason !== detail ? <div style={{ fontSize: 12, color: "#ffcf9d", marginTop: 4 }}>{reason}</div> : null}
               <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>{inspection.scopeLabel}</div>
+              {exactAction ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>exact action: {exactAction}</div> : null}
+              {lineage ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div> : null}
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                 <code>{a.id}</code> / domain=<code>{inspection.domain}</code>
               </div>
@@ -2936,8 +2983,8 @@ function SystemPanel(props: {
     returnToWorkItems.push({
       id: `approval:${approval.id}`,
       label: "Approval",
-      title: worldStateApprovalTitle(approval),
-      detail: worldStateApprovalDetail(approval),
+      title: approvalProjectionTitle(approval),
+      detail: approvalProjectionDetail(approval),
       tone: approval.status || "needs_approval",
       actionLabel: "Open approvals",
       onAction: () => props.onOpenApprovals(approval.id),
@@ -5107,9 +5154,9 @@ function SystemPanel(props: {
           ) : (
             pendingApprovals.map((item) => (
               (() => {
-                const detail = worldStateApprovalDetail(item);
-                const exactAction = worldStateApprovalExactActionLine(item);
-                const lineage = worldStateApprovalLineage(item);
+                const detail = approvalProjectionDetail(item);
+                const exactAction = approvalProjectionExactActionLine(item);
+                const lineage = approvalProjectionLineage(item);
                 const reason = safeString(item.reason).trim();
                 return (
                   <div
@@ -5117,7 +5164,7 @@ function SystemPanel(props: {
                     style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
                   >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>{worldStateApprovalTitle(item)}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{approvalProjectionTitle(item)}</div>
                       <span style={badgeStyle(item.status || "pending")}>{item.status || "pending"}</span>
                     </div>
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{detail}</div>

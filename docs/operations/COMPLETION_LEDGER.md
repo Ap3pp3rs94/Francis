@@ -204,6 +204,26 @@ without changing backend approval law:
   so the new operator-visible approval context does not break the current chat
   UI bundle.
 
+The `2026-04-16` approvals-panel projection parity slice is now also materially
+true in the repo and closes the next operator-review gap on the same governed
+line without widening approval scope:
+
+- `apps/chat_ui/src/index.ts` now preserves bounded approval projection fields
+  (`request_kind`, approval-refresh lineage, and `payload_summary`) through the
+  `/approvals/list` client instead of treating the richer response as an
+  untyped cast.
+- `apps/chat_ui/src/App.tsx` now reuses that same bounded projection language in
+  the direct approvals panel, including:
+  - requested-action titles instead of raw action ids when available
+  - request kind, exact-action detail, and approval-refresh lineage in both the
+    selected approval view and queue cards
+  - projection-backed evidence and scope summaries without requiring the
+    operator to inspect raw payload JSON first
+- `apps/chat_ui/src/index.test.ts` now proves the approvals client preserves the
+  richer approval projection contract used by the panel.
+- `apps/chat_ui` production build still succeeds after the approvals-panel
+  rendering change.
+
 The `2026-04-15` bounded mission-control productivity slice is now also
 materially true in the repo and advances the same `P8_MEMORY -> P7_EXECUTION`
 continuity line without claiming hidden autonomy:
