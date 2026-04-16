@@ -221,6 +221,9 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
                 "last_task_result_status": str(meta.get("last_task_result_status") or "").strip(),
                 "last_task_reason": str(meta.get("last_task_reason") or "").strip(),
                 "last_task_gate": str(meta.get("last_task_gate") or "").strip(),
+                "last_task_approval_id": str(meta.get("last_task_approval_id") or "").strip(),
+                "last_task_previous_approval_id": str(meta.get("last_task_previous_approval_id") or "").strip(),
+                "last_task_approval_status": str(meta.get("last_task_approval_status") or "").strip(),
                 "last_task_next_step": str(meta.get("last_task_next_step") or "").strip(),
                 "last_task_updated_at": str(meta.get("last_task_updated_at") or "").strip(),
                 "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
@@ -248,6 +251,14 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
     return {
         "status_counts": status_counts,
         "recent": trimmed,
+    }
+
+
+def _mission_hold_projection(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "last_task_approval_id": str(item.get("last_task_approval_id") or "").strip(),
+        "last_task_previous_approval_id": str(item.get("last_task_previous_approval_id") or "").strip(),
+        "last_task_approval_status": str(item.get("last_task_approval_status") or "").strip(),
     }
 
 
@@ -421,6 +432,7 @@ def _mission_briefing(
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
                 "last_task_gate": str(item.get("last_task_gate") or "").strip(),
+                **_mission_hold_projection(item),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
                 "last_advance_operation_id": str(item.get("last_advance_operation_id") or "").strip(),
@@ -449,6 +461,7 @@ def _mission_briefing(
                 "objective": str(item.get("objective") or "").strip(),
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
+                **_mission_hold_projection(item),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
                 "latest_activity": dict(item.get("latest_activity") or {})
@@ -469,6 +482,7 @@ def _mission_briefing(
                 "objective": str(item.get("objective") or "").strip(),
                 "reason": str(item.get("deadletter_reason") or "").strip(),
                 "recommended_action": str(item.get("recommended_action") or "").strip(),
+                **_mission_hold_projection(item),
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)

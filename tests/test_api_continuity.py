@@ -354,3 +354,95 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     recent_completed = body["briefing"]["recently_completed"]
     assert recent_completed
     assert recent_completed[0]["id"] == completed_id
+
+
+def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/reviewable",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Approval-bound deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approval-bound continuity test"})
+    assert trust.status_code == 200
+    assert trust.json()["ok"] is True
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Continuity briefing should carry exact approval context.",
+            "summary": "Blocked mission should name the pending approval.",
+            "priority": 9,
+            "requester_id": "test.continuity.approval_projection",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "continuity approval projection",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    pending = client.post(
+        f"/operations/{operation_id}/run",
+        json={"worker_id": "test.continuity.approval_projection"},
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    focus_item = next(item for item in body["briefing"]["focus"] if item["id"] == blocked_id)
+    assert focus_item["recommended_action"] == "review_pending_approval"
+    assert focus_item["last_task_approval_id"] == approval_id
+    assert focus_item["last_task_approval_status"] == "pending"
+    assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."
+
+    recent_item = next(item for item in body["recent_missions"] if item["id"] == blocked_id)
+    assert recent_item["last_task_id"] == operation_id
+    assert recent_item["last_task_gate"] == "approvals_gate"
+    assert recent_item["last_task_approval_id"] == approval_id
+    assert recent_item["last_task_approval_status"] == "pending"

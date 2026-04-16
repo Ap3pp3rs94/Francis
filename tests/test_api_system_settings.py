@@ -434,6 +434,88 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert deadletter_items[0]["recommended_action"] == "review_deadletter"
 
 
+def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/reviewable",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Approval-bound deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approval-bound test"})
+    assert trust.status_code == 200
+    assert trust.json()["ok"] is True
+
+    blocked = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission should expose exact pending approval.",
+            "summary": "Mission needs approval-backed visibility in world state.",
+            "priority": 9,
+            "requester_id": "test.system.approval_projection",
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_id = str(blocked.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "world state approval projection",
+            "mission_id": blocked_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.system.approval_projection"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    blocked_recent = next(item for item in body["overview"]["recent_missions"] if item["id"] == blocked_id)
+    assert blocked_recent["last_task_id"] == operation_id
+    assert blocked_recent["last_task_gate"] == "approvals_gate"
+    assert blocked_recent["last_task_approval_id"] == approval_id
+    assert blocked_recent["last_task_approval_status"] == "pending"
+
+    focus_item = next(item for item in body["overview"]["mission_briefing"]["focus"] if item["id"] == blocked_id)
+    assert focus_item["recommended_action"] == "review_pending_approval"
+    assert focus_item["last_task_approval_id"] == approval_id
+    assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."
+
+
 def test_system_world_state_projects_mission_briefing_and_advance_receipts(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
