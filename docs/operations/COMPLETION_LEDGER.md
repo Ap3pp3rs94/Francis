@@ -299,6 +299,26 @@ hardening line on a governed industrial mutation surface:
   mismatched and missing `industrial.intervention.request` approvals, with
   approved replay completing against the same `intervention_id`.
 
+The `2026-04-16` credential approval-reconciliation slice is now materially
+true in the repo and advances the same `Phase 2 / P2_IDENTITY -> P3_GOVERNANCE`
+hardening line without inventing secret material or hidden issuance:
+
+- `src/francis/api/routes/credentials.py` now reconciles credential metadata
+  against approval decisions so the credential manager stops reporting stale
+  `pending` state after the operator approves or rejects a governed request.
+- `src/francis/api/routes/credentials.py` now turns approved credential requests
+  into truthful `active` metadata references, turns denied requests into `error`,
+  and applies approved credential revocations as `revoked` while clearing the
+  pending revocation flag instead of leaving approval outcomes disconnected from
+  credential state.
+- `src/francis/api/routes/credentials.py` now records approval-status and
+  status-reconciliation events inside the credential registry so approval
+  outcomes remain auditable through the identity surface itself.
+- `tests/test_api_credentials.py` now proves that an approved credential request
+  materializes as `active` on the next governed read and that an approved
+  revocation materializes as `revoked` instead of remaining indefinitely
+  `pending`.
+
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
@@ -346,6 +366,10 @@ The following validations were run against the current working tree on
   Result: `10 passed in 4.05s`
 - `git diff --check -- src/francis/api/routes/industrial.py tests/test_api_industrial.py`
   Result: `passed` (Git emitted a line-ending warning only)
+- `pytest tests/test_api_credentials.py --disable-warnings`
+  Result: `4 passed in 1.85s`
+- `git diff --check -- src/francis/api/routes/credentials.py tests/test_api_credentials.py`
+  Result: `passed`
 
 Those validations specifically cover:
 
@@ -389,6 +413,11 @@ Those validations specifically cover:
   is replayed
 - intervention-request lineage reusing the same governed request record after
   approval refresh instead of minting duplicate request state
+- credential-request approval outcomes reconciling from governed approval
+  decisions into truthful `active` or `error` metadata state
+- credential-revocation approval outcomes reconciling from governed approval
+  decisions into truthful `revoked` state instead of remaining indefinitely
+  pending in the identity surface
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:

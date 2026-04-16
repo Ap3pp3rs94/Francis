@@ -98,6 +98,112 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
     assert credential_id in registry["credentials"]
 
 
+def test_credentials_request_approval_reconciles_active_status(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    requested = client.post(
+        "/credentials/request",
+        json={
+            "scope_id": "openai_readonly",
+            "provider": "openai",
+            "type": "api_key",
+            "label": "OpenAI Active",
+            "reason": "integration_test",
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    assert requested_body["ok"] is True
+    credential_id = str(requested_body["id"])
+    approval_id = str(requested_body["approval_id"])
+    assert requested_body["status"] == "pending"
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    listed = client.get("/credentials/list?status=active")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    items = [item for item in listed_body["items"] if item.get("id") == credential_id]
+    assert len(items) == 1
+    assert items[0]["status"] == "active"
+    assert items[0]["meta"]["approval_status"] == "approved"
+
+    registry = json.loads((data_root / "credentials" / "_registry.json").read_text(encoding="utf-8"))
+    record = registry["credentials"][credential_id]
+    assert record["status"] == "active"
+    assert record["meta"]["approval_status"] == "approved"
+
+
+def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    requested = client.post(
+        "/credentials/request",
+        json={
+            "scope_id": "openai_readonly",
+            "provider": "openai",
+            "type": "api_key",
+            "label": "OpenAI Revoked",
+            "reason": "integration_test",
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    credential_id = str(requested_body["id"])
+    request_approval_id = str(requested_body["approval_id"])
+
+    approved_request = client.post("/approvals/decision", json={"id": request_approval_id, "action": "approve"})
+    assert approved_request.status_code == 200
+    assert approved_request.json()["ok"] is True
+
+    active = client.get("/credentials/list?status=active")
+    assert active.status_code == 200
+    active_items = [item for item in active.json()["items"] if item.get("id") == credential_id]
+    assert len(active_items) == 1
+    assert active_items[0]["status"] == "active"
+
+    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    assert revoked.status_code == 200
+    revoked_body = revoked.json()
+    assert revoked_body["ok"] is True
+    revoke_approval_id = str(revoked_body["approval_id"])
+
+    approved_revoke = client.post("/approvals/decision", json={"id": revoke_approval_id, "action": "approve"})
+    assert approved_revoke.status_code == 200
+    assert approved_revoke.json()["ok"] is True
+
+    listed = client.get("/credentials/list?status=revoked")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    items = [item for item in listed_body["items"] if item.get("id") == credential_id]
+    assert len(items) == 1
+    assert items[0]["status"] == "revoked"
+    assert items[0]["meta"]["revocation_approval_status"] == "approved"
+    assert items[0]["meta"]["revocation_requested"] is False
+
+    registry = json.loads((data_root / "credentials" / "_registry.json").read_text(encoding="utf-8"))
+    record = registry["credentials"][credential_id]
+    assert record["status"] == "revoked"
+    assert record["meta"]["revocation_approval_status"] == "approved"
+    assert record["meta"]["revocation_requested"] is False
+
+
 def test_credentials_seed_from_vault_and_parse_delegation_files(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

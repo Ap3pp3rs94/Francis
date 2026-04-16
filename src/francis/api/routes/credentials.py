@@ -62,6 +62,14 @@ def _now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return _safe_str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
 def _strip_quotes(text: str) -> str:
     value = text.strip()
     if len(value) >= 2 and ((value[0] == '"' and value[-1] == '"') or (value[0] == "'" and value[-1] == "'")):
@@ -225,6 +233,116 @@ def _append_event(registry: dict[str, Any], event_type: str, payload: dict[str, 
             handle.write("\n")
     except OSError:
         pass
+
+
+def _approval_status(approval_id: str) -> tuple[str, dict[str, Any] | None]:
+    resolved_id = _safe_str(approval_id).strip()
+    if not resolved_id:
+        return "", None
+    candidates: list[tuple[str, Path]] = [
+        ("pending", approval_store.pending_dir() / f"{resolved_id}.json"),
+        ("approved", approval_store.approved_dir() / f"{resolved_id}.json"),
+        ("rejected", approval_store.rejected_dir() / f"{resolved_id}.json"),
+        ("emergency", approval_store.emergency_dir() / f"{resolved_id}.json"),
+    ]
+    for status, path in candidates:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return "corrupt", None
+        return status, payload if isinstance(payload, dict) else None
+    return "missing", None
+
+
+def _reconcile_credential_approvals(registry: dict[str, Any]) -> bool:
+    credentials = registry.get("credentials")
+    if not isinstance(credentials, dict):
+        return False
+
+    changed = False
+    for credential_id, raw in list(credentials.items()):
+        if not isinstance(raw, dict):
+            continue
+        record = _normalize_credential_record(_safe_str(credential_id), raw)
+        meta = dict(record.get("meta") or {})
+        prior_status = _safe_str(record.get("status")).strip() or "active"
+        updated = False
+
+        request_approval_id = _safe_str(meta.get("approval_id")).strip()
+        prior_request_status = _safe_str(meta.get("approval_status")).strip()
+        if request_approval_id:
+            request_status, _ = _approval_status(request_approval_id)
+            if request_status and request_status != prior_request_status:
+                meta["approval_status"] = request_status
+                updated = True
+                _append_event(
+                    registry,
+                    "credential.request.approval_status",
+                    {
+                        "credential_id": credential_id,
+                        "approval_id": request_approval_id,
+                        "previous_status": prior_request_status,
+                        "approval_status": request_status,
+                        "actor": "credential_manager_reconcile",
+                    },
+                )
+            if prior_status == "pending" and not _to_bool(meta.get("revocation_requested")):
+                if request_status == "approved":
+                    record["status"] = "active"
+                    updated = True
+                elif request_status in {"rejected", "emergency"}:
+                    record["status"] = "error"
+                    updated = True
+
+        revocation_approval_id = _safe_str(meta.get("revocation_approval_id")).strip()
+        prior_revocation_status = _safe_str(meta.get("revocation_approval_status")).strip()
+        if revocation_approval_id and _to_bool(meta.get("revocation_requested")):
+            revocation_status, _ = _approval_status(revocation_approval_id)
+            if revocation_status and revocation_status != prior_revocation_status:
+                meta["revocation_approval_status"] = revocation_status
+                updated = True
+                _append_event(
+                    registry,
+                    "credential.revoke.approval_status",
+                    {
+                        "credential_id": credential_id,
+                        "approval_id": revocation_approval_id,
+                        "previous_status": prior_revocation_status,
+                        "approval_status": revocation_status,
+                        "actor": "credential_manager_reconcile",
+                    },
+                )
+            previous_status = _safe_str(meta.get("revocation_previous_status")).strip() or "active"
+            if revocation_status == "approved":
+                record["status"] = "revoked"
+                meta["revocation_requested"] = False
+                updated = True
+            elif revocation_status in {"rejected", "emergency"}:
+                record["status"] = previous_status
+                meta["revocation_requested"] = False
+                updated = True
+
+        if _safe_str(record.get("status")).strip() != prior_status:
+            _append_event(
+                registry,
+                "credential.status_reconciled",
+                {
+                    "credential_id": credential_id,
+                    "previous_status": prior_status,
+                    "status": _safe_str(record.get("status")).strip(),
+                    "approval_id": request_approval_id or revocation_approval_id,
+                    "actor": "credential_manager_reconcile",
+                },
+            )
+
+        if updated:
+            record["meta"] = meta
+            _write_credential(registry, _normalize_credential_record(credential_id, record))
+            changed = True
+
+    return changed
 
 
 def _parse_ts(value: Any) -> int:
@@ -559,6 +677,7 @@ def status() -> dict[str, object]:
     try:
         registry = _load_registry()
         changed = _seed_from_vault(registry)
+        changed = _reconcile_credential_approvals(registry) or changed
         if changed:
             _save_registry(registry)
         credentials = registry.get("credentials")
@@ -594,6 +713,7 @@ def list_credentials(
 
         registry = _load_registry()
         changed = _seed_from_vault(registry)
+        changed = _reconcile_credential_approvals(registry) or changed
         if changed:
             _save_registry(registry)
 
@@ -622,6 +742,7 @@ def list_scopes() -> dict[str, object]:
     try:
         registry = _load_registry()
         changed = _seed_from_vault(registry)
+        changed = _reconcile_credential_approvals(registry) or changed
         if changed:
             _save_registry(registry)
         items = _load_scopes(registry)
@@ -636,6 +757,7 @@ def list_delegations(limit: int = 200) -> dict[str, object]:
         safe_limit = max(1, min(int(limit), 5000))
         registry = _load_registry()
         changed = _seed_from_vault(registry)
+        changed = _reconcile_credential_approvals(registry) or changed
         if changed:
             _save_registry(registry)
         items = _load_delegations(registry)[:safe_limit]
@@ -674,6 +796,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
         credential_id = _validate_credential_id(f"cred_{_slugify(provider or 'generic')}_{uuid.uuid4().hex[:10]}")
         registry = _load_registry()
         changed = _seed_from_vault(registry)
+        changed = _reconcile_credential_approvals(registry) or changed
         record = _normalize_credential_record(
             credential_id,
             {
@@ -732,6 +855,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
 
         registry = _load_registry()
         changed = _seed_from_vault(registry)
+        changed = _reconcile_credential_approvals(registry) or changed
         current = _read_credential(registry, credential_id)
         if current is None:
             return {"ok": False, "error": "not_found", "id": credential_id}
@@ -751,7 +875,9 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
         current_meta = current.get("meta")
         current_meta_obj = current_meta if isinstance(current_meta, dict) else {}
         current_meta_obj["revocation_requested"] = True
+        current_meta_obj["revocation_previous_status"] = _safe_str(current.get("status")).strip() or "active"
         current_meta_obj["revocation_approval_id"] = approval_id
+        current_meta_obj["revocation_approval_status"] = _safe_str(approval.get("status")).strip() or "pending"
         current_meta_obj["revocation_reason"] = reason
         current["meta"] = current_meta_obj
         _write_credential(registry, _normalize_credential_record(credential_id, current))
