@@ -173,6 +173,11 @@ def _result_approval_id(task: dict[str, Any]) -> str:
     return _safe_str(payload.get("approval_id")).strip()
 
 
+def _result_previous_approval_id(task: dict[str, Any]) -> str:
+    payload = _result_payload(task)
+    return _safe_str(payload.get("previous_approval_id")).strip()
+
+
 def _task_mission_id(task: dict[str, Any]) -> str:
     inputs = task.get("inputs")
     if not isinstance(inputs, dict):
@@ -245,6 +250,7 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
     _write_json(_record_path(task_id), updated)
 
     governance = _result_governance(task)
+    previous_approval_id = _result_previous_approval_id(task)
     append = getattr(delegation_store, "_append_audit", None)
     if callable(append):
         append(
@@ -267,6 +273,8 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
             result_status=result_status,
             status_reason=_safe_str(updated.get("status_reason")).strip(),
             governance=governance,
+            approval_id=approval_id,
+            previous_approval_id=previous_approval_id,
             actor="operations.runtime",
             note="governance_hold",
         )

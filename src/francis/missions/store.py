@@ -200,6 +200,9 @@ def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[s
     result = task.get("result") if isinstance(task.get("result"), dict) else {}
     payload = result.get("data") if isinstance(result.get("data"), dict) else {}
     governance = payload.get("governance") if isinstance(payload.get("governance"), dict) else {}
+    approval_id = str(payload.get("approval_id") or "").strip()
+    previous_approval_id = str(payload.get("previous_approval_id") or "").strip()
+    approval_status = str(governance.get("approval_status") or "").strip()
     updated_at = str(task.get("updated_at") or "")
     created_at = str(task.get("created_at") or "")
     return {
@@ -208,6 +211,9 @@ def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[s
         "result_status": _normalize_task_status(payload.get("status")),
         "status_reason": str(task.get("status_reason") or payload.get("error") or payload.get("message") or "").strip(),
         "gate": str(governance.get("gate") or "").strip(),
+        "approval_id": approval_id,
+        "previous_approval_id": previous_approval_id,
+        "approval_status": approval_status,
         "next_step": str(governance.get("next_step") or "").strip(),
         "updated_at": updated_at,
         "created_at": created_at,
@@ -307,13 +313,19 @@ def _queue_action(record: "MissionRecord") -> tuple[str, str, str]:
     last_task_id = str(meta.get("last_task_id") or "").strip()
     last_task_result_status = str(meta.get("last_task_result_status") or "").strip().lower()
     last_task_gate = str(meta.get("last_task_gate") or "").strip().lower()
+    last_task_approval_id = str(meta.get("last_task_approval_id") or "").strip()
+    last_task_approval_status = str(meta.get("last_task_approval_status") or "").strip().lower()
     next_step = str(meta.get("last_task_next_step") or record.next_step or "").strip()
 
     if status == MissionStatus.BLOCKED.value:
         if last_task_gate == "approvals_gate" or last_task_result_status in {"pending", "needs_approval"}:
+            approval_hint = ""
+            if last_task_approval_id:
+                approval_state = last_task_approval_status or "pending"
+                approval_hint = f"Approval {last_task_approval_id} is {approval_state} before the mission can continue."
             return (
                 "review_pending_approval",
-                next_step or "A linked task is waiting on approval before the mission can continue.",
+                approval_hint or next_step or "A linked task is waiting on approval before the mission can continue.",
                 last_task_id,
             )
         if last_task_gate == "trust_gate":
@@ -377,6 +389,9 @@ def _queue_item(record: "MissionRecord") -> dict[str, Any]:
         "last_task_status": str(meta.get("last_task_status") or "").strip(),
         "last_task_result_status": str(meta.get("last_task_result_status") or "").strip(),
         "last_task_gate": str(meta.get("last_task_gate") or "").strip(),
+        "last_task_approval_id": str(meta.get("last_task_approval_id") or "").strip(),
+        "last_task_previous_approval_id": str(meta.get("last_task_previous_approval_id") or "").strip(),
+        "last_task_approval_status": str(meta.get("last_task_approval_status") or "").strip(),
         "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
         "last_advance_outcome": str(meta.get("last_advance_outcome") or "").strip(),
         "last_advance_operation_id": str(meta.get("last_advance_operation_id") or "").strip(),
@@ -721,6 +736,9 @@ def record_linked_task_transition(
     result_status: str = "",
     status_reason: str = "",
     governance: dict[str, Any] | None = None,
+    approval_id: str = "",
+    previous_approval_id: str = "",
+    approval_status: str = "",
     actor: str | None = None,
     note: str | None = None,
 ) -> tuple[MissionRecord | None, str | None]:
@@ -732,6 +750,9 @@ def record_linked_task_transition(
     normalized_task_status = _normalize_task_status(task_status)
     normalized_result_status = _normalize_task_status(result_status)
     cleaned_task_id = str(task_id or "").strip()
+    cleaned_approval_id = str(approval_id or "").strip()
+    cleaned_previous_approval_id = str(previous_approval_id or "").strip()
+    cleaned_approval_status = str(approval_status or governance_payload.get("approval_status") or "").strip().lower()
     if not cleaned_task_id:
         return None, "task_id_required"
 
@@ -763,6 +784,9 @@ def record_linked_task_transition(
             "last_task_result_status": normalized_result_status or None,
             "last_task_reason": str(status_reason or "").strip() or None,
             "last_task_gate": str(governance_payload.get("gate") or "").strip() or None,
+            "last_task_approval_id": cleaned_approval_id or None,
+            "last_task_previous_approval_id": cleaned_previous_approval_id or None,
+            "last_task_approval_status": cleaned_approval_status or None,
             "last_task_next_step": str(governance_payload.get("next_step") or "").strip() or None,
             "last_task_updated_at": _now(),
         }
@@ -787,6 +811,9 @@ def record_linked_task_transition(
                 "result_status": normalized_result_status or None,
                 "status_reason": str(status_reason or "").strip() or None,
                 "gate": str(governance_payload.get("gate") or "").strip() or None,
+                "approval_id": cleaned_approval_id or None,
+                "previous_approval_id": cleaned_previous_approval_id or None,
+                "approval_status": cleaned_approval_status or None,
                 "next_step": str(governance_payload.get("next_step") or "").strip() or None,
                 "actor": str(actor or "").strip() or None,
                 "note": str(note or "").strip() or None,
@@ -821,6 +848,9 @@ def tick_mission(
         "last_task_result_status": str(latest.get("result_status") or "").strip() or None,
         "last_task_reason": str(latest.get("status_reason") or "").strip() or None,
         "last_task_gate": str(latest.get("gate") or "").strip() or None,
+        "last_task_approval_id": str(latest.get("approval_id") or "").strip() or None,
+        "last_task_previous_approval_id": str(latest.get("previous_approval_id") or "").strip() or None,
+        "last_task_approval_status": str(latest.get("approval_status") or "").strip().lower() or None,
         "last_task_next_step": str(latest.get("next_step") or "").strip() or None,
         "last_task_updated_at": str(latest.get("updated_at") or latest.get("created_at") or "").strip() or None,
     }
@@ -860,6 +890,9 @@ def tick_mission(
                 "latest_task_status": meta_updates["last_task_status"],
                 "latest_task_result_status": meta_updates["last_task_result_status"],
                 "latest_task_gate": meta_updates["last_task_gate"],
+                "latest_task_approval_id": meta_updates["last_task_approval_id"],
+                "latest_task_previous_approval_id": meta_updates["last_task_previous_approval_id"],
+                "latest_task_approval_status": meta_updates["last_task_approval_status"],
                 "latest_task_next_step": meta_updates["last_task_next_step"],
                 "latest_task_reason": meta_updates["last_task_reason"],
             },
