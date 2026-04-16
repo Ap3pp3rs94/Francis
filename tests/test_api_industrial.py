@@ -450,3 +450,187 @@ def test_industrial_execute_refreshes_missing_approval(monkeypatch, tmp_path: Pa
     assert len(interventions) == 1
     assert interventions[0]["status"] == "executed"
     assert interventions[0]["approval_id"] == refreshed_approval_id
+
+
+def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    asset_created = client.post("/industrial/assets", json={"name": "Boiler A", "asset_type": "boiler", "risk": "high"})
+    assert asset_created.status_code == 200
+    asset_id = str(asset_created.json()["id"])
+
+    pending = client.post(
+        "/industrial/safety/validate",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "reason": "preflight",
+            "dry_run": False,
+            "params": {"risk": "high", "window": "short"},
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    assert pending_body["status"] == "warn"
+    approval_id = str(pending_body["approval_id"])
+    validation_id = str(pending_body["id"])
+    assert approval_id
+    assert validation_id
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    mismatched = client.post(
+        "/industrial/safety/validate",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "reason": "preflight",
+            "dry_run": False,
+            "params": {"risk": "high", "window": "extended"},
+            "approval_id": approval_id,
+        },
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatched_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != approval_id
+    assert mismatched_body["previous_approval_id"] == approval_id
+    assert mismatched_body["id"] == validation_id
+    artifact_dir = Path(str(mismatched_body["artifact_dir"]))
+    assert (artifact_dir / "mismatch.json").exists()
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    validated = client.post(
+        "/industrial/safety/validate",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "reason": "preflight",
+            "dry_run": False,
+            "params": {"risk": "high", "window": "extended"},
+            "approval_id": refreshed_approval_id,
+        },
+    )
+    assert validated.status_code == 200
+    validated_body = validated.json()
+    assert validated_body["ok"] is True
+    assert validated_body["status"] == "pass"
+    assert validated_body["approval_id"] == refreshed_approval_id
+    assert validated_body["id"] == validation_id
+
+    registry_path = data_root / "industrial" / "_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    validation = registry.get("safety_validations", {}).get(validation_id)
+    assert isinstance(validation, dict)
+    assert validation["status"] == "pass"
+    assert validation["meta"]["approval_id"] == refreshed_approval_id
+    assert validation["meta"]["previous_approval_id"] == approval_id
+
+
+def test_industrial_safety_validate_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    asset_created = client.post("/industrial/assets", json={"name": "Boiler B", "asset_type": "boiler", "risk": "high"})
+    assert asset_created.status_code == 200
+    asset_id = str(asset_created.json()["id"])
+
+    pending = client.post(
+        "/industrial/safety/validate",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "reason": "preflight",
+            "dry_run": False,
+            "params": {"risk": "high"},
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    assert pending_body["status"] == "warn"
+    approval_id = str(pending_body["approval_id"])
+    validation_id = str(pending_body["id"])
+    assert approval_id
+    assert validation_id
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    assert pending_path.exists()
+    pending_path.unlink()
+
+    refreshed = client.post(
+        "/industrial/safety/validate",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "reason": "preflight",
+            "dry_run": False,
+            "params": {"risk": "high"},
+            "approval_id": approval_id,
+        },
+    )
+    assert refreshed.status_code == 200
+    refreshed_body = refreshed.json()
+    assert refreshed_body["ok"] is False
+    assert refreshed_body["status"] == "needs_approval"
+    assert refreshed_body["error"] == "approval_not_found"
+    refreshed_approval_id = str(refreshed_body["approval_id"])
+    assert refreshed_approval_id
+    assert refreshed_approval_id != approval_id
+    assert refreshed_body["previous_approval_id"] == approval_id
+    assert refreshed_body["id"] == validation_id
+    artifact_dir = Path(str(refreshed_body["artifact_dir"]))
+    assert (artifact_dir / "request.json").exists()
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    validated = client.post(
+        "/industrial/safety/validate",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "reason": "preflight",
+            "dry_run": False,
+            "params": {"risk": "high"},
+            "approval_id": refreshed_approval_id,
+        },
+    )
+    assert validated.status_code == 200
+    validated_body = validated.json()
+    assert validated_body["ok"] is True
+    assert validated_body["status"] == "pass"
+    assert validated_body["approval_id"] == refreshed_approval_id
+    assert validated_body["id"] == validation_id
+
+    registry_path = data_root / "industrial" / "_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    validation = registry.get("safety_validations", {}).get(validation_id)
+    assert isinstance(validation, dict)
+    assert validation["status"] == "pass"
+    assert validation["meta"]["approval_id"] == refreshed_approval_id
+    assert validation["meta"]["previous_approval_id"] == approval_id

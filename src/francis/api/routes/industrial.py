@@ -487,6 +487,37 @@ def _approval_matches(approval_record: dict[str, Any] | None, *, action: str, re
     return _normalize_approval_value(payload) == _normalize_approval_value(request_payload)
 
 
+def _find_validation_record(
+    registry: dict[str, Any],
+    *,
+    validation_id: str = "",
+    approval_id: str = "",
+) -> tuple[str, dict[str, Any] | None]:
+    validations = registry.get("safety_validations")
+    if not isinstance(validations, dict):
+        return "", None
+
+    resolved_validation_id = _safe_str(validation_id).strip()
+    if resolved_validation_id:
+        raw = validations.get(resolved_validation_id)
+        return resolved_validation_id, raw if isinstance(raw, dict) else None
+
+    resolved_approval_id = _safe_str(approval_id).strip()
+    if not resolved_approval_id:
+        return "", None
+
+    for candidate_id, raw in validations.items():
+        if not isinstance(raw, dict):
+            continue
+        meta = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}
+        current_approval_id = _safe_str(meta.get("approval_id")).strip()
+        previous_approval_id = _safe_str(meta.get("previous_approval_id")).strip()
+        if resolved_approval_id and resolved_approval_id in {current_approval_id, previous_approval_id}:
+            return _safe_str(candidate_id).strip(), raw
+
+    return "", None
+
+
 @router.get("/status")
 def status() -> dict[str, object]:
     try:
@@ -1078,30 +1109,228 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
         params = _normalize_meta(payload.get("params"))
         dry_run = bool(payload.get("dry_run", True))
         risk = _safe_str(params.get("risk")).strip().lower() or "medium"
-
-        validation_id = _new_id("validation", f"{target_kind}_{target_id}")
+        registry = _load_registry()
+        approval_action = "industrial.safety.validate"
+        supplied_approval_id = _approval_id_from_payload(payload)
+        supplied_validation_id = _safe_str(payload.get("validation_id")).strip()
+        matched_validation_id, matched_validation_raw = _find_validation_record(
+            registry,
+            validation_id=supplied_validation_id,
+            approval_id=supplied_approval_id,
+        )
+        validation_id = matched_validation_id or supplied_validation_id or _new_id("validation", f"{target_kind}_{target_id}")
+        matched_validation = (
+            _normalize_validation(validation_id, matched_validation_raw)
+            if isinstance(matched_validation_raw, dict)
+            else None
+        )
+        matched_meta = matched_validation.get("meta") if isinstance(matched_validation, dict) and isinstance(matched_validation.get("meta"), dict) else {}
         status = "warn" if dry_run else "pass"
         summary = "Dry-run safety validation completed." if dry_run else "Safety validation passed."
         violations: list[dict[str, Any]] = []
-        approval_id = ""
-        request_id = ""
+        approval_id = supplied_approval_id
+        request_id = _safe_str(payload.get("request_id")).strip() or _safe_str(matched_meta.get("request_id")).strip()
+        if not request_id:
+            request_id = _new_id("safety_req", target_id)
+
+        request_payload = {
+            "request_id": request_id,
+            "validation_id": validation_id,
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "risk": risk,
+            "reason": reason,
+            "dry_run": dry_run,
+            "params": params,
+        }
 
         if risk in {"high", "safety_critical"} and not dry_run:
             status = "warn"
             summary = "High-risk validation requires approval."
             violations.append({"code": "HIGH_RISK_APPROVAL_REQUIRED", "message": "Approval required for high-risk validation.", "severity": "warning"})
-            request_id = _new_id("safety_req", target_id)
-            approval_id = _request_approval(
-                "industrial.safety.validate",
-                reason,
-                {
-                    "request_id": request_id,
-                    "validation_id": validation_id,
-                    "target_kind": target_kind,
-                    "target_id": target_id,
-                    "risk": risk,
-                },
-            )
+
+            if not approval_id:
+                approval_id, _ = _request_exact_approval(
+                    action=approval_action,
+                    reason=reason,
+                    request_payload=request_payload,
+                )
+            else:
+                approval_status, approval_record = _approval_status(approval_id)
+                if approval_status in {"missing", "corrupt"}:
+                    refreshed_id, art = _request_exact_approval(
+                        action=approval_action,
+                        reason=reason,
+                        request_payload=request_payload,
+                        previous_approval_id=approval_id,
+                        previous_status=approval_status,
+                        previous_record=approval_record,
+                    )
+                    validation = _normalize_validation(
+                        validation_id,
+                        {
+                            "id": validation_id,
+                            "ts": _now_s(),
+                            "target_kind": target_kind,
+                            "target_id": target_id,
+                            "status": status,
+                            "risk": risk,
+                            "summary": summary,
+                            "violations": violations,
+                            "meta": {
+                                "reason": reason,
+                                "params": params,
+                                "dry_run": dry_run,
+                                "request_id": request_id,
+                                "approval_id": refreshed_id,
+                                "previous_approval_id": approval_id,
+                            },
+                        },
+                    )
+                    _write_section(registry, "safety_validations", validation_id, validation)
+                    _append_telemetry(
+                        registry,
+                        target_id,
+                        {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+                        {"event": "safety.validate", "validation_id": validation_id},
+                    )
+                    _save_registry(registry)
+                    return {
+                        "ok": False,
+                        "id": validation_id,
+                        "validation": validation,
+                        "status": "needs_approval",
+                        "error": "approval_not_found",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "request_id": request_id,
+                        "artifact_dir": str(art),
+                        "message": "Approval was missing for this safety validation; a fresh exact-action approval is required.",
+                    }
+                if approval_status == "pending":
+                    validation = _normalize_validation(
+                        validation_id,
+                        {
+                            "id": validation_id,
+                            "ts": _now_s(),
+                            "target_kind": target_kind,
+                            "target_id": target_id,
+                            "status": status,
+                            "risk": risk,
+                            "summary": summary,
+                            "violations": violations,
+                            "meta": {
+                                "reason": reason,
+                                "params": params,
+                                "dry_run": dry_run,
+                                "request_id": request_id,
+                                "approval_id": approval_id,
+                                "previous_approval_id": _safe_str(matched_meta.get("previous_approval_id")).strip(),
+                            },
+                        },
+                    )
+                    _write_section(registry, "safety_validations", validation_id, validation)
+                    _append_telemetry(
+                        registry,
+                        target_id,
+                        {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+                        {"event": "safety.validate", "validation_id": validation_id},
+                    )
+                    _save_registry(registry)
+                    return {
+                        "ok": False,
+                        "id": validation_id,
+                        "validation": validation,
+                        "status": "needs_approval",
+                        "approval_id": approval_id,
+                        "request_id": request_id,
+                        "message": "Safety validation request is awaiting approval.",
+                    }
+                if approval_status in {"rejected", "emergency"}:
+                    return {
+                        "ok": False,
+                        "id": validation_id,
+                        "status": "denied",
+                        "error": "approval_denied",
+                        "approval_id": approval_id,
+                        "request_id": request_id,
+                        "message": "Approval was denied for this safety validation.",
+                        "meta": {"approval_status": approval_status},
+                    }
+                if approval_status != "approved":
+                    return {
+                        "ok": False,
+                        "id": validation_id,
+                        "status": "needs_approval",
+                        "error": "approval_not_found",
+                        "approval_id": approval_id,
+                        "request_id": request_id,
+                        "message": "A matching approved request was not found for this safety validation.",
+                    }
+                if not _approval_matches(approval_record, action=approval_action, request_payload=request_payload):
+                    refreshed_id, art = _request_exact_approval(
+                        action=approval_action,
+                        reason=reason,
+                        request_payload=request_payload,
+                        previous_approval_id=approval_id,
+                        previous_status=approval_status,
+                        previous_record=approval_record,
+                    )
+                    mismatch_body = {
+                        "kind": "industrial.safety.validate.mismatch",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "validation_id": validation_id,
+                        "request": request_payload,
+                        "approval_record": approval_record,
+                    }
+                    _atomic_write(art / "mismatch.json", mismatch_body)
+                    _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+                    validation = _normalize_validation(
+                        validation_id,
+                        {
+                            "id": validation_id,
+                            "ts": _now_s(),
+                            "target_kind": target_kind,
+                            "target_id": target_id,
+                            "status": status,
+                            "risk": risk,
+                            "summary": summary,
+                            "violations": violations,
+                            "meta": {
+                                "reason": reason,
+                                "params": params,
+                                "dry_run": dry_run,
+                                "request_id": request_id,
+                                "approval_id": refreshed_id,
+                                "previous_approval_id": approval_id,
+                            },
+                        },
+                    )
+                    _write_section(registry, "safety_validations", validation_id, validation)
+                    _append_telemetry(
+                        registry,
+                        target_id,
+                        {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+                        {"event": "safety.validate", "validation_id": validation_id},
+                    )
+                    _save_registry(registry)
+                    return {
+                        "ok": False,
+                        "id": validation_id,
+                        "validation": validation,
+                        "status": "needs_approval",
+                        "error": "approval_payload_mismatch",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "request_id": request_id,
+                        "artifact_dir": str(art),
+                        "message": "Approval does not match this exact safety validation request.",
+                    }
+
+                status = "pass"
+                summary = "Safety validation passed."
+                violations = []
 
         validation = _normalize_validation(
             validation_id,
@@ -1114,11 +1343,17 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                 "risk": risk,
                 "summary": summary,
                 "violations": violations,
-                "meta": {"reason": reason, "params": params, "dry_run": dry_run},
+                "meta": {
+                    "reason": reason,
+                    "params": params,
+                    "dry_run": dry_run,
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "previous_approval_id": _safe_str(matched_meta.get("previous_approval_id")).strip(),
+                },
             },
         )
 
-        registry = _load_registry()
         _write_section(registry, "safety_validations", validation_id, validation)
         _append_telemetry(registry, target_id, {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])}, {"event": "safety.validate", "validation_id": validation_id})
         _save_registry(registry)
