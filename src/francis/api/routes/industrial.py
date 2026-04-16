@@ -99,6 +99,7 @@ def _default_registry() -> dict[str, Any]:
         "safety_validations": {},
         "telemetry": [],
         "interventions": [],
+        "digital_twin_actions": [],
     }
 
 
@@ -125,7 +126,7 @@ def _load_registry() -> dict[str, Any]:
     for key in ("assets", "processes", "simulations", "runs", "safety_validations"):
         if isinstance(raw.get(key), dict):
             out[key] = raw[key]
-    for key in ("telemetry", "interventions"):
+    for key in ("telemetry", "interventions", "digital_twin_actions"):
         if isinstance(raw.get(key), list):
             out[key] = raw[key]
     return out
@@ -142,11 +143,14 @@ def _save_registry(registry: dict[str, Any]) -> None:
         "safety_validations": registry.get("safety_validations") if isinstance(registry.get("safety_validations"), dict) else {},
         "telemetry": registry.get("telemetry") if isinstance(registry.get("telemetry"), list) else [],
         "interventions": registry.get("interventions") if isinstance(registry.get("interventions"), list) else [],
+        "digital_twin_actions": registry.get("digital_twin_actions") if isinstance(registry.get("digital_twin_actions"), list) else [],
     }
     if len(normalized["telemetry"]) > 5000:
         normalized["telemetry"] = normalized["telemetry"][-5000:]
     if len(normalized["interventions"]) > 5000:
         normalized["interventions"] = normalized["interventions"][-5000:]
+    if len(normalized["digital_twin_actions"]) > 5000:
+        normalized["digital_twin_actions"] = normalized["digital_twin_actions"][-5000:]
     _atomic_write(_registry_path(), normalized)
 
 
@@ -516,6 +520,37 @@ def _find_validation_record(
             return _safe_str(candidate_id).strip(), raw
 
     return "", None
+
+
+def _find_digital_twin_action_record(
+    registry: dict[str, Any],
+    *,
+    action_id: str = "",
+    approval_id: str = "",
+) -> tuple[int, dict[str, Any] | None]:
+    actions = registry.get("digital_twin_actions")
+    if not isinstance(actions, list):
+        return -1, None
+
+    resolved_action_id = _safe_str(action_id).strip()
+    if resolved_action_id:
+        for idx, raw in enumerate(actions):
+            if isinstance(raw, dict) and _safe_str(raw.get("id")).strip() == resolved_action_id:
+                return idx, raw
+
+    resolved_approval_id = _safe_str(approval_id).strip()
+    if not resolved_approval_id:
+        return -1, None
+
+    for idx, raw in enumerate(actions):
+        if not isinstance(raw, dict):
+            continue
+        current_approval_id = _safe_str(raw.get("approval_id")).strip()
+        previous_approval_id = _safe_str(raw.get("previous_approval_id")).strip()
+        if resolved_approval_id and resolved_approval_id in {current_approval_id, previous_approval_id}:
+            return idx, raw
+
+    return -1, None
 
 
 @router.get("/status")
@@ -1845,9 +1880,25 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
         if _read_section(registry, "assets", twin_id) is None:
             return {"ok": False, "error": "not_found", "twin_id": twin_id}
 
-        request_id = _new_id("dtreq", twin_id)
-        approval_id = ""
+        supplied_action_id = _safe_str(payload.get("action_id")).strip()
+        supplied_approval_id = _approval_id_from_payload(payload)
+        action_idx, action_record = _find_digital_twin_action_record(
+            registry,
+            action_id=supplied_action_id,
+            approval_id=supplied_approval_id,
+        )
+        action_id = supplied_action_id or (_safe_str(action_record.get("id")).strip() if isinstance(action_record, dict) else "")
+        if not action_id:
+            action_id = _new_id("dtact", twin_id)
+        request_id = _safe_str(payload.get("request_id")).strip() or (
+            _safe_str(action_record.get("request_id")).strip() if isinstance(action_record, dict) else ""
+        )
+        if not request_id:
+            request_id = _new_id("dtreq", twin_id)
+        approval_id = supplied_approval_id
         status = "pending"
+        reason = _safe_str(payload.get("reason")).strip() or "requested"
+        params = _normalize_meta(payload.get("params"))
 
         if action == "validate_safety":
             validation_id = _new_id("validation", f"twin_{twin_id}")
@@ -1865,20 +1916,239 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "status": "warn",
                         "risk": "medium",
                         "summary": "Digital twin safety validation requested.",
-                        "meta": {"reason": _safe_str(payload.get("reason")).strip(), "params": _normalize_meta(payload.get("params"))},
+                        "meta": {"reason": reason, "params": params},
                     },
                 ),
             )
             status = "validated"
         else:
-            approval_id = _request_approval(
-                "industrial.digital_twin.action",
-                _safe_str(payload.get("reason")).strip() or "requested",
-                {"request_id": request_id, "twin_id": twin_id, "action": action, "params": _normalize_meta(payload.get("params"))},
-            )
+            approval_action = "industrial.digital_twin.action"
+            request_payload = {
+                "request_id": request_id,
+                "action_id": action_id,
+                "twin_id": twin_id,
+                "action": action,
+                "reason": reason,
+                "params": params,
+            }
+            actions = registry.get("digital_twin_actions")
+            if not isinstance(actions, list):
+                actions = []
+                registry["digital_twin_actions"] = actions
 
-        _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action"})
+            if not approval_id:
+                approval_id, _ = _request_exact_approval(
+                    action=approval_action,
+                    reason=reason,
+                    request_payload=request_payload,
+                )
+                record = {
+                    "id": action_id,
+                    "ts": _now_s(),
+                    "twin_id": twin_id,
+                    "action": action,
+                    "status": "pending",
+                    "reason": reason,
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "previous_approval_id": "",
+                    "params": params,
+                }
+                if action_idx >= 0:
+                    actions[action_idx] = record
+                else:
+                    actions.append(record)
+            else:
+                approval_status, approval_record = _approval_status(approval_id)
+                if approval_status in {"missing", "corrupt"}:
+                    refreshed_id, art = _request_exact_approval(
+                        action=approval_action,
+                        reason=reason,
+                        request_payload=request_payload,
+                        previous_approval_id=approval_id,
+                        previous_status=approval_status,
+                        previous_record=approval_record,
+                    )
+                    record = {
+                        "id": action_id,
+                        "ts": _now_s(),
+                        "twin_id": twin_id,
+                        "action": action,
+                        "status": "pending",
+                        "reason": reason,
+                        "request_id": request_id,
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "params": params,
+                    }
+                    if action_idx >= 0:
+                        actions[action_idx] = record
+                    else:
+                        actions.append(record)
+                    _atomic_write(
+                        art / "error.json",
+                        {
+                            "kind": "industrial.digital_twin.action.error",
+                            "approval_id": refreshed_id,
+                            "previous_approval_id": approval_id,
+                            "status": approval_status,
+                            "request": request_payload,
+                            "action_id": action_id,
+                        },
+                    )
+                    _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action", "action_id": action_id})
+                    _save_registry(registry)
+                    return {
+                        "ok": False,
+                        "twin_id": twin_id,
+                        "action": action,
+                        "action_id": action_id,
+                        "request_id": request_id,
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "status": "needs_approval",
+                        "error": "approval_not_found",
+                        "artifact_dir": str(art),
+                        "message": "Approval was missing for this digital twin action; a fresh exact-action approval is required.",
+                    }
+                if approval_status == "pending":
+                    record = {
+                        "id": action_id,
+                        "ts": _now_s(),
+                        "twin_id": twin_id,
+                        "action": action,
+                        "status": "pending",
+                        "reason": reason,
+                        "request_id": request_id,
+                        "approval_id": approval_id,
+                        "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip() if isinstance(action_record, dict) else "",
+                        "params": params,
+                    }
+                    if action_idx >= 0:
+                        actions[action_idx] = record
+                    else:
+                        actions.append(record)
+                    _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action", "action_id": action_id})
+                    _save_registry(registry)
+                    return {
+                        "ok": True,
+                        "twin_id": twin_id,
+                        "action": action,
+                        "action_id": action_id,
+                        "request_id": request_id,
+                        "approval_id": approval_id,
+                        "status": "pending",
+                        "message": "Digital twin action is awaiting approval.",
+                    }
+                if approval_status in {"rejected", "emergency"}:
+                    return {
+                        "ok": False,
+                        "twin_id": twin_id,
+                        "action": action,
+                        "action_id": action_id,
+                        "request_id": request_id,
+                        "approval_id": approval_id,
+                        "status": "denied",
+                        "error": "approval_denied",
+                        "message": "Approval was denied for this digital twin action.",
+                        "meta": {"approval_status": approval_status},
+                    }
+                if approval_status != "approved":
+                    return {
+                        "ok": False,
+                        "twin_id": twin_id,
+                        "action": action,
+                        "action_id": action_id,
+                        "request_id": request_id,
+                        "approval_id": approval_id,
+                        "status": "needs_approval",
+                        "error": "approval_not_found",
+                        "message": "A matching approved request was not found for this digital twin action.",
+                    }
+                if not _approval_matches(approval_record, action=approval_action, request_payload=request_payload):
+                    refreshed_id, art = _request_exact_approval(
+                        action=approval_action,
+                        reason=reason,
+                        request_payload=request_payload,
+                        previous_approval_id=approval_id,
+                        previous_status=approval_status,
+                        previous_record=approval_record,
+                    )
+                    mismatch_body = {
+                        "kind": "industrial.digital_twin.action.mismatch",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "action_id": action_id,
+                        "request": request_payload,
+                        "approval_record": approval_record,
+                    }
+                    _atomic_write(art / "mismatch.json", mismatch_body)
+                    _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+                    record = {
+                        "id": action_id,
+                        "ts": _now_s(),
+                        "twin_id": twin_id,
+                        "action": action,
+                        "status": "pending",
+                        "reason": reason,
+                        "request_id": request_id,
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "params": params,
+                    }
+                    if action_idx >= 0:
+                        actions[action_idx] = record
+                    else:
+                        actions.append(record)
+                    _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action", "action_id": action_id})
+                    _save_registry(registry)
+                    return {
+                        "ok": False,
+                        "twin_id": twin_id,
+                        "action": action,
+                        "action_id": action_id,
+                        "request_id": request_id,
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "status": "needs_approval",
+                        "error": "approval_payload_mismatch",
+                        "artifact_dir": str(art),
+                        "message": "Approval does not match this exact digital twin action request.",
+                    }
+
+                status = "approved"
+                record = {
+                    "id": action_id,
+                    "ts": _now_s(),
+                    "twin_id": twin_id,
+                    "action": action,
+                    "status": status,
+                    "reason": reason,
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip() if isinstance(action_record, dict) else "",
+                    "params": params,
+                }
+                if action_idx >= 0:
+                    actions[action_idx] = record
+                else:
+                    actions.append(record)
+
+        _append_telemetry(
+            registry,
+            twin_id,
+            {"digital_twin_action": action},
+            {"event": "digital_twin.action", "action_id": action_id} if action != "validate_safety" else {"event": "digital_twin.action"},
+        )
         _save_registry(registry)
-        return {"ok": True, "twin_id": twin_id, "action": action, "request_id": request_id, "approval_id": approval_id, "status": status}
+        return {
+            "ok": True,
+            "twin_id": twin_id,
+            "action": action,
+            "action_id": action_id,
+            "request_id": request_id,
+            "approval_id": approval_id,
+            "status": status,
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
