@@ -95,6 +95,133 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert fetched_events.count("status_changed") >= 2
 
 
+def test_missions_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+
+    set_control_mode("observe", reason="test_missions_create_block", actor="tests")
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": "Blocked mission declaration",
+            "summary": "Observe mode should reject mission writes.",
+            "requester_id": "test.missions.observe",
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is False
+    assert created_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in created_body["error"]
+
+    listed = client.get("/missions/list")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["items"] == []
+
+
+def test_mission_mutation_routes_are_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": "Observe-mode mutation guard",
+            "summary": "Mission should remain unchanged while posture is read-only.",
+            "next_step": "Wait for operator posture change.",
+            "requester_id": "test.missions.observe",
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    mission_id = str(created_body["mission_id"])
+
+    set_control_mode("observe", reason="test_mission_mutation_block", actor="tests")
+
+    patched = client.patch(
+        f"/missions/{mission_id}",
+        json={"status": "active", "summary": "should not apply", "actor": "tests"},
+    )
+    assert patched.status_code == 200
+    patched_body = patched.json()
+    assert patched_body["ok"] is False
+    assert patched_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in patched_body["error"]
+
+    ticked = client.post(f"/missions/{mission_id}/tick", json={"actor": "tests"})
+    assert ticked.status_code == 200
+    ticked_body = ticked.json()
+    assert ticked_body["ok"] is False
+    assert ticked_body["applied"] is False
+    assert ticked_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in ticked_body["error"]
+
+    deadlettered = client.post(
+        f"/missions/{mission_id}/deadletter",
+        json={"reason": "should_not_apply", "actor": "tests"},
+    )
+    assert deadlettered.status_code == 200
+    deadlettered_body = deadlettered.json()
+    assert deadlettered_body["ok"] is False
+    assert deadlettered_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in deadlettered_body["error"]
+
+    advanced = client.post(f"/missions/{mission_id}/advance", json={"actor": "tests"})
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is False
+    assert advanced_body["applied"] is False
+    assert advanced_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in advanced_body["error"]
+
+    tick_all = client.post("/missions/tick", json={"actor": "tests", "limit": 10})
+    assert tick_all.status_code == 200
+    tick_all_body = tick_all.json()
+    assert tick_all_body["ok"] is False
+    assert tick_all_body["status"] == "blocked"
+    assert tick_all_body["items"] == []
+    assert tick_all_body["applied"] == 0
+    assert "Observe mode keeps Francis read-only." in tick_all_body["errors"][0]["error"]
+
+    run_once = client.post("/missions/run_once", json={"actor": "tests", "limit": 10})
+    assert run_once.status_code == 200
+    run_once_body = run_once.json()
+    assert run_once_body["ok"] is False
+    assert run_once_body["status"] == "blocked"
+    assert run_once_body["items"] == []
+    assert run_once_body["advanced"] == 0
+    assert run_once_body["processed"] == 0
+    assert "Observe mode keeps Francis read-only." in run_once_body["errors"][0]["error"]
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["ok"] is True
+    assert fetched_body["mission"]["status"] == "queued"
+    assert fetched_body["mission"]["summary"] == "Mission should remain unchanged while posture is read-only."
+    assert fetched_body["mission"]["next_step"] == "Wait for operator posture change."
+    assert fetched_body["mission"]["deadletter_reason"] is None
+    history_events = [str(item.get("event")) for item in fetched_body["history"]]
+    assert history_events == ["created"]
+
+
 def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -248,6 +375,11 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     run_ledger = fetched_body["run_ledger"]
     assert any(item["operation_id"] == operation_id and item["name"] == "governance_hold" for item in run_ledger)
     assert any(item["operation_id"] == operation_id and item["status"] == "blocked" for item in run_ledger)
+    loop_state = fetched_body["loop_state"]
+    assert loop_state["active_stage"] == "gate"
+    assert loop_state["gate"]["gate"] == "trust_gate"
+    assert loop_state["gate"]["next_step"] == "raise_trust_or_reduce_risk"
+    assert loop_state["execute"]["next_step"] == "raise_trust_or_reduce_risk"
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]
     assert transition_events
     assert transition_events[-1]["details"]["gate"] == "trust_gate"
@@ -760,3 +892,158 @@ def test_mission_advance_respects_governance_blockers(monkeypatch, tmp_path: Pat
     fetched_body = fetched.json()
     assert fetched_body["mission"]["status"] == "blocked"
     assert fetched_body["mission"]["meta"]["last_advance_outcome"] == "requires_operator"
+
+
+def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+          "objective": "Approval-bound mission should surface exact handoff",
+          "summary": "Mission advance should return the approval needed for the next step.",
+          "requester_id": "test.missions.advance",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "mission-advance-approval-handoff"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "approval-bound advance",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.missions.advance", "worker_id": "test.missions.advance"},
+    )
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is True
+    assert advanced_body["applied"] is True
+    assert advanced_body["action"] == "run_linked_operation"
+    assert advanced_body["operation_id"] == operation_id
+    assert advanced_body["status"] == "queued"
+    assert advanced_body["approval_id"]
+    assert advanced_body["gate"] == "approvals_gate"
+    assert advanced_body["next_step"] == "review_pending_approval"
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["meta"]["last_task_gate"] == "approvals_gate"
+    assert fetched_body["mission"]["meta"]["last_task_result_status"] in {"pending", "needs_approval"}
+
+
+def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Queue runner should surface approval handoff",
+            "summary": "Bounded queue run should return approval ids for governed next steps.",
+            "requester_id": "test.missions.queue",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "mission-run-once-approval-handoff"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "approval-bound queue runner",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    run_once = client.post("/missions/run_once", json={"actor": "test.missions.queue", "limit": 10})
+    assert run_once.status_code == 200
+    run_once_body = run_once.json()
+    assert run_once_body["ok"] is True
+    mission_result = next(item for item in run_once_body["results"] if item["mission_id"] == mission_id)
+    assert mission_result["applied"] is True
+    assert mission_result["action"] == "run_linked_operation"
+    assert mission_result["operation_id"] == operation_id
+    assert mission_result["status"] == "queued"
+    assert mission_result["approval_id"]
+    assert mission_result["gate"] == "approvals_gate"
+    assert mission_result["next_step"] == "review_pending_approval"
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["meta"]["last_task_gate"] == "approvals_gate"

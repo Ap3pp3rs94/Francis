@@ -138,3 +138,62 @@ test("OperationsClient.runOnce posts a single bounded worker cycle request", asy
     restoreFetch();
   }
 });
+
+test("OperationsClient.create posts the governed operation request envelope and preserves approval handoff fields", async () => {
+  const requests: Array<{ path: string; method: string; body: unknown }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const path = new URL(url).pathname;
+    requests.push({
+      path,
+      method: (init?.method ?? "GET").toUpperCase(),
+      body: jsonRequestBody(init),
+    });
+
+    return jsonResponse({
+      ok: true,
+      operation_id: "tsk_compose_alpha",
+      approval_id: "apr_compose_alpha",
+      status: "queued",
+      message: "created",
+    });
+  });
+
+  try {
+    const client = new OperationsClient("http://127.0.0.1:8000");
+    const response = await client.create(
+      {
+        action: "plan.create",
+        reason: "operator_requested",
+        actor: "chat_ui.operations",
+        mission_id: "mission_alpha",
+        input: { goal: "Capture the next governed plan step" },
+        objective: "Create a governed plan for the current operator objective",
+        priority: 5,
+      },
+      { timeoutMs: 50 },
+    );
+
+    assert.deepEqual(requests, [
+      {
+        path: "/operations/create",
+        method: "POST",
+        body: {
+          action: "plan.create",
+          reason: "operator_requested",
+          actor: "chat_ui.operations",
+          mission_id: "mission_alpha",
+          input: { goal: "Capture the next governed plan step" },
+          objective: "Create a governed plan for the current operator objective",
+          priority: 5,
+        },
+      },
+    ]);
+    assert.equal(response.ok, true);
+    assert.equal(response.operation_id, "tsk_compose_alpha");
+    assert.equal(response.approval_id, "apr_compose_alpha");
+    assert.equal(response.status, "queued");
+    assert.equal(response.message, "created");
+  } finally {
+    restoreFetch();
+  }
+});

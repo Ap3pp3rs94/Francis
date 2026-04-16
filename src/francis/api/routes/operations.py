@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field
 
 from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
+from francis.api.routes._operator_posture import posture_write_guard
 from francis.kernel.paths import data_dir
 from francis.missions import store as mission_store
 from francis.operations import runtime as operations_runtime
 from francis.workers.runner import run_workers
-from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -117,31 +117,13 @@ def _safe_str(value: Any) -> str:
         return ""
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
 def _execution_posture_guard(action_label: str) -> str:
-    try:
-        operator_state = operator_mode_snapshot()
-    except Exception as exc:
-        return f"Execution is blocked until operator posture can be verified: {exc}"
-
-    if not bool(operator_state.get("ok")):
-        return "Execution is blocked until operator posture can be verified."
-
-    control_mode = _as_dict(operator_state.get("control_mode"))
-    posture = _as_dict(operator_state.get("posture"))
-
-    control_mode_id = _safe_str(control_mode.get("id")).strip().lower()
-    control_writes = _safe_str(control_mode.get("writes")).strip().lower()
-    posture_writes = _safe_str(posture.get("writes")).strip().lower()
-
-    if control_mode_id == "observe" or control_writes == "blocked":
-        return f"Observe mode keeps execution read-only. Switch posture before {action_label}."
-    if posture_writes == "blocked":
-        return f"Current operator posture blocks writes. Adjust the environment before {action_label}."
-    return ""
+    return posture_write_guard(
+        action_label,
+        verification_prefix="Execution is blocked until operator posture can be verified",
+        observe_message="Observe mode keeps execution read-only.",
+        writes_blocked_message="Current operator posture blocks writes.",
+    )
 
 
 def _now_iso() -> str:
@@ -668,6 +650,9 @@ def get_many_operations(payload: OperationGetManyIn) -> dict[str, object]:
 
 @router.post("/create")
 def create_operation(payload: OperationCreateIn) -> dict[str, object]:
+    blocked_reason = posture_write_guard("declaring an operation")
+    if blocked_reason:
+        return {"ok": False, "error": blocked_reason, "status": "blocked"}
     try:
         return operations_runtime.create_operation(
             action=payload.action,

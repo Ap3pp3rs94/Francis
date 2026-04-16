@@ -87,6 +87,35 @@ def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> Non
     assert fetched_body["operation"]["status"] in {"succeeded", "failed"}
 
 
+def test_operations_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+
+    set_control_mode("observe", reason="test_observe_create_block", actor="tests")
+
+    created = client.post(
+        "/operations/create",
+        json={"action": "plan.create", "reason": "observe_block", "input": {"goal": "should not queue"}},
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is False
+    assert created_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in created_body["error"]
+
+    listed = client.get("/operations/list")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["items"] == []
+
+
 def test_operations_run_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

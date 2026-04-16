@@ -4,7 +4,7 @@ import type { ChatMessage } from "./chat";
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
 import { MissionsApiError, MissionsClient } from "./missions";
-import type { MissionDetail } from "./missions";
+import type { MissionDetail, MissionLoopState } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
@@ -154,6 +154,19 @@ function operationApprovalId(record: OperationRecord | null | undefined): string
   return operationMetaString(record, "approval_id") || safeString(operationOutputRecord(record).approval_id);
 }
 
+function operationMissionId(record: OperationRecord | null | undefined): string {
+  if (!record) return "";
+  const input = isRecord(record.input) ? record.input : {};
+  const inputMeta = isRecord(input.meta) ? input.meta : {};
+  const output = operationOutputRecord(record);
+  return (
+    operationMetaString(record, "mission_id").trim() ||
+    safeString(input.mission_id).trim() ||
+    safeString(inputMeta.mission_id).trim() ||
+    safeString(output.mission_id).trim()
+  );
+}
+
 function operationGate(record: OperationRecord | null | undefined): string {
   return safeString(operationGovernance(record).gate).trim();
 }
@@ -211,7 +224,7 @@ function executionBlockedReason(operatorMode: OperatorModeSnapshot | null, actio
 
 function statusBadgeColors(status: string): { bg: string; border: string; color: string } {
   const normalized = safeString(status).trim().toLowerCase();
-  if (["ready", "ok", "approved", "completed", "succeeded", "healthy", "live"].includes(normalized)) {
+  if (["ready", "ok", "approved", "completed", "succeeded", "healthy", "live", "recorded", "clear", "available"].includes(normalized)) {
     return { bg: "#102417", border: "#244d31", color: "#9de2ad" };
   }
   if (["running", "pending", "accepted", "queued", "needs_approval", "attention", "stale"].includes(normalized)) {
@@ -274,6 +287,25 @@ function prettyData(value: unknown): string {
   }
 }
 
+function parseJsonObjectInput(value: string): { ok: true; parsed: Record<string, unknown> } | { ok: false; error: string } {
+  const trimmed = safeString(value).trim();
+  if (!trimmed) {
+    return { ok: true, parsed: {} };
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!isRecord(parsed)) {
+      return { ok: false, error: "Request input must be a JSON object." };
+    }
+    return { ok: true, parsed };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? `Request input is invalid JSON: ${err.message}` : "Request input is invalid JSON.",
+    };
+  }
+}
+
 type ApprovalInspection = {
   domain: string;
   risk: string;
@@ -283,6 +315,13 @@ type ApprovalInspection = {
   approveEffect: string;
   denyEffect: string;
   missionRelation: string;
+  missionId: string;
+  operationId: string;
+};
+
+type ApprovalReturnContext = {
+  missionId?: string;
+  operationId?: string;
 };
 
 function approvalPayload(item: ApprovalItem | null | undefined): Record<string, unknown> {
@@ -301,11 +340,26 @@ function approvalActionField(payload: Record<string, unknown>, fallback: string)
   return approvalTextField(payload, "action", "name") || fallback;
 }
 
+function approvalContextField(item: ApprovalItem | null | undefined, ...keys: string[]): string {
+  const payload = approvalPayload(item);
+  const input = isRecord(payload.input) ? payload.input : {};
+  const payloadMeta = isRecord(payload.meta) ? payload.meta : {};
+  const inputMeta = isRecord(input.meta) ? input.meta : {};
+  const sources = [payload, payloadMeta, input, inputMeta];
+  for (const source of sources) {
+    const value = approvalTextField(source, ...keys);
+    if (value) return value;
+  }
+  return "";
+}
+
 function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspection {
   const payload = approvalPayload(item);
   const meta = isRecord(payload.meta) ? payload.meta : {};
   const action = safeString(item?.action).trim().toLowerCase();
   const requestAction = approvalActionField(payload, safeString(item?.action).trim() || "requested action");
+  const missionId = approvalContextField(item, "mission_id");
+  const operationId = approvalContextField(item, "operation_id", "task_id");
   const risk =
     approvalTextField(payload, "risk", "risk_tier") ||
     approvalTextField(meta, "risk", "risk_tier") ||
@@ -334,6 +388,8 @@ function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspect
   pushScope("URL", approvalTextField(payload, "url"));
   pushScope("Domain", approvalTextField(payload, "domain"));
   pushScope("Record", approvalTextField(payload, "record_id", "request_id"));
+  pushScope("Mission", missionId);
+  pushScope("Task", operationId);
 
   const scopeLabel = scopeItems[0] || `Domain: ${domain}`;
 
@@ -409,6 +465,8 @@ function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspect
     approveEffect,
     denyEffect,
     missionRelation,
+    missionId,
+    operationId,
   };
 }
 
@@ -1346,7 +1404,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<TabKey>("approvals");
   const [focusedApprovalId, setFocusedApprovalId] = useState("");
+  const [approvalReturnContext, setApprovalReturnContext] = useState<ApprovalReturnContext | null>(null);
   const [focusedOperationId, setFocusedOperationId] = useState("");
+  const [focusedMissionId, setFocusedMissionId] = useState("");
   const [operatorMode, setOperatorMode] = useState<OperatorModeSnapshot | null>(null);
   const [operatorModeError, setOperatorModeError] = useState<string | null>(null);
   const [operatorModeBusy, setOperatorModeBusy] = useState(false);
@@ -1469,8 +1529,16 @@ export default function App() {
     setActiveId(s.id);
   }, []);
 
-  const openApprovalsPanel = useCallback((approvalId?: string) => {
+  const openApprovalsPanel = useCallback((approvalId?: string, returnContext?: ApprovalReturnContext) => {
     setFocusedApprovalId(approvalId ? approvalId : "");
+    setApprovalReturnContext(
+      returnContext && (safeString(returnContext.missionId).trim() || safeString(returnContext.operationId).trim())
+        ? {
+            missionId: safeString(returnContext.missionId).trim() || undefined,
+            operationId: safeString(returnContext.operationId).trim() || undefined,
+          }
+        : null,
+    );
     setPanel("approvals");
   }, []);
 
@@ -1494,6 +1562,20 @@ export default function App() {
 
   const openOrbPanel = useCallback(() => {
     setPanel("system");
+  }, []);
+
+  const openMissionPanel = useCallback((missionId: string) => {
+    const cleaned = missionId.trim();
+    if (!cleaned) return;
+    setFocusedMissionId(cleaned);
+    setPanel("system");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target =
+          document.getElementById("francis-mission-feed") ?? document.getElementById("francis-shift-briefing");
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
   }, []);
 
   const openMissionFeed = useCallback(() => {
@@ -1935,17 +2017,26 @@ export default function App() {
                   ))}
                 </div>
 
-                {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
+                {panel === "approvals" ? (
+                  <ApprovalsPanel
+                    baseUrl={baseUrl}
+                    focusApprovalId={focusedApprovalId}
+                    returnContext={approvalReturnContext}
+                    onOpenMission={openMissionPanel}
+                    onOpenOperation={openOperationPanel}
+                  />
+                ) : null}
                 {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} onOpenApprovals={openApprovalsPanel} /> : null}
                 {panel === "system" ? (
-                <SystemPanel
-                  baseUrl={baseUrl}
-                  settings={settings}
-                  operatorMode={operatorMode}
-                  onOpenApprovals={openApprovalsPanel}
-                  onOpenOperation={openOperationPanel}
-                  onOpenOperations={openOperationsPanel}
-                />
+                  <SystemPanel
+                    baseUrl={baseUrl}
+                    settings={settings}
+                    operatorMode={operatorMode}
+                    focusMissionId={focusedMissionId}
+                    onOpenApprovals={openApprovalsPanel}
+                    onOpenOperation={openOperationPanel}
+                    onOpenOperations={openOperationsPanel}
+                  />
                 ) : null}
                 {panel === "operations" ? (
                   <OperationsPanel
@@ -1953,6 +2044,7 @@ export default function App() {
                     focusOperationId={focusedOperationId}
                     operatorMode={operatorMode}
                     onOpenApprovals={openApprovalsPanel}
+                    onOpenMission={openMissionPanel}
                   />
                 ) : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
@@ -1986,13 +2078,22 @@ export default function App() {
                 ))}
               </div>
 
-              {panel === "approvals" ? <ApprovalsPanel baseUrl={baseUrl} focusApprovalId={focusedApprovalId} /> : null}
+              {panel === "approvals" ? (
+                <ApprovalsPanel
+                  baseUrl={baseUrl}
+                  focusApprovalId={focusedApprovalId}
+                  returnContext={approvalReturnContext}
+                  onOpenMission={openMissionPanel}
+                  onOpenOperation={openOperationPanel}
+                />
+              ) : null}
               {panel === "plugins" ? <PluginsPanel baseUrl={baseUrl} onOpenApprovals={openApprovalsPanel} /> : null}
               {panel === "system" ? (
                 <SystemPanel
                   baseUrl={baseUrl}
                   settings={settings}
                   operatorMode={operatorMode}
+                  focusMissionId={focusedMissionId}
                   onOpenApprovals={openApprovalsPanel}
                   onOpenOperation={openOperationPanel}
                   onOpenOperations={openOperationsPanel}
@@ -2004,6 +2105,7 @@ export default function App() {
                   focusOperationId={focusedOperationId}
                   operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
+                  onOpenMission={openMissionPanel}
                 />
               ) : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
@@ -2033,7 +2135,13 @@ export default function App() {
     </div>
   );
 }
-function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
+function ApprovalsPanel(props: {
+  baseUrl: string;
+  focusApprovalId?: string;
+  returnContext?: ApprovalReturnContext | null;
+  onOpenMission?: (missionId: string) => void;
+  onOpenOperation?: (operationId: string) => void;
+}) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new ApprovalsClient(resolvedBaseUrl), [resolvedBaseUrl]);
 
@@ -2043,6 +2151,13 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [decisionBusy, setDecisionBusy] = useState<Record<string, boolean>>({});
   const [decisionError, setDecisionError] = useState<Record<string, string | null>>({});
+  const [decisionResult, setDecisionResult] = useState<{
+    approvalId: string;
+    action: string;
+    status: string;
+    missionId?: string;
+    operationId?: string;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -2081,11 +2196,27 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
     setSelectedApprovalId(props.focusApprovalId);
   }, [props.focusApprovalId]);
 
+  useEffect(() => {
+    setDecisionResult(null);
+  }, [props.focusApprovalId]);
+
   async function performDecision(id: string, action: string) {
+    const currentItem = items.find((item) => item.id === id) ?? null;
     setDecisionError((prev) => ({ ...prev, [id]: null }));
     setDecisionBusy((prev) => ({ ...prev, [id]: true }));
     try {
-      await client.decide({ id, action });
+      const response = await client.decide({ id, action });
+      const decidedItem = response.item ?? currentItem;
+      const inspection = inspectApproval(decidedItem);
+      const fallbackContext =
+        props.focusApprovalId && props.focusApprovalId === id && props.returnContext ? props.returnContext : null;
+      setDecisionResult({
+        approvalId: id,
+        action,
+        status: safeString(response.status, action).trim() || action,
+        missionId: inspection.missionId || fallbackContext?.missionId,
+        operationId: inspection.operationId || fallbackContext?.operationId,
+      });
       await refresh();
     } catch (err) {
       const msg =
@@ -2146,6 +2277,32 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
         </div>
       </div>
 
+      {decisionResult ? (
+        <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Latest Decision</div>
+              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>
+                <code>{decisionResult.approvalId}</code> moved to <code>{decisionResult.status}</code> via{" "}
+                <code>{decisionResult.action}</code>.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {decisionResult.missionId && props.onOpenMission ? (
+                <button style={buttonStyle} onClick={() => props.onOpenMission?.(decisionResult.missionId || "")}>
+                  Open mission flow
+                </button>
+              ) : null}
+              {decisionResult.operationId && props.onOpenOperation ? (
+                <button style={buttonStyle} onClick={() => props.onOpenOperation?.(decisionResult.operationId || "")}>
+                  Open linked task
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>Selected Approval</div>
         {!selectedApproval ? (
@@ -2169,6 +2326,20 @@ function ApprovalsPanel(props: { baseUrl: string; focusApprovalId?: string }) {
             <div style={{ fontSize: 12 }}>
               Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
             </div>
+            {selectedInspection.missionId || selectedInspection.operationId ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {selectedInspection.missionId && props.onOpenMission ? (
+                  <button style={buttonStyle} onClick={() => props.onOpenMission?.(selectedInspection.missionId)}>
+                    Open mission flow
+                  </button>
+                ) : null}
+                {selectedInspection.operationId && props.onOpenOperation ? (
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation?.(selectedInspection.operationId)}>
+                    Open linked task
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Scope Touched</div>
               <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
@@ -2286,7 +2457,8 @@ function SystemPanel(props: {
   baseUrl: string;
   settings: UiSettings;
   operatorMode: OperatorModeSnapshot | null;
-  onOpenApprovals: (approvalId?: string) => void;
+  focusMissionId?: string;
+  onOpenApprovals: (approvalId?: string, returnContext?: ApprovalReturnContext) => void;
   onOpenOperation: (operationId: string) => void;
   onOpenOperations: () => void;
 }) {
@@ -2313,9 +2485,30 @@ function SystemPanel(props: {
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
   const [missionDetailError, setMissionDetailError] = useState<string | null>(null);
-  const [missionActionBusy, setMissionActionBusy] = useState<"" | "run" | "cancel">("");
-  const [missionActionOperationId, setMissionActionOperationId] = useState("");
+  const [missionActionBusy, setMissionActionBusy] = useState<"" | "run" | "cancel" | "advance">("");
+  const [missionActionTargetId, setMissionActionTargetId] = useState("");
   const [missionActionNotice, setMissionActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [missionActionResult, setMissionActionResult] = useState<{
+    missionId?: string;
+    operationId?: string;
+    approvalId?: string;
+  } | null>(null);
+  const [missionQueueRunBusy, setMissionQueueRunBusy] = useState(false);
+  const [missionQueueRunSummary, setMissionQueueRunSummary] = useState<{
+    processed: number;
+    applied: number;
+    advanced: number;
+    results: Array<{
+      missionId?: string;
+      operationId?: string;
+      approvalId?: string;
+      action?: string;
+      status?: string;
+      gate?: string;
+      nextStep?: string;
+      message?: string;
+    }>;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -2659,7 +2852,14 @@ function SystemPanel(props: {
       detail: incident.detail || "Local runtime drift needs operator review before additional action.",
       tone: incident.severity || "warning",
       actionLabel: approvalId ? "Review approval" : taskId ? "Open task" : undefined,
-      onAction: approvalId ? () => props.onOpenApprovals(approvalId) : taskId ? () => props.onOpenOperation(taskId) : undefined,
+      onAction: approvalId
+        ? () =>
+            props.onOpenApprovals(approvalId, {
+              operationId: taskId || undefined,
+            })
+        : taskId
+          ? () => props.onOpenOperation(taskId)
+          : undefined,
     });
   }
 
@@ -2749,6 +2949,7 @@ function SystemPanel(props: {
       ordered.push(cleaned);
     };
 
+    push(props.focusMissionId);
     shiftBriefingFocus.forEach((item) => push(item.id));
     missionQueue.forEach((item) => push(item.id));
     recentDeclaredMissions.forEach((mission) => push(mission.id));
@@ -2756,13 +2957,24 @@ function SystemPanel(props: {
     shiftBriefingDeadletter.forEach((item) => push(item.id));
     if (leadMission) push(leadMission.id);
     return ordered;
-  }, [leadMission, missionQueue, recentDeclaredMissions, shiftBriefingCompleted, shiftBriefingDeadletter, shiftBriefingFocus]);
+  }, [leadMission, missionQueue, props.focusMissionId, recentDeclaredMissions, shiftBriefingCompleted, shiftBriefingDeadletter, shiftBriefingFocus]);
   const missionSelectionKey = missionSelectionCandidates.join("|");
   const selectedMission = missionDetail?.mission;
   const selectedMissionMeta = isRecord(selectedMission?.meta) ? selectedMission.meta : {};
+  const selectedMissionContextId = safeString(selectedMission?.id).trim() || selectedMissionId;
   const missionLinkedOperations = missionDetail?.linked_operations ?? [];
   const missionRunLedger = missionDetail?.run_ledger ?? [];
   const missionHistory = missionDetail?.history ?? [];
+  const missionLoopState: MissionLoopState | undefined = missionDetail?.loop_state;
+  const missionLoopStages = missionLoopState
+    ? ([
+        { key: "plan", label: "Plan", stage: missionLoopState.plan },
+        { key: "gate", label: "Gate", stage: missionLoopState.gate },
+        { key: "execute", label: "Execute", stage: missionLoopState.execute },
+        { key: "trace", label: "Trace", stage: missionLoopState.trace },
+        { key: "memory", label: "Memory", stage: missionLoopState.memory },
+      ] as const).filter((item) => item.stage)
+    : [];
   const primaryMissionOperation = missionLinkedOperations[0]?.operation ?? null;
   const primaryMissionOperationStatus = operationStatus(primaryMissionOperation);
   const primaryMissionOperationApprovalId = operationApprovalId(primaryMissionOperation);
@@ -2778,11 +2990,21 @@ function SystemPanel(props: {
             : "This mission is currently in a steady state. Review continuity and linked traces before changing course.";
   const selectedMissionLatestTaskId =
     selectedMission?.linked_task_ids?.find((taskId) => safeString(taskId).trim().length > 0) ?? "";
+  const missionAdvanceBlockedReason = executionBlockedReason(props.operatorMode, "advancing mission continuity");
+  const canAdvanceMission = missionAdvanceBlockedReason.length === 0;
+  const missionQueueRunBlockedReason = executionBlockedReason(props.operatorMode, "running the mission queue");
+  const canRunMissionQueue = missionQueueRunBlockedReason.length === 0;
   const inspectMission = useCallback((missionId: string) => {
     const cleaned = missionId.trim();
     if (!cleaned) return;
     setSelectedMissionId(cleaned);
   }, []);
+
+  useEffect(() => {
+    const cleaned = safeString(props.focusMissionId).trim();
+    if (!cleaned) return;
+    setSelectedMissionId(cleaned);
+  }, [props.focusMissionId]);
 
   useEffect(() => {
     setSelectedMissionId((prev) => {
@@ -2797,14 +3019,120 @@ function SystemPanel(props: {
 
   useEffect(() => {
     setMissionActionNotice(null);
+    setMissionActionResult(null);
   }, [selectedMissionId]);
+
+  const advanceMission = useCallback(
+    async (missionId: string) => {
+      const cleaned = missionId.trim();
+      if (!cleaned || !canAdvanceMission) return;
+      setMissionActionBusy("advance");
+      setMissionActionTargetId(cleaned);
+      setMissionActionNotice(null);
+      setMissionActionResult(null);
+      try {
+        const response = await missionsClient.advance(cleaned, {
+          actor: "chat_ui.orb",
+          note: "advance_from_orb_panel",
+          worker_id: "chat_ui.orb",
+        });
+        const nextDetail = await loadMissionDetail(cleaned);
+        await refresh();
+        const resolvedOperation = response.operation ?? nextDetail?.linked_operations?.[0]?.operation ?? null;
+        const approvalId = operationApprovalId(resolvedOperation);
+        const nextStatus = safeString(response.status || nextDetail?.mission?.status || response.mission?.status, "unknown");
+        if (!response.ok) {
+          setMissionActionNotice({
+            tone: "error",
+            text: response.error || response.message || `Mission advance failed with status ${nextStatus}.`,
+          });
+          return;
+        }
+
+        const summary = response.applied
+          ? `Mission advanced once. Status is now ${nextStatus}.`
+          : `Mission remains ${nextStatus}.`;
+        const message = safeString(response.message).trim();
+        const approvalMessage = approvalId ? ` Review approval ${approvalId}.` : "";
+        setMissionActionResult({
+          missionId: cleaned,
+          operationId: safeString(response.operation_id).trim() || undefined,
+          approvalId: approvalId || undefined,
+        });
+        setMissionActionNotice({
+          tone: "info",
+          text: `${summary}${message ? ` ${message}` : ""}${approvalMessage}`,
+        });
+      } catch (err) {
+        setMissionActionNotice({ tone: "error", text: missionError(err) });
+      } finally {
+        setMissionActionBusy("");
+        setMissionActionTargetId("");
+      }
+    },
+    [canAdvanceMission, loadMissionDetail, missionError, missionsClient, refresh],
+  );
+
+  const runMissionQueueOnce = useCallback(async () => {
+    if (!canRunMissionQueue) return;
+    setMissionQueueRunBusy(true);
+    setMissionActionNotice(null);
+    setMissionActionResult(null);
+    try {
+      const response = await missionsClient.runOnce({
+        actor: "chat_ui.orb",
+        note: "run_queue_once_from_orb_panel",
+        limit: 6,
+      });
+      await refresh();
+      if (selectedMissionId) {
+        await loadMissionDetail(selectedMissionId);
+      }
+
+      setMissionQueueRunSummary({
+        processed: response.processed ?? 0,
+        applied: response.applied ?? 0,
+        advanced: response.advanced ?? 0,
+        results: (response.results ?? []).slice(0, 4).map((item) => ({
+          missionId: item.mission_id,
+          operationId: item.operation_id,
+          approvalId: item.approval_id,
+          action: item.action,
+          status: item.status,
+          gate: item.gate,
+          nextStep: item.next_step,
+          message: item.message,
+        })),
+      });
+
+      if (!response.ok) {
+        const firstError = isRecord(response.errors?.[0]) ? safeString(response.errors?.[0]?.error).trim() : "";
+        setMissionActionNotice({
+          tone: "error",
+          text: response.error || firstError || "Mission queue run did not complete cleanly.",
+        });
+        return;
+      }
+
+      setMissionActionNotice({
+        tone: "info",
+        text: `Mission queue pass processed ${String(response.processed ?? 0)} missions and advanced ${String(
+          response.advanced ?? 0,
+        )}. Continuity and backlog state have been refreshed.`,
+      });
+    } catch (err) {
+      setMissionActionNotice({ tone: "error", text: missionError(err) });
+    } finally {
+      setMissionQueueRunBusy(false);
+    }
+  }, [canRunMissionQueue, loadMissionDetail, missionError, missionsClient, refresh, selectedMissionId]);
 
   const runMissionOperation = useCallback(
     async (operationId: string) => {
       const cleaned = operationId.trim();
       if (!cleaned) return;
       setMissionActionBusy("run");
-      setMissionActionOperationId(cleaned);
+      setMissionActionTargetId(cleaned);
       setMissionActionNotice(null);
       try {
         const response = await operationsClient.run(cleaned, { worker_id: "chat_ui.orb" });
@@ -2829,7 +3157,7 @@ function SystemPanel(props: {
         setMissionActionNotice({ tone: "error", text: operationsError(err) });
       } finally {
         setMissionActionBusy("");
-        setMissionActionOperationId("");
+        setMissionActionTargetId("");
       }
     },
     [loadMissionDetail, operationsClient, operationsError, refresh, selectedMission?.id, selectedMissionId],
@@ -2840,7 +3168,7 @@ function SystemPanel(props: {
       const cleaned = operationId.trim();
       if (!cleaned) return;
       setMissionActionBusy("cancel");
-      setMissionActionOperationId(cleaned);
+      setMissionActionTargetId(cleaned);
       setMissionActionNotice(null);
       try {
         const response = await operationsClient.cancel(cleaned, { reason: "cancelled_from_orb_panel" });
@@ -2862,7 +3190,7 @@ function SystemPanel(props: {
         setMissionActionNotice({ tone: "error", text: operationsError(err) });
       } finally {
         setMissionActionBusy("");
-        setMissionActionOperationId("");
+        setMissionActionTargetId("");
       }
     },
     [loadMissionDetail, operationsClient, operationsError, refresh, selectedMission?.id, selectedMissionId],
@@ -3870,6 +4198,109 @@ function SystemPanel(props: {
                 </div>
               </div>
 
+              {missionLoopStages.length > 0 ? (
+                <div style={{ ...summaryCardStyle(), marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>ORB Loop State</div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {missionLoopState?.summary || "Current plan, gate, execution, trace, and continuity posture for this mission."}
+                      </div>
+                    </div>
+                    {missionLoopState?.active_stage ? (
+                      <span style={badgeStyle(missionLoopState.active_stage)}>active {missionLoopState.active_stage}</span>
+                    ) : null}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
+                    {missionLoopStages.map((item) => (
+                      <div
+                        key={`mission-loop-${item.key}`}
+                        style={{
+                          border: `1px solid ${missionLoopState?.active_stage === item.key ? "#3a5c67" : THEME.panelBorder}`,
+                          borderRadius: 10,
+                          padding: 10,
+                          background: missionLoopState?.active_stage === item.key ? "#10181b" : "#121212",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontSize: 11, color: THEME.muted }}>{item.label}</div>
+                          <span style={badgeStyle(item.stage?.status || "unknown")}>{item.stage?.status || "unknown"}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: THEME.text, marginTop: 8 }}>
+                          {item.stage?.detail || "No receipt is recorded for this stage yet."}
+                        </div>
+                        {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.next_step) ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                            {item.stage?.count !== undefined ? (
+                              <>
+                                count <code>{String(item.stage.count)}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.gate ? (
+                              <>
+                                {item.stage?.count !== undefined ? " / " : ""}gate <code>{item.stage.gate}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.next_step ? (
+                              <>
+                                {(item.stage?.count !== undefined || item.stage?.gate) ? " / " : ""}next <code>{item.stage.next_step}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id || item.stage?.latest_event) ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                            {item.stage?.approval_id ? (
+                              <>
+                                approval <code>{item.stage.approval_id}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.operation_id ? (
+                              <>
+                                {item.stage?.approval_id ? " / " : ""}task <code>{item.stage.operation_id}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.trace_id ? (
+                              <>
+                                {(item.stage?.approval_id || item.stage?.operation_id) ? " / " : ""}trace <code>{item.stage.trace_id}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.latest_event ? (
+                              <>
+                                {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id) ? " / " : ""}latest <code>{item.stage.latest_event}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {(item.stage?.approval_id || item.stage?.operation_id) ? (
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                            {item.stage?.approval_id ? (
+                              <button
+                                style={buttonStyle}
+                                onClick={() =>
+                                  props.onOpenApprovals(item.stage?.approval_id || "", {
+                                    missionId: selectedMissionContextId || undefined,
+                                    operationId: item.stage?.operation_id,
+                                  })
+                                }
+                              >
+                                Review approval
+                              </button>
+                            ) : null}
+                            {item.stage?.operation_id ? (
+                              <button style={buttonStyle} onClick={() => props.onOpenOperation(item.stage?.operation_id || "")}>
+                                Open linked task
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {missionActionNotice ? (
                 <div
                   style={{
@@ -3885,10 +4316,51 @@ function SystemPanel(props: {
                   {missionActionNotice.text}
                 </div>
               ) : null}
+              {missionActionResult ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+                  {missionActionResult.missionId ? (
+                    <span style={badgeStyle("mission")}>mission <code>{missionActionResult.missionId}</code></span>
+                  ) : null}
+                  {missionActionResult.operationId ? (
+                    <span style={badgeStyle("queued")}>task <code>{missionActionResult.operationId}</code></span>
+                  ) : null}
+                  {missionActionResult.approvalId ? (
+                    <span style={badgeStyle("needs_approval")}>approval <code>{missionActionResult.approvalId}</code></span>
+                  ) : null}
+                  {missionActionResult.operationId ? (
+                    <button style={buttonStyle} onClick={() => props.onOpenOperation(missionActionResult.operationId || "")}>
+                      Open task
+                    </button>
+                  ) : null}
+                  {missionActionResult.approvalId ? (
+                    <button
+                      style={buttonStyle}
+                      onClick={() =>
+                        props.onOpenApprovals(missionActionResult.approvalId, {
+                          missionId: missionActionResult.missionId,
+                          operationId: missionActionResult.operationId,
+                        })
+                      }
+                    >
+                      Review approval
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {missionAdvanceBlockedReason ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>{missionAdvanceBlockedReason}</div>
+              ) : null}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 <button style={buttonStyle} onClick={() => void loadMissionDetail(selectedMission.id)} disabled={missionDetailBusy}>
                   {missionDetailBusy ? "Refreshing." : "Refresh mission flow"}
+                </button>
+                <button
+                  style={buttonStyle}
+                  onClick={() => void advanceMission(selectedMission.id)}
+                  disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy}
+                >
+                  {missionActionBusy === "advance" && missionActionTargetId === selectedMission.id ? "Advancing." : "Advance mission once"}
                 </button>
                 {selectedMissionLatestTaskId ? (
                   <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionLatestTaskId)}>
@@ -3950,7 +4422,15 @@ function SystemPanel(props: {
                             ) : null}
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                               {approvalId ? (
-                                <button style={buttonStyle} onClick={() => props.onOpenApprovals(approvalId)}>
+                                <button
+                                  style={buttonStyle}
+                                  onClick={() =>
+                                    props.onOpenApprovals(approvalId, {
+                                      missionId: selectedMission.id,
+                                      operationId: operation.id,
+                                    })
+                                  }
+                                >
                                   Review approval
                                 </button>
                               ) : null}
@@ -3958,18 +4438,18 @@ function SystemPanel(props: {
                                 <button
                                   style={buttonStyle}
                                   onClick={() => void runMissionOperation(operation.id)}
-                                  disabled={missionActionBusy !== "" && missionActionOperationId === operation.id}
+                                  disabled={missionActionBusy !== "" && missionActionTargetId === operation.id}
                                 >
-                                  {missionActionBusy === "run" && missionActionOperationId === operation.id ? "Retrying." : "Retry now"}
+                                  {missionActionBusy === "run" && missionActionTargetId === operation.id ? "Retrying." : "Retry now"}
                                 </button>
                               ) : null}
                               {["queued", "running", "blocked"].includes(operationStatus(operation)) ? (
                                 <button
                                   style={buttonStyle}
                                   onClick={() => void cancelMissionOperation(operation.id)}
-                                  disabled={missionActionBusy !== "" && missionActionOperationId === operation.id}
+                                  disabled={missionActionBusy !== "" && missionActionTargetId === operation.id}
                                 >
-                                  {missionActionBusy === "cancel" && missionActionOperationId === operation.id ? "Canceling." : "Cancel"}
+                                  {missionActionBusy === "cancel" && missionActionTargetId === operation.id ? "Canceling." : "Cancel"}
                                 </button>
                               ) : null}
                               <button style={buttonStyle} onClick={() => props.onOpenOperation(operation.id)}>
@@ -4072,7 +4552,86 @@ function SystemPanel(props: {
 
         {missionQueue.length > 0 ? (
           <>
-            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Mission Queue</div>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Mission Queue</div>
+                <div style={{ fontSize: 11, color: missionQueueRunBlockedReason ? "#ffcf9d" : THEME.muted, marginTop: 4 }}>
+                  {missionQueueRunBlockedReason ||
+                    "Run one bounded queue pass to reconcile continuity and advance only missions that are already safe to move."}
+                </div>
+              </div>
+              <button
+                style={buttonStyle}
+                onClick={() => void runMissionQueueOnce()}
+                disabled={!canRunMissionQueue || missionQueueRunBusy || missionActionBusy !== ""}
+              >
+                {missionQueueRunBusy ? "Running queue." : "Run mission queue once"}
+              </button>
+            </div>
+            {missionQueueRunSummary ? (
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#111819", marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: THEME.muted }}>
+                  processed=<code>{String(missionQueueRunSummary.processed)}</code>
+                  {" / "}applied=<code>{String(missionQueueRunSummary.applied)}</code>
+                  {" / "}advanced=<code>{String(missionQueueRunSummary.advanced)}</code>
+                </div>
+                {missionQueueRunSummary.results.length > 0 ? (
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {missionQueueRunSummary.results.map((item, index) => (
+                      <div key={`mission-queue-summary-${item.missionId || item.operationId || index}`} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontSize: 11, fontWeight: 600 }}>{item.missionId || "mission"}</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {item.action ? <span style={badgeStyle(item.action)}>{item.action}</span> : null}
+                            {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
+                          </div>
+                        </div>
+                        {item.message ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.message}</div> : null}
+                        {item.gate || item.nextStep ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {item.gate ? (
+                              <>
+                                gate=<code>{item.gate}</code>
+                              </>
+                            ) : null}
+                            {item.nextStep ? (
+                              <>
+                                {item.gate ? " / " : ""}next=<code>{item.nextStep}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {item.approvalId ? (
+                            <button
+                              style={buttonStyle}
+                              onClick={() =>
+                                props.onOpenApprovals(item.approvalId, {
+                                  missionId: item.missionId,
+                                  operationId: item.operationId,
+                                })
+                              }
+                            >
+                              Review approval
+                            </button>
+                          ) : null}
+                          {item.missionId ? (
+                            <button style={buttonStyle} onClick={() => inspectMission(item.missionId || "")}>
+                              Inspect mission flow
+                            </button>
+                          ) : null}
+                          {item.operationId ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(item.operationId || "")}>
+                              Open linked task
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {missionQueue.slice(0, 4).map((item) => {
                 const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
@@ -4096,6 +4655,13 @@ function SystemPanel(props: {
                       {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
                     </div>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      <button
+                        style={buttonStyle}
+                        onClick={() => void advanceMission(item.id)}
+                        disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy}
+                      >
+                        {missionActionBusy === "advance" && missionActionTargetId === item.id ? "Advancing." : "Advance once"}
+                      </button>
                       <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                         Inspect mission flow
                       </button>
@@ -4304,7 +4870,14 @@ function SystemPanel(props: {
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
                     {approvalId ? (
-                      <button style={buttonStyle} onClick={() => props.onOpenApprovals(approvalId)}>
+                      <button
+                        style={buttonStyle}
+                        onClick={() =>
+                          props.onOpenApprovals(approvalId, {
+                            operationId: taskId || undefined,
+                          })
+                        }
+                      >
                         Review approval
                       </button>
                     ) : null}
@@ -4927,7 +5500,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
               <div style={{ fontSize: 11 }}>
                 approval <code>{runResponse.approval_id}</code>
               </div>
-              <button style={buttonStyle} onClick={() => props.onOpenApprovals(runResponse.approval_id)}>
+              <button
+                style={buttonStyle}
+                onClick={() => props.onOpenApprovals(runResponse.approval_id)}
+              >
                 Open approval
               </button>
             </div>
@@ -4950,10 +5526,12 @@ function OperationsPanel(props: {
   baseUrl: string;
   focusOperationId?: string;
   operatorMode: OperatorModeSnapshot | null;
-  onOpenApprovals: (approvalId?: string) => void;
+  onOpenApprovals: (approvalId?: string, returnContext?: ApprovalReturnContext) => void;
+  onOpenMission: (missionId: string) => void;
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [items, setItems] = useState<OperationRecord[]>([]);
   const [selectedOperationId, setSelectedOperationId] = useState("");
   const [detail, setDetail] = useState<OperationDetail | null>(null);
@@ -4964,6 +5542,19 @@ function OperationsPanel(props: {
   const [actionNotice, setActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [workerCycleBusy, setWorkerCycleBusy] = useState(false);
   const [workerCycleNotice, setWorkerCycleNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [composerObjective, setComposerObjective] = useState("Create a governed plan for the current operator objective");
+  const [composerReason, setComposerReason] = useState("operator_requested");
+  const [composerAction, setComposerAction] = useState("plan.create");
+  const [composerInputText, setComposerInputText] = useState('{\n  "goal": "Capture the next governed plan step"\n}');
+  const [composerDomain, setComposerDomain] = useState("");
+  const [composerMissionSummary, setComposerMissionSummary] = useState("Declared from the operations console so the ORB can carry the work across queue, governance, execution, and continuity.");
+  const [composerMissionNextStep, setComposerMissionNextStep] = useState("Inspect the created task, satisfy any approval gate, and run the first bounded execution step.");
+  const [composerCreateMission, setComposerCreateMission] = useState(true);
+  const [composerPriority, setComposerPriority] = useState("5");
+  const [composerRiskTier, setComposerRiskTier] = useState("medium");
+  const [composerBusy, setComposerBusy] = useState<"" | "create" | "create_run">("");
+  const [composerNotice, setComposerNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [composerResult, setComposerResult] = useState<{ missionId?: string; operationId?: string; approvalId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const operationsError = useCallback((err: unknown): string => {
@@ -5044,6 +5635,8 @@ function OperationsPanel(props: {
   }, [selectedOperationId]);
 
   const operatorEnvironment = props.operatorMode?.environment;
+  const composerBlockedReason = executionBlockedReason(props.operatorMode, "declaring governed work");
+  const canCreateComposedRequest = composerBlockedReason.length === 0;
   const runSelectedBlockedReason = executionBlockedReason(props.operatorMode, "running queued work");
   const workerProfile = safeString(operatorEnvironment?.id).trim();
   const workerRunMode = safeString(operatorEnvironment?.run_mode).trim();
@@ -5075,8 +5668,10 @@ function OperationsPanel(props: {
   const selectedGovernance = isRecord(selectedMeta.governance) ? selectedMeta.governance : {};
   const selectedApprovalId =
     safeString(selectedMeta.approval_id) || safeString(selectedOutput.approval_id) || "";
+  const selectedMissionId = operationMissionId(selectedOperation);
   const selectedOrbPlane = safeString(selectedMeta.orb_plane);
   const selectedResultMessage = safeString(selectedMeta.result_message);
+  const selectedTraceId = operationTraceId(selectedOperation);
   const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
   const hasGovernance =
     Object.keys(selectedGovernance).length > 0 || Boolean(selectedApprovalId) || Boolean(selectedOrbPlane);
@@ -5128,6 +5723,152 @@ function OperationsPanel(props: {
       setWorkerCycleBusy(false);
     }
   }, [canRunWorkerCycle, client, loadDetail, operationsError, refresh, selectedOperationId, workerProfile, workerRunMode]);
+
+  const submitComposedRequest = useCallback(
+    async (runImmediately: boolean) => {
+      if (!canCreateComposedRequest) return;
+
+      const objective = safeString(composerObjective).trim();
+      const action = safeString(composerAction).trim();
+      const reason = safeString(composerReason).trim() || "operator_requested";
+      const parsedInput = parseJsonObjectInput(composerInputText);
+      if (!action) {
+        setComposerNotice({ tone: "error", text: "Action is required before Francis can queue governed work." });
+        return;
+      }
+      if (!parsedInput.ok) {
+        setComposerNotice({ tone: "error", text: parsedInput.error });
+        return;
+      }
+      if (composerCreateMission && !objective) {
+        setComposerNotice({ tone: "error", text: "Mission creation requires an objective so continuity has a truthful anchor." });
+        return;
+      }
+
+      setComposerBusy(runImmediately ? "create_run" : "create");
+      setComposerNotice(null);
+      setComposerResult(null);
+      setActionNotice(null);
+      setWorkerCycleNotice(null);
+      setError(null);
+
+      let missionId = "";
+      try {
+        if (composerCreateMission) {
+          const missionResponse = await missionsClient.create({
+            objective,
+            summary: safeString(composerMissionSummary).trim(),
+            next_step: safeString(composerMissionNextStep).trim(),
+            requester_id: "chat_ui.operations",
+            priority: Math.max(1, Math.min(9, Number.parseInt(composerPriority, 10) || 5)),
+            risk_tier: safeString(composerRiskTier).trim() || "medium",
+          });
+          if (!missionResponse.ok || !safeString(missionResponse.mission_id).trim()) {
+            setComposerNotice({
+              tone: "error",
+              text: missionResponse.error || "Mission creation failed before any governed operation was queued.",
+            });
+            return;
+          }
+          missionId = safeString(missionResponse.mission_id).trim();
+        }
+
+        const createResponse = await client.create({
+          action,
+          reason,
+          domain: safeString(composerDomain).trim() || undefined,
+          actor: "chat_ui.operations",
+          mission_id: missionId || undefined,
+          input: parsedInput.parsed,
+          objective: objective || undefined,
+          priority: Math.max(1, Math.min(9, Number.parseInt(composerPriority, 10) || 5)),
+        });
+
+        const createdOperationId = safeString(createResponse.operation_id).trim();
+        if (!createResponse.ok || !createdOperationId) {
+          setComposerResult(missionId ? { missionId } : null);
+          setComposerNotice({
+            tone: "error",
+            text:
+              createResponse.message ||
+              "Governed operation creation failed. Any declared mission was preserved and should be inspected before retrying.",
+          });
+          return;
+        }
+
+        let approvalId = safeString(createResponse.approval_id).trim();
+        setSelectedOperationId(createdOperationId);
+        await refresh();
+        const createdDetail = await loadDetail(createdOperationId);
+
+        if (runImmediately) {
+          const runResponse = await client.run(createdOperationId, { worker_id: "chat_ui.operations" });
+          if (runResponse.operation) {
+            upsertOperation(runResponse.operation);
+          }
+          await refresh();
+          const nextDetail = await loadDetail(createdOperationId);
+          const resolvedApprovalId =
+            safeString(runResponse.operation?.meta?.approval_id) ||
+            safeString(isRecord(runResponse.operation?.output) ? runResponse.operation?.output.approval_id : "") ||
+            safeString(isRecord(nextDetail?.operation?.meta) ? nextDetail?.operation?.meta.approval_id : "") ||
+            safeString(isRecord(nextDetail?.operation?.output) ? nextDetail?.operation?.output.approval_id : "") ||
+            approvalId;
+          setComposerResult({
+            missionId: missionId || undefined,
+            operationId: createdOperationId,
+            approvalId: resolvedApprovalId || undefined,
+          });
+          setComposerNotice({
+            tone: runResponse.ok ? "info" : "error",
+            text: runResponse.ok
+              ? `Governed request queued and advanced. Inspect the created task for execution, governance, trace, and continuity outcomes.`
+              : runResponse.message || "The task was created, but the first execution step did not complete cleanly.",
+          });
+          return;
+        }
+
+        const resolvedApprovalId =
+          safeString(isRecord(createdDetail?.operation?.meta) ? createdDetail?.operation?.meta.approval_id : "") ||
+          safeString(isRecord(createdDetail?.operation?.output) ? createdDetail?.operation?.output.approval_id : "") ||
+          approvalId;
+        setComposerResult({
+          missionId: missionId || undefined,
+          operationId: createdOperationId,
+          approvalId: resolvedApprovalId || undefined,
+        });
+        setComposerNotice({
+          tone: "info",
+          text: missionId
+            ? "Mission and first governed task were created. Open the mission flow or task detail to continue through governance and execution."
+            : "Governed task created. Open the task detail to continue through governance and execution.",
+        });
+      } catch (err) {
+        setComposerResult(missionId ? { missionId } : null);
+        setComposerNotice({ tone: "error", text: err instanceof Error ? err.message : "Request creation failed." });
+      } finally {
+        setComposerBusy("");
+      }
+    },
+    [
+      canCreateComposedRequest,
+      client,
+      composerAction,
+      composerCreateMission,
+      composerDomain,
+      composerInputText,
+      composerMissionNextStep,
+      composerMissionSummary,
+      composerObjective,
+      composerPriority,
+      composerReason,
+      composerRiskTier,
+      loadDetail,
+      missionsClient,
+      refresh,
+      upsertOperation,
+    ],
+  );
 
   const runSelectedOperation = useCallback(async () => {
     if (!selectedOperationId || !canRunSelected) return;
@@ -5220,6 +5961,171 @@ function OperationsPanel(props: {
           </select>
           <button onClick={() => void refresh()} disabled={busy || actionBusy !== "" || workerCycleBusy} style={buttonStyle}>
             {busy ? "Refreshing." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Governed Request Composer</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Declare a mission if needed, queue the first governed operation, and optionally advance it immediately without leaving the operator console.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <span style={badgeStyle(composerCreateMission ? "mission-linked" : "task-only")}>
+              {composerCreateMission ? "mission linked" : "task only"}
+            </span>
+            <span style={badgeStyle(composerAction || "action")}>{composerAction || "action"}</span>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: composerBlockedReason ? "#ffcf9d" : THEME.muted, marginTop: 8 }}>
+          {composerBlockedReason || "This writes only explicit mission/task state. Governance, approvals, and trace surfaces remain visible after creation."}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8, marginTop: 10 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 11, color: THEME.muted }}>Objective</span>
+            <input value={composerObjective} onChange={(e) => setComposerObjective(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 11, color: THEME.muted }}>Action</span>
+            <input value={composerAction} onChange={(e) => setComposerAction(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 11, color: THEME.muted }}>Reason</span>
+            <input value={composerReason} onChange={(e) => setComposerReason(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 11, color: THEME.muted }}>Domain</span>
+            <input value={composerDomain} onChange={(e) => setComposerDomain(e.target.value)} placeholder="optional domain scope" style={inputStyle} />
+          </label>
+        </div>
+
+        <label style={{ display: "grid", gap: 6, marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: THEME.muted }}>Input JSON object</span>
+          <textarea
+            value={composerInputText}
+            onChange={(e) => setComposerInputText(e.target.value)}
+            rows={6}
+            style={{ ...inputStyle, resize: "vertical", fontFamily: "Consolas, monospace", fontSize: 12 }}
+          />
+        </label>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={composerCreateMission}
+              onChange={(e) => setComposerCreateMission(e.target.checked)}
+            />
+            Declare mission alongside task
+          </label>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            Priority
+            <input
+              value={composerPriority}
+              onChange={(e) => setComposerPriority(e.target.value)}
+              inputMode="numeric"
+              style={{ ...inputStyle, padding: "8px 10px", width: 72 }}
+            />
+          </label>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            Risk
+            <input
+              value={composerRiskTier}
+              onChange={(e) => setComposerRiskTier(e.target.value)}
+              style={{ ...inputStyle, padding: "8px 10px", width: 110 }}
+            />
+          </label>
+        </div>
+
+        {composerCreateMission ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8, marginTop: 8 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 11, color: THEME.muted }}>Mission summary</span>
+              <textarea
+                value={composerMissionSummary}
+                onChange={(e) => setComposerMissionSummary(e.target.value)}
+                rows={3}
+                style={{ ...inputStyle, resize: "vertical" }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 11, color: THEME.muted }}>Mission next step</span>
+              <textarea
+                value={composerMissionNextStep}
+                onChange={(e) => setComposerMissionNextStep(e.target.value)}
+                rows={3}
+                style={{ ...inputStyle, resize: "vertical" }}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {composerNotice ? (
+          <div
+            style={{
+              border: `1px solid ${composerNotice.tone === "error" ? THEME.errorBorder : THEME.panelBorder}`,
+              background: composerNotice.tone === "error" ? THEME.errorBg : "#111819",
+              color: composerNotice.tone === "error" ? "#ffaaaa" : "#aee6df",
+              padding: 10,
+              borderRadius: 10,
+              fontSize: 12,
+              marginTop: 10,
+            }}
+          >
+            {composerNotice.text}
+          </div>
+        ) : null}
+
+        {composerResult ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+            {composerResult.missionId ? <span style={badgeStyle("mission")}>mission <code>{composerResult.missionId}</code></span> : null}
+            {composerResult.operationId ? <span style={badgeStyle("queued")}>task <code>{composerResult.operationId}</code></span> : null}
+            {composerResult.approvalId ? <span style={badgeStyle("needs_approval")}>approval <code>{composerResult.approvalId}</code></span> : null}
+            {composerResult.missionId ? (
+              <button style={buttonStyle} onClick={() => props.onOpenMission(composerResult.missionId ?? "")}>
+                Open mission flow
+              </button>
+            ) : null}
+            {composerResult.operationId ? (
+              <button style={buttonStyle} onClick={() => setSelectedOperationId(composerResult.operationId ?? "")}>
+                Open task detail
+              </button>
+            ) : null}
+            {composerResult.approvalId ? (
+              <button
+                style={buttonStyle}
+                onClick={() =>
+                  props.onOpenApprovals(composerResult.approvalId, {
+                    missionId: composerResult.missionId,
+                    operationId: composerResult.operationId,
+                  })
+                }
+              >
+                Review approval
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button
+            onClick={() => void submitComposedRequest(false)}
+            disabled={!canCreateComposedRequest || composerBusy !== "" || busy || actionBusy !== "" || workerCycleBusy}
+            style={buttonStyle}
+          >
+            {composerBusy === "create" ? "Creating." : "Create request"}
+          </button>
+          <button
+            onClick={() => void submitComposedRequest(true)}
+            disabled={!canCreateComposedRequest || composerBusy !== "" || busy || actionBusy !== "" || workerCycleBusy}
+            style={buttonStyle}
+          >
+            {composerBusy === "create_run" ? "Creating + running." : "Create + run now"}
           </button>
         </div>
       </div>
@@ -5359,6 +6265,16 @@ function OperationsPanel(props: {
               <div style={{ fontSize: 12 }}>
                 Assigned to: <code>{operationMetaString(selectedOperation, "assigned_to", "unassigned")}</code>
               </div>
+              {selectedMissionId ? (
+                <div style={{ fontSize: 12 }}>
+                  Mission: <code>{selectedMissionId}</code>
+                </div>
+              ) : null}
+              {selectedTraceId ? (
+                <div style={{ fontSize: 12 }}>
+                  Trace: <code>{selectedTraceId}</code>
+                </div>
+              ) : null}
               <div style={{ fontSize: 12 }}>
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
@@ -5380,6 +6296,11 @@ function OperationsPanel(props: {
                 >
                   {actionBusy === "cancel" ? "Canceling." : "Cancel"}
                 </button>
+                {selectedMissionId ? (
+                  <button style={buttonStyle} onClick={() => props.onOpenMission(selectedMissionId)}>
+                    Open mission flow
+                  </button>
+                ) : null}
               </div>
               {actionNotice ? (
                 <div
@@ -5439,12 +6360,30 @@ function OperationsPanel(props: {
                       ORB plane <code>{selectedOrbPlane}</code>
                     </div>
                   ) : null}
+                  {selectedMissionId ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 11 }}>
+                        mission <code>{selectedMissionId}</code>
+                      </div>
+                      <button style={buttonStyle} onClick={() => props.onOpenMission(selectedMissionId)}>
+                        Open mission flow
+                      </button>
+                    </div>
+                  ) : null}
                   {selectedApprovalId ? (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                       <div style={{ fontSize: 11 }}>
                         approval <code>{selectedApprovalId}</code>
                       </div>
-                      <button style={buttonStyle} onClick={() => props.onOpenApprovals(selectedApprovalId)}>
+                      <button
+                        style={buttonStyle}
+                        onClick={() =>
+                          props.onOpenApprovals(selectedApprovalId, {
+                            missionId: selectedMissionId || undefined,
+                            operationId: selectedOperation.id,
+                          })
+                        }
+                      >
                         Open approval
                       </button>
                     </div>
@@ -5481,6 +6420,8 @@ function OperationsPanel(props: {
                       const reason = safeString(entryMeta.reason);
                       const gate = safeString(entryMeta.gate);
                       const nextStep = safeString(entryMeta.next_step);
+                      const taskId = safeString(entryMeta.task_id).trim() || selectedOperation.id;
+                      const entryOrbPlane = safeString(entryMeta.orb_plane).trim();
                       return (
                         <div
                           key={entry.id}
@@ -5513,6 +6454,19 @@ function OperationsPanel(props: {
                               ) : null}
                             </div>
                           ) : null}
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            task <code>{taskId}</code>
+                            {selectedMissionId ? (
+                              <>
+                                {" / "}mission <code>{selectedMissionId}</code>
+                              </>
+                            ) : null}
+                            {entryOrbPlane ? (
+                              <>
+                                {" / "}plane <code>{entryOrbPlane}</code>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                       );
                     })}

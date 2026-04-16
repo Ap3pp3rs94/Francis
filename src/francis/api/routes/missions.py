@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from francis.api.routes._operator_posture import posture_write_guard
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
@@ -20,6 +21,10 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _mission_write_posture_guard(action_label: str) -> str:
+    return posture_write_guard(action_label)
 
 
 def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, Any]:
@@ -90,6 +95,236 @@ def _mission_run_ledger(mission_id: str, linked_operations: list[dict[str, Any]]
     return entries[: max(0, int(limit))]
 
 
+def _operation_status(detail: dict[str, Any]) -> str:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    return _safe_str(operation.get("status")).strip().lower()
+
+
+def _operation_gate(detail: dict[str, Any]) -> str:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+    governance = meta.get("governance") if isinstance(meta.get("governance"), dict) else {}
+    output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
+    output_governance = output.get("governance") if isinstance(output.get("governance"), dict) else {}
+    return (
+        _safe_str(governance.get("gate")).strip()
+        or _safe_str(output_governance.get("gate")).strip()
+    )
+
+
+def _operation_approval_id(detail: dict[str, Any]) -> str:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+    output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
+    return _safe_str(meta.get("approval_id")).strip() or _safe_str(output.get("approval_id")).strip()
+
+
+def _operation_trace_id(detail: dict[str, Any]) -> str:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+    return _safe_str(operation.get("trace_id")).strip() or _safe_str(meta.get("trace_id")).strip()
+
+
+def _operation_next_step(detail: dict[str, Any]) -> str:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
+    governance = meta.get("governance") if isinstance(meta.get("governance"), dict) else {}
+    output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
+    output_governance = output.get("governance") if isinstance(output.get("governance"), dict) else {}
+    return (
+        _safe_str(governance.get("next_step")).strip()
+        or _safe_str(output_governance.get("next_step")).strip()
+    )
+
+
+def _loop_stage(
+    status: str,
+    detail: str,
+    *,
+    count: int | None = None,
+    gate: str = "",
+    approval_id: str = "",
+    operation_id: str = "",
+    trace_id: str = "",
+    latest_event: str = "",
+    next_step: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": status,
+        "detail": detail,
+    }
+    if count is not None:
+        payload["count"] = count
+    if gate:
+        payload["gate"] = gate
+    if approval_id:
+        payload["approval_id"] = approval_id
+    if operation_id:
+        payload["operation_id"] = operation_id
+    if trace_id:
+        payload["trace_id"] = trace_id
+    if latest_event:
+        payload["latest_event"] = latest_event
+    if next_step:
+        payload["next_step"] = next_step
+    return payload
+
+
+def _mission_loop_state(
+    record: mission_store.MissionRecord,
+    linked_operations: list[dict[str, Any]],
+    run_ledger: list[dict[str, Any]],
+    history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    latest_detail = linked_operations[0] if linked_operations else {}
+    latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
+    latest_operation_id = _safe_str(latest_operation.get("id")).strip()
+    latest_operation_status = _operation_status(latest_detail)
+    latest_gate = _operation_gate(latest_detail)
+    latest_approval_id = _operation_approval_id(latest_detail)
+    latest_trace_id = _operation_trace_id(latest_detail)
+    latest_next_step = _operation_next_step(latest_detail)
+
+    if linked_operations:
+        plan_stage = _loop_stage(
+            "ready",
+            f"{len(linked_operations)} linked operation(s) declared for this mission.",
+            count=len(linked_operations),
+            operation_id=latest_operation_id,
+        )
+    else:
+        plan_stage = _loop_stage(
+            "pending",
+            "No linked operation has been declared for this mission yet.",
+            count=0,
+        )
+
+    if latest_gate or latest_approval_id:
+        gate_status = "needs_approval" if latest_gate == "approvals_gate" or latest_approval_id else "blocked"
+        gate_bits: list[str] = []
+        if latest_gate:
+            gate_bits.append(f"gate {latest_gate}")
+        if latest_approval_id:
+            gate_bits.append(f"approval {latest_approval_id}")
+        gate_stage = _loop_stage(
+            gate_status,
+            "Governance is actively holding the current linked operation through "
+            + ", ".join(gate_bits)
+            + ".",
+            gate=latest_gate,
+            approval_id=latest_approval_id,
+            operation_id=latest_operation_id,
+            next_step=latest_next_step,
+        )
+    elif linked_operations:
+        gate_stage = _loop_stage(
+            "clear",
+            "No active governance gate is recorded for the current linked operation.",
+            operation_id=latest_operation_id,
+        )
+    else:
+        gate_stage = _loop_stage(
+            "pending",
+            "Governance has nothing to evaluate until a linked operation exists.",
+        )
+
+    execute_status = latest_operation_status or record.status.value
+    if execute_status == "completed":
+        execute_status = "succeeded"
+    elif execute_status == "active":
+        execute_status = "running"
+    elif execute_status == "queued":
+        execute_status = "pending"
+    elif execute_status == "cancelled":
+        execute_status = "canceled"
+    if linked_operations:
+        execute_stage = _loop_stage(
+            execute_status or "unknown",
+            f"The latest linked operation is currently {execute_status or 'unknown'}.",
+            operation_id=latest_operation_id,
+            gate=latest_gate,
+            approval_id=latest_approval_id,
+            next_step=latest_next_step,
+        )
+    else:
+        execute_stage = _loop_stage(
+            "pending",
+            "Execution has not started because no linked operation exists yet.",
+        )
+
+    trace_count = sum(1 for detail in linked_operations if _operation_trace_id(detail))
+    audit_count = sum(
+        len(detail.get("logs")) for detail in linked_operations if isinstance(detail.get("logs"), list)
+    )
+    ledger_count = len(run_ledger)
+    if trace_count or audit_count or ledger_count:
+        trace_parts: list[str] = []
+        if trace_count:
+            trace_parts.append(f"{trace_count} trace id(s)")
+        if ledger_count:
+            trace_parts.append(f"{ledger_count} run-ledger receipt(s)")
+        if audit_count:
+            trace_parts.append(f"{audit_count} audit event(s)")
+        trace_stage = _loop_stage(
+            "recorded",
+            "Trace receipts are available through " + ", ".join(trace_parts) + ".",
+            count=trace_count + ledger_count + audit_count,
+            operation_id=latest_operation_id,
+            trace_id=latest_trace_id,
+        )
+    else:
+        trace_stage = _loop_stage(
+            "pending",
+            "No trace receipts have been recorded for this mission yet.",
+            count=0,
+            operation_id=latest_operation_id,
+        )
+
+    history_count = len(history)
+    latest_history_event = ""
+    if history:
+        latest_history = history[-1] if isinstance(history[-1], dict) else {}
+        latest_history_event = _safe_str(latest_history.get("event")).strip()
+    if history_count:
+        memory_stage = _loop_stage(
+            "recorded",
+            f"{history_count} mission continuity receipt(s) are stored in local history.",
+            count=history_count,
+            latest_event=latest_history_event,
+        )
+    else:
+        memory_stage = _loop_stage(
+            "pending",
+            "No mission continuity receipts have been stored yet.",
+            count=0,
+        )
+
+    active_stage = "memory"
+    summary = "Mission continuity receipts are available for review."
+    if latest_gate or latest_approval_id:
+        active_stage = "gate"
+        summary = "The mission is waiting on a governance decision before it can continue."
+    elif execute_status in {"running", "pending", "queued"}:
+        active_stage = "execute"
+        summary = "The mission is currently in its bounded execution phase."
+    elif not linked_operations:
+        active_stage = "plan"
+        summary = "The mission still needs its first linked operation."
+    elif not (trace_count or audit_count or ledger_count):
+        active_stage = "trace"
+        summary = "The mission has linked work, but no trace receipts are recorded yet."
+
+    return {
+        "summary": summary,
+        "active_stage": active_stage,
+        "plan": plan_stage,
+        "gate": gate_stage,
+        "execute": execute_stage,
+        "trace": trace_stage,
+        "memory": memory_stage,
+    }
+
+
 class MissionCreateIn(BaseModel):
     objective: str
     summary: str = ""
@@ -139,6 +374,9 @@ class MissionDeadletterIn(BaseModel):
 
 @router.post("/create")
 def create_mission(payload: MissionCreateIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("declaring a mission")
+    if blocked_reason:
+        return {"ok": False, "error": blocked_reason, "status": "blocked"}
     try:
         record, err = mission_store.create_mission(
             MissionCreateRequest(
@@ -194,6 +432,16 @@ def mission_queue(limit: int = 50, include_terminal: bool = False) -> dict[str, 
 
 @router.post("/tick")
 def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("reconciling the mission queue")
+    if blocked_reason:
+        return {
+            "ok": False,
+            "items": [],
+            "total": 0,
+            "applied": 0,
+            "errors": [{"error": blocked_reason}],
+            "status": "blocked",
+        }
     try:
         safe_limit = max(1, min(int(payload.limit), 5000))
         records, applied, errors = mission_store.tick_all_missions(
@@ -214,6 +462,21 @@ def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
 
 @router.post("/run_once")
 def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("running the mission queue")
+    if blocked_reason:
+        return {
+            "ok": False,
+            "items": [],
+            "deadletter": [],
+            "total": 0,
+            "applied": 0,
+            "advanced": 0,
+            "results": [],
+            "processed": 0,
+            "errors": [{"error": blocked_reason}],
+            "counts": {},
+            "status": "blocked",
+        }
     try:
         safe_limit = max(1, min(int(payload.limit), 5000))
         actor = _safe_str(payload.actor).strip() or "missions.runner"
@@ -241,12 +504,15 @@ def get_mission(mission_id: str) -> dict[str, object]:
         if not record:
             return {"ok": False, "error": err or "not_found"}
         linked_operations = _linked_operation_details(record)
+        history = mission_store.read_history(mission_id)
+        run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
         return {
             "ok": True,
             "mission": _serialize_mission(record),
-            "history": mission_store.read_history(mission_id),
+            "history": history,
             "linked_operations": linked_operations,
-            "run_ledger": _mission_run_ledger(record.mission_id, linked_operations),
+            "run_ledger": run_ledger,
+            "loop_state": _mission_loop_state(record, linked_operations, run_ledger, history),
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
@@ -254,6 +520,9 @@ def get_mission(mission_id: str) -> dict[str, object]:
 
 @router.patch("/{mission_id}")
 def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("updating a mission")
+    if blocked_reason:
+        return {"ok": False, "error": blocked_reason, "status": "blocked"}
     try:
         record, err = mission_store.update_mission(
             mission_id,
@@ -282,6 +551,9 @@ def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]
 
 @router.post("/{mission_id}/tick")
 def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("ticking mission continuity")
+    if blocked_reason:
+        return {"ok": False, "applied": False, "error": blocked_reason, "status": "blocked"}
     try:
         record, applied, err = mission_store.tick_mission(
             mission_id,
@@ -303,6 +575,9 @@ def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
 
 @router.post("/{mission_id}/deadletter")
 def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("deadlettering a mission")
+    if blocked_reason:
+        return {"ok": False, "error": blocked_reason, "status": "blocked"}
     try:
         record, err = mission_store.deadletter_mission(
             mission_id,
@@ -325,6 +600,9 @@ def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[st
 
 @router.post("/{mission_id}/advance")
 def advance_mission(mission_id: str, payload: MissionAdvanceIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("advancing a mission")
+    if blocked_reason:
+        return {"ok": False, "applied": False, "error": blocked_reason, "status": "blocked"}
     try:
         actor = _safe_str(payload.actor).strip() or "missions.runner"
         note = _safe_str(payload.note).strip() or "mission_advance"

@@ -1,5 +1,5 @@
-import type { OperationDetail, OperationRecord } from "../operations";
-import { parseOperationDetail, parseOperationRecord } from "../operations";
+import type { OperationDetail, OperationRecord } from "../operations/index.ts";
+import { parseOperationDetail, parseOperationRecord } from "../operations/index.ts";
 
 export type MissionRecord = {
   id: string;
@@ -25,12 +25,130 @@ export type MissionHistoryEntry = {
   details?: Record<string, unknown>;
 };
 
+export type MissionLoopStage = {
+  status?: string;
+  detail?: string;
+  count?: number;
+  gate?: string;
+  next_step?: string;
+  approval_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  latest_event?: string;
+};
+
+export type MissionLoopState = {
+  summary?: string;
+  active_stage?: string;
+  plan?: MissionLoopStage;
+  gate?: MissionLoopStage;
+  execute?: MissionLoopStage;
+  trace?: MissionLoopStage;
+  memory?: MissionLoopStage;
+};
+
 export type MissionDetail = {
   ok: boolean;
   mission?: MissionRecord;
   history?: MissionHistoryEntry[];
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
+  loop_state?: MissionLoopState;
+  error?: string;
+};
+
+export type MissionListResponse = {
+  items: MissionRecord[];
+  total?: number;
+  limit?: number;
+  error?: string;
+};
+
+export type MissionCreateRequest = {
+  objective: string;
+  summary?: string;
+  next_step?: string;
+  requester_id?: string;
+  priority?: number;
+  risk_tier?: string;
+  status?: string;
+  linked_task_ids?: string[];
+  meta?: Record<string, unknown>;
+};
+
+export type MissionCreateResponse = {
+  ok: boolean;
+  mission_id?: string;
+  status?: string;
+  mission?: MissionRecord;
+  message?: string;
+  error?: string;
+};
+
+export type MissionQueueItem = MissionRecord & {
+  recommended_action?: string;
+  action_target_id?: string;
+  operator_hint?: string;
+  last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_gate?: string;
+  last_task_next_step?: string;
+  last_task_reason?: string;
+};
+
+export type MissionAdvanceRequest = {
+  actor?: string;
+  note?: string;
+  worker_id?: string;
+};
+
+export type MissionAdvanceResponse = {
+  ok: boolean;
+  applied?: boolean;
+  action?: string;
+  mission?: MissionRecord;
+  operation?: OperationRecord;
+  operation_id?: string;
+  approval_id?: string;
+  gate?: string;
+  next_step?: string;
+  status?: string;
+  message?: string;
+  error?: string;
+};
+
+export type MissionRunOnceRequest = {
+  actor?: string;
+  note?: string;
+  limit?: number;
+};
+
+export type MissionRunOnceResult = {
+  mission_id?: string;
+  ok?: boolean;
+  applied?: boolean;
+  action?: string;
+  status?: string;
+  operation_id?: string;
+  approval_id?: string;
+  gate?: string;
+  next_step?: string;
+  message?: string;
+};
+
+export type MissionRunOnceResponse = {
+  ok: boolean;
+  items: MissionQueueItem[];
+  deadletter: MissionQueueItem[];
+  total?: number;
+  applied?: number;
+  advanced?: number;
+  processed?: number;
+  counts?: Record<string, number>;
+  results?: MissionRunOnceResult[];
+  errors?: Array<Record<string, unknown>>;
+  status?: string;
   error?: string;
 };
 
@@ -162,6 +280,24 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
   return record;
 }
 
+function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
+  const record = parseMissionRecord(raw);
+  if (!record || !isRecord(raw)) return record;
+
+  return {
+    ...record,
+    recommended_action: safeString(raw.recommended_action, "") || undefined,
+    action_target_id: safeString(raw.action_target_id, "") || undefined,
+    operator_hint: safeString(raw.operator_hint, "") || undefined,
+    last_task_id: safeString(raw.last_task_id, "") || undefined,
+    last_task_status: safeString(raw.last_task_status, "") || undefined,
+    last_task_result_status: safeString(raw.last_task_result_status, "") || undefined,
+    last_task_gate: safeString(raw.last_task_gate, "") || undefined,
+    last_task_next_step: safeString(raw.last_task_next_step, "") || undefined,
+    last_task_reason: safeString(raw.last_task_reason, "") || undefined,
+  };
+}
+
 function parseMissionHistoryEntry(raw: unknown): MissionHistoryEntry | null {
   if (!isRecord(raw)) return null;
   return {
@@ -170,6 +306,54 @@ function parseMissionHistoryEntry(raw: unknown): MissionHistoryEntry | null {
     event: safeString(raw.event, "") || undefined,
     details: isRecord(raw.details) ? raw.details : undefined,
   };
+}
+
+function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const stage: MissionLoopStage = {
+    status: safeString(raw.status, "") || undefined,
+    detail: safeString(raw.detail, "") || undefined,
+    count: safeNumber(raw.count, 0) || undefined,
+    gate: safeString(raw.gate, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    operation_id: safeString(raw.operation_id, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
+    latest_event: safeString(raw.latest_event, "") || undefined,
+  };
+
+  if (
+    !stage.status &&
+    !stage.detail &&
+    !stage.operation_id &&
+    !stage.approval_id &&
+    !stage.trace_id &&
+    !stage.latest_event &&
+    !stage.next_step
+  ) {
+    return undefined;
+  }
+  return stage;
+}
+
+function parseMissionLoopState(raw: unknown): MissionLoopState | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const state: MissionLoopState = {
+    summary: safeString(raw.summary, "") || undefined,
+    active_stage: safeString(raw.active_stage, "") || undefined,
+    plan: parseMissionLoopStage(raw.plan),
+    gate: parseMissionLoopStage(raw.gate),
+    execute: parseMissionLoopStage(raw.execute),
+    trace: parseMissionLoopStage(raw.trace),
+    memory: parseMissionLoopStage(raw.memory),
+  };
+
+  if (!state.summary && !state.active_stage && !state.plan && !state.gate && !state.execute && !state.trace && !state.memory) {
+    return undefined;
+  }
+  return state;
 }
 
 function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
@@ -216,6 +400,133 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
     history,
     linked_operations,
     run_ledger,
+    loop_state: parseMissionLoopState(json.loop_state),
+    error: safeString(json.error, "") || undefined,
+  };
+}
+
+function parseMissionListResponse(json: unknown): MissionListResponse {
+  if (!isRecord(json)) {
+    return {
+      items: [],
+      total: 0,
+      limit: 0,
+      error: typeof json === "string" ? json : "invalid_mission_list_payload",
+    };
+  }
+
+  const items = Array.isArray(json.items)
+    ? json.items.map(parseMissionRecord).filter((item): item is MissionRecord => item !== undefined)
+    : [];
+
+  return {
+    items,
+    total: safeNumber(json.total, items.length) || undefined,
+    limit: safeNumber(json.limit, 0) || undefined,
+    error: safeString(json.error, "") || undefined,
+  };
+}
+
+function parseMissionCreateResponse(json: unknown): MissionCreateResponse {
+  if (!isRecord(json)) {
+    return {
+      ok: false,
+      error: typeof json === "string" ? json : "invalid_mission_create_payload",
+    };
+  }
+
+  return {
+    ok: safeBoolean(json.ok, false),
+    mission_id: safeString(json.mission_id, "") || undefined,
+    status: safeString(json.status, "") || undefined,
+    mission: parseMissionRecord(json.mission),
+    message: safeString(json.message, "") || undefined,
+    error: safeString(json.error, "") || undefined,
+  };
+}
+
+function parseMissionAdvanceResponse(json: unknown): MissionAdvanceResponse {
+  if (!isRecord(json)) {
+    return {
+      ok: false,
+      error: typeof json === "string" ? json : "invalid_mission_advance_payload",
+    };
+  }
+
+  return {
+    ok: safeBoolean(json.ok, false),
+    applied: safeBoolean(json.applied, false),
+    action: safeString(json.action, "") || undefined,
+    mission: parseMissionRecord(json.mission),
+    operation: parseOperationRecord(json.operation) ?? undefined,
+    operation_id: safeString(json.operation_id, "") || undefined,
+    approval_id: safeString(json.approval_id, "") || undefined,
+    gate: safeString(json.gate, "") || undefined,
+    next_step: safeString(json.next_step, "") || undefined,
+    status: safeString(json.status, "") || undefined,
+    message: safeString(json.message, "") || undefined,
+    error: safeString(json.error, "") || undefined,
+  };
+}
+
+function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
+  if (!isRecord(raw)) return null;
+  return {
+    mission_id: safeString(raw.mission_id, "") || undefined,
+    ok: safeBoolean(raw.ok, false),
+    applied: safeBoolean(raw.applied, false),
+    action: safeString(raw.action, "") || undefined,
+    status: safeString(raw.status, "") || undefined,
+    operation_id: safeString(raw.operation_id, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    gate: safeString(raw.gate, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    message: safeString(raw.message, "") || undefined,
+  };
+}
+
+function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
+  if (!isRecord(json)) {
+    return {
+      ok: false,
+      items: [],
+      deadletter: [],
+      error: typeof json === "string" ? json : "invalid_mission_run_once_payload",
+    };
+  }
+
+  const items = Array.isArray(json.items)
+    ? json.items.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
+    : [];
+  const deadletter = Array.isArray(json.deadletter)
+    ? json.deadletter.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
+    : [];
+  const results = Array.isArray(json.results)
+    ? json.results.map(parseMissionRunOnceResult).filter((item): item is MissionRunOnceResult => item !== null)
+    : [];
+  const errors = Array.isArray(json.errors)
+    ? json.errors.filter((item): item is Record<string, unknown> => isRecord(item))
+    : [];
+  const counts = isRecord(json.counts)
+    ? Object.fromEntries(
+        Object.entries(json.counts).flatMap(([key, value]) =>
+          typeof value === "number" && Number.isFinite(value) ? [[key, value]] : [],
+        ),
+      )
+    : undefined;
+
+  return {
+    ok: safeBoolean(json.ok, false),
+    items,
+    deadletter,
+    total: safeNumber(json.total, 0) || undefined,
+    applied: safeNumber(json.applied, 0) || undefined,
+    advanced: safeNumber(json.advanced, 0) || undefined,
+    processed: safeNumber(json.processed, 0) || undefined,
+    counts,
+    results,
+    errors,
+    status: safeString(json.status, "") || undefined,
     error: safeString(json.error, "") || undefined,
   };
 }
@@ -231,6 +542,90 @@ export class MissionsClient {
     const cleaned = (missionId || "").trim();
     if (!cleaned) throw new Error("Mission id is required");
     return `${this.baseUrl}/missions/${encodeURIComponent(cleaned)}`;
+  }
+
+  private listUrl(limit?: number, status?: string): string {
+    const url = new URL(`${this.baseUrl}/missions/list`);
+    if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+      url.searchParams.set("limit", String(Math.max(1, Math.floor(limit))));
+    }
+    const cleanedStatus = safeString(status, "").trim();
+    if (cleanedStatus) {
+      url.searchParams.set("status", cleanedStatus);
+    }
+    return url.toString();
+  }
+
+  private createUrl(): string {
+    return `${this.baseUrl}/missions/create`;
+  }
+
+  private advanceUrl(missionId: string): string {
+    return `${this.missionUrl(missionId)}/advance`;
+  }
+
+  private runOnceUrl(): string {
+    return `${this.baseUrl}/missions/run_once`;
+  }
+
+  async list(
+    opts?: { signal?: AbortSignal; timeoutMs?: number; limit?: number; status?: string },
+  ): Promise<MissionListResponse> {
+    const json = await fetchJson(this.listUrl(opts?.limit, opts?.status), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+    return parseMissionListResponse(json);
+  }
+
+  async create(
+    req: MissionCreateRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<MissionCreateResponse> {
+    const json = await fetchJson(this.createUrl(), {
+      method: "POST",
+      body: JSON.stringify(req),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return parseMissionCreateResponse(json);
+  }
+
+  async advance(
+    missionId: string,
+    req?: MissionAdvanceRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<MissionAdvanceResponse> {
+    const json = await fetchJson(this.advanceUrl(missionId), {
+      method: "POST",
+      body: JSON.stringify(req ?? {}),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return parseMissionAdvanceResponse(json);
+  }
+
+  async runOnce(
+    req?: MissionRunOnceRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<MissionRunOnceResponse> {
+    const json = await fetchJson(this.runOnceUrl(), {
+      method: "POST",
+      body: JSON.stringify(req ?? {}),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return parseMissionRunOnceResponse(json);
   }
 
   async get(missionId: string, opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<MissionDetail> {

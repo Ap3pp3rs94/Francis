@@ -17,6 +17,37 @@ def _safe_str(value: Any) -> str:
         return ""
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _operation_handoff(operation: Any) -> dict[str, object]:
+    operation_record = _as_dict(operation)
+    operation_meta = _as_dict(operation_record.get("meta"))
+    operation_output = _as_dict(operation_record.get("output"))
+    governance = _as_dict(operation_meta.get("governance"))
+    approval_id = (
+        _safe_str(operation_meta.get("approval_id")).strip()
+        or _safe_str(operation_output.get("approval_id")).strip()
+    )
+    gate = _safe_str(governance.get("gate")).strip()
+    next_step = _safe_str(governance.get("next_step")).strip()
+    message = (
+        _safe_str(operation_meta.get("result_message")).strip()
+        or _safe_str(operation_output.get("message")).strip()
+    )
+    handoff: dict[str, object] = {}
+    if approval_id:
+        handoff["approval_id"] = approval_id
+    if gate:
+        handoff["gate"] = gate
+    if next_step:
+        handoff["next_step"] = next_step
+    if message:
+        handoff["operation_message"] = message
+    return handoff
+
+
 def advance_mission(
     mission_id: str,
     *,
@@ -83,6 +114,7 @@ def advance_mission(
             "operation_id": operation_id or None,
             "status": operation_status or updated_record.status.value,
             "message": message,
+            **_operation_handoff(created.get("operation")),
         }
 
     if action == "run_linked_operation" and action_target_id:
@@ -115,6 +147,7 @@ def advance_mission(
             "operation_id": action_target_id,
             "status": operation_status or updated_record.status.value,
             "message": message,
+            **_operation_handoff(run_result.get("operation")),
         }
 
     if record_operator_receipt:
@@ -203,6 +236,9 @@ def run_queue_once(
                 "status": _safe_str(outcome.get("status")).strip(),
                 "operation_id": _safe_str(outcome.get("operation_id")).strip() or None,
                 "message": _safe_str(outcome.get("message")).strip(),
+                "approval_id": _safe_str(outcome.get("approval_id")).strip() or None,
+                "gate": _safe_str(outcome.get("gate")).strip() or None,
+                "next_step": _safe_str(outcome.get("next_step")).strip() or None,
             }
         )
         if bool(outcome.get("applied")):
