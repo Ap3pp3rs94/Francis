@@ -267,8 +267,16 @@ function Invoke-CodexContinueCli([string]$RepoRoot, [string]$ResumeSessionId, [s
 
   Push-Location $RepoRoot
   try {
-    & codex @commandArgs
-    return $LASTEXITCODE
+    & codex @commandArgs 2>&1 | ForEach-Object {
+      $line = [string]$_
+      if (-not [string]::IsNullOrWhiteSpace($line)) {
+        Write-LoopStatus ("codex> {0}" -f $line.Trim())
+      }
+    }
+    if ($null -eq $LASTEXITCODE) {
+      return 0
+    }
+    return [int]$LASTEXITCODE
   } finally {
     Pop-Location
   }
