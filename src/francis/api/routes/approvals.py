@@ -1,16 +1,29 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from francis.governance.approvals import decide as decide_request, list_requests, request as create_request
+from francis.kernel.paths import data_dir
 
 router = APIRouter()
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _LOCAL_HOST_ALIASES = {"localhost", "testclient"}
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
 
 
 def _to_bool(value: str | None, *, default: bool) -> bool:
@@ -33,6 +46,110 @@ def _is_local_client(host: str) -> bool:
         return ipaddress.ip_address(normalized).is_loopback
     except ValueError:
         return False
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _approval_payload_summary(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+
+    input_obj = payload.get("input") if isinstance(payload.get("input"), dict) else {}
+    meta_obj = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+
+    summary: dict[str, Any] = {}
+
+    requested_action = _safe_str(payload.get("action")).strip()
+    if requested_action:
+        summary["requested_action"] = requested_action
+
+    plugin_id = _safe_str(payload.get("plugin_id")).strip()
+    if plugin_id:
+        summary["plugin_id"] = plugin_id
+
+    risk_tier = _safe_str(payload.get("risk_tier")).strip().lower()
+    if risk_tier:
+        summary["risk_tier"] = risk_tier
+
+    required_trust_raw = payload.get("required_trust")
+    if isinstance(required_trust_raw, bool):
+        summary["required_trust"] = int(required_trust_raw)
+    elif isinstance(required_trust_raw, int):
+        summary["required_trust"] = required_trust_raw
+    elif isinstance(required_trust_raw, float):
+        summary["required_trust"] = int(required_trust_raw)
+    elif isinstance(required_trust_raw, str):
+        text = required_trust_raw.strip()
+        if text:
+            try:
+                summary["required_trust"] = int(float(text))
+            except Exception:
+                pass
+
+    payload_keys = sorted(_safe_str(key).strip() for key in payload.keys() if _safe_str(key).strip())
+    if payload_keys:
+        summary["payload_keys"] = payload_keys[:8]
+
+    input_keys = sorted(_safe_str(key).strip() for key in input_obj.keys() if _safe_str(key).strip())
+    if input_keys:
+        summary["input_keys"] = input_keys[:8]
+
+    meta_keys = sorted(_safe_str(key).strip() for key in meta_obj.keys() if _safe_str(key).strip())
+    if meta_keys:
+        summary["meta_keys"] = meta_keys[:8]
+
+    return summary
+
+
+def _approval_artifact_request(approval_id: str) -> dict[str, Any]:
+    resolved_id = _safe_str(approval_id).strip()
+    if not resolved_id:
+        return {}
+
+    artifact_root = data_dir() / "artifacts"
+    candidates = [
+        artifact_root / "plugins" / "approvals" / resolved_id / "request.json",
+        artifact_root / "web_learning" / "approvals" / resolved_id / "request.json",
+        artifact_root / "industrial" / "approvals" / resolved_id / "request.json",
+        artifact_root / "git_push" / resolved_id / "request.json",
+        artifact_root / "supervised_exec" / resolved_id / "request.json",
+    ]
+    for path in candidates:
+        record = _read_json(path)
+        if record:
+            return record
+    return {}
+
+
+def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
+    item = dict(record) if isinstance(record, dict) else {}
+    approval_id = _safe_str(item.get("id")).strip()
+
+    out = dict(item)
+    out["payload_summary"] = _approval_payload_summary(item.get("payload"))
+
+    artifact_request = _approval_artifact_request(approval_id)
+    request_kind = _safe_str(artifact_request.get("kind")).strip()
+    if request_kind:
+        out["request_kind"] = request_kind
+
+    previous_approval_id = _safe_str(artifact_request.get("previous_approval_id")).strip()
+    if previous_approval_id:
+        out["previous_approval_id"] = previous_approval_id
+
+    previous_status = _safe_str(artifact_request.get("previous_status")).strip()
+    if previous_status:
+        out["previous_approval_status"] = previous_status
+
+    return out
 
 
 class ApprovalIn(BaseModel):
@@ -58,7 +175,7 @@ def request_approval(payload: ApprovalIn) -> dict[str, object]:
 @router.get("/list")
 def list_approvals(status: str = "pending", limit: int = 100) -> dict[str, object]:
     try:
-        return {"items": list_requests(status=status, limit=limit)}
+        return {"items": [_approval_item(item) for item in list_requests(status=status, limit=limit)]}
     except Exception as exc:
         return {"items": [], "error": str(exc)}
 
