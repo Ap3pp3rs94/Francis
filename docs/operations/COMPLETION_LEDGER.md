@@ -333,6 +333,22 @@ in the repo and closes the next truthful-identity boundary on that same surface:
   reconcile to `error` and missing revocation approvals restore the previous
   credential status instead of leaving stale pending state behind.
 
+The `2026-04-16` credential approval-queue visibility slice is now also
+materially true in the repo and tightens ORB governance visibility on the same
+identity surface:
+
+- `src/francis/api/routes/credentials.py` now writes approval `request.json`
+  artifacts for credential request and revoke actions using the same artifact
+  convention as the other governed approval-backed surfaces.
+- `src/francis/api/routes/approvals.py` now reads credential approval artifacts
+  and surfaces credential-specific payload summary fields (`scope_id`,
+  `provider`, `credential_type`, `label`, `credential_id`) through
+  `/approvals/list` instead of forcing the operator to inspect raw payload JSON
+  or infer credential lineage manually.
+- `tests/test_api_approvals.py` now proves pending credential request and
+  revoke approvals expose truthful request kinds and credential context in the
+  approval queue.
+
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
@@ -384,6 +400,8 @@ The following validations were run against the current working tree on
   Result: `4 passed in 1.85s`
 - `pytest tests/test_api_credentials.py --disable-warnings`
   Result: `6 passed in 2.37s`
+- `pytest tests/test_api_approvals.py tests/test_api_credentials.py --disable-warnings`
+  Result: `9 passed in 9.03s`
 - `git diff --check -- src/francis/api/routes/credentials.py tests/test_api_credentials.py`
   Result: `passed`
 
@@ -438,6 +456,9 @@ Those validations specifically cover:
   credential references in the identity surface
 - missing credential-revocation approvals no longer leaving live credentials
   stranded in fake pending-revocation state
+- pending credential approvals now surfacing artifact-backed request context in
+  the approval queue instead of remaining second-class relative to plugin,
+  web-learning, and industrial approvals
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:

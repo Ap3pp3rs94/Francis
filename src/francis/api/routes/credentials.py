@@ -45,6 +45,10 @@ def _usage_events_path() -> Path:
     return _credentials_dir() / "usage_logs" / "api_events.jsonl"
 
 
+def _approval_artifact_dir(approval_id: str) -> Path:
+    return data_dir() / "artifacts" / "credentials" / "approvals" / _safe_str(approval_id).strip()
+
+
 def _safe_str(value: Any) -> str:
     if value is None:
         return ""
@@ -794,6 +798,24 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
         approval_id = _safe_str(approval.get("id")).strip()
 
         credential_id = _validate_credential_id(f"cred_{_slugify(provider or 'generic')}_{uuid.uuid4().hex[:10]}")
+        request_payload = {
+            "credential_id": credential_id,
+            "scope_id": scope_id,
+            "provider": provider,
+            "type": cred_type,
+            "label": label,
+            "request_id": request_id,
+            "meta": dict(payload.meta or {}),
+        }
+        _atomic_write_json(
+            _approval_artifact_dir(approval_id) / "request.json",
+            {
+                "kind": "credential.request.request",
+                "approval": approval,
+                "action": "credential.request",
+                "request": request_payload,
+            },
+        )
         registry = _load_registry()
         changed = _seed_from_vault(registry)
         changed = _reconcile_credential_approvals(registry) or changed
@@ -870,6 +892,20 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
             },
         )
         approval_id = _safe_str(approval.get("id")).strip()
+        _atomic_write_json(
+            _approval_artifact_dir(approval_id) / "request.json",
+            {
+                "kind": "credential.revoke.request",
+                "approval": approval,
+                "action": "credential.revoke",
+                "request": {
+                    "credential_id": credential_id,
+                    "scope_id": _safe_str(current.get("scope_id")).strip(),
+                    "provider": _safe_str(current.get("provider")).strip(),
+                    "reason": reason,
+                },
+            },
+        )
 
         previous_status = _safe_str(current.get("status")).strip() or "active"
         current["status"] = "pending"

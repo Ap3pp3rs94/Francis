@@ -75,6 +75,26 @@ def _approval_payload_summary(payload: Any) -> dict[str, Any]:
     if plugin_id:
         summary["plugin_id"] = plugin_id
 
+    scope_id = _safe_str(payload.get("scope_id")).strip()
+    if scope_id:
+        summary["scope_id"] = scope_id
+
+    provider = _safe_str(payload.get("provider")).strip()
+    if provider:
+        summary["provider"] = provider
+
+    credential_type = _safe_str(payload.get("type")).strip()
+    if credential_type:
+        summary["credential_type"] = credential_type
+
+    label = _safe_str(payload.get("label")).strip()
+    if label:
+        summary["label"] = label
+
+    credential_id = _safe_str(payload.get("credential_id")).strip() or _safe_str(payload.get("id")).strip()
+    if credential_id:
+        summary["credential_id"] = credential_id
+
     risk_tier = _safe_str(payload.get("risk_tier")).strip().lower()
     if risk_tier:
         summary["risk_tier"] = risk_tier
@@ -116,6 +136,7 @@ def _approval_artifact_request(approval_id: str) -> dict[str, Any]:
 
     artifact_root = data_dir() / "artifacts"
     candidates = [
+        artifact_root / "credentials" / "approvals" / resolved_id / "request.json",
         artifact_root / "plugins" / "approvals" / resolved_id / "request.json",
         artifact_root / "web_learning" / "approvals" / resolved_id / "request.json",
         artifact_root / "industrial" / "approvals" / resolved_id / "request.json",
@@ -133,10 +154,17 @@ def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
     approval_id = _safe_str(item.get("id")).strip()
 
-    out = dict(item)
-    out["payload_summary"] = _approval_payload_summary(item.get("payload"))
-
     artifact_request = _approval_artifact_request(approval_id)
+    payload_summary = _approval_payload_summary(item.get("payload"))
+    artifact_payload = artifact_request.get("request")
+    if isinstance(artifact_payload, dict):
+        credential_id = _safe_str(artifact_payload.get("credential_id")).strip()
+        if credential_id and "credential_id" not in payload_summary:
+            payload_summary["credential_id"] = credential_id
+
+    out = dict(item)
+    out["payload_summary"] = payload_summary
+
     request_kind = _safe_str(artifact_request.get("kind")).strip()
     if request_kind:
         out["request_kind"] = request_kind

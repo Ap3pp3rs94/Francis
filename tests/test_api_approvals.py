@@ -107,3 +107,68 @@ def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch,
     assert refreshed_item["payload_summary"]["required_trust"] == 5
     assert refreshed_item["payload_summary"]["input_keys"] == ["target"]
     assert "plugin_id" in refreshed_item["payload_summary"]["payload_keys"]
+
+
+def test_approval_list_surfaces_credential_request_and_revoke_context(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    requested = client.post(
+        "/credentials/request",
+        json={
+            "scope_id": "openai_readonly",
+            "provider": "openai",
+            "type": "api_key",
+            "label": "OpenAI Queue Visibility",
+            "reason": "integration_test",
+            "meta": {"ticket": "FR-901"},
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    assert requested_body["ok"] is True
+    credential_id = str(requested_body["id"])
+    request_approval_id = str(requested_body["approval_id"])
+
+    approvals_list = client.get("/approvals/list?status=pending&limit=20")
+    assert approvals_list.status_code == 200
+    request_item = next(item for item in approvals_list.json()["items"] if item["id"] == request_approval_id)
+    assert request_item["action"] == "credential.request"
+    assert request_item["status"] == "pending"
+    assert request_item["request_kind"] == "credential.request.request"
+    assert request_item["payload_summary"]["scope_id"] == "openai_readonly"
+    assert request_item["payload_summary"]["provider"] == "openai"
+    assert request_item["payload_summary"]["credential_type"] == "api_key"
+    assert request_item["payload_summary"]["label"] == "OpenAI Queue Visibility"
+    assert request_item["payload_summary"]["credential_id"] == credential_id
+
+    approved_request = client.post("/approvals/decision", json={"id": request_approval_id, "action": "approve"})
+    assert approved_request.status_code == 200
+    assert approved_request.json()["ok"] is True
+
+    listed_active = client.get("/credentials/list?status=active")
+    assert listed_active.status_code == 200
+    active_items = [item for item in listed_active.json()["items"] if item.get("id") == credential_id]
+    assert len(active_items) == 1
+
+    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    assert revoked.status_code == 200
+    revoked_body = revoked.json()
+    assert revoked_body["ok"] is True
+    revoke_approval_id = str(revoked_body["approval_id"])
+
+    approvals_list = client.get("/approvals/list?status=pending&limit=20")
+    assert approvals_list.status_code == 200
+    revoke_item = next(item for item in approvals_list.json()["items"] if item["id"] == revoke_approval_id)
+    assert revoke_item["action"] == "credential.revoke"
+    assert revoke_item["status"] == "pending"
+    assert revoke_item["request_kind"] == "credential.revoke.request"
+    assert revoke_item["payload_summary"]["scope_id"] == "openai_readonly"
+    assert revoke_item["payload_summary"]["provider"] == "openai"
+    assert revoke_item["payload_summary"]["credential_id"] == credential_id
