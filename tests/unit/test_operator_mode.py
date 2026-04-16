@@ -175,3 +175,89 @@ ui:
     active_modes = [item for item in state["available_modes"] if item["active"]]
     assert len(active_modes) == 1
     assert active_modes[0]["id"] == "away"
+
+
+def test_operator_mode_snapshot_preserves_exact_mission_approval_handoff(
+    monkeypatch, tmp_path: Path
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from francis.world_state import operator_mode as operator_mode_module
+
+    monkeypatch.setattr(
+        operator_mode_module,
+        "mission_continuity_snapshot",
+        lambda **_: {
+            "mission_status_counts": {"blocked": 1},
+            "mission_briefing": {
+                "headline": "Approval handback remains visible",
+                "counts": {"blocked": 1},
+                "focus": [
+                    {
+                        "id": "msn_approval_focus",
+                        "status": "blocked",
+                        "recommended_action": "review_exact_approval",
+                        "last_task_approval_id": "apr_exact_321",
+                        "last_task_previous_approval_id": "apr_exact_320",
+                        "last_task_approval_status": "pending",
+                        "latest_activity": {
+                            "name": "governance_hold",
+                            "status": "blocked",
+                        },
+                    }
+                ],
+                "recently_completed": [],
+                "deadletter_preview": [],
+            }
+        },
+    )
+
+    state = operator_mode_module.snapshot()
+
+    assert state["focus"]["plane_id"] == "P3_GOVERNANCE"
+    assert state["continuity"]["headline"] == "Approval handback remains visible"
+    focus_item = state["continuity"]["focus"][0]
+    assert focus_item["id"] == "msn_approval_focus"
+    assert focus_item["last_task_approval_id"] == "apr_exact_321"
+    assert focus_item["last_task_previous_approval_id"] == "apr_exact_320"
+    assert focus_item["last_task_approval_status"] == "pending"
+    assert focus_item["latest_activity"]["name"] == "governance_hold"

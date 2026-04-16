@@ -245,6 +245,126 @@ controls:
     assert state["transitions"]["forbidden"][0]["reason"] == "direct shortcut forbidden"
 
 
+def test_orb_snapshot_handback_preserves_exact_mission_approval_handoff(
+    monkeypatch, tmp_path: Path
+) -> None:
+    repo_root = tmp_path / "repo"
+    meta_root = repo_root / "meta"
+    data_root = repo_root / "data"
+    meta_root.mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+
+    (meta_root / "plane_map.yaml").write_text(
+        """
+meta:
+  model_id: francis.plane_map
+  version: 2
+planes:
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: Capture requests
+    side_effects_allowed: false
+    default_risk_class: low
+  - id: P3_GOVERNANCE
+    name: Governance
+    category: governance
+    purpose: Enforce approvals
+    side_effects_allowed: false
+    default_risk_class: high
+  - id: P7_EXECUTION
+    name: Execution
+    category: execution
+    purpose: Run tools
+    side_effects_allowed: true
+    default_risk_class: critical
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: direct shortcut forbidden
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "action_taxonomy.yaml").write_text(
+        """
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 3
+controls:
+  - id: permission_gate
+    description: Require identity validation
+  - id: approvals_gate
+    description: Require approvals
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.world_state import orb as orb_module
+
+    monkeypatch.setattr(
+        orb_module,
+        "operator_mode_snapshot",
+        lambda: {
+            "control_mode": {
+                "id": "assist",
+                "label": "Assist",
+                "writes": "restricted",
+                "implementation_status": "active",
+            },
+            "focus": {
+                "plane_id": "P3_GOVERNANCE",
+                "label": "Governance",
+                "reason": "Approval apr_exact_321 is pending before the mission can continue.",
+            },
+            "backlog": {
+                "pending_approvals": 1,
+                "approval_pending_tasks": 1,
+                "blocked_tasks": 0,
+                "blocked_missions": 1,
+                "deadlettered_missions": 0,
+                "running_tasks": 0,
+                "active_missions": 0,
+                "queued_tasks": 0,
+                "queued_missions": 0,
+                "completed_missions": 0,
+            },
+            "continuity": {
+                "headline": "Approval handback remains visible",
+                "focus": [
+                    {
+                        "id": "msn_approval_focus",
+                        "status": "blocked",
+                        "recommended_action": "review_exact_approval",
+                        "last_task_approval_id": "apr_exact_321",
+                        "last_task_previous_approval_id": "apr_exact_320",
+                        "last_task_approval_status": "pending",
+                        "latest_activity": {
+                            "name": "governance_hold",
+                            "status": "blocked",
+                        },
+                    }
+                ],
+                "recently_completed": [],
+                "deadletter_preview": [],
+            },
+        },
+    )
+
+    state = orb_module.snapshot()
+
+    assert state["state"]["render_state"] == "handback"
+    assert state["state"]["handback_state"]["state"] == "operator_action_required"
+    focus_item = state["state"]["handback_state"]["focus"]
+    assert focus_item["id"] == "msn_approval_focus"
+    assert focus_item["last_task_approval_id"] == "apr_exact_321"
+    assert focus_item["last_task_previous_approval_id"] == "apr_exact_320"
+    assert focus_item["last_task_approval_status"] == "pending"
+    assert focus_item["latest_activity"]["name"] == "governance_hold"
+
+
 def test_stack_and_services_report_known_surfaces(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
