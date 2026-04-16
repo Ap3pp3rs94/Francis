@@ -204,6 +204,109 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
     assert record["meta"]["revocation_requested"] is False
 
 
+def test_credentials_request_missing_approval_reconciles_error_status(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    requested = client.post(
+        "/credentials/request",
+        json={
+            "scope_id": "openai_readonly",
+            "provider": "openai",
+            "type": "api_key",
+            "label": "OpenAI Missing Approval",
+            "reason": "integration_test",
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    credential_id = str(requested_body["id"])
+    approval_id = str(requested_body["approval_id"])
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    assert pending_path.exists()
+    pending_path.unlink()
+
+    listed = client.get("/credentials/list?status=error")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    items = [item for item in listed_body["items"] if item.get("id") == credential_id]
+    assert len(items) == 1
+    assert items[0]["status"] == "error"
+    assert items[0]["meta"]["approval_status"] == "missing"
+
+    registry = json.loads((data_root / "credentials" / "_registry.json").read_text(encoding="utf-8"))
+    record = registry["credentials"][credential_id]
+    assert record["status"] == "error"
+    assert record["meta"]["approval_status"] == "missing"
+
+
+def test_credentials_revocation_missing_approval_restores_previous_status(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    requested = client.post(
+        "/credentials/request",
+        json={
+            "scope_id": "openai_readonly",
+            "provider": "openai",
+            "type": "api_key",
+            "label": "OpenAI Missing Revoke Approval",
+            "reason": "integration_test",
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    credential_id = str(requested_body["id"])
+    request_approval_id = str(requested_body["approval_id"])
+
+    approved_request = client.post("/approvals/decision", json={"id": request_approval_id, "action": "approve"})
+    assert approved_request.status_code == 200
+    assert approved_request.json()["ok"] is True
+
+    active = client.get("/credentials/list?status=active")
+    assert active.status_code == 200
+    active_items = [item for item in active.json()["items"] if item.get("id") == credential_id]
+    assert len(active_items) == 1
+    assert active_items[0]["status"] == "active"
+
+    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    assert revoked.status_code == 200
+    revoked_body = revoked.json()
+    revoke_approval_id = str(revoked_body["approval_id"])
+
+    pending_path = data_root / "approvals" / "pending" / f"{revoke_approval_id}.json"
+    assert pending_path.exists()
+    pending_path.unlink()
+
+    listed = client.get("/credentials/list?status=active")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    items = [item for item in listed_body["items"] if item.get("id") == credential_id]
+    assert len(items) == 1
+    assert items[0]["status"] == "active"
+    assert items[0]["meta"]["revocation_approval_status"] == "missing"
+    assert items[0]["meta"]["revocation_requested"] is False
+
+    registry = json.loads((data_root / "credentials" / "_registry.json").read_text(encoding="utf-8"))
+    record = registry["credentials"][credential_id]
+    assert record["status"] == "active"
+    assert record["meta"]["revocation_approval_status"] == "missing"
+    assert record["meta"]["revocation_requested"] is False
+
+
 def test_credentials_seed_from_vault_and_parse_delegation_files(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

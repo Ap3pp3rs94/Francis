@@ -319,6 +319,20 @@ hardening line without inventing secret material or hidden issuance:
   revocation materializes as `revoked` instead of remaining indefinitely
   `pending`.
 
+The `2026-04-16` credential approval-recovery slice is now also materially true
+in the repo and closes the next truthful-identity boundary on that same surface:
+
+- `src/francis/api/routes/credentials.py` now treats missing or corrupt
+  approval records as explicit credential-state recovery cases instead of
+  leaving the identity surface stranded in fake `pending` posture.
+- `src/francis/api/routes/credentials.py` now reconciles broken request
+  approvals to `error` and broken revocation approvals back to the prior
+  credential state while clearing the pending revocation flag, so approval-file
+  loss no longer implies a credential is still awaiting review.
+- `tests/test_api_credentials.py` now proves missing request approvals
+  reconcile to `error` and missing revocation approvals restore the previous
+  credential status instead of leaving stale pending state behind.
+
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
@@ -368,6 +382,8 @@ The following validations were run against the current working tree on
   Result: `passed` (Git emitted a line-ending warning only)
 - `pytest tests/test_api_credentials.py --disable-warnings`
   Result: `4 passed in 1.85s`
+- `pytest tests/test_api_credentials.py --disable-warnings`
+  Result: `6 passed in 2.37s`
 - `git diff --check -- src/francis/api/routes/credentials.py tests/test_api_credentials.py`
   Result: `passed`
 
@@ -418,6 +434,10 @@ Those validations specifically cover:
 - credential-revocation approval outcomes reconciling from governed approval
   decisions into truthful `revoked` state instead of remaining indefinitely
   pending in the identity surface
+- missing credential-request approvals no longer leaving dead `pending`
+  credential references in the identity surface
+- missing credential-revocation approvals no longer leaving live credentials
+  stranded in fake pending-revocation state
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:

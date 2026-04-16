@@ -292,7 +292,7 @@ def _reconcile_credential_approvals(registry: dict[str, Any]) -> bool:
                 if request_status == "approved":
                     record["status"] = "active"
                     updated = True
-                elif request_status in {"rejected", "emergency"}:
+                elif request_status in {"rejected", "emergency", "missing", "corrupt"}:
                     record["status"] = "error"
                     updated = True
 
@@ -319,7 +319,7 @@ def _reconcile_credential_approvals(registry: dict[str, Any]) -> bool:
                 record["status"] = "revoked"
                 meta["revocation_requested"] = False
                 updated = True
-            elif revocation_status in {"rejected", "emergency"}:
+            elif revocation_status in {"rejected", "emergency", "missing", "corrupt"}:
                 record["status"] = previous_status
                 meta["revocation_requested"] = False
                 updated = True
@@ -871,11 +871,12 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
         )
         approval_id = _safe_str(approval.get("id")).strip()
 
+        previous_status = _safe_str(current.get("status")).strip() or "active"
         current["status"] = "pending"
         current_meta = current.get("meta")
         current_meta_obj = current_meta if isinstance(current_meta, dict) else {}
         current_meta_obj["revocation_requested"] = True
-        current_meta_obj["revocation_previous_status"] = _safe_str(current.get("status")).strip() or "active"
+        current_meta_obj["revocation_previous_status"] = previous_status
         current_meta_obj["revocation_approval_id"] = approval_id
         current_meta_obj["revocation_approval_status"] = _safe_str(approval.get("status")).strip() or "pending"
         current_meta_obj["revocation_reason"] = reason
