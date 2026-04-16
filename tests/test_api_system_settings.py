@@ -510,6 +510,16 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert blocked_recent["last_task_approval_id"] == approval_id
     assert blocked_recent["last_task_approval_status"] == "pending"
 
+    pending_approval = next(item for item in body["overview"]["pending_approvals"] if item["id"] == approval_id)
+    assert pending_approval["action"] == "plugin.run"
+    assert pending_approval["status"] == "pending"
+    assert pending_approval["payload_summary"]["plugin_id"] == plugin_id
+    assert pending_approval["payload_summary"]["requested_action"] == "deploy"
+    assert pending_approval["payload_summary"]["risk_tier"] == "critical"
+    assert pending_approval["payload_summary"]["required_trust"] == 5
+    assert pending_approval["payload_summary"]["input_keys"] == ["target"]
+    assert "plugin_id" in pending_approval["payload_summary"]["payload_keys"]
+
     focus_item = next(item for item in body["overview"]["mission_briefing"]["focus"] if item["id"] == blocked_id)
     assert focus_item["recommended_action"] == "review_pending_approval"
     assert focus_item["last_task_approval_id"] == approval_id

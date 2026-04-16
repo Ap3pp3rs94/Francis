@@ -542,6 +542,57 @@ def mission_continuity_snapshot(
     }
 
 
+def _approval_payload_summary(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+
+    input_obj = payload.get("input") if isinstance(payload.get("input"), dict) else {}
+    meta_obj = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+
+    summary: dict[str, Any] = {}
+
+    requested_action = str(payload.get("action") or "").strip()
+    if requested_action:
+        summary["requested_action"] = requested_action
+
+    plugin_id = str(payload.get("plugin_id") or "").strip()
+    if plugin_id:
+        summary["plugin_id"] = plugin_id
+
+    risk_tier = str(payload.get("risk_tier") or "").strip().lower()
+    if risk_tier:
+        summary["risk_tier"] = risk_tier
+
+    required_trust_raw = payload.get("required_trust")
+    if isinstance(required_trust_raw, bool):
+        summary["required_trust"] = int(required_trust_raw)
+    elif isinstance(required_trust_raw, int):
+        summary["required_trust"] = required_trust_raw
+    elif isinstance(required_trust_raw, float):
+        summary["required_trust"] = int(required_trust_raw)
+    elif isinstance(required_trust_raw, str):
+        text = required_trust_raw.strip()
+        if text:
+            try:
+                summary["required_trust"] = int(float(text))
+            except Exception:
+                pass
+
+    payload_keys = sorted(str(key).strip() for key in payload.keys() if str(key).strip())
+    if payload_keys:
+        summary["payload_keys"] = payload_keys[:8]
+
+    input_keys = sorted(str(key).strip() for key in input_obj.keys() if str(key).strip())
+    if input_keys:
+        summary["input_keys"] = input_keys[:8]
+
+    meta_keys = sorted(str(key).strip() for key in meta_obj.keys() if str(key).strip())
+    if meta_keys:
+        summary["meta_keys"] = meta_keys[:8]
+
+    return summary
+
+
 def _pending_approval_summary(path: Path, limit: int = 10) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -564,6 +615,7 @@ def _pending_approval_summary(path: Path, limit: int = 10) -> list[dict[str, Any
                 "reason": str(record.get("reason") or "").strip(),
                 "status": str(record.get("status") or "").strip(),
                 "ts": float(record.get("ts") or 0.0),
+                "payload_summary": _approval_payload_summary(record.get("payload")),
             }
         )
     return out
