@@ -4,6 +4,7 @@ param(
   [int]$PollSeconds = 20,
   [int]$IdleSeconds = 60,
   [string]$StopFile = ".tmp\codex-continue.stop",
+  [string]$PidFile = ".tmp\codex-continue.pid",
   [string]$SessionId = "",
   [switch]$FollowLatestSession,
   [string]$LogFile = "",
@@ -26,6 +27,20 @@ $stopPath = if ([System.IO.Path]::IsPathRooted($StopFile)) {
 $stopDir = Split-Path -Parent $stopPath
 if ($stopDir -and -not (Test-Path -LiteralPath $stopDir)) {
   New-Item -ItemType Directory -Path $stopDir -Force | Out-Null
+}
+
+$pidPath = if ([string]::IsNullOrWhiteSpace($PidFile)) {
+  $null
+} elseif ([System.IO.Path]::IsPathRooted($PidFile)) {
+  $PidFile
+} else {
+  Join-Path $repoRoot $PidFile
+}
+if ($pidPath) {
+  $pidDir = Split-Path -Parent $pidPath
+  if ($pidDir -and -not (Test-Path -LiteralPath $pidDir)) {
+    New-Item -ItemType Directory -Path $pidDir -Force | Out-Null
+  }
 }
 
 $logPath = if ([string]::IsNullOrWhiteSpace($LogFile)) {
@@ -306,6 +321,14 @@ Write-LoopStatus "Stop file: $stopPath"
 if ($logPath) {
   Write-LoopStatus "Log file: $logPath"
 }
+if ($pidPath) {
+  try {
+    Set-Content -LiteralPath $pidPath -Value ([string]$PID) -Encoding utf8
+    Write-LoopStatus "Pid file: $pidPath"
+  } catch {
+    Write-LoopStatus ("Warning: failed to write pid file '{0}': {1}" -f $pidPath, $_.Exception.Message)
+  }
+}
 if ($SessionId) {
   Write-LoopStatus "Session id: $SessionId"
 }
@@ -327,71 +350,84 @@ if ($DeliveryMode -eq 'ui') {
 if ($DryRun) {
   Write-LoopStatus "DryRun is enabled. No Codex command will be executed."
 }
+Write-LoopStatus "Loop mode: continuous until stop file or explicit process stop."
 
 $iteration = 0
-while ($true) {
-  if (Test-Path -LiteralPath $stopPath) {
-    Write-LoopStatus "Stop file detected. Exiting."
-    break
-  }
-  if ($MaxIterations -gt 0 -and $iteration -ge $MaxIterations) {
-    Write-LoopStatus "MaxIterations reached. Exiting."
-    break
-  }
-
-  if (-not $SessionId -and ($FollowLatestSession -or -not $resolvedSessionFile)) {
-    $latestSessionFile = Resolve-LatestCodexSessionFile
-    if ($latestSessionFile -and $latestSessionFile -ne $resolvedSessionFile) {
-      $resolvedSessionFile = $latestSessionFile
-      Write-LoopStatus "Tracking latest session file: $resolvedSessionFile"
+try {
+  while ($true) {
+    if (Test-Path -LiteralPath $stopPath) {
+      Write-LoopStatus "Stop file detected. Exiting."
+      break
     }
-  }
-
-  if ($resolvedSessionFile) {
-    $turnState = Get-SessionTurnState $resolvedSessionFile
-    if ($turnState -and $turnState.State -eq 'active') {
-      $startedAt = if ([string]::IsNullOrWhiteSpace($turnState.StartedAt)) { 'unknown' } else { $turnState.StartedAt }
-      Write-LoopStatus ("Session still has an active turn (started {0}). Waiting {1}s." -f $startedAt, $PollSeconds)
-      Start-Sleep -Seconds $PollSeconds
-      continue
+    if ($MaxIterations -gt 0 -and $iteration -ge $MaxIterations) {
+      Write-LoopStatus "MaxIterations reached. Exiting."
+      break
     }
 
-    $idleFor = Get-SessionIdleSeconds $resolvedSessionFile
-    if ($null -eq $idleFor) {
-      Write-LoopStatus ("Session file is unavailable. Waiting {0}s." -f $PollSeconds)
-      Start-Sleep -Seconds $PollSeconds
-      continue
+    if (-not $SessionId -and ($FollowLatestSession -or -not $resolvedSessionFile)) {
+      $latestSessionFile = Resolve-LatestCodexSessionFile
+      if ($latestSessionFile -and $latestSessionFile -ne $resolvedSessionFile) {
+        $resolvedSessionFile = $latestSessionFile
+        Write-LoopStatus "Tracking latest session file: $resolvedSessionFile"
+      }
     }
-    if ($idleFor -lt $IdleSeconds) {
-      Write-LoopStatus ("Session idle for {0}s (< {1}s). Waiting {2}s." -f $idleFor, $IdleSeconds, $PollSeconds)
-      Start-Sleep -Seconds $PollSeconds
-      continue
+
+    if ($resolvedSessionFile) {
+      $turnState = Get-SessionTurnState $resolvedSessionFile
+      if ($turnState -and $turnState.State -eq 'active') {
+        $startedAt = if ([string]::IsNullOrWhiteSpace($turnState.StartedAt)) { 'unknown' } else { $turnState.StartedAt }
+        Write-LoopStatus ("Session still has an active turn (started {0}). Waiting {1}s." -f $startedAt, $PollSeconds)
+        Start-Sleep -Seconds $PollSeconds
+        continue
+      }
+
+      $idleFor = Get-SessionIdleSeconds $resolvedSessionFile
+      if ($null -eq $idleFor) {
+        Write-LoopStatus ("Session file is unavailable. Waiting {0}s." -f $PollSeconds)
+        Start-Sleep -Seconds $PollSeconds
+        continue
+      }
+      if ($idleFor -lt $IdleSeconds) {
+        Write-LoopStatus ("Session idle for {0}s (< {1}s). Waiting {2}s." -f $idleFor, $IdleSeconds, $PollSeconds)
+        Start-Sleep -Seconds $PollSeconds
+        continue
+      }
+    } else {
+      $runningCodex = Get-CodexProcesses
+      if ($runningCodex.Count -gt 0) {
+        Write-LoopStatus ("Codex already running ({0} process(es)). Waiting {1}s." -f $runningCodex.Count, $PollSeconds)
+        Start-Sleep -Seconds $PollSeconds
+        continue
+      }
     }
-  } else {
-    $runningCodex = Get-CodexProcesses
-    if ($runningCodex.Count -gt 0) {
-      Write-LoopStatus ("Codex already running ({0} process(es)). Waiting {1}s." -f $runningCodex.Count, $PollSeconds)
-      Start-Sleep -Seconds $PollSeconds
-      continue
+
+    $iteration += 1
+    if ($DeliveryMode -eq 'ui') {
+      $exitCode = Invoke-CodexContinueUi -ResumePrompt $Prompt -TitlePattern $WindowTitlePattern -Simulate:$DryRun
+    } else {
+      $exitCode = Invoke-CodexContinueCli -RepoRoot $repoRoot -ResumeSessionId $SessionId -ResumePrompt $Prompt -Simulate:$DryRun
+    }
+    if ($exitCode -eq 0) {
+      Write-LoopStatus "Codex turn completed."
+    } else {
+      Write-LoopStatus ("Codex exited with code {0}." -f $exitCode)
+    }
+
+    if ($MaxIterations -gt 0 -and $iteration -ge $MaxIterations) {
+      Write-LoopStatus "MaxIterations reached after completion. Exiting."
+      break
+    }
+
+    Start-Sleep -Seconds $PollSeconds
+  }
+} finally {
+  if ($pidPath -and (Test-Path -LiteralPath $pidPath)) {
+    try {
+      $recordedPid = (Get-Content -LiteralPath $pidPath -ErrorAction Stop | Select-Object -First 1).Trim()
+      if ($recordedPid -eq ([string]$PID)) {
+        Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+      }
+    } catch {
     }
   }
-
-  $iteration += 1
-  if ($DeliveryMode -eq 'ui') {
-    $exitCode = Invoke-CodexContinueUi -ResumePrompt $Prompt -TitlePattern $WindowTitlePattern -Simulate:$DryRun
-  } else {
-    $exitCode = Invoke-CodexContinueCli -RepoRoot $repoRoot -ResumeSessionId $SessionId -ResumePrompt $Prompt -Simulate:$DryRun
-  }
-  if ($exitCode -eq 0) {
-    Write-LoopStatus "Codex turn completed."
-  } else {
-    Write-LoopStatus ("Codex exited with code {0}." -f $exitCode)
-  }
-
-  if ($MaxIterations -gt 0 -and $iteration -ge $MaxIterations) {
-    Write-LoopStatus "MaxIterations reached after completion. Exiting."
-    break
-  }
-
-  Start-Sleep -Seconds $PollSeconds
 }
