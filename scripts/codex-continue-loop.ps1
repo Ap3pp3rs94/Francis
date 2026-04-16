@@ -5,6 +5,7 @@ param(
   [int]$IdleSeconds = 60,
   [string]$StopFile = ".tmp\codex-continue.stop",
   [string]$SessionId = "",
+  [switch]$FollowLatestSession,
   [ValidateSet('ui', 'cli')]
   [string]$DeliveryMode = "ui",
   [string]$WindowTitlePattern = '^Codex(?:$| )',
@@ -286,6 +287,13 @@ if ($SessionId) {
 if ($resolvedSessionFile) {
   Write-LoopStatus "Session file: $resolvedSessionFile"
   Write-LoopStatus "Idle threshold: ${IdleSeconds}s"
+  if (-not $SessionId) {
+    if ($FollowLatestSession) {
+      Write-LoopStatus "Session binding: follow_latest"
+    } else {
+      Write-LoopStatus "Session binding: pinned_at_start"
+    }
+  }
 }
 Write-LoopStatus "Delivery mode: $DeliveryMode"
 if ($DeliveryMode -eq 'ui') {
@@ -306,7 +314,7 @@ while ($true) {
     break
   }
 
-  if (-not $SessionId) {
+  if (-not $SessionId -and ($FollowLatestSession -or -not $resolvedSessionFile)) {
     $latestSessionFile = Resolve-LatestCodexSessionFile
     if ($latestSessionFile -and $latestSessionFile -ne $resolvedSessionFile) {
       $resolvedSessionFile = $latestSessionFile
