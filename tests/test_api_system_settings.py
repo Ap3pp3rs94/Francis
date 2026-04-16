@@ -513,6 +513,7 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     pending_approval = next(item for item in body["overview"]["pending_approvals"] if item["id"] == approval_id)
     assert pending_approval["action"] == "plugin.run"
     assert pending_approval["status"] == "pending"
+    assert pending_approval["request_kind"] == "plugin.run.request"
     assert pending_approval["payload_summary"]["plugin_id"] == plugin_id
     assert pending_approval["payload_summary"]["requested_action"] == "deploy"
     assert pending_approval["payload_summary"]["risk_tier"] == "critical"
@@ -524,6 +525,64 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert focus_item["recommended_action"] == "review_pending_approval"
     assert focus_item["last_task_approval_id"] == approval_id
     assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."
+
+
+def test_system_world_state_surfaces_exact_action_context_for_industrial_pending_approval(
+    monkeypatch, tmp_path: Path
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    asset_created = client.post(
+        "/industrial/assets",
+        json={"name": "World State Compressor", "asset_type": "compressor", "risk": "high"},
+    )
+    assert asset_created.status_code == 200
+    asset_id = str(asset_created.json()["id"])
+
+    pending = client.post(
+        "/industrial/interventions/request",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "action": "dispatch_crew",
+            "reason": "operator_request",
+            "dry_run": False,
+            "risk": "high",
+            "domain": "operations",
+            "actor": "operator:world_state",
+            "params": {"crew": "alpha"},
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    pending_approval = next(item for item in body["overview"]["pending_approvals"] if item["id"] == approval_id)
+    assert pending_approval["action"] == "industrial.intervention.request"
+    assert pending_approval["status"] == "pending"
+    assert pending_approval["request_kind"] == "industrial.approval.request"
+    assert pending_approval["payload_summary"]["requested_action"] == "dispatch_crew"
+    assert pending_approval["payload_summary"]["target_kind"] == "asset"
+    assert pending_approval["payload_summary"]["target_id"] == asset_id
+    assert pending_approval["payload_summary"]["risk"] == "high"
+    assert pending_approval["payload_summary"]["domain"] == "operations"
+    assert pending_approval["payload_summary"]["actor"] == "operator:world_state"
+    assert pending_approval["payload_summary"]["dry_run"] is False
+    assert pending_approval["payload_summary"]["params_keys"] == ["crew"]
+    assert "target_id" in pending_approval["payload_summary"]["payload_keys"]
 
 
 def test_system_world_state_projects_mission_briefing_and_advance_receipts(monkeypatch, tmp_path: Path) -> None:

@@ -363,10 +363,29 @@ governed actions:
 - `tests/test_api_approvals.py` now proves pending industrial intervention
   approvals expose truthful exact-action context in `/approvals/list`.
 
+The `2026-04-16` world-state approval projection parity slice is now also
+materially true in the repo and closes the next operator-truthfulness gap on
+the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
+
+- `src/francis/governance/approval_projection.py` now centralizes approval
+  payload summary and artifact-backed enrichment so governed approval surfaces
+  stop drifting between route-local and world-state-specific reducers.
+- `src/francis/api/routes/approvals.py` and `src/francis/world_state/snapshot.py`
+  now read the same projection path, so `/system/world_state` preserves the
+  existing pending-approval shape while adding the same bounded request kind,
+  credential context, and exact-action target/risk fields already surfaced in
+  `/approvals/list`.
+- `tests/test_api_system_settings.py` now proves world-state pending approvals
+  expose artifact-backed plugin request kinds and industrial exact-action
+  context instead of falling back to the older plugin-only summary logic.
+
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
-`2026-04-15`:
+`2026-04-16`:
+
+- `pytest tests/test_api_system_settings.py tests/test_api_approvals.py --disable-warnings`
+  Result: `22 passed in 10.37s`
 
 - `pytest tests/test_api_operations.py tests/test_api_supervised_exec.py tests/test_paths_data_dir.py -q`
   Result: `16 passed`
@@ -477,6 +496,9 @@ Those validations specifically cover:
   web-learning, and industrial approvals
 - pending industrial approvals now surfacing nested exact-action context in the
   approval queue instead of opaque wrapper payload keys
+- `/system/world_state` pending approvals now sharing the same artifact-backed
+  request kind and exact-action summary contract as `/approvals/list` instead
+  of regressing to a plugin-only payload reducer
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:
