@@ -172,3 +172,54 @@ def test_approval_list_surfaces_credential_request_and_revoke_context(monkeypatc
     assert revoke_item["payload_summary"]["scope_id"] == "openai_readonly"
     assert revoke_item["payload_summary"]["provider"] == "openai"
     assert revoke_item["payload_summary"]["credential_id"] == credential_id
+
+
+def test_approval_list_surfaces_exact_action_context_for_industrial_request(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    asset_created = client.post("/industrial/assets", json={"name": "Queue Compressor", "asset_type": "compressor", "risk": "high"})
+    assert asset_created.status_code == 200
+    asset_id = str(asset_created.json()["id"])
+
+    pending = client.post(
+        "/industrial/interventions/request",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "action": "dispatch_crew",
+            "reason": "operator_request",
+            "dry_run": False,
+            "risk": "high",
+            "domain": "operations",
+            "actor": "operator:queue",
+            "params": {"crew": "alpha"},
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approvals_list = client.get("/approvals/list?status=pending&limit=20")
+    assert approvals_list.status_code == 200
+    approval_item = next(item for item in approvals_list.json()["items"] if item["id"] == approval_id)
+
+    assert approval_item["action"] == "industrial.intervention.request"
+    assert approval_item["status"] == "pending"
+    assert approval_item["request_kind"] == "industrial.approval.request"
+    assert approval_item["payload_summary"]["requested_action"] == "dispatch_crew"
+    assert approval_item["payload_summary"]["target_kind"] == "asset"
+    assert approval_item["payload_summary"]["target_id"] == asset_id
+    assert approval_item["payload_summary"]["risk"] == "high"
+    assert approval_item["payload_summary"]["domain"] == "operations"
+    assert approval_item["payload_summary"]["actor"] == "operator:queue"
+    assert approval_item["payload_summary"]["dry_run"] is False
+    assert approval_item["payload_summary"]["params_keys"] == ["crew"]
+    assert "target_id" in approval_item["payload_summary"]["payload_keys"]

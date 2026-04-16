@@ -62,44 +62,90 @@ def _approval_payload_summary(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
 
-    input_obj = payload.get("input") if isinstance(payload.get("input"), dict) else {}
-    meta_obj = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+    payload_obj = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+    summary_payload = payload_obj if payload_obj else payload
+
+    input_obj = summary_payload.get("input") if isinstance(summary_payload.get("input"), dict) else {}
+    meta_obj = summary_payload.get("meta") if isinstance(summary_payload.get("meta"), dict) else {}
 
     summary: dict[str, Any] = {}
 
-    requested_action = _safe_str(payload.get("action")).strip()
+    requested_action = _safe_str(summary_payload.get("action")).strip() or _safe_str(payload.get("action")).strip()
     if requested_action:
         summary["requested_action"] = requested_action
 
-    plugin_id = _safe_str(payload.get("plugin_id")).strip()
+    plugin_id = _safe_str(summary_payload.get("plugin_id")).strip() or _safe_str(payload.get("plugin_id")).strip()
     if plugin_id:
         summary["plugin_id"] = plugin_id
 
-    scope_id = _safe_str(payload.get("scope_id")).strip()
+    scope_id = _safe_str(summary_payload.get("scope_id")).strip() or _safe_str(payload.get("scope_id")).strip()
     if scope_id:
         summary["scope_id"] = scope_id
 
-    provider = _safe_str(payload.get("provider")).strip()
+    provider = _safe_str(summary_payload.get("provider")).strip() or _safe_str(payload.get("provider")).strip()
     if provider:
         summary["provider"] = provider
 
-    credential_type = _safe_str(payload.get("type")).strip()
+    credential_type = _safe_str(summary_payload.get("type")).strip() or _safe_str(payload.get("type")).strip()
     if credential_type:
         summary["credential_type"] = credential_type
 
-    label = _safe_str(payload.get("label")).strip()
+    label = _safe_str(summary_payload.get("label")).strip() or _safe_str(payload.get("label")).strip()
     if label:
         summary["label"] = label
 
-    credential_id = _safe_str(payload.get("credential_id")).strip() or _safe_str(payload.get("id")).strip()
+    credential_id = (
+        _safe_str(summary_payload.get("credential_id")).strip()
+        or _safe_str(summary_payload.get("id")).strip()
+        or _safe_str(payload.get("credential_id")).strip()
+        or _safe_str(payload.get("id")).strip()
+    )
     if credential_id:
         summary["credential_id"] = credential_id
 
-    risk_tier = _safe_str(payload.get("risk_tier")).strip().lower()
+    target_kind = _safe_str(summary_payload.get("target_kind")).strip()
+    if target_kind:
+        summary["target_kind"] = target_kind
+
+    target_id = _safe_str(summary_payload.get("target_id")).strip()
+    if target_id:
+        summary["target_id"] = target_id
+
+    twin_id = _safe_str(summary_payload.get("twin_id")).strip()
+    if twin_id:
+        summary["twin_id"] = twin_id
+
+    url = _safe_str(summary_payload.get("url")).strip()
+    if url:
+        summary["url"] = url
+
+    domain = _safe_str(summary_payload.get("domain")).strip()
+    if domain:
+        summary["domain"] = domain
+
+    actor = _safe_str(summary_payload.get("actor")).strip()
+    if actor:
+        summary["actor"] = actor
+
+    risk = _safe_str(summary_payload.get("risk")).strip().lower()
+    if risk:
+        summary["risk"] = risk
+
+    enabled = summary_payload.get("enabled")
+    if isinstance(enabled, bool):
+        summary["enabled"] = enabled
+
+    dry_run = summary_payload.get("dry_run")
+    if isinstance(dry_run, bool):
+        summary["dry_run"] = dry_run
+
+    risk_tier = _safe_str(summary_payload.get("risk_tier")).strip().lower() or _safe_str(payload.get("risk_tier")).strip().lower()
     if risk_tier:
         summary["risk_tier"] = risk_tier
 
-    required_trust_raw = payload.get("required_trust")
+    required_trust_raw = summary_payload.get("required_trust")
+    if required_trust_raw is None:
+        required_trust_raw = payload.get("required_trust")
     if isinstance(required_trust_raw, bool):
         summary["required_trust"] = int(required_trust_raw)
     elif isinstance(required_trust_raw, int):
@@ -114,7 +160,7 @@ def _approval_payload_summary(payload: Any) -> dict[str, Any]:
             except Exception:
                 pass
 
-    payload_keys = sorted(_safe_str(key).strip() for key in payload.keys() if _safe_str(key).strip())
+    payload_keys = sorted(_safe_str(key).strip() for key in summary_payload.keys() if _safe_str(key).strip())
     if payload_keys:
         summary["payload_keys"] = payload_keys[:8]
 
@@ -125,6 +171,11 @@ def _approval_payload_summary(payload: Any) -> dict[str, Any]:
     meta_keys = sorted(_safe_str(key).strip() for key in meta_obj.keys() if _safe_str(key).strip())
     if meta_keys:
         summary["meta_keys"] = meta_keys[:8]
+
+    params_obj = summary_payload.get("params") if isinstance(summary_payload.get("params"), dict) else {}
+    params_keys = sorted(_safe_str(key).strip() for key in params_obj.keys() if _safe_str(key).strip())
+    if params_keys:
+        summary["params_keys"] = params_keys[:8]
 
     return summary
 

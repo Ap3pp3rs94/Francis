@@ -349,6 +349,20 @@ identity surface:
   revoke approvals expose truthful request kinds and credential context in the
   approval queue.
 
+The `2026-04-16` exact-action approval summary slice is now also materially
+true in the repo and strengthens approval-queue truthfulness for non-plugin
+governed actions:
+
+- `src/francis/api/routes/approvals.py` now unwraps exact-action approval
+  envelopes when building `payload_summary`, so industrial and similar governed
+  actions surface their real requested action and nested target context instead
+  of opaque top-level wrapper keys.
+- `src/francis/api/routes/approvals.py` now carries nested exact-action fields
+  such as `target_kind`, `target_id`, `domain`, `actor`, `risk`, `dry_run`,
+  and `params_keys` into the approval queue summary where present.
+- `tests/test_api_approvals.py` now proves pending industrial intervention
+  approvals expose truthful exact-action context in `/approvals/list`.
+
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
@@ -402,6 +416,8 @@ The following validations were run against the current working tree on
   Result: `6 passed in 2.37s`
 - `pytest tests/test_api_approvals.py tests/test_api_credentials.py --disable-warnings`
   Result: `9 passed in 9.03s`
+- `pytest tests/test_api_approvals.py --disable-warnings`
+  Result: `4 passed in 2.68s`
 - `git diff --check -- src/francis/api/routes/credentials.py tests/test_api_credentials.py`
   Result: `passed`
 
@@ -459,6 +475,8 @@ Those validations specifically cover:
 - pending credential approvals now surfacing artifact-backed request context in
   the approval queue instead of remaining second-class relative to plugin,
   web-learning, and industrial approvals
+- pending industrial approvals now surfacing nested exact-action context in the
+  approval queue instead of opaque wrapper payload keys
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:
