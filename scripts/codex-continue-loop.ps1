@@ -32,17 +32,28 @@ function Write-LoopStatus([string]$Message) {
 }
 
 function Resolve-CodexSessionFile([string]$TargetSessionId) {
+  $sessionRoot = Join-Path $HOME '.codex\sessions'
+  if (-not (Test-Path -LiteralPath $sessionRoot)) {
+    return $null
+  }
+
   if ([string]::IsNullOrWhiteSpace($TargetSessionId)) {
     return $null
   }
 
+  Get-ChildItem -LiteralPath $sessionRoot -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*$TargetSessionId*" } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1 -ExpandProperty FullName
+}
+
+function Resolve-LatestCodexSessionFile {
   $sessionRoot = Join-Path $HOME '.codex\sessions'
   if (-not (Test-Path -LiteralPath $sessionRoot)) {
     return $null
   }
 
   Get-ChildItem -LiteralPath $sessionRoot -Recurse -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like "*$TargetSessionId*" } |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1 -ExpandProperty FullName
 }
@@ -257,7 +268,11 @@ if ($MaxIterations -lt 0) {
   throw "MaxIterations must be >= 0 (got $MaxIterations)."
 }
 
-$resolvedSessionFile = Resolve-CodexSessionFile $SessionId
+$resolvedSessionFile = if ([string]::IsNullOrWhiteSpace($SessionId)) {
+  Resolve-LatestCodexSessionFile
+} else {
+  Resolve-CodexSessionFile $SessionId
+}
 if ($SessionId -and -not $resolvedSessionFile) {
   throw "Could not resolve a Codex session file for SessionId '$SessionId'."
 }
@@ -267,6 +282,8 @@ Write-LoopStatus "Repo root: $repoRoot"
 Write-LoopStatus "Stop file: $stopPath"
 if ($SessionId) {
   Write-LoopStatus "Session id: $SessionId"
+}
+if ($resolvedSessionFile) {
   Write-LoopStatus "Session file: $resolvedSessionFile"
   Write-LoopStatus "Idle threshold: ${IdleSeconds}s"
 }
@@ -287,6 +304,14 @@ while ($true) {
   if ($MaxIterations -gt 0 -and $iteration -ge $MaxIterations) {
     Write-LoopStatus "MaxIterations reached. Exiting."
     break
+  }
+
+  if (-not $SessionId) {
+    $latestSessionFile = Resolve-LatestCodexSessionFile
+    if ($latestSessionFile -and $latestSessionFile -ne $resolvedSessionFile) {
+      $resolvedSessionFile = $latestSessionFile
+      Write-LoopStatus "Tracking latest session file: $resolvedSessionFile"
+    }
   }
 
   if ($resolvedSessionFile) {
