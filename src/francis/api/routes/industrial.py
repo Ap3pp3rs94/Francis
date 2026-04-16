@@ -375,6 +375,118 @@ def _request_approval(action: str, reason: str, payload: dict[str, Any]) -> str:
     return _safe_str(item.get("id")).strip()
 
 
+def _approval_artifact_dir(approval_id: str) -> Path:
+    return data_dir() / "artifacts" / "industrial" / "approvals" / _safe_str(approval_id).strip()
+
+
+def _approval_status(approval_id: str) -> tuple[str, dict[str, Any] | None]:
+    resolved_id = _safe_str(approval_id).strip()
+    if not resolved_id:
+        return "missing", None
+    candidates: list[tuple[str, Path]] = [
+        ("pending", approval_store.pending_dir() / f"{resolved_id}.json"),
+        ("approved", approval_store.approved_dir() / f"{resolved_id}.json"),
+        ("rejected", approval_store.rejected_dir() / f"{resolved_id}.json"),
+        ("emergency", approval_store.emergency_dir() / f"{resolved_id}.json"),
+    ]
+    for status, path in candidates:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return "corrupt", None
+        return status, payload if isinstance(payload, dict) else None
+    return "missing", None
+
+
+def _approval_id_from_payload(payload: dict[str, Any]) -> str:
+    explicit = _safe_str(payload.get("approval_id")).strip()
+    if explicit:
+        return explicit
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        return _safe_str(meta.get("approval_id")).strip()
+    return ""
+
+
+def _normalize_approval_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
+            normalized_key = _safe_str(key).strip()
+            if not normalized_key:
+                continue
+            normalized[normalized_key] = _normalize_approval_value(value.get(key))
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [_normalize_approval_value(item) for item in value]
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+    except Exception:
+        return _safe_str(value)
+
+
+def _approval_meta(meta: Any) -> dict[str, Any]:
+    if not isinstance(meta, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
+        normalized_key = _safe_str(key).strip()
+        if not normalized_key or normalized_key in {"approval_id", "force"}:
+            continue
+        normalized[normalized_key] = _normalize_approval_value(meta.get(key))
+    return normalized
+
+
+def _approval_request_payload(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": action,
+        "payload": _normalize_approval_value(payload),
+    }
+
+
+def _request_exact_approval(
+    *,
+    action: str,
+    reason: str,
+    request_payload: dict[str, Any],
+    previous_approval_id: str = "",
+    previous_status: str = "",
+    previous_record: dict[str, Any] | None = None,
+) -> tuple[str, Path]:
+    approval = approval_store.request(action, reason, request_payload)
+    approval_id = _safe_str(approval.get("id")).strip()
+    art = _approval_artifact_dir(approval_id)
+    request_body: dict[str, Any] = {
+        "kind": "industrial.approval.request",
+        "approval": approval,
+        "action": action,
+        "request": request_payload,
+    }
+    if previous_approval_id:
+        request_body["previous_approval_id"] = previous_approval_id
+    if previous_status:
+        request_body["previous_status"] = previous_status
+    if isinstance(previous_record, dict):
+        request_body["previous_approval"] = previous_record
+    _atomic_write(art / "request.json", request_body)
+    return approval_id, art
+
+
+def _approval_matches(approval_record: dict[str, Any] | None, *, action: str, request_payload: dict[str, Any]) -> bool:
+    if not isinstance(approval_record, dict):
+        return False
+    if _safe_str(approval_record.get("action")).strip() != action:
+        return False
+    payload = approval_record.get("payload")
+    if not isinstance(payload, dict):
+        return False
+    return _normalize_approval_value(payload) == _normalize_approval_value(request_payload)
+
+
 @router.get("/status")
 def status() -> dict[str, object]:
     try:
@@ -1140,60 +1252,255 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
         risk = _safe_str(payload.get("risk")).strip().lower()
         dry_run = bool(payload.get("dry_run", False))
         reason = _safe_str(payload.get("reason")).strip() or "requested"
+        domain = _safe_str(payload.get("domain")).strip()
+        actor = _safe_str(payload.get("actor")).strip()
+        params = _normalize_meta(payload.get("params"))
+        meta = _normalize_meta(payload.get("meta"))
         request_id = _new_id("iexec", f"{target_kind}_{target_id}")
-        approval_id = ""
-        result_id = ""
-        status = "dry_run" if dry_run else "executed"
-        message = "Intervention executed."
-
-        if risk in {"high", "safety_critical"} and not dry_run:
-            approval_id = _request_approval(
-                "industrial.intervention.execute",
-                reason,
-                {
-                    "request_id": request_id,
-                    "target_kind": target_kind,
-                    "target_id": target_id,
-                    "action": action,
-                    "risk": risk,
-                    "params": _normalize_meta(payload.get("params")),
-                    "meta": _normalize_meta(payload.get("meta")),
-                },
-            )
-            status = "pending"
-            message = "High-risk intervention requires approval."
-        else:
-            result_id = _new_id("ires", f"{target_kind}_{target_id}_{action}")
-
+        approval_action = "industrial.intervention.execute"
+        approval_id = _approval_id_from_payload(payload)
+        request_payload = _approval_request_payload(
+            approval_action,
+            {
+                "target_kind": target_kind,
+                "target_id": target_id,
+                "action": action,
+                "risk": risk,
+                "dry_run": dry_run,
+                "domain": domain,
+                "actor": actor,
+                "params": params,
+                "meta": _approval_meta(meta),
+            },
+        )
         registry = _load_registry()
         interventions = registry.get("interventions")
         if not isinstance(interventions, list):
             interventions = []
             registry["interventions"] = interventions
-        interventions.append(
-            {
-                "id": _new_id("intervention", target_id),
-                "ts": _now_s(),
-                "mode": "execute",
-                "target_kind": target_kind,
-                "target_id": target_id,
-                "action": action,
-                "status": status,
-                "reason": reason,
-                "dry_run": dry_run,
-                "risk": risk,
-                "domain": _safe_str(payload.get("domain")).strip(),
-                "actor": _safe_str(payload.get("actor")).strip(),
-                "request_id": request_id,
-                "approval_id": approval_id,
-                "result_id": result_id,
-                "params": _normalize_meta(payload.get("params")),
-                "meta": _normalize_meta(payload.get("meta")),
-            }
+        intervention_id = _new_id("intervention", target_id)
+        record_idx = next(
+            (
+                i
+                for i, item in enumerate(interventions)
+                if approval_id and _safe_str(item.get("approval_id")).strip() == approval_id
+            ),
+            -1,
         )
+        if record_idx >= 0:
+            intervention_id = _safe_str(interventions[record_idx].get("id")).strip() or intervention_id
+
+        status = "dry_run" if dry_run else "executed"
+        result_id = _new_id("ires", f"{target_kind}_{target_id}_{action}") if not dry_run else ""
+        message = "Intervention executed."
+
+        if risk in {"high", "safety_critical"} and not dry_run:
+            status = "pending"
+            message = "High-risk intervention requires approval."
+
+            if not approval_id:
+                approval_id, art = _request_exact_approval(
+                    action=approval_action,
+                    reason=reason,
+                    request_payload=request_payload,
+                )
+                intervention = {
+                    "id": intervention_id,
+                    "ts": _now_s(),
+                    "mode": "execute",
+                    "target_kind": target_kind,
+                    "target_id": target_id,
+                    "action": action,
+                    "status": "pending",
+                    "reason": reason,
+                    "dry_run": dry_run,
+                    "risk": risk,
+                    "domain": domain,
+                    "actor": actor,
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "result_id": "",
+                    "params": params,
+                    "meta": meta,
+                }
+                interventions.append(intervention)
+                _append_telemetry(
+                    registry,
+                    target_id,
+                    {"intervention_executed": False, "dry_run": dry_run},
+                    {"event": "interventions.execute"},
+                )
+                _save_registry(registry)
+                return {
+                    "ok": True,
+                    "status": "pending",
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "result_id": "",
+                    "intervention_id": intervention_id,
+                    "artifact_dir": str(art),
+                    "message": message,
+                }
+
+            approval_status, approval_record = _approval_status(approval_id)
+            if approval_status in {"missing", "corrupt"}:
+                refreshed_id, art = _request_exact_approval(
+                    action=approval_action,
+                    reason=reason,
+                    request_payload=request_payload,
+                    previous_approval_id=approval_id,
+                    previous_status=approval_status,
+                    previous_record=approval_record,
+                )
+                if record_idx >= 0:
+                    interventions[record_idx]["approval_id"] = refreshed_id
+                    interventions[record_idx]["status"] = "pending"
+                    interventions[record_idx]["request_id"] = request_id
+                    interventions[record_idx]["ts"] = _now_s()
+                _atomic_write(
+                    art / "error.json",
+                    {
+                        "kind": "industrial.intervention.execute.error",
+                        "approval_id": refreshed_id,
+                        "previous_approval_id": approval_id,
+                        "status": approval_status,
+                        "request": request_payload,
+                        "intervention_id": intervention_id,
+                    },
+                )
+                _append_telemetry(
+                    registry,
+                    target_id,
+                    {"intervention_executed": False, "dry_run": dry_run},
+                    {"event": "interventions.execute"},
+                )
+                _save_registry(registry)
+                return {
+                    "ok": False,
+                    "status": "needs_approval",
+                    "error": "approval_not_found",
+                    "request_id": request_id,
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "result_id": "",
+                    "intervention_id": intervention_id,
+                    "artifact_dir": str(art),
+                    "message": "Approval was missing for this intervention execution; a fresh exact-action approval is required.",
+                }
+            if approval_status == "pending":
+                return {
+                    "ok": True,
+                    "status": "pending",
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "result_id": "",
+                    "intervention_id": intervention_id,
+                    "message": "Intervention request is awaiting approval.",
+                }
+            if approval_status in {"rejected", "emergency"}:
+                return {
+                    "ok": False,
+                    "status": "denied",
+                    "error": "approval_denied",
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "result_id": "",
+                    "intervention_id": intervention_id,
+                    "message": "Approval was denied for this intervention execution.",
+                    "meta": {"approval_status": approval_status},
+                }
+            if approval_status != "approved":
+                return {
+                    "ok": False,
+                    "status": "needs_approval",
+                    "error": "approval_not_found",
+                    "request_id": request_id,
+                    "approval_id": approval_id,
+                    "result_id": "",
+                    "intervention_id": intervention_id,
+                    "message": "A matching approved request was not found for this intervention execution.",
+                }
+            if not _approval_matches(approval_record, action=approval_action, request_payload=request_payload):
+                refreshed_id, art = _request_exact_approval(
+                    action=approval_action,
+                    reason=reason,
+                    request_payload=request_payload,
+                    previous_approval_id=approval_id,
+                    previous_status=approval_status,
+                    previous_record=approval_record,
+                )
+                if record_idx >= 0:
+                    interventions[record_idx]["approval_id"] = refreshed_id
+                    interventions[record_idx]["status"] = "pending"
+                    interventions[record_idx]["request_id"] = request_id
+                    interventions[record_idx]["ts"] = _now_s()
+                mismatch_body = {
+                    "kind": "industrial.intervention.execute.mismatch",
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "intervention_id": intervention_id,
+                    "request": request_payload,
+                    "approval_record": approval_record,
+                }
+                _atomic_write(art / "mismatch.json", mismatch_body)
+                _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+                _append_telemetry(
+                    registry,
+                    target_id,
+                    {"intervention_executed": False, "dry_run": dry_run},
+                    {"event": "interventions.execute"},
+                )
+                _save_registry(registry)
+                return {
+                    "ok": False,
+                    "status": "needs_approval",
+                    "error": "approval_payload_mismatch",
+                    "request_id": request_id,
+                    "approval_id": refreshed_id,
+                    "previous_approval_id": approval_id,
+                    "result_id": "",
+                    "intervention_id": intervention_id,
+                    "artifact_dir": str(art),
+                    "message": "Approval does not match this exact intervention execution request.",
+                }
+
+            status = "executed"
+            message = "Intervention executed."
+
+        intervention = {
+            "id": intervention_id,
+            "ts": _now_s(),
+            "mode": "execute",
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "action": action,
+            "status": status,
+            "reason": reason,
+            "dry_run": dry_run,
+            "risk": risk,
+            "domain": domain,
+            "actor": actor,
+            "request_id": request_id,
+            "approval_id": approval_id,
+            "result_id": result_id,
+            "params": params,
+            "meta": meta,
+        }
+        if record_idx >= 0:
+            interventions[record_idx] = intervention
+        else:
+            interventions.append(intervention)
         _append_telemetry(registry, target_id, {"intervention_executed": status in {"executed", "dry_run"}, "dry_run": dry_run}, {"event": "interventions.execute"})
         _save_registry(registry)
-        return {"ok": True, "status": status, "request_id": request_id, "approval_id": approval_id, "result_id": result_id, "message": message}
+        return {
+            "ok": True,
+            "status": status,
+            "request_id": request_id,
+            "approval_id": approval_id,
+            "result_id": result_id,
+            "intervention_id": intervention_id,
+            "message": message,
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
