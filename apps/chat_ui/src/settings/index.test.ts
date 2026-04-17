@@ -115,8 +115,32 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
           task_status_counts: { queued: 3 },
           recent_tasks: [],
           mission_status_counts: { queued: 1 },
-          recent_missions: [{ id: "mission_alpha", status: "queued" }],
-          mission_queue: [],
+          recent_missions: [
+            {
+              id: "mission_alpha",
+              status: "queued",
+              latest_activity: {
+                source: "run_ledger",
+                name: "created",
+                status: "queued",
+                ts: 1_710_000_654,
+              },
+            },
+          ],
+          mission_queue: [
+            {
+              id: "mission_blocked",
+              status: "blocked",
+              recommended_action: "raise_trust_or_reduce_risk",
+              latest_activity: {
+                source: "run_ledger",
+                name: "governance_hold",
+                status: "blocked",
+                gate: "trust_gate",
+                ts: 1_710_000_655,
+              },
+            },
+          ],
           deadletter_missions: [],
           incidents: [],
         },
@@ -218,6 +242,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.counts?.queued_tasks, 3);
     assert.equal(worldState.paths.data?.path, "C:/Francis/data");
     assert.equal(worldState.overview?.recent_missions?.[0]?.id, "mission_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.name, "created");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.status, "queued");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");

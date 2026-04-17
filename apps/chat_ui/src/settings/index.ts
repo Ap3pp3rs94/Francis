@@ -206,6 +206,7 @@ export type WorldStateMissionSummary = {
   created_at?: string;
   updated_at?: string;
   terminal?: boolean;
+  latest_activity?: Record<string, unknown>;
 };
 
 export type WorldStateMissionQueueItem = {
@@ -227,6 +228,7 @@ export type WorldStateMissionQueueItem = {
   action_target_id?: string;
   deadletter_reason?: string;
   updated_at?: string;
+  latest_activity?: Record<string, unknown>;
 };
 
 export type WorldStateOverview = {
@@ -985,6 +987,7 @@ function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary |
     created_at: safeString(raw.created_at, ""),
     updated_at: safeString(raw.updated_at, ""),
     terminal: safeBoolean(raw.terminal, false),
+    latest_activity: isRecord(raw.latest_activity) ? (raw.latest_activity as Record<string, unknown>) : undefined,
   };
 }
 
@@ -1102,6 +1105,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         action_target_id: safeString(item.action_target_id, ""),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         updated_at: safeString(item.updated_at, ""),
+        latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
       .filter((item) => item.id),
     deadletter_missions: deadletterMissionsRaw
@@ -1127,6 +1131,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         action_target_id: safeString(item.action_target_id, ""),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         updated_at: safeString(item.updated_at, ""),
+        latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
       .filter((item) => item.id),
     incidents: incidentsRaw

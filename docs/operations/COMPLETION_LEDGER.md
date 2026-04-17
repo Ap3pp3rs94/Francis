@@ -114,6 +114,22 @@ without widening authority or inventing progress:
   the same `latest_event` and `latest_ts` fields relied on by the ORB mission
   inspector.
 
+The `2026-04-17` mission-feed latest-activity parity slice is now materially
+true in the repo and continues the same `Phase 2 / P1_INTERFACE` continuity line
+without adding backend authority or new synthetic state:
+
+- `apps/chat_ui/src/settings/index.ts` now preserves backend-provided
+  `latest_activity` records through the world-state mission summary and mission
+  queue parser instead of silently dropping them before the UI can render them.
+- `apps/chat_ui/src/App.tsx` now reuses a shared latest-activity formatter across
+  the ORB mission surfaces, adding the same `latest/status/gate/at` recency
+  language to shift-focus, recent mission progress, and mission queue cards.
+- This closes the gap where freshness was visible only after opening the full
+  mission inspector, even though the broader world-state cards already had
+  truthful latest-activity receipts available from the backend.
+- `apps/chat_ui/src/settings/index.test.ts` now proves the browser parser keeps
+  `latest_activity` on recent mission and mission queue records.
+
 As of `2026-04-15`, the highest-confidence surface newly touched in the current
 working tree is the governed operations/runtime extension for exact-action
 approval refresh on `git.push`, `codex.supervised_exec`, and approval-bound
@@ -597,6 +613,9 @@ Those validations specifically cover:
   loop state itself
 - mission loop-stage receipt recency for the latest trace and continuity
   movement directly inside the ORB mission inspector
+- world-state mission latest-activity receipts surviving browser parsing and
+  showing up on the ORB mission progress and mission queue cards before the
+  operator opens a full mission detail view
 - chat UI production build integrity after adding the governed request composer
 - chat UI production build integrity after adding bounded mission advance and
   queue-run controls
@@ -629,6 +648,8 @@ Those validations specifically cover:
   Result: `15 passed`
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `15 passed`
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:

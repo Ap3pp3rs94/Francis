@@ -205,6 +205,32 @@ function continuityLedgerMetaLabels(entry: ContinuityLedgerEntry): string[] {
   return labels.filter((label) => label.length > 0).slice(0, 4);
 }
 
+function mixedLocaleTime(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return toLocaleTime(value);
+  const text = safeString(value).trim();
+  if (!text) return "";
+  const parsedMs = Date.parse(text);
+  if (Number.isNaN(parsedMs)) return "";
+  return new Date(parsedMs).toLocaleString();
+}
+
+function latestActivitySummary(activity: Record<string, unknown> | null | undefined): {
+  name: string;
+  status: string;
+  gate: string;
+  observedAt: string;
+} {
+  if (!activity) {
+    return { name: "", status: "", gate: "", observedAt: "" };
+  }
+  return {
+    name: safeString(activity["name"]).trim(),
+    status: safeString(activity["status"]).trim(),
+    gate: safeString(activity["gate"]).trim(),
+    observedAt: mixedLocaleTime(activity["ts"]),
+  };
+}
+
 function executionBlockedReason(operatorMode: OperatorModeSnapshot | null, actionLabel: string): string {
   if (!operatorMode?.ok) {
     return "Execution controls remain disabled until operator posture is loaded.";
@@ -3712,10 +3738,7 @@ function SystemPanel(props: {
                 safeString(item.summary).trim() ||
                 safeString(item.deadletter_reason).trim() ||
                 "Mission continuity exists, but the next-step note is still blank.";
-              const latestActivity = item.latest_activity ?? {};
-              const latestActivityName = safeString(latestActivity["name"]).trim();
-              const latestActivityStatus = safeString(latestActivity["status"]).trim();
-              const latestActivityGate = safeString(latestActivity["gate"]).trim();
+              const latestActivity = latestActivitySummary(item.latest_activity);
               return (
                 <div
                   key={`shift-focus-${item.id}`}
@@ -3736,14 +3759,19 @@ function SystemPanel(props: {
                     {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
                     {" / "}linked_tasks=<code>{String(item.linked_task_count ?? 0)}</code>
                   </div>
-                  {latestActivityName || latestActivityStatus || latestActivityGate ? (
+                  {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       latest=
-                      <code>{latestActivityName || "activity"}</code>
-                      {" / "}status=<code>{latestActivityStatus || "unknown"}</code>
-                      {latestActivityGate ? (
+                      <code>{latestActivity.name || "activity"}</code>
+                      {" / "}status=<code>{latestActivity.status || "unknown"}</code>
+                      {latestActivity.gate ? (
                         <>
-                          {" / "}gate=<code>{latestActivityGate}</code>
+                          {" / "}gate=<code>{latestActivity.gate}</code>
+                        </>
+                      ) : null}
+                      {latestActivity.observedAt ? (
+                        <>
+                          {" / "}at=<code>{latestActivity.observedAt}</code>
                         </>
                       ) : null}
                     </div>
@@ -4755,6 +4783,7 @@ function SystemPanel(props: {
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {missionQueue.slice(0, 4).map((item) => {
                 const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
+                const latestActivity = latestActivitySummary(item.latest_activity);
                 return (
                   <div
                     key={`mission-queue-${item.id}`}
@@ -4774,6 +4803,22 @@ function SystemPanel(props: {
                       priority=<code>{String(item.priority ?? 0)}</code>
                       {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
                     </div>
+                    {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        latest=<code>{latestActivity.name || "activity"}</code>
+                        {" / "}status=<code>{latestActivity.status || "unknown"}</code>
+                        {latestActivity.gate ? (
+                          <>
+                            {" / "}gate=<code>{latestActivity.gate}</code>
+                          </>
+                        ) : null}
+                        {latestActivity.observedAt ? (
+                          <>
+                            {" / "}at=<code>{latestActivity.observedAt}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                       <button
                         style={buttonStyle}
@@ -4874,6 +4919,7 @@ function SystemPanel(props: {
           ) : missionFeedDeclared ? (
             recentDeclaredMissions.map((mission) => {
               const linkedTaskId = firstLinkedTaskId(mission);
+              const latestActivity = latestActivitySummary(mission.latest_activity);
               return (
                 <div
                   key={`mission-progress-${mission.id}`}
@@ -4906,6 +4952,22 @@ function SystemPanel(props: {
                     linked_tasks=<code>{String(mission.linked_task_count ?? mission.linked_task_ids?.length ?? 0)}</code>
                     {" / "}risk=<code>{mission.risk_tier || "unknown"}</code>
                   </div>
+                  {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      latest=<code>{latestActivity.name || "activity"}</code>
+                      {" / "}status=<code>{latestActivity.status || "unknown"}</code>
+                      {latestActivity.gate ? (
+                        <>
+                          {" / "}gate=<code>{latestActivity.gate}</code>
+                        </>
+                      ) : null}
+                      {latestActivity.observedAt ? (
+                        <>
+                          {" / "}at=<code>{latestActivity.observedAt}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {mission.last_task_reason ? (
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.last_task_reason}</div>
                   ) : null}
