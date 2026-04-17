@@ -58,6 +58,35 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 
 ## 3. High-confidence current slice
 
+As of `2026-04-17`, the highest-confidence surface newly touched in the current
+working tree is a read-only continuation/build observer for the canonical Codex
+watcher, which advances the active `Phase 2 / P9_OBSERVABILITY` line without
+changing watcher authority or repo execution behavior.
+
+Directly inspected implementation truth:
+
+- `scripts/francis-observer-lib.ps1` now provides the shared read-only observer
+  contract for watcher pid/state/log inspection, pinned-session resolution,
+  recent task-event parsing from the live session jsonl, real build/test command
+  detection from session exit codes, and git branch/commit/status summarization
+  from `C:\Francis`.
+- `scripts/watch-francis-live.ps1` now renders a 25-second-by-default terminal
+  dashboard showing watcher pid/alive truth, thread id, last launch
+  decision/verification state, last task start and terminal timestamps, idle
+  seconds, pinned session file path, latest git branch/commit/status, and the
+  latest build/test command with `test_status` derived from real session exit
+  codes instead of inferred progress.
+- `scripts/tail-francis-events.ps1` now exposes observer tail/snapshot modes for
+  watcher log, watcher state json, and pinned-session recent task events.
+- The observer surface keeps execution and observability separate: it reads the
+  canonical watcher files and repo state but does not mutate watcher control,
+  repo state, or continuation logic.
+- Live validation also proved the observer does not trust stale files blindly:
+  during this run the watcher pid file still pointed at `34640`, but the live
+  dashboard reported `watcher_alive: false` while still surfacing the last
+  verified launch receipt and pinned session path, which is the truthful state
+  the operator needs.
+
 As of `2026-04-15`, the highest-confidence surface newly touched in the current
 working tree is the governed operations/runtime extension for exact-action
 approval refresh on `git.push`, `codex.supervised_exec`, and approval-bound
@@ -422,7 +451,18 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
 ## 4. Latest validation evidence
 
 The following validations were run against the current working tree on
-`2026-04-16`:
+`2026-04-16` and `2026-04-17`:
+
+- `pwsh -NoProfile -File scripts/watch-francis-live.ps1 -Once -NoClear`
+  Result: `passed`
+- `pwsh -NoProfile -File scripts/tail-francis-events.ps1 -Mode all -Lines 8 -NoClear`
+  Result: `passed`
+- `pwsh -NoProfile -File scripts/tail-francis-events.ps1 -Mode session -Lines 10 -NoClear`
+  Result: `passed`
+- `pytest tests/test_api_operations.py -q -rA`
+  Result: `14 passed`
+- `git diff --check -- scripts/francis-observer-lib.ps1 scripts/watch-francis-live.ps1 scripts/tail-francis-events.ps1`
+  Result: `passed`
 
 - `pytest tests/test_api_system_settings.py tests/test_api_approvals.py --disable-warnings`
   Result: `22 passed in 10.37s`
@@ -481,6 +521,16 @@ The following validations were run against the current working tree on
   Result: `passed`
 
 Those validations specifically cover:
+
+- live dashboard rendering against the real watcher pid/state/log files
+- real thread/session resolution through the pinned session jsonl path
+- explicit reporting of a dead watcher process even when stale state/log receipts
+  still exist on disk
+- live repo branch/commit/dirty-state reporting from `C:\Francis`
+- recent session-event visibility, including observer commands and the targeted
+  repo `pytest` run
+- real build/test status projection from session command exit codes, including a
+  confirmed `test_status: passed` after the targeted `pytest` invocation
 
 - governed `git.push` capability registration through the operations runtime
 - approval-bound local Git push execution
