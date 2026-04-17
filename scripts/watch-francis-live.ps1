@@ -84,6 +84,8 @@ while ($true) {
     $lastDecisionText = if ($state -and $state.ContainsKey("last_decision")) { [string]$state["last_decision"] } else { "-" }
     $lastLaunchVerifiedText = if ($state -and $state.ContainsKey("last_launch_verified")) { ([bool]$state["last_launch_verified"]).ToString().ToLowerInvariant() } else { "-" }
     $lastLaunchObservedStateText = if ($state -and $state.ContainsKey("last_launch_observed_state")) { [string]$state["last_launch_observed_state"] } else { "-" }
+    $watcherCheckedAtText = Format-FrancisTimestamp -Timestamp $(if ($state -and $state.ContainsKey("last_checked_at")) { $state["last_checked_at"] } else { "" })
+    $watcherStateAgeSecondsText = Get-FrancisTimestampAgeSeconds -Timestamp $(if ($state -and $state.ContainsKey("last_checked_at")) { $state["last_checked_at"] } else { "" })
     $lastLaunchStartedText = Format-FrancisTimestamp -Timestamp $(if ($state -and $state.ContainsKey("last_launch_observed_started_at")) { $state["last_launch_observed_started_at"] } else { "" })
     $lastLaunchTerminalTypeText = if ($state -and $state.ContainsKey("last_launch_observed_terminal_type")) { [string]$state["last_launch_observed_terminal_type"] } else { "-" }
     $lastLaunchTerminalAtText = Format-FrancisTimestamp -Timestamp $(if ($state -and $state.ContainsKey("last_launch_observed_terminal_at")) { $state["last_launch_observed_terminal_at"] } else { "" })
@@ -107,6 +109,7 @@ while ($true) {
     $pushBehindText = if ($pushState -and $pushState.ContainsKey("behind_count")) { [string]$pushState["behind_count"] } else { "-" }
     $pushRepoDirtyText = if ($pushState -and $pushState.ContainsKey("repo_dirty")) { ([bool]$pushState["repo_dirty"]).ToString().ToLowerInvariant() } else { "-" }
     $pushCheckedAtText = Format-FrancisTimestamp -Timestamp $(if ($pushState -and $pushState.ContainsKey("last_checked_at")) { $pushState["last_checked_at"] } else { "" })
+    $pushStateAgeSecondsText = Get-FrancisTimestampAgeSeconds -Timestamp $(if ($pushState -and $pushState.ContainsKey("last_checked_at")) { $pushState["last_checked_at"] } else { "" })
     $pushLastPushAtText = Format-FrancisTimestamp -Timestamp $(if ($pushState -and $pushState.ContainsKey("last_push_at")) { $pushState["last_push_at"] } else { "" })
     $pushCountText = if ($pushState -and $pushState.ContainsKey("pushes")) { [string]$pushState["pushes"] } else { "-" }
     $pushResultText = if ($pushState -and $pushState.ContainsKey("last_push_result") -and [string]$pushState["last_push_result"]) { [string]$pushState["last_push_result"] } else { "-" }
@@ -126,6 +129,8 @@ while ($true) {
     $lines.Add(("session_lock_path: {0}" -f $sessionLockPathText))
     $lines.Add(("launch_count: {0}" -f $launchCountText))
     $lines.Add(("last_launch_decision: {0}" -f $lastDecisionText))
+    $lines.Add(("watcher_checked_at: {0}" -f $watcherCheckedAtText))
+    $lines.Add(("watcher_state_age_seconds: {0}" -f $watcherStateAgeSecondsText))
     $lines.Add(("last_launch_verified: {0}" -f $lastLaunchVerifiedText))
     $lines.Add(("last_launch_observed_state: {0}" -f $lastLaunchObservedStateText))
     $lines.Add(("last_launch_started: {0}" -f $lastLaunchStartedText))
@@ -156,6 +161,7 @@ while ($true) {
     $lines.Add(("push_latest_commit: {0}" -f $pushLatestCommitText))
     $lines.Add(("push_decision: {0}" -f $pushDecisionText))
     $lines.Add(("push_checked_at: {0}" -f $pushCheckedAtText))
+    $lines.Add(("push_state_age_seconds: {0}" -f $pushStateAgeSecondsText))
     $lines.Add(("push_ahead_count: {0}" -f $pushAheadText))
     $lines.Add(("push_behind_count: {0}" -f $pushBehindText))
     $lines.Add(("push_repo_dirty: {0}" -f $pushRepoDirtyText))

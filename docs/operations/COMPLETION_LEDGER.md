@@ -135,11 +135,14 @@ continues the active `Phase 2 / P9_OBSERVABILITY` line without changing watcher
 authority:
 
 - `scripts/francis-observer-lib.ps1` now includes push-watcher log summarization
-  alongside the existing continuation watcher/session/git helpers.
+  alongside the existing continuation watcher/session/git helpers, plus timestamp
+  age calculation so stale watcher state can be distinguished from merely old
+  receipts.
 - `scripts/watch-francis-live.ps1` now renders the background GitHub push
   watcher in the main observer dashboard, including pid/alive truth, stop-flag
   state, branch, latest commit, ahead/behind counts, repo-dirty truth, last
-  push decision, and last push timestamp/result.
+  push decision, last push timestamp/result, and explicit watcher/push
+  `state_age_seconds` derived from the real `last_checked_at` fields.
 - `scripts/tail-francis-events.ps1` now exposes `push-log` and `push-state`
   views so raw GitHub-sync watcher receipts can be inspected without leaving the
   existing observer toolchain.

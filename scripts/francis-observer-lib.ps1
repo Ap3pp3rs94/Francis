@@ -243,6 +243,18 @@ function ConvertTo-FrancisDateTimeOffset {
     }
 }
 
+function Get-FrancisTimestampAgeSeconds {
+    param($Timestamp)
+
+    $parsed = ConvertTo-FrancisDateTimeOffset -Timestamp $Timestamp
+    if ($null -eq $parsed) {
+        return "-"
+    }
+
+    $ageSeconds = ([DateTimeOffset]::UtcNow - $parsed.ToUniversalTime()).TotalSeconds
+    return [string][Math]::Max(0, [int][Math]::Floor($ageSeconds))
+}
+
 function Format-FrancisTimestamp {
     param($Timestamp)
 
