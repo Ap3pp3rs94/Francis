@@ -130,6 +130,23 @@ without adding backend authority or new synthetic state:
 - `apps/chat_ui/src/settings/index.test.ts` now proves the browser parser keeps
   `latest_activity` on recent mission and mission queue records.
 
+The `2026-04-17` observer push-sync slice is now materially true in the repo and
+continues the active `Phase 2 / P9_OBSERVABILITY` line without changing watcher
+authority:
+
+- `scripts/francis-observer-lib.ps1` now includes push-watcher log summarization
+  alongside the existing continuation watcher/session/git helpers.
+- `scripts/watch-francis-live.ps1` now renders the background GitHub push
+  watcher in the main observer dashboard, including pid/alive truth, stop-flag
+  state, branch, latest commit, ahead/behind counts, repo-dirty truth, last
+  push decision, and last push timestamp/result.
+- `scripts/tail-francis-events.ps1` now exposes `push-log` and `push-state`
+  views so raw GitHub-sync watcher receipts can be inspected without leaving the
+  existing observer toolchain.
+- Live validation showed the observer reporting the truthful in-progress state:
+  continuation watcher alive, push watcher alive, and repo dirty with observer
+  changes not yet committed, rather than inventing a clean/pushed status.
+
 As of `2026-04-15`, the highest-confidence surface newly touched in the current
 working tree is the governed operations/runtime extension for exact-action
 approval refresh on `git.push`, `codex.supervised_exec`, and approval-bound
@@ -616,6 +633,9 @@ Those validations specifically cover:
 - world-state mission latest-activity receipts surviving browser parsing and
   showing up on the ORB mission progress and mission queue cards before the
   operator opens a full mission detail view
+- live observer visibility for background GitHub-sync state, including raw push
+  watcher tails and truthful ahead/behind/dirty reporting in the same surface
+  as continuation/build state
 - chat UI production build integrity after adding the governed request composer
 - chat UI production build integrity after adding bounded mission advance and
   queue-run controls
@@ -650,6 +670,10 @@ Those validations specifically cover:
   Result: `passed`
 - `cd apps/chat_ui && npm test -- settings/index.test.ts`
   Result: `15 passed`
+- `pwsh -NoProfile -File scripts/watch-francis-live.ps1 -Once -NoClear`
+  Result: `passed`
+- `pwsh -NoProfile -File scripts/tail-francis-events.ps1 -Mode push-state -NoClear`
+  Result: `passed`
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:

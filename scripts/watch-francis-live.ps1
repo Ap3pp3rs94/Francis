@@ -17,6 +17,10 @@ $statePath = Join-Path $WatcherRoot "watch-state.json"
 $pidPath = Join-Path $WatcherRoot "watch.pid"
 $logPath = Join-Path $WatcherRoot "watch.log"
 $stopPath = Join-Path $WatcherRoot "stop.flag"
+$pushStatePath = Join-Path $WatcherRoot "push-watch-state.json"
+$pushPidPath = Join-Path $WatcherRoot "push-watch.pid"
+$pushLogPath = Join-Path $WatcherRoot "push-watch.log"
+$pushStopPath = Join-Path $WatcherRoot "push-stop.flag"
 if ([string]::IsNullOrWhiteSpace($SessionPinPath)) {
     $SessionPinPath = Join-Path $WatcherRoot "watch-session.txt"
 }
@@ -34,7 +38,11 @@ while ($true) {
     $session = Get-FrancisSessionSummary -SessionFilePath $sessionPath -TailLines $TailLines
     $git = Get-FrancisGitSummary -RepoRoot $RepoRoot
     $watcherLog = Get-FrancisWatcherLogSummary -LogPath $logPath
+    $pushState = Read-FrancisJsonFile -Path $pushStatePath
+    $pushProcessInfo = Get-FrancisWatcherProcessInfo -PidPath $pushPidPath
+    $pushWatcherLog = Get-FrancisPushWatcherLogSummary -LogPath $pushLogPath
     $stopRequested = Test-Path -LiteralPath $stopPath
+    $pushStopRequested = Test-Path -LiteralPath $pushStopPath
 
     $turnState = if ($session.TurnState -ne "missing" -and $session.TurnState -ne "unknown") {
         $session.TurnState
@@ -91,6 +99,18 @@ while ($true) {
     $lastBuildExitCodeText = if ($null -ne $session.LastBuildExitCode) { [string]$session.LastBuildExitCode } else { "-" }
     $branchText = if ($git.Branch) { $git.Branch } else { "-" }
     $latestCommitText = if ($git.LatestCommit) { $git.LatestCommit } else { "-" }
+    $pushWatcherPidText = if ($pushProcessInfo.Pid) { [string]$pushProcessInfo.Pid } else { "-" }
+    $pushBranchText = if ($pushState -and $pushState.ContainsKey("branch") -and [string]$pushState["branch"]) { [string]$pushState["branch"] } else { $branchText }
+    $pushLatestCommitText = if ($pushState -and $pushState.ContainsKey("latest_commit") -and [string]$pushState["latest_commit"]) { [string]$pushState["latest_commit"] } else { $latestCommitText }
+    $pushDecisionText = if ($pushState -and $pushState.ContainsKey("last_decision")) { [string]$pushState["last_decision"] } else { "-" }
+    $pushAheadText = if ($pushState -and $pushState.ContainsKey("ahead_count")) { [string]$pushState["ahead_count"] } else { "-" }
+    $pushBehindText = if ($pushState -and $pushState.ContainsKey("behind_count")) { [string]$pushState["behind_count"] } else { "-" }
+    $pushRepoDirtyText = if ($pushState -and $pushState.ContainsKey("repo_dirty")) { ([bool]$pushState["repo_dirty"]).ToString().ToLowerInvariant() } else { "-" }
+    $pushCheckedAtText = Format-FrancisTimestamp -Timestamp $(if ($pushState -and $pushState.ContainsKey("last_checked_at")) { $pushState["last_checked_at"] } else { "" })
+    $pushLastPushAtText = Format-FrancisTimestamp -Timestamp $(if ($pushState -and $pushState.ContainsKey("last_push_at")) { $pushState["last_push_at"] } else { "" })
+    $pushCountText = if ($pushState -and $pushState.ContainsKey("pushes")) { [string]$pushState["pushes"] } else { "-" }
+    $pushResultText = if ($pushState -and $pushState.ContainsKey("last_push_result") -and [string]$pushState["last_push_result"]) { [string]$pushState["last_push_result"] } else { "-" }
+    $pushWatcherLogText = if ($pushWatcherLog.LastPushLine) { $pushWatcherLog.LastPushLine } else { "-" }
 
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("Francis Live Observer")
@@ -127,6 +147,22 @@ while ($true) {
     $lines.Add(("latest_build_or_test_at: {0}" -f $lastBuildAtText))
     $lines.Add(("test_status: {0}" -f $session.TestStatus))
     $lines.Add(("latest_build_or_test_exit_code: {0}" -f $lastBuildExitCodeText))
+    $lines.Add("")
+    $lines.Add("GITHUB PUSH")
+    $lines.Add(("push_watcher_pid: {0}" -f $pushWatcherPidText))
+    $lines.Add(("push_watcher_alive: {0}" -f $pushProcessInfo.Alive.ToString().ToLowerInvariant()))
+    $lines.Add(("push_stop_requested: {0}" -f $pushStopRequested.ToString().ToLowerInvariant()))
+    $lines.Add(("push_branch: {0}" -f $pushBranchText))
+    $lines.Add(("push_latest_commit: {0}" -f $pushLatestCommitText))
+    $lines.Add(("push_decision: {0}" -f $pushDecisionText))
+    $lines.Add(("push_checked_at: {0}" -f $pushCheckedAtText))
+    $lines.Add(("push_ahead_count: {0}" -f $pushAheadText))
+    $lines.Add(("push_behind_count: {0}" -f $pushBehindText))
+    $lines.Add(("push_repo_dirty: {0}" -f $pushRepoDirtyText))
+    $lines.Add(("push_count: {0}" -f $pushCountText))
+    $lines.Add(("push_last_push_at: {0}" -f $pushLastPushAtText))
+    $lines.Add(("push_last_result: {0}" -f $pushResultText))
+    $lines.Add(("push_last_log: {0}" -f $pushWatcherLogText))
     $lines.Add("")
     $lines.Add("REPO")
     $lines.Add(("branch: {0}" -f $branchText))

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("watcher-log", "state", "session", "all")]
+    [ValidateSet("watcher-log", "state", "session", "push-log", "push-state", "all")]
     [string]$Mode = "all",
     [int]$Lines = 40,
     [int]$RefreshSeconds = 5,
@@ -17,6 +17,8 @@ $ErrorActionPreference = "Stop"
 
 $statePath = Join-Path $WatcherRoot "watch-state.json"
 $logPath = Join-Path $WatcherRoot "watch.log"
+$pushStatePath = Join-Path $WatcherRoot "push-watch-state.json"
+$pushLogPath = Join-Path $WatcherRoot "push-watch.log"
 if ([string]::IsNullOrWhiteSpace($SessionPinPath)) {
     $SessionPinPath = Join-Path $WatcherRoot "watch-session.txt"
 }
@@ -26,6 +28,18 @@ function Show-FrancisStateSnapshot {
 
     Write-Host "WATCHER STATE JSON"
     Write-Host "------------------"
+    if (Test-Path -LiteralPath $Path) {
+        Write-Host (Get-Content -LiteralPath $Path -Raw)
+    } else {
+        Write-Host "<missing>"
+    }
+}
+
+function Show-FrancisPushStateSnapshot {
+    param([string]$Path)
+
+    Write-Host "PUSH WATCHER STATE JSON"
+    Write-Host "-----------------------"
     if (Test-Path -LiteralPath $Path) {
         Write-Host (Get-Content -LiteralPath $Path -Raw)
     } else {
@@ -79,6 +93,15 @@ if ($Mode -eq "watcher-log") {
     exit 0
 }
 
+if ($Mode -eq "push-log") {
+    if ($Follow) {
+        Get-Content -LiteralPath $pushLogPath -Tail $Lines -Wait
+    } else {
+        Get-Content -LiteralPath $pushLogPath -Tail $Lines
+    }
+    exit 0
+}
+
 while ($true) {
     $state = Read-FrancisJsonFile -Path $statePath
 
@@ -93,6 +116,9 @@ while ($true) {
         "session" {
             Show-FrancisSessionSnapshot -State $state -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath -Lines $Lines -RawSession:$RawSession
         }
+        "push-state" {
+            Show-FrancisPushStateSnapshot -Path $pushStatePath
+        }
         "all" {
             Write-Host "WATCHER LOG"
             Write-Host "-----------"
@@ -105,6 +131,16 @@ while ($true) {
             Show-FrancisStateSnapshot -Path $statePath
             Write-Host ""
             Show-FrancisSessionSnapshot -State $state -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath -Lines $Lines -RawSession:$RawSession
+            Write-Host ""
+            Write-Host "PUSH WATCHER LOG"
+            Write-Host "----------------"
+            if (Test-Path -LiteralPath $pushLogPath) {
+                Get-Content -LiteralPath $pushLogPath -Tail $Lines
+            } else {
+                Write-Host "<missing>"
+            }
+            Write-Host ""
+            Show-FrancisPushStateSnapshot -Path $pushStatePath
         }
     }
 

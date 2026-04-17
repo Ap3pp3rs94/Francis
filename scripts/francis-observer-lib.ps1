@@ -438,6 +438,28 @@ function Get-FrancisWatcherLogSummary {
     }
 }
 
+function Get-FrancisPushWatcherLogSummary {
+    param(
+        [string]$LogPath,
+        [int]$TailLines = 120
+    )
+
+    if ([string]::IsNullOrWhiteSpace($LogPath) -or -not (Test-Path -LiteralPath $LogPath)) {
+        return [pscustomobject]@{
+            LastPushLine = ""
+            LastLine     = ""
+        }
+    }
+
+    $lines = @(Get-Content -LiteralPath $LogPath -Tail $TailLines -ErrorAction SilentlyContinue)
+    $pushLines = @($lines | Where-Object { $_ -match 'push_|fetch_failed|branch_diverged|behind_remote|dirty_no_commits|up_to_date' })
+
+    [pscustomobject]@{
+        LastPushLine = if ($pushLines.Count -gt 0) { [string]$pushLines[-1] } else { "" }
+        LastLine     = if ($lines.Count -gt 0) { [string]$lines[-1] } else { "" }
+    }
+}
+
 function Get-FrancisGitSummary {
     param([string]$RepoRoot)
 
