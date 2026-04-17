@@ -4,7 +4,8 @@ param(
     [int]$Lines = 40,
     [int]$RefreshSeconds = 5,
     [string]$WatcherRoot = "C:\Users\Ap3pp\.codex\automations\francis-thread-builder",
-    [string]$SessionsRoot = "C:\Users\Ap3pp\.codex\sessions",
+    [string]$SessionFilePath = "",
+    [string]$SessionPinPath = "",
     [string]$ThreadId = "",
     [switch]$Follow,
     [switch]$RawSession,
@@ -16,6 +17,9 @@ $ErrorActionPreference = "Stop"
 
 $statePath = Join-Path $WatcherRoot "watch-state.json"
 $logPath = Join-Path $WatcherRoot "watch.log"
+if ([string]::IsNullOrWhiteSpace($SessionPinPath)) {
+    $SessionPinPath = Join-Path $WatcherRoot "watch-session.txt"
+}
 
 function Show-FrancisStateSnapshot {
     param([string]$Path)
@@ -32,15 +36,17 @@ function Show-FrancisStateSnapshot {
 function Show-FrancisSessionSnapshot {
     param(
         [hashtable]$State,
-        [string]$ThreadId,
-        [string]$SessionsRoot,
+        [string]$SessionFilePath,
+        [string]$SessionPinPath,
         [int]$Lines,
         [switch]$RawSession
     )
 
-    $sessionPath = Resolve-FrancisSessionPath -State $State -ThreadId $ThreadId -SessionsRoot $SessionsRoot
+    $sessionBinding = Resolve-FrancisSessionBinding -State $State -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath
+    $sessionPath = if ($sessionBinding.Valid) { [string]$sessionBinding.Path } else { "" }
     Write-Host "PINNED SESSION EVENTS"
     Write-Host "---------------------"
+    Write-Host ("session_lock_source: {0}" -f [string]$sessionBinding.Source)
     Write-Host ("session_file: {0}" -f $(if ($sessionPath) { $sessionPath } else { "<missing>" }))
 
     if ([string]::IsNullOrWhiteSpace($sessionPath) -or -not (Test-Path -LiteralPath $sessionPath)) {
@@ -85,7 +91,7 @@ while ($true) {
             Show-FrancisStateSnapshot -Path $statePath
         }
         "session" {
-            Show-FrancisSessionSnapshot -State $state -ThreadId $ThreadId -SessionsRoot $SessionsRoot -Lines $Lines -RawSession:$RawSession
+            Show-FrancisSessionSnapshot -State $state -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath -Lines $Lines -RawSession:$RawSession
         }
         "all" {
             Write-Host "WATCHER LOG"
@@ -98,7 +104,7 @@ while ($true) {
             Write-Host ""
             Show-FrancisStateSnapshot -Path $statePath
             Write-Host ""
-            Show-FrancisSessionSnapshot -State $state -ThreadId $ThreadId -SessionsRoot $SessionsRoot -Lines $Lines -RawSession:$RawSession
+            Show-FrancisSessionSnapshot -State $state -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath -Lines $Lines -RawSession:$RawSession
         }
     }
 

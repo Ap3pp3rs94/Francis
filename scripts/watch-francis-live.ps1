@@ -3,7 +3,8 @@ param(
     [int]$TailLines = 400,
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$WatcherRoot = "C:\Users\Ap3pp\.codex\automations\francis-thread-builder",
-    [string]$SessionsRoot = "C:\Users\Ap3pp\.codex\sessions",
+    [string]$SessionFilePath = "",
+    [string]$SessionPinPath = "",
     [string]$ThreadId = "",
     [switch]$NoClear,
     [switch]$Once
@@ -16,11 +17,15 @@ $statePath = Join-Path $WatcherRoot "watch-state.json"
 $pidPath = Join-Path $WatcherRoot "watch.pid"
 $logPath = Join-Path $WatcherRoot "watch.log"
 $stopPath = Join-Path $WatcherRoot "stop.flag"
+if ([string]::IsNullOrWhiteSpace($SessionPinPath)) {
+    $SessionPinPath = Join-Path $WatcherRoot "watch-session.txt"
+}
 
 while ($true) {
     $state = Read-FrancisJsonFile -Path $statePath
     $processInfo = Get-FrancisWatcherProcessInfo -PidPath $pidPath
-    $sessionPath = Resolve-FrancisSessionPath -State $state -ThreadId $ThreadId -SessionsRoot $SessionsRoot
+    $sessionBinding = Resolve-FrancisSessionBinding -State $state -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath
+    $sessionPath = if ($sessionBinding.Valid) { [string]$sessionBinding.Path } else { "" }
     $resolvedThreadId = if (-not [string]::IsNullOrWhiteSpace($ThreadId)) {
         $ThreadId
     } else {
@@ -65,6 +70,8 @@ while ($true) {
 
     $watcherPidText = if ($processInfo.Pid) { [string]$processInfo.Pid } else { "-" }
     $threadIdText = if ($resolvedThreadId) { $resolvedThreadId } else { "-" }
+    $sessionLockSourceText = [string]$sessionBinding.Source
+    $sessionLockPathText = if ($sessionBinding.Path) { [string]$sessionBinding.Path } else { "-" }
     $launchCountText = if ($state -and $state.ContainsKey("launched")) { [string]$state["launched"] } else { "-" }
     $lastDecisionText = if ($state -and $state.ContainsKey("last_decision")) { [string]$state["last_decision"] } else { "-" }
     $lastLaunchVerifiedText = if ($state -and $state.ContainsKey("last_launch_verified")) { ([bool]$state["last_launch_verified"]).ToString().ToLowerInvariant() } else { "-" }
@@ -95,6 +102,8 @@ while ($true) {
     $lines.Add(("watcher_alive: {0}" -f $processInfo.Alive.ToString().ToLowerInvariant()))
     $lines.Add(("watcher_stop_requested: {0}" -f $stopRequested.ToString().ToLowerInvariant()))
     $lines.Add(("thread_id: {0}" -f $threadIdText))
+    $lines.Add(("session_lock_source: {0}" -f $sessionLockSourceText))
+    $lines.Add(("session_lock_path: {0}" -f $sessionLockPathText))
     $lines.Add(("launch_count: {0}" -f $launchCountText))
     $lines.Add(("last_launch_decision: {0}" -f $lastDecisionText))
     $lines.Add(("last_launch_verified: {0}" -f $lastLaunchVerifiedText))

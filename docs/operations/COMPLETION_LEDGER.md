@@ -70,6 +70,11 @@ Directly inspected implementation truth:
   recent task-event parsing from the live session jsonl, real build/test command
   detection from session exit codes, and git branch/commit/status summarization
   from `C:\Francis`.
+- The observer/session resolution path is now locked to one exact session file:
+  it resolves an explicit session path or the watcher-side
+  `watch-session.txt` pin first, falls back only to the already-known
+  `last_seen_session_file` for bootstrap, and no longer scans all matching Codex
+  session files for the thread.
 - `scripts/watch-francis-live.ps1` now renders a 25-second-by-default terminal
   dashboard showing watcher pid/alive truth, thread id, last launch
   decision/verification state, last task start and terminal timestamps, idle
@@ -459,6 +464,8 @@ The following validations were run against the current working tree on
   Result: `passed`
 - `pwsh -NoProfile -File scripts/tail-francis-events.ps1 -Mode session -Lines 10 -NoClear`
   Result: `passed`
+- `pwsh -NoProfile -File C:\Users\Ap3pp\.codex\automations\francis-thread-builder\watch-thread.ps1 -DryRun -Once`
+  Result: `passed`
 - `pytest tests/test_api_operations.py -q -rA`
   Result: `14 passed`
 - `git diff --check -- scripts/francis-observer-lib.ps1 scripts/watch-francis-live.ps1 scripts/tail-francis-events.ps1`
@@ -524,6 +531,9 @@ Those validations specifically cover:
 
 - live dashboard rendering against the real watcher pid/state/log files
 - real thread/session resolution through the pinned session jsonl path
+- exact-session lock bootstrap through watcher-side `watch-session.txt`, with
+  `session_lock_source: pin_file` and the exact pinned jsonl path surfaced in
+  both the observer and watcher state
 - explicit reporting of a dead watcher process even when stale state/log receipts
   still exist on disk
 - live repo branch/commit/dirty-state reporting from `C:\Francis`

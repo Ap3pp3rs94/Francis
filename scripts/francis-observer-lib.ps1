@@ -56,31 +56,74 @@ function Get-FrancisThreadIdFromSessionPath {
     return ""
 }
 
-function Resolve-FrancisSessionPath {
+function Read-FrancisSessionPin {
     param(
-        [hashtable]$State,
-        [string]$ThreadId,
-        [string]$SessionsRoot = (Join-Path $HOME ".codex\sessions")
+        [string]$SessionPinPath
     )
 
-    if ($State -and $State.ContainsKey("last_seen_session_file")) {
-        $candidate = [string]$State["last_seen_session_file"]
-        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
-            return $candidate
-        }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($ThreadId) -or -not (Test-Path -LiteralPath $SessionsRoot)) {
+    if ([string]::IsNullOrWhiteSpace($SessionPinPath) -or -not (Test-Path -LiteralPath $SessionPinPath)) {
         return ""
     }
 
-    $match = Get-ChildItem -LiteralPath $SessionsRoot -Recurse -File -Filter "*.jsonl" -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "*$ThreadId*" } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
+    try {
+        return (Get-Content -LiteralPath $SessionPinPath -Raw).Trim()
+    } catch {
+        return ""
+    }
+}
 
-    if ($match) {
-        return [string]$match.FullName
+function Resolve-FrancisSessionBinding {
+    param(
+        [hashtable]$State,
+        [string]$SessionFilePath = "",
+        [string]$SessionPinPath = ""
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($SessionFilePath)) {
+        return [pscustomobject]@{
+            Path   = $SessionFilePath
+            Source = if (Test-Path -LiteralPath $SessionFilePath) { "explicit_param" } else { "explicit_param_missing" }
+            Valid  = (Test-Path -LiteralPath $SessionFilePath)
+        }
+    }
+
+    $pinnedPath = Read-FrancisSessionPin -SessionPinPath $SessionPinPath
+    if (-not [string]::IsNullOrWhiteSpace($pinnedPath)) {
+        return [pscustomobject]@{
+            Path   = $pinnedPath
+            Source = if (Test-Path -LiteralPath $pinnedPath) { "pin_file" } else { "pin_file_missing" }
+            Valid  = (Test-Path -LiteralPath $pinnedPath)
+        }
+    }
+
+    if ($State -and $State.ContainsKey("last_seen_session_file")) {
+        $statePath = [string]$State["last_seen_session_file"]
+        if (-not [string]::IsNullOrWhiteSpace($statePath)) {
+            return [pscustomobject]@{
+                Path   = $statePath
+                Source = if (Test-Path -LiteralPath $statePath) { "state_last_seen" } else { "state_last_seen_missing" }
+                Valid  = (Test-Path -LiteralPath $statePath)
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Path   = ""
+        Source = "unresolved"
+        Valid  = $false
+    }
+}
+
+function Resolve-FrancisSessionPath {
+    param(
+        [hashtable]$State,
+        [string]$SessionFilePath = "",
+        [string]$SessionPinPath = ""
+    )
+
+    $binding = Resolve-FrancisSessionBinding -State $State -SessionFilePath $SessionFilePath -SessionPinPath $SessionPinPath
+    if ($binding.Valid) {
+        return [string]$binding.Path
     }
 
     return ""
