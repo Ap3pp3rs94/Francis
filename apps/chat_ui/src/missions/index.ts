@@ -35,6 +35,7 @@ export type MissionLoopStage = {
   operation_id?: string;
   trace_id?: string;
   latest_event?: string;
+  latest_ts?: string;
 };
 
 export type MissionLoopState = {
@@ -321,6 +322,7 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     operation_id: safeString(raw.operation_id, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
     latest_event: safeString(raw.latest_event, "") || undefined,
+    latest_ts: safeString(raw.latest_ts, "") || undefined,
   };
 
   if (
@@ -330,6 +332,7 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     !stage.approval_id &&
     !stage.trace_id &&
     !stage.latest_event &&
+    !stage.latest_ts &&
     !stage.next_step
   ) {
     return undefined;

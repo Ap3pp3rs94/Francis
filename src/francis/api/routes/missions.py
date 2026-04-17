@@ -27,6 +27,18 @@ def _mission_write_posture_guard(action_label: str) -> str:
     return posture_write_guard(action_label)
 
 
+def _stage_timestamp(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        try:
+            from datetime import datetime, timezone
+
+            return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except Exception:
+            return ""
+    text = _safe_str(value).strip()
+    return text
+
+
 def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, Any]:
     if record is None:
         return {}
@@ -147,6 +159,7 @@ def _loop_stage(
     operation_id: str = "",
     trace_id: str = "",
     latest_event: str = "",
+    latest_ts: str = "",
     next_step: str = "",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
@@ -165,6 +178,8 @@ def _loop_stage(
         payload["trace_id"] = trace_id
     if latest_event:
         payload["latest_event"] = latest_event
+    if latest_ts:
+        payload["latest_ts"] = latest_ts
     if next_step:
         payload["next_step"] = next_step
     return payload
@@ -257,6 +272,9 @@ def _mission_loop_state(
         len(detail.get("logs")) for detail in linked_operations if isinstance(detail.get("logs"), list)
     )
     ledger_count = len(run_ledger)
+    latest_trace_receipt = run_ledger[0] if run_ledger else {}
+    latest_trace_event = _safe_str(latest_trace_receipt.get("name")).strip()
+    latest_trace_ts = _stage_timestamp(latest_trace_receipt.get("ts"))
     if trace_count or audit_count or ledger_count:
         trace_parts: list[str] = []
         if trace_count:
@@ -271,6 +289,8 @@ def _mission_loop_state(
             count=trace_count + ledger_count + audit_count,
             operation_id=latest_operation_id,
             trace_id=latest_trace_id,
+            latest_event=latest_trace_event,
+            latest_ts=latest_trace_ts,
         )
     else:
         trace_stage = _loop_stage(
@@ -282,15 +302,18 @@ def _mission_loop_state(
 
     history_count = len(history)
     latest_history_event = ""
+    latest_history_ts = ""
     if history:
         latest_history = history[-1] if isinstance(history[-1], dict) else {}
         latest_history_event = _safe_str(latest_history.get("event")).strip()
+        latest_history_ts = _stage_timestamp(latest_history.get("ts"))
     if history_count:
         memory_stage = _loop_stage(
             "recorded",
             f"{history_count} mission continuity receipt(s) are stored in local history.",
             count=history_count,
             latest_event=latest_history_event,
+            latest_ts=latest_history_ts,
         )
     else:
         memory_stage = _loop_stage(

@@ -92,6 +92,28 @@ Directly inspected implementation truth:
   verified launch receipt and pinned session path, which is the truthful state
   the operator needs.
 
+The `2026-04-17` ORB mission receipt recency slice is now materially true in the
+repo and advances the same `Phase 2 / P1_INTERFACE -> P8_MEMORY` continuity line
+without widening authority or inventing progress:
+
+- `src/francis/api/routes/missions.py` now carries the latest trace receipt name
+  and timestamp plus the latest mission-history receipt timestamp into mission
+  `loop_state`, so the ORB mission inspector can show when trace or continuity
+  actually moved instead of only showing counts.
+- `apps/chat_ui/src/missions/index.ts` now preserves the bounded `latest_ts`
+  mission loop-stage field through client parsing instead of dropping receipt
+  recency on the browser side.
+- `apps/chat_ui/src/App.tsx` now renders receipt recency directly inside the ORB
+  mission loop cards, alongside the existing latest receipt label, so the
+  operator can judge whether trace or continuity is fresh without leaving the
+  loop surface for raw ledgers.
+- `tests/test_api_missions.py` now proves the mission detail route returns
+  truthful latest trace and memory receipt recency for a governed blocked
+  mission.
+- `apps/chat_ui/src/missions/index.test.ts` now proves the browser client keeps
+  the same `latest_event` and `latest_ts` fields relied on by the ORB mission
+  inspector.
+
 As of `2026-04-15`, the highest-confidence surface newly touched in the current
 working tree is the governed operations/runtime extension for exact-action
 approval refresh on `git.push`, `codex.supervised_exec`, and approval-bound
@@ -573,6 +595,8 @@ Those validations specifically cover:
   linked operations
 - ORB mission loop cards exposing direct approval/task actions from the visible
   loop state itself
+- mission loop-stage receipt recency for the latest trace and continuity
+  movement directly inside the ORB mission inspector
 - chat UI production build integrity after adding the governed request composer
 - chat UI production build integrity after adding bounded mission advance and
   queue-run controls
@@ -599,6 +623,12 @@ Those validations specifically cover:
 - `/system/world_state` pending approvals now sharing the same artifact-backed
   request kind and exact-action summary contract as `/approvals/list` instead
   of regressing to a plugin-only payload reducer
+- `pytest tests/test_api_missions.py -q`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- missions/index.test.ts`
+  Result: `15 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Earlier validation evidence from `2026-04-14` remains relevant for the continuity
 bridge slice:

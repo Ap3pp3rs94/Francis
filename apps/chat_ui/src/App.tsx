@@ -4364,7 +4364,7 @@ function SystemPanel(props: {
                             ) : null}
                           </div>
                         ) : null}
-                        {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id || item.stage?.latest_event) ? (
+                        {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id || item.stage?.latest_event || item.stage?.latest_ts) ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                             {item.stage?.approval_id ? (
                               <>
@@ -4384,6 +4384,11 @@ function SystemPanel(props: {
                             {item.stage?.latest_event ? (
                               <>
                                 {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id) ? " / " : ""}latest <code>{item.stage.latest_event}</code>
+                              </>
+                            ) : null}
+                            {item.stage?.latest_ts ? (
+                              <>
+                                {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id || item.stage?.latest_event) ? " / " : ""}at <code>{toLocaleTime(item.stage.latest_ts)}</code>
                               </>
                             ) : null}
                           </div>
