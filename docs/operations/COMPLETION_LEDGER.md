@@ -886,6 +886,13 @@ Latest targeted validation for the `2026-04-19` observer receipt lineage slice:
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-19` observer audit-log surface slice:
+
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
 Those validations specifically cover:
 
 - continuity ledger route tail behavior
