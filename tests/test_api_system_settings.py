@@ -498,6 +498,8 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert scanned_body["receipt"]["decision"] == "urgent_review"
     assert scanned_body["receipt"]["actor"] == "test.system.observer"
     assert scanned_body["receipt"]["reason"] == "manual verification"
+    assert str(scanned_body["receipt"]["trace_id"]).startswith("trace_")
+    assert str(scanned_body["receipt"]["run_id"]).startswith("run_")
     assert scanned_body["receipt"]["incident_count"] >= 2
     assert scanned_body["receipt"]["anomaly"]["score"] >= 50
     assert scanned_body["receipt"]["anomaly"]["level"] == "error"
@@ -509,6 +511,8 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert "task_runtime" in scanned_body["receipt"]["probes"]
     assert scanned_body["recent_scans"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
     assert scanned_body["recent_scans"][0]["anomaly"]["level"] == "error"
+    assert scanned_body["recent_scans"][0]["trace_id"] == scanned_body["receipt"]["trace_id"]
+    assert scanned_body["recent_scans"][0]["run_id"] == scanned_body["receipt"]["run_id"]
     assert (
         next(item for item in scanned_body["recent_scans"][0]["probe_statuses"] if item["id"] == "task_runtime")[
             "incident_count"
@@ -523,6 +527,8 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert events_body["total"] == 1
     assert events_body["items"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
     assert events_body["items"][0]["decision"] == "urgent_review"
+    assert events_body["items"][0]["trace_id"] == scanned_body["receipt"]["trace_id"]
+    assert events_body["items"][0]["run_id"] == scanned_body["receipt"]["run_id"]
     assert events_body["items"][0]["anomaly"]["score"] >= 50
     assert (
         next(item for item in events_body["items"][0]["probe_statuses"] if item["id"] == "approval_queue")["status"]

@@ -875,6 +875,17 @@ Latest targeted validation for the `2026-04-19` observer receipt probe-status sl
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-19` observer receipt lineage slice:
+
+- `python -m ruff check src/francis/api/routes/system.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `passed`
+- `python -m pytest tests/test_api_system_settings.py tests/test_api_continuity.py -q`
+  Result: `24 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `15 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
 Those validations specifically cover:
 
 - continuity ledger route tail behavior

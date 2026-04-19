@@ -395,6 +395,8 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert observer_recent_scans[0]["receipt_id"] == receipt_id
     assert observer_recent_scans[0]["decision"] == "urgent_review"
     assert observer_recent_scans[0]["anomaly"]["level"] == "error"
+    assert observer_recent_scans[0]["trace_id"] == observer_scan_body["receipt"]["trace_id"]
+    assert observer_recent_scans[0]["run_id"] == observer_scan_body["receipt"]["run_id"]
     assert (
         next(item for item in observer_recent_scans[0]["probe_statuses"] if item["id"] == "task_runtime")["status"]
         == "attention"
