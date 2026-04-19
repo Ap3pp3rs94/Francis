@@ -470,6 +470,15 @@ export type ObserverScanReceiptSummary = {
   run_id?: string;
 };
 
+export type ObserverEventsSnapshot = {
+  ok: boolean;
+  subsystem?: string;
+  items: ObserverScanReceiptSummary[];
+  total?: number;
+  limit?: number;
+  error?: string;
+};
+
 export type ContinuityBriefingPayload = {
   headline?: string;
   counts?: Record<string, number>;
@@ -1679,6 +1688,34 @@ function parseContinuityLedgerSnapshot(raw: unknown): ContinuityLedgerSnapshot {
   return snapshot;
 }
 
+function parseObserverEventsSnapshot(raw: unknown): ObserverEventsSnapshot {
+  if (!isRecord(raw)) return { ok: false, items: [] };
+
+  const sourceItems = Array.isArray(raw["items"])
+    ? raw["items"]
+    : Array.isArray(raw["history"])
+      ? raw["history"]
+      : [];
+
+  const snapshot: ObserverEventsSnapshot = {
+    ok: safeBoolean(raw["ok"], false),
+    subsystem: safeString(raw["subsystem"], ""),
+    items: sourceItems
+      .map(parseObserverScanReceiptSummary)
+      .filter((item): item is ObserverScanReceiptSummary => item !== null),
+    total: safeNumber(raw["total"], 0),
+    limit: safeNumber(raw["limit"], 0),
+    error: safeString(raw["error"], ""),
+  };
+
+  if (!snapshot.subsystem) delete snapshot.subsystem;
+  if (!snapshot.total) delete snapshot.total;
+  if (!snapshot.limit) delete snapshot.limit;
+  if (!snapshot.error) delete snapshot.error;
+
+  return snapshot;
+}
+
 function parseContinuityOperatorSurface(raw: unknown): ContinuityOperatorSurface | undefined {
   if (!isRecord(raw)) return undefined;
 
@@ -1837,6 +1874,7 @@ export type SettingsEndpoints = {
   worldState: () => string[];
   continuityLedger: () => string[];
   continuityBriefing: () => string[];
+  observerEvents: () => string[];
   orbStatus: () => string[];
   operatorMode: () => string[];
   setOperatorMode: () => string[];
@@ -1860,6 +1898,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     worldState: () => ["/system/world_state", "/system/world-state"],
     continuityLedger: () => ["/continuity/ledger"],
     continuityBriefing: () => ["/continuity/briefing", "/continuity/shift_briefing", "/continuity/shift-briefing"],
+    observerEvents: () => ["/system/observer/events", "/system/observer/log", "/system/observer/audit"],
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
     setOperatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
@@ -1998,6 +2037,24 @@ export class SettingsClient {
   }): Promise<ContinuityBriefingSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.continuityBriefing(), this.init(opts));
     return parseContinuityBriefingSnapshot(json);
+  }
+
+  async getObserverEvents(opts?: {
+    limit?: number;
+    status?: string;
+    decision?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<ObserverEventsSnapshot> {
+    const safeLimit = Math.max(1, Math.min(Math.floor(opts?.limit ?? 20), 100));
+    const query = buildQuery({
+      limit: safeLimit,
+      status: safeString(opts?.status, "").trim() || undefined,
+      decision: safeString(opts?.decision, "").trim() || undefined,
+    });
+    const paths = this.endpoints.observerEvents().map((path) => `${path}${query}`);
+    const { json } = await this.fetchFirstOk(paths, this.init(opts));
+    return parseObserverEventsSnapshot(json);
   }
 
   async getOrbStatus(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<OrbStatusSnapshot> {

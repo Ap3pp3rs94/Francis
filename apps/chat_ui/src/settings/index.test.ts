@@ -319,6 +319,93 @@ test("SettingsClient.getContinuityLedger requests the continuity ledger tail wit
   }
 });
 
+test("SettingsClient.getObserverEvents uses bounded audit aliases and preserves receipt history", async () => {
+  const requests: Array<{
+    path: string;
+    limit: string | null;
+    status: string | null;
+    decision: string | null;
+  }> = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      limit: parsed.searchParams.get("limit"),
+      status: parsed.searchParams.get("status"),
+      decision: parsed.searchParams.get("decision"),
+    });
+
+    if (parsed.pathname === "/system/observer/events" || parsed.pathname === "/system/observer/log") {
+      return jsonResponse({ ok: false, error: "not_found" }, 404);
+    }
+
+    if (parsed.pathname === "/system/observer/audit") {
+      return jsonResponse({
+        ok: true,
+        subsystem: "observer_events",
+        items: [
+          {
+            receipt_id: "obs_scan_007",
+            event: "observer.scan",
+            status: "attention",
+            decision: "urgent_review",
+            headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
+            incident_count: 1,
+            probes: ["task_runtime"],
+            trace_id: "trace_observer_events",
+            run_id: "run_observer_events",
+          },
+        ],
+        total: 1,
+        limit: 6,
+      });
+    }
+
+    return jsonResponse({ ok: false, error: `unexpected path ${parsed.pathname}` }, 500);
+  });
+
+  try {
+    const client = new SettingsClient("http://127.0.0.1:8000");
+    const snapshot = await client.getObserverEvents({
+      limit: 6,
+      status: "attention",
+      decision: "urgent_review",
+      timeoutMs: 50,
+    });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/system/observer/events",
+        limit: "6",
+        status: "attention",
+        decision: "urgent_review",
+      },
+      {
+        path: "/system/observer/log",
+        limit: "6",
+        status: "attention",
+        decision: "urgent_review",
+      },
+      {
+        path: "/system/observer/audit",
+        limit: "6",
+        status: "attention",
+        decision: "urgent_review",
+      },
+    ]);
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.subsystem, "observer_events");
+    assert.equal(snapshot.total, 1);
+    assert.equal(snapshot.limit, 6);
+    assert.equal(snapshot.items[0]?.receipt_id, "obs_scan_007");
+    assert.equal(snapshot.items[0]?.decision, "urgent_review");
+    assert.equal(snapshot.items[0]?.trace_id, "trace_observer_events");
+    assert.equal(snapshot.items[0]?.run_id, "run_observer_events");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("SettingsClient uses compatibility aliases for operator-critical mutations", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {

@@ -15,6 +15,7 @@ import type {
   ContinuityLedgerEntry,
   ContinuityLedgerSnapshot,
   ObserverAnomalySummary,
+  ObserverEventsSnapshot,
   ObserverScanReceiptSummary,
   OperatorControlModeId,
   OperatorModeSnapshot,
@@ -267,6 +268,118 @@ function observerScanFocusSummary(scan: ObserverScanReceiptSummary | null | unde
 function observerAnomalyReasonSummary(anomaly: ObserverAnomalySummary | null | undefined): string {
   const reasons = Array.isArray(anomaly?.reasons) ? anomaly.reasons : [];
   return reasons.map((item) => safeString(item).trim()).filter(Boolean).slice(0, 3).join(" · ");
+}
+
+function renderObserverScanCard(scan: ObserverScanReceiptSummary, keyPrefix: string): React.ReactNode {
+  const observedAt = mixedLocaleTime(scan.generated_at ?? scan.ts);
+  const focusLines = observerScanFocusSummary(scan);
+  const anomalySummary = observerAnomalyReasonSummary(scan.anomaly);
+
+  return (
+    <div
+      key={`${keyPrefix}-${scan.receipt_id || scan.headline || observedAt}`}
+      style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
+    >
+      {scan.anomaly ? (
+        <div style={{ fontSize: 11, color: THEME.muted, marginBottom: 6 }}>
+          <span style={badgeStyle(safeString(scan.anomaly.level).trim() || "clear")}>
+            anomaly {safeNumber(scan.anomaly.score, 0)}/100
+          </span>
+          {anomalySummary ? <span style={{ marginLeft: 8 }}>{anomalySummary}</span> : null}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 11, fontWeight: 600 }}>{scan.headline || "Observer scan recorded"}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {scan.status ? <span style={badgeStyle(scan.status)}>{scan.status}</span> : null}
+          {scan.decision ? <span style={badgeStyle(scan.decision)}>{scan.decision}</span> : null}
+          {typeof scan.incident_count === "number" ? (
+            <span style={badgeStyle(scan.incident_count > 0 ? "warning" : "clear")}>incidents {scan.incident_count}</span>
+          ) : null}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+        receipt=<code>{scan.receipt_id || "unknown"}</code>
+        {observedAt ? (
+          <>
+            {" / "}at=<code>{observedAt}</code>
+          </>
+        ) : null}
+        {scan.trace_id ? (
+          <>
+            {" / "}trace=<code>{scan.trace_id}</code>
+          </>
+        ) : null}
+        {scan.run_id ? (
+          <>
+            {" / "}run=<code>{scan.run_id}</code>
+          </>
+        ) : null}
+        {scan.actor ? (
+          <>
+            {" / "}actor=<code>{scan.actor}</code>
+          </>
+        ) : null}
+        {scan.reason ? (
+          <>
+            {" / "}reason=<code>{scan.reason}</code>
+          </>
+        ) : null}
+      </div>
+      {scan.probe_statuses?.length ? (
+        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+          {scan.probe_statuses.map((probe) => (
+            <div
+              key={`${keyPrefix}:${scan.receipt_id || scan.headline || "observer-scan"}:${probe.id || probe.headline}`}
+              style={{
+                border: `1px solid ${THEME.panelBorder}`,
+                borderRadius: 8,
+                padding: 8,
+                background: "#121212",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 600 }}>{probe.headline || probe.id || "Observer probe"}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {probe.id ? <span style={badgeStyle(probe.id)}>{probe.id}</span> : null}
+                  {probe.status ? <span style={badgeStyle(probe.status)}>{probe.status}</span> : null}
+                  {probe.severity ? <span style={badgeStyle(probe.severity)}>{probe.severity}</span> : null}
+                  {typeof probe.incident_count === "number" ? (
+                    <span style={badgeStyle(probe.incident_count > 0 ? "warning" : "clear")}>
+                      incidents {probe.incident_count}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {probe.detail ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{probe.detail}</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {scan.probes?.length ? (
+        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+          probes <code>{scan.probes.join(", ")}</code>
+        </div>
+      ) : null}
+      {focusLines.length > 0 ? (
+        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+          {focusLines.map((line) => (
+            <div key={`${keyPrefix}:${scan.receipt_id || scan.headline}:${line}`} style={{ fontSize: 11, color: THEME.muted }}>
+              focus <code>{line}</code>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function executionBlockedReason(operatorMode: OperatorModeSnapshot | null, actionLabel: string): string {
@@ -2666,6 +2779,8 @@ function SystemPanel(props: {
   const [continuityLedgerError, setContinuityLedgerError] = useState<string | null>(null);
   const [continuityBriefing, setContinuityBriefing] = useState<ContinuityBriefingSnapshot | null>(null);
   const [continuityBriefingError, setContinuityBriefingError] = useState<string | null>(null);
+  const [observerEvents, setObserverEvents] = useState<ObserverEventsSnapshot | null>(null);
+  const [observerEventsError, setObserverEventsError] = useState<string | null>(null);
   const [orbStatus, setOrbStatus] = useState<OrbStatusSnapshot | null>(null);
   const [orbStatusError, setOrbStatusError] = useState<string | null>(null);
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
@@ -2744,13 +2859,23 @@ function SystemPanel(props: {
     setRefreshNotice(null);
     setError(null);
     try {
-      const [nextInfo, nextHealth, nextWorldState, nextContinuityLedger, nextContinuityBriefing, nextOrbStatus, nextOperations] =
+      const [
+        nextInfo,
+        nextHealth,
+        nextWorldState,
+        nextContinuityLedger,
+        nextContinuityBriefing,
+        nextObserverEvents,
+        nextOrbStatus,
+        nextOperations,
+      ] =
         await Promise.allSettled([
         client.getSystemInfo(),
         client.getHealth(),
         client.getWorldState(),
         client.getContinuityLedger({ limit: 8 }),
         client.getContinuityBriefing(),
+        client.getObserverEvents({ limit: 8 }),
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
       ]);
@@ -2795,6 +2920,14 @@ function SystemPanel(props: {
       } else {
         setContinuityBriefingError(settingsError(nextContinuityBriefing.reason, "Continuity briefing request failed."));
         degradedFeeds.push("continuity briefing");
+      }
+
+      if (nextObserverEvents.status === "fulfilled") {
+        setObserverEvents(nextObserverEvents.value);
+        setObserverEventsError(null);
+      } else {
+        setObserverEventsError(settingsError(nextObserverEvents.reason, "Observer audit request failed."));
+        degradedFeeds.push("observer audit");
       }
 
       if (nextOrbStatus.status === "fulfilled") {
@@ -2977,6 +3110,9 @@ function SystemPanel(props: {
   const continuityLedgerEntries = [...(continuityLedger?.entries ?? [])].slice(-6).reverse();
   const continuityLedgerCount = continuityLedger?.entries?.length ?? 0;
   const continuityLedgerRouteError = safeString(continuityLedger?.error).trim();
+  const observerEventEntries = observerEvents?.items ?? [];
+  const observerEventCount = observerEvents?.total ?? observerEventEntries.length;
+  const observerEventsRouteError = safeString(observerEvents?.error).trim();
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const recentTasks = overview?.recent_tasks ?? [];
@@ -4039,121 +4175,7 @@ function SystemPanel(props: {
                 {shiftBriefingObserverRecentScans.length === 0 ? (
                   <div style={{ fontSize: 11, color: THEME.muted }}>No explicit observer scan receipts are embedded in this snapshot yet.</div>
                 ) : (
-                  shiftBriefingObserverRecentScans.slice(0, 2).map((scan) => {
-                    const observedAt = mixedLocaleTime(scan.generated_at ?? scan.ts);
-                    const focusLines = observerScanFocusSummary(scan);
-                    return (
-                      <div
-                        key={`observer-scan-${scan.receipt_id || scan.headline || observedAt}`}
-                      style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
-                    >
-                      {scan.anomaly ? (
-                        <div style={{ fontSize: 11, color: THEME.muted, marginBottom: 6 }}>
-                          <span style={badgeStyle(safeString(scan.anomaly.level).trim() || "clear")}>
-                            anomaly {safeNumber(scan.anomaly.score, 0)}/100
-                          </span>
-                          {observerAnomalyReasonSummary(scan.anomaly) ? (
-                            <span style={{ marginLeft: 8 }}>{observerAnomalyReasonSummary(scan.anomaly)}</span>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 11, fontWeight: 600 }}>{scan.headline || "Observer scan recorded"}</div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {scan.status ? <span style={badgeStyle(scan.status)}>{scan.status}</span> : null}
-                          {scan.decision ? <span style={badgeStyle(scan.decision)}>{scan.decision}</span> : null}
-                            {typeof scan.incident_count === "number" ? (
-                              <span style={badgeStyle(scan.incident_count > 0 ? "warning" : "clear")}>
-                                incidents {scan.incident_count}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
-                          receipt=<code>{scan.receipt_id || "unknown"}</code>
-                          {observedAt ? (
-                            <>
-                              {" / "}at=<code>{observedAt}</code>
-                            </>
-                          ) : null}
-                          {scan.trace_id ? (
-                            <>
-                              {" / "}trace=<code>{scan.trace_id}</code>
-                            </>
-                          ) : null}
-                          {scan.run_id ? (
-                            <>
-                              {" / "}run=<code>{scan.run_id}</code>
-                            </>
-                          ) : null}
-                          {scan.actor ? (
-                            <>
-                              {" / "}actor=<code>{scan.actor}</code>
-                            </>
-                          ) : null}
-                          {scan.reason ? (
-                            <>
-                              {" / "}reason=<code>{scan.reason}</code>
-                            </>
-                          ) : null}
-                        </div>
-                        {scan.probe_statuses?.length ? (
-                          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
-                            {scan.probe_statuses.map((probe) => (
-                              <div
-                                key={`${scan.receipt_id || scan.headline || "observer-scan"}:${probe.id || probe.headline}`}
-                                style={{
-                                  border: `1px solid ${THEME.panelBorder}`,
-                                  borderRadius: 8,
-                                  padding: 8,
-                                  background: "#121212",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: 8,
-                                    flexWrap: "wrap",
-                                  }}
-                                >
-                                  <div style={{ fontSize: 11, fontWeight: 600 }}>{probe.headline || probe.id || "Observer probe"}</div>
-                                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                    {probe.id ? <span style={badgeStyle(probe.id)}>{probe.id}</span> : null}
-                                    {probe.status ? <span style={badgeStyle(probe.status)}>{probe.status}</span> : null}
-                                    {probe.severity ? <span style={badgeStyle(probe.severity)}>{probe.severity}</span> : null}
-                                    {typeof probe.incident_count === "number" ? (
-                                      <span style={badgeStyle(probe.incident_count > 0 ? "warning" : "clear")}>
-                                        incidents {probe.incident_count}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                                {probe.detail ? (
-                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{probe.detail}</div>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                        {scan.probes?.length ? (
-                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                            probes <code>{scan.probes.join(", ")}</code>
-                          </div>
-                        ) : null}
-                        {focusLines.length > 0 ? (
-                          <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
-                            {focusLines.map((line) => (
-                              <div key={`${scan.receipt_id || scan.headline}:${line}`} style={{ fontSize: 11, color: THEME.muted }}>
-                                focus <code>{line}</code>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })
+                  shiftBriefingObserverRecentScans.slice(0, 2).map((scan) => renderObserverScanCard(scan, "observer-scan"))
                 )}
               </div>
             </div>
@@ -4365,6 +4387,45 @@ function SystemPanel(props: {
                 </div>
               );
             })
+          )}
+        </div>
+      </div>
+
+      <div id="francis-observer-audit" style={{ ...summaryCardStyle(), marginTop: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Observer Receipt Audit</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              Read-only bounded audit history from the explicit observer scan route. This extends the decisions log beyond the embedded shift briefing snapshot.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={badgeStyle(observerEventCount > 0 ? "live" : "clear")}>entries {observerEventCount}</span>
+            {observerEventEntries[0]?.ts ? (
+              <span style={{ fontSize: 11, color: THEME.muted }}>Latest {toLocaleTime(observerEventEntries[0].ts)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {observerEventsError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Observer audit feed unavailable: {observerEventsError}
+          </div>
+        ) : null}
+
+        {observerEventsRouteError && !observerEventsError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+            Observer audit route reported: {observerEventsRouteError}
+          </div>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {observerEventEntries.length === 0 ? (
+            <div style={{ fontSize: 12, color: THEME.muted }}>
+              No explicit observer audit receipts are recorded yet. Trigger a governed observer scan to append a new receipt.
+            </div>
+          ) : (
+            observerEventEntries.slice(0, 6).map((scan) => renderObserverScanCard(scan, "observer-audit"))
           )}
         </div>
       </div>
