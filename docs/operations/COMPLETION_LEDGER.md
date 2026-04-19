@@ -840,6 +840,17 @@ Latest targeted validation for the `2026-04-19` observer anomaly scoring slice:
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-19` observer truth-state link into ORB presence slice:
+
+- `python -m pytest tests/test_api_system_settings.py tests/unit/test_kernel_contracts.py -q`
+  Result: `26 passed`
+- `python -m ruff check src/francis/world_state/orb.py tests/test_api_system_settings.py tests/unit/test_kernel_contracts.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm test`
+  Result: `15 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
 Those validations specifically cover:
 
 - continuity ledger route tail behavior

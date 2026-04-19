@@ -74,18 +74,14 @@ def test_world_state_snapshot_reports_repo_and_data(monkeypatch, tmp_path: Path)
     task_dir.mkdir(parents=True, exist_ok=True)
     second_task_dir.mkdir(parents=True, exist_ok=True)
     (data_root / "logs").mkdir(parents=True, exist_ok=True)
-    (
-        data_root / "approvals" / "pending" / "a.json"
-    ).write_text('{"id":"a","action":"plugin.run","reason":"test","status":"pending","ts":1}', encoding="utf-8")
-    (
-        task_dir / "record.json"
-    ).write_text(
+    (data_root / "approvals" / "pending" / "a.json").write_text(
+        '{"id":"a","action":"plugin.run","reason":"test","status":"pending","ts":1}', encoding="utf-8"
+    )
+    (task_dir / "record.json").write_text(
         '{"task_id":"tsk_example","status":"pending","capability":"plugin.run","objective":"First","created_at":"2026-04-11T10:00:00+00:00","updated_at":"2026-04-11T10:00:00+00:00"}',
         encoding="utf-8",
     )
-    (
-        second_task_dir / "record.json"
-    ).write_text(
+    (second_task_dir / "record.json").write_text(
         '{"task_id":"tsk_running","status":"running","capability":"codex.supervised_exec","objective":"Second","created_at":"2026-04-11T11:00:00+00:00","updated_at":"2026-04-11T12:00:00+00:00","assigned_to":"worker-1"}',
         encoding="utf-8",
     )
@@ -118,9 +114,7 @@ def test_world_state_snapshot_derives_governance_backlog_states(monkeypatch, tmp
     blocked_task_dir.mkdir(parents=True, exist_ok=True)
     approval_task_dir.mkdir(parents=True, exist_ok=True)
 
-    (
-        blocked_task_dir / "record.json"
-    ).write_text(
+    (blocked_task_dir / "record.json").write_text(
         """
 {
   "task_id": "tsk_blocked",
@@ -139,9 +133,7 @@ def test_world_state_snapshot_derives_governance_backlog_states(monkeypatch, tmp
 """.strip(),
         encoding="utf-8",
     )
-    (
-        approval_task_dir / "record.json"
-    ).write_text(
+    (approval_task_dir / "record.json").write_text(
         """
 {
   "task_id": "tsk_approval",
@@ -245,9 +237,7 @@ controls:
     assert state["transitions"]["forbidden"][0]["reason"] == "direct shortcut forbidden"
 
 
-def test_orb_snapshot_handback_preserves_exact_mission_approval_handoff(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_orb_snapshot_handback_preserves_exact_mission_approval_handoff(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     meta_root = repo_root / "meta"
     data_root = repo_root / "data"
@@ -352,10 +342,45 @@ controls:
             },
         },
     )
+    monkeypatch.setattr(
+        orb_module,
+        "observer_incident_snapshot",
+        lambda: {
+            "incidents": [
+                {
+                    "id": "governance.blocked_tasks",
+                    "severity": "error",
+                    "title": "Tasks are blocked by governance",
+                    "category": "governance",
+                    "probe": "task_runtime",
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        orb_module,
+        "observer_summary",
+        lambda snapshot: {
+            "headline": "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
+            "decision": "urgent_review",
+            "counts": {"active": 1, "critical": 0, "error": 1, "warning": 0, "info": 0},
+            "focus": [{"id": "governance.blocked_tasks", "title": "Tasks are blocked by governance"}],
+            "incident_ids": ["governance.blocked_tasks"],
+            "probes": ["task_runtime"],
+            "anomaly": {
+                "score": 50,
+                "level": "error",
+                "reasons": ["error incidents: 1", "active probes: task_runtime"],
+            },
+        },
+    )
 
     state = orb_module.snapshot()
 
     assert state["state"]["render_state"] == "handback"
+    assert state["state"]["incident_pressure"]["source"] == "observer"
+    assert state["state"]["incident_pressure"]["observer"]["score"] == 50
+    assert state["state"]["interjection_state"]["reason"].startswith("Approval apr_exact_321")
     assert state["state"]["handback_state"]["state"] == "operator_action_required"
     focus_item = state["state"]["handback_state"]["focus"]
     assert focus_item["id"] == "msn_approval_focus"
