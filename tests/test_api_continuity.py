@@ -129,7 +129,16 @@ controls:
 
 
 def _write_repo_scaffold(repo_root: Path) -> None:
+    (repo_root / "data").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "francis").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "api").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "daemon").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "workers").mkdir(parents=True, exist_ok=True)
+    (repo_root / "apps" / "chat_ui").mkdir(parents=True, exist_ok=True)
+    (repo_root / "plugins").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "api" / "app.py").write_text("", encoding="utf-8")
+    (repo_root / "src" / "francis" / "daemon" / "runner.py").write_text("", encoding="utf-8")
+    (repo_root / "src" / "francis" / "workers" / "runner.py").write_text("", encoding="utf-8")
     (repo_root / "pyproject.toml").write_text("[project]\nname='francis-test'\nversion='0.0.0'\n", encoding="utf-8")
     _write_dev_environment(repo_root)
     _write_orb_meta(repo_root)
@@ -159,6 +168,9 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["subsystem"] == "continuity_briefing"
     assert body["briefing"]["headline"] == "No mission backlog is currently active."
     assert body["briefing"]["focus"] == []
+    assert body["briefing"]["observer"]["headline"] == "Observer reports no active incidents."
+    assert body["briefing"]["observer"]["counts"]["active"] == 0
+    assert body["briefing"]["observer"]["focus"] == []
     assert body["recent_missions"] == []
     assert body["operator"]["available"] is True
     assert body["operator"]["control_mode"]["id"] == "assist"
@@ -219,7 +231,9 @@ def test_continuity_ledger_tail_returns_recent_entries(monkeypatch, tmp_path: Pa
     from francis.api.app import create_app
     from francis.chat.continuity.ledger import append
 
-    append("user", "Carry forward the 8 AM continuity pass.", {"session_id": "chat_alpha", "mission_id": "mission_alpha"})
+    append(
+        "user", "Carry forward the 8 AM continuity pass.", {"session_id": "chat_alpha", "mission_id": "mission_alpha"}
+    )
     append("system", "daemon started", {"subsystem": "daemon", "profile": "dev", "run_mode": "api"})
 
     client = TestClient(create_app())
@@ -344,6 +358,14 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["focus"][0]["recommended_action"] == "raise_trust_or_reduce_risk"
     assert body["briefing"]["focus"][0]["latest_activity"]["name"] == "governance_hold"
     assert body["briefing"]["focus"][0]["latest_activity"]["status"] == "blocked"
+    assert body["briefing"]["observer"]["counts"]["active"] >= 1
+    observer_focus = body["briefing"]["observer"]["focus"]
+    assert observer_focus
+    blocked_incident = next(item for item in observer_focus if item["id"] == "governance.blocked_tasks")
+    assert blocked_incident["probe"] == "task_runtime"
+    assert blocked_incident["task_id"] == blocked_operation_id
+    assert blocked_incident["evidence"][0]["kind"] == "task"
+    assert blocked_incident["evidence"][0]["id"] == blocked_operation_id
     assert body["mission_status_counts"]["completed"] == 1
     assert body["recent_missions"][0]["id"] in {blocked_id, completed_id}
     assert body["operator"]["available"] is True
