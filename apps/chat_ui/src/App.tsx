@@ -4076,6 +4076,16 @@ function SystemPanel(props: {
                               {" / "}at=<code>{observedAt}</code>
                             </>
                           ) : null}
+                          {scan.trace_id ? (
+                            <>
+                              {" / "}trace=<code>{scan.trace_id}</code>
+                            </>
+                          ) : null}
+                          {scan.run_id ? (
+                            <>
+                              {" / "}run=<code>{scan.run_id}</code>
+                            </>
+                          ) : null}
                           {scan.actor ? (
                             <>
                               {" / "}actor=<code>{scan.actor}</code>

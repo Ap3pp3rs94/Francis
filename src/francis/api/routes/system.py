@@ -22,6 +22,7 @@ from francis.kernel.services import services_action, services_status
 from francis.kernel.stack import stack_status
 from francis.settings import Settings
 from francis.telemetry.audit import record
+from francis.telemetry.tracing import start_span
 from francis.world_state.operator_mode import set_control_mode, snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
 from francis.world_state.snapshot import (
@@ -462,27 +463,28 @@ def observer_events(
 def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10) -> dict[str, object]:
     try:
         body = payload or ObserverScanIn()
-        snapshot = observer_incident_snapshot()
-        summary = observer_summary(snapshot)
-        receipt = record(
-            "observer.scan",
-            status="ok" if int(summary["counts"].get("active") or 0) <= 0 else "attention",
-            subsystem="observer",
-            receipt_id=_observer_receipt_id(),
-            generated_at=float(snapshot.get("generated_at") or 0.0),
-            decision=summary["decision"],
-            headline=summary["headline"],
-            incident_count=int(summary["counts"].get("active") or 0),
-            counts=summary["counts"],
-            incident_ids=summary["incident_ids"],
-            probes=summary["probes"],
-            focus=summary["focus"],
-            probe_statuses=summary["probe_statuses"],
-            anomaly=summary["anomaly"],
-            actor=body.actor or "operator",
-            reason=body.reason or "manual_scan",
-            meta=body.meta,
-        )
+        with start_span("observer.scan"):
+            snapshot = observer_incident_snapshot()
+            summary = observer_summary(snapshot)
+            receipt = record(
+                "observer.scan",
+                status="ok" if int(summary["counts"].get("active") or 0) <= 0 else "attention",
+                subsystem="observer",
+                receipt_id=_observer_receipt_id(),
+                generated_at=float(snapshot.get("generated_at") or 0.0),
+                decision=summary["decision"],
+                headline=summary["headline"],
+                incident_count=int(summary["counts"].get("active") or 0),
+                counts=summary["counts"],
+                incident_ids=summary["incident_ids"],
+                probes=summary["probes"],
+                focus=summary["focus"],
+                probe_statuses=summary["probe_statuses"],
+                anomaly=summary["anomaly"],
+                actor=body.actor or "operator",
+                reason=body.reason or "manual_scan",
+                meta=body.meta,
+            )
         response = _observer_state_payload(recent_limit=recent_limit)
         response["receipt"] = observer_scan_event_projection(receipt)
         return response
