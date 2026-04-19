@@ -170,6 +170,8 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["briefing"]["focus"] == []
     assert body["briefing"]["observer"]["headline"] == "Observer reports no active incidents."
     assert body["briefing"]["observer"]["counts"]["active"] == 0
+    assert body["briefing"]["observer"]["anomaly"]["score"] == 0
+    assert body["briefing"]["observer"]["anomaly"]["level"] == "clear"
     assert body["briefing"]["observer"]["focus"] == []
     assert body["recent_missions"] == []
     assert body["operator"]["available"] is True
@@ -369,6 +371,8 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["focus"][0]["latest_activity"]["name"] == "governance_hold"
     assert body["briefing"]["focus"][0]["latest_activity"]["status"] == "blocked"
     assert body["briefing"]["observer"]["counts"]["active"] >= 1
+    assert body["briefing"]["observer"]["anomaly"]["score"] >= 50
+    assert body["briefing"]["observer"]["anomaly"]["level"] == "error"
     observer_focus = body["briefing"]["observer"]["focus"]
     assert observer_focus
     blocked_incident = next(item for item in observer_focus if item["id"] == "governance.blocked_tasks")
@@ -380,6 +384,7 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert observer_recent_scans
     assert observer_recent_scans[0]["receipt_id"] == receipt_id
     assert observer_recent_scans[0]["decision"] == "urgent_review"
+    assert observer_recent_scans[0]["anomaly"]["level"] == "error"
     assert "task_runtime" in observer_recent_scans[0]["probes"]
     assert body["mission_status_counts"]["completed"] == 1
     assert body["recent_missions"][0]["id"] in {blocked_id, completed_id}

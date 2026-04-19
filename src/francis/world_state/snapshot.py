@@ -20,6 +20,7 @@ from francis.trust.levels import get_state
 _TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 _TERMINAL_MISSION_STATUSES = {"completed", "failed", "deadlettered", "cancelled"}
 _INCIDENT_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
+_OBSERVER_ANOMALY_WEIGHTS = {"critical": 80, "error": 50, "warning": 20, "info": 5}
 
 
 def _count_json_entries(path: Path) -> int:
@@ -87,6 +88,111 @@ def _safe_str(value: Any) -> str:
         return ""
 
 
+def _observer_anomaly_projection(raw: Any) -> dict[str, Any]:
+    payload = raw if isinstance(raw, dict) else {}
+    level = _safe_str(payload.get("level")).strip().lower()
+    reasons = [_safe_str(item).strip() for item in payload.get("reasons", []) if _safe_str(item).strip()]
+    score = int(payload.get("score") or 0)
+
+    projected: dict[str, Any] = {"score": max(0, min(score, 100))}
+    if level:
+        projected["level"] = level
+    if reasons:
+        projected["reasons"] = reasons
+    return projected
+
+
+def observer_incident_counts(incidents: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"active": len(incidents), "critical": 0, "error": 0, "warning": 0, "info": 0}
+    for item in incidents:
+        severity = _safe_str(item.get("severity")).strip().lower()
+        if severity in counts:
+            counts[severity] += 1
+    return counts
+
+
+def observer_anomaly_summary(incidents: list[dict[str, Any]]) -> dict[str, Any]:
+    counts = observer_incident_counts(incidents)
+    if int(counts.get("active") or 0) <= 0:
+        return {"score": 0, "level": "clear", "reasons": []}
+
+    weighted_score = sum(
+        int(counts.get(severity) or 0) * weight for severity, weight in _OBSERVER_ANOMALY_WEIGHTS.items()
+    )
+    weighted_score += max(0, int(counts.get("active") or 0) - 1) * 5
+    score = max(0, min(weighted_score, 100))
+
+    if score >= 80:
+        level = "critical"
+    elif score >= 50:
+        level = "error"
+    elif score >= 20:
+        level = "warning"
+    else:
+        level = "info"
+
+    reasons: list[str] = []
+    for severity in ("critical", "error", "warning", "info"):
+        count = int(counts.get(severity) or 0)
+        if count > 0:
+            reasons.append(f"{severity} incidents: {count}")
+
+    probes = sorted(
+        {_safe_str(item.get("probe")).strip() for item in incidents if _safe_str(item.get("probe")).strip()}
+    )
+    if probes:
+        reasons.append(f"active probes: {', '.join(probes[:3])}")
+
+    lead = incidents[0] if incidents else {}
+    lead_title = _safe_str(lead.get("title")).strip() or _safe_str(lead.get("id")).strip()
+    if lead_title:
+        reasons.append(f"lead issue: {lead_title}")
+
+    return {"score": score, "level": level, "reasons": reasons[:4]}
+
+
+def observer_focus(incidents: list[dict[str, Any]], *, limit: int = 3) -> list[dict[str, Any]]:
+    return [dict(item) for item in incidents[: max(0, int(limit))] if isinstance(item, dict)]
+
+
+def observer_decision(counts: dict[str, int]) -> str:
+    if int(counts.get("active") or 0) <= 0:
+        return "stable"
+    if int(counts.get("critical") or 0) > 0 or int(counts.get("error") or 0) > 0:
+        return "urgent_review"
+    return "review"
+
+
+def observer_headline(incidents: list[dict[str, Any]], counts: dict[str, int]) -> str:
+    active = int(counts.get("active") or 0)
+    if active <= 0:
+        return "Observer reports no active incidents."
+    focus = incidents[0] if incidents else {}
+    focus_title = _safe_str(focus.get("title")).strip() or "Observer findings need review"
+    return f"Observer flagged {active} active incident(s); highest-priority issue: {focus_title}."
+
+
+def observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict[str, Any]:
+    incidents = snapshot.get("incidents") if isinstance(snapshot.get("incidents"), list) else []
+    normalized_incidents = [dict(item) for item in incidents if isinstance(item, dict)]
+    counts = observer_incident_counts(normalized_incidents)
+    focus = observer_focus(normalized_incidents, limit=focus_limit)
+    probes = sorted(
+        {_safe_str(item.get("probe")).strip() for item in normalized_incidents if _safe_str(item.get("probe")).strip()}
+    )
+    return {
+        "headline": observer_headline(normalized_incidents, counts),
+        "decision": observer_decision(counts),
+        "counts": counts,
+        "focus": focus,
+        "incident_ids": [
+            str(item.get("id") or "").strip() for item in normalized_incidents if str(item.get("id") or "").strip()
+        ],
+        "probes": probes,
+        "anomaly": observer_anomaly_summary(normalized_incidents),
+    }
+
+
 def observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
     counts = item.get("counts") if isinstance(item.get("counts"), dict) else {}
     focus = [dict(entry) for entry in item.get("focus", []) if isinstance(entry, dict)]
@@ -102,6 +208,7 @@ def observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
         "incident_ids": [str(value).strip() for value in item.get("incident_ids", []) if str(value).strip()],
         "probes": [str(value).strip() for value in item.get("probes", []) if str(value).strip()],
         "focus": focus,
+        "anomaly": _observer_anomaly_projection(item.get("anomaly")),
         "generated_at": float(item.get("generated_at") or 0.0),
         "reason": _safe_str(item.get("reason")).strip(),
         "actor": _safe_str(item.get("actor")).strip(),

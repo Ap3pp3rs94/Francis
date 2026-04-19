@@ -469,6 +469,9 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert initial_body["subsystem"] == "observer"
     assert initial_body["decision"] == "urgent_review"
     assert initial_body["counts"]["active"] >= 2
+    assert initial_body["anomaly"]["score"] >= 50
+    assert initial_body["anomaly"]["level"] == "error"
+    assert "task_runtime" in " ".join(initial_body["anomaly"]["reasons"])
     assert initial_body["recent_scans"] == []
     incident_ids = {item["id"] for item in initial_body["incidents"]}
     assert "governance.pending_approvals" in incident_ids
@@ -491,9 +494,12 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert scanned_body["receipt"]["actor"] == "test.system.observer"
     assert scanned_body["receipt"]["reason"] == "manual verification"
     assert scanned_body["receipt"]["incident_count"] >= 2
+    assert scanned_body["receipt"]["anomaly"]["score"] >= 50
+    assert scanned_body["receipt"]["anomaly"]["level"] == "error"
     assert "governance.blocked_tasks" in scanned_body["receipt"]["incident_ids"]
     assert "task_runtime" in scanned_body["receipt"]["probes"]
     assert scanned_body["recent_scans"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
+    assert scanned_body["recent_scans"][0]["anomaly"]["level"] == "error"
 
     events = client.get("/system/observer/events")
     assert events.status_code == 200
@@ -502,6 +508,7 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert events_body["total"] == 1
     assert events_body["items"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
     assert events_body["items"][0]["decision"] == "urgent_review"
+    assert events_body["items"][0]["anomaly"]["score"] >= 50
 
     filtered = client.get("/system/observer/audit?decision=urgent_review")
     assert filtered.status_code == 200
