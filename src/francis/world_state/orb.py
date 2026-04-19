@@ -8,6 +8,7 @@ import yaml
 
 from francis.kernel.paths import repo_root
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
+from francis.world_state.snapshot import observer_incident_snapshot, observer_summary
 
 
 _CORE_LOOP_IDS = (
@@ -27,6 +28,7 @@ _PREFERRED_GATES = (
     "audit_log",
     "sandbox_execute",
 )
+_PRESSURE_LEVEL_RANK = {"clear": 0, "info": 1, "warning": 2, "error": 3, "critical": 4}
 
 
 def _safe_str(value: Any) -> str:
@@ -156,7 +158,40 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _incident_pressure(backlog: dict[str, Any]) -> dict[str, Any]:
+def _pressure_rank(level: Any) -> int:
+    return _PRESSURE_LEVEL_RANK.get(_safe_str(level).strip().lower(), 0)
+
+
+def _presence_actionable_incident(item: dict[str, Any]) -> bool:
+    category = _safe_str(item.get("category")).strip().lower()
+    probe = _safe_str(item.get("probe")).strip().lower()
+    return category == "governance" or probe == "task_runtime"
+
+
+def _observer_presence() -> tuple[dict[str, Any], dict[str, Any]]:
+    try:
+        snapshot = observer_incident_snapshot()
+        incidents = _as_list(snapshot.get("incidents"))
+        actionable_snapshot = {
+            "incidents": [
+                dict(item) for item in incidents if isinstance(item, dict) and _presence_actionable_incident(item)
+            ]
+        }
+        return observer_summary(snapshot), observer_summary(actionable_snapshot)
+    except Exception:
+        empty = {
+            "headline": "",
+            "decision": "",
+            "counts": {"active": 0, "critical": 0, "error": 0, "warning": 0, "info": 0},
+            "focus": [],
+            "incident_ids": [],
+            "probes": [],
+            "anomaly": {"score": 0, "level": "clear", "reasons": []},
+        }
+        return empty, empty
+
+
+def _incident_pressure(backlog: dict[str, Any], observer: dict[str, Any]) -> dict[str, Any]:
     pending_approvals = _safe_int(backlog.get("pending_approvals"))
     approval_pending_tasks = _safe_int(backlog.get("approval_pending_tasks"))
     blocked_tasks = _safe_int(backlog.get("blocked_tasks"))
@@ -170,14 +205,56 @@ def _incident_pressure(backlog: dict[str, Any]) -> dict[str, Any]:
     else:
         level = "info"
 
-    return {
+    pressure = {
         "level": level,
+        "source": "backlog",
         "pending_approvals": pending_approvals,
         "approval_pending_tasks": approval_pending_tasks,
         "blocked_tasks": blocked_tasks,
         "blocked_missions": blocked_missions,
         "deadlettered_missions": deadlettered_missions,
     }
+
+    observer_counts = _as_dict(observer.get("counts"))
+    observer_anomaly = _as_dict(observer.get("anomaly"))
+    observer_focus = _as_list(observer.get("focus"))
+    observer_level = _safe_str(observer_anomaly.get("level")).strip().lower()
+    observer_score = _safe_int(observer_anomaly.get("score"))
+    observer_active = _safe_int(observer_counts.get("active"))
+    observer_headline = _safe_str(observer.get("headline")).strip()
+    observer_decision = _safe_str(observer.get("decision")).strip()
+    observer_reasons = [
+        _safe_str(item).strip() for item in observer_anomaly.get("reasons", []) if _safe_str(item).strip()
+    ]
+    observer_focus_item = dict(observer_focus[0]) if observer_focus and isinstance(observer_focus[0], dict) else {}
+    observer_focus_title = (
+        _safe_str(observer_focus_item.get("title")).strip() or _safe_str(observer_focus_item.get("id")).strip()
+    )
+
+    if observer_headline or observer_score > 0 or observer_active > 0:
+        pressure["observer"] = {
+            "level": observer_level or "clear",
+            "score": observer_score,
+            "active": observer_active,
+            "decision": observer_decision,
+            "headline": observer_headline,
+            "reasons": observer_reasons,
+            "focus_title": observer_focus_title,
+        }
+
+    if _pressure_rank(observer_level) >= _pressure_rank(level) and (observer_score > 0 or observer_active > 0):
+        pressure["level"] = observer_level or pressure["level"]
+        pressure["source"] = "observer"
+        if observer_headline:
+            pressure["headline"] = observer_headline
+        if observer_reasons:
+            pressure["reasons"] = observer_reasons
+        if observer_decision:
+            pressure["decision"] = observer_decision
+        if observer_focus_title:
+            pressure["focus_title"] = observer_focus_title
+
+    return pressure
 
 
 def _activity_intensity(backlog: dict[str, Any]) -> dict[str, Any]:
@@ -214,10 +291,16 @@ def _activity_intensity(backlog: dict[str, Any]) -> dict[str, Any]:
 
 def _interjection_state(incident_pressure: dict[str, Any], focus: dict[str, Any]) -> dict[str, Any]:
     level = _safe_str(incident_pressure.get("level")).strip().lower()
-    if level in {"warning", "error"}:
+    if level in {"warning", "error", "critical"}:
+        observer = _as_dict(incident_pressure.get("observer"))
+        reason = (
+            _safe_str(focus.get("reason")).strip()
+            or _safe_str(incident_pressure.get("headline")).strip()
+            or _safe_str(observer.get("headline")).strip()
+        )
         return {
             "state": "attention_required",
-            "reason": _safe_str(focus.get("reason")).strip(),
+            "reason": reason,
         }
     return {
         "state": "ambient",
@@ -258,7 +341,7 @@ def _render_state(
         return "active_execution"
     if _safe_str(handback_state.get("state")).strip().lower() != "none":
         return "handback"
-    if _safe_str(incident_pressure.get("level")).strip().lower() in {"warning", "error"}:
+    if _safe_str(incident_pressure.get("level")).strip().lower() in {"warning", "error", "critical"}:
         return "handback"
     return "ambient_rest"
 
@@ -268,8 +351,9 @@ def _orb_live_state(operator_report: dict[str, Any]) -> dict[str, Any]:
     focus = _as_dict(operator_report.get("focus"))
     backlog = _as_dict(operator_report.get("backlog"))
     continuity = _as_dict(operator_report.get("continuity"))
+    observer, actionable_observer = _observer_presence()
 
-    incident_pressure = _incident_pressure(backlog)
+    incident_pressure = _incident_pressure(backlog, actionable_observer)
     activity_intensity = _activity_intensity(backlog)
     handback_state = _handback_state(continuity)
 
@@ -287,6 +371,7 @@ def _orb_live_state(operator_report: dict[str, Any]) -> dict[str, Any]:
             "label": _safe_str(focus.get("label")).strip(),
             "reason": _safe_str(focus.get("reason")).strip(),
         },
+        "observer": observer,
         "interjection_state": _interjection_state(incident_pressure, focus),
         "handback_state": handback_state,
         "render_state": _render_state(incident_pressure, activity_intensity, handback_state),

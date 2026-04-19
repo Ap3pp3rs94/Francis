@@ -1107,6 +1107,7 @@ controls:
     assert body["state"]["mode"]["id"] == "assist"
     assert body["state"]["execution_focus"]["plane_id"] == "P1_INTERFACE"
     assert body["state"]["render_state"] == "ambient_rest"
+    assert body["state"]["incident_pressure"]["source"] == "backlog"
     assert body["state"]["handback_state"]["state"] == "none"
 
 
@@ -1319,9 +1320,15 @@ controls:
     assert body["ok"] is True
     assert body["state"]["mode"]["id"] == "assist"
     assert body["state"]["incident_pressure"]["level"] == "error"
+    assert body["state"]["incident_pressure"]["source"] == "observer"
+    assert body["state"]["incident_pressure"]["observer"]["score"] >= 50
+    assert body["state"]["incident_pressure"]["observer"]["active"] >= 1
+    assert "tasks are blocked by governance" in body["state"]["incident_pressure"]["observer"]["headline"].lower()
+    assert "observer flagged" in body["state"]["incident_pressure"]["headline"].lower()
     assert body["state"]["activity_intensity"]["level"] == "handoff"
     assert body["state"]["execution_focus"]["plane_id"] == "P3_GOVERNANCE"
     assert body["state"]["interjection_state"]["state"] == "attention_required"
+    assert "blocked by policy or trust gates" in body["state"]["interjection_state"]["reason"].lower()
     assert body["state"]["render_state"] == "handback"
     assert body["state"]["handback_state"]["state"] == "operator_action_required"
     assert body["state"]["handback_state"]["focus"]["id"] == blocked_id

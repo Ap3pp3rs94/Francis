@@ -2931,8 +2931,30 @@ function SystemPanel(props: {
   const continuityOrbHandbackState = isRecord(continuityOrbState?.handback_state)
     ? continuityOrbState.handback_state
     : null;
+  const continuityOrbIncidentPressure = isRecord(continuityOrbState?.incident_pressure)
+    ? continuityOrbState.incident_pressure
+    : null;
+  const continuityOrbPressureObserver = isRecord(continuityOrbIncidentPressure?.observer)
+    ? continuityOrbIncidentPressure.observer
+    : null;
   const continuityOrbHandbackStatus = safeString(continuityOrbHandbackState?.state).trim();
   const continuityOrbHandbackHeadline = safeString(continuityOrbHandbackState?.headline).trim();
+  const continuityOrbPressureLevel = safeString(continuityOrbIncidentPressure?.level).trim();
+  const continuityOrbPressureSource = safeString(continuityOrbIncidentPressure?.source).trim();
+  const continuityOrbPressureHeadline =
+    safeString(continuityOrbIncidentPressure?.headline).trim() || safeString(continuityOrbPressureObserver?.headline).trim();
+  const continuityOrbPressureScore = safeNumber(continuityOrbPressureObserver?.score, 0);
+  const continuityOrbPressureReasons = observerAnomalyReasonSummary(
+    continuityOrbPressureObserver
+      ? {
+          score: continuityOrbPressureScore,
+          level: safeString(continuityOrbPressureObserver?.level).trim(),
+          reasons: Array.isArray(continuityOrbPressureObserver?.reasons)
+            ? continuityOrbPressureObserver.reasons.map((item) => safeString(item).trim()).filter(Boolean)
+            : [],
+        }
+      : null,
+  );
   const shiftBriefingCounts = shiftBriefing?.counts ?? {};
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
@@ -3804,11 +3826,32 @@ function SystemPanel(props: {
                     {continuityOrbHandbackStatus ? (
                       <span style={badgeStyle(continuityOrbHandbackStatus)}>{continuityOrbHandbackStatus}</span>
                     ) : null}
+                    {continuityOrbPressureLevel ? (
+                      <span style={badgeStyle(continuityOrbPressureLevel)}>
+                        pressure {continuityOrbPressureLevel}
+                      </span>
+                    ) : null}
+                    {continuityOrbPressureSource ? (
+                      <span style={badgeStyle(continuityOrbPressureSource)}>{continuityOrbPressureSource}</span>
+                    ) : null}
+                    {continuityOrbPressureSource === "observer" ? (
+                      <span style={badgeStyle(safeString(continuityOrbPressureObserver?.level).trim() || "clear")}>
+                        anomaly {continuityOrbPressureScore}/100
+                      </span>
+                    ) : null}
                   </div>
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                     {continuityOrbHandbackHeadline ||
                       "Dedicated ORB model polling can degrade; this briefing snapshot keeps the last handback state visible."}
                   </div>
+                  {continuityOrbPressureSource === "observer" && continuityOrbPressureHeadline ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      Observer-backed pressure: {continuityOrbPressureHeadline}
+                    </div>
+                  ) : null}
+                  {continuityOrbPressureSource === "observer" && continuityOrbPressureReasons ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{continuityOrbPressureReasons}</div>
+                  ) : null}
                 </>
               ) : (
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
