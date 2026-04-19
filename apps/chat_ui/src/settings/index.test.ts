@@ -341,6 +341,25 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
       });
     }
 
+    if (path === "/system/observer/scan") {
+      return jsonResponse({
+        ok: true,
+        subsystem: "observer",
+        headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
+        decision: "urgent_review",
+        counts: { active: 1, error: 1 },
+        receipt: {
+          receipt_id: "obs_scan_003",
+          event: "observer.scan",
+          status: "attention",
+          decision: "urgent_review",
+          headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
+          incident_count: 1,
+          probes: ["task_runtime"],
+        },
+      });
+    }
+
     if (path === "/system/config/mutate") {
       return jsonResponse({ ok: false, error: "not_found" }, 404);
     }
@@ -380,6 +399,13 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
       },
       { timeoutMs: 50 },
     );
+    const observerResponse = await client.recordObserverScan(
+      {
+        reason: "manual continuity review",
+        actor: "chat_ui_test",
+      },
+      { timeoutMs: 50 },
+    );
     const configResponse = await client.mutateConfig(
       {
         op: "merge",
@@ -399,6 +425,7 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
       [
         { path: "/system/operator_mode", method: "POST" },
         { path: "/system/operator-mode", method: "POST" },
+        { path: "/system/observer/scan", method: "POST" },
         { path: "/system/config/mutate", method: "POST" },
         { path: "/system/config/patch", method: "POST" },
         { path: "/system/flags/ui.alias_mode", method: "POST" },
@@ -411,13 +438,17 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
       reason: "night shift handoff",
       actor: "chat_ui_test",
     });
-    assert.deepEqual(requests[3]?.body, {
+    assert.deepEqual(requests[2]?.body, {
+      reason: "manual continuity review",
+      actor: "chat_ui_test",
+    });
+    assert.deepEqual(requests[4]?.body, {
       op: "merge",
       path: "ui.preferences",
       value: { density: "compact" },
       reason: "compatibility mutation",
     });
-    assert.deepEqual(requests[6]?.body, {
+    assert.deepEqual(requests[7]?.body, {
       key: "ui.alias_mode",
       enabled: true,
       reason: "compatibility mutation",
@@ -425,6 +456,9 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
     assert.equal(operatorResponse.ok, true);
     assert.equal(operatorResponse.applied, true);
     assert.equal(operatorResponse.snapshot?.control_mode?.id, "away");
+    assert.equal(observerResponse.ok, true);
+    assert.equal(observerResponse.decision, "urgent_review");
+    assert.equal(observerResponse.receipt?.receipt_id, "obs_scan_003");
     assert.equal(configResponse.ok, true);
     assert.deepEqual(configResponse.resulting_value, { density: "compact" });
     assert.equal(flagResponse.ok, true);

@@ -127,6 +127,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/system/operator-mode"),
         ("POST", "/system/operator_mode"),
         ("POST", "/system/operator-mode"),
+        ("POST", "/system/observer/scan"),
         ("GET", "/system/flags"),
         ("GET", "/system/feature_flags"),
         ("GET", "/system/features"),

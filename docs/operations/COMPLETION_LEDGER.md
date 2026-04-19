@@ -59,6 +59,24 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 ## 3. High-confidence current slice
 
 As of `2026-04-18`, the highest-confidence surface newly touched in the current
+working tree is an operator-triggerable observer scan path in the live ORB
+surface that advances the active `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE`
+line without introducing hidden polling or unreceipted observer activity:
+
+- `apps/chat_ui/src/settings/index.ts` now exposes a dedicated
+  `recordObserverScan()` mutation on the governed settings client, bound to the
+  explicit `/system/observer/scan` route instead of using ad hoc fetch logic.
+- `apps/chat_ui/src/App.tsx` now adds a visible `Record observer scan` action in
+  the embedded observer section of the ORB/Shift Briefing surface and wires it
+  through the existing refresh path, so explicit observer receipts can be
+  created and then immediately inspected in the same truthful continuity UI.
+- The command palette now also exposes that same explicit scan action, which
+  keeps the scan pathway operator-legible without implying background autonomy.
+- `tests/test_api_contract_chat_ui.py` now pins `/system/observer/scan` into the
+  mounted UI contract, and `apps/chat_ui/src/settings/index.test.ts` now proves
+  the client mutation preserves observer receipt ids and decisions.
+
+As of `2026-04-18`, the highest-confidence surface newly touched in the current
 working tree is a continuity-facing observer decisions log that advances the
 active `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE` line without creating
 ambient observer activity or adding a second observer polling path:
@@ -784,6 +802,17 @@ Latest targeted validation for the `2026-04-18` observer continuity decisions-lo
   Result: `passed`
 - `python -m ruff format src/francis/world_state/snapshot.py src/francis/api/routes/system.py src/francis/api/routes/continuity.py tests/test_api_continuity.py`
   Result: `1 file reformatted, 3 files left unchanged`
+- `cd apps/chat_ui && npm test`
+  Result: `15 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-18` operator-triggered observer scan slice:
+
+- `python -m pytest tests/test_api_contract_chat_ui.py -q`
+  Result: `1 passed`
+- `python -m ruff check tests/test_api_contract_chat_ui.py`
+  Result: `passed`
 - `cd apps/chat_ui && npm test`
   Result: `15 passed`
 - `cd apps/chat_ui && npm run build`
