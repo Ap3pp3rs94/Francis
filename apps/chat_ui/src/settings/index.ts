@@ -461,6 +461,7 @@ export type ObserverScanReceiptSummary = {
   incident_ids?: string[];
   probes?: string[];
   focus?: WorldStateIncidentSummary[];
+  probe_statuses?: ObserverProbeSummary[];
   anomaly?: ObserverAnomalySummary;
   generated_at?: number;
   reason?: string;
@@ -1563,6 +1564,9 @@ function parseObserverScanReceiptSummary(raw: unknown): ObserverScanReceiptSumma
     focus: (Array.isArray(raw["focus"]) ? raw["focus"] : [])
       .map(parseWorldStateIncidentSummary)
       .filter((item): item is WorldStateIncidentSummary => item !== null),
+    probe_statuses: (Array.isArray(raw["probe_statuses"]) ? raw["probe_statuses"] : [])
+      .map(parseObserverProbeSummary)
+      .filter((item): item is ObserverProbeSummary => item !== null),
     anomaly: parseObserverAnomalySummary(raw["anomaly"]),
     generated_at: safeNumber(raw["generated_at"], 0),
     reason: safeString(raw["reason"], ""),
@@ -1576,6 +1580,7 @@ function parseObserverScanReceiptSummary(raw: unknown): ObserverScanReceiptSumma
   if (!summary.incident_ids?.length) delete summary.incident_ids;
   if (!summary.probes?.length) delete summary.probes;
   if (!summary.focus?.length) delete summary.focus;
+  if (!summary.probe_statuses?.length) delete summary.probe_statuses;
   if (!summary.generated_at) delete summary.generated_at;
   if (!summary.event) delete summary.event;
   if (!summary.status) delete summary.status;

@@ -477,6 +477,7 @@ def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10)
             incident_ids=summary["incident_ids"],
             probes=summary["probes"],
             focus=summary["focus"],
+            probe_statuses=summary["probe_statuses"],
             anomaly=summary["anomaly"],
             actor=body.actor or "operator",
             reason=body.reason or "manual_scan",

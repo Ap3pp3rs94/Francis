@@ -303,6 +303,7 @@ def observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict[
 def observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
     counts = item.get("counts") if isinstance(item.get("counts"), dict) else {}
     focus = [dict(entry) for entry in item.get("focus", []) if isinstance(entry, dict)]
+    probe_statuses = [dict(entry) for entry in item.get("probe_statuses", []) if isinstance(entry, dict)]
     projected: dict[str, Any] = {
         "ts": float(item.get("ts") or 0.0),
         "receipt_id": _safe_str(item.get("receipt_id")).strip(),
@@ -315,6 +316,7 @@ def observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
         "incident_ids": [str(value).strip() for value in item.get("incident_ids", []) if str(value).strip()],
         "probes": [str(value).strip() for value in item.get("probes", []) if str(value).strip()],
         "focus": focus,
+        "probe_statuses": probe_statuses,
         "anomaly": _observer_anomaly_projection(item.get("anomaly")),
         "generated_at": float(item.get("generated_at") or 0.0),
         "reason": _safe_str(item.get("reason")).strip(),
