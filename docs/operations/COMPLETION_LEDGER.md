@@ -851,6 +851,17 @@ Latest targeted validation for the `2026-04-19` observer truth-state link into O
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-19` observer probe-visibility slice:
+
+- `python -m pytest tests/test_api_system_settings.py tests/test_api_continuity.py -q`
+  Result: `24 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py src/francis/api/routes/system.py src/francis/api/routes/continuity.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm test`
+  Result: `15 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
 Those validations specifically cover:
 
 - continuity ledger route tail behavior

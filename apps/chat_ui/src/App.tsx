@@ -2962,6 +2962,7 @@ function SystemPanel(props: {
   const shiftBriefingObserver = shiftBriefing?.observer;
   const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
   const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
+  const shiftBriefingObserverProbes = shiftBriefingObserver?.probes ?? [];
   const shiftBriefingObserverRecentScans = shiftBriefingObserver?.recent_scans ?? [];
   const shiftBriefingObserverAnomaly = shiftBriefingObserver?.anomaly;
   const shiftBriefingObserverHasAnomaly = Boolean(shiftBriefingObserverAnomaly);
@@ -3918,6 +3919,46 @@ function SystemPanel(props: {
                 {shiftBriefingObserverAnomalyReasons ? `. ${shiftBriefingObserverAnomalyReasons}` : "."}
               </div>
             ) : null}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 600 }}>Observer probes</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                These are the bounded probe results behind the current observer summary.
+              </div>
+              <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                {shiftBriefingObserverProbes.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted }}>No probe summaries are embedded in this snapshot yet.</div>
+                ) : (
+                  shiftBriefingObserverProbes.map((probe) => (
+                    <div
+                      key={`observer-probe-${probe.id || probe.headline}`}
+                      style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>{probe.headline || probe.id || "Observer probe"}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {probe.id ? <span style={badgeStyle(probe.id)}>{probe.id}</span> : null}
+                          {probe.status ? <span style={badgeStyle(probe.status)}>{probe.status}</span> : null}
+                          {probe.severity ? <span style={badgeStyle(probe.severity)}>{probe.severity}</span> : null}
+                          {typeof probe.incident_count === "number" ? (
+                            <span style={badgeStyle(probe.incident_count > 0 ? "warning" : "clear")}>
+                              incidents {probe.incident_count}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      {probe.detail ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{probe.detail}</div>
+                      ) : null}
+                      {probe.observed_at ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          observed <code>{mixedLocaleTime(probe.observed_at)}</code>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {shiftBriefingObserverFocus.length === 0 ? (
                 <div style={{ fontSize: 11, color: THEME.muted }}>No active observer incidents are embedded in this snapshot.</div>

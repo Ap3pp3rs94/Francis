@@ -439,6 +439,16 @@ export type ObserverAnomalySummary = {
   reasons?: string[];
 };
 
+export type ObserverProbeSummary = {
+  id?: string;
+  status?: string;
+  severity?: string;
+  headline?: string;
+  detail?: string;
+  incident_count?: number;
+  observed_at?: number;
+};
+
 export type ObserverScanReceiptSummary = {
   ts?: number;
   receipt_id?: string;
@@ -469,6 +479,7 @@ export type ContinuityBriefingPayload = {
     headline?: string;
     counts?: Record<string, number>;
     focus?: WorldStateIncidentSummary[];
+    probes?: ObserverProbeSummary[];
     recent_scans?: ObserverScanReceiptSummary[];
     anomaly?: ObserverAnomalySummary;
     observed_at?: number;
@@ -1601,6 +1612,33 @@ function parseObserverAnomalySummary(raw: unknown): ObserverAnomalySummary | und
   return summary;
 }
 
+function parseObserverProbeSummary(raw: unknown): ObserverProbeSummary | null {
+  if (!isRecord(raw)) return null;
+
+  const id = safeString(raw["id"], "").trim();
+  const headline = safeString(raw["headline"], "").trim();
+  if (!id && !headline) return null;
+
+  const summary: ObserverProbeSummary = {
+    id,
+    status: safeString(raw["status"], ""),
+    severity: safeString(raw["severity"], ""),
+    headline,
+    detail: safeString(raw["detail"], ""),
+    incident_count: safeNumber(raw["incident_count"], 0),
+    observed_at: safeNumber(raw["observed_at"], 0),
+  };
+
+  if (!summary.id) delete summary.id;
+  if (!summary.status) delete summary.status;
+  if (!summary.severity) delete summary.severity;
+  if (!summary.detail) delete summary.detail;
+  if (!summary.incident_count) delete summary.incident_count;
+  if (!summary.observed_at) delete summary.observed_at;
+
+  return summary;
+}
+
 function parseContinuityLedgerEntry(raw: unknown): ContinuityLedgerEntry | null {
   if (!isRecord(raw)) return null;
 
@@ -1730,6 +1768,13 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
             )
               .map(parseWorldStateIncidentSummary)
               .filter((item): item is WorldStateIncidentSummary => item !== null),
+            probes: (
+              Array.isArray((briefingRaw["observer"] as Record<string, unknown>)["probes"])
+                ? ((briefingRaw["observer"] as Record<string, unknown>)["probes"] as unknown[])
+                : []
+            )
+              .map(parseObserverProbeSummary)
+              .filter((item): item is ObserverProbeSummary => item !== null),
             recent_scans: (
               Array.isArray((briefingRaw["observer"] as Record<string, unknown>)["recent_scans"])
                 ? ((briefingRaw["observer"] as Record<string, unknown>)["recent_scans"] as unknown[])
@@ -1761,6 +1806,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.deadletter_preview?.length) ||
     Boolean(snapshot.briefing?.observer?.headline) ||
     Boolean(snapshot.briefing?.observer?.focus?.length) ||
+    Boolean(snapshot.briefing?.observer?.probes?.length) ||
     Boolean(snapshot.briefing?.observer?.anomaly?.score) ||
     Boolean(snapshot.briefing?.observer?.anomaly?.level) ||
     Boolean(snapshot.briefing?.observer?.recent_scans?.length);
