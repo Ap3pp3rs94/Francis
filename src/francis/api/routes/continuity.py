@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from francis.chat.continuity.ledger import tail
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
-from francis.world_state.snapshot import mission_continuity_snapshot, observer_incident_snapshot
+from francis.world_state.snapshot import mission_continuity_snapshot, observer_incident_snapshot, observer_scan_history
 
 router = APIRouter()
 
@@ -62,11 +62,13 @@ def _orb_surface() -> dict[str, Any]:
 def _observer_briefing() -> dict[str, Any]:
     try:
         payload = observer_incident_snapshot()
+        recent_scans = observer_scan_history(limit=3)
     except Exception as exc:
         return {
             "headline": "Observer summary unavailable.",
             "counts": {"active": 0},
             "focus": [],
+            "recent_scans": [],
             "error": str(exc),
         }
 
@@ -89,6 +91,7 @@ def _observer_briefing() -> dict[str, Any]:
         "headline": headline,
         "counts": counts,
         "focus": incidents[:3],
+        "recent_scans": recent_scans,
     }
 
 

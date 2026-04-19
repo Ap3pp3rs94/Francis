@@ -484,6 +484,27 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
                 ],
               },
             ],
+            recent_scans: [
+              {
+                receipt_id: "obs_scan_001",
+                event: "observer.scan",
+                status: "attention",
+                decision: "urgent_review",
+                headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
+                incident_count: 1,
+                probes: ["task_runtime"],
+                focus: [
+                  {
+                    id: "governance.blocked_tasks",
+                    severity: "error",
+                    title: "Tasks are blocked by governance",
+                  },
+                ],
+                generated_at: 1_710_000_452,
+                actor: "operator",
+                reason: "manual_scan",
+              },
+            ],
           },
         },
         mission_status_counts: { queued: 2 },
@@ -515,6 +536,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.observer?.counts?.active, 1);
     assert.equal(briefing.briefing?.observer?.focus?.[0]?.probe, "task_runtime");
     assert.equal(briefing.briefing?.observer?.focus?.[0]?.evidence?.[0]?.id, "tsk_blocked");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.receipt_id, "obs_scan_001");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.decision, "urgent_review");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probes?.[0], "task_runtime");
     assert.equal(briefing.operator?.available, true);
     assert.equal(briefing.operator?.control_mode?.id, "assist");
     assert.equal(briefing.operator?.focus?.plane_id, "P3_GOVERNANCE");
@@ -542,6 +566,14 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
           headline: "Observer reports no active incidents.",
           counts: { active: 0 },
           focus: [],
+          recent_scans: [
+            {
+              receipt_id: "obs_scan_002",
+              status: "ok",
+              decision: "stable",
+              headline: "Observer reports no active incidents.",
+            },
+          ],
         },
         recently_completed: [
           {
@@ -571,6 +603,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.decision, "stable");
     assert.equal(briefing.briefing?.headline, "");
     assert.equal(briefing.briefing?.focus?.length, 0);
   } finally {

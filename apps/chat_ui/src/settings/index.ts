@@ -433,6 +433,25 @@ export type ContinuityBriefingDeadletterItem = {
   latest_activity?: Record<string, unknown>;
 };
 
+export type ObserverScanReceiptSummary = {
+  ts?: number;
+  receipt_id?: string;
+  event?: string;
+  status?: string;
+  decision?: string;
+  headline?: string;
+  incident_count?: number;
+  counts?: Record<string, number>;
+  incident_ids?: string[];
+  probes?: string[];
+  focus?: WorldStateIncidentSummary[];
+  generated_at?: number;
+  reason?: string;
+  actor?: string;
+  trace_id?: string;
+  run_id?: string;
+};
+
 export type ContinuityBriefingPayload = {
   headline?: string;
   counts?: Record<string, number>;
@@ -443,6 +462,7 @@ export type ContinuityBriefingPayload = {
     headline?: string;
     counts?: Record<string, number>;
     focus?: WorldStateIncidentSummary[];
+    recent_scans?: ObserverScanReceiptSummary[];
     observed_at?: number;
     error?: string;
   };
@@ -1483,6 +1503,55 @@ function parseWorldStateIncidentSummary(raw: unknown): WorldStateIncidentSummary
   return summary;
 }
 
+function parseObserverScanReceiptSummary(raw: unknown): ObserverScanReceiptSummary | null {
+  if (!isRecord(raw)) return null;
+
+  const receiptId = safeString(raw["receipt_id"], "").trim();
+  const headline = safeString(raw["headline"], "").trim();
+  if (!receiptId && !headline) return null;
+
+  const summary: ObserverScanReceiptSummary = {
+    ts: safeNumber(raw["ts"], 0),
+    receipt_id: receiptId,
+    event: safeString(raw["event"], ""),
+    status: safeString(raw["status"], ""),
+    decision: safeString(raw["decision"], ""),
+    headline,
+    incident_count: safeNumber(raw["incident_count"], 0),
+    counts: parseNumberMap(raw["counts"]),
+    incident_ids: (Array.isArray(raw["incident_ids"]) ? raw["incident_ids"] : [])
+      .map((item) => safeString(item, "").trim())
+      .filter(Boolean),
+    probes: (Array.isArray(raw["probes"]) ? raw["probes"] : [])
+      .map((item) => safeString(item, "").trim())
+      .filter(Boolean),
+    focus: (Array.isArray(raw["focus"]) ? raw["focus"] : [])
+      .map(parseWorldStateIncidentSummary)
+      .filter((item): item is WorldStateIncidentSummary => item !== null),
+    generated_at: safeNumber(raw["generated_at"], 0),
+    reason: safeString(raw["reason"], ""),
+    actor: safeString(raw["actor"], ""),
+    trace_id: safeString(raw["trace_id"], ""),
+    run_id: safeString(raw["run_id"], ""),
+  };
+
+  if (!summary.ts) delete summary.ts;
+  if (!summary.counts || Object.keys(summary.counts).length === 0) delete summary.counts;
+  if (!summary.incident_ids?.length) delete summary.incident_ids;
+  if (!summary.probes?.length) delete summary.probes;
+  if (!summary.focus?.length) delete summary.focus;
+  if (!summary.generated_at) delete summary.generated_at;
+  if (!summary.event) delete summary.event;
+  if (!summary.status) delete summary.status;
+  if (!summary.decision) delete summary.decision;
+  if (!summary.reason) delete summary.reason;
+  if (!summary.actor) delete summary.actor;
+  if (!summary.trace_id) delete summary.trace_id;
+  if (!summary.run_id) delete summary.run_id;
+
+  return summary;
+}
+
 function parseContinuityLedgerEntry(raw: unknown): ContinuityLedgerEntry | null {
   if (!isRecord(raw)) return null;
 
@@ -1612,6 +1681,13 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
             )
               .map(parseWorldStateIncidentSummary)
               .filter((item): item is WorldStateIncidentSummary => item !== null),
+            recent_scans: (
+              Array.isArray((briefingRaw["observer"] as Record<string, unknown>)["recent_scans"])
+                ? ((briefingRaw["observer"] as Record<string, unknown>)["recent_scans"] as unknown[])
+                : []
+            )
+              .map(parseObserverScanReceiptSummary)
+              .filter((item): item is ObserverScanReceiptSummary => item !== null),
             observed_at: safeNumber((briefingRaw["observer"] as Record<string, unknown>)["observed_at"], 0),
             error: safeString((briefingRaw["observer"] as Record<string, unknown>)["error"], ""),
           }
@@ -1634,7 +1710,8 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.recently_completed?.length) ||
     Boolean(snapshot.briefing?.deadletter_preview?.length) ||
     Boolean(snapshot.briefing?.observer?.headline) ||
-    Boolean(snapshot.briefing?.observer?.focus?.length);
+    Boolean(snapshot.briefing?.observer?.focus?.length) ||
+    Boolean(snapshot.briefing?.observer?.recent_scans?.length);
   if (!hasBriefingContent) delete snapshot.briefing;
   if (!snapshot.mission_status_counts || Object.keys(snapshot.mission_status_counts).length === 0) {
     delete snapshot.mission_status_counts;

@@ -319,6 +319,16 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert blocked_run.status_code == 200
     assert blocked_run.json()["status"] == "blocked"
 
+    observer_scan = client.post(
+        "/system/observer/scan",
+        json={"reason": "continuity handoff check", "actor": "test.continuity.briefing"},
+    )
+    assert observer_scan.status_code == 200
+    observer_scan_body = observer_scan.json()
+    assert observer_scan_body["ok"] is True
+    receipt_id = str(observer_scan_body["receipt"]["receipt_id"])
+    assert receipt_id
+
     completed = client.post(
         "/missions/create",
         json={
@@ -366,6 +376,11 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert blocked_incident["task_id"] == blocked_operation_id
     assert blocked_incident["evidence"][0]["kind"] == "task"
     assert blocked_incident["evidence"][0]["id"] == blocked_operation_id
+    observer_recent_scans = body["briefing"]["observer"]["recent_scans"]
+    assert observer_recent_scans
+    assert observer_recent_scans[0]["receipt_id"] == receipt_id
+    assert observer_recent_scans[0]["decision"] == "urgent_review"
+    assert "task_runtime" in observer_recent_scans[0]["probes"]
     assert body["mission_status_counts"]["completed"] == 1
     assert body["recent_missions"][0]["id"] in {blocked_id, completed_id}
     assert body["operator"]["available"] is True
