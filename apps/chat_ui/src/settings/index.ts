@@ -182,6 +182,17 @@ export type WorldStateIncidentSummary = {
   count?: number;
   approval_id?: string;
   task_id?: string;
+  probe?: string;
+  observed_at?: number;
+  evidence?: Array<{
+    kind?: string;
+    id?: string;
+    label?: string;
+    status?: string;
+    detail?: string;
+    path?: string;
+    ts?: number;
+  }>;
 };
 
 export type WorldStateMissionSummary = {
@@ -428,6 +439,13 @@ export type ContinuityBriefingPayload = {
   focus?: ContinuityBriefingFocusItem[];
   recently_completed?: ContinuityBriefingCompletedItem[];
   deadletter_preview?: ContinuityBriefingDeadletterItem[];
+  observer?: {
+    headline?: string;
+    counts?: Record<string, number>;
+    focus?: WorldStateIncidentSummary[];
+    observed_at?: number;
+    error?: string;
+  };
 };
 
 export type ContinuityLedgerEntry = {
@@ -1135,20 +1153,8 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
       }))
       .filter((item) => item.id),
     incidents: incidentsRaw
-      .filter(isRecord)
-      .map((item) => ({
-        id: safeString(item.id, ""),
-        severity: safeString(item.severity, ""),
-        category: safeString(item.category, ""),
-        status: safeString(item.status, ""),
-        title: safeString(item.title, ""),
-        detail: safeString(item.detail, ""),
-        source: safeString(item.source, ""),
-        count: safeNumber(item.count, 0),
-        approval_id: safeString(item.approval_id, ""),
-        task_id: safeString(item.task_id, ""),
-      }))
-      .filter((item) => item.id),
+      .map(parseWorldStateIncidentSummary)
+      .filter((item): item is WorldStateIncidentSummary => item !== null),
   };
 
   const snapshot: WorldStateSnapshot = {
@@ -1436,6 +1442,47 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
   };
 }
 
+function parseWorldStateIncidentSummary(raw: unknown): WorldStateIncidentSummary | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw["id"], "").trim();
+  if (!id) return null;
+
+  const evidenceRaw = Array.isArray(raw["evidence"]) ? raw["evidence"] : [];
+  const evidence = evidenceRaw
+    .filter(isRecord)
+    .map((item) => ({
+      kind: safeString(item["kind"], ""),
+      id: safeString(item["id"], ""),
+      label: safeString(item["label"], ""),
+      status: safeString(item["status"], ""),
+      detail: safeString(item["detail"], ""),
+      path: safeString(item["path"], ""),
+      ts: safeNumber(item["ts"], 0),
+    }))
+    .filter((item) => Boolean(item.kind || item.id || item.label || item.status || item.detail || item.path || item.ts));
+
+  const summary: WorldStateIncidentSummary = {
+    id,
+    severity: safeString(raw["severity"], ""),
+    category: safeString(raw["category"], ""),
+    status: safeString(raw["status"], ""),
+    title: safeString(raw["title"], ""),
+    detail: safeString(raw["detail"], ""),
+    source: safeString(raw["source"], ""),
+    count: safeNumber(raw["count"], 0),
+    approval_id: safeString(raw["approval_id"], ""),
+    task_id: safeString(raw["task_id"], ""),
+    probe: safeString(raw["probe"], ""),
+    observed_at: safeNumber(raw["observed_at"], 0),
+    evidence,
+  };
+
+  if (!summary.observed_at) delete summary.observed_at;
+  if (!summary.evidence?.length) delete summary.evidence;
+
+  return summary;
+}
+
 function parseContinuityLedgerEntry(raw: unknown): ContinuityLedgerEntry | null {
   if (!isRecord(raw)) return null;
 
@@ -1554,6 +1601,21 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
       deadletter_preview: (Array.isArray(briefingRaw["deadletter_preview"]) ? briefingRaw["deadletter_preview"] : [])
         .map(parseContinuityDeadletterItem)
         .filter((item): item is ContinuityBriefingDeadletterItem => item !== null),
+      observer: isRecord(briefingRaw["observer"])
+        ? {
+            headline: safeString((briefingRaw["observer"] as Record<string, unknown>)["headline"], ""),
+            counts: parseNumberMap((briefingRaw["observer"] as Record<string, unknown>)["counts"]),
+            focus: (
+              Array.isArray((briefingRaw["observer"] as Record<string, unknown>)["focus"])
+                ? ((briefingRaw["observer"] as Record<string, unknown>)["focus"] as unknown[])
+                : []
+            )
+              .map(parseWorldStateIncidentSummary)
+              .filter((item): item is WorldStateIncidentSummary => item !== null),
+            observed_at: safeNumber((briefingRaw["observer"] as Record<string, unknown>)["observed_at"], 0),
+            error: safeString((briefingRaw["observer"] as Record<string, unknown>)["error"], ""),
+          }
+        : undefined,
     },
     mission_status_counts: parseNumberMap(raw["mission_status_counts"]),
     recent_missions: (Array.isArray(raw["recent_missions"]) ? raw["recent_missions"] : [])
@@ -1570,7 +1632,9 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.focus?.length) ||
     Boolean(snapshot.briefing?.counts && Object.keys(snapshot.briefing.counts).length > 0) ||
     Boolean(snapshot.briefing?.recently_completed?.length) ||
-    Boolean(snapshot.briefing?.deadletter_preview?.length);
+    Boolean(snapshot.briefing?.deadletter_preview?.length) ||
+    Boolean(snapshot.briefing?.observer?.headline) ||
+    Boolean(snapshot.briefing?.observer?.focus?.length);
   if (!hasBriefingContent) delete snapshot.briefing;
   if (!snapshot.mission_status_counts || Object.keys(snapshot.mission_status_counts).length === 0) {
     delete snapshot.mission_status_counts;

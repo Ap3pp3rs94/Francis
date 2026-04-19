@@ -58,6 +58,60 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 
 ## 3. High-confidence current slice
 
+As of `2026-04-18`, the highest-confidence surface newly touched in the current
+working tree is an explicit observer scan receipt path that advances the active
+`Phase 2 / P9_OBSERVABILITY` line without inventing ambient autonomy or writing
+audit noise on passive reads:
+
+- `src/francis/api/routes/system.py` now exposes a bounded `/system/observer`
+  surface for current observer truth plus recent explicit scan receipts, and a
+  `/system/observer/scan` route that snapshots incidents and writes an
+  `observer.scan` audit record only when the operator explicitly requests a
+  scan.
+- Observer scan receipts now carry a concrete decision (`stable`, `review`, or
+  `urgent_review`), bounded severity counts, incident ids, probe ids, and the
+  top evidence-backed findings, so Stage 2 scans are both traceable and rich
+  enough to support a real decisions log instead of a vague “observer ran”
+  claim.
+- The same route family now exposes `/system/observer/events`,
+  `/system/observer/log`, and `/system/observer/audit` aliases that project
+  recent `observer.scan` receipts without emitting new ones, preserving the
+  distinction between observation state and receipted scan actions.
+- `tests/test_api_system_settings.py` now proves the important contract:
+  read-only observer routes stay passive, explicit scans emit one receipt,
+  recent-scan history is queryable through the alias routes, and the receipt
+  carries the expected governance-backed incident ids and probes.
+
+As of `2026-04-18`, the highest-confidence surface newly touched in the current
+working tree is an evidence-backed observer continuity bridge that advances the
+active `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE` line without widening
+authority or inventing mission state:
+
+- `src/francis/world_state/snapshot.py` now exposes bounded observer evidence on
+  each derived incident instead of only returning category/title/count summaries.
+  Incidents now carry their generating probe id plus concrete evidence items
+  such as missing stack/service surfaces, pending approvals, or task ids and
+  status reasons from governed task state.
+- The observer summary path is now reusable through
+  `observer_incident_snapshot()`, so both world-state and continuity surfaces
+  project the same locally derived findings instead of drifting into parallel
+  observer logic.
+- `src/francis/api/routes/continuity.py` now embeds an observer briefing inside
+  the continuity briefing payload, with an observer headline, bounded severity
+  counts, and the top active incidents. This lets the presence surface cite
+  observer truth directly instead of forcing the operator to switch to the
+  separate world-state panel.
+- `apps/chat_ui/src/settings/index.ts` now preserves the new observer briefing
+  contract plus incident probe/evidence fields through the browser parser rather
+  than silently dropping them.
+- `apps/chat_ui/src/App.tsx` now renders the embedded observer surface inside the
+  Shift Briefing card and shows probe/evidence details in both the briefing and
+  incident-view cards, so observer findings are inspectable from the same
+  return-to-work surface that already carries operator and ORB handback state.
+- `tests/test_api_continuity.py`, `tests/test_api_system_settings.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove that the observer bridge is
+  evidence-backed, alias-stable, and preserved by the UI parser.
+
 As of `2026-04-17`, the highest-confidence surface newly touched in the current
 working tree is a read-only continuation/build observer for the canonical Codex
 watcher, which advances the active `Phase 2 / P9_OBSERVABILITY` line without
@@ -685,6 +739,26 @@ bridge slice:
   Result: `28 passed`
 - `cd apps/chat_ui && npm test`
   Result: `8 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-18` observer scan receipt slice:
+
+- `python -m pytest tests/test_api_system_settings.py -q`
+  Result: `19 passed`
+- `python -m ruff check src/francis/api/routes/system.py tests/test_api_system_settings.py`
+  Result: `passed`
+- `python -m ruff format src/francis/api/routes/system.py tests/test_api_system_settings.py`
+  Result: `1 file reformatted, 1 file left unchanged`
+
+Latest targeted validation for the `2026-04-18` observer continuity bridge:
+
+- `python -m pytest tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `24 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py src/francis/api/routes/continuity.py src/francis/api/routes/system.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm test`
+  Result: `15 passed`
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 

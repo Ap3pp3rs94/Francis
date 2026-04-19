@@ -459,6 +459,32 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               recommended_action: "resume",
             },
           ],
+          observer: {
+            headline: "Observer flagged 1 active incident(s); Tasks are blocked by governance leads review.",
+            counts: { active: 1, error: 1 },
+            observed_at: 1_710_000_450,
+            focus: [
+              {
+                id: "governance.blocked_tasks",
+                severity: "error",
+                category: "governance",
+                title: "Tasks are blocked by governance",
+                detail: "1 task is blocked by trust policy.",
+                source: "tasks",
+                probe: "task_runtime",
+                observed_at: 1_710_000_450,
+                evidence: [
+                  {
+                    kind: "task",
+                    id: "tsk_blocked",
+                    label: "Blocked deploy",
+                    status: "blocked",
+                    detail: "insufficient_trust",
+                  },
+                ],
+              },
+            ],
+          },
         },
         mission_status_counts: { queued: 2 },
         recent_missions: [{ id: "mission_alpha", status: "queued" }],
@@ -486,6 +512,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.ok, true);
     assert.equal(briefing.generated_at, 1_710_000_456);
     assert.equal(briefing.briefing?.headline, "Night shift ready");
+    assert.equal(briefing.briefing?.observer?.counts?.active, 1);
+    assert.equal(briefing.briefing?.observer?.focus?.[0]?.probe, "task_runtime");
+    assert.equal(briefing.briefing?.observer?.focus?.[0]?.evidence?.[0]?.id, "tsk_blocked");
     assert.equal(briefing.operator?.available, true);
     assert.equal(briefing.operator?.control_mode?.id, "assist");
     assert.equal(briefing.operator?.focus?.plane_id, "P3_GOVERNANCE");
@@ -509,6 +538,11 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       generated_at: 1_710_001_234,
       briefing: {
         counts: { queued: 2, deadlettered: 1 },
+        observer: {
+          headline: "Observer reports no active incidents.",
+          counts: { active: 0 },
+          focus: [],
+        },
         recently_completed: [
           {
             id: "mission_done",
@@ -536,6 +570,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.deepEqual(briefing.briefing?.counts, { queued: 2, deadlettered: 1 });
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
+    assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");
     assert.equal(briefing.briefing?.headline, "");
     assert.equal(briefing.briefing?.focus?.length, 0);
   } finally {

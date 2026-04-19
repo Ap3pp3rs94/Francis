@@ -20,6 +20,7 @@ import type {
   SystemHealth,
   SystemInfo,
   WorldStateApprovalSummary,
+  WorldStateIncidentSummary,
   WorldStateMissionSummary,
   WorldStateSnapshot,
 } from "./settings";
@@ -229,6 +230,28 @@ function latestActivitySummary(activity: Record<string, unknown> | null | undefi
     gate: safeString(activity["gate"]).trim(),
     observedAt: mixedLocaleTime(activity["ts"]),
   };
+}
+
+function incidentEvidenceSummary(incident: WorldStateIncidentSummary | null | undefined): string[] {
+  const evidence = Array.isArray(incident?.evidence) ? incident.evidence : [];
+  return evidence
+    .map((item) => {
+      const label =
+        safeString(item?.label).trim() ||
+        safeString(item?.id).trim() ||
+        safeString(item?.kind).trim() ||
+        "evidence";
+      const status = safeString(item?.status).trim();
+      const detail = safeString(item?.detail).trim();
+      const path = safeString(item?.path).trim();
+      const parts = [label];
+      if (status) parts.push(status);
+      if (detail) parts.push(detail);
+      else if (path) parts.push(path);
+      return parts.join(" / ");
+    })
+    .filter(Boolean)
+    .slice(0, 2);
 }
 
 function executionBlockedReason(operatorMode: OperatorModeSnapshot | null, actionLabel: string): string {
@@ -2850,6 +2873,13 @@ function SystemPanel(props: {
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
   const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
+  const shiftBriefingObserver = shiftBriefing?.observer;
+  const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
+  const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
+  const shiftBriefingObserverActive = safeNumber(shiftBriefingObserverCounts["active"], shiftBriefingObserverFocus.length);
+  const shiftBriefingObserverCritical = safeNumber(shiftBriefingObserverCounts["critical"], 0);
+  const shiftBriefingObserverError = safeNumber(shiftBriefingObserverCounts["error"], 0);
+  const shiftBriefingObserverWarning = safeNumber(shiftBriefingObserverCounts["warning"], 0);
   const continuityLedgerEntries = [...(continuityLedger?.entries ?? [])].slice(-6).reverse();
   const continuityLedgerCount = continuityLedger?.entries?.length ?? 0;
   const continuityLedgerRouteError = safeString(continuityLedger?.error).trim();
@@ -3714,6 +3744,110 @@ function SystemPanel(props: {
                   {safeString(continuityOrbSurface?.error).trim() ||
                     "Embedded orb handback state is unavailable in this briefing snapshot."}
                 </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {shiftBriefingObserver ? (
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Embedded Observer Surface</div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  {safeString(shiftBriefingObserver.headline).trim() || "Observer findings are embedded here when available."}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <span style={badgeStyle(shiftBriefingObserverActive > 0 ? "warning" : "clear")}>
+                  active {shiftBriefingObserverActive}
+                </span>
+                <span style={badgeStyle(shiftBriefingObserverCritical > 0 ? "critical" : "clear")}>
+                  critical {shiftBriefingObserverCritical}
+                </span>
+                <span style={badgeStyle(shiftBriefingObserverError > 0 ? "error" : "clear")}>
+                  error {shiftBriefingObserverError}
+                </span>
+                <span style={badgeStyle(shiftBriefingObserverWarning > 0 ? "warning" : "clear")}>
+                  warning {shiftBriefingObserverWarning}
+                </span>
+                {shiftBriefingObserver.observed_at ? (
+                  <span style={{ fontSize: 11, color: THEME.muted }}>Observed {toLocaleTime(shiftBriefingObserver.observed_at)}</span>
+                ) : null}
+              </div>
+            </div>
+            {safeString(shiftBriefingObserver.error).trim() ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>{safeString(shiftBriefingObserver.error).trim()}</div>
+            ) : null}
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {shiftBriefingObserverFocus.length === 0 ? (
+                <div style={{ fontSize: 11, color: THEME.muted }}>No active observer incidents are embedded in this snapshot.</div>
+              ) : (
+                shiftBriefingObserverFocus.slice(0, 2).map((incident) => {
+                  const approvalId = safeString(incident.approval_id).trim();
+                  const taskId = safeString(incident.task_id).trim();
+                  const evidenceLines = incidentEvidenceSummary(incident);
+                  const observedAt = mixedLocaleTime(incident.observed_at);
+                  return (
+                    <div
+                      key={`observer-focus-${incident.id}`}
+                      style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>{incident.title || incident.id}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {incident.severity ? <span style={badgeStyle(incident.severity)}>{incident.severity}</span> : null}
+                          {incident.category ? <span style={badgeStyle(incident.category)}>{incident.category}</span> : null}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                        {incident.detail || "Observer detail unavailable."}
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        source=<code>{incident.source || "unknown"}</code>
+                        {incident.probe ? (
+                          <>
+                            {" / "}probe=<code>{incident.probe}</code>
+                          </>
+                        ) : null}
+                        {typeof incident.count === "number" ? ` / count=${String(incident.count)}` : ""}
+                        {observedAt ? (
+                          <>
+                            {" / "}at=<code>{observedAt}</code>
+                          </>
+                        ) : null}
+                      </div>
+                      {evidenceLines.length > 0 ? (
+                        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                          {evidenceLines.map((line) => (
+                            <div key={`${incident.id}:${line}`} style={{ fontSize: 11, color: THEME.muted }}>
+                              evidence <code>{line}</code>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                        {approvalId ? (
+                          <button
+                            style={buttonStyle}
+                            onClick={() =>
+                              props.onOpenApprovals(approvalId, {
+                                operationId: taskId || undefined,
+                              })
+                            }
+                          >
+                            Review approval
+                          </button>
+                        ) : null}
+                        {taskId ? (
+                          <button style={buttonStyle} onClick={() => props.onOpenOperation(taskId)}>
+                            Open task
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -5031,6 +5165,8 @@ function SystemPanel(props: {
             incidents.map((incident) => {
               const approvalId = safeString(incident.approval_id);
               const taskId = safeString(incident.task_id);
+              const evidenceLines = incidentEvidenceSummary(incident);
+              const observedAt = mixedLocaleTime(incident.observed_at);
               return (
                 <div
                   key={incident.id}
@@ -5048,8 +5184,27 @@ function SystemPanel(props: {
                   </div>
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                     source=<code>{incident.source || "unknown"}</code>
+                    {incident.probe ? (
+                      <>
+                        {" / "}probe=<code>{incident.probe}</code>
+                      </>
+                    ) : null}
                     {typeof incident.count === "number" ? ` / count=${String(incident.count)}` : ""}
+                    {observedAt ? (
+                      <>
+                        {" / "}at=<code>{observedAt}</code>
+                      </>
+                    ) : null}
                   </div>
+                  {evidenceLines.length > 0 ? (
+                    <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                      {evidenceLines.map((line) => (
+                        <div key={`${incident.id}:${line}`} style={{ fontSize: 11, color: THEME.muted }}>
+                          evidence <code>{line}</code>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
                     {approvalId ? (
                       <button

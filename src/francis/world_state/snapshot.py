@@ -590,8 +590,11 @@ def _incident_record(
     count: int = 0,
     approval_id: str = "",
     task_id: str = "",
+    probe: str = "",
+    observed_at: float = 0.0,
+    evidence: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    return {
+    record = {
         "id": incident_id,
         "severity": severity,
         "category": category,
@@ -603,6 +606,35 @@ def _incident_record(
         "approval_id": approval_id,
         "task_id": task_id,
     }
+    if probe:
+        record["probe"] = probe
+    cleaned_evidence = [dict(item) for item in (evidence or []) if isinstance(item, dict)]
+    if cleaned_evidence:
+        record["evidence"] = cleaned_evidence
+    return record
+
+
+def _incident_evidence_item(
+    kind: str,
+    *,
+    evidence_id: str = "",
+    label: str = "",
+    status: str = "",
+    detail: str = "",
+    path: str = "",
+    ts: float = 0.0,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "kind": str(kind or "").strip(),
+        "id": str(evidence_id or "").strip(),
+        "label": str(label or "").strip(),
+        "status": str(status or "").strip(),
+        "detail": str(detail or "").strip(),
+        "path": str(path or "").strip(),
+    }
+    if ts > 0:
+        item["ts"] = ts
+    return {key: value for key, value in item.items() if value not in {"", None}}
 
 
 def _first_task_for_status(recent_tasks: list[dict[str, Any]], status: str) -> dict[str, Any]:
@@ -612,7 +644,7 @@ def _first_task_for_status(recent_tasks: list[dict[str, Any]], status: str) -> d
     return {}
 
 
-def _stack_incidents(stack_report: dict[str, Any]) -> list[dict[str, Any]]:
+def _stack_incidents(stack_report: dict[str, Any], *, observed_at: float) -> list[dict[str, Any]]:
     items = stack_report.get("items")
     if not isinstance(items, list):
         return []
@@ -632,6 +664,18 @@ def _stack_incidents(stack_report: dict[str, Any]) -> list[dict[str, Any]]:
     preview = ", ".join(labels[:3])
     if len(labels) > 3:
         preview = f"{preview}, +{len(labels) - 3} more"
+    evidence = [
+        _incident_evidence_item(
+            "stack_item",
+            evidence_id=str(item.get("name") or item.get("kind") or "").strip(),
+            label=str(item.get("name") or item.get("kind") or "").strip(),
+            status=str(item.get("status") or "").strip(),
+            detail=f"{str(item.get('kind') or 'surface').strip()} surface missing",
+            path=str(item.get("path") or "").strip(),
+        )
+        for item in missing_core[:3]
+        if isinstance(item, dict)
+    ]
     return [
         _incident_record(
             "runtime.stack_missing",
@@ -641,11 +685,14 @@ def _stack_incidents(stack_report: dict[str, Any]) -> list[dict[str, Any]]:
             detail=f"Missing stack surfaces: {preview}.",
             source="stack",
             count=len(labels),
+            probe="stack_status",
+            observed_at=observed_at,
+            evidence=evidence,
         )
     ]
 
 
-def _service_incidents(services_report: dict[str, Any]) -> list[dict[str, Any]]:
+def _service_incidents(services_report: dict[str, Any], *, observed_at: float) -> list[dict[str, Any]]:
     items = services_report.get("services")
     if not isinstance(items, list):
         return []
@@ -682,6 +729,18 @@ def _service_incidents(services_report: dict[str, Any]) -> list[dict[str, Any]]:
         if len(disabled) > 3:
             preview = f"{preview}, +{len(disabled) - 3} more"
         parts.append(f"disabled: {preview}")
+    evidence = [
+        _incident_evidence_item(
+            "service",
+            evidence_id=str(item.get("name") or "").strip(),
+            label=str(item.get("name") or "").strip(),
+            status=str(item.get("status") or "").strip(),
+            detail=f"service marked {str(item.get('status') or 'unknown').strip()}",
+            path=str(item.get("path") or "").strip(),
+        )
+        for item in degraded[:3]
+        if isinstance(item, dict)
+    ]
 
     return [
         _incident_record(
@@ -692,6 +751,9 @@ def _service_incidents(services_report: dict[str, Any]) -> list[dict[str, Any]]:
             detail="; ".join(parts) or "One or more services are not ready.",
             source="services",
             count=len(degraded),
+            probe="services_status",
+            observed_at=observed_at,
+            evidence=evidence,
         )
     ]
 
@@ -700,6 +762,8 @@ def _governance_incidents(
     pending_approvals: list[dict[str, Any]],
     task_status_counts: dict[str, Any],
     recent_tasks: list[dict[str, Any]],
+    *,
+    observed_at: float,
 ) -> list[dict[str, Any]]:
     incidents: list[dict[str, Any]] = []
 
@@ -710,6 +774,18 @@ def _governance_incidents(
 
     if queued_approval_count > 0:
         approval_id = str((pending_approvals[0] or {}).get("id") or "").strip()
+        evidence = [
+            _incident_evidence_item(
+                "approval",
+                evidence_id=str(item.get("id") or "").strip(),
+                label=str(item.get("action") or "").strip() or str(item.get("id") or "").strip(),
+                status=str(item.get("status") or "").strip(),
+                detail=str(item.get("reason") or "").strip(),
+                ts=_parse_ts(item.get("ts")),
+            )
+            for item in pending_approvals[:3]
+            if isinstance(item, dict)
+        ]
         incidents.append(
             _incident_record(
                 "governance.pending_approvals",
@@ -720,11 +796,40 @@ def _governance_incidents(
                 source="approvals",
                 count=queued_approval_count,
                 approval_id=approval_id,
+                probe="approval_queue",
+                observed_at=observed_at,
+                evidence=evidence,
             )
         )
 
     if pending_approval_count > 0:
         task = _first_task_for_status(recent_tasks, "needs_approval")
+        evidence = []
+        if task:
+            evidence.append(
+                _incident_evidence_item(
+                    "task",
+                    evidence_id=str(task.get("id") or "").strip(),
+                    label=str(task.get("objective") or task.get("capability") or task.get("id") or "").strip(),
+                    status=str(task.get("status") or "").strip(),
+                    detail=str(task.get("status_reason") or "").strip(),
+                    ts=_parse_ts(task.get("updated_at")),
+                )
+            )
+        if pending_approvals:
+            first_pending = pending_approvals[0]
+            if isinstance(first_pending, dict):
+                evidence.append(
+                    _incident_evidence_item(
+                        "approval",
+                        evidence_id=str(first_pending.get("id") or "").strip(),
+                        label=str(first_pending.get("action") or "").strip()
+                        or str(first_pending.get("id") or "").strip(),
+                        status=str(first_pending.get("status") or "").strip(),
+                        detail=str(first_pending.get("reason") or "").strip(),
+                        ts=_parse_ts(first_pending.get("ts")),
+                    )
+                )
         incidents.append(
             _incident_record(
                 "governance.awaiting_approval",
@@ -735,12 +840,27 @@ def _governance_incidents(
                 source="tasks",
                 count=pending_approval_count,
                 task_id=str(task.get("id") or "").strip(),
+                probe="task_runtime",
+                observed_at=observed_at,
+                evidence=evidence,
             )
         )
 
     if blocked_count > 0:
         task = _first_task_for_status(recent_tasks, "blocked")
         detail = str(task.get("status_reason") or "").strip() or "Policy or trust gates blocked execution."
+        evidence = []
+        if task:
+            evidence.append(
+                _incident_evidence_item(
+                    "task",
+                    evidence_id=str(task.get("id") or "").strip(),
+                    label=str(task.get("objective") or task.get("capability") or task.get("id") or "").strip(),
+                    status=str(task.get("status") or "").strip(),
+                    detail=detail,
+                    ts=_parse_ts(task.get("updated_at")),
+                )
+            )
         incidents.append(
             _incident_record(
                 "governance.blocked_tasks",
@@ -751,12 +871,27 @@ def _governance_incidents(
                 source="tasks",
                 count=blocked_count,
                 task_id=str(task.get("id") or "").strip(),
+                probe="task_runtime",
+                observed_at=observed_at,
+                evidence=evidence,
             )
         )
 
     if failed_count > 0:
         task = _first_task_for_status(recent_tasks, "failed")
         detail = str(task.get("status_reason") or "").strip() or "Execution failed and needs review."
+        evidence = []
+        if task:
+            evidence.append(
+                _incident_evidence_item(
+                    "task",
+                    evidence_id=str(task.get("id") or "").strip(),
+                    label=str(task.get("objective") or task.get("capability") or task.get("id") or "").strip(),
+                    status=str(task.get("status") or "").strip(),
+                    detail=detail,
+                    ts=_parse_ts(task.get("updated_at")),
+                )
+            )
         incidents.append(
             _incident_record(
                 "execution.failed_tasks",
@@ -767,6 +902,9 @@ def _governance_incidents(
                 source="tasks",
                 count=failed_count,
                 task_id=str(task.get("id") or "").strip(),
+                probe="task_runtime",
+                observed_at=observed_at,
+                evidence=evidence,
             )
         )
 
@@ -780,6 +918,43 @@ def _governance_incidents(
     return incidents
 
 
+def observer_incident_snapshot() -> dict[str, Any]:
+    data = data_dir()
+    approvals_root = data / "approvals"
+    tasks_root = data / "tasks"
+    generated_at = time.time()
+
+    stack_report = stack_status()
+    services_report = services_status()
+    task_summary = _task_summary(tasks_root)
+    task_status_counts = task_summary["status_counts"] if isinstance(task_summary.get("status_counts"), dict) else {}
+    recent_tasks = task_summary["recent"] if isinstance(task_summary.get("recent"), list) else []
+    pending_approval_items = _pending_approval_summary(approvals_root / "pending")
+
+    incidents = [
+        *_stack_incidents(stack_report, observed_at=generated_at),
+        *_service_incidents(services_report, observed_at=generated_at),
+        *_governance_incidents(
+            pending_approval_items,
+            task_status_counts,
+            recent_tasks,
+            observed_at=generated_at,
+        ),
+    ]
+
+    return {
+        "ok": True,
+        "subsystem": "observer_incidents",
+        "generated_at": generated_at,
+        "stack": stack_report,
+        "services": services_report,
+        "task_status_counts": task_status_counts,
+        "recent_tasks": recent_tasks,
+        "pending_approvals": pending_approval_items,
+        "incidents": incidents,
+    }
+
+
 def snapshot() -> dict[str, Any]:
     root = repo_root()
     data = data_dir()
@@ -789,11 +964,14 @@ def snapshot() -> dict[str, Any]:
     missions_root = data / "missions"
     logs_root = data / "logs"
     plugins_root = root / "plugins" / "generated"
-    stack_report = stack_status()
-    services_report = services_status()
-    task_summary = _task_summary(tasks_root)
-    task_status_counts = task_summary["status_counts"] if isinstance(task_summary.get("status_counts"), dict) else {}
-    recent_tasks = task_summary["recent"] if isinstance(task_summary.get("recent"), list) else []
+    observer = observer_incident_snapshot()
+    generated_at = float(observer.get("generated_at") or time.time())
+    stack_report = observer.get("stack") if isinstance(observer.get("stack"), dict) else {}
+    services_report = observer.get("services") if isinstance(observer.get("services"), dict) else {}
+    task_status_counts = (
+        observer.get("task_status_counts") if isinstance(observer.get("task_status_counts"), dict) else {}
+    )
+    recent_tasks = observer.get("recent_tasks") if isinstance(observer.get("recent_tasks"), list) else []
     continuity = mission_continuity_snapshot()
     mission_status_counts = (
         continuity["mission_status_counts"] if isinstance(continuity.get("mission_status_counts"), dict) else {}
@@ -804,18 +982,16 @@ def snapshot() -> dict[str, Any]:
         continuity["deadletter_missions"] if isinstance(continuity.get("deadletter_missions"), list) else []
     )
     mission_briefing = continuity["mission_briefing"] if isinstance(continuity.get("mission_briefing"), dict) else {}
-    pending_approval_items = _pending_approval_summary(approvals_root / "pending")
+    pending_approval_items = (
+        observer.get("pending_approvals") if isinstance(observer.get("pending_approvals"), list) else []
+    )
     pending_approvals = _count_json_entries(approvals_root / "pending")
-    incidents = [
-        *_stack_incidents(stack_report),
-        *_service_incidents(services_report),
-        *_governance_incidents(pending_approval_items, task_status_counts, recent_tasks),
-    ]
+    incidents = observer.get("incidents") if isinstance(observer.get("incidents"), list) else []
 
     return {
         "ok": True,
         "subsystem": "world_state",
-        "generated_at": time.time(),
+        "generated_at": generated_at,
         "repo_root": str(root),
         "data_dir": str(data),
         "trust": get_state(),

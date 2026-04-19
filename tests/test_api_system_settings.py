@@ -3,6 +3,147 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _write_dev_environment(repo_root: Path) -> None:
+    env_root = repo_root / "config" / "environments"
+    env_root.mkdir(parents=True, exist_ok=True)
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+
+def _write_orb_meta(repo_root: Path) -> None:
+    meta_root = repo_root / "meta"
+    meta_root.mkdir(parents=True, exist_ok=True)
+    (meta_root / "plane_map.yaml").write_text(
+        """
+meta:
+  model_id: francis.plane_map
+  version: 1
+planes:
+  - id: P1_INTERFACE
+    name: Interface
+    category: interface
+    purpose: Capture operator intent
+    side_effects_allowed: false
+    default_risk_class: low
+  - id: P4_COGNITION
+    name: Cognition
+    category: cognition
+    purpose: Produce plans
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P3_GOVERNANCE
+    name: Governance
+    category: governance
+    purpose: Evaluate policy gates
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P2_IDENTITY
+    name: Identity
+    category: security
+    purpose: Validate scopes
+    side_effects_allowed: true
+    default_risk_class: high
+  - id: P7_EXECUTION
+    name: Execution
+    category: execution
+    purpose: Perform side effects
+    side_effects_allowed: true
+    default_risk_class: critical
+  - id: P9_OBSERVABILITY
+    name: Observability
+    category: observability
+    purpose: Emit audit traces
+    side_effects_allowed: false
+    default_risk_class: medium
+  - id: P8_MEMORY
+    name: Memory
+    category: memory
+    purpose: Preserve continuity
+    side_effects_allowed: false
+    default_risk_class: medium
+transitions:
+  - from: P1_INTERFACE
+    to: P4_COGNITION
+    reason: Operator intent enters planning
+    conditions:
+      - input_received
+  - from: P4_COGNITION
+    to: P3_GOVERNANCE
+    reason: Planned work enters policy evaluation
+    conditions:
+      - plan_ready
+forbidden_transitions:
+  - from: P1_INTERFACE
+    to: P7_EXECUTION
+    reason: Execution must not bypass cognition and governance
+    conditions:
+      - governance_missing
+""".strip(),
+        encoding="utf-8",
+    )
+    (meta_root / "action_taxonomy.yaml").write_text(
+        """
+meta:
+  taxonomy_id: francis.action_taxonomy
+  version: 1
+controls:
+  - id: permission_gate
+    description: Validate identity and scopes
+  - id: trust_gate
+    description: Check trust thresholds
+  - id: approvals_gate
+    description: Require approval when policy demands it
+  - id: audit_log
+    description: Emit an auditable trail
+""".strip(),
+        encoding="utf-8",
+    )
+
+
+def _write_repo_scaffold(repo_root: Path) -> None:
+    (repo_root / "data").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "api").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "daemon").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "workers").mkdir(parents=True, exist_ok=True)
+    (repo_root / "apps" / "chat_ui").mkdir(parents=True, exist_ok=True)
+    (repo_root / "plugins").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "francis" / "api" / "app.py").write_text("", encoding="utf-8")
+    (repo_root / "src" / "francis" / "daemon" / "runner.py").write_text("", encoding="utf-8")
+    (repo_root / "src" / "francis" / "workers" / "runner.py").write_text("", encoding="utf-8")
+    (repo_root / "pyproject.toml").write_text("[project]\nname='francis-test'\nversion='0.0.0'\n", encoding="utf-8")
+    _write_dev_environment(repo_root)
+    _write_orb_meta(repo_root)
+
+
 def test_system_info_and_status(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -258,6 +399,117 @@ def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_p
     incident_ids = {item["id"] for item in body["overview"]["incidents"]}
     assert "governance.awaiting_approval" in incident_ids
     assert "governance.blocked_tasks" in incident_ids
+    approval_incident = next(
+        item for item in body["overview"]["incidents"] if item["id"] == "governance.awaiting_approval"
+    )
+    assert approval_incident["probe"] == "task_runtime"
+    assert approval_incident["evidence"][0]["kind"] == "task"
+    assert approval_incident["evidence"][0]["id"] == "tsk_approval"
+    blocked_incident = next(item for item in body["overview"]["incidents"] if item["id"] == "governance.blocked_tasks")
+    assert blocked_incident["probe"] == "task_runtime"
+    assert blocked_incident["evidence"][0]["detail"] == "insufficient_trust"
+
+
+def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    approvals_root = data_root / "approvals" / "pending"
+    blocked_task_dir = data_root / "tasks" / "tsk_blocked"
+    _write_repo_scaffold(repo_root)
+    approvals_root.mkdir(parents=True, exist_ok=True)
+    blocked_task_dir.mkdir(parents=True, exist_ok=True)
+
+    (approvals_root / "appr_blocked.json").write_text(
+        """
+{
+  "id": "appr_blocked",
+  "action": "plugin.run",
+  "reason": "Review blocked deployment",
+  "status": "pending",
+  "ts": 1712900000
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (blocked_task_dir / "record.json").write_text(
+        """
+{
+  "task_id": "tsk_blocked",
+  "status": "accepted",
+  "capability": "plugin.run",
+  "objective": "Blocked deploy",
+  "updated_at": "2026-04-11T12:05:00+00:00",
+  "result": {
+    "kind": "task.result",
+    "data": {
+      "status": "blocked",
+      "error": "insufficient_trust"
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    initial = client.get("/system/observer")
+    assert initial.status_code == 200
+    initial_body = initial.json()
+    assert initial_body["ok"] is True
+    assert initial_body["subsystem"] == "observer"
+    assert initial_body["decision"] == "urgent_review"
+    assert initial_body["counts"]["active"] >= 2
+    assert initial_body["recent_scans"] == []
+    incident_ids = {item["id"] for item in initial_body["incidents"]}
+    assert "governance.pending_approvals" in incident_ids
+    assert "governance.blocked_tasks" in incident_ids
+
+    empty_events = client.get("/system/observer/events")
+    assert empty_events.status_code == 200
+    assert empty_events.json()["items"] == []
+
+    scanned = client.post(
+        "/system/observer/scan",
+        json={"reason": "manual verification", "actor": "test.system.observer"},
+    )
+    assert scanned.status_code == 200
+    scanned_body = scanned.json()
+    assert scanned_body["ok"] is True
+    assert scanned_body["receipt"]["event"] == "observer.scan"
+    assert scanned_body["receipt"]["status"] == "attention"
+    assert scanned_body["receipt"]["decision"] == "urgent_review"
+    assert scanned_body["receipt"]["actor"] == "test.system.observer"
+    assert scanned_body["receipt"]["reason"] == "manual verification"
+    assert scanned_body["receipt"]["incident_count"] >= 2
+    assert "governance.blocked_tasks" in scanned_body["receipt"]["incident_ids"]
+    assert "task_runtime" in scanned_body["receipt"]["probes"]
+    assert scanned_body["recent_scans"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
+
+    events = client.get("/system/observer/events")
+    assert events.status_code == 200
+    events_body = events.json()
+    assert events_body["ok"] is True
+    assert events_body["total"] == 1
+    assert events_body["items"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
+    assert events_body["items"][0]["decision"] == "urgent_review"
+
+    filtered = client.get("/system/observer/audit?decision=urgent_review")
+    assert filtered.status_code == 200
+    assert filtered.json()["items"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
+
+    after_read = client.get("/system/observer")
+    assert after_read.status_code == 200
+    assert len(after_read.json()["recent_scans"]) == 1
 
 
 def test_system_world_state_reports_mission_counts_and_continuity(monkeypatch, tmp_path: Path) -> None:

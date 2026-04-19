@@ -8,6 +8,7 @@ import platform
 import socket
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +21,10 @@ from francis.kernel.paths import data_dir
 from francis.kernel.services import services_action, services_status
 from francis.kernel.stack import stack_status
 from francis.settings import Settings
+from francis.telemetry.audit import read_events, record
 from francis.world_state.operator_mode import set_control_mode, snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
-from francis.world_state.snapshot import snapshot as world_state_snapshot
+from francis.world_state.snapshot import observer_incident_snapshot, snapshot as world_state_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -43,6 +45,10 @@ def _safe_str(value: Any) -> str:
 
 def _now_s() -> int:
     return int(time.time())
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 def _runtime_settings_path() -> Path:
@@ -107,9 +113,7 @@ def _settings_dict() -> dict[str, Any]:
 
     if hasattr(settings_obj, "__dict__"):
         return {
-            key: value
-            for key, value in vars(settings_obj).items()
-            if not key.startswith("_") and not callable(value)
+            key: value for key, value in vars(settings_obj).items() if not key.startswith("_") and not callable(value)
         }
     return {}
 
@@ -153,9 +157,9 @@ def _effective_config_snapshot() -> dict[str, Any]:
 
     merged["francis_env_profile"] = _safe_str(os.getenv("FRANCIS_ENV_PROFILE")).strip() or "dev"
     merged["francis_run_mode"] = _safe_str(os.getenv("FRANCIS_RUN_MODE")).strip() or "api"
-    merged["francis_log_level"] = _safe_str(os.getenv("FRANCIS_LOG_LEVEL")).strip() or _safe_str(
-        merged.get("francis_log_level")
-    ) or "INFO"
+    merged["francis_log_level"] = (
+        _safe_str(os.getenv("FRANCIS_LOG_LEVEL")).strip() or _safe_str(merged.get("francis_log_level")) or "INFO"
+    )
 
     merged["feature_flags"] = {
         _safe_str(item.get("key")): bool(item.get("enabled"))
@@ -211,6 +215,132 @@ def _get_parent_node(root: dict[str, Any], tokens: list[str], *, create_missing:
 
 def _deep_copy_dict(obj: dict[str, Any]) -> dict[str, Any]:
     return json.loads(json.dumps(obj, ensure_ascii=False, default=str))
+
+
+def _observer_receipt_id() -> str:
+    return f"obs_scan_{_now_ms()}_{uuid.uuid4().hex[:8]}"
+
+
+def _observer_counts(incidents: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"active": len(incidents), "critical": 0, "error": 0, "warning": 0, "info": 0}
+    for item in incidents:
+        severity = _safe_str(item.get("severity")).strip().lower()
+        if severity in counts:
+            counts[severity] += 1
+    return counts
+
+
+def _observer_decision(counts: dict[str, int]) -> str:
+    if int(counts.get("active") or 0) <= 0:
+        return "stable"
+    if int(counts.get("critical") or 0) > 0 or int(counts.get("error") or 0) > 0:
+        return "urgent_review"
+    return "review"
+
+
+def _observer_headline(incidents: list[dict[str, Any]], counts: dict[str, int]) -> str:
+    active = int(counts.get("active") or 0)
+    if active <= 0:
+        return "Observer reports no active incidents."
+    focus = incidents[0] if incidents else {}
+    focus_title = _safe_str(focus.get("title")).strip() or "Observer findings need review"
+    return f"Observer flagged {active} active incident(s); highest-priority issue: {focus_title}."
+
+
+def _observer_focus(incidents: list[dict[str, Any]], *, limit: int = 3) -> list[dict[str, Any]]:
+    return [dict(item) for item in incidents[: max(0, int(limit))] if isinstance(item, dict)]
+
+
+def _observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict[str, Any]:
+    incidents = snapshot.get("incidents") if isinstance(snapshot.get("incidents"), list) else []
+    normalized_incidents = [dict(item) for item in incidents if isinstance(item, dict)]
+    counts = _observer_counts(normalized_incidents)
+    focus = _observer_focus(normalized_incidents, limit=focus_limit)
+    probes = sorted(
+        {_safe_str(item.get("probe")).strip() for item in normalized_incidents if _safe_str(item.get("probe")).strip()}
+    )
+    return {
+        "headline": _observer_headline(normalized_incidents, counts),
+        "decision": _observer_decision(counts),
+        "counts": counts,
+        "focus": focus,
+        "incident_ids": [
+            str(item.get("id") or "").strip() for item in normalized_incidents if str(item.get("id") or "").strip()
+        ],
+        "probes": probes,
+    }
+
+
+def _observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
+    counts = item.get("counts") if isinstance(item.get("counts"), dict) else {}
+    focus = [dict(entry) for entry in item.get("focus", []) if isinstance(entry, dict)]
+    projected: dict[str, Any] = {
+        "ts": float(item.get("ts") or 0.0),
+        "receipt_id": _safe_str(item.get("receipt_id")).strip(),
+        "event": _safe_str(item.get("event")).strip(),
+        "status": _safe_str(item.get("status")).strip(),
+        "decision": _safe_str(item.get("decision")).strip(),
+        "headline": _safe_str(item.get("headline")).strip(),
+        "incident_count": int(item.get("incident_count") or counts.get("active") or 0),
+        "counts": {key: int(value) for key, value in counts.items() if isinstance(value, (int, float))},
+        "incident_ids": [str(value).strip() for value in item.get("incident_ids", []) if str(value).strip()],
+        "probes": [str(value).strip() for value in item.get("probes", []) if str(value).strip()],
+        "focus": focus,
+        "generated_at": float(item.get("generated_at") or 0.0),
+        "reason": _safe_str(item.get("reason")).strip(),
+        "actor": _safe_str(item.get("actor")).strip(),
+        "trace_id": _safe_str(item.get("trace_id")).strip(),
+        "run_id": _safe_str(item.get("run_id")).strip(),
+    }
+    cleaned: dict[str, Any] = {}
+    for key, value in projected.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value:
+            continue
+        if isinstance(value, (list, dict)) and not value:
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+def _recent_observer_scans(*, limit: int = 10, status: str = "", decision: str = "") -> list[dict[str, Any]]:
+    items = read_events(limit=max(1, min(int(limit), 100)), event="observer.scan")
+    status_filter = status.strip().lower()
+    decision_filter = decision.strip().lower()
+    projected = [_observer_scan_event_projection(item) for item in items if isinstance(item, dict)]
+    filtered: list[dict[str, Any]] = []
+    for item in projected:
+        if status_filter and _safe_str(item.get("status")).strip().lower() != status_filter:
+            continue
+        if decision_filter and _safe_str(item.get("decision")).strip().lower() != decision_filter:
+            continue
+        filtered.append(item)
+    filtered.sort(key=lambda item: float(item.get("ts") or 0.0), reverse=True)
+    return filtered
+
+
+def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
+    snapshot = observer_incident_snapshot()
+    summary = _observer_summary(snapshot)
+    return {
+        "ok": bool(snapshot.get("ok")),
+        "subsystem": "observer",
+        "generated_at": float(snapshot.get("generated_at") or 0.0),
+        "headline": summary["headline"],
+        "decision": summary["decision"],
+        "counts": summary["counts"],
+        "focus": summary["focus"],
+        "incidents": snapshot.get("incidents") if isinstance(snapshot.get("incidents"), list) else [],
+        "task_status_counts": snapshot.get("task_status_counts")
+        if isinstance(snapshot.get("task_status_counts"), dict)
+        else {},
+        "recent_tasks": snapshot.get("recent_tasks") if isinstance(snapshot.get("recent_tasks"), list) else [],
+        "pending_approvals": snapshot.get("pending_approvals")
+        if isinstance(snapshot.get("pending_approvals"), list)
+        else [],
+        "recent_scans": _recent_observer_scans(limit=recent_limit),
+    }
 
 
 def _apply_mutation(config: dict[str, Any], *, op: str, path: str, value: Any) -> tuple[dict[str, Any], Any]:
@@ -323,6 +453,12 @@ class ControlModeSetIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class ObserverScanIn(BaseModel):
+    reason: str | None = None
+    actor: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/health")
 def health() -> dict[str, object]:
     try:
@@ -373,6 +509,74 @@ def world_state() -> dict[str, object]:
         return world_state_snapshot()
     except Exception as exc:
         return {"ok": False, "error": str(exc), "subsystem": "world_state"}
+
+
+@router.get("/observer")
+def observer(recent_limit: int = 10) -> dict[str, object]:
+    try:
+        return _observer_state_payload(recent_limit=recent_limit)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "subsystem": "observer"}
+
+
+@router.get("/observer/events")
+@router.get("/observer/log")
+@router.get("/observer/audit")
+def observer_events(
+    limit: int = 20,
+    status: str | None = None,
+    decision: str | None = None,
+) -> dict[str, object]:
+    try:
+        items = _recent_observer_scans(limit=limit, status=_safe_str(status), decision=_safe_str(decision))
+        return {
+            "ok": True,
+            "subsystem": "observer_events",
+            "items": items,
+            "history": items,
+            "total": len(items),
+            "limit": max(1, min(int(limit), 100)),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "subsystem": "observer_events",
+            "items": [],
+            "history": [],
+            "total": 0,
+            "limit": max(1, min(int(limit), 100)),
+            "error": str(exc),
+        }
+
+
+@router.post("/observer/scan")
+def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10) -> dict[str, object]:
+    try:
+        body = payload or ObserverScanIn()
+        snapshot = observer_incident_snapshot()
+        summary = _observer_summary(snapshot)
+        receipt = record(
+            "observer.scan",
+            status="ok" if int(summary["counts"].get("active") or 0) <= 0 else "attention",
+            subsystem="observer",
+            receipt_id=_observer_receipt_id(),
+            generated_at=float(snapshot.get("generated_at") or 0.0),
+            decision=summary["decision"],
+            headline=summary["headline"],
+            incident_count=int(summary["counts"].get("active") or 0),
+            counts=summary["counts"],
+            incident_ids=summary["incident_ids"],
+            probes=summary["probes"],
+            focus=summary["focus"],
+            actor=body.actor or "operator",
+            reason=body.reason or "manual_scan",
+            meta=body.meta,
+        )
+        response = _observer_state_payload(recent_limit=recent_limit)
+        response["receipt"] = _observer_scan_event_projection(receipt)
+        return response
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "subsystem": "observer"}
 
 
 @router.get("/orb_status")
