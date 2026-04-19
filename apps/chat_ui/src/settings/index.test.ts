@@ -376,6 +376,8 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
             level: "error",
             reasons: ["error incidents: 1", "active probes: task_runtime"],
           },
+          trace_id: "trace_observer_scan",
+          run_id: "run_observer_scan",
         },
       });
     }
@@ -484,6 +486,8 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
     assert.equal(observerResponse.receipt?.anomaly?.level, "error");
     assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.id, "task_runtime");
     assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.status, "attention");
+    assert.equal(observerResponse.receipt?.trace_id, "trace_observer_scan");
+    assert.equal(observerResponse.receipt?.run_id, "run_observer_scan");
     assert.equal(configResponse.ok, true);
     assert.deepEqual(configResponse.resulting_value, { density: "compact" });
     assert.equal(flagResponse.ok, true);
@@ -601,6 +605,8 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
                 generated_at: 1_710_000_452,
                 actor: "operator",
                 reason: "manual_scan",
+                trace_id: "trace_observer_scan",
+                run_id: "run_observer_scan",
               },
             ],
           },
@@ -643,6 +649,8 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probes?.[0], "task_runtime");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probe_statuses?.[0]?.id, "task_runtime");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probe_statuses?.[0]?.status, "attention");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.trace_id, "trace_observer_scan");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.run_id, "run_observer_scan");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.anomaly?.level, "error");
     assert.equal(briefing.operator?.available, true);
     assert.equal(briefing.operator?.control_mode?.id, "assist");
@@ -705,6 +713,8 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
                 score: 0,
                 level: "clear",
               },
+              trace_id: "trace_observer_clear",
+              run_id: "run_observer_clear",
             },
           ],
         },
@@ -741,6 +751,8 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.observer?.anomaly?.level, "clear");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.decision, "stable");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probe_statuses?.[0]?.id, "approval_queue");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.trace_id, "trace_observer_clear");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.run_id, "run_observer_clear");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.anomaly?.level, "clear");
     assert.equal(briefing.briefing?.headline, "");
     assert.equal(briefing.briefing?.focus?.length, 0);
