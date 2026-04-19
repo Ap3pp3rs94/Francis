@@ -1564,6 +1564,8 @@ export default function App() {
   const [operatorMode, setOperatorMode] = useState<OperatorModeSnapshot | null>(null);
   const [operatorModeError, setOperatorModeError] = useState<string | null>(null);
   const [operatorModeBusy, setOperatorModeBusy] = useState(false);
+  const [observerScanBusy, setObserverScanBusy] = useState(false);
+  const [observerScanNotice, setObserverScanNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -1964,6 +1966,14 @@ export default function App() {
         keywords: "away night shift mode",
         run: () => setControlMode("away"),
       },
+      {
+        id: "observer.scan",
+        label: "Record Observer Scan",
+        description: "Trigger an explicit receipted observer scan and refresh the continuity surfaces.",
+        group: "Control",
+        keywords: "observer scan receipt continuity observability",
+        run: () => recordObserverScan(),
+      },
     ];
   }, [
     createNewChat,
@@ -1976,6 +1986,7 @@ export default function App() {
     openPluginsPanel,
     openSettingsPanel,
     operatorMode?.backlog?.pending_approvals,
+    recordObserverScan,
     setControlMode,
   ]);
 
@@ -2807,6 +2818,44 @@ function SystemPanel(props: {
       setBusy(false);
     }
   }, [client, operationsClient, operationsError, settingsError]);
+
+  const recordObserverScan = useCallback(async () => {
+    if (!modeClient) {
+      setObserverScanNotice({ tone: "error", text: "API base URL is required before observer scans can be recorded." });
+      return;
+    }
+
+    setObserverScanBusy(true);
+    setObserverScanNotice(null);
+    try {
+      const response = await modeClient.recordObserverScan(
+        {
+          reason: "chat_ui.shift_briefing",
+          actor: "chat_ui.shift_briefing",
+        },
+        { timeoutMs: 10_000 },
+      );
+      if (!response.ok) {
+        throw new Error("Observer scan failed.");
+      }
+      const receiptId = safeString(response.receipt?.receipt_id).trim();
+      const decision = safeString(response.decision).trim() || safeString(response.receipt?.decision).trim();
+      setObserverScanNotice({
+        tone: "info",
+        text: receiptId
+          ? `Observer scan recorded as ${receiptId}${decision ? ` (${decision})` : ""}.`
+          : "Observer scan recorded.",
+      });
+      await refresh();
+    } catch (err) {
+      setObserverScanNotice({
+        tone: "error",
+        text: settingsError(err, "Observer scan request failed."),
+      });
+    } finally {
+      setObserverScanBusy(false);
+    }
+  }, [modeClient, refresh, settingsError]);
 
   useEffect(() => {
     void refresh();
@@ -3768,7 +3817,7 @@ function SystemPanel(props: {
                   {safeString(shiftBriefingObserver.headline).trim() || "Observer findings are embedded here when available."}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
                 <span style={badgeStyle(shiftBriefingObserverActive > 0 ? "warning" : "clear")}>
                   active {shiftBriefingObserverActive}
                 </span>
@@ -3784,10 +3833,24 @@ function SystemPanel(props: {
                 {shiftBriefingObserver.observed_at ? (
                   <span style={{ fontSize: 11, color: THEME.muted }}>Observed {toLocaleTime(shiftBriefingObserver.observed_at)}</span>
                 ) : null}
+                <button style={buttonStyle} disabled={busy || observerScanBusy} onClick={() => void recordObserverScan()}>
+                  {observerScanBusy ? "Scanning." : "Record observer scan"}
+                </button>
               </div>
             </div>
             {safeString(shiftBriefingObserver.error).trim() ? (
               <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>{safeString(shiftBriefingObserver.error).trim()}</div>
+            ) : null}
+            {observerScanNotice ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  marginTop: 8,
+                  color: observerScanNotice.tone === "error" ? "#ffb0b0" : "#d7f0c8",
+                }}
+              >
+                {observerScanNotice.text}
+              </div>
             ) : null}
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {shiftBriefingObserverFocus.length === 0 ? (

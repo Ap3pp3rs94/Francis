@@ -557,6 +557,21 @@ export type ConfigMutationResponse = {
   meta?: Record<string, unknown>;
 };
 
+export type ObserverScanRequest = {
+  reason?: string;
+  actor?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type ObserverScanResponse = {
+  ok: boolean;
+  subsystem?: string;
+  headline?: string;
+  decision?: string;
+  counts?: Record<string, number>;
+  receipt?: ObserverScanReceiptSummary;
+};
+
 export type OperatorModeMutationRequest = {
   mode: OperatorControlModeId;
   reason?: string;
@@ -1737,6 +1752,7 @@ export type SettingsEndpoints = {
   orbStatus: () => string[];
   operatorMode: () => string[];
   setOperatorMode: () => string[];
+  observerScan: () => string[];
   featureFlags: () => string[];
   effectiveConfig: () => string[];
 
@@ -1759,6 +1775,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
     setOperatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
+    observerScan: () => ["/system/observer/scan"],
     featureFlags: () => ["/system/flags", "/system/feature_flags", "/system/features", "/flags"],
     effectiveConfig: () => ["/system/config/effective", "/system/effective_config", "/system/config", "/config/effective"],
 
@@ -1926,6 +1943,31 @@ export class SettingsClient {
       status: safeString(json.status, ""),
       message: safeString(json.message, ""),
       snapshot: parseOperatorModeSnapshot(json),
+    };
+  }
+
+  async recordObserverScan(
+    req: ObserverScanRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<ObserverScanResponse> {
+    if (!this.mutationsEnabled) {
+      throw new Error("SettingsClient.recordObserverScan is disabled (mutationsEnabled=false).");
+    }
+
+    const { json } = await this.fetchFirstOk(this.endpoints.observerScan(), {
+      ...this.init(opts),
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+
+    if (!isRecord(json)) return { ok: false };
+    return {
+      ok: safeBoolean(json.ok, false),
+      subsystem: safeString(json.subsystem, ""),
+      headline: safeString(json.headline, ""),
+      decision: safeString(json.decision, ""),
+      counts: parseNumberMap(json.counts),
+      receipt: parseObserverScanReceiptSummary(json.receipt),
     };
   }
 
