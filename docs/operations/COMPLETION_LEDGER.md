@@ -893,6 +893,11 @@ Latest targeted validation for the `2026-04-19` observer audit-log surface slice
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 
+Latest targeted validation for the `2026-04-19` observer audit-route contract slice:
+
+- `python -m pytest tests/test_api_contract_chat_ui.py -q`
+  Result: `1 passed`
+
 Those validations specifically cover:
 
 - continuity ledger route tail behavior
