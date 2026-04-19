@@ -21,10 +21,15 @@ from francis.kernel.paths import data_dir
 from francis.kernel.services import services_action, services_status
 from francis.kernel.stack import stack_status
 from francis.settings import Settings
-from francis.telemetry.audit import read_events, record
+from francis.telemetry.audit import record
 from francis.world_state.operator_mode import set_control_mode, snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
-from francis.world_state.snapshot import observer_incident_snapshot, snapshot as world_state_snapshot
+from francis.world_state.snapshot import (
+    observer_incident_snapshot,
+    observer_scan_event_projection,
+    observer_scan_history,
+    snapshot as world_state_snapshot,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -271,55 +276,6 @@ def _observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict
     }
 
 
-def _observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
-    counts = item.get("counts") if isinstance(item.get("counts"), dict) else {}
-    focus = [dict(entry) for entry in item.get("focus", []) if isinstance(entry, dict)]
-    projected: dict[str, Any] = {
-        "ts": float(item.get("ts") or 0.0),
-        "receipt_id": _safe_str(item.get("receipt_id")).strip(),
-        "event": _safe_str(item.get("event")).strip(),
-        "status": _safe_str(item.get("status")).strip(),
-        "decision": _safe_str(item.get("decision")).strip(),
-        "headline": _safe_str(item.get("headline")).strip(),
-        "incident_count": int(item.get("incident_count") or counts.get("active") or 0),
-        "counts": {key: int(value) for key, value in counts.items() if isinstance(value, (int, float))},
-        "incident_ids": [str(value).strip() for value in item.get("incident_ids", []) if str(value).strip()],
-        "probes": [str(value).strip() for value in item.get("probes", []) if str(value).strip()],
-        "focus": focus,
-        "generated_at": float(item.get("generated_at") or 0.0),
-        "reason": _safe_str(item.get("reason")).strip(),
-        "actor": _safe_str(item.get("actor")).strip(),
-        "trace_id": _safe_str(item.get("trace_id")).strip(),
-        "run_id": _safe_str(item.get("run_id")).strip(),
-    }
-    cleaned: dict[str, Any] = {}
-    for key, value in projected.items():
-        if value is None:
-            continue
-        if isinstance(value, str) and not value:
-            continue
-        if isinstance(value, (list, dict)) and not value:
-            continue
-        cleaned[key] = value
-    return cleaned
-
-
-def _recent_observer_scans(*, limit: int = 10, status: str = "", decision: str = "") -> list[dict[str, Any]]:
-    items = read_events(limit=max(1, min(int(limit), 100)), event="observer.scan")
-    status_filter = status.strip().lower()
-    decision_filter = decision.strip().lower()
-    projected = [_observer_scan_event_projection(item) for item in items if isinstance(item, dict)]
-    filtered: list[dict[str, Any]] = []
-    for item in projected:
-        if status_filter and _safe_str(item.get("status")).strip().lower() != status_filter:
-            continue
-        if decision_filter and _safe_str(item.get("decision")).strip().lower() != decision_filter:
-            continue
-        filtered.append(item)
-    filtered.sort(key=lambda item: float(item.get("ts") or 0.0), reverse=True)
-    return filtered
-
-
 def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
     snapshot = observer_incident_snapshot()
     summary = _observer_summary(snapshot)
@@ -339,7 +295,7 @@ def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
         "pending_approvals": snapshot.get("pending_approvals")
         if isinstance(snapshot.get("pending_approvals"), list)
         else [],
-        "recent_scans": _recent_observer_scans(limit=recent_limit),
+        "recent_scans": observer_scan_history(limit=recent_limit),
     }
 
 
@@ -528,7 +484,7 @@ def observer_events(
     decision: str | None = None,
 ) -> dict[str, object]:
     try:
-        items = _recent_observer_scans(limit=limit, status=_safe_str(status), decision=_safe_str(decision))
+        items = observer_scan_history(limit=limit, status=_safe_str(status), decision=_safe_str(decision))
         return {
             "ok": True,
             "subsystem": "observer_events",
@@ -573,7 +529,7 @@ def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10)
             meta=body.meta,
         )
         response = _observer_state_payload(recent_limit=recent_limit)
-        response["receipt"] = _observer_scan_event_projection(receipt)
+        response["receipt"] = observer_scan_event_projection(receipt)
         return response
     except Exception as exc:
         return {"ok": False, "error": str(exc), "subsystem": "observer"}

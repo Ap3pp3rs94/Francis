@@ -59,6 +59,31 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 ## 3. High-confidence current slice
 
 As of `2026-04-18`, the highest-confidence surface newly touched in the current
+working tree is a continuity-facing observer decisions log that advances the
+active `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE` line without creating
+ambient observer activity or adding a second observer polling path:
+
+- `src/francis/world_state/snapshot.py` now exposes shared observer scan receipt
+  projection and history helpers, so explicit `observer.scan` audit receipts can
+  be reused consistently across system and continuity surfaces instead of being
+  reinterpreted differently at each API edge.
+- `src/francis/api/routes/continuity.py` now embeds recent explicit observer
+  scan receipts inside the continuity briefing’s observer payload. The shift
+  briefing can now carry both current observer truth and the recent receipted
+  scan/decision trail in one bounded payload.
+- `apps/chat_ui/src/settings/index.ts` and
+  `apps/chat_ui/src/settings/index.test.ts` now preserve that recent observer
+  scan history through the browser parser, including decision, status, receipt
+  id, probes, and top focus incidents.
+- `apps/chat_ui/src/App.tsx` now renders a compact “Recent explicit observer
+  scans” block inside the embedded observer surface in Shift Briefing, making
+  the Stage 2 observer decisions log visible in the same return-to-work surface
+  as orb/operator handback truth.
+- `tests/test_api_continuity.py` now proves that an explicit observer scan
+  receipt survives into the continuity briefing instead of remaining stranded in
+  the backend-only observer API.
+
+As of `2026-04-18`, the highest-confidence surface newly touched in the current
 working tree is an explicit observer scan receipt path that advances the active
 `Phase 2 / P9_OBSERVABILITY` line without inventing ambient autonomy or writing
 audit noise on passive reads:
@@ -750,6 +775,19 @@ Latest targeted validation for the `2026-04-18` observer scan receipt slice:
   Result: `passed`
 - `python -m ruff format src/francis/api/routes/system.py tests/test_api_system_settings.py`
   Result: `1 file reformatted, 1 file left unchanged`
+
+Latest targeted validation for the `2026-04-18` observer continuity decisions-log slice:
+
+- `python -m pytest tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `24 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py src/francis/api/routes/system.py src/francis/api/routes/continuity.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `passed`
+- `python -m ruff format src/francis/world_state/snapshot.py src/francis/api/routes/system.py src/francis/api/routes/continuity.py tests/test_api_continuity.py`
+  Result: `1 file reformatted, 3 files left unchanged`
+- `cd apps/chat_ui && npm test`
+  Result: `15 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-18` observer continuity bridge:
 

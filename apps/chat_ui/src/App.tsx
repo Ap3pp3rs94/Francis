@@ -14,6 +14,7 @@ import type {
   ContinuityBriefingSnapshot,
   ContinuityLedgerEntry,
   ContinuityLedgerSnapshot,
+  ObserverScanReceiptSummary,
   OperatorControlModeId,
   OperatorModeSnapshot,
   OrbStatusSnapshot,
@@ -250,6 +251,14 @@ function incidentEvidenceSummary(incident: WorldStateIncidentSummary | null | un
       else if (path) parts.push(path);
       return parts.join(" / ");
     })
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
+function observerScanFocusSummary(scan: ObserverScanReceiptSummary | null | undefined): string[] {
+  const focus = Array.isArray(scan?.focus) ? scan.focus : [];
+  return focus
+    .map((item) => safeString(item?.title).trim() || safeString(item?.id).trim())
     .filter(Boolean)
     .slice(0, 2);
 }
@@ -2876,6 +2885,7 @@ function SystemPanel(props: {
   const shiftBriefingObserver = shiftBriefing?.observer;
   const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
   const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
+  const shiftBriefingObserverRecentScans = shiftBriefingObserver?.recent_scans ?? [];
   const shiftBriefingObserverActive = safeNumber(shiftBriefingObserverCounts["active"], shiftBriefingObserverFocus.length);
   const shiftBriefingObserverCritical = safeNumber(shiftBriefingObserverCounts["critical"], 0);
   const shiftBriefingObserverError = safeNumber(shiftBriefingObserverCounts["error"], 0);
@@ -3849,6 +3859,73 @@ function SystemPanel(props: {
                   );
                 })
               )}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 600 }}>Recent explicit observer scans</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                This is the bounded decisions log for manual observer scans. Passive briefing reads do not create these receipts.
+              </div>
+              <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                {shiftBriefingObserverRecentScans.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted }}>No explicit observer scan receipts are embedded in this snapshot yet.</div>
+                ) : (
+                  shiftBriefingObserverRecentScans.slice(0, 2).map((scan) => {
+                    const observedAt = mixedLocaleTime(scan.generated_at ?? scan.ts);
+                    const focusLines = observerScanFocusSummary(scan);
+                    return (
+                      <div
+                        key={`observer-scan-${scan.receipt_id || scan.headline || observedAt}`}
+                        style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <div style={{ fontSize: 11, fontWeight: 600 }}>{scan.headline || "Observer scan recorded"}</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {scan.status ? <span style={badgeStyle(scan.status)}>{scan.status}</span> : null}
+                            {scan.decision ? <span style={badgeStyle(scan.decision)}>{scan.decision}</span> : null}
+                            {typeof scan.incident_count === "number" ? (
+                              <span style={badgeStyle(scan.incident_count > 0 ? "warning" : "clear")}>
+                                incidents {scan.incident_count}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          receipt=<code>{scan.receipt_id || "unknown"}</code>
+                          {observedAt ? (
+                            <>
+                              {" / "}at=<code>{observedAt}</code>
+                            </>
+                          ) : null}
+                          {scan.actor ? (
+                            <>
+                              {" / "}actor=<code>{scan.actor}</code>
+                            </>
+                          ) : null}
+                          {scan.reason ? (
+                            <>
+                              {" / "}reason=<code>{scan.reason}</code>
+                            </>
+                          ) : null}
+                        </div>
+                        {scan.probes?.length ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            probes <code>{scan.probes.join(", ")}</code>
+                          </div>
+                        ) : null}
+                        {focusLines.length > 0 ? (
+                          <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                            {focusLines.map((line) => (
+                              <div key={`${scan.receipt_id || scan.headline}:${line}`} style={{ fontSize: 11, color: THEME.muted }}>
+                                focus <code>{line}</code>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         ) : null}
