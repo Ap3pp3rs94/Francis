@@ -155,6 +155,112 @@ def observer_focus(incidents: list[dict[str, Any]], *, limit: int = 3) -> list[d
     return [dict(item) for item in incidents[: max(0, int(limit))] if isinstance(item, dict)]
 
 
+def _probe_severity(incidents: list[dict[str, Any]]) -> str:
+    if not incidents:
+        return "clear"
+    ordered = sorted(
+        (_safe_str(item.get("severity")).strip().lower() for item in incidents),
+        key=lambda value: _INCIDENT_SEVERITY_ORDER.get(value, 99),
+    )
+    return ordered[0] if ordered else "clear"
+
+
+def _observer_probe_summary(
+    probe_id: str,
+    *,
+    status: str,
+    incidents: list[dict[str, Any]],
+    headline: str,
+    detail: str,
+) -> dict[str, Any]:
+    return {
+        "id": probe_id,
+        "status": status,
+        "severity": _probe_severity(incidents),
+        "headline": headline,
+        "detail": detail,
+        "incident_count": len(incidents),
+    }
+
+
+def observer_probe_statuses(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    incidents = [dict(item) for item in snapshot.get("incidents", []) if isinstance(item, dict)]
+    incidents_by_probe: dict[str, list[dict[str, Any]]] = {}
+    for item in incidents:
+        probe_id = _safe_str(item.get("probe")).strip()
+        if not probe_id:
+            continue
+        incidents_by_probe.setdefault(probe_id, []).append(item)
+
+    stack_report = snapshot.get("stack") if isinstance(snapshot.get("stack"), dict) else {}
+    stack_counts = stack_report.get("counts") if isinstance(stack_report.get("counts"), dict) else {}
+    stack_incidents = incidents_by_probe.get("stack_status", [])
+    stack_total = int(stack_counts.get("total") or 0)
+    stack_ready = int(stack_counts.get("ready") or 0)
+    stack_missing = int(stack_counts.get("missing") or 0)
+
+    services_report = snapshot.get("services") if isinstance(snapshot.get("services"), dict) else {}
+    services_counts = services_report.get("counts") if isinstance(services_report.get("counts"), dict) else {}
+    service_incidents = incidents_by_probe.get("services_status", [])
+    services_ready = int(services_counts.get("ready") or 0)
+    services_missing = int(services_counts.get("missing") or 0)
+    services_disabled = int(services_counts.get("disabled") or 0)
+
+    pending_approvals = snapshot.get("pending_approvals") if isinstance(snapshot.get("pending_approvals"), list) else []
+    approval_incidents = incidents_by_probe.get("approval_queue", [])
+    task_status_counts = (
+        snapshot.get("task_status_counts") if isinstance(snapshot.get("task_status_counts"), dict) else {}
+    )
+    runtime_incidents = incidents_by_probe.get("task_runtime", [])
+    blocked_tasks = int(task_status_counts.get("blocked") or 0)
+    approval_pending_tasks = int(task_status_counts.get("needs_approval") or 0)
+    failed_tasks = int(task_status_counts.get("failed") or 0)
+
+    stack_headline = (
+        _safe_str(stack_incidents[0].get("title")).strip() if stack_incidents else "Stack surfaces are ready."
+    )
+    services_headline = (
+        _safe_str(service_incidents[0].get("title")).strip() if service_incidents else "Service surfaces are ready."
+    )
+    approval_headline = (
+        _safe_str(approval_incidents[0].get("title")).strip() if approval_incidents else "Approval queue is clear."
+    )
+    runtime_headline = (
+        _safe_str(runtime_incidents[0].get("title")).strip() if runtime_incidents else "Task runtime is clear."
+    )
+
+    return [
+        _observer_probe_summary(
+            "stack_status",
+            status=_safe_str(stack_report.get("status")).strip() or "unknown",
+            incidents=stack_incidents,
+            headline=stack_headline,
+            detail=f"{stack_ready}/{stack_total} stack surfaces ready; missing {stack_missing}.",
+        ),
+        _observer_probe_summary(
+            "services_status",
+            status=_safe_str(services_report.get("status")).strip() or "unknown",
+            incidents=service_incidents,
+            headline=services_headline,
+            detail=f"{services_ready} ready; missing {services_missing}; disabled {services_disabled}.",
+        ),
+        _observer_probe_summary(
+            "approval_queue",
+            status="attention" if approval_incidents else "ok",
+            incidents=approval_incidents,
+            headline=approval_headline,
+            detail=f"{len(pending_approvals)} approval request(s) queued for review.",
+        ),
+        _observer_probe_summary(
+            "task_runtime",
+            status="attention" if runtime_incidents else "ok",
+            incidents=runtime_incidents,
+            headline=runtime_headline,
+            detail=(f"blocked {blocked_tasks}; awaiting approval {approval_pending_tasks}; failed {failed_tasks}."),
+        ),
+    ]
+
+
 def observer_decision(counts: dict[str, int]) -> str:
     if int(counts.get("active") or 0) <= 0:
         return "stable"
@@ -189,6 +295,7 @@ def observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict[
             str(item.get("id") or "").strip() for item in normalized_incidents if str(item.get("id") or "").strip()
         ],
         "probes": probes,
+        "probe_statuses": observer_probe_statuses(snapshot),
         "anomaly": observer_anomaly_summary(normalized_incidents),
     }
 

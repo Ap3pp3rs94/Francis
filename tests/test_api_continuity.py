@@ -172,6 +172,12 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["briefing"]["observer"]["counts"]["active"] == 0
     assert body["briefing"]["observer"]["anomaly"]["score"] == 0
     assert body["briefing"]["observer"]["anomaly"]["level"] == "clear"
+    assert {item["id"] for item in body["briefing"]["observer"]["probes"]} == {
+        "stack_status",
+        "services_status",
+        "approval_queue",
+        "task_runtime",
+    }
     assert body["briefing"]["observer"]["focus"] == []
     assert body["recent_missions"] == []
     assert body["operator"]["available"] is True
@@ -373,6 +379,10 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["observer"]["counts"]["active"] >= 1
     assert body["briefing"]["observer"]["anomaly"]["score"] >= 50
     assert body["briefing"]["observer"]["anomaly"]["level"] == "error"
+    observer_probes = body["briefing"]["observer"]["probes"]
+    assert observer_probes
+    assert next(item for item in observer_probes if item["id"] == "task_runtime")["status"] == "attention"
+    assert next(item for item in observer_probes if item["id"] == "approval_queue")["incident_count"] == 0
     observer_focus = body["briefing"]["observer"]["focus"]
     assert observer_focus
     blocked_incident = next(item for item in observer_focus if item["id"] == "governance.blocked_tasks")

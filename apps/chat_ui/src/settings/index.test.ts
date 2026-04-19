@@ -509,6 +509,25 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
           observer: {
             headline: "Observer flagged 1 active incident(s); Tasks are blocked by governance leads review.",
             counts: { active: 1, error: 1 },
+            probes: [
+              {
+                id: "stack_status",
+                status: "ok",
+                severity: "clear",
+                headline: "Stack surfaces are ready.",
+                detail: "9/9 stack surfaces ready; missing 0.",
+                incident_count: 0,
+              },
+              {
+                id: "task_runtime",
+                status: "attention",
+                severity: "error",
+                headline: "Tasks are blocked by governance",
+                detail: "blocked 1; awaiting approval 0; failed 0.",
+                incident_count: 1,
+                observed_at: 1_710_000_450,
+              },
+            ],
             anomaly: {
               score: 50,
               level: "error",
@@ -591,6 +610,8 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.generated_at, 1_710_000_456);
     assert.equal(briefing.briefing?.headline, "Night shift ready");
     assert.equal(briefing.briefing?.observer?.counts?.active, 1);
+    assert.equal(briefing.briefing?.observer?.probes?.[1]?.id, "task_runtime");
+    assert.equal(briefing.briefing?.observer?.probes?.[1]?.status, "attention");
     assert.equal(briefing.briefing?.observer?.anomaly?.level, "error");
     assert.equal(briefing.briefing?.observer?.anomaly?.score, 50);
     assert.equal(briefing.briefing?.observer?.focus?.[0]?.probe, "task_runtime");
@@ -625,6 +646,16 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
         observer: {
           headline: "Observer reports no active incidents.",
           counts: { active: 0 },
+          probes: [
+            {
+              id: "approval_queue",
+              status: "ok",
+              severity: "clear",
+              headline: "Approval queue is clear.",
+              detail: "0 approval request(s) queued for review.",
+              incident_count: 0,
+            },
+          ],
           anomaly: {
             score: 0,
             level: "clear",
@@ -671,6 +702,8 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");
+    assert.equal(briefing.briefing?.observer?.probes?.[0]?.id, "approval_queue");
+    assert.equal(briefing.briefing?.observer?.probes?.[0]?.status, "ok");
     assert.equal(briefing.briefing?.observer?.anomaly?.level, "clear");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.decision, "stable");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.anomaly?.level, "clear");

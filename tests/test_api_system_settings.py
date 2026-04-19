@@ -472,6 +472,11 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert initial_body["anomaly"]["score"] >= 50
     assert initial_body["anomaly"]["level"] == "error"
     assert "task_runtime" in " ".join(initial_body["anomaly"]["reasons"])
+    probe_ids = {item["id"] for item in initial_body["probes"]}
+    assert {"stack_status", "services_status", "approval_queue", "task_runtime"} <= probe_ids
+    task_runtime_probe = next(item for item in initial_body["probes"] if item["id"] == "task_runtime")
+    assert task_runtime_probe["status"] == "attention"
+    assert task_runtime_probe["incident_count"] >= 1
     assert initial_body["recent_scans"] == []
     incident_ids = {item["id"] for item in initial_body["incidents"]}
     assert "governance.pending_approvals" in incident_ids

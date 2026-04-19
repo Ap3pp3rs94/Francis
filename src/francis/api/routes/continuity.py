@@ -82,6 +82,7 @@ def _observer_briefing() -> dict[str, Any]:
         "headline": summary["headline"],
         "counts": summary["counts"],
         "focus": summary["focus"],
+        "probes": summary["probe_statuses"],
         "anomaly": summary["anomaly"],
         "recent_scans": recent_scans,
     }

@@ -238,6 +238,7 @@ def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
         "decision": summary["decision"],
         "counts": summary["counts"],
         "focus": summary["focus"],
+        "probes": summary["probe_statuses"],
         "anomaly": summary["anomaly"],
         "incidents": snapshot.get("incidents") if isinstance(snapshot.get("incidents"), list) else [],
         "task_status_counts": snapshot.get("task_status_counts")
