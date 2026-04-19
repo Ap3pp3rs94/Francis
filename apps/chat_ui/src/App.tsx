@@ -4087,6 +4087,46 @@ function SystemPanel(props: {
                             </>
                           ) : null}
                         </div>
+                        {scan.probe_statuses?.length ? (
+                          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                            {scan.probe_statuses.map((probe) => (
+                              <div
+                                key={`${scan.receipt_id || scan.headline || "observer-scan"}:${probe.id || probe.headline}`}
+                                style={{
+                                  border: `1px solid ${THEME.panelBorder}`,
+                                  borderRadius: 8,
+                                  padding: 8,
+                                  background: "#121212",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <div style={{ fontSize: 11, fontWeight: 600 }}>{probe.headline || probe.id || "Observer probe"}</div>
+                                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                    {probe.id ? <span style={badgeStyle(probe.id)}>{probe.id}</span> : null}
+                                    {probe.status ? <span style={badgeStyle(probe.status)}>{probe.status}</span> : null}
+                                    {probe.severity ? <span style={badgeStyle(probe.severity)}>{probe.severity}</span> : null}
+                                    {typeof probe.incident_count === "number" ? (
+                                      <span style={badgeStyle(probe.incident_count > 0 ? "warning" : "clear")}>
+                                        incidents {probe.incident_count}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                {probe.detail ? (
+                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{probe.detail}</div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         {scan.probes?.length ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                             probes <code>{scan.probes.join(", ")}</code>

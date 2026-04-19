@@ -361,6 +361,16 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
           headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
           incident_count: 1,
           probes: ["task_runtime"],
+          probe_statuses: [
+            {
+              id: "task_runtime",
+              status: "attention",
+              severity: "error",
+              headline: "Tasks are blocked by governance",
+              detail: "blocked 1; awaiting approval 0; failed 0.",
+              incident_count: 1,
+            },
+          ],
           anomaly: {
             score: 50,
             level: "error",
@@ -472,6 +482,8 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
     assert.equal(observerResponse.anomaly?.score, 50);
     assert.equal(observerResponse.receipt?.receipt_id, "obs_scan_003");
     assert.equal(observerResponse.receipt?.anomaly?.level, "error");
+    assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.id, "task_runtime");
+    assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.status, "attention");
     assert.equal(configResponse.ok, true);
     assert.deepEqual(configResponse.resulting_value, { density: "compact" });
     assert.equal(flagResponse.ok, true);
@@ -564,6 +576,16 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
                 headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
                 incident_count: 1,
                 probes: ["task_runtime"],
+                probe_statuses: [
+                  {
+                    id: "task_runtime",
+                    status: "attention",
+                    severity: "error",
+                    headline: "Tasks are blocked by governance",
+                    detail: "blocked 1; awaiting approval 0; failed 0.",
+                    incident_count: 1,
+                  },
+                ],
                 anomaly: {
                   score: 50,
                   level: "error",
@@ -619,6 +641,8 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.receipt_id, "obs_scan_001");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.decision, "urgent_review");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probes?.[0], "task_runtime");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probe_statuses?.[0]?.id, "task_runtime");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probe_statuses?.[0]?.status, "attention");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.anomaly?.level, "error");
     assert.equal(briefing.operator?.available, true);
     assert.equal(briefing.operator?.control_mode?.id, "assist");
@@ -667,6 +691,16 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               status: "ok",
               decision: "stable",
               headline: "Observer reports no active incidents.",
+              probe_statuses: [
+                {
+                  id: "approval_queue",
+                  status: "ok",
+                  severity: "clear",
+                  headline: "Approval queue is clear.",
+                  detail: "0 approval request(s) queued for review.",
+                  incident_count: 0,
+                },
+              ],
               anomaly: {
                 score: 0,
                 level: "clear",
@@ -706,6 +740,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.observer?.probes?.[0]?.status, "ok");
     assert.equal(briefing.briefing?.observer?.anomaly?.level, "clear");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.decision, "stable");
+    assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.probe_statuses?.[0]?.id, "approval_queue");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.anomaly?.level, "clear");
     assert.equal(briefing.briefing?.headline, "");
     assert.equal(briefing.briefing?.focus?.length, 0);
