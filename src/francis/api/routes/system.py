@@ -28,6 +28,7 @@ from francis.world_state.snapshot import (
     observer_incident_snapshot,
     observer_scan_event_projection,
     observer_scan_history,
+    observer_summary,
     snapshot as world_state_snapshot,
 )
 
@@ -226,59 +227,9 @@ def _observer_receipt_id() -> str:
     return f"obs_scan_{_now_ms()}_{uuid.uuid4().hex[:8]}"
 
 
-def _observer_counts(incidents: list[dict[str, Any]]) -> dict[str, int]:
-    counts = {"active": len(incidents), "critical": 0, "error": 0, "warning": 0, "info": 0}
-    for item in incidents:
-        severity = _safe_str(item.get("severity")).strip().lower()
-        if severity in counts:
-            counts[severity] += 1
-    return counts
-
-
-def _observer_decision(counts: dict[str, int]) -> str:
-    if int(counts.get("active") or 0) <= 0:
-        return "stable"
-    if int(counts.get("critical") or 0) > 0 or int(counts.get("error") or 0) > 0:
-        return "urgent_review"
-    return "review"
-
-
-def _observer_headline(incidents: list[dict[str, Any]], counts: dict[str, int]) -> str:
-    active = int(counts.get("active") or 0)
-    if active <= 0:
-        return "Observer reports no active incidents."
-    focus = incidents[0] if incidents else {}
-    focus_title = _safe_str(focus.get("title")).strip() or "Observer findings need review"
-    return f"Observer flagged {active} active incident(s); highest-priority issue: {focus_title}."
-
-
-def _observer_focus(incidents: list[dict[str, Any]], *, limit: int = 3) -> list[dict[str, Any]]:
-    return [dict(item) for item in incidents[: max(0, int(limit))] if isinstance(item, dict)]
-
-
-def _observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict[str, Any]:
-    incidents = snapshot.get("incidents") if isinstance(snapshot.get("incidents"), list) else []
-    normalized_incidents = [dict(item) for item in incidents if isinstance(item, dict)]
-    counts = _observer_counts(normalized_incidents)
-    focus = _observer_focus(normalized_incidents, limit=focus_limit)
-    probes = sorted(
-        {_safe_str(item.get("probe")).strip() for item in normalized_incidents if _safe_str(item.get("probe")).strip()}
-    )
-    return {
-        "headline": _observer_headline(normalized_incidents, counts),
-        "decision": _observer_decision(counts),
-        "counts": counts,
-        "focus": focus,
-        "incident_ids": [
-            str(item.get("id") or "").strip() for item in normalized_incidents if str(item.get("id") or "").strip()
-        ],
-        "probes": probes,
-    }
-
-
 def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
     snapshot = observer_incident_snapshot()
-    summary = _observer_summary(snapshot)
+    summary = observer_summary(snapshot)
     return {
         "ok": bool(snapshot.get("ok")),
         "subsystem": "observer",
@@ -287,6 +238,7 @@ def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
         "decision": summary["decision"],
         "counts": summary["counts"],
         "focus": summary["focus"],
+        "anomaly": summary["anomaly"],
         "incidents": snapshot.get("incidents") if isinstance(snapshot.get("incidents"), list) else [],
         "task_status_counts": snapshot.get("task_status_counts")
         if isinstance(snapshot.get("task_status_counts"), dict)
@@ -510,7 +462,7 @@ def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10)
     try:
         body = payload or ObserverScanIn()
         snapshot = observer_incident_snapshot()
-        summary = _observer_summary(snapshot)
+        summary = observer_summary(snapshot)
         receipt = record(
             "observer.scan",
             status="ok" if int(summary["counts"].get("active") or 0) <= 0 else "attention",
@@ -524,6 +476,7 @@ def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10)
             incident_ids=summary["incident_ids"],
             probes=summary["probes"],
             focus=summary["focus"],
+            anomaly=summary["anomaly"],
             actor=body.actor or "operator",
             reason=body.reason or "manual_scan",
             meta=body.meta,

@@ -8,7 +8,12 @@ from fastapi import APIRouter
 from francis.chat.continuity.ledger import tail
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
-from francis.world_state.snapshot import mission_continuity_snapshot, observer_incident_snapshot, observer_scan_history
+from francis.world_state.snapshot import (
+    mission_continuity_snapshot,
+    observer_incident_snapshot,
+    observer_scan_history,
+    observer_summary,
+)
 
 router = APIRouter()
 
@@ -63,6 +68,7 @@ def _observer_briefing() -> dict[str, Any]:
     try:
         payload = observer_incident_snapshot()
         recent_scans = observer_scan_history(limit=3)
+        summary = observer_summary(payload)
     except Exception as exc:
         return {
             "headline": "Observer summary unavailable.",
@@ -72,25 +78,11 @@ def _observer_briefing() -> dict[str, Any]:
             "error": str(exc),
         }
 
-    incidents = [item for item in _as_list(payload.get("incidents")) if isinstance(item, dict)]
-    counts = {
-        "active": len(incidents),
-        "critical": len([item for item in incidents if str(item.get("severity") or "").strip().lower() == "critical"]),
-        "error": len([item for item in incidents if str(item.get("severity") or "").strip().lower() == "error"]),
-        "warning": len([item for item in incidents if str(item.get("severity") or "").strip().lower() == "warning"]),
-        "info": len([item for item in incidents if str(item.get("severity") or "").strip().lower() == "info"]),
-    }
-    if incidents:
-        lead = incidents[0]
-        lead_title = str(lead.get("title") or lead.get("id") or "observer finding").strip()
-        headline = f"Observer flagged {len(incidents)} active incident(s); {lead_title} leads review."
-    else:
-        headline = "Observer reports no active incidents."
-
     return {
-        "headline": headline,
-        "counts": counts,
-        "focus": incidents[:3],
+        "headline": summary["headline"],
+        "counts": summary["counts"],
+        "focus": summary["focus"],
+        "anomaly": summary["anomaly"],
         "recent_scans": recent_scans,
     }
 

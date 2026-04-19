@@ -14,6 +14,7 @@ import type {
   ContinuityBriefingSnapshot,
   ContinuityLedgerEntry,
   ContinuityLedgerSnapshot,
+  ObserverAnomalySummary,
   ObserverScanReceiptSummary,
   OperatorControlModeId,
   OperatorModeSnapshot,
@@ -261,6 +262,11 @@ function observerScanFocusSummary(scan: ObserverScanReceiptSummary | null | unde
     .map((item) => safeString(item?.title).trim() || safeString(item?.id).trim())
     .filter(Boolean)
     .slice(0, 2);
+}
+
+function observerAnomalyReasonSummary(anomaly: ObserverAnomalySummary | null | undefined): string {
+  const reasons = Array.isArray(anomaly?.reasons) ? anomaly.reasons : [];
+  return reasons.map((item) => safeString(item).trim()).filter(Boolean).slice(0, 3).join(" · ");
 }
 
 function executionBlockedReason(operatorMode: OperatorModeSnapshot | null, actionLabel: string): string {
@@ -2935,10 +2941,16 @@ function SystemPanel(props: {
   const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
   const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
   const shiftBriefingObserverRecentScans = shiftBriefingObserver?.recent_scans ?? [];
+  const shiftBriefingObserverAnomaly = shiftBriefingObserver?.anomaly;
+  const shiftBriefingObserverHasAnomaly = Boolean(shiftBriefingObserverAnomaly);
   const shiftBriefingObserverActive = safeNumber(shiftBriefingObserverCounts["active"], shiftBriefingObserverFocus.length);
   const shiftBriefingObserverCritical = safeNumber(shiftBriefingObserverCounts["critical"], 0);
   const shiftBriefingObserverError = safeNumber(shiftBriefingObserverCounts["error"], 0);
   const shiftBriefingObserverWarning = safeNumber(shiftBriefingObserverCounts["warning"], 0);
+  const shiftBriefingObserverAnomalyScore = safeNumber(shiftBriefingObserverAnomaly?.score, 0);
+  const shiftBriefingObserverAnomalyLevel =
+    safeString(shiftBriefingObserverAnomaly?.level).trim() || (shiftBriefingObserverActive > 0 ? "warning" : "clear");
+  const shiftBriefingObserverAnomalyReasons = observerAnomalyReasonSummary(shiftBriefingObserverAnomaly);
   const continuityLedgerEntries = [...(continuityLedger?.entries ?? [])].slice(-6).reverse();
   const continuityLedgerCount = continuityLedger?.entries?.length ?? 0;
   const continuityLedgerRouteError = safeString(continuityLedger?.error).trim();
@@ -3830,6 +3842,11 @@ function SystemPanel(props: {
                 <span style={badgeStyle(shiftBriefingObserverWarning > 0 ? "warning" : "clear")}>
                   warning {shiftBriefingObserverWarning}
                 </span>
+                {shiftBriefingObserverHasAnomaly ? (
+                  <span style={badgeStyle(shiftBriefingObserverAnomalyLevel)}>
+                    anomaly {shiftBriefingObserverAnomalyScore}/100
+                  </span>
+                ) : null}
                 {shiftBriefingObserver.observed_at ? (
                   <span style={{ fontSize: 11, color: THEME.muted }}>Observed {toLocaleTime(shiftBriefingObserver.observed_at)}</span>
                 ) : null}
@@ -3850,6 +3867,12 @@ function SystemPanel(props: {
                 }}
               >
                 {observerScanNotice.text}
+              </div>
+            ) : null}
+            {shiftBriefingObserverHasAnomaly ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                Anomaly score {shiftBriefingObserverAnomalyScore}/100
+                {shiftBriefingObserverAnomalyReasons ? `. ${shiftBriefingObserverAnomalyReasons}` : "."}
               </div>
             ) : null}
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
@@ -3938,13 +3961,23 @@ function SystemPanel(props: {
                     return (
                       <div
                         key={`observer-scan-${scan.receipt_id || scan.headline || observedAt}`}
-                        style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                          <div style={{ fontSize: 11, fontWeight: 600 }}>{scan.headline || "Observer scan recorded"}</div>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {scan.status ? <span style={badgeStyle(scan.status)}>{scan.status}</span> : null}
-                            {scan.decision ? <span style={badgeStyle(scan.decision)}>{scan.decision}</span> : null}
+                      style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}
+                    >
+                      {scan.anomaly ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginBottom: 6 }}>
+                          <span style={badgeStyle(safeString(scan.anomaly.level).trim() || "clear")}>
+                            anomaly {safeNumber(scan.anomaly.score, 0)}/100
+                          </span>
+                          {observerAnomalyReasonSummary(scan.anomaly) ? (
+                            <span style={{ marginLeft: 8 }}>{observerAnomalyReasonSummary(scan.anomaly)}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>{scan.headline || "Observer scan recorded"}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {scan.status ? <span style={badgeStyle(scan.status)}>{scan.status}</span> : null}
+                          {scan.decision ? <span style={badgeStyle(scan.decision)}>{scan.decision}</span> : null}
                             {typeof scan.incident_count === "number" ? (
                               <span style={badgeStyle(scan.incident_count > 0 ? "warning" : "clear")}>
                                 incidents {scan.incident_count}

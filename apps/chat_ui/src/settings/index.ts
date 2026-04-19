@@ -433,6 +433,12 @@ export type ContinuityBriefingDeadletterItem = {
   latest_activity?: Record<string, unknown>;
 };
 
+export type ObserverAnomalySummary = {
+  score?: number;
+  level?: string;
+  reasons?: string[];
+};
+
 export type ObserverScanReceiptSummary = {
   ts?: number;
   receipt_id?: string;
@@ -445,6 +451,7 @@ export type ObserverScanReceiptSummary = {
   incident_ids?: string[];
   probes?: string[];
   focus?: WorldStateIncidentSummary[];
+  anomaly?: ObserverAnomalySummary;
   generated_at?: number;
   reason?: string;
   actor?: string;
@@ -463,6 +470,7 @@ export type ContinuityBriefingPayload = {
     counts?: Record<string, number>;
     focus?: WorldStateIncidentSummary[];
     recent_scans?: ObserverScanReceiptSummary[];
+    anomaly?: ObserverAnomalySummary;
     observed_at?: number;
     error?: string;
   };
@@ -569,6 +577,7 @@ export type ObserverScanResponse = {
   headline?: string;
   decision?: string;
   counts?: Record<string, number>;
+  anomaly?: ObserverAnomalySummary;
   receipt?: ObserverScanReceiptSummary;
 };
 
@@ -1543,6 +1552,7 @@ function parseObserverScanReceiptSummary(raw: unknown): ObserverScanReceiptSumma
     focus: (Array.isArray(raw["focus"]) ? raw["focus"] : [])
       .map(parseWorldStateIncidentSummary)
       .filter((item): item is WorldStateIncidentSummary => item !== null),
+    anomaly: parseObserverAnomalySummary(raw["anomaly"]),
     generated_at: safeNumber(raw["generated_at"], 0),
     reason: safeString(raw["reason"], ""),
     actor: safeString(raw["actor"], ""),
@@ -1563,6 +1573,30 @@ function parseObserverScanReceiptSummary(raw: unknown): ObserverScanReceiptSumma
   if (!summary.actor) delete summary.actor;
   if (!summary.trace_id) delete summary.trace_id;
   if (!summary.run_id) delete summary.run_id;
+
+  return summary;
+}
+
+function parseObserverAnomalySummary(raw: unknown): ObserverAnomalySummary | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const score = safeNumber(raw["score"], 0);
+  const level = safeString(raw["level"], "").trim();
+  const reasons = (Array.isArray(raw["reasons"]) ? raw["reasons"] : [])
+    .map((item) => safeString(item, "").trim())
+    .filter(Boolean);
+
+  if (!score && !level && reasons.length === 0) return undefined;
+
+  const summary: ObserverAnomalySummary = {
+    score,
+    level,
+    reasons,
+  };
+
+  if (!summary.score) delete summary.score;
+  if (!summary.level) delete summary.level;
+  if (!summary.reasons?.length) delete summary.reasons;
 
   return summary;
 }
@@ -1703,6 +1737,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
             )
               .map(parseObserverScanReceiptSummary)
               .filter((item): item is ObserverScanReceiptSummary => item !== null),
+            anomaly: parseObserverAnomalySummary((briefingRaw["observer"] as Record<string, unknown>)["anomaly"]),
             observed_at: safeNumber((briefingRaw["observer"] as Record<string, unknown>)["observed_at"], 0),
             error: safeString((briefingRaw["observer"] as Record<string, unknown>)["error"], ""),
           }
@@ -1726,6 +1761,8 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.deadletter_preview?.length) ||
     Boolean(snapshot.briefing?.observer?.headline) ||
     Boolean(snapshot.briefing?.observer?.focus?.length) ||
+    Boolean(snapshot.briefing?.observer?.anomaly?.score) ||
+    Boolean(snapshot.briefing?.observer?.anomaly?.level) ||
     Boolean(snapshot.briefing?.observer?.recent_scans?.length);
   if (!hasBriefingContent) delete snapshot.briefing;
   if (!snapshot.mission_status_counts || Object.keys(snapshot.mission_status_counts).length === 0) {
@@ -1967,6 +2004,7 @@ export class SettingsClient {
       headline: safeString(json.headline, ""),
       decision: safeString(json.decision, ""),
       counts: parseNumberMap(json.counts),
+      anomaly: parseObserverAnomalySummary(json.anomaly),
       receipt: parseObserverScanReceiptSummary(json.receipt),
     };
   }
