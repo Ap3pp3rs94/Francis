@@ -56,6 +56,16 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 2. complete the end-to-end plan -> gate -> execute -> trace -> memory loop
 3. expose that loop clearly in the chat UI
 
+As of `2026-04-20`, the strongest truthful CI posture is:
+
+- feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
+  runs; PR validation now executes once per change on non-`main` branches
+- repo-wide type debt is still materially present, but `mypy.ini` now scopes that
+  debt explicitly to known modules instead of letting the CI surface imply the
+  whole tree is already under a clean type gate
+- `mypy src` is now green again for the currently gated tree, which removes an
+  unrelated GitHub blocker from the active Stage 2 observer follow-up line
+
 ## 3. High-confidence current slice
 
 As of `2026-04-18`, the highest-confidence surface newly touched in the current
