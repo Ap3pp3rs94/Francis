@@ -750,7 +750,6 @@ def test_operations_supervised_exec_refreshes_stale_approval(monkeypatch, tmp_pa
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
-    from francis.governance import approvals
 
     client = TestClient(create_app())
 
