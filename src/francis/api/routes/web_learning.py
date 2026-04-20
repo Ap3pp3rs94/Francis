@@ -168,7 +168,11 @@ def _append_event(registry: dict[str, Any], event: dict[str, Any]) -> None:
         events = []
         registry["events"] = events
     eid = _safe_str(event.get("id")).strip() or _new_id("wev", _safe_str(event.get("kind")).strip() or "event")
-    item = {"id": eid, "ts": int(event.get("ts") or _now_s()), **{k: v for k, v in event.items() if k not in {"id", "ts"}}}
+    item = {
+        "id": eid,
+        "ts": int(event.get("ts") or _now_s()),
+        **{k: v for k, v in event.items() if k not in {"id", "ts"}},
+    }
     events.append(item)
 
 
@@ -176,7 +180,15 @@ def _sort_desc(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(items, key=lambda item: (int(item.get("ts") or 0), _safe_str(item.get("id"))), reverse=True)
 
 
-def _filter(items: list[dict[str, Any]], *, status: str = "", domain: str = "", search: str = "", start_ts: int | None = None, end_ts: int | None = None) -> list[dict[str, Any]]:
+def _filter(
+    items: list[dict[str, Any]],
+    *,
+    status: str = "",
+    domain: str = "",
+    search: str = "",
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+) -> list[dict[str, Any]]:
     status_filter = status.strip().lower()
     domain_filter = domain.strip().lower()
     search_filter = search.strip().lower()
@@ -206,12 +218,30 @@ def _paginate(items: list[dict[str, Any]], limit: int, offset: int, cursor: str 
     return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
 
 
-def _query(kind: str, *, limit: int = 200, offset: int = 0, cursor: str | None = None, start_ts: int | None = None, end_ts: int | None = None, status: str | None = None, domain: str | None = None, search: str | None = None) -> dict[str, Any]:
+def _query(
+    kind: str,
+    *,
+    limit: int = 200,
+    offset: int = 0,
+    cursor: str | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    status: str | None = None,
+    domain: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
     registry = _load()
     items = registry.get(kind)
     if not isinstance(items, list):
         return {"items": [], "total": 0, "limit": 0, "offset": 0}
-    filtered = _filter(items, status=_safe_str(status), domain=_safe_str(domain), search=_safe_str(search), start_ts=start_ts, end_ts=end_ts)
+    filtered = _filter(
+        items,
+        status=_safe_str(status),
+        domain=_safe_str(domain),
+        search=_safe_str(search),
+        start_ts=start_ts,
+        end_ts=end_ts,
+    )
     return _paginate(_sort_desc(filtered), limit, offset, cursor)
 
 
@@ -249,11 +279,17 @@ def _policy_verdict(url: str, domain: str, policy: dict[str, Any]) -> tuple[str,
     for deny in policy.get("deny_domains", []) if isinstance(policy.get("deny_domains"), list) else []:
         if _match_domain(domain, _safe_str(deny)):
             return "blocked", f"Domain is deny-listed ({deny})."
-    deny_patterns = [_safe_str(x) for x in (policy.get("deny_patterns") if isinstance(policy.get("deny_patterns"), list) else [])]
+    deny_patterns = [
+        _safe_str(x) for x in (policy.get("deny_patterns") if isinstance(policy.get("deny_patterns"), list) else [])
+    ]
     if _matches_pattern(url, deny_patterns):
         return "blocked", "URL denied by policy pattern."
-    allow_domains = [_safe_str(x) for x in (policy.get("allow_domains") if isinstance(policy.get("allow_domains"), list) else [])]
-    allow_patterns = [_safe_str(x) for x in (policy.get("allow_patterns") if isinstance(policy.get("allow_patterns"), list) else [])]
+    allow_domains = [
+        _safe_str(x) for x in (policy.get("allow_domains") if isinstance(policy.get("allow_domains"), list) else [])
+    ]
+    allow_patterns = [
+        _safe_str(x) for x in (policy.get("allow_patterns") if isinstance(policy.get("allow_patterns"), list) else [])
+    ]
     if allow_domains or allow_patterns:
         domain_ok = any(_match_domain(domain, rule) for rule in allow_domains)
         pattern_ok = _matches_pattern(url, allow_patterns)
@@ -388,6 +424,7 @@ def _approval_matches(approval_record: dict[str, Any] | None, *, action: str, re
         return False
     return _normalize_approval_value(payload) == _normalize_approval_value(request_payload)
 
+
 def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     url = _safe_str(payload.get("url")).strip()
     if not url:
@@ -413,13 +450,38 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     policy = registry.get("policy") if isinstance(registry.get("policy"), dict) else _default_policy()
 
     requests = registry.get("requests") if isinstance(registry.get("requests"), list) else []
-    requests.append({"id": request_id, "ts": ts, "url": normalized_url, "status": "received", "reason": reason, "domain": domain, "actor": actor, "meta": req_meta})
+    requests.append(
+        {
+            "id": request_id,
+            "ts": ts,
+            "url": normalized_url,
+            "status": "received",
+            "reason": reason,
+            "domain": domain,
+            "actor": actor,
+            "meta": req_meta,
+        }
+    )
     registry["requests"] = requests
 
     if not _effective_enabled(registry):
         registry["last_error_ts"] = ts
         registry["last_error"] = "Web learning is disabled."
-        _append_event(registry, {"ts": ts, "kind": "policy_block", "url": normalized_url, "record_id": record_id, "status": "disabled", "message": "Web learning is disabled.", "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
+        _append_event(
+            registry,
+            {
+                "ts": ts,
+                "kind": "policy_block",
+                "url": normalized_url,
+                "record_id": record_id,
+                "status": "disabled",
+                "message": "Web learning is disabled.",
+                "actor": actor,
+                "domain": domain,
+                "source": source,
+                "correlation_id": request_id,
+            },
+        )
         _save(registry)
         return {"ok": False, "request_id": request_id, "status": "disabled", "message": "Web learning is disabled."}
 
@@ -429,17 +491,81 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     if verdict in {"blocked", "quarantined"}:
         quarantine_id = _new_id("wlq", domain)
         record_status = "blocked" if verdict == "blocked" else "quarantined"
-        records.append({"id": record_id, "ts": ts, "url": normalized_url, "status": record_status, "method": "GET", "domain": domain, "source": source, "summary": "Blocked by policy and held in quarantine.", "quarantine_id": quarantine_id, "error": verdict_reason, "meta": {"reason": reason, "request_id": request_id, "force": force}})
-        quarantine.append({"id": quarantine_id, "ts": ts, "url": normalized_url, "reason": verdict_reason, "status": "quarantined", "record_id": record_id, "domain": domain, "source": source, "evidence": "Policy validation denied this URL.", "meta": {"request_id": request_id}})
+        records.append(
+            {
+                "id": record_id,
+                "ts": ts,
+                "url": normalized_url,
+                "status": record_status,
+                "method": "GET",
+                "domain": domain,
+                "source": source,
+                "summary": "Blocked by policy and held in quarantine.",
+                "quarantine_id": quarantine_id,
+                "error": verdict_reason,
+                "meta": {"reason": reason, "request_id": request_id, "force": force},
+            }
+        )
+        quarantine.append(
+            {
+                "id": quarantine_id,
+                "ts": ts,
+                "url": normalized_url,
+                "reason": verdict_reason,
+                "status": "quarantined",
+                "record_id": record_id,
+                "domain": domain,
+                "source": source,
+                "evidence": "Policy validation denied this URL.",
+                "meta": {"request_id": request_id},
+            }
+        )
         registry["records"] = records
         registry["quarantine"] = quarantine
-        _append_event(registry, {"ts": ts, "kind": "policy_block", "url": normalized_url, "record_id": record_id, "status": record_status, "message": verdict_reason, "quarantine_id": quarantine_id, "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
-        _append_event(registry, {"ts": ts, "kind": "quarantine", "url": normalized_url, "record_id": record_id, "status": "quarantined", "message": "Request moved to quarantine.", "quarantine_id": quarantine_id, "actor": actor, "domain": domain, "source": source, "correlation_id": request_id})
+        _append_event(
+            registry,
+            {
+                "ts": ts,
+                "kind": "policy_block",
+                "url": normalized_url,
+                "record_id": record_id,
+                "status": record_status,
+                "message": verdict_reason,
+                "quarantine_id": quarantine_id,
+                "actor": actor,
+                "domain": domain,
+                "source": source,
+                "correlation_id": request_id,
+            },
+        )
+        _append_event(
+            registry,
+            {
+                "ts": ts,
+                "kind": "quarantine",
+                "url": normalized_url,
+                "record_id": record_id,
+                "status": "quarantined",
+                "message": "Request moved to quarantine.",
+                "quarantine_id": quarantine_id,
+                "actor": actor,
+                "domain": domain,
+                "source": source,
+                "correlation_id": request_id,
+            },
+        )
         registry["last_run_ts"] = ts
         registry["last_error_ts"] = ts
         registry["last_error"] = verdict_reason
         _save(registry)
-        return {"ok": False, "request_id": request_id, "record_id": record_id, "status": record_status, "message": verdict_reason, "meta": {"quarantine_id": quarantine_id}}
+        return {
+            "ok": False,
+            "request_id": request_id,
+            "record_id": record_id,
+            "status": record_status,
+            "message": verdict_reason,
+            "meta": {"quarantine_id": quarantine_id},
+        }
 
     duration_ms = int(payload.get("duration_ms") or 120)
     byte_count = int(payload.get("bytes") or 0)
@@ -769,7 +895,14 @@ def _set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
     ts = _now_s()
     current = _effective_enabled(registry)
     if desired == current:
-        return {"ok": True, "status": "unchanged", "applied": True, "enabled": current, "ts": ts, "message": "No change."}
+        return {
+            "ok": True,
+            "status": "unchanged",
+            "applied": True,
+            "enabled": current,
+            "ts": ts,
+            "message": "No change.",
+        }
 
     approval_required = desired and _to_bool(policy.get("approvals_required"), default=True)
     approval_action = "web_learning.set_enabled"
@@ -1265,9 +1398,44 @@ def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 def _csv_fields(kind: str) -> list[str]:
     if kind == "records":
-        return ["id", "ts", "url", "status", "http_status", "method", "content_type", "bytes", "duration_ms", "title", "summary", "domain", "source", "approval_id", "quarantine_id", "error"]
+        return [
+            "id",
+            "ts",
+            "url",
+            "status",
+            "http_status",
+            "method",
+            "content_type",
+            "bytes",
+            "duration_ms",
+            "title",
+            "summary",
+            "domain",
+            "source",
+            "approval_id",
+            "quarantine_id",
+            "error",
+        ]
     if kind == "events":
-        return ["id", "ts", "kind", "url", "record_id", "status", "message", "http_status", "bytes", "duration_ms", "approval_id", "quarantine_id", "actor", "domain", "source", "correlation_id", "operation_id"]
+        return [
+            "id",
+            "ts",
+            "kind",
+            "url",
+            "record_id",
+            "status",
+            "message",
+            "http_status",
+            "bytes",
+            "duration_ms",
+            "approval_id",
+            "quarantine_id",
+            "actor",
+            "domain",
+            "source",
+            "correlation_id",
+            "operation_id",
+        ]
     return ["id", "ts", "url", "reason", "status", "record_id", "approval_id", "evidence", "domain", "source"]
 
 
@@ -1284,7 +1452,17 @@ def _render_export(kind: str, fmt: str, items: list[dict[str, Any]]) -> tuple[st
     return json.dumps({"items": items}, ensure_ascii=False, indent=2, default=str), "application/json"
 
 
-def _export(kind: str, format: str = "json", start_ts: int | None = None, end_ts: int | None = None, status: str | None = None, domain: str | None = None, search: str | None = None, limit: int = 10_000, cursor: str | None = None) -> Response:
+def _export(
+    kind: str,
+    format: str = "json",
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    status: str | None = None,
+    domain: str | None = None,
+    search: str | None = None,
+    limit: int = 10_000,
+    cursor: str | None = None,
+) -> Response:
     normalized_kind = _safe_str(kind).strip().lower()
     if normalized_kind not in {"records", "events", "quarantine"}:
         return Response(
@@ -1300,12 +1478,27 @@ def _export(kind: str, format: str = "json", start_ts: int | None = None, end_ts
             status_code=400,
         )
 
-    page = _query(normalized_kind, limit=max(1, min(int(limit), 10_000)), offset=0, cursor=cursor, start_ts=start_ts, end_ts=end_ts, status=status, domain=domain, search=search)
-    content, media_type = _render_export(normalized_kind, fmt, page.get("items") if isinstance(page.get("items"), list) else [])
+    page = _query(
+        normalized_kind,
+        limit=max(1, min(int(limit), 10_000)),
+        offset=0,
+        cursor=cursor,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        status=status,
+        domain=domain,
+        search=search,
+    )
+    content, media_type = _render_export(
+        normalized_kind, fmt, page.get("items") if isinstance(page.get("items"), list) else []
+    )
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     ext = "jsonl" if fmt == "jsonl" else fmt
     filename = f"francis-web-learning-{normalized_kind}-{stamp}.{ext}"
-    return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return Response(
+        content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 
 @router.get("/")
 def root_status() -> dict[str, Any]:
@@ -1322,8 +1515,16 @@ def status() -> dict[str, Any]:
             "records": len(records),
             "events": len(registry.get("events") or []),
             "quarantine": len(registry.get("quarantine") or []),
-            "pending": len([r for r in records if _safe_str((r or {}).get("status")).strip().lower() in {"pending", "queued"}]),
-            "in_flight": len([r for r in records if _safe_str((r or {}).get("status")).strip().lower() in {"pending", "queued", "fetched", "parsed"}]),
+            "pending": len(
+                [r for r in records if _safe_str((r or {}).get("status")).strip().lower() in {"pending", "queued"}]
+            ),
+            "in_flight": len(
+                [
+                    r
+                    for r in records
+                    if _safe_str((r or {}).get("status")).strip().lower() in {"pending", "queued", "fetched", "parsed"}
+                ]
+            ),
         }
         return {
             "ok": True,
@@ -1374,7 +1575,17 @@ def list_records(
     domain: str | None = None,
     search: str | None = None,
 ) -> dict[str, Any]:
-    return _query("records", limit=limit, offset=offset, cursor=cursor, start_ts=start_ts, end_ts=end_ts, status=status, domain=domain, search=search)
+    return _query(
+        "records",
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        status=status,
+        domain=domain,
+        search=search,
+    )
 
 
 @router.get("/events")
@@ -1390,7 +1601,17 @@ def list_events(
     domain: str | None = None,
     search: str | None = None,
 ) -> dict[str, Any]:
-    return _query("events", limit=limit, offset=offset, cursor=cursor, start_ts=start_ts, end_ts=end_ts, status=status, domain=domain, search=search)
+    return _query(
+        "events",
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        status=status,
+        domain=domain,
+        search=search,
+    )
 
 
 @router.get("/quarantine")
@@ -1405,7 +1626,17 @@ def list_quarantine(
     domain: str | None = None,
     search: str | None = None,
 ) -> dict[str, Any]:
-    return _query("quarantine", limit=limit, offset=offset, cursor=cursor, start_ts=start_ts, end_ts=end_ts, status=status, domain=domain, search=search)
+    return _query(
+        "quarantine",
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        status=status,
+        domain=domain,
+        search=search,
+    )
 
 
 @router.post("/request")

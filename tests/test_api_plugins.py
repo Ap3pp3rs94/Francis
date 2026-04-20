@@ -72,7 +72,11 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
 
     downloaded = client.get(f"/plugins/download/{plugin_id}")
     assert downloaded.status_code == 200
-    assert downloaded.headers["content-type"] in {"application/zip", "application/x-zip-compressed", "application/octet-stream"}
+    assert downloaded.headers["content-type"] in {
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/octet-stream",
+    }
 
     registry_path = data_root / "plugins" / "_registry.json"
     assert registry_path.exists()
@@ -292,7 +296,12 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
 
     executed = client.post(
         "/plugins/run",
-        json={"id": plugin_id, "action": "deploy", "approval_id": refreshed_approval_id, "input": {"target": "staging"}},
+        json={
+            "id": plugin_id,
+            "action": "deploy",
+            "approval_id": refreshed_approval_id,
+            "input": {"target": "staging"},
+        },
     )
     assert executed.status_code == 200
     executed_body = executed.json()

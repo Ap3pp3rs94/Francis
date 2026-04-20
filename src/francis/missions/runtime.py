@@ -27,14 +27,12 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
     operation_output = _as_dict(operation_record.get("output"))
     governance = _as_dict(operation_meta.get("governance"))
     approval_id = (
-        _safe_str(operation_meta.get("approval_id")).strip()
-        or _safe_str(operation_output.get("approval_id")).strip()
+        _safe_str(operation_meta.get("approval_id")).strip() or _safe_str(operation_output.get("approval_id")).strip()
     )
     gate = _safe_str(governance.get("gate")).strip()
     next_step = _safe_str(governance.get("next_step")).strip()
     message = (
-        _safe_str(operation_meta.get("result_message")).strip()
-        or _safe_str(operation_output.get("message")).strip()
+        _safe_str(operation_meta.get("result_message")).strip() or _safe_str(operation_output.get("message")).strip()
     )
     handoff: dict[str, object] = {}
     if approval_id:
@@ -215,7 +213,8 @@ def run_queue_once(
                     "action": action,
                     "status": _safe_str(item.get("status")).strip(),
                     "operation_id": _safe_str(item.get("action_target_id")).strip() or None,
-                    "message": _safe_str(item.get("operator_hint")).strip() or "Mission requires operator intervention.",
+                    "message": _safe_str(item.get("operator_hint")).strip()
+                    or "Mission requires operator intervention.",
                 }
             )
             continue
@@ -244,7 +243,9 @@ def run_queue_once(
         if bool(outcome.get("applied")):
             advanced += 1
         elif outcome.get("ok") is False:
-            errors.append({"mission_id": mission_id, "error": _safe_str(outcome.get("error")).strip() or "advance_failed"})
+            errors.append(
+                {"mission_id": mission_id, "error": _safe_str(outcome.get("error")).strip() or "advance_failed"}
+            )
 
     queue_items = mission_store.mission_queue_items(limit=safe_limit, include_terminal=False)
     deadletter_items = mission_store.deadletter_queue_items(limit=min(safe_limit, 20))

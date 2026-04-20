@@ -177,9 +177,7 @@ ui:
     assert active_modes[0]["id"] == "away"
 
 
-def test_operator_mode_snapshot_preserves_exact_mission_approval_handoff(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_operator_mode_snapshot_preserves_exact_mission_approval_handoff(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
     env_root = repo_root / "config" / "environments"
@@ -247,7 +245,7 @@ ui:
                 ],
                 "recently_completed": [],
                 "deadletter_preview": [],
-            }
+            },
         },
     )
 

@@ -179,7 +179,9 @@ def _current_level(state: dict[str, Any]) -> int:
 
 
 def _normalize_event(raw: dict[str, Any]) -> dict[str, Any]:
-    event_id = _safe_str(raw.get("id")).strip() or _new_id("tev", _safe_str(raw.get("kind") or "adjust").strip() or "adjust")
+    event_id = _safe_str(raw.get("id")).strip() or _new_id(
+        "tev", _safe_str(raw.get("kind") or "adjust").strip() or "adjust"
+    )
     ts = _normalize_ts(raw.get("ts") or _now_s())
     before_level = int(raw.get("before_level") or raw.get("before") or 0)
     after_level = int(raw.get("after_level") or raw.get("after") or raw.get("level") or before_level)
@@ -237,7 +239,9 @@ def _append_history(event: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
-def _paginate(items: list[dict[str, Any]], limit: int, cursor: str | None) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
+def _paginate(
+    items: list[dict[str, Any]], limit: int, cursor: str | None
+) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
     safe_limit = max(1, min(int(limit), 10_000))
     safe_offset = int(cursor) if cursor and cursor.isdigit() else 0
     total = len(items)
@@ -265,8 +269,12 @@ def _state_body() -> dict[str, Any]:
         "tier": _tier(float(level)),
         "decay_enabled": _parse_bool((policy.get("gates") or {}).get("decay_enabled"), default=True),
         "growth_enabled": _parse_bool((policy.get("gates") or {}).get("growth_enabled"), default=True),
-        "min_level": int(thresholds.get("min_level")) if isinstance(thresholds.get("min_level"), (int, float)) else None,
-        "max_level": int(thresholds.get("max_level")) if isinstance(thresholds.get("max_level"), (int, float)) else None,
+        "min_level": int(thresholds.get("min_level"))
+        if isinstance(thresholds.get("min_level"), (int, float))
+        else None,
+        "max_level": int(thresholds.get("max_level"))
+        if isinstance(thresholds.get("max_level"), (int, float))
+        else None,
         "source": "trust.levels",
         "meta": {"policy_ts": _normalize_ts(policy.get("ts") or _now_s())},
     }

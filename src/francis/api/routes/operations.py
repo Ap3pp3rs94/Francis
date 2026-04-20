@@ -845,7 +845,9 @@ def run_operation(operation_id: str, payload: OperationRunIn) -> dict[str, objec
     blocked_reason = _execution_posture_guard("running queued work")
     if blocked_reason:
         detail = operations_runtime.get_operation_detail(operation_id, include_logs=False)
-        operation = detail.get("operation") if isinstance(detail, dict) and isinstance(detail.get("operation"), dict) else None
+        operation = (
+            detail.get("operation") if isinstance(detail, dict) and isinstance(detail.get("operation"), dict) else None
+        )
         status = _safe_str(operation.get("status") if isinstance(operation, dict) else "").strip() or "blocked"
         return {
             "ok": False,

@@ -121,7 +121,9 @@ def _default_registry() -> dict[str, Any]:
 
 
 def _normalize_artifact(raw: dict[str, Any]) -> dict[str, Any]:
-    artifact_id = _safe_str(raw.get("id")).strip() or _new_id("art", _safe_str(raw.get("kind") or raw.get("path") or "artifact").strip() or "artifact")
+    artifact_id = _safe_str(raw.get("id")).strip() or _new_id(
+        "art", _safe_str(raw.get("kind") or raw.get("path") or "artifact").strip() or "artifact"
+    )
     return {
         "id": artifact_id,
         "kind": _safe_str(raw.get("kind")).strip(),
@@ -141,7 +143,13 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     else:
         payload = _safe_str(payload_value)
 
-    artifacts_raw = raw.get("artifacts") if isinstance(raw.get("artifacts"), list) else raw.get("files") if isinstance(raw.get("files"), list) else []
+    artifacts_raw = (
+        raw.get("artifacts")
+        if isinstance(raw.get("artifacts"), list)
+        else raw.get("files")
+        if isinstance(raw.get("files"), list)
+        else []
+    )
     artifacts = [_normalize_artifact(item) for item in artifacts_raw if isinstance(item, dict)]
 
     return {
@@ -152,7 +160,9 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "domain": _safe_str(raw.get("domain")).strip(),
         "actor": _safe_str(raw.get("actor") or raw.get("role")).strip(),
         "scope": _safe_str(raw.get("scope") or raw.get("scope_id")).strip(),
-        "correlation_id": _safe_str(raw.get("correlation_id") or raw.get("trace_id") or raw.get("correlationId")).strip(),
+        "correlation_id": _safe_str(
+            raw.get("correlation_id") or raw.get("trace_id") or raw.get("correlationId")
+        ).strip(),
         "parent_id": _safe_str(raw.get("parent_id") or raw.get("parentId")).strip(),
         "title": _safe_str(raw.get("title")).strip(),
         "message": _safe_str(raw.get("message") or raw.get("summary") or raw.get("content")).strip(),
@@ -209,7 +219,9 @@ def _load_registry() -> dict[str, Any]:
         for item in events_raw:
             if not isinstance(item, dict):
                 continue
-            event_id = _safe_str(item.get("id")).strip() or _new_id("evt", _safe_str(item.get("kind") or item.get("title")).strip() or "event")
+            event_id = _safe_str(item.get("id")).strip() or _new_id(
+                "evt", _safe_str(item.get("kind") or item.get("title")).strip() or "event"
+            )
             events.append(_normalize_event(event_id, item))
 
     if len(events) > 100_000:
@@ -355,7 +367,9 @@ def _filter_events(
     return out
 
 
-def _paginate(items: list[dict[str, Any]], limit: int, offset: int, cursor: str | None) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
+def _paginate(
+    items: list[dict[str, Any]], limit: int, offset: int, cursor: str | None
+) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
     safe_limit = max(1, min(int(limit), 5000))
     safe_offset = int(cursor) if cursor and cursor.isdigit() else max(0, int(offset))
     total = len(items)
@@ -402,7 +416,9 @@ def _csv(items: list[dict[str, Any]]) -> str:
                 "title": item.get("title"),
                 "message": item.get("message"),
                 "tags": ",".join(_parse_list(item.get("tags"))),
-                "artifacts": json.dumps(item.get("artifacts") if isinstance(item.get("artifacts"), list) else [], ensure_ascii=False),
+                "artifacts": json.dumps(
+                    item.get("artifacts") if isinstance(item.get("artifacts"), list) else [], ensure_ascii=False
+                ),
                 "meta": json.dumps(item.get("meta") if isinstance(item.get("meta"), dict) else {}, ensure_ascii=False),
                 "payload": json.dumps(item.get("payload"), ensure_ascii=False, default=str),
             }
@@ -603,7 +619,9 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
         if requested_id:
             event_id = _validate_id(requested_id, "event id")
         else:
-            event_id = _new_id("evt", _safe_str(payload.get("kind") or payload.get("title") or "event").strip() or "event")
+            event_id = _new_id(
+                "evt", _safe_str(payload.get("kind") or payload.get("title") or "event").strip() or "event"
+            )
 
         registry = _load_registry()
         events_obj = registry.get("events")
@@ -611,7 +629,9 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
             events_obj = []
             registry["events"] = events_obj
 
-        existing_idx = next((idx for idx, item in enumerate(events_obj) if _safe_str((item or {}).get("id")).strip() == event_id), -1)
+        existing_idx = next(
+            (idx for idx, item in enumerate(events_obj) if _safe_str((item or {}).get("id")).strip() == event_id), -1
+        )
         existing = events_obj[existing_idx] if existing_idx >= 0 and isinstance(events_obj[existing_idx], dict) else {}
 
         merged = {
@@ -627,7 +647,8 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
             or _safe_str(existing.get("correlation_id")).strip(),
             "parent_id": _safe_str(payload.get("parent_id")).strip() or _safe_str(existing.get("parent_id")).strip(),
             "title": _safe_str(payload.get("title")).strip() or _safe_str(existing.get("title")).strip(),
-            "message": _safe_str(payload.get("message") or payload.get("summary")).strip() or _safe_str(existing.get("message")).strip(),
+            "message": _safe_str(payload.get("message") or payload.get("summary")).strip()
+            or _safe_str(existing.get("message")).strip(),
             "tags": _parse_list(payload.get("tags") if "tags" in payload else existing.get("tags")),
             "payload": payload.get("payload")
             if "payload" in payload

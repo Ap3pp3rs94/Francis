@@ -296,9 +296,13 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     approval_id = _result_approval_id(task)
     error = _safe_str(task.get("status_reason")).strip() or None
     if not error:
-        error = _safe_str((result_obj.get("data") or {}).get("error") if isinstance(result_obj.get("data"), dict) else "")
+        error = _safe_str(
+            (result_obj.get("data") or {}).get("error") if isinstance(result_obj.get("data"), dict) else ""
+        )
         error = error or None
-    result_message = _safe_str((result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else "")
+    result_message = _safe_str(
+        (result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else ""
+    )
     orb_plane = _operation_plane(raw_status, result_status, governance)
     mission_id = _task_mission_id(task)
 
@@ -538,7 +542,10 @@ def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> di
     task = _load_task(op_id)
     if not isinstance(task, dict):
         return {"ok": False, "error": "not_found"}
-    if _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES and _result_status(task) not in _RETRYABLE_GOVERNANCE_STATUSES:
+    if (
+        _normalize_internal_status(task.get("status")) in _TERMINAL_STATUSES
+        and _result_status(task) not in _RETRYABLE_GOVERNANCE_STATUSES
+    ):
         operation = _task_to_operation(task)
         return {
             "ok": _operation_request_ok(operation.get("status")),

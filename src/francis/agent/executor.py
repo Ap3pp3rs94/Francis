@@ -568,7 +568,12 @@ def _cap_plugin_uninstall(inputs: dict[str, Any], objective: str) -> dict[str, A
             result["kind"] = "plugin.uninstall.result"
             result["objective"] = objective
             return result
-        return {"kind": "plugin.uninstall.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
+        return {
+            "kind": "plugin.uninstall.result",
+            "ok": False,
+            "error": "unexpected_result_type",
+            "objective": objective,
+        }
     except Exception as exc:
         return {"kind": "plugin.uninstall.result", "ok": False, "error": str(exc), "objective": objective}
 
@@ -632,7 +637,12 @@ def _cap_plugin_tool_run(inputs: dict[str, Any], objective: str) -> dict[str, An
             result["kind"] = "plugin.tool.run.result"
             result["objective"] = objective
             return result
-        return {"kind": "plugin.tool.run.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
+        return {
+            "kind": "plugin.tool.run.result",
+            "ok": False,
+            "error": "unexpected_result_type",
+            "objective": objective,
+        }
     except Exception as exc:
         return {"kind": "plugin.tool.run.result", "ok": False, "error": str(exc), "objective": objective}
 
@@ -683,7 +693,9 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         task["assigned_to"] = worker_id
         task["attempts"] = int(task.get("attempts", 0) or 0) + 1
         save_task(task)
-        _append_task_audit(task_id, "status_updated", {"to": "failed", "assigned_to": worker_id, "reason": "expired_ttl"})
+        _append_task_audit(
+            task_id, "status_updated", {"to": "failed", "assigned_to": worker_id, "reason": "expired_ttl"}
+        )
         return task
 
     capability = _safe_str(task.get("capability", ""))
@@ -696,7 +708,9 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         task["assigned_to"] = worker_id
         task["attempts"] = int(task.get("attempts", 0) or 0) + 1
         save_task(task)
-        _append_task_audit(task_id, "status_updated", {"to": "failed", "assigned_to": worker_id, "reason": "invalid_inputs"})
+        _append_task_audit(
+            task_id, "status_updated", {"to": "failed", "assigned_to": worker_id, "reason": "invalid_inputs"}
+        )
         return task
 
     _register_capabilities()
@@ -772,7 +786,9 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
         "data": payload,
     }
     save_task(task)
-    _append_task_audit(task_id, "status_updated", {"to": task["status"], "assigned_to": worker_id, "reason": task["status_reason"]})
+    _append_task_audit(
+        task_id, "status_updated", {"to": task["status"], "assigned_to": worker_id, "reason": task["status_reason"]}
+    )
     payload_status = ""
     if isinstance(payload, dict):
         payload_status = _safe_str(payload.get("status")).strip().lower()

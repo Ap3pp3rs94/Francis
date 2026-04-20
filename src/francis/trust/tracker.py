@@ -253,7 +253,11 @@ def adjust_level(
             "state": load_state(),
             "event": existing,
             "policy": policy,
-            "decision": evaluate(level, normalize_risk_tier(risk_tier), policy_requires_approval=bool(policy["gates"].get("approvals_required"))).to_dict(),
+            "decision": evaluate(
+                level,
+                normalize_risk_tier(risk_tier),
+                policy_requires_approval=bool(policy["gates"].get("approvals_required")),
+            ).to_dict(),
         }
 
     before = current_level()

@@ -204,7 +204,9 @@ class PluginLoader:
         raise ValueError(f"unsupported suffix: {suffix}")
 
     def _normalize_spec(self, payload: dict[str, Any], *, source_path: Path) -> PluginSpec:
-        plugin_id = str(payload.get("plugin_id") or payload.get("id") or payload.get("name") or source_path.stem).strip()
+        plugin_id = str(
+            payload.get("plugin_id") or payload.get("id") or payload.get("name") or source_path.stem
+        ).strip()
         plugin_id = plugin_id or _slugify(source_path.stem, separator=".")
 
         name = str(payload.get("name") or plugin_id).strip() or plugin_id
@@ -305,7 +307,9 @@ class PluginLoader:
 
         tools: list[ToolSpec] = []
         for idx, candidate in enumerate(candidates):
-            tools.append(self._normalize_tool(plugin_id=plugin_id, default_risk=risk_class, payload=candidate, index=idx))
+            tools.append(
+                self._normalize_tool(plugin_id=plugin_id, default_risk=risk_class, payload=candidate, index=idx)
+            )
         return tuple(tools)
 
     def _normalize_tool(
@@ -317,18 +321,26 @@ class PluginLoader:
         index: int,
     ) -> ToolSpec:
         meta = _to_dict(payload.get("meta") or payload.get("metadata"))
-        action = str(payload.get("action") or payload.get("tool_name") or payload.get("name") or f"action_{index}").strip()
+        action = str(
+            payload.get("action") or payload.get("tool_name") or payload.get("name") or f"action_{index}"
+        ).strip()
         raw_tool_name = str(payload.get("tool_name") or payload.get("name") or action).strip() or f"action_{index}"
-        tool_name = raw_tool_name if "." in raw_tool_name else f"{_slugify(plugin_id, separator='.')}.{_slugify(raw_tool_name)}"
+        tool_name = (
+            raw_tool_name if "." in raw_tool_name else f"{_slugify(plugin_id, separator='.')}.{_slugify(raw_tool_name)}"
+        )
         summary = str(payload.get("summary") or payload.get("description") or raw_tool_name).strip() or raw_tool_name
         description = str(payload.get("description") or summary).strip() or summary
-        tool_risk = str(payload.get("risk_class") or payload.get("risk_tier") or meta.get("risk_tier") or default_risk).strip()
+        tool_risk = str(
+            payload.get("risk_class") or payload.get("risk_tier") or meta.get("risk_tier") or default_risk
+        ).strip()
         requires_approvals = bool(
             payload.get("requires_approvals")
             if "requires_approvals" in payload
             else payload.get("approvals_required", tool_risk in {"critical", "safety_critical"})
         )
-        requires_trust_level = int(payload.get("requires_trust_level") or payload.get("required_trust") or meta.get("required_trust") or 0)
+        requires_trust_level = int(
+            payload.get("requires_trust_level") or payload.get("required_trust") or meta.get("required_trust") or 0
+        )
         input_schema = _to_dict(payload.get("input_schema")) or {"type": "object", "additionalProperties": True}
         output_schema = _to_dict(payload.get("output_schema")) or {"type": "object", "additionalProperties": True}
         resources = _to_str_tuple(payload.get("resources"))

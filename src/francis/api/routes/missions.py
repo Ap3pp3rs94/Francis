@@ -60,7 +60,9 @@ def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, 
     }
 
 
-def _linked_operation_details(record: mission_store.MissionRecord | None, *, log_limit: int = 50) -> list[dict[str, Any]]:
+def _linked_operation_details(
+    record: mission_store.MissionRecord | None, *, log_limit: int = 50
+) -> list[dict[str, Any]]:
     if record is None:
         return []
     items: list[dict[str, Any]] = []
@@ -80,7 +82,9 @@ def _linked_operation_details(record: mission_store.MissionRecord | None, *, log
     return items
 
 
-def _mission_run_ledger(mission_id: str, linked_operations: list[dict[str, Any]], *, limit: int = 200) -> list[dict[str, Any]]:
+def _mission_run_ledger(
+    mission_id: str, linked_operations: list[dict[str, Any]], *, limit: int = 200
+) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for detail in linked_operations:
         operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
@@ -118,10 +122,7 @@ def _operation_gate(detail: dict[str, Any]) -> str:
     governance = meta.get("governance") if isinstance(meta.get("governance"), dict) else {}
     output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
     output_governance = output.get("governance") if isinstance(output.get("governance"), dict) else {}
-    return (
-        _safe_str(governance.get("gate")).strip()
-        or _safe_str(output_governance.get("gate")).strip()
-    )
+    return _safe_str(governance.get("gate")).strip() or _safe_str(output_governance.get("gate")).strip()
 
 
 def _operation_approval_id(detail: dict[str, Any]) -> str:
@@ -143,10 +144,7 @@ def _operation_next_step(detail: dict[str, Any]) -> str:
     governance = meta.get("governance") if isinstance(meta.get("governance"), dict) else {}
     output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
     output_governance = output.get("governance") if isinstance(output.get("governance"), dict) else {}
-    return (
-        _safe_str(governance.get("next_step")).strip()
-        or _safe_str(output_governance.get("next_step")).strip()
-    )
+    return _safe_str(governance.get("next_step")).strip() or _safe_str(output_governance.get("next_step")).strip()
 
 
 def _loop_stage(
@@ -223,9 +221,7 @@ def _mission_loop_state(
             gate_bits.append(f"approval {latest_approval_id}")
         gate_stage = _loop_stage(
             gate_status,
-            "Governance is actively holding the current linked operation through "
-            + ", ".join(gate_bits)
-            + ".",
+            "Governance is actively holding the current linked operation through " + ", ".join(gate_bits) + ".",
             gate=latest_gate,
             approval_id=latest_approval_id,
             operation_id=latest_operation_id,
@@ -268,9 +264,7 @@ def _mission_loop_state(
         )
 
     trace_count = sum(1 for detail in linked_operations if _operation_trace_id(detail))
-    audit_count = sum(
-        len(detail.get("logs")) for detail in linked_operations if isinstance(detail.get("logs"), list)
-    )
+    audit_count = sum(len(detail.get("logs")) for detail in linked_operations if isinstance(detail.get("logs"), list))
     ledger_count = len(run_ledger)
     latest_trace_receipt = run_ledger[0] if run_ledger else {}
     latest_trace_event = _safe_str(latest_trace_receipt.get("name")).strip()

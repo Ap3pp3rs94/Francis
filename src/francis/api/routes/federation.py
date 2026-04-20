@@ -350,12 +350,17 @@ def _list_shared_knowledge(
     page, total, safe_limit, safe_offset = _paginate(out, limit, offset)
     return {"items": page, "knowledge": page, "total": total, "limit": safe_limit, "offset": safe_offset}
 
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     try:
         registry = _load_registry()
         instances_obj = registry.get("instances") if isinstance(registry.get("instances"), dict) else {}
-        instances = [_normalize_instance(_safe_str(instance_id), item) for instance_id, item in instances_obj.items() if isinstance(item, dict)]
+        instances = [
+            _normalize_instance(_safe_str(instance_id), item)
+            for instance_id, item in instances_obj.items()
+            if isinstance(item, dict)
+        ]
         online = len([i for i in instances if _safe_str(i.get("status")).strip().lower() == "online"])
         degraded = len([i for i in instances if _safe_str(i.get("status")).strip().lower() == "degraded"])
         return {
@@ -457,7 +462,9 @@ def list_shared_knowledge(
     tags: str | None = None,
 ) -> dict[str, Any]:
     try:
-        return _list_shared_knowledge(_load_registry(), kind=kind, domain=domain, limit=limit, offset=offset, tags=_parse_list(tags))
+        return _list_shared_knowledge(
+            _load_registry(), kind=kind, domain=domain, limit=limit, offset=offset, tags=_parse_list(tags)
+        )
     except Exception as exc:
         return {"items": [], "knowledge": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
 
@@ -487,15 +494,23 @@ def upsert_instance(payload: dict[str, Any]) -> dict[str, Any]:
             **existing,
             "id": instance_id,
             "name": name or _safe_str(existing.get("name")).strip() or instance_id,
-            "status": _safe_str(payload.get("status")).strip() or _safe_str(existing.get("status")).strip() or "unknown",
+            "status": _safe_str(payload.get("status")).strip()
+            or _safe_str(existing.get("status")).strip()
+            or "unknown",
             "endpoint": _safe_str(payload.get("endpoint")).strip() or _safe_str(existing.get("endpoint")).strip(),
             "region": _safe_str(payload.get("region")).strip() or _safe_str(existing.get("region")).strip(),
             "role": _safe_str(payload.get("role")).strip() or _safe_str(existing.get("role")).strip(),
             "first_seen_ts": first_seen_ts,
             "last_seen_ts": int(payload.get("last_seen_ts") or now_s),
-            "capabilities": _parse_list(payload.get("capabilities") if "capabilities" in payload else existing.get("capabilities")),
-            "trust_level": payload.get("trust_level") if isinstance(payload.get("trust_level"), (int, float)) else existing.get("trust_level", 0),
-            "requires_approval": _to_bool(payload.get("requires_approval"), default=_to_bool(existing.get("requires_approval"), default=False)),
+            "capabilities": _parse_list(
+                payload.get("capabilities") if "capabilities" in payload else existing.get("capabilities")
+            ),
+            "trust_level": payload.get("trust_level")
+            if isinstance(payload.get("trust_level"), (int, float))
+            else existing.get("trust_level", 0),
+            "requires_approval": _to_bool(
+                payload.get("requires_approval"), default=_to_bool(existing.get("requires_approval"), default=False)
+            ),
             "tags": _parse_list(payload.get("tags") if "tags" in payload else existing.get("tags")),
             "health": _meta(payload.get("health") if "health" in payload else existing.get("health")),
             "inventory": _meta(payload.get("inventory") if "inventory" in payload else existing.get("inventory")),

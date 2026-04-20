@@ -18,7 +18,16 @@ from pydantic import BaseModel, Field
 from francis.governance import approvals as approval_store
 from francis.kernel.paths import data_dir, repo_root
 from francis.plugin_factory.spec_builder import build_plugin
-from francis.plugin_system import PluginDispatcher, PluginLoader, PluginRegistry, PluginSpec, PluginValidator, SandboxLimits, SandboxRunner, ToolSpec
+from francis.plugin_system import (
+    PluginDispatcher,
+    PluginLoader,
+    PluginRegistry,
+    PluginSpec,
+    PluginValidator,
+    SandboxLimits,
+    SandboxRunner,
+    ToolSpec,
+)
 from francis.trust.levels import get_state
 
 router = APIRouter()
@@ -42,6 +51,7 @@ def _registry_path() -> Path:
 
 def _runtime_catalog_path() -> Path:
     return data_dir() / "plugins" / "catalog.json"
+
 
 _PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _ALLOWED_STATUSES = {"enabled", "disabled", "error", "installing", "uninstalling", "updating", "unknown", "uninstalled"}
@@ -343,7 +353,9 @@ def _tool_spec_from_capability(plugin_id: str, capability: dict[str, Any]) -> To
             methods = ["execute"]
     rate_limits = meta.get("rate_limits") if isinstance(meta.get("rate_limits"), dict) else {}
     required_trust = meta.get("required_trust")
-    required_trust_level = int(required_trust) if isinstance(required_trust, (int, float)) else _RISK_DEFAULT_MIN_TRUST.get(risk_tier, 0)
+    required_trust_level = (
+        int(required_trust) if isinstance(required_trust, (int, float)) else _RISK_DEFAULT_MIN_TRUST.get(risk_tier, 0)
+    )
     return ToolSpec(
         tool_name=tool_name,
         action=action,
@@ -375,7 +387,9 @@ def _spec_from_plugin_record(plugin: dict[str, Any]) -> PluginSpec:
                 return contract
 
     capabilities = _capabilities_for_plugin(plugin_id, plugin.get("capabilities"))
-    tools = tuple(_tool_spec_from_capability(plugin_id, capability) for capability in capabilities if isinstance(capability, dict))
+    tools = tuple(
+        _tool_spec_from_capability(plugin_id, capability) for capability in capabilities if isinstance(capability, dict)
+    )
     meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
     contract_summary = meta.get("contract") if isinstance(meta.get("contract"), dict) else {}
     permissions = meta.get("permissions") if isinstance(meta.get("permissions"), dict) else {}
@@ -425,8 +439,14 @@ def _build_install_contract_spec(plugin_id: str, payload: "PluginInstallIn") -> 
     source_ref = _safe_str(payload.source_ref).strip()
     version = _safe_str(payload.version).strip() or "0.1.0"
     description = f"Installed from {source_kind}:{source_ref}"
-    normalized_capabilities = _capabilities_for_plugin(plugin_id, [item for item in payload.capabilities if isinstance(item, dict)])
-    tools = tuple(_tool_spec_from_capability(plugin_id, capability) for capability in normalized_capabilities if isinstance(capability, dict))
+    normalized_capabilities = _capabilities_for_plugin(
+        plugin_id, [item for item in payload.capabilities if isinstance(item, dict)]
+    )
+    tools = tuple(
+        _tool_spec_from_capability(plugin_id, capability)
+        for capability in normalized_capabilities
+        if isinstance(capability, dict)
+    )
     meta = dict(payload.meta or {}) if isinstance(payload.meta, dict) else {}
     meta["reason"] = _safe_str(payload.reason).strip()
     ref = _safe_str(payload.ref).strip()
@@ -738,7 +758,11 @@ def _load_registry() -> dict[str, Any]:
 
     plugins = raw.get("plugins")
     if isinstance(plugins, dict):
-        return {"version": int(raw.get("version") or 1), "updated_at": int(raw.get("updated_at") or _now_s()), "plugins": plugins}
+        return {
+            "version": int(raw.get("version") or 1),
+            "updated_at": int(raw.get("updated_at") or _now_s()),
+            "plugins": plugins,
+        }
 
     legacy_plugins = {k: v for k, v in raw.items() if isinstance(v, dict)}
     if legacy_plugins:
@@ -1101,7 +1125,8 @@ def _ensure_plugin_from_generated(registry: dict[str, Any], plugin_id: str) -> b
                 **current,
                 "id": plugin_id,
                 "name": _safe_str(manifest.get("name")).strip() or _safe_str(current.get("name")).strip() or plugin_id,
-                "description": _safe_str(manifest.get("description")).strip() or _safe_str(current.get("description")).strip(),
+                "description": _safe_str(manifest.get("description")).strip()
+                or _safe_str(current.get("description")).strip(),
                 "status": current.get("status") or "enabled",
                 "enabled": current.get("enabled", True),
                 "source_kind": _safe_str(current.get("source_kind")).strip() or "generated",
@@ -1206,10 +1231,14 @@ def _sandbox_limits_for_plugin(plugin: dict[str, Any], capability: dict[str, Any
     )
 
 
-def _execute_plugin_action(plugin: dict[str, Any], capability: dict[str, Any], payload_input: Any, *, dry_run: bool) -> dict[str, Any]:
+def _execute_plugin_action(
+    plugin: dict[str, Any], capability: dict[str, Any], payload_input: Any, *, dry_run: bool
+) -> dict[str, Any]:
     plugin_id = _safe_str(plugin.get("id")).strip()
     cap_meta = capability.get("meta") if isinstance(capability.get("meta"), dict) else {}
-    tool_name = _safe_str(cap_meta.get("tool_name")).strip() or _safe_str(capability.get("id")).strip() or f"{plugin_id}.run"
+    tool_name = (
+        _safe_str(cap_meta.get("tool_name")).strip() or _safe_str(capability.get("id")).strip() or f"{plugin_id}.run"
+    )
     dispatcher = PluginDispatcher(sandbox=SandboxRunner(_sandbox_limits_for_plugin(plugin, capability)))
 
     def _handler() -> Any:
@@ -1291,7 +1320,9 @@ def _query_tools(
             if _match_tool(tool, plugin_filter, enabled, kind_filter, tag_filters, search_filter):
                 tools.append(tool)
 
-    tools.sort(key=lambda item: (_safe_str(item.get("plugin_id")), _safe_str(item.get("name")), _safe_str(item.get("id"))))
+    tools.sort(
+        key=lambda item: (_safe_str(item.get("plugin_id")), _safe_str(item.get("name")), _safe_str(item.get("id")))
+    )
     total = len(tools)
     return tools[safe_offset : safe_offset + safe_limit], total
 
@@ -1553,9 +1584,13 @@ def get_plugin(id: str) -> dict[str, object]:
             item["runtime"] = {
                 "entrypoint": _safe_str(details.get("entrypoint")).strip() or "plugin.py",
                 "generated_dir": _safe_str(item.get("generated_dir")).strip(),
-                "artifact_exists": bool(_safe_str(item.get("artifact_zip")).strip() and Path(_safe_str(item.get("artifact_zip"))).exists()),
+                "artifact_exists": bool(
+                    _safe_str(item.get("artifact_zip")).strip() and Path(_safe_str(item.get("artifact_zip"))).exists()
+                ),
                 "spec_exists": bool(isinstance(details.get("contract"), dict) and details.get("contract")),
-                "registry_snapshot_exists": bool(isinstance(details.get("registry_snapshot"), dict) and details.get("registry_snapshot")),
+                "registry_snapshot_exists": bool(
+                    isinstance(details.get("registry_snapshot"), dict) and details.get("registry_snapshot")
+                ),
             }
         else:
             meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
@@ -1770,7 +1805,14 @@ def enable_plugin(payload: PluginToggleIn) -> dict[str, object]:
         _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
         catalog = _save_registry_and_catalog(registry)
 
-        return {"ok": True, "id": plugin_id, "enabled": True, "status": "enabled", "message": "enabled", "catalog": catalog}
+        return {
+            "ok": True,
+            "id": plugin_id,
+            "enabled": True,
+            "status": "enabled",
+            "message": "enabled",
+            "catalog": catalog,
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -1791,7 +1833,14 @@ def disable_plugin(payload: PluginToggleIn) -> dict[str, object]:
         _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
         catalog = _save_registry_and_catalog(registry)
 
-        return {"ok": True, "id": plugin_id, "enabled": False, "status": "disabled", "message": "disabled", "catalog": catalog}
+        return {
+            "ok": True,
+            "id": plugin_id,
+            "enabled": False,
+            "status": "disabled",
+            "message": "disabled",
+            "catalog": catalog,
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -1820,7 +1869,9 @@ def install_plugin(payload: PluginInstallIn) -> dict[str, object]:
 
         if payload.dry_run:
             preview_spec = _build_install_contract_spec(
-                _validate_plugin_id(f"{int(time.time())}_{_slugify(source_ref.split('/')[-1] if '/' in source_ref else source_ref)}"),
+                _validate_plugin_id(
+                    f"{int(time.time())}_{_slugify(source_ref.split('/')[-1] if '/' in source_ref else source_ref)}"
+                ),
                 payload,
             )
             validation = _PLUGIN_VALIDATOR.validate(preview_spec)
@@ -1840,7 +1891,12 @@ def install_plugin(payload: PluginInstallIn) -> dict[str, object]:
         spec = _build_install_contract_spec(plugin_id, payload)
         validation = _PLUGIN_VALIDATOR.validate(spec)
         if not validation.valid:
-            return {"ok": False, "error": "invalid_plugin_spec", "validation": validation.to_dict(), "plugin_id": plugin_id}
+            return {
+                "ok": False,
+                "error": "invalid_plugin_spec",
+                "validation": validation.to_dict(),
+                "plugin_id": plugin_id,
+            }
 
         now_s = _now_s()
         current = existing if isinstance(existing, dict) else {}
@@ -2211,7 +2267,8 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                 "risk_tier": risk_tier,
                 "required_trust": required_trust,
                 "current_trust": trust_level,
-                "tool_name": _safe_str((cap_meta or {}).get("tool_name")).strip() or _safe_str(capability.get("id")).strip(),
+                "tool_name": _safe_str((cap_meta or {}).get("tool_name")).strip()
+                or _safe_str(capability.get("id")).strip(),
             },
         }
     except Exception as exc:

@@ -145,9 +145,7 @@ def _selector_matches(task_value: str, selected_value: str) -> bool:
 def _task_matches_route(task: dict[str, Any], *, queue: str, kind: str) -> bool:
     task_queue = _extract_route_value(task, "queue")
     task_kind = _extract_route_value(task, "kind")
-    return _selector_matches(task_queue, queue) and _selector_matches(
-        task_kind, kind
-    )
+    return _selector_matches(task_queue, queue) and _selector_matches(task_kind, kind)
 
 
 def _candidate_task_ids(*, queue: str, kind: str) -> list[str]:
@@ -285,17 +283,11 @@ def run_workers(
     )
     effective_run_once = _to_bool(once if once is not None else run_once, default=False)
     effective_fail_fast = _to_bool(fail_fast, default=False)
-    effective_queue = _normalize_selector(
-        queue_name if queue_name is not None else queue
-    )
-    effective_kind = _normalize_selector(
-        worker_kind if worker_kind is not None else kind
-    )
+    effective_queue = _normalize_selector(queue_name if queue_name is not None else queue)
+    effective_kind = _normalize_selector(worker_kind if worker_kind is not None else kind)
     effective_profile = _safe_str(profile if profile is not None else env_profile).strip() or "dev"
     effective_mode = _safe_str(mode if mode is not None else run_mode).strip() or "local"
-    effective_idle_exit = (
-        _to_int(idle_exit_cycles, default=0, minimum=1) if idle_exit_cycles is not None else None
-    )
+    effective_idle_exit = _to_int(idle_exit_cycles, default=0, minimum=1) if idle_exit_cycles is not None else None
 
     host = socket.gethostname()
     pid = os.getpid()

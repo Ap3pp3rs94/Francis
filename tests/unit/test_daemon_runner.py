@@ -77,4 +77,3 @@ def test_daemon_launcher_once_from_source_checkout(monkeypatch, tmp_path: Path) 
 
     final_record = _read_record(data_root, record.task_id)
     assert final_record["status"] == "complete"
-
