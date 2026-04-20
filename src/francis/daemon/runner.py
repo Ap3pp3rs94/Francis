@@ -187,7 +187,11 @@ def run_daemon(
         minimum=1,
     )
     effective_heartbeat = _to_float(
-        heartbeat if heartbeat is not None else heartbeat_interval_s if heartbeat_interval_s is not None else heartbeat_s,
+        heartbeat
+        if heartbeat is not None
+        else heartbeat_interval_s
+        if heartbeat_interval_s is not None
+        else heartbeat_s,
         default=10.0,
         minimum=0.0,
     )
@@ -290,4 +294,3 @@ def run(**kwargs: Any) -> int:
 
 def main(**kwargs: Any) -> int:
     return run_daemon(**kwargs)
-

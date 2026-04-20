@@ -75,7 +75,9 @@ class SandboxRunner:
                 audit_event=event,
             )
 
-        payload_size = self._estimate_payload_bytes(payload if payload is not None else {"args": args, "kwargs": kwargs})
+        payload_size = self._estimate_payload_bytes(
+            payload if payload is not None else {"args": args, "kwargs": kwargs}
+        )
         if payload_size > self.limits.max_payload_bytes:
             event = audit.record(
                 "plugin.sandbox.run",

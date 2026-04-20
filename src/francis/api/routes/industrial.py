@@ -140,10 +140,14 @@ def _save_registry(registry: dict[str, Any]) -> None:
         "processes": registry.get("processes") if isinstance(registry.get("processes"), dict) else {},
         "simulations": registry.get("simulations") if isinstance(registry.get("simulations"), dict) else {},
         "runs": registry.get("runs") if isinstance(registry.get("runs"), dict) else {},
-        "safety_validations": registry.get("safety_validations") if isinstance(registry.get("safety_validations"), dict) else {},
+        "safety_validations": registry.get("safety_validations")
+        if isinstance(registry.get("safety_validations"), dict)
+        else {},
         "telemetry": registry.get("telemetry") if isinstance(registry.get("telemetry"), list) else [],
         "interventions": registry.get("interventions") if isinstance(registry.get("interventions"), list) else [],
-        "digital_twin_actions": registry.get("digital_twin_actions") if isinstance(registry.get("digital_twin_actions"), list) else [],
+        "digital_twin_actions": registry.get("digital_twin_actions")
+        if isinstance(registry.get("digital_twin_actions"), list)
+        else [],
     }
     if len(normalized["telemetry"]) > 5000:
         normalized["telemetry"] = normalized["telemetry"][-5000:]
@@ -293,12 +297,16 @@ def _normalize_telemetry(raw: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _append_telemetry(registry: dict[str, Any], source_id: str, fields: dict[str, Any], meta: dict[str, Any] | None = None) -> None:
+def _append_telemetry(
+    registry: dict[str, Any], source_id: str, fields: dict[str, Any], meta: dict[str, Any] | None = None
+) -> None:
     telemetry = registry.get("telemetry")
     if not isinstance(telemetry, list):
         telemetry = []
         registry["telemetry"] = telemetry
-    point = _normalize_telemetry({"ts": _now_s(), "source_id": source_id, "fields": fields, "quality": "estimated", "meta": meta or {}})
+    point = _normalize_telemetry(
+        {"ts": _now_s(), "source_id": source_id, "fields": fields, "quality": "estimated", "meta": meta or {}}
+    )
     if point is not None:
         telemetry.append(point)
 
@@ -350,7 +358,9 @@ def _apply_filters(
     return out
 
 
-def _paginate(items: list[dict[str, Any]], limit: int, offset: int, cursor: str | None = None) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
+def _paginate(
+    items: list[dict[str, Any]], limit: int, offset: int, cursor: str | None = None
+) -> tuple[list[dict[str, Any]], int, int, int, str | None]:
     safe_limit = max(1, min(int(limit), 5000))
     safe_offset = max(0, int(offset))
     if cursor and cursor.isdigit():
@@ -615,6 +625,7 @@ def health() -> dict[str, object]:
     body["route"] = "industrial.health"
     return body
 
+
 @router.get("/assets")
 def list_assets(
     limit: int = 200,
@@ -732,9 +743,15 @@ def delete_asset(asset_id: str, payload: dict[str, Any] | None = None) -> dict[s
         if not removed:
             return {"ok": False, "error": "not_found", "id": entity_id}
         _save_registry(registry)
-        return {"ok": True, "id": entity_id, "status": "deleted", "reason": _safe_str((payload or {}).get("reason")).strip()}
+        return {
+            "ok": True,
+            "id": entity_id,
+            "status": "deleted",
+            "reason": _safe_str((payload or {}).get("reason")).strip(),
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
 
 @router.get("/processes")
 def list_processes(
@@ -850,9 +867,15 @@ def delete_process(process_id: str, payload: dict[str, Any] | None = None) -> di
         if not removed:
             return {"ok": False, "error": "not_found", "id": entity_id}
         _save_registry(registry)
-        return {"ok": True, "id": entity_id, "status": "deleted", "reason": _safe_str((payload or {}).get("reason")).strip()}
+        return {
+            "ok": True,
+            "id": entity_id,
+            "status": "deleted",
+            "reason": _safe_str((payload or {}).get("reason")).strip(),
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
 
 @router.get("/simulations")
 def list_simulations(
@@ -954,7 +977,17 @@ def update_simulation(simulation_id: str, payload: dict[str, Any]) -> dict[str, 
         if current is None:
             return {"ok": False, "error": "not_found", "id": entity_id}
         item = _normalize_simulation(entity_id, current)
-        for key in ("name", "status", "risk", "description", "engine", "scenario", "asset_id", "process_id", "digital_twin_id"):
+        for key in (
+            "name",
+            "status",
+            "risk",
+            "description",
+            "engine",
+            "scenario",
+            "asset_id",
+            "process_id",
+            "digital_twin_id",
+        ):
             if key in payload and payload[key] is not None:
                 item[key] = _safe_str(payload[key]).strip()
         if "tags" in payload:
@@ -982,9 +1015,15 @@ def delete_simulation(simulation_id: str, payload: dict[str, Any] | None = None)
         if not removed:
             return {"ok": False, "error": "not_found", "id": entity_id}
         _save_registry(registry)
-        return {"ok": True, "id": entity_id, "status": "deleted", "reason": _safe_str((payload or {}).get("reason")).strip()}
+        return {
+            "ok": True,
+            "id": entity_id,
+            "status": "deleted",
+            "reason": _safe_str((payload or {}).get("reason")).strip(),
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
 
 @router.get("/runs")
 def list_runs(
@@ -1043,7 +1082,19 @@ def export_runs(
     if kind == "csv":
         out = io.StringIO()
         writer = csv.writer(out)
-        writer.writerow(["id", "simulation_id", "status", "requested_ts", "started_ts", "completed_ts", "requested_by", "reason", "summary"])
+        writer.writerow(
+            [
+                "id",
+                "simulation_id",
+                "status",
+                "requested_ts",
+                "started_ts",
+                "completed_ts",
+                "requested_by",
+                "reason",
+                "summary",
+            ]
+        )
         for item in items:
             writer.writerow(
                 [
@@ -1060,7 +1111,9 @@ def export_runs(
             )
         return Response(content=out.getvalue(), media_type="text/csv")
 
-    return Response(content=json.dumps({"items": items, "total": len(items)}, ensure_ascii=False), media_type="application/json")
+    return Response(
+        content=json.dumps({"items": items, "total": len(items)}, ensure_ascii=False), media_type="application/json"
+    )
 
 
 @router.get("/runs/{run_id}")
@@ -1101,12 +1154,23 @@ def start_run(payload: dict[str, Any]) -> dict[str, object]:
                 "params": _normalize_meta(payload.get("params")),
                 "metrics": {"dry_run": 1.0 if dry_run else 0.0},
                 "summary": "Dry-run completed without external actuation." if dry_run else "Run started.",
-                "artifacts": [{"id": _new_id("artifact", run_id), "kind": "run_report", "path": f"data/artifacts/simulations/{run_id}.json"}],
+                "artifacts": [
+                    {
+                        "id": _new_id("artifact", run_id),
+                        "kind": "run_report",
+                        "path": f"data/artifacts/simulations/{run_id}.json",
+                    }
+                ],
                 "meta": {"created_at": _now_iso(), "dry_run": dry_run},
             },
         )
         _write_section(registry, "runs", run_id, run)
-        _append_telemetry(registry, simulation_id, {"run_status": run.get("status"), "dry_run": dry_run}, {"event": "runs.start", "run_id": run_id})
+        _append_telemetry(
+            registry,
+            simulation_id,
+            {"run_status": run.get("status"), "dry_run": dry_run},
+            {"event": "runs.start", "run_id": run_id},
+        )
         _save_registry(registry)
         return {"ok": True, "id": run_id, "run": run, "status": run.get("status")}
     except Exception as exc:
@@ -1130,11 +1194,17 @@ def cancel_run(run_id: str, payload: dict[str, Any]) -> dict[str, object]:
         meta["cancel_reason"] = _safe_str(payload.get("reason")).strip() or "requested"
         run["meta"] = meta
         _write_section(registry, "runs", entity_id, run)
-        _append_telemetry(registry, _safe_str(run.get("simulation_id")).strip(), {"run_status": run.get("status"), "canceled": True}, {"event": "runs.cancel", "run_id": entity_id})
+        _append_telemetry(
+            registry,
+            _safe_str(run.get("simulation_id")).strip(),
+            {"run_status": run.get("status"), "canceled": True},
+            {"event": "runs.cancel", "run_id": entity_id},
+        )
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "status": run.get("status")}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
 
 @router.get("/safety/validations")
 def list_safety_validations(
@@ -1154,7 +1224,10 @@ def list_safety_validations(
             items,
             status=_safe_str(status).strip().lower(),
             include_archived=True,
-            extra={"target_kind": _safe_str(target_kind).strip().lower(), "target_id": _safe_str(target_id).strip().lower()},
+            extra={
+                "target_kind": _safe_str(target_kind).strip().lower(),
+                "target_id": _safe_str(target_id).strip().lower(),
+            },
             start_ts=start_ts,
             end_ts=end_ts,
             time_key="ts",
@@ -1187,13 +1260,19 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
             validation_id=supplied_validation_id,
             approval_id=supplied_approval_id,
         )
-        validation_id = matched_validation_id or supplied_validation_id or _new_id("validation", f"{target_kind}_{target_id}")
+        validation_id = (
+            matched_validation_id or supplied_validation_id or _new_id("validation", f"{target_kind}_{target_id}")
+        )
         matched_validation = (
             _normalize_validation(validation_id, matched_validation_raw)
             if isinstance(matched_validation_raw, dict)
             else None
         )
-        matched_meta = matched_validation.get("meta") if isinstance(matched_validation, dict) and isinstance(matched_validation.get("meta"), dict) else {}
+        matched_meta = (
+            matched_validation.get("meta")
+            if isinstance(matched_validation, dict) and isinstance(matched_validation.get("meta"), dict)
+            else {}
+        )
         status = "warn" if dry_run else "pass"
         summary = "Dry-run safety validation completed." if dry_run else "Safety validation passed."
         violations: list[dict[str, Any]] = []
@@ -1216,7 +1295,13 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
         if risk in {"high", "safety_critical"} and not dry_run:
             status = "warn"
             summary = "High-risk validation requires approval."
-            violations.append({"code": "HIGH_RISK_APPROVAL_REQUIRED", "message": "Approval required for high-risk validation.", "severity": "warning"})
+            violations.append(
+                {
+                    "code": "HIGH_RISK_APPROVAL_REQUIRED",
+                    "message": "Approval required for high-risk validation.",
+                    "severity": "warning",
+                }
+            )
 
             if not approval_id:
                 approval_id, _ = _request_exact_approval(
@@ -1260,7 +1345,10 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                     _append_telemetry(
                         registry,
                         target_id,
-                        {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+                        {
+                            "safety_status": validation.get("status"),
+                            "violation_count": len(validation.get("violations") or []),
+                        },
                         {"event": "safety.validate", "validation_id": validation_id},
                     )
                     _save_registry(registry)
@@ -1302,7 +1390,10 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                     _append_telemetry(
                         registry,
                         target_id,
-                        {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+                        {
+                            "safety_status": validation.get("status"),
+                            "violation_count": len(validation.get("violations") or []),
+                        },
                         {"event": "safety.validate", "validation_id": validation_id},
                     )
                     _save_registry(registry)
@@ -1380,7 +1471,10 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                     _append_telemetry(
                         registry,
                         target_id,
-                        {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+                        {
+                            "safety_status": validation.get("status"),
+                            "violation_count": len(validation.get("violations") or []),
+                        },
                         {"event": "safety.validate", "validation_id": validation_id},
                     )
                     _save_registry(registry)
@@ -1424,9 +1518,21 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
         )
 
         _write_section(registry, "safety_validations", validation_id, validation)
-        _append_telemetry(registry, target_id, {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])}, {"event": "safety.validate", "validation_id": validation_id})
+        _append_telemetry(
+            registry,
+            target_id,
+            {"safety_status": validation.get("status"), "violation_count": len(validation.get("violations") or [])},
+            {"event": "safety.validate", "validation_id": validation_id},
+        )
         _save_registry(registry)
-        return {"ok": True, "id": validation_id, "validation": validation, "status": validation.get("status"), "approval_id": approval_id, "request_id": request_id}
+        return {
+            "ok": True,
+            "id": validation_id,
+            "validation": validation,
+            "status": validation.get("status"),
+            "approval_id": approval_id,
+            "request_id": request_id,
+        }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -1632,7 +1738,9 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
                 "status": "pending",
                 "request_id": request_id,
                 "approval_id": approval_id,
-                "previous_approval_id": _safe_str(request_record.get("previous_approval_id")).strip() if isinstance(request_record, dict) else "",
+                "previous_approval_id": _safe_str(request_record.get("previous_approval_id")).strip()
+                if isinstance(request_record, dict)
+                else "",
                 "intervention_id": intervention_id,
                 "message": "Intervention request is awaiting approval.",
             }
@@ -1729,7 +1837,9 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
             "actor": actor,
             "request_id": request_id,
             "approval_id": approval_id,
-            "previous_approval_id": _safe_str(request_record.get("previous_approval_id")).strip() if isinstance(request_record, dict) else "",
+            "previous_approval_id": _safe_str(request_record.get("previous_approval_id")).strip()
+            if isinstance(request_record, dict)
+            else "",
             "params": params,
             "meta": meta,
         }
@@ -2004,7 +2114,12 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
             interventions[record_idx] = intervention
         else:
             interventions.append(intervention)
-        _append_telemetry(registry, target_id, {"intervention_executed": status in {"executed", "dry_run"}, "dry_run": dry_run}, {"event": "interventions.execute"})
+        _append_telemetry(
+            registry,
+            target_id,
+            {"intervention_executed": status in {"executed", "dry_run"}, "dry_run": dry_run},
+            {"event": "interventions.execute"},
+        )
         _save_registry(registry)
         return {
             "ok": True,
@@ -2017,6 +2132,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
 
 @router.get("/digital_twins/list")
 def list_digital_twins() -> dict[str, object]:
@@ -2098,15 +2214,30 @@ def get_digital_twin_snapshot(id: str) -> dict[str, object]:
 
         runs = _list_section(registry, "runs", _normalize_run)
         run_count = len([run for run in runs if _safe_str(run.get("simulation_id")).strip() == entity_id])
-        running_count = len([run for run in runs if _safe_str(run.get("simulation_id")).strip() == entity_id and _safe_str(run.get("status")).strip() == "running"])
+        running_count = len(
+            [
+                run
+                for run in runs
+                if _safe_str(run.get("simulation_id")).strip() == entity_id
+                and _safe_str(run.get("status")).strip() == "running"
+            ]
+        )
 
         snapshot = {
             "id": entity_id,
             "ts": _now_s(),
             "status": asset.get("status") or "unknown",
             "summary": f"Twin snapshot for {asset.get('name') or entity_id}.",
-            "state": {"asset": asset, "latest_telemetry": latest, "run_count": run_count, "running_count": running_count},
-            "health": {"telemetry_points": len(source_points), "has_recent_telemetry": bool(latest and int(latest.get("ts") or 0) >= _now_s() - 3600)},
+            "state": {
+                "asset": asset,
+                "latest_telemetry": latest,
+                "run_count": run_count,
+                "running_count": running_count,
+            },
+            "health": {
+                "telemetry_points": len(source_points),
+                "has_recent_telemetry": bool(latest and int(latest.get("ts") or 0) >= _now_s() - 3600),
+            },
         }
         return {"ok": True, "snapshot": snapshot}
     except Exception as exc:
@@ -2131,7 +2262,9 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
             action_id=supplied_action_id,
             approval_id=supplied_approval_id,
         )
-        action_id = supplied_action_id or (_safe_str(action_record.get("id")).strip() if isinstance(action_record, dict) else "")
+        action_id = supplied_action_id or (
+            _safe_str(action_record.get("id")).strip() if isinstance(action_record, dict) else ""
+        )
         if not action_id:
             action_id = _new_id("dtact", twin_id)
         request_id = _safe_str(payload.get("request_id")).strip() or (
@@ -2240,7 +2373,12 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                             "action_id": action_id,
                         },
                     )
-                    _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action", "action_id": action_id})
+                    _append_telemetry(
+                        registry,
+                        twin_id,
+                        {"digital_twin_action": action},
+                        {"event": "digital_twin.action", "action_id": action_id},
+                    )
                     _save_registry(registry)
                     return {
                         "ok": False,
@@ -2265,14 +2403,21 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "reason": reason,
                         "request_id": request_id,
                         "approval_id": approval_id,
-                        "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip() if isinstance(action_record, dict) else "",
+                        "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip()
+                        if isinstance(action_record, dict)
+                        else "",
                         "params": params,
                     }
                     if action_idx >= 0:
                         actions[action_idx] = record
                     else:
                         actions.append(record)
-                    _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action", "action_id": action_id})
+                    _append_telemetry(
+                        registry,
+                        twin_id,
+                        {"digital_twin_action": action},
+                        {"event": "digital_twin.action", "action_id": action_id},
+                    )
                     _save_registry(registry)
                     return {
                         "ok": True,
@@ -2344,7 +2489,12 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         actions[action_idx] = record
                     else:
                         actions.append(record)
-                    _append_telemetry(registry, twin_id, {"digital_twin_action": action}, {"event": "digital_twin.action", "action_id": action_id})
+                    _append_telemetry(
+                        registry,
+                        twin_id,
+                        {"digital_twin_action": action},
+                        {"event": "digital_twin.action", "action_id": action_id},
+                    )
                     _save_registry(registry)
                     return {
                         "ok": False,
@@ -2370,7 +2520,9 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                     "reason": reason,
                     "request_id": request_id,
                     "approval_id": approval_id,
-                    "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip() if isinstance(action_record, dict) else "",
+                    "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip()
+                    if isinstance(action_record, dict)
+                    else "",
                     "params": params,
                 }
                 if action_idx >= 0:
@@ -2382,7 +2534,9 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
             registry,
             twin_id,
             {"digital_twin_action": action},
-            {"event": "digital_twin.action", "action_id": action_id} if action != "validate_safety" else {"event": "digital_twin.action"},
+            {"event": "digital_twin.action", "action_id": action_id}
+            if action != "validate_safety"
+            else {"event": "digital_twin.action"},
         )
         _save_registry(registry)
         return {

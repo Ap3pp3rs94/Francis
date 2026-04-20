@@ -60,6 +60,7 @@ def _env_int(*names: str, default: int) -> int:
             logger.warning("Ignoring invalid integer env %s=%r", name, value)
     return default
 
+
 if not TYPE_CHECKING and BaseSettings is not None:
 
     class Settings(BaseSettings):
@@ -106,16 +107,24 @@ elif not TYPE_CHECKING:
     class Settings:
         francis_env: str = field(default_factory=lambda: _env_text("FRANCIS_ENV_PROFILE", "FRANCIS_ENV", default="dev"))
         francis_root: str = field(default_factory=lambda: _env_text("FRANCIS_ROOT", "FRANCIS_HOME", default="."))
-        francis_log_level: str = field(default_factory=lambda: _env_text("FRANCIS_LOG_LEVEL", "LOG_LEVEL", default="INFO"))
+        francis_log_level: str = field(
+            default_factory=lambda: _env_text("FRANCIS_LOG_LEVEL", "LOG_LEVEL", default="INFO")
+        )
         francis_log_json: bool = field(
-            default_factory=lambda: _env_text("FRANCIS_LOG_JSON", "LOG_JSON", default="true").lower() not in {"0", "false", "no", "off"}
+            default_factory=lambda: (
+                _env_text("FRANCIS_LOG_JSON", "LOG_JSON", default="true").lower() not in {"0", "false", "no", "off"}
+            )
         )
 
-        francis_api_host: str = field(default_factory=lambda: _env_text("FRANCIS_API_HOST", "API_HOST", default="127.0.0.1"))
+        francis_api_host: str = field(
+            default_factory=lambda: _env_text("FRANCIS_API_HOST", "API_HOST", default="127.0.0.1")
+        )
         francis_api_port: int = field(default_factory=lambda: _env_int("FRANCIS_API_PORT", "API_PORT", default=8000))
 
         ollama_base_url: str = field(
-            default_factory=lambda: _env_text("FRANCIS_OLLAMA_BASE_URL", "OLLAMA_BASE_URL", default="http://localhost:11434")
+            default_factory=lambda: _env_text(
+                "FRANCIS_OLLAMA_BASE_URL", "OLLAMA_BASE_URL", default="http://localhost:11434"
+            )
         )
         ollama_default_model: str = field(
             default_factory=lambda: _env_text("FRANCIS_LLM_CHAT_MODEL", "OLLAMA_DEFAULT_MODEL", default="qwen2.5:7b")

@@ -411,8 +411,12 @@ def _seed_from_vault(registry: dict[str, Any]) -> bool:
                     "status": "active",
                     "scope_id": scope_id,
                     "provider": provider,
-                    "domain": _safe_str(obj.get("request", {}).get("domain_id") if isinstance(obj.get("request"), dict) else "").strip(),
-                    "actor": _safe_str(obj.get("actor", {}).get("id") if isinstance(obj.get("actor"), dict) else "").strip(),
+                    "domain": _safe_str(
+                        obj.get("request", {}).get("domain_id") if isinstance(obj.get("request"), dict) else ""
+                    ).strip(),
+                    "actor": _safe_str(
+                        obj.get("actor", {}).get("id") if isinstance(obj.get("actor"), dict) else ""
+                    ).strip(),
                     "created_ts": emitted_ts,
                     "last_used_ts": emitted_ts,
                     "label": credential_id,
@@ -444,7 +448,9 @@ def _seed_from_vault(registry: dict[str, Any]) -> bool:
     return changed
 
 
-def _match_credential(item: dict[str, Any], status_filter: str, scope_filter: str, provider_filter: str, search_filter: str) -> bool:
+def _match_credential(
+    item: dict[str, Any], status_filter: str, scope_filter: str, provider_filter: str, search_filter: str
+) -> bool:
     if status_filter and _safe_str(item.get("status")).strip().lower() != status_filter:
         return False
     if scope_filter and _safe_str(item.get("scope_id")).strip().lower() != scope_filter:
@@ -653,7 +659,10 @@ def _load_delegations(registry: dict[str, Any]) -> list[dict[str, Any]]:
                 "scope_id": scope_id,
                 "status": "pending",
                 "reason": _safe_str(event.get("reason")).strip(),
-                "meta": {"source": "credential_api_event", "credential_id": _safe_str(event.get("credential_id")).strip()},
+                "meta": {
+                    "source": "credential_api_event",
+                    "credential_id": _safe_str(event.get("credential_id")).strip(),
+                },
             }
     return list(sorted(out.values(), key=lambda item: int(item.get("ts") or 0), reverse=True))
 
@@ -733,7 +742,14 @@ def list_credentials(
             if _match_credential(item, status_filter, scope_filter, provider_filter, search_filter):
                 items.append(item)
 
-        items.sort(key=lambda item: (int(item.get("last_used_ts") or 0), int(item.get("created_ts") or 0), _safe_str(item.get("id"))), reverse=True)
+        items.sort(
+            key=lambda item: (
+                int(item.get("last_used_ts") or 0),
+                int(item.get("created_ts") or 0),
+                _safe_str(item.get("id")),
+            ),
+            reverse=True,
+        )
         total = len(items)
         page = items[safe_offset : safe_offset + safe_limit]
         return {"items": page, "credentials": page, "total": total, "offset": safe_offset, "limit": safe_limit}

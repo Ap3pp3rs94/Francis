@@ -611,7 +611,9 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     assert blocked_run.status_code == 200
     assert blocked_run.json()["status"] == "blocked"
 
-    run_once = client.post("/missions/run_once", json={"actor": "test.missions.queue", "note": "queue reconcile", "limit": 10})
+    run_once = client.post(
+        "/missions/run_once", json={"actor": "test.missions.queue", "note": "queue reconcile", "limit": 10}
+    )
     assert run_once.status_code == 200
     run_once_body = run_once.json()
     assert run_once_body["ok"] is True
@@ -911,9 +913,9 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     mission = client.post(
         "/missions/create",
         json={
-          "objective": "Approval-bound mission should surface exact handoff",
-          "summary": "Mission advance should return the approval needed for the next step.",
-          "requester_id": "test.missions.advance",
+            "objective": "Approval-bound mission should surface exact handoff",
+            "summary": "Mission advance should return the approval needed for the next step.",
+            "requester_id": "test.missions.advance",
         },
     )
     assert mission.status_code == 200

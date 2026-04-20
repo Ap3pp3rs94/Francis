@@ -179,11 +179,15 @@ def _load_registry() -> dict[str, Any]:
         for item in records_obj:
             if not isinstance(item, dict):
                 continue
-            record_id = _safe_str(item.get("id")).strip() or _new_id("exp", _safe_str(item.get("title") or item.get("kind")).strip() or "record")
+            record_id = _safe_str(item.get("id")).strip() or _new_id(
+                "exp", _safe_str(item.get("title") or item.get("kind")).strip() or "record"
+            )
             records[record_id] = _normalize_record(record_id, item)
 
     if len(records) > 50_000:
-        keep_ids = sorted(records.keys(), key=lambda rid: (int(records[rid].get("ts") or 0), rid), reverse=True)[:50_000]
+        keep_ids = sorted(records.keys(), key=lambda rid: (int(records[rid].get("ts") or 0), rid), reverse=True)[
+            :50_000
+        ]
         records = {rid: records[rid] for rid in keep_ids}
 
     out["records"] = records
@@ -201,7 +205,9 @@ def _save_registry(registry: dict[str, Any]) -> None:
             records[record_id] = _normalize_record(record_id, item)
 
     if len(records) > 50_000:
-        keep_ids = sorted(records.keys(), key=lambda rid: (int(records[rid].get("ts") or 0), rid), reverse=True)[:50_000]
+        keep_ids = sorted(records.keys(), key=lambda rid: (int(records[rid].get("ts") or 0), rid), reverse=True)[
+            :50_000
+        ]
         records = {rid: records[rid] for rid in keep_ids}
 
     payload = {
@@ -570,8 +576,10 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
             "domain": _safe_str(payload.get("domain")).strip() or _safe_str(existing_obj.get("domain")).strip(),
             "conversation_id": _safe_str(payload.get("conversation_id") or payload.get("thread_id")).strip()
             or _safe_str(existing_obj.get("conversation_id")).strip(),
-            "approval_id": _safe_str(payload.get("approval_id")).strip() or _safe_str(existing_obj.get("approval_id")).strip(),
-            "plugin_id": _safe_str(payload.get("plugin_id")).strip() or _safe_str(existing_obj.get("plugin_id")).strip(),
+            "approval_id": _safe_str(payload.get("approval_id")).strip()
+            or _safe_str(existing_obj.get("approval_id")).strip(),
+            "plugin_id": _safe_str(payload.get("plugin_id")).strip()
+            or _safe_str(existing_obj.get("plugin_id")).strip(),
             "tags": _parse_list(payload.get("tags") if "tags" in payload else existing_obj.get("tags")),
             "content": payload.get("content") if "content" in payload else existing_obj.get("content"),
             "inputs": _meta(payload.get("inputs") if "inputs" in payload else existing_obj.get("inputs")),

@@ -150,8 +150,10 @@ def _normalize_domain_record(domain_id: str, record: dict[str, Any]) -> dict[str
         "status": _coerce_status(record.get("status")),
         "created_ts": created_ts,
         "updated_ts": updated_ts,
-        "created_at": _safe_str(record.get("created_at")).strip() or datetime.fromtimestamp(created_ts, tz=UTC).isoformat(),
-        "updated_at": _safe_str(record.get("updated_at")).strip() or datetime.fromtimestamp(updated_ts, tz=UTC).isoformat(),
+        "created_at": _safe_str(record.get("created_at")).strip()
+        or datetime.fromtimestamp(created_ts, tz=UTC).isoformat(),
+        "updated_at": _safe_str(record.get("updated_at")).strip()
+        or datetime.fromtimestamp(updated_ts, tz=UTC).isoformat(),
         "risk": _safe_str(record.get("risk")).strip() or "",
         "requires_approval": bool(record.get("requires_approval", False)),
         "tags": tags,
@@ -430,4 +432,3 @@ def domain_summary(domain_id: str) -> dict[str, object]:
         return {"ok": True, "summary": _summarize_domain(item)}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
-

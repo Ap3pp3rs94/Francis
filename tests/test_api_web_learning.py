@@ -59,7 +59,9 @@ def test_web_learning_lifecycle_and_quarantine(monkeypatch, tmp_path: Path) -> N
     assert quarantine_items
     quarantine_id = str(quarantine_items[0]["id"])
 
-    release = client.post(f"/web_learning/quarantine/{quarantine_id}/decide", json={"action": "release", "reason": "manual_review"})
+    release = client.post(
+        f"/web_learning/quarantine/{quarantine_id}/decide", json={"action": "release", "reason": "manual_review"}
+    )
     assert release.status_code == 200
     release_body = release.json()
     assert release_body["ok"] is True
@@ -90,7 +92,6 @@ def test_web_learning_lifecycle_and_quarantine(monkeypatch, tmp_path: Path) -> N
     event_items = events.json()["items"]
     assert isinstance(event_items, list)
     assert any(str(item.get("kind")) in {"ingest", "fetch_end", "fetch_start"} for item in event_items)
-
 
 
 def test_web_learning_exports_aliases_and_registry(monkeypatch, tmp_path: Path) -> None:
@@ -135,7 +136,9 @@ def test_web_learning_exports_aliases_and_registry(monkeypatch, tmp_path: Path) 
     assert quarantine_items
     quarantine_id = str(quarantine_items[0]["id"])
 
-    delete_pending = client.post(f"/web_learning/quarantine/{quarantine_id}/decide", json={"action": "delete", "reason": "cleanup"})
+    delete_pending = client.post(
+        f"/web_learning/quarantine/{quarantine_id}/decide", json={"action": "delete", "reason": "cleanup"}
+    )
     assert delete_pending.status_code == 200
     delete_pending_body = delete_pending.json()
     assert delete_pending_body["ok"] is True
@@ -455,8 +458,13 @@ def test_web_learning_quarantine_delete_refreshes_missing_approval(monkeypatch, 
 
     records = client.get("/web_learning/records")
     assert records.status_code == 200
-    matching_records = [item for item in records.json()["items"] if str(item.get("quarantine_id")) in {"", quarantine_id}]
-    assert any(str(item.get("status")) == "failed" and str(item.get("error")) == "Deleted from quarantine." for item in matching_records)
+    matching_records = [
+        item for item in records.json()["items"] if str(item.get("quarantine_id")) in {"", quarantine_id}
+    ]
+    assert any(
+        str(item.get("status")) == "failed" and str(item.get("error")) == "Deleted from quarantine."
+        for item in matching_records
+    )
 
 
 def test_web_learning_dash_and_system_prefix_aliases(monkeypatch, tmp_path: Path) -> None:

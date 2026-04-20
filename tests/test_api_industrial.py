@@ -260,7 +260,9 @@ def test_industrial_execute_refreshes_mismatched_approval(monkeypatch, tmp_path:
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Critical Pump", "asset_type": "pump", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Critical Pump", "asset_type": "pump", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 
@@ -361,7 +363,9 @@ def test_industrial_request_refreshes_mismatched_approval(monkeypatch, tmp_path:
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Compressor A", "asset_type": "compressor", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Compressor A", "asset_type": "compressor", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 
@@ -463,7 +467,9 @@ def test_industrial_execute_refreshes_missing_approval(monkeypatch, tmp_path: Pa
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Valve Bank", "asset_type": "valve", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Valve Bank", "asset_type": "valve", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 
@@ -564,7 +570,9 @@ def test_industrial_request_refreshes_missing_approval(monkeypatch, tmp_path: Pa
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Compressor B", "asset_type": "compressor", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Compressor B", "asset_type": "compressor", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 
@@ -850,7 +858,9 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Twin Controller", "asset_type": "controller", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Twin Controller", "asset_type": "controller", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 
@@ -939,7 +949,9 @@ def test_industrial_digital_twin_action_refreshes_missing_approval(monkeypatch, 
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Twin Controller B", "asset_type": "controller", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Twin Controller B", "asset_type": "controller", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 

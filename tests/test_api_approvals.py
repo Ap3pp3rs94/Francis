@@ -184,7 +184,9 @@ def test_approval_list_surfaces_exact_action_context_for_industrial_request(monk
 
     client = TestClient(create_app())
 
-    asset_created = client.post("/industrial/assets", json={"name": "Queue Compressor", "asset_type": "compressor", "risk": "high"})
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Queue Compressor", "asset_type": "compressor", "risk": "high"}
+    )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
 
