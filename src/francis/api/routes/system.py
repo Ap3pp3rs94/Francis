@@ -108,6 +108,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _settings_dict() -> dict[str, Any]:
+    settings_obj: Any
     try:
         settings_obj = Settings()
     except Exception:
