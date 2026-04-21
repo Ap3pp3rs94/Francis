@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+
+def _without_dynamic_observed_at(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _without_dynamic_observed_at(item) for key, item in value.items() if key != "observed_at"}
+    if isinstance(value, list):
+        return [_without_dynamic_observed_at(item) for item in value]
+    return value
 
 
 def _write_dev_environment(repo_root: Path) -> None:
@@ -169,6 +178,7 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["briefing"]["headline"] == "No mission backlog is currently active."
     assert body["briefing"]["focus"] == []
     assert body["briefing"]["observer"]["headline"] == "Observer reports no active incidents."
+    assert body["briefing"]["observer"]["observed_at"] > 0
     assert body["briefing"]["observer"]["counts"]["active"] == 0
     assert body["briefing"]["observer"]["anomaly"]["score"] == 0
     assert body["briefing"]["observer"]["anomaly"]["level"] == "clear"
@@ -178,6 +188,7 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
         "approval_queue",
         "task_runtime",
     }
+    assert all(item["observed_at"] > 0 for item in body["briefing"]["observer"]["probes"])
     assert body["briefing"]["observer"]["focus"] == []
     assert body["recent_missions"] == []
     assert body["operator"]["available"] is True
@@ -217,11 +228,11 @@ def test_continuity_briefing_aliases_match_primary_route(monkeypatch, tmp_path: 
     for body in (underscore_alias.json(), hyphen_alias.json()):
         assert body["ok"] == primary_body["ok"]
         assert body["subsystem"] == primary_body["subsystem"]
-        assert body["briefing"] == primary_body["briefing"]
+        assert _without_dynamic_observed_at(body["briefing"]) == _without_dynamic_observed_at(primary_body["briefing"])
         assert body["mission_status_counts"] == primary_body["mission_status_counts"]
         assert body["recent_missions"] == primary_body["recent_missions"]
         assert body["operator"] == primary_body["operator"]
-        assert body["orb"] == primary_body["orb"]
+        assert _without_dynamic_observed_at(body["orb"]) == _without_dynamic_observed_at(primary_body["orb"])
 
 
 def test_continuity_ledger_tail_returns_recent_entries(monkeypatch, tmp_path: Path) -> None:
@@ -388,6 +399,7 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     blocked_incident = next(item for item in observer_focus if item["id"] == "governance.blocked_tasks")
     assert blocked_incident["probe"] == "task_runtime"
     assert blocked_incident["task_id"] == blocked_operation_id
+    assert blocked_incident["observed_at"] > 0
     assert blocked_incident["evidence"][0]["kind"] == "task"
     assert blocked_incident["evidence"][0]["id"] == blocked_operation_id
     observer_recent_scans = body["briefing"]["observer"]["recent_scans"]
@@ -397,6 +409,10 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert observer_recent_scans[0]["anomaly"]["level"] == "error"
     assert observer_recent_scans[0]["trace_id"] == observer_scan_body["receipt"]["trace_id"]
     assert observer_recent_scans[0]["run_id"] == observer_scan_body["receipt"]["run_id"]
+    recent_blocked_focus = next(
+        item for item in observer_recent_scans[0]["focus"] if item["id"] == "governance.blocked_tasks"
+    )
+    assert recent_blocked_focus["observed_at"] > 0
     assert (
         next(item for item in observer_recent_scans[0]["probe_statuses"] if item["id"] == "task_runtime")["status"]
         == "attention"

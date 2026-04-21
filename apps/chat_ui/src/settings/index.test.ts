@@ -434,6 +434,7 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
         subsystem: "observer",
         headline: "Observer flagged 1 active incident(s); highest-priority issue: Tasks are blocked by governance.",
         decision: "urgent_review",
+        observed_at: 1_710_000_500,
         counts: { active: 1, error: 1 },
         anomaly: {
           score: 50,
@@ -456,6 +457,7 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
               headline: "Tasks are blocked by governance",
               detail: "blocked 1; awaiting approval 0; failed 0.",
               incident_count: 1,
+              observed_at: 1_710_000_500,
             },
           ],
           anomaly: {
@@ -567,12 +569,14 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
     assert.equal(operatorResponse.snapshot?.control_mode?.id, "away");
     assert.equal(observerResponse.ok, true);
     assert.equal(observerResponse.decision, "urgent_review");
+    assert.equal(observerResponse.observed_at, 1_710_000_500);
     assert.equal(observerResponse.anomaly?.level, "error");
     assert.equal(observerResponse.anomaly?.score, 50);
     assert.equal(observerResponse.receipt?.receipt_id, "obs_scan_003");
     assert.equal(observerResponse.receipt?.anomaly?.level, "error");
     assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.id, "task_runtime");
     assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.status, "attention");
+    assert.equal(observerResponse.receipt?.probe_statuses?.[0]?.observed_at, 1_710_000_500);
     assert.equal(observerResponse.receipt?.trace_id, "trace_observer_scan");
     assert.equal(observerResponse.receipt?.run_id, "run_observer_scan");
     assert.equal(configResponse.ok, true);

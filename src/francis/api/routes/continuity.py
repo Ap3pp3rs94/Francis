@@ -84,6 +84,7 @@ def _observer_briefing() -> dict[str, Any]:
         "focus": summary["focus"],
         "probes": summary["probe_statuses"],
         "anomaly": summary["anomaly"],
+        "observed_at": float(payload.get("generated_at") or 0.0),
         "recent_scans": recent_scans,
     }
 

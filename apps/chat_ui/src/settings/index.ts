@@ -597,6 +597,7 @@ export type ObserverScanResponse = {
   subsystem?: string;
   headline?: string;
   decision?: string;
+  observed_at?: number;
   counts?: Record<string, number>;
   anomaly?: ObserverAnomalySummary;
   receipt?: ObserverScanReceiptSummary;
@@ -2106,15 +2107,18 @@ export class SettingsClient {
     });
 
     if (!isRecord(json)) return { ok: false };
-    return {
+    const response: ObserverScanResponse = {
       ok: safeBoolean(json.ok, false),
       subsystem: safeString(json.subsystem, ""),
       headline: safeString(json.headline, ""),
       decision: safeString(json.decision, ""),
+      observed_at: safeNumber(json.observed_at, 0),
       counts: parseNumberMap(json.counts),
       anomaly: parseObserverAnomalySummary(json.anomaly),
       receipt: parseObserverScanReceiptSummary(json.receipt),
     };
+    if (!response.observed_at) delete response.observed_at;
+    return response;
   }
 
   async listFeatureFlags(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FeatureFlagsResponse> {

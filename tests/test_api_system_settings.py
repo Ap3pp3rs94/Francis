@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+
+def _without_dynamic_observed_at(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _without_dynamic_observed_at(item) for key, item in value.items() if key != "observed_at"}
+    if isinstance(value, list):
+        return [_without_dynamic_observed_at(item) for item in value]
+    return value
 
 
 def _write_dev_environment(repo_root: Path) -> None:
@@ -229,7 +238,9 @@ ui:
     assert world_state_alias_body["subsystem"] == world_state_body["subsystem"]
     assert world_state_alias_body["counts"] == world_state_body["counts"]
     assert world_state_alias_body["paths"] == world_state_body["paths"]
-    assert world_state_alias_body["overview"] == world_state_body["overview"]
+    assert _without_dynamic_observed_at(world_state_alias_body["overview"]) == _without_dynamic_observed_at(
+        world_state_body["overview"]
+    )
     assert world_state_alias_body["trust"] == world_state_body["trust"]
 
     orb_status = client.get("/system/orb_status")
@@ -246,7 +257,9 @@ ui:
         assert alias_body.get("core_loop") == orb_status_body.get("core_loop")
         assert alias_body.get("gates") == orb_status_body.get("gates")
         assert alias_body.get("transitions") == orb_status_body.get("transitions")
-        assert alias_body.get("state") == orb_status_body.get("state")
+        assert _without_dynamic_observed_at(alias_body.get("state")) == _without_dynamic_observed_at(
+            orb_status_body.get("state")
+        )
 
     operator_mode = client.get("/system/operator_mode")
     operator_mode_alias = client.get("/system/operator-mode")
@@ -403,10 +416,12 @@ def test_system_world_state_reports_governance_backlog_states(monkeypatch, tmp_p
         item for item in body["overview"]["incidents"] if item["id"] == "governance.awaiting_approval"
     )
     assert approval_incident["probe"] == "task_runtime"
+    assert approval_incident["observed_at"] > 0
     assert approval_incident["evidence"][0]["kind"] == "task"
     assert approval_incident["evidence"][0]["id"] == "tsk_approval"
     blocked_incident = next(item for item in body["overview"]["incidents"] if item["id"] == "governance.blocked_tasks")
     assert blocked_incident["probe"] == "task_runtime"
+    assert blocked_incident["observed_at"] > 0
     assert blocked_incident["evidence"][0]["detail"] == "insufficient_trust"
 
 
@@ -467,6 +482,7 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     initial_body = initial.json()
     assert initial_body["ok"] is True
     assert initial_body["subsystem"] == "observer"
+    assert initial_body["observed_at"] > 0
     assert initial_body["decision"] == "urgent_review"
     assert initial_body["counts"]["active"] >= 2
     assert initial_body["anomaly"]["score"] >= 50
@@ -477,10 +493,13 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     task_runtime_probe = next(item for item in initial_body["probes"] if item["id"] == "task_runtime")
     assert task_runtime_probe["status"] == "attention"
     assert task_runtime_probe["incident_count"] >= 1
+    assert task_runtime_probe["observed_at"] > 0
     assert initial_body["recent_scans"] == []
     incident_ids = {item["id"] for item in initial_body["incidents"]}
     assert "governance.pending_approvals" in incident_ids
     assert "governance.blocked_tasks" in incident_ids
+    blocked_initial = next(item for item in initial_body["incidents"] if item["id"] == "governance.blocked_tasks")
+    assert blocked_initial["observed_at"] > 0
 
     empty_events = client.get("/system/observer/events")
     assert empty_events.status_code == 200
@@ -509,10 +528,18 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     )
     assert "governance.blocked_tasks" in scanned_body["receipt"]["incident_ids"]
     assert "task_runtime" in scanned_body["receipt"]["probes"]
+    blocked_receipt_focus = next(
+        item for item in scanned_body["receipt"]["focus"] if item["id"] == "governance.blocked_tasks"
+    )
+    assert blocked_receipt_focus["observed_at"] > 0
     assert scanned_body["recent_scans"][0]["receipt_id"] == scanned_body["receipt"]["receipt_id"]
     assert scanned_body["recent_scans"][0]["anomaly"]["level"] == "error"
     assert scanned_body["recent_scans"][0]["trace_id"] == scanned_body["receipt"]["trace_id"]
     assert scanned_body["recent_scans"][0]["run_id"] == scanned_body["receipt"]["run_id"]
+    blocked_recent_focus = next(
+        item for item in scanned_body["recent_scans"][0]["focus"] if item["id"] == "governance.blocked_tasks"
+    )
+    assert blocked_recent_focus["observed_at"] == blocked_receipt_focus["observed_at"]
     assert (
         next(item for item in scanned_body["recent_scans"][0]["probe_statuses"] if item["id"] == "task_runtime")[
             "incident_count"

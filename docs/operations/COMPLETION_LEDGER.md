@@ -69,6 +69,28 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 2 line is observer finding timestamp lineage. This advances the active
+`Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE` line by making observer truth more
+traceable without adding new probes, background sensing, or autonomy:
+
+- `src/francis/world_state/snapshot.py` now preserves the already-computed
+  observation timestamp on every emitted observer incident and probe summary.
+  Findings can now say when they were observed instead of only what was found.
+- `src/francis/api/routes/system.py` now exposes `observed_at` on the live
+  `/system/observer` and `/system/observer/scan` response envelope while keeping
+  existing `generated_at` behavior intact.
+- `src/francis/api/routes/continuity.py` now carries the same observer
+  observation timestamp into the continuity briefing, so presence and handback
+  surfaces can cite observer truth with time context.
+- `apps/chat_ui/src/settings/index.ts` now preserves the top-level observer scan
+  `observed_at` field in the browser control-plane client. Existing incident and
+  probe parsers already preserve their own `observed_at` fields.
+- `tests/test_api_system_settings.py`, `tests/test_api_continuity.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove observation timestamps
+  survive world-state incidents, explicit observer scan receipts, recent-scan
+  history, continuity observer focus, probe summaries, and the UI client parser.
+
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 2 line is a system-runtime mutation posture guard, following the CI
 platform cleanup already landed on `main`. This advances the active `Phase 2 /
 P3_GOVERNANCE -> P2_IDENTITY -> P9_OBSERVABILITY` line without changing
@@ -665,6 +687,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-21` observer timestamp lineage slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m ruff check src/francis/world_state/snapshot.py src/francis/api/routes/system.py src/francis/api/routes/continuity.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `passed`
+- `python -m pytest tests/test_api_system_settings.py::test_system_read_aliases_match_primary_routes tests/test_api_system_settings.py::test_system_world_state_reports_governance_backlog_states tests/test_api_system_settings.py::test_system_observer_scan_is_receipted_and_read_paths_remain_passive tests/test_api_continuity.py::test_continuity_briefing_aliases_match_primary_route tests/test_api_continuity.py::test_continuity_briefing_reports_idle_operator_start_state tests/test_api_continuity.py::test_continuity_briefing_surfaces_handoff_and_recent_completion -q`
+  Result: `6 passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 The following validations were run against the current working tree on
 `2026-04-16` and `2026-04-17`:

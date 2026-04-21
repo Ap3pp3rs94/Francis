@@ -172,8 +172,9 @@ def _observer_probe_summary(
     incidents: list[dict[str, Any]],
     headline: str,
     detail: str,
+    observed_at: float = 0.0,
 ) -> dict[str, Any]:
-    return {
+    summary: dict[str, Any] = {
         "id": probe_id,
         "status": status,
         "severity": _probe_severity(incidents),
@@ -181,10 +182,14 @@ def _observer_probe_summary(
         "detail": detail,
         "incident_count": len(incidents),
     }
+    if observed_at > 0:
+        summary["observed_at"] = observed_at
+    return summary
 
 
 def observer_probe_statuses(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
     incidents = [dict(item) for item in snapshot.get("incidents", []) if isinstance(item, dict)]
+    observed_at = _parse_ts(snapshot.get("generated_at"))
     incidents_by_probe: dict[str, list[dict[str, Any]]] = {}
     for item in incidents:
         probe_id = _safe_str(item.get("probe")).strip()
@@ -236,6 +241,7 @@ def observer_probe_statuses(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             incidents=stack_incidents,
             headline=stack_headline,
             detail=f"{stack_ready}/{stack_total} stack surfaces ready; missing {stack_missing}.",
+            observed_at=observed_at,
         ),
         _observer_probe_summary(
             "services_status",
@@ -243,6 +249,7 @@ def observer_probe_statuses(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             incidents=service_incidents,
             headline=services_headline,
             detail=f"{services_ready} ready; missing {services_missing}; disabled {services_disabled}.",
+            observed_at=observed_at,
         ),
         _observer_probe_summary(
             "approval_queue",
@@ -250,6 +257,7 @@ def observer_probe_statuses(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             incidents=approval_incidents,
             headline=approval_headline,
             detail=f"{len(pending_approvals)} approval request(s) queued for review.",
+            observed_at=observed_at,
         ),
         _observer_probe_summary(
             "task_runtime",
@@ -257,6 +265,7 @@ def observer_probe_statuses(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             incidents=runtime_incidents,
             headline=runtime_headline,
             detail=(f"blocked {blocked_tasks}; awaiting approval {approval_pending_tasks}; failed {failed_tasks}."),
+            observed_at=observed_at,
         ),
     ]
 
@@ -883,6 +892,8 @@ def _incident_record(
     }
     if probe:
         record["probe"] = probe
+    if observed_at > 0:
+        record["observed_at"] = observed_at
     cleaned_evidence = [dict(item) for item in (evidence or []) if isinstance(item, dict)]
     if cleaned_evidence:
         record["evidence"] = cleaned_evidence

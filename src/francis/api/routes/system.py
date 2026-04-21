@@ -246,6 +246,7 @@ def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
         "ok": bool(snapshot.get("ok")),
         "subsystem": "observer",
         "generated_at": float(snapshot.get("generated_at") or 0.0),
+        "observed_at": float(snapshot.get("generated_at") or 0.0),
         "headline": summary["headline"],
         "decision": summary["decision"],
         "counts": summary["counts"],
