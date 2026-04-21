@@ -11,6 +11,7 @@ from francis.world_state.orb import snapshot as orb_status_snapshot
 from francis.world_state.snapshot import (
     mission_continuity_snapshot,
     observer_incident_snapshot,
+    observer_readiness,
     observer_scan_history,
     observer_summary,
 )
@@ -86,6 +87,7 @@ def _observer_briefing() -> dict[str, Any]:
         "anomaly": summary["anomaly"],
         "observed_at": float(payload.get("generated_at") or 0.0),
         "recent_scans": recent_scans,
+        "readiness": observer_readiness(payload, recent_scans=recent_scans),
     }
 
 

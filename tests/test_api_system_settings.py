@@ -484,6 +484,16 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert initial_body["subsystem"] == "observer"
     assert initial_body["observed_at"] > 0
     assert initial_body["decision"] == "urgent_review"
+    assert initial_body["readiness"]["stage"] == "Stage 2 - Observer"
+    assert initial_body["readiness"]["status"] == "review"
+    assert initial_body["readiness"]["satisfied"] == 3
+    assert initial_body["readiness"]["total"] == 5
+    readiness_by_id = {item["id"]: item for item in initial_body["readiness"]["criteria"]}
+    assert readiness_by_id["evidence_backed_incidents"]["status"] == "satisfied"
+    assert readiness_by_id["traceable_scans"]["status"] == "not_yet_observed"
+    assert readiness_by_id["observer_findings_receipted"]["status"] == "not_yet_observed"
+    assert readiness_by_id["presence_truth_link"]["status"] == "satisfied"
+    assert readiness_by_id["non_invasive_awareness"]["status"] == "satisfied"
     assert initial_body["counts"]["active"] >= 2
     assert initial_body["anomaly"]["score"] >= 50
     assert initial_body["anomaly"]["level"] == "error"
@@ -522,6 +532,11 @@ def test_system_observer_scan_is_receipted_and_read_paths_remain_passive(monkeyp
     assert scanned_body["receipt"]["incident_count"] >= 2
     assert scanned_body["receipt"]["anomaly"]["score"] >= 50
     assert scanned_body["receipt"]["anomaly"]["level"] == "error"
+    assert scanned_body["readiness"]["status"] == "ready"
+    assert scanned_body["readiness"]["satisfied"] == scanned_body["readiness"]["total"] == 5
+    scanned_readiness_by_id = {item["id"]: item for item in scanned_body["readiness"]["criteria"]}
+    assert scanned_readiness_by_id["traceable_scans"]["status"] == "satisfied"
+    assert scanned_readiness_by_id["observer_findings_receipted"]["status"] == "satisfied"
     assert (
         next(item for item in scanned_body["receipt"]["probe_statuses"] if item["id"] == "task_runtime")["status"]
         == "attention"

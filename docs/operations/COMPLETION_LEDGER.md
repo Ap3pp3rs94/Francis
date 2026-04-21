@@ -69,6 +69,32 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 2 line is an explicit Observer readiness checklist. This advances the
+active `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE` line by making Stage 2
+closure criteria inspectable without claiming completion automatically:
+
+- `src/francis/world_state/snapshot.py` now computes a bounded
+  `observer_readiness` projection from the current incident snapshot and recent
+  explicit scan receipts. The projection maps directly to the Stage 2 done
+  criteria: evidence-backed incidents, traceable scans, receipted findings,
+  truthful presence links, and explicit/non-invasive awareness.
+- `src/francis/api/routes/system.py` now includes the readiness projection in
+  `/system/observer` and `/system/observer/scan`, so the live observer surface
+  can distinguish `ready`, `review`, and `attention` states from actual local
+  evidence.
+- `src/francis/api/routes/continuity.py` now carries the same readiness
+  projection into the continuity briefing, keeping the operator handback surface
+  aligned with observer truth instead of requiring source diving.
+- `apps/chat_ui/src/settings/index.ts` and `apps/chat_ui/src/App.tsx` now
+  preserve and render Observer readiness in the embedded observer surface. The
+  UI shows criterion status and the next truthful action, such as recording an
+  explicit observer scan when scan receipts are missing.
+- `tests/test_api_system_settings.py`, `tests/test_api_continuity.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove idle observer state reports
+  a review posture until a scan is receipted, while post-scan observer state can
+  reach `ready` when current findings are covered by traceable receipts.
+
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 2 line is observer finding timestamp lineage. This advances the active
 `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE` line by making observer truth more
 traceable without adding new probes, background sensing, or autonomy:
@@ -687,6 +713,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-21` observer readiness checklist slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_api_system_settings.py::test_system_observer_scan_is_receipted_and_read_paths_remain_passive tests/test_api_continuity.py::test_continuity_briefing_reports_idle_operator_start_state tests/test_api_continuity.py::test_continuity_briefing_surfaces_handoff_and_recent_completion -q`
+  Result: `3 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py src/francis/api/routes/system.py src/francis/api/routes/continuity.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-21` observer timestamp lineage slice:
 

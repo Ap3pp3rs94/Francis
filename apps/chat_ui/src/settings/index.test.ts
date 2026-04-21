@@ -441,6 +441,22 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
           level: "error",
           reasons: ["error incidents: 1", "active probes: task_runtime"],
         },
+        readiness: {
+          stage: "Stage 2 - Observer",
+          status: "ready",
+          satisfied: 5,
+          total: 5,
+          next_action: "Stage 2 observer criteria are satisfied for the current local state.",
+          criteria: [
+            {
+              id: "traceable_scans",
+              label: "Scans are traceable",
+              status: "satisfied",
+              detail: "Recent observer scans include receipt, trace, and run identifiers.",
+              evidence: { recent_scan_count: 1, traceable_scan_count: 1 },
+            },
+          ],
+        },
         receipt: {
           receipt_id: "obs_scan_003",
           event: "observer.scan",
@@ -570,6 +586,9 @@ test("SettingsClient uses compatibility aliases for operator-critical mutations"
     assert.equal(observerResponse.ok, true);
     assert.equal(observerResponse.decision, "urgent_review");
     assert.equal(observerResponse.observed_at, 1_710_000_500);
+    assert.equal(observerResponse.readiness?.status, "ready");
+    assert.equal(observerResponse.readiness?.criteria?.[0]?.id, "traceable_scans");
+    assert.equal(observerResponse.readiness?.criteria?.[0]?.evidence?.recent_scan_count, 1);
     assert.equal(observerResponse.anomaly?.level, "error");
     assert.equal(observerResponse.anomaly?.score, 50);
     assert.equal(observerResponse.receipt?.receipt_id, "obs_scan_003");
@@ -639,6 +658,22 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               score: 50,
               level: "error",
               reasons: ["error incidents: 1", "active probes: task_runtime"],
+            },
+            readiness: {
+              stage: "Stage 2 - Observer",
+              status: "ready",
+              satisfied: 5,
+              total: 5,
+              next_action: "Stage 2 observer criteria are satisfied for the current local state.",
+              criteria: [
+                {
+                  id: "observer_findings_receipted",
+                  label: "Observer findings are receipted",
+                  status: "satisfied",
+                  detail: "The latest observer scan receipt covers the current active findings.",
+                  evidence: { latest_receipt_id: "obs_scan_001" },
+                },
+              ],
             },
             observed_at: 1_710_000_450,
             focus: [
@@ -733,6 +768,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.status, "attention");
     assert.equal(briefing.briefing?.observer?.anomaly?.level, "error");
     assert.equal(briefing.briefing?.observer?.anomaly?.score, 50);
+    assert.equal(briefing.briefing?.observer?.readiness?.status, "ready");
+    assert.equal(briefing.briefing?.observer?.readiness?.criteria?.[0]?.id, "observer_findings_receipted");
+    assert.equal(briefing.briefing?.observer?.readiness?.criteria?.[0]?.evidence?.latest_receipt_id, "obs_scan_001");
     assert.equal(briefing.briefing?.observer?.focus?.[0]?.probe, "task_runtime");
     assert.equal(briefing.briefing?.observer?.focus?.[0]?.evidence?.[0]?.id, "tsk_blocked");
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.receipt_id, "obs_scan_001");

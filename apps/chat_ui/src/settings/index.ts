@@ -449,6 +449,23 @@ export type ObserverProbeSummary = {
   observed_at?: number;
 };
 
+export type ObserverReadinessCriterion = {
+  id?: string;
+  label?: string;
+  status?: string;
+  detail?: string;
+  evidence?: Record<string, unknown>;
+};
+
+export type ObserverReadinessSummary = {
+  stage?: string;
+  status?: string;
+  criteria?: ObserverReadinessCriterion[];
+  satisfied?: number;
+  total?: number;
+  next_action?: string;
+};
+
 export type ObserverScanReceiptSummary = {
   ts?: number;
   receipt_id?: string;
@@ -492,6 +509,7 @@ export type ContinuityBriefingPayload = {
     probes?: ObserverProbeSummary[];
     recent_scans?: ObserverScanReceiptSummary[];
     anomaly?: ObserverAnomalySummary;
+    readiness?: ObserverReadinessSummary;
     observed_at?: number;
     error?: string;
   };
@@ -601,6 +619,7 @@ export type ObserverScanResponse = {
   counts?: Record<string, number>;
   anomaly?: ObserverAnomalySummary;
   receipt?: ObserverScanReceiptSummary;
+  readiness?: ObserverReadinessSummary;
 };
 
 export type OperatorModeMutationRequest = {
@@ -1603,6 +1622,57 @@ function parseObserverScanReceiptSummary(raw: unknown): ObserverScanReceiptSumma
   return summary;
 }
 
+function parseObserverReadinessCriterion(raw: unknown): ObserverReadinessCriterion | null {
+  if (!isRecord(raw)) return null;
+
+  const id = safeString(raw["id"], "").trim();
+  const label = safeString(raw["label"], "").trim();
+  if (!id && !label) return null;
+
+  const criterion: ObserverReadinessCriterion = {
+    id,
+    label,
+    status: safeString(raw["status"], "").trim(),
+    detail: safeString(raw["detail"], "").trim(),
+    evidence: isRecord(raw["evidence"]) ? (raw["evidence"] as Record<string, unknown>) : undefined,
+  };
+
+  if (!criterion.id) delete criterion.id;
+  if (!criterion.label) delete criterion.label;
+  if (!criterion.status) delete criterion.status;
+  if (!criterion.detail) delete criterion.detail;
+  if (!criterion.evidence) delete criterion.evidence;
+
+  return criterion;
+}
+
+function parseObserverReadinessSummary(raw: unknown): ObserverReadinessSummary | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const criteria = (Array.isArray(raw["criteria"]) ? raw["criteria"] : [])
+    .map(parseObserverReadinessCriterion)
+    .filter((item): item is ObserverReadinessCriterion => item !== null);
+  const satisfied = safeNumber(raw["satisfied"], Number.NaN);
+  const total = safeNumber(raw["total"], Number.NaN);
+  const summary: ObserverReadinessSummary = {
+    stage: safeString(raw["stage"], "").trim(),
+    status: safeString(raw["status"], "").trim(),
+    criteria,
+    satisfied,
+    total,
+    next_action: safeString(raw["next_action"], "").trim(),
+  };
+
+  if (!summary.stage) delete summary.stage;
+  if (!summary.status) delete summary.status;
+  if (!summary.criteria?.length) delete summary.criteria;
+  if (!Number.isFinite(satisfied)) delete summary.satisfied;
+  if (!Number.isFinite(total)) delete summary.total;
+  if (!summary.next_action) delete summary.next_action;
+
+  return summary.status || summary.criteria?.length ? summary : undefined;
+}
+
 function parseObserverAnomalySummary(raw: unknown): ObserverAnomalySummary | undefined {
   if (!isRecord(raw)) return undefined;
 
@@ -1826,6 +1896,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
               .map(parseObserverScanReceiptSummary)
               .filter((item): item is ObserverScanReceiptSummary => item !== null),
             anomaly: parseObserverAnomalySummary((briefingRaw["observer"] as Record<string, unknown>)["anomaly"]),
+            readiness: parseObserverReadinessSummary((briefingRaw["observer"] as Record<string, unknown>)["readiness"]),
             observed_at: safeNumber((briefingRaw["observer"] as Record<string, unknown>)["observed_at"], 0),
             error: safeString((briefingRaw["observer"] as Record<string, unknown>)["error"], ""),
           }
@@ -1852,6 +1923,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.observer?.probes?.length) ||
     Boolean(snapshot.briefing?.observer?.anomaly?.score) ||
     Boolean(snapshot.briefing?.observer?.anomaly?.level) ||
+    Boolean(snapshot.briefing?.observer?.readiness?.status) ||
     Boolean(snapshot.briefing?.observer?.recent_scans?.length);
   if (!hasBriefingContent) delete snapshot.briefing;
   if (!snapshot.mission_status_counts || Object.keys(snapshot.mission_status_counts).length === 0) {
@@ -2116,6 +2188,7 @@ export class SettingsClient {
       counts: parseNumberMap(json.counts),
       anomaly: parseObserverAnomalySummary(json.anomaly),
       receipt: parseObserverScanReceiptSummary(json.receipt),
+      readiness: parseObserverReadinessSummary(json.readiness),
     };
     if (!response.observed_at) delete response.observed_at;
     return response;

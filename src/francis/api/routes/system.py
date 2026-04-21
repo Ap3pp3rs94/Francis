@@ -28,6 +28,7 @@ from francis.world_state.operator_mode import set_control_mode, snapshot as oper
 from francis.world_state.orb import snapshot as orb_status_snapshot
 from francis.world_state.snapshot import (
     observer_incident_snapshot,
+    observer_readiness,
     observer_scan_event_projection,
     observer_scan_history,
     observer_summary,
@@ -242,6 +243,7 @@ def _system_write_posture_guard(action_label: str) -> str:
 def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
     snapshot = observer_incident_snapshot()
     summary = observer_summary(snapshot)
+    recent_scans = observer_scan_history(limit=recent_limit)
     return {
         "ok": bool(snapshot.get("ok")),
         "subsystem": "observer",
@@ -261,7 +263,8 @@ def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
         "pending_approvals": snapshot.get("pending_approvals")
         if isinstance(snapshot.get("pending_approvals"), list)
         else [],
-        "recent_scans": observer_scan_history(limit=recent_limit),
+        "recent_scans": recent_scans,
+        "readiness": observer_readiness(snapshot, recent_scans=recent_scans),
     }
 
 

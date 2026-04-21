@@ -3098,6 +3098,8 @@ function SystemPanel(props: {
   const shiftBriefingObserverProbes = shiftBriefingObserver?.probes ?? [];
   const shiftBriefingObserverRecentScans = shiftBriefingObserver?.recent_scans ?? [];
   const shiftBriefingObserverAnomaly = shiftBriefingObserver?.anomaly;
+  const shiftBriefingObserverReadiness = shiftBriefingObserver?.readiness;
+  const shiftBriefingObserverReadinessCriteria = shiftBriefingObserverReadiness?.criteria ?? [];
   const shiftBriefingObserverHasAnomaly = Boolean(shiftBriefingObserverAnomaly);
   const shiftBriefingObserverActive = safeNumber(shiftBriefingObserverCounts["active"], shiftBriefingObserverFocus.length);
   const shiftBriefingObserverCritical = safeNumber(shiftBriefingObserverCounts["critical"], 0);
@@ -4054,6 +4056,41 @@ function SystemPanel(props: {
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                 Anomaly score {shiftBriefingObserverAnomalyScore}/100
                 {shiftBriefingObserverAnomalyReasons ? `. ${shiftBriefingObserverAnomalyReasons}` : "."}
+              </div>
+            ) : null}
+            {shiftBriefingObserverReadiness ? (
+              <div style={{ marginTop: 10, border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#0f0f0f" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600 }}>Observer readiness</div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      {shiftBriefingObserverReadiness.stage || "Stage 2 - Observer"}
+                      {typeof shiftBriefingObserverReadiness.satisfied === "number" &&
+                      typeof shiftBriefingObserverReadiness.total === "number"
+                        ? ` / ${shiftBriefingObserverReadiness.satisfied}/${shiftBriefingObserverReadiness.total} criteria`
+                        : ""}
+                    </div>
+                  </div>
+                  {shiftBriefingObserverReadiness.status ? (
+                    <span style={badgeStyle(shiftBriefingObserverReadiness.status)}>
+                      {shiftBriefingObserverReadiness.status}
+                    </span>
+                  ) : null}
+                </div>
+                {shiftBriefingObserverReadiness.next_action ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    {shiftBriefingObserverReadiness.next_action}
+                  </div>
+                ) : null}
+                {shiftBriefingObserverReadinessCriteria.length ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {shiftBriefingObserverReadinessCriteria.map((criterion) => (
+                      <span key={`observer-readiness-${criterion.id || criterion.label}`} style={badgeStyle(criterion.status || "unknown")}>
+                        {criterion.label || criterion.id || "criterion"}: {criterion.status || "unknown"}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <div style={{ marginTop: 10 }}>

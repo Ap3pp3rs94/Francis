@@ -179,6 +179,13 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["briefing"]["focus"] == []
     assert body["briefing"]["observer"]["headline"] == "Observer reports no active incidents."
     assert body["briefing"]["observer"]["observed_at"] > 0
+    assert body["briefing"]["observer"]["readiness"]["stage"] == "Stage 2 - Observer"
+    assert body["briefing"]["observer"]["readiness"]["status"] == "review"
+    assert body["briefing"]["observer"]["readiness"]["satisfied"] == 4
+    assert body["briefing"]["observer"]["readiness"]["total"] == 5
+    readiness_by_id = {item["id"]: item for item in body["briefing"]["observer"]["readiness"]["criteria"]}
+    assert readiness_by_id["traceable_scans"]["status"] == "not_yet_observed"
+    assert readiness_by_id["observer_findings_receipted"]["status"] == "satisfied"
     assert body["briefing"]["observer"]["counts"]["active"] == 0
     assert body["briefing"]["observer"]["anomaly"]["score"] == 0
     assert body["briefing"]["observer"]["anomaly"]["level"] == "clear"
@@ -388,6 +395,9 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["focus"][0]["latest_activity"]["name"] == "governance_hold"
     assert body["briefing"]["focus"][0]["latest_activity"]["status"] == "blocked"
     assert body["briefing"]["observer"]["counts"]["active"] >= 1
+    assert body["briefing"]["observer"]["readiness"]["status"] == "ready"
+    assert body["briefing"]["observer"]["readiness"]["satisfied"] == 5
+    assert body["briefing"]["observer"]["readiness"]["total"] == 5
     assert body["briefing"]["observer"]["anomaly"]["score"] >= 50
     assert body["briefing"]["observer"]["anomaly"]["level"] == "error"
     observer_probes = body["briefing"]["observer"]["probes"]

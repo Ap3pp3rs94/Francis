@@ -309,6 +309,136 @@ def observer_summary(snapshot: dict[str, Any], *, focus_limit: int = 3) -> dict[
     }
 
 
+def _readiness_status(ok: bool, *, empty_state: str = "attention") -> str:
+    if ok:
+        return "satisfied"
+    return empty_state
+
+
+def observer_readiness(snapshot: dict[str, Any], *, recent_scans: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    incidents = [dict(item) for item in snapshot.get("incidents", []) if isinstance(item, dict)]
+    summary = observer_summary(snapshot)
+    scans = [dict(item) for item in (recent_scans or []) if isinstance(item, dict)]
+    active_incident_ids = [_safe_str(item.get("id")).strip() for item in incidents if _safe_str(item.get("id")).strip()]
+    missing_evidence_ids = [
+        _safe_str(item.get("id")).strip() or "unknown"
+        for item in incidents
+        if not [entry for entry in item.get("evidence", []) if isinstance(entry, dict)]
+    ]
+
+    traceable_scans = [
+        scan
+        for scan in scans
+        if _safe_str(scan.get("receipt_id")).strip()
+        and _safe_str(scan.get("trace_id")).strip()
+        and _safe_str(scan.get("run_id")).strip()
+    ]
+    latest_scan = scans[0] if scans else {}
+    receipted_ids = {_safe_str(item).strip() for item in latest_scan.get("incident_ids", []) if _safe_str(item).strip()}
+    unreceipted_active_ids = sorted(set(active_incident_ids) - receipted_ids) if active_incident_ids else []
+    observed_at = _parse_ts(snapshot.get("generated_at"))
+    probes = summary.get("probe_statuses") if isinstance(summary.get("probe_statuses"), list) else []
+    traceable_scan_status = (
+        "satisfied"
+        if scans and len(traceable_scans) == len(scans)
+        else "not_yet_observed"
+        if not scans
+        else "attention"
+    )
+    findings_receipt_status = (
+        "satisfied" if not unreceipted_active_ids else "not_yet_observed" if not scans else "attention"
+    )
+
+    criteria = [
+        {
+            "id": "evidence_backed_incidents",
+            "label": "Incidents are evidence-backed",
+            "status": _readiness_status(not missing_evidence_ids),
+            "detail": (
+                "All active observer incidents include bounded evidence."
+                if not missing_evidence_ids
+                else "Some active observer incidents are missing evidence."
+            ),
+            "evidence": {
+                "active_incident_count": len(active_incident_ids),
+                "missing_evidence_ids": missing_evidence_ids,
+            },
+        },
+        {
+            "id": "traceable_scans",
+            "label": "Scans are traceable",
+            "status": traceable_scan_status,
+            "detail": (
+                "Recent observer scans include receipt, trace, and run identifiers."
+                if scans and len(traceable_scans) == len(scans)
+                else "Record an explicit observer scan to prove traceable scan receipts in this data set."
+            ),
+            "evidence": {
+                "recent_scan_count": len(scans),
+                "traceable_scan_count": len(traceable_scans),
+                "latest_receipt_id": _safe_str(latest_scan.get("receipt_id")).strip(),
+            },
+        },
+        {
+            "id": "observer_findings_receipted",
+            "label": "Observer findings are receipted",
+            "status": findings_receipt_status,
+            "detail": (
+                "The latest observer scan receipt covers the current active findings."
+                if not unreceipted_active_ids
+                else "Current active findings need a fresh explicit observer scan receipt."
+            ),
+            "evidence": {
+                "active_incident_ids": active_incident_ids,
+                "unreceipted_active_ids": unreceipted_active_ids,
+                "latest_receipt_id": _safe_str(latest_scan.get("receipt_id")).strip(),
+            },
+        },
+        {
+            "id": "presence_truth_link",
+            "label": "Presence can cite observer truth",
+            "status": _readiness_status(bool(summary.get("headline")) and observed_at > 0 and bool(probes)),
+            "detail": "Observer summary carries headline, observation time, anomaly, focus, and probe status.",
+            "evidence": {
+                "headline": _safe_str(summary.get("headline")).strip(),
+                "observed_at": observed_at,
+                "focus_count": len(summary.get("focus") if isinstance(summary.get("focus"), list) else []),
+                "probe_count": len(probes),
+            },
+        },
+        {
+            "id": "non_invasive_awareness",
+            "label": "Awareness is explicit and bounded",
+            "status": "satisfied",
+            "detail": "Read surfaces are passive; receipt creation remains bound to the explicit observer scan route.",
+            "evidence": {
+                "read_surface": "/system/observer",
+                "receipt_surface": "/system/observer/scan",
+                "scan_trigger": "operator_explicit",
+            },
+        },
+    ]
+    blocked = [item for item in criteria if item.get("status") != "satisfied"]
+    if not blocked:
+        status = "ready"
+        next_action = "Stage 2 observer criteria are satisfied for the current local state."
+    elif any(item.get("id") in {"traceable_scans", "observer_findings_receipted"} for item in blocked):
+        status = "review"
+        next_action = "Record an explicit observer scan, then inspect the receipt and continuity briefing."
+    else:
+        status = "attention"
+        next_action = "Resolve observer readiness criteria before treating Stage 2 as complete."
+
+    return {
+        "stage": "Stage 2 - Observer",
+        "status": status,
+        "criteria": criteria,
+        "satisfied": len(criteria) - len(blocked),
+        "total": len(criteria),
+        "next_action": next_action,
+    }
+
+
 def observer_scan_event_projection(item: dict[str, Any]) -> dict[str, Any]:
     counts = item.get("counts") if isinstance(item.get("counts"), dict) else {}
     focus = [dict(entry) for entry in item.get("focus", []) if isinstance(entry, dict)]
