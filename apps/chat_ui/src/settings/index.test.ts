@@ -632,6 +632,22 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               recommended_action: "resume",
             },
           ],
+          readiness: {
+            stage: "Stage 3 - Missions",
+            status: "review",
+            satisfied: 4,
+            total: 5,
+            next_action: "Exercise mission tick and deadletter paths, then inspect the continuity briefing again.",
+            criteria: [
+              {
+                id: "deadletter_cleanly",
+                label: "Failures deadletter cleanly",
+                status: "not_yet_observed",
+                detail: "Deadletter path has not been exercised in this data set.",
+                evidence: { deadlettered_count: 0 },
+              },
+            ],
+          },
           observer: {
             headline: "Observer flagged 1 active incident(s); Tasks are blocked by governance leads review.",
             counts: { active: 1, error: 1 },
@@ -763,6 +779,11 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.ok, true);
     assert.equal(briefing.generated_at, 1_710_000_456);
     assert.equal(briefing.briefing?.headline, "Night shift ready");
+    assert.equal(briefing.briefing?.readiness?.stage, "Stage 3 - Missions");
+    assert.equal(briefing.briefing?.readiness?.status, "review");
+    assert.equal(briefing.briefing?.readiness?.satisfied, 4);
+    assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
+    assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.evidence?.deadlettered_count, 0);
     assert.equal(briefing.briefing?.observer?.counts?.active, 1);
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.id, "task_runtime");
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.status, "attention");
@@ -804,6 +825,19 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       generated_at: 1_710_001_234,
       briefing: {
         counts: { queued: 2, deadlettered: 1 },
+        readiness: {
+          stage: "Stage 3 - Missions",
+          status: "review",
+          satisfied: 0,
+          total: 5,
+          criteria: [
+            {
+              id: "idempotent_ticks",
+              label: "Mission ticks are idempotent",
+              status: "not_yet_observed",
+            },
+          ],
+        },
         observer: {
           headline: "Observer reports no active incidents.",
           counts: { active: 0 },
@@ -872,6 +906,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
 
     assert.equal(briefing.ok, true);
     assert.deepEqual(briefing.briefing?.counts, { queued: 2, deadlettered: 1 });
+    assert.equal(briefing.briefing?.readiness?.status, "review");
+    assert.equal(briefing.briefing?.readiness?.satisfied, 0);
+    assert.equal(briefing.briefing?.readiness?.total, 5);
+    assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "idempotent_ticks");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");

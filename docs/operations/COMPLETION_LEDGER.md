@@ -63,6 +63,11 @@ the current local state. A live `POST /system/observer/scan` returned readiness
 with the caveat that Observer readiness is state-dependent and should be re-run
 before any milestone or release claim.
 
+As of `2026-04-21`, Stage 3 Mission work has begun with a readiness projection,
+not a completion claim. Mission continuity can now report which Stage 3 criteria
+are satisfied, missing, or attention-worthy from the current local mission
+records, queue, deadletter, history, and briefing context.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -74,6 +79,32 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 3 line is a mission readiness projection inside the continuity briefing.
+This advances the active `Phase 2 / P8_MEMORY -> P1_INTERFACE` line by mapping
+Mission state to the roadmap's Stage 3 done criteria without adding new
+autonomy or fake progress:
+
+- `src/francis/world_state/snapshot.py` now computes a bounded
+  `mission_readiness` projection from existing mission status counts, queue
+  items, deadletter items, recent mission summaries, mission histories, and
+  run-ledger-linked activity.
+- The projection maps to the Stage 3 criteria: idempotent ticks, clean
+  deadletter behavior, visible mission status, session continuity, and reduced
+  manual reconstruction.
+- `/continuity/briefing` now includes this readiness object under the existing
+  mission briefing payload, so operator handback can distinguish `ready`,
+  `review`, and `attention` mission posture from actual local evidence.
+- `apps/chat_ui/src/settings/index.ts` and `apps/chat_ui/src/App.tsx` now
+  preserve and render Mission readiness in the Shift Briefing. The UI shows
+  criterion status plus the next truthful action instead of implying mission
+  completion.
+- `tests/test_api_continuity.py` and
+  `apps/chat_ui/src/settings/index.test.ts` now prove idle missions report a
+  review posture, real handoff/completion evidence can satisfy continuity
+  criteria, clean deadletters are detected, and zero satisfied counts are not
+  dropped by the UI parser.
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 2 line is an explicit Observer readiness checklist. This advances the
@@ -738,6 +769,23 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-21` Stage 3 mission readiness slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_api_continuity.py -q`
+  Result: `6 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-21` observer readiness checklist slice:
 

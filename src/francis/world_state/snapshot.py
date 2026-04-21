@@ -799,6 +799,201 @@ def _attach_mission_activity(
     return enriched
 
 
+def _mission_history_map(*item_lists: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    histories: dict[str, list[dict[str, Any]]] = {}
+    for items in item_lists:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            mission_id = str(item.get("id") or "").strip()
+            if not mission_id or mission_id in histories:
+                continue
+            histories[mission_id] = mission_store.read_history(mission_id, limit=200)
+    return histories
+
+
+def _mission_readiness(
+    mission_status_counts: dict[str, Any],
+    mission_queue: list[dict[str, Any]],
+    deadletter_missions: list[dict[str, Any]],
+    recent_missions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    histories = _mission_history_map(mission_queue, deadletter_missions, recent_missions)
+    mission_ids = sorted(histories.keys())
+    mission_total = sum(int(value or 0) for value in mission_status_counts.values())
+    tick_events = [
+        event
+        for history in histories.values()
+        for event in history
+        if isinstance(event, dict) and str(event.get("event") or "").strip() == "mission_ticked"
+    ]
+    missions_with_history = sorted(mission_id for mission_id, history in histories.items() if history)
+    expected_status_keys = {"queued", "active", "blocked", "completed", "failed", "deadlettered", "cancelled"}
+    visible_status = bool(expected_status_keys.intersection(mission_status_counts.keys()))
+
+    deadlettered_count = int(mission_status_counts.get("deadlettered") or 0)
+    deadletter_ids = [str(item.get("id") or "").strip() for item in deadletter_missions if isinstance(item, dict)]
+    deadletter_missing_reason = [
+        str(item.get("id") or "").strip() or "unknown"
+        for item in deadletter_missions
+        if isinstance(item, dict) and not str(item.get("deadletter_reason") or item.get("reason") or "").strip()
+    ]
+    deadletter_missing_history = []
+    for mission_id in deadletter_ids:
+        history = histories.get(mission_id, [])
+        has_deadletter_transition = any(
+            isinstance(event, dict)
+            and str(event.get("event") or "").strip() == "status_changed"
+            and str((event.get("details") if isinstance(event.get("details"), dict) else {}).get("to") or "").strip()
+            == "deadlettered"
+            for event in history
+        )
+        if not has_deadletter_transition:
+            deadletter_missing_history.append(mission_id)
+    if deadlettered_count <= 0:
+        deadletter_status = "not_yet_observed"
+    elif deadletter_missing_reason or deadletter_missing_history:
+        deadletter_status = "attention"
+    else:
+        deadletter_status = "satisfied"
+
+    focus_context_ids = [
+        str(item.get("id") or "").strip()
+        for item in mission_queue
+        if isinstance(item, dict)
+        and (
+            str(item.get("recommended_action") or "").strip()
+            or str(item.get("operator_hint") or "").strip()
+            or str(item.get("next_step") or "").strip()
+        )
+    ]
+    completed_context_ids = [
+        str(item.get("id") or "").strip()
+        for item in recent_missions
+        if isinstance(item, dict)
+        and str(item.get("status") or "").strip().lower() == "completed"
+        and (
+            str(item.get("last_advance_action") or "").strip()
+            or str(item.get("last_task_id") or "").strip()
+            or bool(item.get("latest_activity") if isinstance(item.get("latest_activity"), dict) else {})
+        )
+    ]
+    deadletter_context_ids = [
+        str(item.get("id") or "").strip()
+        for item in deadletter_missions
+        if isinstance(item, dict)
+        and (
+            str(item.get("recommended_action") or "").strip()
+            or str(item.get("deadletter_reason") or "").strip()
+            or str(item.get("operator_hint") or "").strip()
+        )
+    ]
+    reconstruction_context_ids = sorted(
+        {item for item in [*focus_context_ids, *completed_context_ids, *deadletter_context_ids] if item}
+    )
+
+    criteria = [
+        {
+            "id": "idempotent_ticks",
+            "label": "Mission ticks are idempotent",
+            "status": "satisfied" if tick_events else "not_yet_observed",
+            "detail": (
+                "At least one mission tick transition is history-backed; repeat no-op ticks remain non-mutating."
+                if tick_events
+                else "Run a mission tick against linked work to prove the idempotent tick path in this data set."
+            ),
+            "evidence": {
+                "mission_count": mission_total,
+                "sampled_mission_ids": mission_ids,
+                "mission_ticked_count": len(tick_events),
+            },
+        },
+        {
+            "id": "deadletter_cleanly",
+            "label": "Failures deadletter cleanly",
+            "status": deadletter_status,
+            "detail": (
+                "Deadlettered missions carry a reason and a status transition in mission history."
+                if deadletter_status == "satisfied"
+                else "Deadletter a blocked/failed mission and verify reason plus history before treating this criterion as complete."
+            ),
+            "evidence": {
+                "deadlettered_count": deadlettered_count,
+                "sampled_deadletter_ids": deadletter_ids,
+                "missing_reason_ids": deadletter_missing_reason,
+                "missing_history_ids": deadletter_missing_history,
+            },
+        },
+        {
+            "id": "visible_status",
+            "label": "Mission status is visible",
+            "status": _readiness_status(visible_status),
+            "detail": "Briefing state exposes mission status counts and queue/recent mission projections.",
+            "evidence": {
+                "status_counts": mission_status_counts,
+                "queue_count": len(mission_queue),
+                "recent_count": len(recent_missions),
+            },
+        },
+        {
+            "id": "session_continuity",
+            "label": "Continuity survives session changes",
+            "status": (
+                "satisfied"
+                if mission_total > 0 and len(missions_with_history) == len(mission_ids) and bool(missions_with_history)
+                else "not_yet_observed"
+                if mission_total <= 0
+                else "attention"
+            ),
+            "detail": (
+                "Sampled missions have persisted history entries for return-to-work continuity."
+                if mission_total > 0 and len(missions_with_history) == len(mission_ids) and bool(missions_with_history)
+                else "Create or advance a mission so continuity can cite persisted mission history."
+            ),
+            "evidence": {
+                "mission_count": mission_total,
+                "sampled_mission_ids": mission_ids,
+                "missions_with_history": missions_with_history,
+            },
+        },
+        {
+            "id": "reconstruction_reduced",
+            "label": "Next step reduces reconstruction",
+            "status": (
+                "satisfied" if reconstruction_context_ids else "not_yet_observed" if mission_total <= 0 else "attention"
+            ),
+            "detail": (
+                "Mission briefing includes next-step, operator hint, completion, or deadletter context."
+                if reconstruction_context_ids
+                else "Mission briefing needs enough next-step context to reduce manual reconstruction."
+            ),
+            "evidence": {
+                "mission_count": mission_total,
+                "context_mission_ids": reconstruction_context_ids,
+            },
+        },
+    ]
+    blocked = [item for item in criteria if item.get("status") != "satisfied"]
+    if not blocked:
+        status = "ready"
+        next_action = "Stage 3 mission criteria are satisfied for the current local state."
+    elif any(item.get("status") == "attention" for item in blocked):
+        status = "attention"
+        next_action = "Repair mission continuity evidence before treating Stage 3 as complete."
+    else:
+        status = "review"
+        next_action = "Exercise mission tick and deadletter paths, then inspect the continuity briefing again."
+
+    return {
+        "stage": "Stage 3 - Missions",
+        "status": status,
+        "criteria": criteria,
+        "satisfied": len(criteria) - len(blocked),
+        "total": len(criteria),
+        "next_action": next_action,
+    }
+
+
 def _mission_briefing(
     mission_status_counts: dict[str, Any],
     mission_queue: list[dict[str, Any]],
@@ -947,6 +1142,13 @@ def mission_continuity_snapshot(
         deadletter_missions,
         recent_missions,
     )
+    mission_readiness = _mission_readiness(
+        mission_status_counts,
+        mission_queue,
+        deadletter_missions,
+        recent_missions,
+    )
+    mission_briefing["readiness"] = mission_readiness
 
     return {
         "mission_status_counts": mission_status_counts,
@@ -954,6 +1156,7 @@ def mission_continuity_snapshot(
         "mission_queue": mission_queue,
         "deadletter_missions": deadletter_missions,
         "mission_briefing": mission_briefing,
+        "mission_readiness": mission_readiness,
     }
 
 

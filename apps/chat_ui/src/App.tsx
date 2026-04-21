@@ -3092,6 +3092,8 @@ function SystemPanel(props: {
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
   const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
+  const shiftBriefingReadiness = shiftBriefing?.readiness;
+  const shiftBriefingReadinessCriteria = shiftBriefingReadiness?.criteria ?? [];
   const shiftBriefingObserver = shiftBriefing?.observer;
   const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
   const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
@@ -3910,6 +3912,37 @@ function SystemPanel(props: {
         {continuityBriefingError ? (
           <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
             Briefing feed unavailable: {continuityBriefingError}
+          </div>
+        ) : null}
+
+        {shiftBriefingReadiness ? (
+          <div style={{ marginTop: 10, border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Mission readiness</div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  {shiftBriefingReadiness.stage || "Stage 3 - Missions"}
+                  {typeof shiftBriefingReadiness.satisfied === "number" && typeof shiftBriefingReadiness.total === "number"
+                    ? ` / ${shiftBriefingReadiness.satisfied}/${shiftBriefingReadiness.total} criteria`
+                    : ""}
+                </div>
+              </div>
+              {shiftBriefingReadiness.status ? (
+                <span style={badgeStyle(shiftBriefingReadiness.status)}>{shiftBriefingReadiness.status}</span>
+              ) : null}
+            </div>
+            {shiftBriefingReadiness.next_action ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{shiftBriefingReadiness.next_action}</div>
+            ) : null}
+            {shiftBriefingReadinessCriteria.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {shiftBriefingReadinessCriteria.map((criterion) => (
+                  <span key={`mission-readiness-${criterion.id || criterion.label}`} style={badgeStyle(criterion.status || "unknown")}>
+                    {criterion.label || criterion.id || "criterion"}: {criterion.status || "unknown"}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

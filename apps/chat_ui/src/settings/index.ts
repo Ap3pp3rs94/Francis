@@ -466,6 +466,9 @@ export type ObserverReadinessSummary = {
   next_action?: string;
 };
 
+export type MissionReadinessCriterion = ObserverReadinessCriterion;
+export type MissionReadinessSummary = ObserverReadinessSummary;
+
 export type ObserverScanReceiptSummary = {
   ts?: number;
   receipt_id?: string;
@@ -502,6 +505,7 @@ export type ContinuityBriefingPayload = {
   focus?: ContinuityBriefingFocusItem[];
   recently_completed?: ContinuityBriefingCompletedItem[];
   deadletter_preview?: ContinuityBriefingDeadletterItem[];
+  readiness?: MissionReadinessSummary;
   observer?: {
     headline?: string;
     counts?: Record<string, number>;
@@ -1870,6 +1874,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
       deadletter_preview: (Array.isArray(briefingRaw["deadletter_preview"]) ? briefingRaw["deadletter_preview"] : [])
         .map(parseContinuityDeadletterItem)
         .filter((item): item is ContinuityBriefingDeadletterItem => item !== null),
+      readiness: parseObserverReadinessSummary(briefingRaw["readiness"]),
       observer: isRecord(briefingRaw["observer"])
         ? {
             headline: safeString((briefingRaw["observer"] as Record<string, unknown>)["headline"], ""),
@@ -1918,6 +1923,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.counts && Object.keys(snapshot.briefing.counts).length > 0) ||
     Boolean(snapshot.briefing?.recently_completed?.length) ||
     Boolean(snapshot.briefing?.deadletter_preview?.length) ||
+    Boolean(snapshot.briefing?.readiness?.status) ||
     Boolean(snapshot.briefing?.observer?.headline) ||
     Boolean(snapshot.briefing?.observer?.focus?.length) ||
     Boolean(snapshot.briefing?.observer?.probes?.length) ||

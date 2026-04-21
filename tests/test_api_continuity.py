@@ -177,6 +177,14 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["subsystem"] == "continuity_briefing"
     assert body["briefing"]["headline"] == "No mission backlog is currently active."
     assert body["briefing"]["focus"] == []
+    assert body["briefing"]["readiness"]["stage"] == "Stage 3 - Missions"
+    assert body["briefing"]["readiness"]["status"] == "review"
+    assert body["briefing"]["readiness"]["satisfied"] == 1
+    assert body["briefing"]["readiness"]["total"] == 5
+    mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    assert mission_readiness_by_id["visible_status"]["status"] == "satisfied"
+    assert mission_readiness_by_id["idempotent_ticks"]["status"] == "not_yet_observed"
+    assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "not_yet_observed"
     assert body["briefing"]["observer"]["headline"] == "Observer reports no active incidents."
     assert body["briefing"]["observer"]["observed_at"] > 0
     assert body["briefing"]["observer"]["readiness"]["stage"] == "Stage 2 - Observer"
@@ -398,6 +406,16 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["observer"]["readiness"]["status"] == "ready"
     assert body["briefing"]["observer"]["readiness"]["satisfied"] == 5
     assert body["briefing"]["observer"]["readiness"]["total"] == 5
+    assert body["briefing"]["readiness"]["stage"] == "Stage 3 - Missions"
+    assert body["briefing"]["readiness"]["status"] == "review"
+    assert body["briefing"]["readiness"]["satisfied"] == 4
+    assert body["briefing"]["readiness"]["total"] == 5
+    mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    assert mission_readiness_by_id["idempotent_ticks"]["status"] == "satisfied"
+    assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "not_yet_observed"
+    assert mission_readiness_by_id["visible_status"]["status"] == "satisfied"
+    assert mission_readiness_by_id["session_continuity"]["status"] == "satisfied"
+    assert mission_readiness_by_id["reconstruction_reduced"]["status"] == "satisfied"
     assert body["briefing"]["observer"]["anomaly"]["score"] >= 50
     assert body["briefing"]["observer"]["anomaly"]["level"] == "error"
     observer_probes = body["briefing"]["observer"]["probes"]
@@ -438,6 +456,93 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     recent_completed = body["briefing"]["recently_completed"]
     assert recent_completed
     assert recent_completed[0]["id"] == completed_id
+
+
+def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Deadletter mission for readiness",
+            "summary": "Deadletter state should remain inspectable in continuity.",
+            "requester_id": "test.continuity.deadletter",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "deadletter readiness blocker",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.continuity.deadletter"})
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+
+    deadlettered = client.post(
+        f"/missions/{mission_id}/deadletter",
+        json={
+            "reason": "operator_abandoned_after_governance_hold",
+            "actor": "test.continuity.deadletter",
+            "note": "deadletter readiness verification",
+        },
+    )
+    assert deadlettered.status_code == 200
+    assert deadlettered.json()["ok"] is True
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["briefing"]["counts"]["deadlettered"] == 1
+    assert body["briefing"]["deadletter_preview"][0]["id"] == mission_id
+    mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "satisfied"
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_deadletter_ids"] == [mission_id]
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["missing_reason_ids"] == []
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["missing_history_ids"] == []
 
 
 def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch, tmp_path: Path) -> None:
