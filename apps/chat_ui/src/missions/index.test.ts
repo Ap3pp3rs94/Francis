@@ -340,6 +340,15 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
       loop_state: {
         summary: "The mission is waiting on a governance decision before it can continue.",
         active_stage: "gate",
+        handoff: {
+          stage: "gate",
+          action: "review_pending_approval",
+          detail: "Review the active governance hold before the linked operation can continue.",
+          gate: "approvals_gate",
+          next_step: "review_pending_approval",
+          approval_id: "apr_loop",
+          operation_id: "tsk_loop",
+        },
         plan: { status: "ready", detail: "1 linked operation(s) declared for this mission.", count: 1, operation_id: "tsk_loop" },
         gate: {
           status: "needs_approval",
@@ -383,6 +392,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.ok, true);
     assert.equal(response.mission?.id, "mission_loop");
     assert.equal(response.loop_state?.active_stage, "gate");
+    assert.equal(response.loop_state?.handoff?.stage, "gate");
+    assert.equal(response.loop_state?.handoff?.action, "review_pending_approval");
+    assert.equal(response.loop_state?.handoff?.approval_id, "apr_loop");
+    assert.equal(response.loop_state?.handoff?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.gate?.status, "needs_approval");
     assert.equal(response.loop_state?.gate?.approval_id, "apr_loop");
     assert.equal(response.loop_state?.gate?.next_step, "review_pending_approval");

@@ -68,6 +68,27 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 
 ## 3. High-confidence current slice
 
+As of `2026-04-21`, the highest-confidence surface newly touched in the current
+working tree is a mission-loop handoff projection that advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line
+without adding new mission state or autonomous behavior:
+
+- `src/francis/api/routes/missions.py` now derives a bounded
+  `loop_state.handoff` object from existing mission, linked-operation,
+  governance, trace, and history receipts. The handoff names the active loop
+  stage, next operator action, evidence detail, and relevant task, approval,
+  gate, trace, or continuity receipt identifiers when present.
+- `apps/chat_ui/src/missions/index.ts` now preserves that handoff contract in
+  the browser parser instead of forcing the ORB mission inspector to infer the
+  next step from individual stage cards.
+- `apps/chat_ui/src/App.tsx` now renders a compact “Loop Handoff” card in the
+  ORB mission detail surface, with direct approval/task actions when the
+  handoff is backed by those identifiers.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove both blocked governance missions and completed linked-operation
+  missions expose a truthful next handoff from the plan -> gate -> execute ->
+  trace -> memory loop.
+
 As of `2026-04-18`, the highest-confidence surface newly touched in the current
 working tree is an operator-triggerable observer scan path in the live ORB
 surface that advances the active `Phase 2 / P9_OBSERVABILITY -> P1_INTERFACE`

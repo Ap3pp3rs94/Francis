@@ -3367,6 +3367,7 @@ function SystemPanel(props: {
   const missionRunLedger = missionDetail?.run_ledger ?? [];
   const missionHistory = missionDetail?.history ?? [];
   const missionLoopState: MissionLoopState | undefined = missionDetail?.loop_state;
+  const missionLoopHandoff = missionLoopState?.handoff;
   const missionLoopStages = missionLoopState
     ? ([
         { key: "plan", label: "Plan", stage: missionLoopState.plan },
@@ -4856,6 +4857,86 @@ function SystemPanel(props: {
                       <span style={badgeStyle(missionLoopState.active_stage)}>active {missionLoopState.active_stage}</span>
                     ) : null}
                   </div>
+
+                  {missionLoopHandoff ? (
+                    <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#111819", marginTop: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>Loop Handoff</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {missionLoopHandoff.stage ? <span style={badgeStyle(missionLoopHandoff.stage)}>{missionLoopHandoff.stage}</span> : null}
+                          {missionLoopHandoff.action ? <span style={badgeStyle(missionLoopHandoff.action)}>{missionLoopHandoff.action}</span> : null}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                        {missionLoopHandoff.detail || "No loop handoff has been projected for this mission yet."}
+                      </div>
+                      {(missionLoopHandoff.gate || missionLoopHandoff.next_step || missionLoopHandoff.latest_event || missionLoopHandoff.latest_ts) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          {missionLoopHandoff.gate ? (
+                            <>
+                              gate <code>{missionLoopHandoff.gate}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.next_step ? (
+                            <>
+                              {missionLoopHandoff.gate ? " / " : ""}next <code>{missionLoopHandoff.next_step}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.latest_event ? (
+                            <>
+                              {(missionLoopHandoff.gate || missionLoopHandoff.next_step) ? " / " : ""}latest <code>{missionLoopHandoff.latest_event}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.latest_ts ? (
+                            <>
+                              {(missionLoopHandoff.gate || missionLoopHandoff.next_step || missionLoopHandoff.latest_event) ? " / " : ""}at <code>{toLocaleTime(missionLoopHandoff.latest_ts)}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(missionLoopHandoff.approval_id || missionLoopHandoff.operation_id || missionLoopHandoff.trace_id) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          {missionLoopHandoff.approval_id ? (
+                            <>
+                              approval <code>{missionLoopHandoff.approval_id}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.operation_id ? (
+                            <>
+                              {missionLoopHandoff.approval_id ? " / " : ""}task <code>{missionLoopHandoff.operation_id}</code>
+                            </>
+                          ) : null}
+                          {missionLoopHandoff.trace_id ? (
+                            <>
+                              {(missionLoopHandoff.approval_id || missionLoopHandoff.operation_id) ? " / " : ""}trace <code>{missionLoopHandoff.trace_id}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(missionLoopHandoff.approval_id || missionLoopHandoff.operation_id) ? (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {missionLoopHandoff.approval_id ? (
+                            <button
+                              style={buttonStyle}
+                              onClick={() =>
+                                props.onOpenApprovals(missionLoopHandoff.approval_id || "", {
+                                  missionId: selectedMissionContextId || undefined,
+                                  operationId: missionLoopHandoff.operation_id,
+                                })
+                              }
+                            >
+                              Review approval
+                            </button>
+                          ) : null}
+                          {missionLoopHandoff.operation_id ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(missionLoopHandoff.operation_id || "")}>
+                              Open linked task
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
                     {missionLoopStages.map((item) => (

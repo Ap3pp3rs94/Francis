@@ -290,6 +290,13 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     run_ledger = fetched_body["run_ledger"]
     assert any(item["operation_id"] == operation_id and item["status"] == "running" for item in run_ledger)
     assert any(item["operation_id"] == operation_id and item["status"] == "succeeded" for item in run_ledger)
+    loop_state = fetched_body["loop_state"]
+    assert loop_state["active_stage"] == "memory"
+    assert loop_state["handoff"]["stage"] == "memory"
+    assert loop_state["handoff"]["action"] == "review_continuity"
+    assert loop_state["handoff"]["operation_id"] == operation_id
+    assert loop_state["handoff"]["latest_event"] == fetched_body["history"][-1]["event"]
+    assert loop_state["handoff"]["latest_ts"] == fetched_body["history"][-1]["ts"]
     history_events = [str(item.get("event")) for item in fetched_body["history"]]
     assert "linked_task_transition" in history_events
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]
@@ -377,6 +384,10 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert any(item["operation_id"] == operation_id and item["status"] == "blocked" for item in run_ledger)
     loop_state = fetched_body["loop_state"]
     assert loop_state["active_stage"] == "gate"
+    assert loop_state["handoff"]["stage"] == "gate"
+    assert loop_state["handoff"]["action"] == "raise_trust_or_reduce_risk"
+    assert loop_state["handoff"]["operation_id"] == operation_id
+    assert loop_state["handoff"]["gate"] == "trust_gate"
     assert loop_state["gate"]["gate"] == "trust_gate"
     assert loop_state["gate"]["next_step"] == "raise_trust_or_reduce_risk"
     assert loop_state["execute"]["next_step"] == "raise_trust_or_reduce_risk"

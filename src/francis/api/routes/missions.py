@@ -183,6 +183,41 @@ def _loop_stage(
     return payload
 
 
+def _loop_handoff(
+    stage: str,
+    action: str,
+    detail: str,
+    *,
+    gate: str = "",
+    approval_id: str = "",
+    operation_id: str = "",
+    trace_id: str = "",
+    latest_event: str = "",
+    latest_ts: str = "",
+    next_step: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "stage": stage,
+        "action": action,
+        "detail": detail,
+    }
+    if gate:
+        payload["gate"] = gate
+    if approval_id:
+        payload["approval_id"] = approval_id
+    if operation_id:
+        payload["operation_id"] = operation_id
+    if trace_id:
+        payload["trace_id"] = trace_id
+    if latest_event:
+        payload["latest_event"] = latest_event
+    if latest_ts:
+        payload["latest_ts"] = latest_ts
+    if next_step:
+        payload["next_step"] = next_step
+    return payload
+
+
 def _mission_loop_state(
     record: mission_store.MissionRecord,
     linked_operations: list[dict[str, Any]],
@@ -318,22 +353,64 @@ def _mission_loop_state(
 
     active_stage = "memory"
     summary = "Mission continuity receipts are available for review."
+    handoff = _loop_handoff(
+        "memory",
+        "review_continuity",
+        "Trace and mission continuity receipts are recorded; review local history before declaring new work.",
+        operation_id=latest_operation_id,
+        trace_id=latest_trace_id,
+        latest_event=latest_history_event,
+        latest_ts=latest_history_ts,
+        next_step=record.next_step,
+    )
     if latest_gate or latest_approval_id:
         active_stage = "gate"
         summary = "The mission is waiting on a governance decision before it can continue."
+        handoff = _loop_handoff(
+            "gate",
+            latest_next_step or ("review_pending_approval" if latest_approval_id else "resolve_governance_gate"),
+            "Review the active governance hold before the linked operation can continue.",
+            gate=latest_gate,
+            approval_id=latest_approval_id,
+            operation_id=latest_operation_id,
+            next_step=latest_next_step,
+        )
     elif execute_status in {"running", "pending", "queued"}:
         active_stage = "execute"
         summary = "The mission is currently in its bounded execution phase."
+        action = "wait_for_execution" if execute_status == "running" else "run_linked_operation"
+        handoff = _loop_handoff(
+            "execute",
+            action,
+            "Advance or monitor the bounded linked operation before expecting trace and memory closure.",
+            operation_id=latest_operation_id,
+            next_step=latest_next_step or record.next_step,
+        )
     elif not linked_operations:
         active_stage = "plan"
         summary = "The mission still needs its first linked operation."
+        handoff = _loop_handoff(
+            "plan",
+            "link_operation",
+            "Declare or link a bounded operation before execution, trace, or memory can progress.",
+            next_step=record.next_step,
+        )
     elif not (trace_count or audit_count or ledger_count):
         active_stage = "trace"
         summary = "The mission has linked work, but no trace receipts are recorded yet."
+        handoff = _loop_handoff(
+            "trace",
+            "inspect_trace_gap",
+            "Linked work exists, but no run-ledger or trace receipt is available yet.",
+            operation_id=latest_operation_id,
+            trace_id=latest_trace_id,
+            next_step=record.next_step,
+        )
 
     return {
         "summary": summary,
         "active_stage": active_stage,
+        "handoff": handoff,
         "plan": plan_stage,
         "gate": gate_stage,
         "execute": execute_stage,

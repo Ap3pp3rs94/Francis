@@ -38,9 +38,23 @@ export type MissionLoopStage = {
   latest_ts?: string;
 };
 
+export type MissionLoopHandoff = {
+  stage?: string;
+  action?: string;
+  detail?: string;
+  gate?: string;
+  next_step?: string;
+  approval_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  latest_event?: string;
+  latest_ts?: string;
+};
+
 export type MissionLoopState = {
   summary?: string;
   active_stage?: string;
+  handoff?: MissionLoopHandoff;
   plan?: MissionLoopStage;
   gate?: MissionLoopStage;
   execute?: MissionLoopStage;
@@ -340,12 +354,45 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
   return stage;
 }
 
+function parseMissionLoopHandoff(raw: unknown): MissionLoopHandoff | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const handoff: MissionLoopHandoff = {
+    stage: safeString(raw.stage, "") || undefined,
+    action: safeString(raw.action, "") || undefined,
+    detail: safeString(raw.detail, "") || undefined,
+    gate: safeString(raw.gate, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    operation_id: safeString(raw.operation_id, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
+    latest_event: safeString(raw.latest_event, "") || undefined,
+    latest_ts: safeString(raw.latest_ts, "") || undefined,
+  };
+
+  if (
+    !handoff.stage &&
+    !handoff.action &&
+    !handoff.detail &&
+    !handoff.operation_id &&
+    !handoff.approval_id &&
+    !handoff.trace_id &&
+    !handoff.latest_event &&
+    !handoff.latest_ts &&
+    !handoff.next_step
+  ) {
+    return undefined;
+  }
+  return handoff;
+}
+
 function parseMissionLoopState(raw: unknown): MissionLoopState | undefined {
   if (!isRecord(raw)) return undefined;
 
   const state: MissionLoopState = {
     summary: safeString(raw.summary, "") || undefined,
     active_stage: safeString(raw.active_stage, "") || undefined,
+    handoff: parseMissionLoopHandoff(raw.handoff),
     plan: parseMissionLoopStage(raw.plan),
     gate: parseMissionLoopStage(raw.gate),
     execute: parseMissionLoopStage(raw.execute),
@@ -353,7 +400,16 @@ function parseMissionLoopState(raw: unknown): MissionLoopState | undefined {
     memory: parseMissionLoopStage(raw.memory),
   };
 
-  if (!state.summary && !state.active_stage && !state.plan && !state.gate && !state.execute && !state.trace && !state.memory) {
+  if (
+    !state.summary &&
+    !state.active_stage &&
+    !state.handoff &&
+    !state.plan &&
+    !state.gate &&
+    !state.execute &&
+    !state.trace &&
+    !state.memory
+  ) {
     return undefined;
   }
   return state;
