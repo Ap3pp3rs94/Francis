@@ -1934,6 +1934,70 @@ def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
     assert target[0]["enabled"] is False
 
 
+def test_system_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.world_state.operator_mode import set_control_mode
+
+    client = TestClient(create_app())
+    set_control_mode("observe", reason="test_system_mutation_block", actor="tests")
+
+    service_action = client.post("/system/services/action", json={"action": "restart", "services": ["daemon"]})
+    assert service_action.status_code == 200
+    service_body = service_action.json()
+    assert service_body["ok"] is False
+    assert service_body["applied"] is False
+    assert service_body["status"] == "blocked"
+    assert "Observe mode keeps system mutations read-only." in service_body["error"]
+
+    flag_set = client.post(
+        "/system/flags/set",
+        json={"key": "ui.blocked_in_observe", "enabled": True, "reason": "should_not_apply"},
+    )
+    assert flag_set.status_code == 200
+    flag_body = flag_set.json()
+    assert flag_body["ok"] is False
+    assert flag_body["applied"] is False
+    assert flag_body["status"] == "blocked"
+    assert "Observe mode keeps system mutations read-only." in flag_body["error"]
+    assert not (data_root / "runtime" / "feature_flags.json").exists()
+
+    config_mutation = client.post(
+        "/system/config/mutate",
+        json={
+            "op": "set",
+            "path": "ui.preferences.theme",
+            "value": "observe-should-not-write",
+            "reason": "should_not_apply",
+        },
+    )
+    assert config_mutation.status_code == 200
+    config_body = config_mutation.json()
+    assert config_body["ok"] is False
+    assert config_body["applied"] is False
+    assert config_body["status"] == "blocked"
+    assert "Observe mode keeps system mutations read-only." in config_body["message"]
+    assert not (data_root / "runtime" / "system_settings.json").exists()
+
+    flags_read = client.get("/system/flags")
+    assert flags_read.status_code == 200
+    assert all(item.get("key") != "ui.blocked_in_observe" for item in flags_read.json()["items"])
+
+    escape_observe = client.post(
+        "/system/operator-mode",
+        json={"mode": "assist", "reason": "operator can leave observe mode", "actor": "tests"},
+    )
+    assert escape_observe.status_code == 200
+    escape_body = escape_observe.json()
+    assert escape_body["ok"] is True
+    assert escape_body["applied"] is True
+    assert escape_body["control_mode"]["id"] == "assist"
+
+
 def test_system_config_mutate_reflects_in_effective_snapshot(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

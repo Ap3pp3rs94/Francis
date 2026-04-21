@@ -68,6 +68,31 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 
 ## 3. High-confidence current slice
 
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 2 line is a system-runtime mutation posture guard, following the CI
+platform cleanup already landed on `main`. This advances the active `Phase 2 /
+P3_GOVERNANCE -> P2_IDENTITY -> P9_OBSERVABILITY` line without changing
+operator-mode control semantics:
+
+- `.github/workflows/ci.yml` now uses Node-24-ready major versions for the
+  GitHub-managed checkout and Python setup actions, removing the CI platform
+  deprecation warning from the canonical `main` validation path while preserving
+  the existing OS/Python matrix.
+- `src/francis/api/routes/system.py` now applies the existing operator posture
+  write guard to service actions, feature-flag writes, and runtime config
+  mutations. Observe mode keeps these system mutations read-only instead of
+  allowing runtime behavior changes through `/system` while execution and
+  mission paths are blocked.
+- `tests/test_api_system_settings.py` now proves observe mode blocks those
+  system mutation routes without writing feature-flag or runtime-settings state,
+  while still allowing `/system/operator-mode` to return the operator to an
+  active mode. Existing mutation alias tests continue to prove canonical state
+  sharing when posture allows writes.
+- `src/francis/kernel/feature_flags.py` now keeps default env-backed feature
+  flag timestamps stable for the process lifetime, so `/system/flags`,
+  `/system/feature_flags`, and `/system/features` stay alias-equivalent across
+  reads instead of racing a timestamp boundary.
+
 As of `2026-04-21`, the highest-confidence surface newly touched in the current
 working tree is a mission-loop handoff projection that advances the active
 `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line

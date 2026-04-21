@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from francis.api.routes._operator_posture import posture_write_guard
 from francis.kernel import feature_flags
 from francis.kernel.health import health_report
 from francis.kernel.paths import data_dir
@@ -227,6 +228,15 @@ def _deep_copy_dict(obj: dict[str, Any]) -> dict[str, Any]:
 
 def _observer_receipt_id() -> str:
     return f"obs_scan_{_now_ms()}_{uuid.uuid4().hex[:8]}"
+
+
+def _system_write_posture_guard(action_label: str) -> str:
+    return posture_write_guard(
+        action_label,
+        verification_prefix="System mutation is blocked until operator posture can be verified",
+        observe_message="Observe mode keeps system mutations read-only.",
+        writes_blocked_message="Current operator posture blocks system mutations.",
+    )
 
 
 def _observer_state_payload(*, recent_limit: int = 10) -> dict[str, Any]:
@@ -539,6 +549,9 @@ def update_operator_mode(payload: ControlModeSetIn) -> dict[str, object]:
 
 @router.post("/services/action")
 def service_action(payload: ServiceActionIn) -> dict[str, object]:
+    blocked_reason = _system_write_posture_guard("requesting service actions")
+    if blocked_reason:
+        return {"ok": False, "applied": False, "status": "blocked", "error": blocked_reason}
     try:
         return services_action(payload.action, payload.services)
     except Exception as exc:
@@ -571,6 +584,9 @@ def set_feature_flag(payload: FlagSetNamedIn) -> dict[str, object]:
 @router.post("/flags/{key}")
 @router.post("/feature_flags/{key}")
 def set_feature_flag_for_key(key: str, payload: FlagSetIn) -> dict[str, object]:
+    blocked_reason = _system_write_posture_guard("changing feature flags")
+    if blocked_reason:
+        return {"ok": False, "applied": False, "status": "blocked", "error": blocked_reason}
     try:
         item = feature_flags.set_flag(
             key,
@@ -612,6 +628,9 @@ def effective_config() -> dict[str, object]:
 @router.post("/settings/mutate")
 @router.post("/settings")
 def mutate_config(payload: ConfigMutationIn) -> dict[str, object]:
+    blocked_reason = _system_write_posture_guard("mutating runtime settings")
+    if blocked_reason:
+        return {"ok": False, "applied": False, "status": "blocked", "message": blocked_reason}
     try:
         current = _read_runtime_overrides()
         updated, resulting = _apply_mutation(
