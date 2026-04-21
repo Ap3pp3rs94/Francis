@@ -5,7 +5,8 @@ Francis is built as a governed, local-first operator layer. The repo workflow ne
 ## Branch Management
 
 - `main` is the canonical branch. Keep it releasable and reflective of the current repo state on GitHub.
-- Do implementation work on a named working branch, not on `main`.
+- Current maintainer workflow is direct-on-`main`: sync first, make a bounded change, validate, commit, and push `main`.
+- Use a named working branch only when a change needs isolated review, experimental protection, or recovery safety.
 - Preferred working branch prefixes:
   - `codex/` for implementation slices
   - `backup/` for preserved checkpoints
@@ -23,23 +24,19 @@ Francis is built as a governed, local-first operator layer. The repo workflow ne
 git fetch origin
 git switch main
 git pull --ff-only origin main
-git switch -c codex/<slice-name>
 ```
 
-Work, validate, commit, and push the working branch:
+Work, validate, commit, and push `main`:
 
 ```powershell
 .\scripts\check.ps1
-git push -u origin codex/<slice-name>
+git push origin main
 ```
 
-After the slice is validated and ready to become canonical:
+For isolated work only, create a named branch after syncing `main`:
 
 ```powershell
-git switch main
-git merge --ff-only codex/<slice-name>
-git push origin main
-git switch codex/<slice-name>
+git switch -c codex/<slice-name>
 ```
 
 ## Repo Checks
@@ -56,7 +53,7 @@ git switch codex/<slice-name>
 If someone opens the repository and inspects the branch graph, they should be able to see:
 
 - a clean canonical `main`
-- clearly named working branches
-- checkpoint branches that explain themselves
+- no unnecessary working branches
+- clearly named temporary branches when isolation is actually needed
 - no ambiguous branch drift
 - no confusion about which branch is the source of truth
