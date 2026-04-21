@@ -56,6 +56,13 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 2. complete the end-to-end plan -> gate -> execute -> trace -> memory loop
 3. expose that loop clearly in the chat UI
 
+As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
+the current local state. A live `POST /system/observer/scan` returned readiness
+`ready` with `5/5` criteria satisfied and receipt
+`obs_scan_1776798650837_20306fb7`. That supports beginning Stage 3 Mission work,
+with the caveat that Observer readiness is state-dependent and should be re-run
+before any milestone or release claim.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -713,6 +720,24 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
+
+- `POST /system/observer/scan` through the local FastAPI app with actor
+  `codex.stage2.observer` and reason `stage_2_readiness_live_verification`
+  Result: `ok=true`, `decision=urgent_review`, readiness `ready`, `5/5`
+  criteria satisfied.
+- Receipt `obs_scan_1776798650837_20306fb7`
+  Result: `status=attention`, `trace_id=trace_46d47c3517ff5bea`,
+  `run_id=run_1776798650_ab604268`, `incident_count=3`, anomaly score `100`
+  with level `critical`.
+- Readback checks:
+  Result: `/system/observer`, `/system/observer/audit`, and
+  `/continuity/briefing` all surfaced the same latest receipt id; continuity
+  briefing reported observer readiness `ready`.
+- Criterion statuses:
+  Result: evidence-backed incidents, traceable scans, receipted findings,
+  presence truth link, and non-invasive awareness all reported `satisfied`.
 
 Latest targeted validation for the `2026-04-21` observer readiness checklist slice:
 
