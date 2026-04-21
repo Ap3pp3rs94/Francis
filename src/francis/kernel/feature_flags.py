@@ -44,6 +44,9 @@ def _utc_now_s() -> int:
     return int(time.time())
 
 
+_DEFAULT_FLAGS_TS = _utc_now_s()
+
+
 def _flags_path() -> Path:
     return data_dir() / "runtime" / "feature_flags.json"
 
@@ -61,21 +64,21 @@ def _default_flags() -> dict[str, dict[str, Any]]:
             "enabled": _to_bool(os.getenv("FRANCIS_WORKERS_ENABLED"), default=True),
             "source": "env",
             "description": "Enable worker execution loops.",
-            "ts": _utc_now_s(),
+            "ts": _DEFAULT_FLAGS_TS,
             "meta": {},
         },
         "daemon.enabled": {
             "enabled": _to_bool(os.getenv("FRANCIS_DAEMON_ENABLED"), default=True),
             "source": "env",
             "description": "Enable daemon control loop.",
-            "ts": _utc_now_s(),
+            "ts": _DEFAULT_FLAGS_TS,
             "meta": {},
         },
         "web_learning.enabled": {
             "enabled": _to_bool(os.getenv("FRANCIS_WEB_LEARNING_ENABLED"), default=True),
             "source": "env",
             "description": "Enable web-learning features.",
-            "ts": _utc_now_s(),
+            "ts": _DEFAULT_FLAGS_TS,
             "meta": {},
         },
     }

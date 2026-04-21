@@ -3,6 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def test_default_feature_flags_are_stable_across_reads(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    from francis.kernel import feature_flags
+
+    first = feature_flags.list_flags()
+    second = feature_flags.list_flags()
+
+    assert second == first
+    assert {item["source"] for item in first} == {"env"}
+
+
 def test_trust_tracker_adjust_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
