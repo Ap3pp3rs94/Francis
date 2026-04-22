@@ -667,6 +667,29 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
             {
               id: "mission_alpha",
               objective: "Carry continuity",
+              dependency_ids: ["msn_dependency"],
+              dependency_count: 1,
+              dependency_state: {
+                status: "waiting",
+                total: 1,
+                resolved: 0,
+                unresolved: 1,
+                first_unresolved: {
+                  id: "msn_dependency",
+                  kind: "mission",
+                  state: "waiting",
+                  status: "active",
+                },
+                items: [
+                  {
+                    id: "msn_dependency",
+                    kind: "mission",
+                    state: "waiting",
+                    status: "active",
+                  },
+                ],
+              },
+              escalation_path: "Ask the operator whether to replace or deadletter the dependency.",
               recommended_action: "resume",
             },
           ],
@@ -822,6 +845,14 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.readiness?.satisfied, 4);
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.evidence?.deadlettered_count, 0);
+    assert.deepEqual(briefing.briefing?.focus?.[0]?.dependency_ids, ["msn_dependency"]);
+    assert.equal(briefing.briefing?.focus?.[0]?.dependency_count, 1);
+    assert.equal(briefing.briefing?.focus?.[0]?.dependency_state?.status, "waiting");
+    assert.equal(briefing.briefing?.focus?.[0]?.dependency_state?.first_unresolved?.id, "msn_dependency");
+    assert.equal(
+      briefing.briefing?.focus?.[0]?.escalation_path,
+      "Ask the operator whether to replace or deadletter the dependency.",
+    );
     assert.equal(briefing.briefing?.observer?.counts?.active, 1);
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.id, "task_runtime");
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.status, "attention");

@@ -458,6 +458,73 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert recent_completed[0]["id"] == completed_id
 
 
+def test_continuity_briefing_surfaces_dependency_blocker_context(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    dependency = client.post(
+        "/missions/create",
+        json={
+            "objective": "Complete prerequisite research",
+            "summary": "The dependent mission must wait for this work.",
+            "requester_id": "test.continuity.dependencies",
+            "status": "active",
+            "priority": 1,
+        },
+    )
+    assert dependency.status_code == 200
+    dependency_id = str(dependency.json()["mission_id"])
+
+    dependent = client.post(
+        "/missions/create",
+        json={
+            "objective": "Proceed only after research completes",
+            "summary": "Briefing should expose the declared blocker.",
+            "requester_id": "test.continuity.dependencies",
+            "dependency_ids": [dependency_id],
+            "escalation_path": "Ask the operator whether to replace or deadletter the dependency.",
+            "priority": 9,
+        },
+    )
+    assert dependent.status_code == 200
+    dependent_id = str(dependent.json()["mission_id"])
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["ok"] is True
+    assert "dependencies" in body["briefing"]["headline"].lower()
+    assert body["briefing"]["counts"]["dependency_waiting"] == 1
+
+    focus = body["briefing"]["focus"][0]
+    assert focus["id"] == dependent_id
+    assert focus["recommended_action"] == "wait_for_dependency"
+    assert focus["action_target_id"] == dependency_id
+    assert focus["dependency_ids"] == [dependency_id]
+    assert focus["dependency_count"] == 1
+    assert focus["dependency_state"]["status"] == "waiting"
+    assert focus["dependency_state"]["first_unresolved"]["id"] == dependency_id
+    assert focus["escalation_path"] == "Ask the operator whether to replace or deadletter the dependency."
+
+    mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    reconstruction = mission_readiness_by_id["reconstruction_reduced"]
+    assert reconstruction["status"] == "satisfied"
+    assert dependent_id in reconstruction["evidence"]["dependency_context_ids"]
+
+
 def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

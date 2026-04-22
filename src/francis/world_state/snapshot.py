@@ -892,8 +892,23 @@ def _mission_readiness(
             or str(item.get("operator_hint") or "").strip()
         )
     ]
+    dependency_context_ids = [
+        str(item.get("id") or "").strip()
+        for item in mission_queue
+        if isinstance(item, dict)
+        and str(
+            (item.get("dependency_state") if isinstance(item.get("dependency_state"), dict) else {}).get("status") or ""
+        )
+        .strip()
+        .lower()
+        in {"waiting", "blocked"}
+    ]
     reconstruction_context_ids = sorted(
-        {item for item in [*focus_context_ids, *completed_context_ids, *deadletter_context_ids] if item}
+        {
+            item
+            for item in [*focus_context_ids, *completed_context_ids, *deadletter_context_ids, *dependency_context_ids]
+            if item
+        }
     )
 
     criteria = [
@@ -967,13 +982,14 @@ def _mission_readiness(
                 "satisfied" if reconstruction_context_ids else "not_yet_observed" if mission_total <= 0 else "attention"
             ),
             "detail": (
-                "Mission briefing includes next-step, operator hint, completion, or deadletter context."
+                "Mission briefing includes next-step, operator hint, dependency, completion, or deadletter context."
                 if reconstruction_context_ids
                 else "Mission briefing needs enough next-step context to reduce manual reconstruction."
             ),
             "evidence": {
                 "mission_count": mission_total,
                 "context_mission_ids": reconstruction_context_ids,
+                "dependency_context_ids": sorted({item for item in dependency_context_ids if item}),
             },
         },
     ]
@@ -1009,10 +1025,18 @@ def _mission_briefing(
     active = int(mission_status_counts.get("active") or 0)
     completed = int(mission_status_counts.get("completed") or 0)
     deadlettered = int(mission_status_counts.get("deadlettered") or 0)
+    dependency_waiting = sum(
+        1
+        for item in mission_queue
+        if isinstance(item, dict)
+        and str(item.get("recommended_action") or "").strip() in {"wait_for_dependency", "resolve_dependency_blocker"}
+    )
 
     headline_parts: list[str] = []
     if blocked > 0:
         headline_parts.append(f"{blocked} blocked mission(s) need operator action.")
+    elif dependency_waiting > 0:
+        headline_parts.append(f"{dependency_waiting} mission(s) are waiting on declared dependencies.")
     elif queued > 0:
         headline_parts.append(f"{queued} queued mission(s) are ready for governed advancement.")
     elif active > 0:
@@ -1038,6 +1062,14 @@ def _mission_briefing(
                 "next_step": str(item.get("next_step") or "").strip(),
                 "priority": int(item.get("priority") or 0),
                 "risk_tier": str(item.get("risk_tier") or "").strip(),
+                "dependency_ids": list(item.get("dependency_ids") or [])
+                if isinstance(item.get("dependency_ids"), list)
+                else [],
+                "dependency_count": int(item.get("dependency_count") or 0),
+                "dependency_state": dict(item.get("dependency_state") or {})
+                if isinstance(item.get("dependency_state"), dict)
+                else {},
+                "escalation_path": str(item.get("escalation_path") or "").strip(),
                 "linked_task_count": int(item.get("linked_task_count") or 0),
                 "recommended_action": str(item.get("recommended_action") or "").strip(),
                 "operator_hint": str(item.get("operator_hint") or "").strip(),
@@ -1112,6 +1144,7 @@ def _mission_briefing(
             "active": active,
             "completed": completed,
             "deadlettered": deadlettered,
+            "dependency_waiting": dependency_waiting,
         },
         "focus": focus_items,
         "recently_completed": recently_completed,

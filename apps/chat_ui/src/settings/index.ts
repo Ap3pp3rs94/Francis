@@ -424,6 +424,10 @@ export type ContinuityBriefingFocusItem = {
   next_step?: string;
   priority?: number;
   risk_tier?: string;
+  dependency_ids?: string[];
+  dependency_count?: number;
+  dependency_state?: WorldStateMissionDependencyState;
+  escalation_path?: string;
   linked_task_count?: number;
   recommended_action?: string;
   operator_hint?: string;
@@ -1554,6 +1558,10 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     next_step: safeString(raw["next_step"], ""),
     priority: safeNumber(raw["priority"], 0),
     risk_tier: safeString(raw["risk_tier"], ""),
+    dependency_ids: safeStringArray(raw["dependency_ids"]),
+    dependency_count: safeNumber(raw["dependency_count"], 0),
+    dependency_state: parseWorldStateMissionDependencyState(raw["dependency_state"]),
+    escalation_path: safeString(raw["escalation_path"], ""),
     linked_task_count: safeNumber(raw["linked_task_count"], 0),
     recommended_action: safeString(raw["recommended_action"], ""),
     operator_hint: safeString(raw["operator_hint"], ""),

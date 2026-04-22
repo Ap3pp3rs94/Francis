@@ -91,6 +91,11 @@ or active missions with unresolved `dependency_ids` now report a bounded
 dependency state and wait for the dependency instead of creating or running
 linked work prematurely.
 
+As of `2026-04-22`, continuity briefings now carry dependency blocker evidence
+from mission queue state. Dependency-gated focus items include dependency ids,
+counts, state, and escalation path, so shift handoff can explain why work is
+waiting instead of implying it is simply ready.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -102,6 +107,19 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is dependency blocker briefing. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by carrying queue
+blocker truth into shift handoff:
+
+- `src/francis/world_state/snapshot.py` now projects dependency waiting counts
+  and dependency state into continuity briefing focus and readiness evidence.
+- `apps/chat_ui/src/settings/index.ts` now preserves dependency blocker fields
+  in the continuity briefing parser.
+- `tests/test_api_continuity.py` and
+  `apps/chat_ui/src/settings/index.test.ts` now prove dependency-gated handoff
+  keeps the blocker id, dependency state, and escalation path visible.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is dependency-aware mission queue gating. This advances the active
@@ -873,6 +891,23 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 dependency blocker briefing slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_api_continuity.py -q`
+  Result: `7 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 dependency-aware mission queue slice:
 
