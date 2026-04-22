@@ -4287,14 +4287,33 @@ function SystemPanel(props: {
             </div>
           ) : (
             shiftBriefingFocus.slice(0, 3).map((item) => {
-              const targetOperationId =
+              const targetId =
                 safeString(item.action_target_id).trim() ||
                 safeString(item.last_task_id).trim() ||
                 safeString(item.last_advance_operation_id).trim();
+              const targetIsMission = targetId.startsWith("msn_");
+              const targetIsOperation = targetId.startsWith("tsk_");
+              const dependencyState = item.dependency_state;
+              const dependencyStatus = safeString(dependencyState?.status).trim();
+              const dependencyIds = Array.isArray(item.dependency_ids)
+                ? item.dependency_ids.map((dependencyId) => safeString(dependencyId).trim()).filter(Boolean)
+                : [];
+              const dependencyTotal = Math.max(
+                0,
+                Number(dependencyState?.total ?? item.dependency_count ?? dependencyIds.length ?? 0),
+              );
+              const dependencyResolved = Math.max(0, Number(dependencyState?.resolved ?? 0));
+              const firstDependency = dependencyState?.first_unresolved;
+              const firstDependencyId = safeString(firstDependency?.id).trim() || dependencyIds[0] || "";
+              const dependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(
+                safeString(item.recommended_action).trim(),
+              );
+              const escalationPath = safeString(item.escalation_path).trim();
               const focusDetail =
                 safeString(item.operator_hint).trim() ||
                 safeString(item.next_step).trim() ||
                 safeString(item.last_advance_message).trim() ||
+                escalationPath ||
                 safeString(item.summary).trim() ||
                 safeString(item.deadletter_reason).trim() ||
                 "Mission continuity exists, but the next-step note is still blank.";
@@ -4319,6 +4338,22 @@ function SystemPanel(props: {
                     {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
                     {" / "}linked_tasks=<code>{String(item.linked_task_count ?? 0)}</code>
                   </div>
+                  {dependencyTotal > 0 ? (
+                    <div style={{ fontSize: 11, color: dependencyAction ? "#ffcf9d" : THEME.muted, marginTop: 4 }}>
+                      dependencies=<code>{String(dependencyResolved)}/{String(dependencyTotal)}</code>
+                      {" / "}state=<code>{dependencyStatus || "unknown"}</code>
+                      {firstDependencyId ? (
+                        <>
+                          {" / "}next=<code>{firstDependencyId}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {escalationPath ? (
+                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
+                      escalation <code>{escalationPath}</code>
+                    </div>
+                  ) : null}
                   {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       latest=
@@ -4340,9 +4375,12 @@ function SystemPanel(props: {
                     <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                       Inspect mission flow
                     </button>
-                    {targetOperationId ? (
-                      <button style={buttonStyle} onClick={() => props.onOpenOperation(targetOperationId)}>
-                        Open linked task
+                    {targetId && (targetIsMission || targetIsOperation) ? (
+                      <button
+                        style={buttonStyle}
+                        onClick={() => (targetIsMission ? inspectMission(targetId) : props.onOpenOperation(targetId))}
+                      >
+                        {targetIsMission ? "Open dependency mission" : "Open linked task"}
                       </button>
                     ) : null}
                   </div>

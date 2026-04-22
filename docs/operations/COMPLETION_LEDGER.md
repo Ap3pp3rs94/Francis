@@ -96,6 +96,12 @@ from mission queue state. Dependency-gated focus items include dependency ids,
 counts, state, and escalation path, so shift handoff can explain why work is
 waiting instead of implying it is simply ready.
 
+As of `2026-04-22`, the ORB Shift Briefing UI now renders that dependency
+blocker evidence directly in the Focus Now cards. Dependency action targets route
+to mission inspection when they identify a mission and to operation inspection
+when they identify a linked task, so operator handoff actions follow the actual
+blocked surface.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -107,6 +113,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is dependency-aware Shift Briefing rendering. This advances the
+active `Phase 2 / P8_MEMORY -> P1_INTERFACE` line by making existing dependency
+truth visible at the operator handoff point:
+
+- `apps/chat_ui/src/App.tsx` now shows dependency resolved/total counts,
+  dependency state, first unresolved dependency id, and escalation path on Shift
+  Briefing focus cards.
+- Shift Briefing focus actions now distinguish mission action targets from
+  operation action targets, avoiding a false "Open linked task" action for a
+  dependency mission id.
+- This is UI surfacing of already-governed mission state; it does not add new
+  mission progression or autonomous behavior.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is dependency blocker briefing. This advances the active
@@ -891,6 +911,19 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 Shift Briefing dependency rendering slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient|MissionsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 dependency blocker briefing slice:
 
