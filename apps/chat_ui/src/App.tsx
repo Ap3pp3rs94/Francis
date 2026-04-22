@@ -4324,9 +4324,11 @@ function SystemPanel(props: {
               const dependencyResolved = Math.max(0, Number(dependencyState?.resolved ?? 0));
               const firstDependency = dependencyState?.first_unresolved;
               const firstDependencyId = safeString(firstDependency?.id).trim() || dependencyIds[0] || "";
-              const dependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(
-                safeString(item.recommended_action).trim(),
-              );
+              const recommendedAction = safeString(item.recommended_action).trim();
+              const dependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(recommendedAction);
+              const briefingAdvanceAction = ["create_first_operation", "run_linked_operation"].includes(recommendedAction);
+              const briefingAdvanceLabel =
+                recommendedAction === "create_first_operation" ? "Create operation" : "Advance once";
               const escalationPath = safeString(item.escalation_path).trim();
               const approvalId = safeString(item.last_task_approval_id).trim();
               const approvalStatus = safeString(item.last_task_approval_status).trim();
@@ -4414,6 +4416,17 @@ function SystemPanel(props: {
                         }
                       >
                         Review approval
+                      </button>
+                    ) : null}
+                    {briefingAdvanceAction ? (
+                      <button
+                        style={buttonStyle}
+                        onClick={() => void advanceMission(item.id)}
+                        disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy}
+                      >
+                        {missionActionBusy === "advance" && missionActionTargetId === item.id
+                          ? "Advancing."
+                          : briefingAdvanceLabel}
                       </button>
                     ) : null}
                     <button style={buttonStyle} onClick={() => inspectMission(item.id)}>

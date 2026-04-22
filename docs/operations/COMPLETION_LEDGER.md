@@ -108,6 +108,11 @@ world-state queues and continuity focus items, and the Shift Briefing / Mission
 Queue cards can open the exact pending approval without forcing a mission-detail
 round trip first.
 
+As of `2026-04-22`, ready Shift Briefing focus items can now advance through the
+existing bounded mission-advance path. The UI exposes this only for
+`create_first_operation` and `run_linked_operation`; dependency and approval
+blockers remain review-only and do not trigger mutation from the briefing card.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -119,6 +124,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is bounded Shift Briefing actionability. This advances the active
+`Phase 2 / P7_EXECUTION -> P1_INTERFACE` line by letting ready mission handoff
+cards use the same governed `/missions/{id}/advance` path as the mission
+inspector:
+
+- `apps/chat_ui/src/App.tsx` now renders a bounded advance control on Shift
+  Briefing focus cards only when the recommendation is `create_first_operation`
+  or `run_linked_operation`.
+- Dependency blockers and approval blockers stay non-mutating from the briefing
+  card; they keep their dependency/approval review actions.
+- The control respects the existing operator-mode write posture and busy-state
+  guards used by the ORB mission inspector and queue runner.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is approval-aware mission re-entry. This advances the active
@@ -932,6 +951,19 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 bounded Shift Briefing actionability slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="MissionsClient|SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 approval-aware mission re-entry slice:
 
