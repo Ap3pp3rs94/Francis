@@ -96,6 +96,10 @@ export type MissionCreateResponse = {
   mission_id?: string;
   status?: string;
   mission?: MissionRecord;
+  history?: MissionHistoryEntry[];
+  linked_operations?: OperationDetail[];
+  run_ledger?: OperationRecord[];
+  loop_state?: MissionLoopState;
   message?: string;
   error?: string;
 };
@@ -128,6 +132,10 @@ export type MissionAdvanceResponse = {
   approval_id?: string;
   gate?: string;
   next_step?: string;
+  history?: MissionHistoryEntry[];
+  linked_operations?: OperationDetail[];
+  run_ledger?: OperationRecord[];
+  loop_state?: MissionLoopState;
   status?: string;
   message?: string;
   error?: string;
@@ -464,6 +472,19 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
   };
 }
 
+function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""): Pick<
+  MissionDetail,
+  "history" | "linked_operations" | "run_ledger" | "loop_state"
+> {
+  const parsed = parseMissionDetail(json, missionId);
+  return {
+    history: parsed.history,
+    linked_operations: parsed.linked_operations,
+    run_ledger: parsed.run_ledger,
+    loop_state: parsed.loop_state,
+  };
+}
+
 function parseMissionListResponse(json: unknown): MissionListResponse {
   if (!isRecord(json)) {
     return {
@@ -499,6 +520,7 @@ function parseMissionCreateResponse(json: unknown): MissionCreateResponse {
     mission_id: safeString(json.mission_id, "") || undefined,
     status: safeString(json.status, "") || undefined,
     mission: parseMissionRecord(json.mission),
+    ...parseMissionDetailParts(json, safeString(json.mission_id, "")),
     message: safeString(json.message, "") || undefined,
     error: safeString(json.error, "") || undefined,
   };
@@ -522,6 +544,7 @@ function parseMissionAdvanceResponse(json: unknown): MissionAdvanceResponse {
     approval_id: safeString(json.approval_id, "") || undefined,
     gate: safeString(json.gate, "") || undefined,
     next_step: safeString(json.next_step, "") || undefined,
+    ...parseMissionDetailParts(json, safeString(json.mission_id, "")),
     status: safeString(json.status, "") || undefined,
     message: safeString(json.message, "") || undefined,
     error: safeString(json.error, "") || undefined,

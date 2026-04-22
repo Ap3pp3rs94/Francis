@@ -68,6 +68,12 @@ not a completion claim. Mission continuity can now report which Stage 3 criteria
 are satisfied, missing, or attention-worthy from the current local mission
 records, queue, deadletter, history, and briefing context.
 
+As of `2026-04-21`, mission mutation responses now carry post-action
+continuity envelopes. Create, update, tick, deadletter, and advance responses can
+return the current mission history, linked operations, run-ledger projection, and
+loop-state handoff, so callers do not need to reconstruct mission state after an
+action.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -79,6 +85,28 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 3 line is post-action mission continuity. This advances the active
+`Phase 2 / P8_MEMORY -> P7_EXECUTION -> P1_INTERFACE` line by making mutation
+responses return the same continuity evidence as mission detail reads:
+
+- `src/francis/api/routes/missions.py` now centralizes mission detail projection
+  for history, linked operations, run-ledger entries, and loop-state handoff.
+- Mission create, patch, tick, deadletter, and advance responses now include
+  this projection when a mission record is available, reducing the need for
+  operator surfaces to perform a second read before knowing the next truthful
+  action.
+- Mission loop state now treats fresh missions with no linked operation as
+  `plan` instead of `execute`, and deadlettered/failed missions hand off through
+  explicit deadletter review rather than pretending they are still live at a
+  gate.
+- `apps/chat_ui/src/missions/index.ts` now preserves mission detail projection
+  fields on create and advance responses. `apps/chat_ui/src/App.tsx` can use
+  returned loop-state handoff detail in mission action notices.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove post-action responses carry continuity envelopes and preserve
+  deadletter/plan handoff truth.
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 3 line is a mission readiness projection inside the continuity briefing.
@@ -781,6 +809,23 @@ Latest targeted validation for the `2026-04-21` Stage 3 mission readiness slice:
 - `git diff --check`
   Result: `passed`
 - `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-21` Stage 3 post-action mission continuity slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_api_missions.py tests/test_mission_store.py -q`
+  Result: `17 passed`
+- `python -m ruff check src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="MissionsClient"`
   Result: `16 passed`
 - `cd apps/chat_ui && npm test`
   Result: `16 passed`

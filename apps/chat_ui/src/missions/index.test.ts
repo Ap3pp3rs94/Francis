@@ -100,6 +100,17 @@ test("MissionsClient.create posts a mission declaration and preserves the return
         next_step: "Run the linked task once it exists.",
         requester_id: "chat_ui.operations",
       },
+      history: [{ ts: "2026-04-21T19:40:00+00:00", mission_id: "mission_beta", event: "created" }],
+      linked_operations: [],
+      run_ledger: [],
+      loop_state: {
+        active_stage: "plan",
+        handoff: {
+          stage: "plan",
+          action: "link_operation",
+          detail: "Declare or link a bounded operation before execution, trace, or memory can progress.",
+        },
+      },
     });
   });
 
@@ -133,6 +144,9 @@ test("MissionsClient.create posts a mission declaration and preserves the return
     assert.equal(response.message, "created");
     assert.equal(response.mission?.id, "mission_beta");
     assert.equal(response.mission?.requester_id, "chat_ui.operations");
+    assert.equal(response.history?.[0]?.event, "created");
+    assert.equal(response.loop_state?.active_stage, "plan");
+    assert.equal(response.loop_state?.handoff?.action, "link_operation");
   } finally {
     restoreFetch();
   }
@@ -171,6 +185,32 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
         name: "plan.create",
         meta: { orb_plane: "P7_EXECUTION" },
       },
+      history: [{ ts: "2026-04-21T19:45:00+00:00", mission_id: "mission_alpha", event: "advance_receipt" }],
+      linked_operations: [
+        {
+          ok: true,
+          operation: {
+            id: "tsk_mission_alpha",
+            ts: 1710000000,
+            status: "queued",
+            kind: "delegated_task",
+            name: "plan.create",
+            meta: { approval_id: "apr_mission_alpha" },
+          },
+          logs: [],
+        },
+      ],
+      run_ledger: [],
+      loop_state: {
+        active_stage: "gate",
+        handoff: {
+          stage: "gate",
+          action: "review_pending_approval",
+          approval_id: "apr_mission_alpha",
+          operation_id: "tsk_mission_alpha",
+          detail: "Review the active governance hold before the linked operation can continue.",
+        },
+      },
     });
   });
 
@@ -204,6 +244,11 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
     assert.equal(response.mission?.status, "completed");
     assert.equal(response.operation?.id, "tsk_mission_alpha");
     assert.equal(response.operation?.meta?.orb_plane, "P7_EXECUTION");
+    assert.equal(response.history?.[0]?.event, "advance_receipt");
+    assert.equal(response.linked_operations?.[0]?.operation?.id, "tsk_mission_alpha");
+    assert.equal(response.loop_state?.active_stage, "gate");
+    assert.equal(response.loop_state?.handoff?.action, "review_pending_approval");
+    assert.equal(response.loop_state?.handoff?.approval_id, "apr_mission_alpha");
   } finally {
     restoreFetch();
   }

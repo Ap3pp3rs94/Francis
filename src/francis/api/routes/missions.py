@@ -363,7 +363,34 @@ def _mission_loop_state(
         latest_ts=latest_history_ts,
         next_step=record.next_step,
     )
-    if latest_gate or latest_approval_id:
+    record_status = record.status.value
+    if record_status == "deadlettered":
+        active_stage = "deadletter"
+        summary = "The mission is deadlettered and should be reviewed before any retry or replacement work."
+        handoff = _loop_handoff(
+            "deadletter",
+            "review_deadletter",
+            record.deadletter_reason or "Review why this mission was deadlettered before declaring follow-up work.",
+            operation_id=latest_operation_id,
+            trace_id=latest_trace_id,
+            latest_event=latest_history_event,
+            latest_ts=latest_history_ts,
+            next_step=record.deadletter_reason or record.next_step,
+        )
+    elif record_status == "failed":
+        active_stage = "deadletter"
+        summary = "The mission failed and needs an explicit retry or deadletter decision."
+        handoff = _loop_handoff(
+            "deadletter",
+            "retry_or_deadletter",
+            "Review the failed mission evidence, then retry bounded work or deadletter it explicitly.",
+            operation_id=latest_operation_id,
+            trace_id=latest_trace_id,
+            latest_event=latest_history_event,
+            latest_ts=latest_history_ts,
+            next_step=record.next_step,
+        )
+    elif latest_gate or latest_approval_id:
         active_stage = "gate"
         summary = "The mission is waiting on a governance decision before it can continue."
         handoff = _loop_handoff(
@@ -375,6 +402,15 @@ def _mission_loop_state(
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )
+    elif not linked_operations:
+        active_stage = "plan"
+        summary = "The mission still needs its first linked operation."
+        handoff = _loop_handoff(
+            "plan",
+            "link_operation",
+            "Declare or link a bounded operation before execution, trace, or memory can progress.",
+            next_step=record.next_step,
+        )
     elif execute_status in {"running", "pending", "queued"}:
         active_stage = "execute"
         summary = "The mission is currently in its bounded execution phase."
@@ -385,15 +421,6 @@ def _mission_loop_state(
             "Advance or monitor the bounded linked operation before expecting trace and memory closure.",
             operation_id=latest_operation_id,
             next_step=latest_next_step or record.next_step,
-        )
-    elif not linked_operations:
-        active_stage = "plan"
-        summary = "The mission still needs its first linked operation."
-        handoff = _loop_handoff(
-            "plan",
-            "link_operation",
-            "Declare or link a bounded operation before execution, trace, or memory can progress.",
-            next_step=record.next_step,
         )
     elif not (trace_count or audit_count or ledger_count):
         active_stage = "trace"
@@ -416,6 +443,18 @@ def _mission_loop_state(
         "execute": execute_stage,
         "trace": trace_stage,
         "memory": memory_stage,
+    }
+
+
+def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit: int = 50) -> dict[str, Any]:
+    linked_operations = _linked_operation_details(record, log_limit=log_limit)
+    history = mission_store.read_history(record.mission_id)
+    run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
+    return {
+        "history": history,
+        "linked_operations": linked_operations,
+        "run_ledger": run_ledger,
+        "loop_state": _mission_loop_state(record, linked_operations, run_ledger, history),
     }
 
 
@@ -492,6 +531,7 @@ def create_mission(payload: MissionCreateIn) -> dict[str, object]:
             "mission_id": record.mission_id,
             "status": record.status.value,
             "mission": _serialize_mission(record),
+            **_mission_detail_projection(record),
             "message": "created",
         }
     except Exception as exc:
@@ -636,7 +676,7 @@ def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]
             "ok": True,
             "status": record.status.value,
             "mission": _serialize_mission(record),
-            "history": mission_store.read_history(mission_id),
+            **_mission_detail_projection(record),
             "message": "updated",
         }
     except Exception as exc:
@@ -660,7 +700,7 @@ def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
             "ok": True,
             "applied": applied,
             "mission": _serialize_mission(record),
-            "history": mission_store.read_history(mission_id),
+            **_mission_detail_projection(record),
             "message": "ticked" if applied else "no_change",
         }
     except Exception as exc:
@@ -685,7 +725,7 @@ def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[st
             "ok": True,
             "status": record.status.value,
             "mission": _serialize_mission(record),
-            "history": mission_store.read_history(mission_id),
+            **_mission_detail_projection(record),
             "message": "deadlettered",
         }
     except Exception as exc:
@@ -711,6 +751,7 @@ def advance_mission(mission_id: str, payload: MissionAdvanceIn) -> dict[str, obj
         mission_record = result.pop("mission_record", None)
         if isinstance(mission_record, mission_store.MissionRecord):
             result["mission"] = _serialize_mission(mission_record)
+            result.update(_mission_detail_projection(mission_record))
         return result
     except Exception as exc:
         return {"ok": False, "applied": False, "error": str(exc)}

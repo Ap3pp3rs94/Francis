@@ -3446,6 +3446,7 @@ function SystemPanel(props: {
         await refresh();
         const resolvedOperation = response.operation ?? nextDetail?.linked_operations?.[0]?.operation ?? null;
         const approvalId = operationApprovalId(resolvedOperation);
+        const actionHandoff = response.loop_state?.handoff ?? nextDetail?.loop_state?.handoff;
         const nextStatus = safeString(response.status || nextDetail?.mission?.status || response.mission?.status, "unknown");
         if (!response.ok) {
           setMissionActionNotice({
@@ -3459,6 +3460,7 @@ function SystemPanel(props: {
           ? `Mission advanced once. Status is now ${nextStatus}.`
           : `Mission remains ${nextStatus}.`;
         const message = safeString(response.message).trim();
+        const handoffDetail = safeString(actionHandoff?.detail).trim();
         const approvalMessage = approvalId ? ` Review approval ${approvalId}.` : "";
         setMissionActionResult({
           missionId: cleaned,
@@ -3467,7 +3469,7 @@ function SystemPanel(props: {
         });
         setMissionActionNotice({
           tone: "info",
-          text: `${summary}${message ? ` ${message}` : ""}${approvalMessage}`,
+          text: `${summary}${message ? ` ${message}` : ""}${handoffDetail ? ` ${handoffDetail}` : ""}${approvalMessage}`,
         });
       } catch (err) {
         setMissionActionNotice({ tone: "error", text: missionError(err) });

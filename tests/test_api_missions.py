@@ -27,6 +27,9 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     created_body = created.json()
     assert created_body["ok"] is True
     mission_id = str(created_body["mission_id"])
+    assert created_body["history"][0]["event"] == "created"
+    assert created_body["loop_state"]["active_stage"] == "plan"
+    assert created_body["loop_state"]["handoff"]["action"] == "link_operation"
 
     listed = client.get("/missions/list")
     assert listed.status_code == 200
@@ -64,6 +67,10 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert patched_body["mission"]["linked_task_ids"] == [operation_id]
     assert patched_body["mission"]["linked_task_count"] == 1
     assert patched_body["mission"]["meta"]["source"] == "integration_test"
+    assert patched_body["linked_operations"][0]["operation"]["id"] == operation_id
+    assert patched_body["loop_state"]["active_stage"] == "execute"
+    assert patched_body["loop_state"]["handoff"]["action"] == "run_linked_operation"
+    assert patched_body["loop_state"]["handoff"]["operation_id"] == operation_id
     history_events = [str(item.get("event")) for item in patched_body["history"]]
     assert "status_changed" in history_events
     assert "task_links_updated" in history_events
@@ -83,6 +90,9 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert deadlettered_body["ok"] is True
     assert deadlettered_body["mission"]["status"] == "deadlettered"
     assert deadlettered_body["mission"]["deadletter_reason"] == "approval_timeout"
+    assert deadlettered_body["loop_state"]["active_stage"] == "deadletter"
+    assert deadlettered_body["loop_state"]["handoff"]["action"] == "review_deadletter"
+    assert deadlettered_body["loop_state"]["handoff"]["operation_id"] == operation_id
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -447,6 +457,9 @@ def test_mission_tick_reconciles_pending_link_and_is_idempotent(monkeypatch, tmp
     assert first_tick_body["mission"]["status"] == "queued"
     assert first_tick_body["mission"]["meta"]["last_task_id"] == operation_id
     assert first_tick_body["mission"]["meta"]["last_task_status"] == "pending"
+    assert first_tick_body["loop_state"]["active_stage"] == "execute"
+    assert first_tick_body["loop_state"]["handoff"]["action"] == "run_linked_operation"
+    assert first_tick_body["loop_state"]["handoff"]["operation_id"] == operation_id
     tick_events = [item for item in first_tick_body["history"] if item.get("event") == "mission_ticked"]
     assert tick_events
     assert tick_events[-1]["details"]["latest_task_status"] == "pending"
@@ -533,6 +546,9 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert deadlettered_body["ok"] is True
     assert deadlettered_body["mission"]["status"] == "deadlettered"
     assert deadlettered_body["mission"]["deadletter_reason"] == "operator_abandoned_after_governance_hold"
+    assert deadlettered_body["loop_state"]["active_stage"] == "deadletter"
+    assert deadlettered_body["loop_state"]["handoff"]["action"] == "review_deadletter"
+    assert deadlettered_body["loop_state"]["handoff"]["operation_id"] == operation_id
 
     history_events = [str(item.get("event")) for item in deadlettered_body["history"]]
     assert "status_changed" in history_events
@@ -550,6 +566,8 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert ticked_body["ok"] is True
     assert ticked_body["applied"] is False
     assert ticked_body["mission"]["status"] == "deadlettered"
+    assert ticked_body["loop_state"]["active_stage"] == "deadletter"
+    assert ticked_body["loop_state"]["handoff"]["action"] == "review_deadletter"
 
 
 def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Path) -> None:
@@ -903,6 +921,10 @@ def test_mission_advance_respects_governance_blockers(monkeypatch, tmp_path: Pat
     assert advanced_body["applied"] is False
     assert advanced_body["action"] == "raise_trust_or_reduce_risk"
     assert advanced_body["operation_id"] == operation_id
+    assert advanced_body["loop_state"]["active_stage"] == "gate"
+    assert advanced_body["loop_state"]["handoff"]["action"] == "raise_trust_or_reduce_risk"
+    assert advanced_body["loop_state"]["handoff"]["operation_id"] == operation_id
+    assert advanced_body["run_ledger"]
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -982,6 +1004,11 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     assert advanced_body["approval_id"]
     assert advanced_body["gate"] == "approvals_gate"
     assert advanced_body["next_step"] == "review_pending_approval"
+    assert advanced_body["loop_state"]["active_stage"] == "gate"
+    assert advanced_body["loop_state"]["handoff"]["action"] == "review_pending_approval"
+    assert advanced_body["loop_state"]["handoff"]["approval_id"] == advanced_body["approval_id"]
+    assert advanced_body["loop_state"]["handoff"]["operation_id"] == operation_id
+    assert advanced_body["history"][-1]["event"] == "advance_receipt"
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
