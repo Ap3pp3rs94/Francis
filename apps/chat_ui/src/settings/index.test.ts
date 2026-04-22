@@ -160,6 +160,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               },
               escalation_path: "Raise trust or reduce scope.",
               recommended_action: "raise_trust_or_reduce_risk",
+              last_task_approval_id: "apr_queue_exact",
+              last_task_previous_approval_id: "apr_queue_previous",
+              last_task_approval_status: "pending",
               latest_activity: {
                 source: "run_ledger",
                 name: "governance_hold",
@@ -284,6 +287,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_state?.status, "blocked");
     assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_state?.first_unresolved?.id, "dep_trust");
     assert.equal(worldState.overview?.mission_queue?.[0]?.escalation_path, "Raise trust or reduce scope.");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_id, "apr_queue_exact");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_previous_approval_id, "apr_queue_previous");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_status, "pending");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
@@ -691,6 +697,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               },
               escalation_path: "Ask the operator whether to replace or deadletter the dependency.",
               recommended_action: "resume",
+              last_task_approval_id: "apr_focus_exact",
+              last_task_previous_approval_id: "apr_focus_previous",
+              last_task_approval_status: "pending",
             },
           ],
           readiness: {
@@ -853,6 +862,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
       briefing.briefing?.focus?.[0]?.escalation_path,
       "Ask the operator whether to replace or deadletter the dependency.",
     );
+    assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_id, "apr_focus_exact");
+    assert.equal(briefing.briefing?.focus?.[0]?.last_task_previous_approval_id, "apr_focus_previous");
+    assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_status, "pending");
     assert.equal(briefing.briefing?.observer?.counts?.active, 1);
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.id, "task_runtime");
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.status, "attention");

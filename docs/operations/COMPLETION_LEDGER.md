@@ -102,6 +102,12 @@ to mission inspection when they identify a mission and to operation inspection
 when they identify a linked task, so operator handoff actions follow the actual
 blocked surface.
 
+As of `2026-04-22`, mission approval holds now survive into the ORB re-entry
+surfaces. The Settings client preserves mission approval ids and statuses from
+world-state queues and continuity focus items, and the Shift Briefing / Mission
+Queue cards can open the exact pending approval without forcing a mission-detail
+round trip first.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -113,6 +119,21 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is approval-aware mission re-entry. This advances the active
+`Phase 2 / P8_MEMORY -> P1_INTERFACE` line by keeping governance blockers
+actionable from mission handoff surfaces:
+
+- `apps/chat_ui/src/settings/index.ts` now preserves
+  `last_task_approval_id`, `last_task_previous_approval_id`, and
+  `last_task_approval_status` on world-state mission queue items and continuity
+  briefing focus items.
+- `apps/chat_ui/src/App.tsx` now shows approval ids/statuses in Shift Briefing
+  and Mission Queue cards and routes `Review approval` through the existing
+  approvals panel with mission/operation context.
+- `apps/chat_ui/src/settings/index.test.ts` now proves the browser parser keeps
+  these approval-hold fields instead of dropping backend handoff truth.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is dependency-aware Shift Briefing rendering. This advances the
@@ -911,6 +932,19 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 approval-aware mission re-entry slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 Shift Briefing dependency rendering slice:
 

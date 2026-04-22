@@ -265,6 +265,9 @@ export type WorldStateMissionQueueItem = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_approval_status?: string;
   recommended_action?: string;
   operator_hint?: string;
   action_target_id?: string;
@@ -436,6 +439,9 @@ export type ContinuityBriefingFocusItem = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_approval_status?: string;
   last_advance_action?: string;
   last_advance_outcome?: string;
   last_advance_operation_id?: string;
@@ -1284,6 +1290,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         last_task_status: safeString(item.last_task_status, ""),
         last_task_result_status: safeString(item.last_task_result_status, ""),
         last_task_gate: safeString(item.last_task_gate, ""),
+        last_task_approval_id: safeString(item.last_task_approval_id, ""),
+        last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
+        last_task_approval_status: safeString(item.last_task_approval_status, ""),
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
@@ -1315,6 +1324,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         last_task_status: safeString(item.last_task_status, ""),
         last_task_result_status: safeString(item.last_task_result_status, ""),
         last_task_gate: safeString(item.last_task_gate, ""),
+        last_task_approval_id: safeString(item.last_task_approval_id, ""),
+        last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
+        last_task_approval_status: safeString(item.last_task_approval_status, ""),
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
@@ -1570,6 +1582,9 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     last_task_status: safeString(raw["last_task_status"], ""),
     last_task_result_status: safeString(raw["last_task_result_status"], ""),
     last_task_gate: safeString(raw["last_task_gate"], ""),
+    last_task_approval_id: safeString(raw["last_task_approval_id"], ""),
+    last_task_previous_approval_id: safeString(raw["last_task_previous_approval_id"], ""),
+    last_task_approval_status: safeString(raw["last_task_approval_status"], ""),
     last_advance_action: safeString(raw["last_advance_action"], ""),
     last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
     last_advance_operation_id: safeString(raw["last_advance_operation_id"], ""),

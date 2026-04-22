@@ -3232,6 +3232,9 @@ function SystemPanel(props: {
 
   if (queueLead) {
     const queueTargetId = safeString(queueLead.action_target_id).trim() || safeString(queueLead.last_task_id).trim();
+    const queueApprovalId = safeString(queueLead.last_task_approval_id).trim();
+    const queueTargetIsMission = queueTargetId.startsWith("msn_");
+    const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
     returnToWorkItems.push({
       id: `queue:${queueLead.id}`,
       label: "Queue",
@@ -3241,8 +3244,24 @@ function SystemPanel(props: {
         safeString(queueLead.next_step).trim() ||
         "Mission queue item needs operator review.",
       tone: queueLead.status || "queued",
-      actionLabel: queueTargetId ? "Open linked task" : undefined,
-      onAction: queueTargetId ? () => props.onOpenOperation(queueTargetId) : undefined,
+      actionLabel: queueApprovalId
+        ? "Review approval"
+        : queueTargetId && queueTargetIsMission
+          ? "Open dependency mission"
+          : queueTargetId && queueTargetIsOperation
+            ? "Open linked task"
+            : undefined,
+      onAction: queueApprovalId
+        ? () =>
+            props.onOpenApprovals(queueApprovalId, {
+              missionId: queueLead.id,
+              operationId: queueTargetIsOperation ? queueTargetId : undefined,
+            })
+        : queueTargetId && queueTargetIsMission
+          ? () => inspectMission(queueTargetId)
+          : queueTargetId && queueTargetIsOperation
+            ? () => props.onOpenOperation(queueTargetId)
+            : undefined,
     });
   } else if (leadMission) {
     const linkedTaskId = firstLinkedTaskId(leadMission);
@@ -4309,6 +4328,8 @@ function SystemPanel(props: {
                 safeString(item.recommended_action).trim(),
               );
               const escalationPath = safeString(item.escalation_path).trim();
+              const approvalId = safeString(item.last_task_approval_id).trim();
+              const approvalStatus = safeString(item.last_task_approval_status).trim();
               const focusDetail =
                 safeString(item.operator_hint).trim() ||
                 safeString(item.next_step).trim() ||
@@ -4354,6 +4375,16 @@ function SystemPanel(props: {
                       escalation <code>{escalationPath}</code>
                     </div>
                   ) : null}
+                  {approvalId ? (
+                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
+                      approval=<code>{approvalId}</code>
+                      {approvalStatus ? (
+                        <>
+                          {" / "}status=<code>{approvalStatus}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       latest=
@@ -4372,6 +4403,19 @@ function SystemPanel(props: {
                     </div>
                   ) : null}
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    {approvalId ? (
+                      <button
+                        style={buttonStyle}
+                        onClick={() =>
+                          props.onOpenApprovals(approvalId, {
+                            missionId: item.id,
+                            operationId: targetIsOperation ? targetId : undefined,
+                          })
+                        }
+                      >
+                        Review approval
+                      </button>
+                    ) : null}
                     <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                       Inspect mission flow
                     </button>
@@ -5535,6 +5579,8 @@ function SystemPanel(props: {
                 const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
                 const queueTargetIsMission = queueTargetId.startsWith("msn_");
                 const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
+                const queueApprovalId = safeString(item.last_task_approval_id).trim();
+                const queueApprovalStatus = safeString(item.last_task_approval_status).trim();
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const dependencyState = item.dependency_state;
                 const dependencyStatus = safeString(dependencyState?.status).trim();
@@ -5572,6 +5618,16 @@ function SystemPanel(props: {
                       priority=<code>{String(item.priority ?? 0)}</code>
                       {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
                     </div>
+                    {queueApprovalId ? (
+                      <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
+                        approval=<code>{queueApprovalId}</code>
+                        {queueApprovalStatus ? (
+                          <>
+                            {" / "}status=<code>{queueApprovalStatus}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                         latest=<code>{latestActivity.name || "activity"}</code>
@@ -5589,6 +5645,19 @@ function SystemPanel(props: {
                       </div>
                     ) : null}
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      {queueApprovalId ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            props.onOpenApprovals(queueApprovalId, {
+                              missionId: item.id,
+                              operationId: queueTargetIsOperation ? queueTargetId : undefined,
+                            })
+                          }
+                        >
+                          Review approval
+                        </button>
+                      ) : null}
                       <button
                         style={buttonStyle}
                         onClick={() => void advanceMission(item.id)}
