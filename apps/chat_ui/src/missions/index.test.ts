@@ -288,11 +288,32 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           ok: true,
           applied: true,
           action: "create_first_operation",
+          mission: { id: "mission_ready", status: "queued" },
           status: "queued",
           operation_id: "tsk_ready",
           approval_id: "apr_ready",
           gate: "approvals_gate",
           next_step: "approve_exact_action",
+          loop_state: {
+            active_stage: "gate",
+            handoff: {
+              stage: "gate",
+              action: "review_pending_approval",
+              detail: "Review the active governance hold before the linked operation can continue.",
+              approval_id: "apr_ready",
+              operation_id: "tsk_ready",
+            },
+          },
+          handoff: {
+            stage: "gate",
+            action: "review_pending_approval",
+            detail: "Review the active governance hold before the linked operation can continue.",
+            approval_id: "apr_ready",
+            operation_id: "tsk_ready",
+          },
+          history_count: 3,
+          linked_operation_count: 1,
+          run_ledger_count: 2,
           message: "operation_created",
         },
       ],
@@ -330,6 +351,13 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.gate, "approvals_gate");
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
+    assert.equal(response.results?.[0]?.mission?.id, "mission_ready");
+    assert.equal(response.results?.[0]?.loop_state?.active_stage, "gate");
+    assert.equal(response.results?.[0]?.handoff?.action, "review_pending_approval");
+    assert.equal(response.results?.[0]?.handoff?.approval_id, "apr_ready");
+    assert.equal(response.results?.[0]?.history_count, 3);
+    assert.equal(response.results?.[0]?.linked_operation_count, 1);
+    assert.equal(response.results?.[0]?.run_ledger_count, 2);
   } finally {
     restoreFetch();
   }

@@ -152,11 +152,17 @@ export type MissionRunOnceResult = {
   ok?: boolean;
   applied?: boolean;
   action?: string;
+  mission?: MissionRecord;
   status?: string;
   operation_id?: string;
   approval_id?: string;
   gate?: string;
   next_step?: string;
+  loop_state?: MissionLoopState;
+  handoff?: MissionLoopHandoff;
+  history_count?: number;
+  linked_operation_count?: number;
+  run_ledger_count?: number;
   message?: string;
 };
 
@@ -558,11 +564,17 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     ok: safeBoolean(raw.ok, false),
     applied: safeBoolean(raw.applied, false),
     action: safeString(raw.action, "") || undefined,
+    mission: parseMissionRecord(raw.mission),
     status: safeString(raw.status, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
     approval_id: safeString(raw.approval_id, "") || undefined,
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
+    loop_state: parseMissionLoopState(raw.loop_state),
+    handoff: parseMissionLoopHandoff(raw.handoff),
+    history_count: safeNumber(raw.history_count, 0) || undefined,
+    linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
+    run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,
     message: safeString(raw.message, "") || undefined,
   };
 }

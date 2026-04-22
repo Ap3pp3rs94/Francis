@@ -458,6 +458,27 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
     }
 
 
+def _mission_queue_result_projection(mission_id: str) -> dict[str, Any]:
+    cleaned = _safe_str(mission_id).strip()
+    if not cleaned:
+        return {}
+    record, err = mission_store.read_mission(cleaned)
+    if not record:
+        return {"mission_error": err or "not_found"}
+    detail = _mission_detail_projection(record, log_limit=25)
+    loop_state = detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {}
+    return {
+        "mission": _serialize_mission(record),
+        "loop_state": loop_state,
+        "handoff": loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {},
+        "history_count": len(detail.get("history")) if isinstance(detail.get("history"), list) else 0,
+        "linked_operation_count": len(detail.get("linked_operations"))
+        if isinstance(detail.get("linked_operations"), list)
+        else 0,
+        "run_ledger_count": len(detail.get("run_ledger")) if isinstance(detail.get("run_ledger"), list) else 0,
+    }
+
+
 class MissionCreateIn(BaseModel):
     objective: str
     summary: str = ""
@@ -615,7 +636,19 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
         safe_limit = max(1, min(int(payload.limit), 5000))
         actor = _safe_str(payload.actor).strip() or "missions.runner"
         note = _safe_str(payload.note).strip() or "mission_queue_run_once"
-        return mission_runtime.run_queue_once(limit=safe_limit, actor=actor, note=note)
+        result = mission_runtime.run_queue_once(limit=safe_limit, actor=actor, note=note)
+        result_items = result.get("results") if isinstance(result.get("results"), list) else []
+        projection_cache: dict[str, dict[str, Any]] = {}
+        for item in result_items:
+            if not isinstance(item, dict):
+                continue
+            mission_id = _safe_str(item.get("mission_id")).strip()
+            if not mission_id:
+                continue
+            if mission_id not in projection_cache:
+                projection_cache[mission_id] = _mission_queue_result_projection(mission_id)
+            item.update(projection_cache[mission_id])
+        return result
     except Exception as exc:
         return {
             "ok": False,

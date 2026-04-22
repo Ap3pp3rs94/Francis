@@ -654,10 +654,21 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     blocked_result = next(item for item in results if item["mission_id"] == blocked_id)
     assert blocked_result["applied"] is False
     assert blocked_result["action"] == "raise_trust_or_reduce_risk"
+    assert blocked_result["mission"]["id"] == blocked_id
+    assert blocked_result["loop_state"]["active_stage"] == "gate"
+    assert blocked_result["handoff"]["action"] == "raise_trust_or_reduce_risk"
+    assert blocked_result["handoff"]["operation_id"] == blocked_operation_id
+    assert blocked_result["linked_operation_count"] == 1
+    assert blocked_result["run_ledger_count"] >= 1
     ready_result = next(item for item in results if item["mission_id"] == ready_id)
     assert ready_result["applied"] is True
     assert ready_result["action"] == "create_first_operation"
     assert ready_result["operation_id"]
+    assert ready_result["mission"]["id"] == ready_id
+    assert ready_result["loop_state"]["active_stage"] == "execute"
+    assert ready_result["handoff"]["action"] == "run_linked_operation"
+    assert ready_result["linked_operation_count"] == 1
+    assert ready_result["history_count"] >= 2
     queue_items = run_once_body["items"]
     assert queue_items[0]["id"] == blocked_id
     assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
@@ -711,6 +722,11 @@ def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path
     assert mission_result["applied"] is True
     assert mission_result["action"] == "run_linked_operation"
     assert mission_result["operation_id"] == operation_id
+    assert mission_result["mission"]["id"] == mission_id
+    assert mission_result["loop_state"]["active_stage"] == "memory"
+    assert mission_result["handoff"]["action"] == "review_continuity"
+    assert mission_result["handoff"]["operation_id"] == operation_id
+    assert mission_result["run_ledger_count"] >= 2
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -1086,6 +1102,12 @@ def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monke
     assert mission_result["approval_id"]
     assert mission_result["gate"] == "approvals_gate"
     assert mission_result["next_step"] == "review_pending_approval"
+    assert mission_result["mission"]["id"] == mission_id
+    assert mission_result["loop_state"]["active_stage"] == "gate"
+    assert mission_result["handoff"]["action"] == "review_pending_approval"
+    assert mission_result["handoff"]["approval_id"] == mission_result["approval_id"]
+    assert mission_result["handoff"]["operation_id"] == operation_id
+    assert mission_result["linked_operation_count"] == 1
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200

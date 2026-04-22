@@ -2808,9 +2808,15 @@ function SystemPanel(props: {
       operationId?: string;
       approvalId?: string;
       action?: string;
+      activeStage?: string;
       status?: string;
       gate?: string;
       nextStep?: string;
+      handoffAction?: string;
+      handoffDetail?: string;
+      historyCount?: number;
+      linkedOperationCount?: number;
+      runLedgerCount?: number;
       message?: string;
     }>;
   } | null>(null);
@@ -3506,9 +3512,15 @@ function SystemPanel(props: {
           operationId: item.operation_id,
           approvalId: item.approval_id,
           action: item.action,
+          activeStage: item.loop_state?.active_stage,
           status: item.status,
           gate: item.gate,
           nextStep: item.next_step,
+          handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
+          handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
+          historyCount: item.history_count,
+          linkedOperationCount: item.linked_operation_count,
+          runLedgerCount: item.run_ledger_count,
           message: item.message,
         })),
       });
@@ -5387,9 +5399,15 @@ function SystemPanel(props: {
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {item.action ? <span style={badgeStyle(item.action)}>{item.action}</span> : null}
                             {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
+                            {item.activeStage ? <span style={badgeStyle(item.activeStage)}>{item.activeStage}</span> : null}
                           </div>
                         </div>
                         {item.message ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.message}</div> : null}
+                        {item.handoffDetail ? (
+                          <div style={{ fontSize: 11, color: "#d6e8e8", marginTop: 6 }}>
+                            Handoff{item.handoffAction ? ` (${item.handoffAction})` : ""}: {item.handoffDetail}
+                          </div>
+                        ) : null}
                         {item.gate || item.nextStep ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                             {item.gate ? (
@@ -5402,6 +5420,15 @@ function SystemPanel(props: {
                                 {item.gate ? " / " : ""}next=<code>{item.nextStep}</code>
                               </>
                             ) : null}
+                          </div>
+                        ) : null}
+                        {typeof item.historyCount === "number" ||
+                        typeof item.linkedOperationCount === "number" ||
+                        typeof item.runLedgerCount === "number" ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            history=<code>{String(item.historyCount ?? 0)}</code>
+                            {" / "}linked=<code>{String(item.linkedOperationCount ?? 0)}</code>
+                            {" / "}ledger=<code>{String(item.runLedgerCount ?? 0)}</code>
                           </div>
                         ) : null}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

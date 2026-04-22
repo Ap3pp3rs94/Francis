@@ -74,6 +74,12 @@ return the current mission history, linked operations, run-ledger projection, an
 loop-state handoff, so callers do not need to reconstruct mission state after an
 action.
 
+As of `2026-04-21`, mission queue-run results now carry bounded post-run
+handoff context. Each processed mission result can expose the current mission
+record, loop-state handoff, and compact continuity evidence counts, so the ORB
+mission queue summary can show what changed and what should happen next without
+implying hidden autonomy or requiring a full detail reload for every row.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -85,6 +91,25 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run handoff continuity. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making bounded
+queue passes report truthful next-step context per processed mission:
+
+- `src/francis/api/routes/missions.py` now enriches `/missions/run_once` result
+  rows with each mission's serialized record, current loop-state handoff, and
+  bounded history/linked-operation/run-ledger counts.
+- The queue-run endpoint intentionally does not attach full histories or full
+  operation logs per row; it returns enough evidence for operator re-entry while
+  keeping detailed inspection behind the existing mission detail route.
+- `apps/chat_ui/src/missions/index.ts` now preserves the queue-run mission,
+  loop-state, handoff, and continuity-count fields.
+- `apps/chat_ui/src/App.tsx` now renders the active stage, handoff detail, and
+  compact evidence counts in the ORB mission queue pass summary.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove queue-run results preserve mission handoff context for created,
+  completed, blocked, and approval-gated mission outcomes.
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 3 line is post-action mission continuity. This advances the active
@@ -809,6 +834,23 @@ Latest targeted validation for the `2026-04-21` Stage 3 mission readiness slice:
 - `git diff --check`
   Result: `passed`
 - `cd apps/chat_ui && npm test -- --test-name-pattern="SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-21` Stage 3 mission queue-run handoff slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_api_missions.py -q`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="MissionsClient"`
   Result: `16 passed`
 - `cd apps/chat_ui && npm test`
   Result: `16 passed`
