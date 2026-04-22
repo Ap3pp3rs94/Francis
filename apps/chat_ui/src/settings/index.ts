@@ -224,6 +224,28 @@ export type WorldStateMissionSummary = {
   latest_activity?: Record<string, unknown>;
 };
 
+export type WorldStateMissionDependencyItem = {
+  id?: string;
+  kind?: string;
+  state?: string;
+  status?: string;
+  result_status?: string;
+  gate?: string;
+  approval_id?: string;
+  objective?: string;
+  detail?: string;
+  updated_at?: string;
+};
+
+export type WorldStateMissionDependencyState = {
+  status?: string;
+  total?: number;
+  resolved?: number;
+  unresolved?: number;
+  items?: WorldStateMissionDependencyItem[];
+  first_unresolved?: WorldStateMissionDependencyItem;
+};
+
 export type WorldStateMissionQueueItem = {
   id: string;
   status?: string;
@@ -235,6 +257,7 @@ export type WorldStateMissionQueueItem = {
   risk_tier?: string;
   dependency_ids?: string[];
   dependency_count?: number;
+  dependency_state?: WorldStateMissionDependencyState;
   escalation_path?: string;
   linked_task_count?: number;
   linked_task_ids?: string[];
@@ -744,6 +767,39 @@ function safeStringArray(v: unknown): string[] {
   return v.map((item) => safeString(item, "").trim()).filter((item) => item.length > 0);
 }
 
+function parseWorldStateMissionDependencyItem(raw: unknown): WorldStateMissionDependencyItem | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    id: safeString(raw.id, ""),
+    kind: safeString(raw.kind, ""),
+    state: safeString(raw.state, ""),
+    status: safeString(raw.status, ""),
+    result_status: safeString(raw.result_status, ""),
+    gate: safeString(raw.gate, ""),
+    approval_id: safeString(raw.approval_id, ""),
+    objective: safeString(raw.objective, ""),
+    detail: safeString(raw.detail, ""),
+    updated_at: safeString(raw.updated_at, ""),
+  };
+}
+
+function parseWorldStateMissionDependencyState(raw: unknown): WorldStateMissionDependencyState | undefined {
+  if (!isRecord(raw)) return undefined;
+  const items = Array.isArray(raw.items)
+    ? raw.items
+        .map(parseWorldStateMissionDependencyItem)
+        .filter((item): item is WorldStateMissionDependencyItem => item !== undefined)
+    : [];
+  return {
+    status: safeString(raw.status, ""),
+    total: safeNumber(raw.total, 0),
+    resolved: safeNumber(raw.resolved, 0),
+    unresolved: safeNumber(raw.unresolved, 0),
+    items,
+    first_unresolved: parseWorldStateMissionDependencyItem(raw.first_unresolved),
+  };
+}
+
 function normalizeUnixSeconds(ts: unknown): UnixSeconds | undefined {
   if (typeof ts !== "number" || !Number.isFinite(ts)) return undefined;
   // Heuristic: if it looks like milliseconds, normalize to seconds.
@@ -1214,6 +1270,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         risk_tier: safeString(item.risk_tier, ""),
         dependency_ids: safeStringArray(item.dependency_ids),
         dependency_count: safeNumber(item.dependency_count, 0),
+        dependency_state: parseWorldStateMissionDependencyState(item.dependency_state),
         escalation_path: safeString(item.escalation_path, ""),
         linked_task_count: safeNumber(item.linked_task_count, 0),
         linked_task_ids: Array.isArray(item.linked_task_ids)
@@ -1244,6 +1301,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         risk_tier: safeString(item.risk_tier, ""),
         dependency_ids: safeStringArray(item.dependency_ids),
         dependency_count: safeNumber(item.dependency_count, 0),
+        dependency_state: parseWorldStateMissionDependencyState(item.dependency_state),
         escalation_path: safeString(item.escalation_path, ""),
         linked_task_count: safeNumber(item.linked_task_count, 0),
         linked_task_ids: Array.isArray(item.linked_task_ids)

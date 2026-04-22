@@ -81,6 +81,8 @@ def _now() -> str:
 
 
 def _coerce_status(value: Any) -> MissionStatus:
+    if isinstance(value, MissionStatus):
+        return value
     raw = str(value or MissionStatus.QUEUED.value).strip().lower()
     normalized = _STATUS_ALIASES.get(raw, MissionStatus.QUEUED.value)
     return MissionStatus(normalized)
@@ -299,6 +301,94 @@ def _derive_mission_status_from_tasks(
     return None, _latest_linked_snapshot(task_ids, repo_root)
 
 
+def _dependency_item(dependency_id: str, record: "MissionRecord", repo_root: Path | None = None) -> dict[str, Any]:
+    cleaned = str(dependency_id or "").strip()
+    if not cleaned:
+        return {}
+
+    if cleaned == record.mission_id:
+        return {
+            "id": cleaned,
+            "kind": "mission",
+            "state": "blocked",
+            "status": "self_dependency",
+            "detail": "Mission depends on itself and cannot advance until the dependency is removed.",
+        }
+
+    mission, _ = read_mission(cleaned, repo_root)
+    if mission is not None:
+        status = mission.status.value
+        if mission.status == MissionStatus.COMPLETED:
+            state = "resolved"
+        elif mission.status in {MissionStatus.FAILED, MissionStatus.DEADLETTERED, MissionStatus.CANCELLED}:
+            state = "blocked"
+        else:
+            state = "waiting"
+        return {
+            "id": cleaned,
+            "kind": "mission",
+            "state": state,
+            "status": status,
+            "objective": mission.objective,
+            "updated_at": mission.updated_at,
+        }
+
+    task = _linked_task_snapshot(cleaned, repo_root)
+    if task:
+        task_status = str(task.get("task_status") or "").strip().lower()
+        result_status = str(task.get("result_status") or "").strip().lower()
+        if result_status in {"blocked", "denied"} or task_status in {"failed", "cancelled"}:
+            state = "blocked"
+        elif result_status in {"pending", "needs_approval"} or task_status in {"pending", "accepted", "running"}:
+            state = "waiting"
+        elif task_status == "completed":
+            state = "resolved"
+        else:
+            state = "waiting"
+        return {
+            "id": cleaned,
+            "kind": "operation",
+            "state": state,
+            "status": task_status or result_status or "unknown",
+            "result_status": result_status,
+            "gate": str(task.get("gate") or "").strip(),
+            "approval_id": str(task.get("approval_id") or "").strip(),
+            "updated_at": str(task.get("updated_at") or task.get("created_at") or "").strip(),
+        }
+
+    return {
+        "id": cleaned,
+        "kind": "unknown",
+        "state": "missing",
+        "status": "missing",
+        "detail": "Dependency record was not found in mission or operation storage.",
+    }
+
+
+def _dependency_state(record: "MissionRecord", repo_root: Path | None = None) -> dict[str, Any]:
+    items = [
+        item
+        for item in (_dependency_item(dependency_id, record, repo_root) for dependency_id in record.dependency_ids)
+        if item
+    ]
+    unresolved = [item for item in items if str(item.get("state") or "").strip().lower() != "resolved"]
+    blocked = [item for item in unresolved if str(item.get("state") or "").strip().lower() in {"blocked", "missing"}]
+    if not unresolved:
+        status = "clear"
+    elif blocked:
+        status = "blocked"
+    else:
+        status = "waiting"
+    return {
+        "status": status,
+        "total": len(items),
+        "resolved": len(items) - len(unresolved),
+        "unresolved": len(unresolved),
+        "items": items,
+        "first_unresolved": unresolved[0] if unresolved else None,
+    }
+
+
 def _queue_sort_key(record: "MissionRecord") -> tuple[int, int, float, str]:
     status = str(record.status.value or "").strip().lower()
     status_rank = _QUEUE_STATUS_ORDER.get(status, 99)
@@ -307,7 +397,7 @@ def _queue_sort_key(record: "MissionRecord") -> tuple[int, int, float, str]:
     return (status_rank, -priority, -updated_ts, record.mission_id)
 
 
-def _queue_action(record: "MissionRecord") -> tuple[str, str, str]:
+def _queue_action(record: "MissionRecord", dependency_state: dict[str, Any] | None = None) -> tuple[str, str, str]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     status = str(record.status.value or "").strip().lower()
     last_task_id = str(meta.get("last_task_id") or "").strip()
@@ -316,6 +406,25 @@ def _queue_action(record: "MissionRecord") -> tuple[str, str, str]:
     last_task_approval_id = str(meta.get("last_task_approval_id") or "").strip()
     last_task_approval_status = str(meta.get("last_task_approval_status") or "").strip().lower()
     next_step = str(meta.get("last_task_next_step") or record.next_step or "").strip()
+
+    if status in {MissionStatus.QUEUED.value, MissionStatus.ACTIVE.value}:
+        dependency_payload = dependency_state if isinstance(dependency_state, dict) else {}
+        first_unresolved = dependency_payload.get("first_unresolved")
+        if isinstance(first_unresolved, dict):
+            dependency_id = str(first_unresolved.get("id") or "").strip()
+            dependency_kind = str(first_unresolved.get("kind") or "dependency").strip() or "dependency"
+            dependency_status = str(first_unresolved.get("status") or "unresolved").strip() or "unresolved"
+            dependency_state_value = str(first_unresolved.get("state") or "waiting").strip().lower()
+            escalation = record.escalation_path.strip()
+            hint = (
+                f"Dependency {dependency_id or 'unknown'} is {dependency_state_value} "
+                f"({dependency_kind} status {dependency_status}) before the mission can continue."
+            )
+            if escalation:
+                hint = f"{hint} Escalation: {escalation}"
+            if dependency_state_value in {"blocked", "missing"}:
+                return "resolve_dependency_blocker", hint, dependency_id
+            return "wait_for_dependency", hint, dependency_id
 
     if status == MissionStatus.BLOCKED.value:
         if last_task_gate == "approvals_gate" or last_task_result_status in {"pending", "needs_approval"}:
@@ -372,9 +481,10 @@ def _queue_action(record: "MissionRecord") -> tuple[str, str, str]:
     return "review_mission", next_step or "Mission needs operator review.", last_task_id
 
 
-def _queue_item(record: "MissionRecord") -> dict[str, Any]:
+def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[str, Any]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
-    recommended_action, operator_hint, action_target_id = _queue_action(record)
+    dependency_state = _dependency_state(record, repo_root)
+    recommended_action, operator_hint, action_target_id = _queue_action(record, dependency_state)
     return {
         "id": record.mission_id,
         "status": record.status.value,
@@ -386,6 +496,7 @@ def _queue_item(record: "MissionRecord") -> dict[str, Any]:
         "risk_tier": record.risk_tier,
         "dependency_ids": list(record.dependency_ids),
         "dependency_count": len(record.dependency_ids),
+        "dependency_state": dependency_state,
         "escalation_path": record.escalation_path,
         "linked_task_count": len(record.linked_task_ids),
         "linked_task_ids": list(record.linked_task_ids),
@@ -419,7 +530,7 @@ def mission_queue_item(
     record, err = read_mission(mission_id, repo_root)
     if not record:
         return None, None, err
-    return record, _queue_item(record), None
+    return record, _queue_item(record, repo_root), None
 
 
 @dataclass(frozen=True)
@@ -984,13 +1095,13 @@ def mission_queue_items(
     if not include_terminal:
         records = [record for record in records if record.status not in _TERMINAL_STATUSES]
     records.sort(key=_queue_sort_key)
-    return [_queue_item(record) for record in records[: max(0, int(limit))]]
+    return [_queue_item(record, repo_root) for record in records[: max(0, int(limit))]]
 
 
 def deadletter_queue_items(repo_root: Path | None = None, *, limit: int = 50) -> list[dict[str, Any]]:
     records = list_missions(repo_root, limit=10_000, status=MissionStatus.DEADLETTERED.value)
     records.sort(key=lambda record: (-_parse_ts(record.updated_at), record.mission_id))
-    return [_queue_item(record) for record in records[: max(0, int(limit))]]
+    return [_queue_item(record, repo_root) for record in records[: max(0, int(limit))]]
 
 
 def run_queue_once(

@@ -138,6 +138,26 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               owner_id: "owner.blocked",
               dependency_ids: ["dep_policy", "dep_trust"],
               dependency_count: 2,
+              dependency_state: {
+                status: "blocked",
+                total: 2,
+                resolved: 1,
+                unresolved: 1,
+                first_unresolved: {
+                  id: "dep_trust",
+                  kind: "unknown",
+                  state: "missing",
+                  status: "missing",
+                },
+                items: [
+                  {
+                    id: "dep_trust",
+                    kind: "unknown",
+                    state: "missing",
+                    status: "missing",
+                  },
+                ],
+              },
               escalation_path: "Raise trust or reduce scope.",
               recommended_action: "raise_trust_or_reduce_risk",
               latest_activity: {
@@ -261,6 +281,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.owner_id, "owner.blocked");
     assert.deepEqual(worldState.overview?.mission_queue?.[0]?.dependency_ids, ["dep_policy", "dep_trust"]);
     assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_count, 2);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_state?.status, "blocked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_state?.first_unresolved?.id, "dep_trust");
     assert.equal(worldState.overview?.mission_queue?.[0]?.escalation_path, "Raise trust or reduce scope.");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");

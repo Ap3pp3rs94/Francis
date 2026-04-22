@@ -5495,7 +5495,15 @@ function SystemPanel(props: {
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {missionQueue.slice(0, 4).map((item) => {
                 const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
+                const queueTargetIsMission = queueTargetId.startsWith("msn_");
+                const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
                 const latestActivity = latestActivitySummary(item.latest_activity);
+                const dependencyState = item.dependency_state;
+                const dependencyStatus = safeString(dependencyState?.status).trim();
+                const firstDependency = dependencyState?.first_unresolved;
+                const dependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(
+                  safeString(item.recommended_action).trim(),
+                );
                 return (
                   <div
                     key={`mission-queue-${item.id}`}
@@ -5511,6 +5519,17 @@ function SystemPanel(props: {
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       {item.operator_hint || item.next_step || "Mission queue item needs operator review."}
                     </div>
+                    {dependencyState && Number(dependencyState.total ?? 0) > 0 ? (
+                      <div style={{ fontSize: 11, color: dependencyAction ? "#ffcf9d" : THEME.muted, marginTop: 4 }}>
+                        dependencies=<code>{String(dependencyState.resolved ?? 0)}/{String(dependencyState.total ?? 0)}</code>
+                        {" / "}state=<code>{dependencyStatus || "unknown"}</code>
+                        {firstDependency?.id ? (
+                          <>
+                            {" / "}next=<code>{firstDependency.id}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       priority=<code>{String(item.priority ?? 0)}</code>
                       {" / "}risk=<code>{item.risk_tier || "unknown"}</code>
@@ -5535,16 +5554,27 @@ function SystemPanel(props: {
                       <button
                         style={buttonStyle}
                         onClick={() => void advanceMission(item.id)}
-                        disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy}
+                        disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy || dependencyAction}
                       >
-                        {missionActionBusy === "advance" && missionActionTargetId === item.id ? "Advancing." : "Advance once"}
+                        {dependencyAction
+                          ? dependencyStatus === "blocked"
+                            ? "Dependency blocked"
+                            : "Waiting on dependency"
+                          : missionActionBusy === "advance" && missionActionTargetId === item.id
+                            ? "Advancing."
+                            : "Advance once"}
                       </button>
                       <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                         Inspect mission flow
                       </button>
-                      {queueTargetId ? (
-                        <button style={buttonStyle} onClick={() => props.onOpenOperation(queueTargetId)}>
-                          Open linked task
+                      {queueTargetId && (queueTargetIsMission || queueTargetIsOperation) ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            queueTargetIsMission ? inspectMission(queueTargetId) : props.onOpenOperation(queueTargetId)
+                          }
+                        >
+                          {queueTargetIsMission ? "Open dependency mission" : "Open linked task"}
                         </button>
                       ) : null}
                     </div>

@@ -301,6 +301,26 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           recommended_action: "raise_trust_or_reduce_risk",
           action_target_id: "tsk_blocked",
           operator_hint: "Mission requires operator intervention.",
+          dependency_state: {
+            status: "blocked",
+            total: 2,
+            resolved: 1,
+            unresolved: 1,
+            first_unresolved: {
+              id: "msn_dependency",
+              kind: "mission",
+              state: "blocked",
+              status: "failed",
+            },
+            items: [
+              {
+                id: "msn_dependency",
+                kind: "mission",
+                state: "blocked",
+                status: "failed",
+              },
+            ],
+          },
         },
       ],
       deadletter: [],
@@ -368,6 +388,10 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.processed, 3);
     assert.equal(response.counts?.blocked, 1);
     assert.equal(response.items[0]?.recommended_action, "raise_trust_or_reduce_risk");
+    assert.equal(response.items[0]?.dependency_state?.status, "blocked");
+    assert.equal(response.items[0]?.dependency_state?.unresolved, 1);
+    assert.equal(response.items[0]?.dependency_state?.first_unresolved?.id, "msn_dependency");
+    assert.equal(response.items[0]?.dependency_state?.items?.[0]?.kind, "mission");
     assert.equal(response.results?.[0]?.mission_id, "mission_ready");
     assert.equal(response.results?.[0]?.operation_id, "tsk_ready");
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");

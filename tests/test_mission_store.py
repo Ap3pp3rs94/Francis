@@ -76,6 +76,58 @@ def test_mission_context_fields_are_typed_and_legacy_records_remain_readable(tmp
     assert legacy.escalation_path == ""
 
 
+def test_mission_queue_waits_for_unresolved_dependency_before_first_operation(tmp_path: Path) -> None:
+    dependency, err = mission_store.create_mission(
+        MissionCreateRequest(
+            objective="Prepare the prerequisite evidence.",
+            requester_id="test.mission.store",
+            status=MissionStatus.ACTIVE,
+        ),
+        repo_root=tmp_path,
+    )
+    assert err is None
+    assert dependency is not None
+
+    mission, err = mission_store.create_mission(
+        MissionCreateRequest(
+            objective="Advance only after prerequisite evidence exists.",
+            requester_id="test.mission.store",
+            dependency_ids=[dependency.mission_id],
+            escalation_path="Ask the operator whether to deadletter or replace the dependency.",
+        ),
+        repo_root=tmp_path,
+    )
+    assert err is None
+    assert mission is not None
+
+    _, queue_item, err = mission_store.mission_queue_item(mission.mission_id, repo_root=tmp_path)
+    assert err is None
+    assert queue_item is not None
+    assert queue_item["recommended_action"] == "wait_for_dependency"
+    assert queue_item["action_target_id"] == dependency.mission_id
+    assert queue_item["dependency_state"]["status"] == "waiting"
+    assert queue_item["dependency_state"]["unresolved"] == 1
+    assert queue_item["dependency_state"]["first_unresolved"]["id"] == dependency.mission_id
+    assert "Escalation:" in queue_item["operator_hint"]
+
+    completed_dependency, err = mission_store.update_mission(
+        dependency.mission_id,
+        repo_root=tmp_path,
+        status=MissionStatus.COMPLETED,
+        actor="test.mission.store",
+        note="dependency satisfied",
+    )
+    assert err is None
+    assert completed_dependency is not None
+
+    _, ready_item, err = mission_store.mission_queue_item(mission.mission_id, repo_root=tmp_path)
+    assert err is None
+    assert ready_item is not None
+    assert ready_item["recommended_action"] == "create_first_operation"
+    assert ready_item["dependency_state"]["status"] == "clear"
+    assert ready_item["dependency_state"]["resolved"] == 1
+
+
 def test_record_linked_task_transition_surfaces_exact_pending_approval(tmp_path: Path) -> None:
     mission, err = mission_store.create_mission(
         MissionCreateRequest(

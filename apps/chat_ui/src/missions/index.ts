@@ -22,6 +22,28 @@ export type MissionRecord = {
   meta?: Record<string, unknown>;
 };
 
+export type MissionDependencyItem = {
+  id?: string;
+  kind?: string;
+  state?: string;
+  status?: string;
+  result_status?: string;
+  gate?: string;
+  approval_id?: string;
+  objective?: string;
+  detail?: string;
+  updated_at?: string;
+};
+
+export type MissionDependencyState = {
+  status?: string;
+  total?: number;
+  resolved?: number;
+  unresolved?: number;
+  items?: MissionDependencyItem[];
+  first_unresolved?: MissionDependencyItem;
+};
+
 export type MissionHistoryEntry = {
   ts?: string;
   mission_id?: string;
@@ -115,6 +137,7 @@ export type MissionQueueItem = MissionRecord & {
   recommended_action?: string;
   action_target_id?: string;
   operator_hint?: string;
+  dependency_state?: MissionDependencyState;
   last_task_id?: string;
   last_task_status?: string;
   last_task_result_status?: string;
@@ -320,6 +343,37 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
   return record;
 }
 
+function parseMissionDependencyItem(raw: unknown): MissionDependencyItem | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    id: safeString(raw.id, "") || undefined,
+    kind: safeString(raw.kind, "") || undefined,
+    state: safeString(raw.state, "") || undefined,
+    status: safeString(raw.status, "") || undefined,
+    result_status: safeString(raw.result_status, "") || undefined,
+    gate: safeString(raw.gate, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    objective: safeString(raw.objective, "") || undefined,
+    detail: safeString(raw.detail, "") || undefined,
+    updated_at: safeString(raw.updated_at, "") || undefined,
+  };
+}
+
+function parseMissionDependencyState(raw: unknown): MissionDependencyState | undefined {
+  if (!isRecord(raw)) return undefined;
+  const items = Array.isArray(raw.items)
+    ? raw.items.map(parseMissionDependencyItem).filter((item): item is MissionDependencyItem => item !== undefined)
+    : [];
+  return {
+    status: safeString(raw.status, "") || undefined,
+    total: safeNumber(raw.total, 0),
+    resolved: safeNumber(raw.resolved, 0),
+    unresolved: safeNumber(raw.unresolved, 0),
+    items,
+    first_unresolved: parseMissionDependencyItem(raw.first_unresolved),
+  };
+}
+
 function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
   const record = parseMissionRecord(raw);
   if (!record || !isRecord(raw)) return record;
@@ -329,6 +383,7 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     recommended_action: safeString(raw.recommended_action, "") || undefined,
     action_target_id: safeString(raw.action_target_id, "") || undefined,
     operator_hint: safeString(raw.operator_hint, "") || undefined,
+    dependency_state: parseMissionDependencyState(raw.dependency_state),
     last_task_id: safeString(raw.last_task_id, "") || undefined,
     last_task_status: safeString(raw.last_task_status, "") || undefined,
     last_task_result_status: safeString(raw.last_task_result_status, "") || undefined,

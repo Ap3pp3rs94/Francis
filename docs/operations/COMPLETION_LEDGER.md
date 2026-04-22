@@ -86,6 +86,11 @@ These fields are preserved through the mission store, API, world-state
 snapshots, and ORB composer/inspector surfaces, so operators can see who owns a
 mission, what it depends on, and how blocked work should be escalated.
 
+As of `2026-04-22`, mission queue recommendations are dependency-aware. Queued
+or active missions with unresolved `dependency_ids` now report a bounded
+dependency state and wait for the dependency instead of creating or running
+linked work prematurely.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -97,6 +102,26 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is dependency-aware mission queue gating. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by preventing
+declared dependencies from becoming passive metadata:
+
+- `src/francis/missions/store.py` now projects dependency state for mission and
+  operation dependency ids, including resolved, waiting, blocked, missing, and
+  self-dependency cases.
+- Queue recommendations now return `wait_for_dependency` or
+  `resolve_dependency_blocker` for queued/active missions whose dependencies are
+  not clear, so `/missions/run_once` does not create fake progress before the
+  dependency is satisfied.
+- `apps/chat_ui/src/missions/index.ts`,
+  `apps/chat_ui/src/settings/index.ts`, and `apps/chat_ui/src/App.tsx` now
+  preserve and render dependency-state evidence in ORB mission queue surfaces.
+- `tests/test_mission_store.py`, `tests/test_api_missions.py`,
+  `apps/chat_ui/src/missions/index.test.ts`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove unresolved dependencies
+  block auto-advance and completed dependencies make the mission actionable.
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 3 line is the mission context contract. This advances the active
@@ -848,6 +873,23 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 dependency-aware mission queue slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_mission_store.py tests/test_api_missions.py -q`
+  Result: `passed`
+- `python -m ruff check src/francis/missions/store.py tests/test_mission_store.py tests/test_api_missions.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="MissionsClient|SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-21` Stage 3 mission context contract slice:
 

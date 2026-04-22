@@ -702,6 +702,76 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     assert ready_item["last_advance_action"] == "create_first_operation"
 
 
+def test_mission_run_once_waits_for_unresolved_dependencies(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    dependency = client.post(
+        "/missions/create",
+        json={
+            "objective": "Finish prerequisite evidence",
+            "summary": "The dependent mission should not move before this is complete.",
+            "requester_id": "test.missions.dependencies",
+            "status": "active",
+            "priority": 1,
+        },
+    )
+    assert dependency.status_code == 200
+    dependency_id = str(dependency.json()["mission_id"])
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Only advance after the dependency is complete",
+            "summary": "Queue runner must not fake progress while the dependency is waiting.",
+            "requester_id": "test.missions.dependencies",
+            "dependency_ids": [dependency_id],
+            "escalation_path": "Ask the operator whether to deadletter or replace the dependency.",
+            "priority": 9,
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    first_run = client.post("/missions/run_once", json={"actor": "test.missions.dependencies", "limit": 10})
+    assert first_run.status_code == 200
+    first_body = first_run.json()
+    assert first_body["ok"] is True
+    assert first_body["advanced"] == 0
+    dependent_result = next(item for item in first_body["results"] if item["mission_id"] == mission_id)
+    assert dependent_result["applied"] is False
+    assert dependent_result["action"] == "wait_for_dependency"
+    assert dependent_result["operation_id"] == dependency_id
+    assert "Dependency" in dependent_result["message"]
+    dependent_queue_item = next(item for item in first_body["items"] if item["id"] == mission_id)
+    assert dependent_queue_item["recommended_action"] == "wait_for_dependency"
+    assert dependent_queue_item["dependency_state"]["status"] == "waiting"
+    assert dependent_queue_item["dependency_state"]["first_unresolved"]["id"] == dependency_id
+
+    completed = client.patch(
+        f"/missions/{dependency_id}",
+        json={"status": "completed", "actor": "test.missions.dependencies", "note": "dependency satisfied"},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["mission"]["status"] == "completed"
+
+    second_run = client.post("/missions/run_once", json={"actor": "test.missions.dependencies", "limit": 10})
+    assert second_run.status_code == 200
+    second_body = second_run.json()
+    assert second_body["ok"] is True
+    assert second_body["advanced"] == 1
+    advanced_result = next(item for item in second_body["results"] if item["mission_id"] == mission_id)
+    assert advanced_result["applied"] is True
+    assert advanced_result["action"] == "create_first_operation"
+    assert advanced_result["operation_id"]
+
+
 def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
