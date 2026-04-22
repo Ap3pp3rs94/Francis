@@ -553,6 +553,18 @@ function parseJsonObjectInput(value: string): { ok: true; parsed: Record<string,
   }
 }
 
+function parseDelimitedIds(value: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of safeString(value).split(/[\n,]+/)) {
+    const cleaned = item.trim();
+    if (!cleaned || seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    out.push(cleaned);
+  }
+  return out;
+}
+
 type ApprovalInspection = {
   domain: string;
   risk: string;
@@ -4881,6 +4893,24 @@ function SystemPanel(props: {
                   </>
                 ) : null}
               </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                owner=<code>{selectedMission.owner_id || selectedMission.requester_id || "unset"}</code>
+                {" / "}dependencies=<code>{String(selectedMission.dependency_count ?? selectedMission.dependency_ids?.length ?? 0)}</code>
+                {selectedMission.escalation_path ? (
+                  <>
+                    {" / "}escalation=<code>{selectedMission.escalation_path}</code>
+                  </>
+                ) : null}
+              </div>
+              {selectedMission.dependency_ids && selectedMission.dependency_ids.length > 0 ? (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  {selectedMission.dependency_ids.slice(0, 4).map((dependencyId) => (
+                    <span key={`mission-dependency-${selectedMission.id}-${dependencyId}`} style={badgeStyle("dependency")}>
+                      dependency <code>{dependencyId}</code>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {safeString(selectedMissionMeta.last_task_reason).trim() ? (
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{safeString(selectedMissionMeta.last_task_reason).trim()}</div>
               ) : null}
@@ -6451,6 +6481,9 @@ function OperationsPanel(props: {
   const [composerDomain, setComposerDomain] = useState("");
   const [composerMissionSummary, setComposerMissionSummary] = useState("Declared from the operations console so the ORB can carry the work across queue, governance, execution, and continuity.");
   const [composerMissionNextStep, setComposerMissionNextStep] = useState("Inspect the created task, satisfy any approval gate, and run the first bounded execution step.");
+  const [composerMissionOwner, setComposerMissionOwner] = useState("chat_ui.operations");
+  const [composerMissionDependencies, setComposerMissionDependencies] = useState("");
+  const [composerMissionEscalation, setComposerMissionEscalation] = useState("Review in the ORB mission inspector, then deadletter or adjust scope if the blocker cannot be cleared.");
   const [composerCreateMission, setComposerCreateMission] = useState(true);
   const [composerPriority, setComposerPriority] = useState("5");
   const [composerRiskTier, setComposerRiskTier] = useState("medium");
@@ -6662,8 +6695,11 @@ function OperationsPanel(props: {
             summary: safeString(composerMissionSummary).trim(),
             next_step: safeString(composerMissionNextStep).trim(),
             requester_id: "chat_ui.operations",
+            owner_id: safeString(composerMissionOwner).trim() || "chat_ui.operations",
             priority: Math.max(1, Math.min(9, Number.parseInt(composerPriority, 10) || 5)),
             risk_tier: safeString(composerRiskTier).trim() || "medium",
+            dependency_ids: parseDelimitedIds(composerMissionDependencies),
+            escalation_path: safeString(composerMissionEscalation).trim(),
           });
           if (!missionResponse.ok || !safeString(missionResponse.mission_id).trim()) {
             setComposerNotice({
@@ -6759,7 +6795,10 @@ function OperationsPanel(props: {
       composerCreateMission,
       composerDomain,
       composerInputText,
+      composerMissionDependencies,
+      composerMissionEscalation,
       composerMissionNextStep,
+      composerMissionOwner,
       composerMissionSummary,
       composerObjective,
       composerPriority,
@@ -6960,6 +6999,34 @@ function OperationsPanel(props: {
               <textarea
                 value={composerMissionNextStep}
                 onChange={(e) => setComposerMissionNextStep(e.target.value)}
+                rows={3}
+                style={{ ...inputStyle, resize: "vertical" }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 11, color: THEME.muted }}>Owner</span>
+              <input
+                value={composerMissionOwner}
+                onChange={(e) => setComposerMissionOwner(e.target.value)}
+                placeholder="chat_ui.operations"
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 11, color: THEME.muted }}>Dependencies</span>
+              <textarea
+                value={composerMissionDependencies}
+                onChange={(e) => setComposerMissionDependencies(e.target.value)}
+                rows={3}
+                placeholder="one dependency id per line or comma-separated"
+                style={{ ...inputStyle, resize: "vertical" }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 11, color: THEME.muted }}>Escalation path</span>
+              <textarea
+                value={composerMissionEscalation}
+                onChange={(e) => setComposerMissionEscalation(e.target.value)}
                 rows={3}
                 style={{ ...inputStyle, resize: "vertical" }}
               />

@@ -80,6 +80,12 @@ record, loop-state handoff, and compact continuity evidence counts, so the ORB
 mission queue summary can show what changed and what should happen next without
 implying hidden autonomy or requiring a full detail reload for every row.
 
+As of `2026-04-21`, mission records now carry explicit context fields for
+continuity handoff: `owner_id`, `dependency_ids`, and `escalation_path`.
+These fields are preserved through the mission store, API, world-state
+snapshots, and ORB composer/inspector surfaces, so operators can see who owns a
+mission, what it depends on, and how blocked work should be escalated.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -91,6 +97,26 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-21`, the highest-confidence surface newly advanced in the current
+Stage 3 line is the mission context contract. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making mission
+continuity data explicit instead of inferred from loose text:
+
+- `src/francis/missions/store.py` now stores typed `owner_id`,
+  `dependency_ids`, and `escalation_path` fields, records continuity updates,
+  and keeps legacy mission records readable with bounded defaults.
+- `src/francis/api/routes/missions.py` and
+  `src/francis/world_state/snapshot.py` now expose those fields through mission
+  reads, mutation responses, queue payloads, and recent mission summaries.
+- `apps/chat_ui/src/App.tsx`, `apps/chat_ui/src/missions/index.ts`, and
+  `apps/chat_ui/src/settings/index.ts` now preserve and render mission owner,
+  dependency, and escalation context in the ORB composer, mission inspector, and
+  briefing parsers.
+- `tests/test_mission_store.py`, `tests/test_api_missions.py`,
+  `apps/chat_ui/src/missions/index.test.ts`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the contract survives
+  create, update, readback, parsing, and legacy-record paths.
 
 As of `2026-04-21`, the highest-confidence surface newly advanced in the current
 Stage 3 line is mission queue-run handoff continuity. This advances the active
@@ -822,6 +848,23 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-21` Stage 3 mission context contract slice:
+
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_mission_store.py tests/test_api_missions.py -q`
+  Result: `passed`
+- `python -m ruff check src/francis/missions/store.py src/francis/api/routes/missions.py src/francis/world_state/snapshot.py tests/test_mission_store.py tests/test_api_missions.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui && npm test -- --test-name-pattern="MissionsClient|SettingsClient"`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-21` Stage 3 mission readiness slice:
 

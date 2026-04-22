@@ -8,8 +8,12 @@ export type MissionRecord = {
   summary?: string;
   next_step?: string;
   requester_id?: string;
+  owner_id?: string;
   priority?: number;
   risk_tier?: string;
+  dependency_ids?: string[];
+  dependency_count?: number;
+  escalation_path?: string;
   linked_task_ids?: string[];
   linked_task_count?: number;
   deadletter_reason?: string;
@@ -84,8 +88,11 @@ export type MissionCreateRequest = {
   summary?: string;
   next_step?: string;
   requester_id?: string;
+  owner_id?: string;
   priority?: number;
   risk_tier?: string;
+  dependency_ids?: string[];
+  escalation_path?: string;
   status?: string;
   linked_task_ids?: string[];
   meta?: Record<string, unknown>;
@@ -296,8 +303,12 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
     summary: safeString(raw.summary, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
     requester_id: safeString(raw.requester_id, "") || undefined,
+    owner_id: safeString(raw.owner_id, "") || undefined,
     priority: safeNumber(raw.priority, 0) || undefined,
     risk_tier: safeString(raw.risk_tier, "") || undefined,
+    dependency_ids: safeStringArray(raw.dependency_ids),
+    dependency_count: safeNumber(raw.dependency_count, 0) || undefined,
+    escalation_path: safeString(raw.escalation_path, "") || undefined,
     linked_task_ids: safeStringArray(raw.linked_task_ids),
     linked_task_count: safeNumber(raw.linked_task_count, 0) || undefined,
     deadletter_reason: safeString(raw.deadletter_reason, "") || undefined,

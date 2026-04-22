@@ -20,6 +20,9 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
             "summary": "Mission declared for the first real Stage 3 slice.",
             "next_step": "Link an operation and advance the mission state.",
             "requester_id": "test.missions",
+            "owner_id": "stage3.owner",
+            "dependency_ids": ["approval_policy", "workspace_ready", "approval_policy"],
+            "escalation_path": "Escalate to operator review if the linked operation blocks.",
             "risk_tier": "high",
         },
     )
@@ -28,8 +31,14 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert created_body["ok"] is True
     mission_id = str(created_body["mission_id"])
     assert created_body["history"][0]["event"] == "created"
+    assert created_body["history"][0]["details"]["owner_id"] == "stage3.owner"
+    assert created_body["history"][0]["details"]["dependency_count"] == 2
     assert created_body["loop_state"]["active_stage"] == "plan"
     assert created_body["loop_state"]["handoff"]["action"] == "link_operation"
+    assert created_body["mission"]["owner_id"] == "stage3.owner"
+    assert created_body["mission"]["dependency_ids"] == ["approval_policy", "workspace_ready"]
+    assert created_body["mission"]["dependency_count"] == 2
+    assert created_body["mission"]["escalation_path"] == "Escalate to operator review if the linked operation blocks."
 
     listed = client.get("/missions/list")
     assert listed.status_code == 200
@@ -54,6 +63,9 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
         json={
             "status": "active",
             "next_step": "Review the linked operation and capture follow-up work.",
+            "owner_id": "stage3.reviewer",
+            "dependency_ids": ["approval_policy"],
+            "escalation_path": "Deadletter if the operation cannot produce a receipt.",
             "add_task_ids": [operation_id],
             "actor": "test.missions",
             "note": "Mission picked up for execution.",
@@ -66,6 +78,10 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert patched_body["mission"]["status"] == "active"
     assert patched_body["mission"]["linked_task_ids"] == [operation_id]
     assert patched_body["mission"]["linked_task_count"] == 1
+    assert patched_body["mission"]["owner_id"] == "stage3.reviewer"
+    assert patched_body["mission"]["dependency_ids"] == ["approval_policy"]
+    assert patched_body["mission"]["dependency_count"] == 1
+    assert patched_body["mission"]["escalation_path"] == "Deadletter if the operation cannot produce a receipt."
     assert patched_body["mission"]["meta"]["source"] == "integration_test"
     assert patched_body["linked_operations"][0]["operation"]["id"] == operation_id
     assert patched_body["loop_state"]["active_stage"] == "execute"
@@ -75,6 +91,10 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert "status_changed" in history_events
     assert "task_links_updated" in history_events
     assert "continuity_updated" in history_events
+    continuity_event = [item for item in patched_body["history"] if item.get("event") == "continuity_updated"][-1]
+    assert continuity_event["details"]["owner_id"] == "stage3.reviewer"
+    assert continuity_event["details"]["dependency_ids"] == ["approval_policy"]
+    assert continuity_event["details"]["escalation_path"] == "Deadletter if the operation cannot produce a receipt."
 
     deadlettered = client.patch(
         f"/missions/{mission_id}",
@@ -100,6 +120,9 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert fetched_body["ok"] is True
     assert fetched_body["mission"]["id"] == mission_id
     assert fetched_body["mission"]["linked_task_ids"] == [operation_id]
+    assert fetched_body["mission"]["owner_id"] == "stage3.reviewer"
+    assert fetched_body["mission"]["dependency_ids"] == ["approval_policy"]
+    assert fetched_body["mission"]["escalation_path"] == "Deadletter if the operation cannot produce a receipt."
     assert fetched_body["mission"]["deadletter_reason"] == "approval_timeout"
     fetched_events = [str(item.get("event")) for item in fetched_body["history"]]
     assert fetched_events.count("status_changed") >= 2

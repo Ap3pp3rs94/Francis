@@ -53,6 +53,10 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
           status: "queued",
           objective: "Carry the first governed request",
           next_step: "Inspect linked task",
+          owner_id: "owner.alpha",
+          dependency_ids: ["dep_one", "dep_two"],
+          dependency_count: 2,
+          escalation_path: "Review with operator if blocked.",
           linked_task_ids: ["tsk_alpha"],
           linked_task_count: 1,
         },
@@ -71,6 +75,10 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
     assert.equal(response.limit, 25);
     assert.equal(response.items.length, 1);
     assert.equal(response.items[0]?.id, "mission_alpha");
+    assert.equal(response.items[0]?.owner_id, "owner.alpha");
+    assert.deepEqual(response.items[0]?.dependency_ids, ["dep_one", "dep_two"]);
+    assert.equal(response.items[0]?.dependency_count, 2);
+    assert.equal(response.items[0]?.escalation_path, "Review with operator if blocked.");
     assert.equal(response.items[0]?.linked_task_ids?.[0], "tsk_alpha");
   } finally {
     restoreFetch();
@@ -99,6 +107,10 @@ test("MissionsClient.create posts a mission declaration and preserves the return
         summary: "Created from the UI composer.",
         next_step: "Run the linked task once it exists.",
         requester_id: "chat_ui.operations",
+        owner_id: "owner.beta",
+        dependency_ids: ["dep_beta"],
+        dependency_count: 1,
+        escalation_path: "Deadletter if the first operation cannot be linked.",
       },
       history: [{ ts: "2026-04-21T19:40:00+00:00", mission_id: "mission_beta", event: "created" }],
       linked_operations: [],
@@ -122,6 +134,9 @@ test("MissionsClient.create posts a mission declaration and preserves the return
         summary: "Created from the UI composer.",
         next_step: "Run the linked task once it exists.",
         requester_id: "chat_ui.operations",
+        owner_id: "owner.beta",
+        dependency_ids: ["dep_beta"],
+        escalation_path: "Deadletter if the first operation cannot be linked.",
       },
       { timeoutMs: 50 },
     );
@@ -135,6 +150,9 @@ test("MissionsClient.create posts a mission declaration and preserves the return
           summary: "Created from the UI composer.",
           next_step: "Run the linked task once it exists.",
           requester_id: "chat_ui.operations",
+          owner_id: "owner.beta",
+          dependency_ids: ["dep_beta"],
+          escalation_path: "Deadletter if the first operation cannot be linked.",
         },
       },
     ]);
@@ -144,6 +162,10 @@ test("MissionsClient.create posts a mission declaration and preserves the return
     assert.equal(response.message, "created");
     assert.equal(response.mission?.id, "mission_beta");
     assert.equal(response.mission?.requester_id, "chat_ui.operations");
+    assert.equal(response.mission?.owner_id, "owner.beta");
+    assert.deepEqual(response.mission?.dependency_ids, ["dep_beta"]);
+    assert.equal(response.mission?.dependency_count, 1);
+    assert.equal(response.mission?.escalation_path, "Deadletter if the first operation cannot be linked.");
     assert.equal(response.history?.[0]?.event, "created");
     assert.equal(response.loop_state?.active_stage, "plan");
     assert.equal(response.loop_state?.handoff?.action, "link_operation");

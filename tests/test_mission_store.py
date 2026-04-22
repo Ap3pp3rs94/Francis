@@ -13,6 +13,69 @@ def _write_task_record(repo_root: Path, task_id: str, payload: dict[str, object]
     (task_dir / "record.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def test_mission_context_fields_are_typed_and_legacy_records_remain_readable(tmp_path: Path) -> None:
+    mission, err = mission_store.create_mission(
+        MissionCreateRequest(
+            objective="Carry explicit mission context.",
+            requester_id="test.mission.store",
+            owner_id="owner.alpha",
+            dependency_ids=["dep_one", "dep_two", "dep_one"],
+            escalation_path="Review with the operator before retrying.",
+        ),
+        repo_root=tmp_path,
+    )
+    assert err is None
+    assert mission is not None
+    assert mission.owner_id == "owner.alpha"
+    assert mission.dependency_ids == ["dep_one", "dep_two"]
+    assert mission.escalation_path == "Review with the operator before retrying."
+
+    updated, err = mission_store.update_mission(
+        mission.mission_id,
+        repo_root=tmp_path,
+        owner_id="owner.beta",
+        dependency_ids=["dep_two"],
+        escalation_path="Deadletter if dependency dep_two remains blocked.",
+        actor="test.mission.store",
+        note="tighten explicit context",
+    )
+    assert err is None
+    assert updated is not None
+    assert updated.owner_id == "owner.beta"
+    assert updated.dependency_ids == ["dep_two"]
+    assert updated.escalation_path == "Deadletter if dependency dep_two remains blocked."
+
+    history = mission_store.read_history(mission.mission_id, repo_root=tmp_path)
+    continuity_event = [item for item in history if item.get("event") == "continuity_updated"][-1]
+    assert continuity_event["details"]["owner_id"] == "owner.beta"
+    assert continuity_event["details"]["dependency_ids"] == ["dep_two"]
+    assert continuity_event["details"]["escalation_path"] == "Deadletter if dependency dep_two remains blocked."
+
+    legacy_id = "msn_legacy_context"
+    legacy_dir = tmp_path / "data" / "missions" / legacy_id
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "mission_id": legacy_id,
+                "created_at": "2026-04-21T00:00:00+00:00",
+                "updated_at": "2026-04-21T00:00:00+00:00",
+                "status": "queued",
+                "objective": "Legacy record without context fields",
+                "requester_id": "legacy.requester",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    legacy, err = mission_store.read_mission(legacy_id, repo_root=tmp_path)
+    assert err is None
+    assert legacy is not None
+    assert legacy.owner_id == "legacy.requester"
+    assert legacy.dependency_ids == []
+    assert legacy.escalation_path == ""
+
+
 def test_record_linked_task_transition_surfaces_exact_pending_approval(tmp_path: Path) -> None:
     mission, err = mission_store.create_mission(
         MissionCreateRequest(

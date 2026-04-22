@@ -202,8 +202,12 @@ export type WorldStateMissionSummary = {
   summary?: string;
   next_step?: string;
   requester_id?: string;
+  owner_id?: string;
   priority?: number;
   risk_tier?: string;
+  dependency_ids?: string[];
+  dependency_count?: number;
+  escalation_path?: string;
   linked_task_ids?: string[];
   linked_task_count?: number;
   deadletter_reason?: string;
@@ -226,8 +230,12 @@ export type WorldStateMissionQueueItem = {
   objective?: string;
   summary?: string;
   next_step?: string;
+  owner_id?: string;
   priority?: number;
   risk_tier?: string;
+  dependency_ids?: string[];
+  dependency_count?: number;
+  escalation_path?: string;
   linked_task_count?: number;
   linked_task_ids?: string[];
   last_task_id?: string;
@@ -1077,8 +1085,12 @@ function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary |
     summary: safeString(raw.summary, ""),
     next_step: safeString(raw.next_step, ""),
     requester_id: safeString(raw.requester_id, ""),
+    owner_id: safeString(raw.owner_id, ""),
     priority: safeNumber(raw.priority, 0),
     risk_tier: safeString(raw.risk_tier, ""),
+    dependency_ids: safeStringArray(raw.dependency_ids),
+    dependency_count: safeNumber(raw.dependency_count, 0),
+    escalation_path: safeString(raw.escalation_path, ""),
     linked_task_ids: Array.isArray(raw.linked_task_ids)
       ? raw.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
       : [],
@@ -1197,8 +1209,12 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         objective: safeString(item.objective, ""),
         summary: safeString(item.summary, ""),
         next_step: safeString(item.next_step, ""),
+        owner_id: safeString(item.owner_id, ""),
         priority: safeNumber(item.priority, 0),
         risk_tier: safeString(item.risk_tier, ""),
+        dependency_ids: safeStringArray(item.dependency_ids),
+        dependency_count: safeNumber(item.dependency_count, 0),
+        escalation_path: safeString(item.escalation_path, ""),
         linked_task_count: safeNumber(item.linked_task_count, 0),
         linked_task_ids: Array.isArray(item.linked_task_ids)
           ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
@@ -1223,8 +1239,12 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         objective: safeString(item.objective, ""),
         summary: safeString(item.summary, ""),
         next_step: safeString(item.next_step, ""),
+        owner_id: safeString(item.owner_id, ""),
         priority: safeNumber(item.priority, 0),
         risk_tier: safeString(item.risk_tier, ""),
+        dependency_ids: safeStringArray(item.dependency_ids),
+        dependency_count: safeNumber(item.dependency_count, 0),
+        escalation_path: safeString(item.escalation_path, ""),
         linked_task_count: safeNumber(item.linked_task_count, 0),
         linked_task_ids: Array.isArray(item.linked_task_ids)
           ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)

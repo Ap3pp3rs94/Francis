@@ -381,8 +381,12 @@ def _queue_item(record: "MissionRecord") -> dict[str, Any]:
         "objective": record.objective,
         "summary": record.summary,
         "next_step": record.next_step,
+        "owner_id": record.owner_id,
         "priority": int(record.priority or 0),
         "risk_tier": record.risk_tier,
+        "dependency_ids": list(record.dependency_ids),
+        "dependency_count": len(record.dependency_ids),
+        "escalation_path": record.escalation_path,
         "linked_task_count": len(record.linked_task_ids),
         "linked_task_ids": list(record.linked_task_ids),
         "last_task_id": str(meta.get("last_task_id") or "").strip(),
@@ -425,8 +429,11 @@ class MissionCreateRequest:
     status: MissionStatus = MissionStatus.QUEUED
     summary: str = ""
     next_step: str = ""
+    owner_id: str = ""
     priority: int = 5
     risk_tier: str = "medium"
+    dependency_ids: list[str] = field(default_factory=list)
+    escalation_path: str = ""
     linked_task_ids: list[str] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
 
@@ -441,8 +448,11 @@ class MissionRecord:
     requester_id: str
     summary: str = ""
     next_step: str = ""
+    owner_id: str = ""
     priority: int = 5
     risk_tier: str = "medium"
+    dependency_ids: list[str] = field(default_factory=list)
+    escalation_path: str = ""
     linked_task_ids: list[str] = field(default_factory=list)
     deadletter_reason: str | None = None
     meta: dict[str, Any] = field(default_factory=dict)
@@ -450,6 +460,7 @@ class MissionRecord:
     def to_json_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["status"] = self.status.value
+        data["dependency_ids"] = _normalize_task_ids(self.dependency_ids)
         data["linked_task_ids"] = _normalize_task_ids(self.linked_task_ids)
         return data
 
@@ -464,8 +475,11 @@ class MissionRecord:
             requester_id=str(data.get("requester_id") or "api"),
             summary=str(data.get("summary") or ""),
             next_step=str(data.get("next_step") or ""),
+            owner_id=str(data.get("owner_id") or data.get("requester_id") or "api"),
             priority=int(data.get("priority") or 5),
             risk_tier=str(data.get("risk_tier") or "medium"),
+            dependency_ids=_normalize_task_ids(list(data.get("dependency_ids") or [])),
+            escalation_path=str(data.get("escalation_path") or ""),
             linked_task_ids=_normalize_task_ids(list(data.get("linked_task_ids") or [])),
             deadletter_reason=(str(data.get("deadletter_reason")) if data.get("deadletter_reason") else None),
             meta=dict(data.get("meta") or {}) if isinstance(data.get("meta"), dict) else {},
@@ -491,8 +505,11 @@ def create_mission(
         requester_id=str(request.requester_id or "api").strip() or "api",
         summary=str(request.summary or "").strip(),
         next_step=str(request.next_step or "").strip(),
+        owner_id=str(request.owner_id or request.requester_id or "api").strip() or "api",
         priority=max(1, min(int(request.priority), 9)),
         risk_tier=str(request.risk_tier or "medium").strip() or "medium",
+        dependency_ids=_normalize_task_ids(request.dependency_ids),
+        escalation_path=str(request.escalation_path or "").strip(),
         linked_task_ids=_normalize_task_ids(request.linked_task_ids),
         meta=dict(request.meta or {}),
     )
@@ -508,6 +525,9 @@ def create_mission(
                 "status": record.status.value,
                 "objective": record.objective,
                 "next_step": record.next_step or None,
+                "owner_id": record.owner_id or None,
+                "dependency_count": len(record.dependency_ids),
+                "escalation_path": record.escalation_path or None,
                 "linked_task_count": len(record.linked_task_ids),
             },
             repo_root,
@@ -589,6 +609,9 @@ def update_mission(
     status: MissionStatus | str | None = None,
     summary: str | None = None,
     next_step: str | None = None,
+    owner_id: str | None = None,
+    dependency_ids: list[str] | None = None,
+    escalation_path: str | None = None,
     add_task_ids: list[str] | None = None,
     remove_task_ids: list[str] | None = None,
     deadletter_reason: str | None = None,
@@ -624,6 +647,24 @@ def update_mission(
         if cleaned_next_step != record.next_step:
             record.next_step = cleaned_next_step
             changes["next_step"] = record.next_step
+
+    if owner_id is not None:
+        cleaned_owner_id = str(owner_id or "").strip()
+        if cleaned_owner_id != record.owner_id:
+            record.owner_id = cleaned_owner_id
+            changes["owner_id"] = record.owner_id
+
+    if dependency_ids is not None:
+        cleaned_dependency_ids = _normalize_task_ids(dependency_ids)
+        if cleaned_dependency_ids != record.dependency_ids:
+            record.dependency_ids = cleaned_dependency_ids
+            changes["dependency_ids"] = list(record.dependency_ids)
+
+    if escalation_path is not None:
+        cleaned_escalation_path = str(escalation_path or "").strip()
+        if cleaned_escalation_path != record.escalation_path:
+            record.escalation_path = cleaned_escalation_path
+            changes["escalation_path"] = record.escalation_path
 
     if deadletter_reason is not None:
         cleaned_reason = str(deadletter_reason or "").strip() or None
@@ -689,7 +730,16 @@ def update_mission(
         continuity_changes = {
             key: value
             for key, value in changes.items()
-            if key in {"summary", "next_step", "deadletter_reason", "meta_keys"}
+            if key
+            in {
+                "summary",
+                "next_step",
+                "owner_id",
+                "dependency_ids",
+                "escalation_path",
+                "deadletter_reason",
+                "meta_keys",
+            }
         }
         if continuity_changes:
             _append_history(

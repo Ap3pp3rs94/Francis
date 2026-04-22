@@ -119,6 +119,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
             {
               id: "mission_alpha",
               status: "queued",
+              owner_id: "owner.alpha",
+              dependency_ids: ["dep_one"],
+              dependency_count: 1,
+              escalation_path: "Review with operator if blocked.",
               latest_activity: {
                 source: "run_ledger",
                 name: "created",
@@ -131,6 +135,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
             {
               id: "mission_blocked",
               status: "blocked",
+              owner_id: "owner.blocked",
+              dependency_ids: ["dep_policy", "dep_trust"],
+              dependency_count: 2,
+              escalation_path: "Raise trust or reduce scope.",
               recommended_action: "raise_trust_or_reduce_risk",
               latest_activity: {
                 source: "run_ledger",
@@ -242,10 +250,18 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.counts?.queued_tasks, 3);
     assert.equal(worldState.paths.data?.path, "C:/Francis/data");
     assert.equal(worldState.overview?.recent_missions?.[0]?.id, "mission_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.owner_id, "owner.alpha");
+    assert.deepEqual(worldState.overview?.recent_missions?.[0]?.dependency_ids, ["dep_one"]);
+    assert.equal(worldState.overview?.recent_missions?.[0]?.dependency_count, 1);
+    assert.equal(worldState.overview?.recent_missions?.[0]?.escalation_path, "Review with operator if blocked.");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.name, "created");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.status, "queued");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.owner_id, "owner.blocked");
+    assert.deepEqual(worldState.overview?.mission_queue?.[0]?.dependency_ids, ["dep_policy", "dep_trust"]);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_count, 2);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.escalation_path, "Raise trust or reduce scope.");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");

@@ -49,8 +49,12 @@ def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, 
         "summary": record.summary,
         "next_step": record.next_step,
         "requester_id": record.requester_id,
+        "owner_id": record.owner_id,
         "priority": record.priority,
         "risk_tier": record.risk_tier,
+        "dependency_ids": list(record.dependency_ids),
+        "dependency_count": len(record.dependency_ids),
+        "escalation_path": record.escalation_path,
         "linked_task_ids": list(record.linked_task_ids),
         "linked_task_count": len(record.linked_task_ids),
         "deadletter_reason": record.deadletter_reason,
@@ -484,8 +488,11 @@ class MissionCreateIn(BaseModel):
     summary: str = ""
     next_step: str = ""
     requester_id: str = "api"
+    owner_id: str = ""
     priority: int = 5
     risk_tier: str = "medium"
+    dependency_ids: list[str] = Field(default_factory=list)
+    escalation_path: str = ""
     status: str = "queued"
     linked_task_ids: list[str] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -495,6 +502,9 @@ class MissionPatchIn(BaseModel):
     status: str | None = None
     summary: str | None = None
     next_step: str | None = None
+    owner_id: str | None = None
+    dependency_ids: list[str] | None = None
+    escalation_path: str | None = None
     add_task_ids: list[str] = Field(default_factory=list)
     remove_task_ids: list[str] = Field(default_factory=list)
     deadletter_reason: str | None = None
@@ -538,8 +548,11 @@ def create_mission(payload: MissionCreateIn) -> dict[str, object]:
                 summary=payload.summary,
                 next_step=payload.next_step,
                 requester_id=payload.requester_id,
+                owner_id=payload.owner_id,
                 priority=max(1, min(int(payload.priority), 9)),
                 risk_tier=payload.risk_tier,
+                dependency_ids=payload.dependency_ids,
+                escalation_path=payload.escalation_path,
                 status=payload.status.strip().lower(),
                 linked_task_ids=payload.linked_task_ids,
                 meta=dict(payload.meta or {}),
@@ -696,6 +709,9 @@ def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]
             status=payload.status.strip().lower() if payload.status else None,
             summary=payload.summary,
             next_step=payload.next_step,
+            owner_id=payload.owner_id,
+            dependency_ids=payload.dependency_ids,
+            escalation_path=payload.escalation_path,
             add_task_ids=payload.add_task_ids,
             remove_task_ids=payload.remove_task_ids,
             deadletter_reason=payload.deadletter_reason,
