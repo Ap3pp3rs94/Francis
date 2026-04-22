@@ -747,12 +747,16 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert queue_items
     assert queue_items[0]["id"] == blocked_id
     assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert queue_items[0]["advance"]["eligible"] is False
+    assert queue_items[0]["advance"]["action"] == "raise_trust_or_reduce_risk"
     assert queue_items[0]["latest_activity"]["source"] == "run_ledger"
     assert queue_items[0]["latest_activity"]["name"] == "governance_hold"
     assert queue_items[0]["latest_activity"]["status"] == "blocked"
     assert queue_items[0]["latest_activity"]["gate"] == "trust_gate"
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "create_first_operation"
+    assert ready_item["advance"]["eligible"] is True
+    assert ready_item["advance"]["action"] == "create_first_operation"
     assert ready_item["latest_activity"] == {}
     deadletter_items = body["overview"]["deadletter_missions"]
     assert deadletter_items
@@ -849,6 +853,8 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
 
     focus_item = next(item for item in body["overview"]["mission_briefing"]["focus"] if item["id"] == blocked_id)
     assert focus_item["recommended_action"] == "review_pending_approval"
+    assert focus_item["advance"]["eligible"] is False
+    assert focus_item["advance"]["action"] == "review_pending_approval"
     assert focus_item["last_task_approval_id"] == approval_id
     assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."
 
@@ -1044,6 +1050,8 @@ def test_system_world_state_projects_mission_briefing_and_advance_receipts(monke
     assert focus[0]["latest_activity"]["status"] == "blocked"
     queued_focus = next(item for item in focus if item["id"] == queued_id)
     assert queued_focus["recommended_action"] == "run_linked_operation"
+    assert queued_focus["advance"]["eligible"] is True
+    assert queued_focus["advance"]["action"] == "run_linked_operation"
     assert queued_focus["last_advance_action"] == "create_first_operation"
     assert queued_focus["last_advance_applied"] is True
     assert queued_focus["latest_activity"]["source"] == "run_ledger"

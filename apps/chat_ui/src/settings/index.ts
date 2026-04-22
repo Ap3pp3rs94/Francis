@@ -246,6 +246,13 @@ export type WorldStateMissionDependencyState = {
   first_unresolved?: WorldStateMissionDependencyItem;
 };
 
+export type WorldStateMissionAdvanceProjection = {
+  eligible?: boolean;
+  action?: string;
+  target_id?: string;
+  reason?: string;
+};
+
 export type WorldStateMissionQueueItem = {
   id: string;
   status?: string;
@@ -271,6 +278,7 @@ export type WorldStateMissionQueueItem = {
   recommended_action?: string;
   operator_hint?: string;
   action_target_id?: string;
+  advance?: WorldStateMissionAdvanceProjection;
   deadletter_reason?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
@@ -435,6 +443,7 @@ export type ContinuityBriefingFocusItem = {
   recommended_action?: string;
   operator_hint?: string;
   action_target_id?: string;
+  advance?: WorldStateMissionAdvanceProjection;
   last_task_id?: string;
   last_task_status?: string;
   last_task_result_status?: string;
@@ -1296,6 +1305,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
+        advance: parseWorldStateMissionAdvanceProjection(item.advance),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
@@ -1330,6 +1340,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
+        advance: parseWorldStateMissionAdvanceProjection(item.advance),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
@@ -1557,6 +1568,18 @@ function parseNumberMap(raw: unknown): Record<string, number> {
   return out;
 }
 
+function parseWorldStateMissionAdvanceProjection(raw: unknown): WorldStateMissionAdvanceProjection | undefined {
+  if (!isRecord(raw)) return undefined;
+  const projection: WorldStateMissionAdvanceProjection = {
+    eligible: safeBoolean(raw["eligible"], false),
+    action: safeString(raw["action"], ""),
+    target_id: safeString(raw["target_id"], ""),
+    reason: safeString(raw["reason"], ""),
+  };
+  if (!projection.eligible && !projection.action && !projection.target_id && !projection.reason) return undefined;
+  return projection;
+}
+
 function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw["id"], "").trim();
@@ -1578,6 +1601,7 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     recommended_action: safeString(raw["recommended_action"], ""),
     operator_hint: safeString(raw["operator_hint"], ""),
     action_target_id: safeString(raw["action_target_id"], ""),
+    advance: parseWorldStateMissionAdvanceProjection(raw["advance"]),
     last_task_id: safeString(raw["last_task_id"], ""),
     last_task_status: safeString(raw["last_task_status"], ""),
     last_task_result_status: safeString(raw["last_task_result_status"], ""),

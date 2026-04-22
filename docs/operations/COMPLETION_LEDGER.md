@@ -113,6 +113,11 @@ existing bounded mission-advance path. The UI exposes this only for
 `create_first_operation` and `run_linked_operation`; dependency and approval
 blockers remain review-only and do not trigger mutation from the briefing card.
 
+As of `2026-04-22`, mission queue and continuity briefing records now carry an
+explicit `advance` projection. Ready items identify bounded advance eligibility
+from the mission store contract, while dependency, approval, trust, and other
+operator-required blockers remain ineligible and explain why.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -124,6 +129,25 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is explicit mission advance eligibility for Shift Briefing. This
+advances the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line
+by making actionability a backend contract instead of a UI string heuristic:
+
+- `src/francis/missions/store.py` now emits an `advance` projection on mission
+  queue items with `eligible`, `action`, `target_id`, and `reason` fields.
+- `src/francis/missions/runtime.py` now reuses the store's
+  `AUTO_ADVANCE_ACTIONS`, so the queue runner and exposed contract share the
+  same bounded action set.
+- `src/francis/world_state/snapshot.py`,
+  `apps/chat_ui/src/settings/index.ts`, and `apps/chat_ui/src/App.tsx` now carry
+  that projection into Shift Briefing and render advance controls only when
+  `advance.eligible` is true.
+- `tests/test_mission_store.py`, `tests/test_api_continuity.py`,
+  `tests/test_api_system_settings.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove ready missions are
+  eligible while dependency and approval blockers remain non-mutating.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is bounded Shift Briefing actionability. This advances the active
@@ -951,6 +975,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 explicit briefing advance contract slice:
+
+- `python -m pytest tests/test_mission_store.py tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `31 passed`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `16 passed`
+- `python -m ruff check src/francis/missions/store.py src/francis/missions/runtime.py src/francis/world_state/snapshot.py tests/test_mission_store.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 bounded Shift Briefing actionability slice:
 

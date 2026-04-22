@@ -4326,9 +4326,10 @@ function SystemPanel(props: {
               const firstDependencyId = safeString(firstDependency?.id).trim() || dependencyIds[0] || "";
               const recommendedAction = safeString(item.recommended_action).trim();
               const dependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(recommendedAction);
-              const briefingAdvanceAction = ["create_first_operation", "run_linked_operation"].includes(recommendedAction);
+              const advanceAction = safeString(item.advance?.action).trim();
+              const briefingAdvanceAction = item.advance?.eligible === true;
               const briefingAdvanceLabel =
-                recommendedAction === "create_first_operation" ? "Create operation" : "Advance once";
+                advanceAction === "create_first_operation" ? "Create operation" : "Advance once";
               const escalationPath = safeString(item.escalation_path).trim();
               const approvalId = safeString(item.last_task_approval_id).trim();
               const approvalStatus = safeString(item.last_task_approval_status).trim();

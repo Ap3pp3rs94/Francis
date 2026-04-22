@@ -1074,6 +1074,7 @@ def _mission_briefing(
                 "recommended_action": str(item.get("recommended_action") or "").strip(),
                 "operator_hint": str(item.get("operator_hint") or "").strip(),
                 "action_target_id": str(item.get("action_target_id") or "").strip(),
+                "advance": dict(item.get("advance") or {}) if isinstance(item.get("advance"), dict) else {},
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),

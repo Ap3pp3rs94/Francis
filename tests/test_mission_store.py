@@ -105,6 +105,9 @@ def test_mission_queue_waits_for_unresolved_dependency_before_first_operation(tm
     assert queue_item is not None
     assert queue_item["recommended_action"] == "wait_for_dependency"
     assert queue_item["action_target_id"] == dependency.mission_id
+    assert queue_item["advance"]["eligible"] is False
+    assert queue_item["advance"]["action"] == "wait_for_dependency"
+    assert queue_item["advance"]["target_id"] == dependency.mission_id
     assert queue_item["dependency_state"]["status"] == "waiting"
     assert queue_item["dependency_state"]["unresolved"] == 1
     assert queue_item["dependency_state"]["first_unresolved"]["id"] == dependency.mission_id
@@ -124,6 +127,8 @@ def test_mission_queue_waits_for_unresolved_dependency_before_first_operation(tm
     assert err is None
     assert ready_item is not None
     assert ready_item["recommended_action"] == "create_first_operation"
+    assert ready_item["advance"]["eligible"] is True
+    assert ready_item["advance"]["action"] == "create_first_operation"
     assert ready_item["dependency_state"]["status"] == "clear"
     assert ready_item["dependency_state"]["resolved"] == 1
 
@@ -163,6 +168,8 @@ def test_record_linked_task_transition_surfaces_exact_pending_approval(tmp_path:
     assert err is None
     assert queue_item is not None
     assert queue_item["recommended_action"] == "review_pending_approval"
+    assert queue_item["advance"]["eligible"] is False
+    assert queue_item["advance"]["action"] == "review_pending_approval"
     assert queue_item["last_task_approval_id"] == "apr_exact_123"
     assert queue_item["last_task_previous_approval_id"] == "apr_old_122"
     assert queue_item["last_task_approval_status"] == "pending"

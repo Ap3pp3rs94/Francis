@@ -513,6 +513,9 @@ def test_continuity_briefing_surfaces_dependency_blocker_context(monkeypatch, tm
     assert focus["id"] == dependent_id
     assert focus["recommended_action"] == "wait_for_dependency"
     assert focus["action_target_id"] == dependency_id
+    assert focus["advance"]["eligible"] is False
+    assert focus["advance"]["action"] == "wait_for_dependency"
+    assert focus["advance"]["target_id"] == dependency_id
     assert focus["dependency_ids"] == [dependency_id]
     assert focus["dependency_count"] == 1
     assert focus["dependency_state"]["status"] == "waiting"
@@ -693,6 +696,9 @@ def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch
 
     focus_item = next(item for item in body["briefing"]["focus"] if item["id"] == blocked_id)
     assert focus_item["recommended_action"] == "review_pending_approval"
+    assert focus_item["advance"]["eligible"] is False
+    assert focus_item["advance"]["action"] == "review_pending_approval"
+    assert focus_item["advance"]["target_id"] == operation_id
     assert focus_item["last_task_approval_id"] == approval_id
     assert focus_item["last_task_approval_status"] == "pending"
     assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."

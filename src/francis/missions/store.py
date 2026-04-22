@@ -13,6 +13,7 @@ from typing import Any
 from francis.kernel.paths import data_dir
 
 __all__ = [
+    "AUTO_ADVANCE_ACTIONS",
     "MissionStatus",
     "MissionCreateRequest",
     "MissionRecord",
@@ -73,6 +74,7 @@ _QUEUE_STATUS_ORDER = {
     MissionStatus.CANCELLED.value: 9,
     MissionStatus.DEADLETTERED.value: 10,
 }
+AUTO_ADVANCE_ACTIONS = frozenset({"create_first_operation", "run_linked_operation"})
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 
 
@@ -481,6 +483,23 @@ def _queue_action(record: "MissionRecord", dependency_state: dict[str, Any] | No
     return "review_mission", next_step or "Mission needs operator review.", last_task_id
 
 
+def _advance_projection(recommended_action: str, action_target_id: str, operator_hint: str) -> dict[str, Any]:
+    action = str(recommended_action or "").strip()
+    target_id = str(action_target_id or "").strip()
+    eligible = action in AUTO_ADVANCE_ACTIONS
+    reason = (
+        "Mission queue item is eligible for one bounded advance through the governed mission runtime."
+        if eligible
+        else str(operator_hint or "").strip() or "Mission requires operator review before it can advance."
+    )
+    return {
+        "eligible": eligible,
+        "action": action,
+        "target_id": target_id,
+        "reason": reason,
+    }
+
+
 def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[str, Any]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     dependency_state = _dependency_state(record, repo_root)
@@ -518,6 +537,7 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "recommended_action": recommended_action,
         "operator_hint": operator_hint,
         "action_target_id": action_target_id,
+        "advance": _advance_projection(recommended_action, action_target_id, operator_hint),
         "deadletter_reason": record.deadletter_reason,
         "updated_at": record.updated_at,
     }

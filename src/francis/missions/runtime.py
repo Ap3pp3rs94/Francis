@@ -5,8 +5,6 @@ from typing import Any
 import francis.missions.store as mission_store
 from francis.operations import runtime as operations_runtime
 
-_AUTO_ADVANCE_ACTIONS = {"create_first_operation", "run_linked_operation"}
-
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -204,7 +202,7 @@ def run_queue_once(
         if not mission_id:
             continue
         action = _safe_str(item.get("recommended_action")).strip() or "review_mission"
-        if action not in _AUTO_ADVANCE_ACTIONS:
+        if action not in mission_store.AUTO_ADVANCE_ACTIONS:
             results.append(
                 {
                     "mission_id": mission_id,

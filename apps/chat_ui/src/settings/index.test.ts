@@ -160,6 +160,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               },
               escalation_path: "Raise trust or reduce scope.",
               recommended_action: "raise_trust_or_reduce_risk",
+              advance: {
+                eligible: false,
+                action: "raise_trust_or_reduce_risk",
+                target_id: "tsk_blocked",
+                reason: "A linked task is blocked by trust posture.",
+              },
               last_task_approval_id: "apr_queue_exact",
               last_task_previous_approval_id: "apr_queue_previous",
               last_task_approval_status: "pending",
@@ -290,6 +296,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_id, "apr_queue_exact");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_previous_approval_id, "apr_queue_previous");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_status, "pending");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.eligible, false);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.action, "raise_trust_or_reduce_risk");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.target_id, "tsk_blocked");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
@@ -697,6 +706,12 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               },
               escalation_path: "Ask the operator whether to replace or deadletter the dependency.",
               recommended_action: "resume",
+              advance: {
+                eligible: false,
+                action: "resume",
+                target_id: "msn_dependency",
+                reason: "Dependency msn_dependency is waiting before the mission can continue.",
+              },
               last_task_approval_id: "apr_focus_exact",
               last_task_previous_approval_id: "apr_focus_previous",
               last_task_approval_status: "pending",
@@ -865,6 +880,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_id, "apr_focus_exact");
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_previous_approval_id, "apr_focus_previous");
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_status, "pending");
+    assert.equal(briefing.briefing?.focus?.[0]?.advance?.eligible, false);
+    assert.equal(briefing.briefing?.focus?.[0]?.advance?.action, "resume");
+    assert.equal(briefing.briefing?.focus?.[0]?.advance?.target_id, "msn_dependency");
     assert.equal(briefing.briefing?.observer?.counts?.active, 1);
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.id, "task_runtime");
     assert.equal(briefing.briefing?.observer?.probes?.[1]?.status, "attention");
