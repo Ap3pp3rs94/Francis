@@ -724,3 +724,101 @@ def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch
     assert recent_item["last_task_gate"] == "approvals_gate"
     assert recent_item["last_task_approval_id"] == approval_id
     assert recent_item["last_task_approval_status"] == "pending"
+
+
+def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linkage(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/reviewable",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Approval-bound deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    trust = client.post("/trust/set", json={"level": 6, "reason": "allow deadletter approval continuity test"})
+    assert trust.status_code == 200
+    assert trust.json()["ok"] is True
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Deadletter preview should keep pending approval linkage.",
+            "summary": "Approval-backed deadletter review should keep the exact approval target.",
+            "priority": 8,
+            "requester_id": "test.continuity.deadletter_approval_projection",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "continuity deadletter approval projection",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    pending = client.post(
+        f"/operations/{operation_id}/run",
+        json={"worker_id": "test.continuity.deadletter_approval_projection"},
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    deadlettered = client.post(
+        f"/missions/{mission_id}/deadletter",
+        json={
+            "reason": "operator_declined_pending_approval",
+            "actor": "test.continuity.deadletter_approval_projection",
+            "note": "verify deadletter approval continuity projection",
+        },
+    )
+    assert deadlettered.status_code == 200
+    assert deadlettered.json()["ok"] is True
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    deadletter_item = next(item for item in body["briefing"]["deadletter_preview"] if item["id"] == mission_id)
+    assert deadletter_item["recommended_action"] == "review_deadletter"
+    assert deadletter_item["last_task_id"] == operation_id
+    assert deadletter_item["last_task_gate"] == "approvals_gate"
+    assert deadletter_item["last_task_approval_id"] == approval_id
+    assert deadletter_item["last_task_approval_status"] == "pending"

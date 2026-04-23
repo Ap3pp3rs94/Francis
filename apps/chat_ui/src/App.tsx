@@ -4542,6 +4542,8 @@ function SystemPanel(props: {
                     const updatedAt = mixedLocaleTime(item.updated_at);
                     const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                     const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
+                    const approvalId = safeString(item.last_task_approval_id).trim();
+                    const approvalStatus = safeString(item.last_task_approval_status).trim();
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4578,6 +4580,16 @@ function SystemPanel(props: {
                         {item.last_task_gate ? (
                           <>
                             {" / "}gate=<code>{item.last_task_gate}</code>
+                          </>
+                        ) : null}
+                        {approvalId ? (
+                          <>
+                            {" / "}approval=<code>{approvalId}</code>
+                          </>
+                        ) : null}
+                        {approvalStatus ? (
+                          <>
+                            {" / "}approval_status=<code>{approvalStatus}</code>
                           </>
                         ) : null}
                       </div>
@@ -4637,6 +4649,19 @@ function SystemPanel(props: {
                         </div>
                       ) : null}
                       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+                        {approvalId ? (
+                          <button
+                            style={buttonStyle}
+                            onClick={() =>
+                              props.onOpenApprovals(approvalId, {
+                                missionId: item.id,
+                                operationId: safeString(item.last_task_id).trim() || undefined,
+                              })
+                            }
+                          >
+                            Review approval
+                          </button>
+                        ) : null}
                         {item.last_task_id ? (
                           <button style={buttonStyle} onClick={() => props.onOpenOperation(item.last_task_id || "")}>
                             Open last task
@@ -6135,6 +6160,8 @@ function SystemPanel(props: {
                 const updatedAt = mixedLocaleTime(item.updated_at);
                 const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                 const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
+                const approvalId = safeString(item.last_task_approval_id).trim();
+                const approvalStatus = safeString(item.last_task_approval_status).trim();
                 return (
                   <div
                     key={`mission-deadletter-${item.id}`}
@@ -6154,6 +6181,16 @@ function SystemPanel(props: {
                       {updatedAt ? (
                         <>
                           {" / "}updated=<code>{updatedAt}</code>
+                        </>
+                      ) : null}
+                      {approvalId ? (
+                        <>
+                          {" / "}approval=<code>{approvalId}</code>
+                        </>
+                      ) : null}
+                      {approvalStatus ? (
+                        <>
+                          {" / "}approval_status=<code>{approvalStatus}</code>
                         </>
                       ) : null}
                     </div>
@@ -6213,6 +6250,19 @@ function SystemPanel(props: {
                       </div>
                     ) : null}
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+                      {approvalId ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            props.onOpenApprovals(approvalId, {
+                              missionId: item.id,
+                              operationId: safeString(item.last_task_id).trim() || undefined,
+                            })
+                          }
+                        >
+                          Review approval
+                        </button>
+                      ) : null}
                       {item.last_task_id ? (
                         <button style={buttonStyle} onClick={() => props.onOpenOperation(item.last_task_id || "")}>
                           Open last task

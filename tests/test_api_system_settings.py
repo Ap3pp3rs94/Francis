@@ -865,6 +865,102 @@ def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(
     assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."
 
 
+def test_system_world_state_deadletter_preview_preserves_pending_approval_linkage(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/reviewable",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Approval-bound deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    trust = client.post("/trust/set", json={"level": 6, "reason": "allow deadletter approval world-state test"})
+    assert trust.status_code == 200
+    assert trust.json()["ok"] is True
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "World state deadletter should keep pending approval linkage.",
+            "summary": "Deadletter review should point back to the exact pending approval.",
+            "priority": 8,
+            "requester_id": "test.system.deadletter_approval_projection",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "world state deadletter approval projection",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    pending = client.post(
+        f"/operations/{operation_id}/run", json={"worker_id": "test.system.deadletter_approval_projection"}
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    deadlettered = client.post(
+        f"/missions/{mission_id}/deadletter",
+        json={"reason": "operator_declined_pending_approval", "actor": "test.system.deadletter_approval_projection"},
+    )
+    assert deadlettered.status_code == 200
+    assert deadlettered.json()["ok"] is True
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    deadletter_item = next(item for item in body["overview"]["deadletter_missions"] if item["id"] == mission_id)
+    assert deadletter_item["recommended_action"] == "review_deadletter"
+    assert deadletter_item["last_task_id"] == operation_id
+    assert deadletter_item["last_task_gate"] == "approvals_gate"
+    assert deadletter_item["last_task_approval_id"] == approval_id
+    assert deadletter_item["last_task_approval_status"] == "pending"
+
+    deadletter_preview_item = next(
+        item for item in body["overview"]["mission_briefing"]["deadletter_preview"] if item["id"] == mission_id
+    )
+    assert deadletter_preview_item["recommended_action"] == "review_deadletter"
+    assert deadletter_preview_item["last_task_id"] == operation_id
+    assert deadletter_preview_item["last_task_gate"] == "approvals_gate"
+    assert deadletter_preview_item["last_task_approval_id"] == approval_id
+    assert deadletter_preview_item["last_task_approval_status"] == "pending"
+
+
 def test_system_world_state_surfaces_exact_action_context_for_industrial_pending_approval(
     monkeypatch, tmp_path: Path
 ) -> None:

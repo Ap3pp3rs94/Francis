@@ -49,6 +49,9 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         last_task_status: "blocked",
         last_task_result_status: "failed",
         last_task_gate: "approvals_gate",
+        last_task_approval_id: "apr_dead_old",
+        last_task_previous_approval_id: "apr_dead_prev",
+        last_task_approval_status: "pending",
         history_count: 4,
         latest_history_event: "continuity_updated",
         latest_history_ts: "2026-04-22T09:00:00+00:00",
@@ -93,6 +96,9 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.last_task_status, "blocked");
   assert.equal(presentation.ordered[2]?.last_task_result_status, "failed");
   assert.equal(presentation.ordered[2]?.last_task_gate, "approvals_gate");
+  assert.equal(presentation.ordered[2]?.last_task_approval_id, "apr_dead_old");
+  assert.equal(presentation.ordered[2]?.last_task_previous_approval_id, "apr_dead_prev");
+  assert.equal(presentation.ordered[2]?.last_task_approval_status, "pending");
   assert.equal(presentation.ordered[2]?.history_count, 4);
   assert.equal(presentation.ordered[2]?.latest_history_event, "continuity_updated");
   assert.equal(presentation.ordered[2]?.latest_history_ts, "2026-04-22T09:00:00+00:00");
@@ -256,6 +262,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               objective: "Deadlettered mission with persisted receipts",
               recommended_action: "review_deadletter",
               deadletter_reason: "manual_cleanup",
+              last_task_approval_id: "apr_dead_exact",
+              last_task_previous_approval_id: "apr_dead_previous",
+              last_task_approval_status: "pending",
               history_count: 3,
               latest_history_event: "continuity_updated",
               latest_history_ts: "2026-04-14T08:05:00Z",
@@ -394,6 +403,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.action, "raise_trust_or_reduce_risk");
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.target_id, "tsk_blocked");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_id, "apr_dead_exact");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_status, "pending");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.history_count, 3);
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_event, "continuity_updated");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_ts, "2026-04-14T08:05:00Z");
@@ -1101,6 +1113,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             last_task_status: "accepted",
             last_task_result_status: "blocked",
             last_task_gate: "approvals_gate",
+            last_task_approval_id: "apr_dead_exact",
+            last_task_previous_approval_id: "apr_dead_previous",
+            last_task_approval_status: "pending",
             history_count: 5,
             latest_history_event: "continuity_updated",
             latest_history_ts: "2026-04-14T08:01:00Z",
@@ -1145,6 +1160,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_status, "accepted");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_result_status, "blocked");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_gate, "approvals_gate");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_id, "apr_dead_exact");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_status, "pending");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.history_count, 5);
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_event, "continuity_updated");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_ts, "2026-04-14T08:01:00Z");

@@ -194,6 +194,24 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter approval-link recovery routing. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by keeping
+deadletter review attached to the exact governed approval target when a mission
+is deadlettered while approval is still pending:
+
+- `apps/chat_ui/src/settings/index.ts` now preserves deadletter approval linkage
+  through the continuity parser and shared deadletter presentation contract,
+  instead of dropping `last_task_approval_id`, previous approval lineage, and
+  approval status on the continuity path.
+- `apps/chat_ui/src/App.tsx` now renders exact approval id/status on both
+  deadletter card surfaces and routes `Review approval` directly into the
+  existing approval inspector with mission/task return context.
+- `tests/test_api_continuity.py`,
+  `tests/test_api_system_settings.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove that deadletter review
+  preserves the pending approval target from snapshot to UI contract.
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter receipt narrative clarity. This advances the active
 `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by reducing the last
 manual reconstruction step in bounded deadletter review while preserving the raw
@@ -1204,6 +1222,19 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 deadletter approval-link recovery routing slice:
+
+- `python -m pytest tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `29 passed`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 deadletter receipt narrative clarity slice:
 

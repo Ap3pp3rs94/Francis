@@ -493,6 +493,9 @@ export type ContinuityBriefingDeadletterItem = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_approval_status?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -612,6 +615,9 @@ type MissionDeadletterLike = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_approval_status?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -631,6 +637,9 @@ export type MissionDeadletterPresentationItem = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_approval_status?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -1040,6 +1049,9 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
           last_task_status: safeString(item.last_task_status, "").trim() || undefined,
           last_task_result_status: safeString(item.last_task_result_status, "").trim() || undefined,
           last_task_gate: safeString(item.last_task_gate, "").trim() || undefined,
+          last_task_approval_id: safeString(item.last_task_approval_id, "").trim() || undefined,
+          last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, "").trim() || undefined,
+          last_task_approval_status: safeString(item.last_task_approval_status, "").trim() || undefined,
           history_count: safeNumber(item.history_count, 0),
           latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
           latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,
@@ -1909,6 +1921,9 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     last_task_status: safeString(raw["last_task_status"], ""),
     last_task_result_status: safeString(raw["last_task_result_status"], ""),
     last_task_gate: safeString(raw["last_task_gate"], ""),
+    last_task_approval_id: safeString(raw["last_task_approval_id"], ""),
+    last_task_previous_approval_id: safeString(raw["last_task_previous_approval_id"], ""),
+    last_task_approval_status: safeString(raw["last_task_approval_status"], ""),
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),
     latest_history_ts: safeString(raw["latest_history_ts"], ""),
