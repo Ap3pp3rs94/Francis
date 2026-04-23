@@ -123,6 +123,13 @@ surface also preserve and use that `advance` projection. Queue cards now disable
 mutation from `advance.eligible` instead of only checking dependency action
 strings.
 
+As of `2026-04-22`, mission detail responses and the selected mission inspector
+now share the same queue actionability contract. The mission detail API includes
+the current `queue_item` projection, the chat UI parser preserves it, and the
+selected mission advance control disables or labels mutation from
+`queue_item.advance.eligible` instead of offering an unconditional advance
+button.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -134,6 +141,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission inspector advance contract parity. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by bringing
+the selected mission detail surface under the same explicit actionability
+contract as the queue and briefing surfaces:
+
+- `src/francis/api/routes/missions.py` now includes `queue_item` in mission
+  detail projections and reuses that projection for `GET /missions/{id}`.
+- `apps/chat_ui/src/missions/index.ts` now parses `queue_item` on mission
+  detail, create, and advance response envelopes.
+- `apps/chat_ui/src/App.tsx` now renders selected mission action posture from
+  `queue_item.advance` and disables mutation for dependency, approval, trust,
+  completion-review, and other non-eligible states.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove mission detail payloads carry ready/review-required queue
+  actionability through the API and browser parser.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is mission queue advance contract parity. This advances the active
@@ -994,6 +1018,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 mission inspector advance contract parity slice:
+
+- `python -m pytest tests/test_api_missions.py -q`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test -- missions/index.test.ts`
+  Result: `16 passed`
+- `python -m ruff check src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 explicit briefing advance contract slice:
 

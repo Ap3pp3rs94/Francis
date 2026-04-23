@@ -102,6 +102,7 @@ export type MissionDetail = {
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
   loop_state?: MissionLoopState;
+  queue_item?: MissionQueueItem;
   error?: string;
 };
 
@@ -136,6 +137,7 @@ export type MissionCreateResponse = {
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
   loop_state?: MissionLoopState;
+  queue_item?: MissionQueueItem;
   message?: string;
   error?: string;
 };
@@ -174,6 +176,7 @@ export type MissionAdvanceResponse = {
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
   loop_state?: MissionLoopState;
+  queue_item?: MissionQueueItem;
   status?: string;
   message?: string;
   error?: string;
@@ -561,13 +564,14 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
     linked_operations,
     run_ledger,
     loop_state: parseMissionLoopState(json.loop_state),
+    queue_item: parseMissionQueueItem(json.queue_item),
     error: safeString(json.error, "") || undefined,
   };
 }
 
 function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""): Pick<
   MissionDetail,
-  "history" | "linked_operations" | "run_ledger" | "loop_state"
+  "history" | "linked_operations" | "run_ledger" | "loop_state" | "queue_item"
 > {
   const parsed = parseMissionDetail(json, missionId);
   return {
@@ -575,6 +579,7 @@ function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""):
     linked_operations: parsed.linked_operations,
     run_ledger: parsed.run_ledger,
     loop_state: parsed.loop_state,
+    queue_item: parsed.queue_item,
   };
 }
 

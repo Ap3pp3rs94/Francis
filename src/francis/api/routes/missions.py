@@ -454,11 +454,13 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
     linked_operations = _linked_operation_details(record, log_limit=log_limit)
     history = mission_store.read_history(record.mission_id)
     run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
+    _, queue_item, _ = mission_store.mission_queue_item(record.mission_id)
     return {
         "history": history,
         "linked_operations": linked_operations,
         "run_ledger": run_ledger,
         "loop_state": _mission_loop_state(record, linked_operations, run_ledger, history),
+        "queue_item": queue_item or {},
     }
 
 
@@ -683,16 +685,10 @@ def get_mission(mission_id: str) -> dict[str, object]:
         record, err = mission_store.read_mission(mission_id)
         if not record:
             return {"ok": False, "error": err or "not_found"}
-        linked_operations = _linked_operation_details(record)
-        history = mission_store.read_history(mission_id)
-        run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
         return {
             "ok": True,
             "mission": _serialize_mission(record),
-            "history": history,
-            "linked_operations": linked_operations,
-            "run_ledger": run_ledger,
-            "loop_state": _mission_loop_state(record, linked_operations, run_ledger, history),
+            **_mission_detail_projection(record),
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

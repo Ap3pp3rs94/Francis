@@ -3433,6 +3433,18 @@ function SystemPanel(props: {
             : "This mission is currently in a steady state. Review continuity and linked traces before changing course.";
   const selectedMissionLatestTaskId =
     selectedMission?.linked_task_ids?.find((taskId) => safeString(taskId).trim().length > 0) ?? "";
+  const selectedMissionQueueItem = missionDetail?.mission?.id === selectedMission?.id ? missionDetail.queue_item : undefined;
+  const selectedMissionRecommendedAction = safeString(selectedMissionQueueItem?.recommended_action).trim();
+  const selectedMissionDependencyState = selectedMissionQueueItem?.dependency_state;
+  const selectedMissionDependencyStatus = safeString(selectedMissionDependencyState?.status).trim();
+  const selectedMissionDependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(
+    selectedMissionRecommendedAction,
+  );
+  const selectedMissionAdvanceEligible = selectedMissionQueueItem?.advance?.eligible === true;
+  const selectedMissionAdvanceAction = safeString(selectedMissionQueueItem?.advance?.action).trim();
+  const selectedMissionAdvanceReason = safeString(selectedMissionQueueItem?.advance?.reason).trim();
+  const selectedMissionAdvanceLabel =
+    selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
   const missionAdvanceBlockedReason = executionBlockedReason(props.operatorMode, "advancing mission continuity");
   const canAdvanceMission = missionAdvanceBlockedReason.length === 0;
   const missionQueueRunBlockedReason = executionBlockedReason(props.operatorMode, "running the mission queue");
@@ -5291,6 +5303,15 @@ function SystemPanel(props: {
               {missionAdvanceBlockedReason ? (
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>{missionAdvanceBlockedReason}</div>
               ) : null}
+              {selectedMissionQueueItem ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                  action=<code>{selectedMissionRecommendedAction || "review_mission"}</code>
+                  {" / "}advance=<code>{selectedMissionAdvanceEligible ? "eligible" : "review_required"}</code>
+                </div>
+              ) : null}
+              {!selectedMissionAdvanceEligible && selectedMissionAdvanceReason ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{selectedMissionAdvanceReason}</div>
+              ) : null}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 <button style={buttonStyle} onClick={() => void loadMissionDetail(selectedMission.id)} disabled={missionDetailBusy}>
@@ -5299,9 +5320,17 @@ function SystemPanel(props: {
                 <button
                   style={buttonStyle}
                   onClick={() => void advanceMission(selectedMission.id)}
-                  disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy}
+                  disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy || !selectedMissionAdvanceEligible}
                 >
-                  {missionActionBusy === "advance" && missionActionTargetId === selectedMission.id ? "Advancing." : "Advance mission once"}
+                  {!selectedMissionAdvanceEligible && selectedMissionDependencyAction
+                    ? selectedMissionDependencyStatus === "blocked"
+                      ? "Dependency blocked"
+                      : "Waiting on dependency"
+                    : !selectedMissionAdvanceEligible
+                      ? "Review required"
+                      : missionActionBusy === "advance" && missionActionTargetId === selectedMission.id
+                        ? "Advancing."
+                        : selectedMissionAdvanceLabel}
                 </button>
                 {selectedMissionLatestTaskId ? (
                   <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionLatestTaskId)}>

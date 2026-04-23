@@ -465,6 +465,20 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           meta: { operation_id: "tsk_loop" },
         },
       ],
+      queue_item: {
+        id: "mission_loop",
+        status: "blocked",
+        objective: "Carry the plan-gate-execute-trace-memory loop",
+        recommended_action: "review_pending_approval",
+        action_target_id: "tsk_loop",
+        operator_hint: "Approval apr_loop is pending before execution can continue.",
+        advance: {
+          eligible: false,
+          action: "review_pending_approval",
+          target_id: "tsk_loop",
+          reason: "Mission requires approval apr_loop before advancing.",
+        },
+      },
       loop_state: {
         summary: "The mission is waiting on a governance decision before it can continue.",
         active_stage: "gate",
@@ -533,6 +547,11 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.trace?.latest_ts, "2024-03-09T16:00:01Z");
     assert.equal(response.loop_state?.memory?.latest_event, "advance_receipt");
     assert.equal(response.loop_state?.memory?.latest_ts, "2026-04-15T12:05:00Z");
+    assert.equal(response.queue_item?.recommended_action, "review_pending_approval");
+    assert.equal(response.queue_item?.action_target_id, "tsk_loop");
+    assert.equal(response.queue_item?.advance?.eligible, false);
+    assert.equal(response.queue_item?.advance?.action, "review_pending_approval");
+    assert.equal(response.queue_item?.advance?.target_id, "tsk_loop");
   } finally {
     restoreFetch();
   }

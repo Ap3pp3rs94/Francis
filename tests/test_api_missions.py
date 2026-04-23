@@ -761,6 +761,13 @@ def test_mission_run_once_waits_for_unresolved_dependencies(monkeypatch, tmp_pat
     assert dependent_queue_item["advance"]["target_id"] == dependency_id
     assert dependent_queue_item["dependency_state"]["status"] == "waiting"
     assert dependent_queue_item["dependency_state"]["first_unresolved"]["id"] == dependency_id
+    detail = client.get(f"/missions/{mission_id}")
+    assert detail.status_code == 200
+    detail_body = detail.json()
+    assert detail_body["queue_item"]["recommended_action"] == "wait_for_dependency"
+    assert detail_body["queue_item"]["advance"]["eligible"] is False
+    assert detail_body["queue_item"]["advance"]["action"] == "wait_for_dependency"
+    assert detail_body["queue_item"]["advance"]["target_id"] == dependency_id
 
     completed = client.patch(
         f"/missions/{dependency_id}",
@@ -835,6 +842,9 @@ def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path
     assert fetched_body["mission"]["status"] == "completed"
     assert fetched_body["mission"]["meta"]["last_advance_action"] == "run_linked_operation"
     assert fetched_body["mission"]["meta"]["last_advance_outcome"] == "succeeded"
+    assert fetched_body["queue_item"]["recommended_action"] == "review_completion"
+    assert fetched_body["queue_item"]["advance"]["eligible"] is False
+    assert fetched_body["queue_item"]["advance"]["action"] == "review_completion"
 
 
 def test_mission_store_run_once_uses_bounded_runtime_path(monkeypatch, tmp_path: Path) -> None:
