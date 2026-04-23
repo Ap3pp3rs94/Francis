@@ -4543,6 +4543,7 @@ function SystemPanel(props: {
                     const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                     const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                     const approvalId = safeString(item.last_task_approval_id).trim();
+                    const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                     const approvalStatus = safeString(item.last_task_approval_status).trim();
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
@@ -4592,10 +4593,18 @@ function SystemPanel(props: {
                             {" / "}approval_status=<code>{approvalStatus}</code>
                           </>
                         ) : null}
+                        {previousApprovalId ? (
+                          <>
+                            {" / "}previous_approval=<code>{previousApprovalId}</code>
+                          </>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
                       </div>
+                      {item.approval_summary ? (
+                        <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
+                      ) : null}
                       {item.history_summary ? (
                         <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
                       ) : null}
@@ -4660,6 +4669,19 @@ function SystemPanel(props: {
                             }
                           >
                             Review approval
+                          </button>
+                        ) : null}
+                        {previousApprovalId && previousApprovalId !== approvalId ? (
+                          <button
+                            style={buttonStyle}
+                            onClick={() =>
+                              props.onOpenApprovals(previousApprovalId, {
+                                missionId: item.id,
+                                operationId: safeString(item.last_task_id).trim() || undefined,
+                              })
+                            }
+                          >
+                            Open previous approval
                           </button>
                         ) : null}
                         {item.last_task_id ? (
@@ -6161,6 +6183,7 @@ function SystemPanel(props: {
                 const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                 const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                 const approvalId = safeString(item.last_task_approval_id).trim();
+                const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                 const approvalStatus = safeString(item.last_task_approval_status).trim();
                 return (
                   <div
@@ -6193,10 +6216,18 @@ function SystemPanel(props: {
                           {" / "}approval_status=<code>{approvalStatus}</code>
                         </>
                       ) : null}
+                      {previousApprovalId ? (
+                        <>
+                          {" / "}previous_approval=<code>{previousApprovalId}</code>
+                        </>
+                      ) : null}
                     </div>
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                       {item.reason || "Mission has been deadlettered."}
                     </div>
+                    {item.approval_summary ? (
+                      <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
+                    ) : null}
                     {item.history_summary ? (
                       <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
                     ) : null}
@@ -6261,6 +6292,19 @@ function SystemPanel(props: {
                           }
                         >
                           Review approval
+                        </button>
+                      ) : null}
+                      {previousApprovalId && previousApprovalId !== approvalId ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            props.onOpenApprovals(previousApprovalId, {
+                              missionId: item.id,
+                              operationId: safeString(item.last_task_id).trim() || undefined,
+                            })
+                          }
+                        >
+                          Open previous approval
                         </button>
                       ) : null}
                       {item.last_task_id ? (

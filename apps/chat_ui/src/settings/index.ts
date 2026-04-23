@@ -640,6 +640,7 @@ export type MissionDeadletterPresentationItem = {
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
   last_task_approval_status?: string;
+  approval_summary?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -1032,6 +1033,30 @@ function summarizeMissionHistoryTail(historyTail: MissionHistoryPreviewEntry[] |
   return undefined;
 }
 
+function summarizeDeadletterApprovalLineage(item: MissionDeadletterLike): string | undefined {
+  const approvalId = safeString(item.last_task_approval_id, "").trim();
+  const previousApprovalId = safeString(item.last_task_previous_approval_id, "").trim();
+  const approvalStatus = safeString(item.last_task_approval_status, "").trim();
+
+  if (approvalId && previousApprovalId) {
+    const statusLabel = approvalStatus || "pending";
+    return `Approval ${approvalId} remains ${statusLabel} and supersedes prior approval ${previousApprovalId}.`;
+  }
+
+  if (approvalId) {
+    if (approvalStatus) {
+      return `Approval ${approvalId} remains ${approvalStatus} on the deadlettered path.`;
+    }
+    return `Approval ${approvalId} remains attached to the deadlettered path.`;
+  }
+
+  if (previousApprovalId) {
+    return `Prior approval ${previousApprovalId} remains in mission lineage.`;
+  }
+
+  return undefined;
+}
+
 export function presentMissionDeadletterItems(items: MissionDeadletterLike[], limit = 2): MissionDeadletterPresentation {
   const normalized = items
     .map((item, index) => {
@@ -1052,6 +1077,7 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
           last_task_approval_id: safeString(item.last_task_approval_id, "").trim() || undefined,
           last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, "").trim() || undefined,
           last_task_approval_status: safeString(item.last_task_approval_status, "").trim() || undefined,
+          approval_summary: summarizeDeadletterApprovalLineage(item),
           history_count: safeNumber(item.history_count, 0),
           latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
           latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,

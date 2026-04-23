@@ -181,6 +181,12 @@ receipt narrative from the bounded history tail. The cards still expose the raw
 receipts, but they also summarize the common deadletter path in plain operator
 language so continuity review does not start with event-name decoding.
 
+As of `2026-04-23`, deadletter approval review now preserves approval lineage
+instead of only the current approval target. Shift Briefing and overview
+deadletter cards can show the superseded approval id when it exists and route
+the operator to either the current pending approval or the prior approval record
+through the existing approval inspector.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -192,6 +198,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter approval-lineage review routing. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by preserving
+what might unblock deadlettered work when approval replacement history exists:
+
+- `apps/chat_ui/src/settings/index.ts` now derives a shared deadletter
+  `approval_summary` from the current approval id, approval status, and prior
+  approval lineage preserved in mission continuity/world-state payloads.
+- `apps/chat_ui/src/App.tsx` now renders previous approval lineage in both
+  deadletter card surfaces and exposes `Open previous approval` when the
+  deadlettered mission still carries a superseded approval reference.
+- `apps/chat_ui/src/settings/index.test.ts` now proves the shared deadletter
+  presentation helper emits the expected approval-lineage summary.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter approval-link recovery routing. This advances the
@@ -1222,6 +1242,17 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 deadletter approval-lineage review routing slice:
+
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 deadletter approval-link recovery routing slice:
 

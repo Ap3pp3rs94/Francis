@@ -99,6 +99,10 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.last_task_approval_id, "apr_dead_old");
   assert.equal(presentation.ordered[2]?.last_task_previous_approval_id, "apr_dead_prev");
   assert.equal(presentation.ordered[2]?.last_task_approval_status, "pending");
+  assert.equal(
+    presentation.ordered[2]?.approval_summary,
+    "Approval apr_dead_old remains pending and supersedes prior approval apr_dead_prev.",
+  );
   assert.equal(presentation.ordered[2]?.history_count, 4);
   assert.equal(presentation.ordered[2]?.latest_history_event, "continuity_updated");
   assert.equal(presentation.ordered[2]?.latest_history_ts, "2026-04-22T09:00:00+00:00");
