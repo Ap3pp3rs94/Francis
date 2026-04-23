@@ -280,6 +280,9 @@ export type WorldStateMissionQueueItem = {
   action_target_id?: string;
   advance?: WorldStateMissionAdvanceProjection;
   deadletter_reason?: string;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -483,6 +486,9 @@ export type ContinuityBriefingDeadletterItem = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -598,6 +604,9 @@ type MissionDeadletterLike = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
 };
 
 export type MissionDeadletterPresentationItem = {
@@ -612,6 +621,9 @@ export type MissionDeadletterPresentationItem = {
   last_task_status?: string;
   last_task_result_status?: string;
   last_task_gate?: string;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
 };
 
 export type MissionDeadletterPresentation = {
@@ -896,6 +908,9 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
         last_task_status: safeString(item.last_task_status, "").trim() || undefined,
         last_task_result_status: safeString(item.last_task_result_status, "").trim() || undefined,
         last_task_gate: safeString(item.last_task_gate, "").trim() || undefined,
+        history_count: safeNumber(item.history_count, 0),
+        latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
+        latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,
       } satisfies MissionDeadletterPresentationItem,
       index,
     }))
@@ -1403,6 +1418,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         action_target_id: safeString(item.action_target_id, ""),
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
         deadletter_reason: safeString(item.deadletter_reason, ""),
+        history_count: safeNumber(item.history_count, 0),
+        latest_history_event: safeString(item.latest_history_event, ""),
+        latest_history_ts: safeString(item.latest_history_ts, ""),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1438,6 +1456,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         action_target_id: safeString(item.action_target_id, ""),
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
         deadletter_reason: safeString(item.deadletter_reason, ""),
+        history_count: safeNumber(item.history_count, 0),
+        latest_history_event: safeString(item.latest_history_event, ""),
+        latest_history_ts: safeString(item.latest_history_ts, ""),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1751,6 +1772,9 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     last_task_status: safeString(raw["last_task_status"], ""),
     last_task_result_status: safeString(raw["last_task_result_status"], ""),
     last_task_gate: safeString(raw["last_task_gate"], ""),
+    history_count: safeNumber(raw["history_count"], 0),
+    latest_history_event: safeString(raw["latest_history_event"], ""),
+    latest_history_ts: safeString(raw["latest_history_ts"], ""),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
   };

@@ -613,6 +613,9 @@ def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_p
     assert body["briefing"]["deadletter_preview"][0]["last_task_status"] == "accepted"
     assert body["briefing"]["deadletter_preview"][0]["last_task_result_status"] == "blocked"
     assert body["briefing"]["deadletter_preview"][0]["last_task_gate"] == "trust_gate"
+    assert body["briefing"]["deadletter_preview"][0]["history_count"] >= 1
+    assert body["briefing"]["deadletter_preview"][0]["latest_history_event"] in {"status_changed", "continuity_updated"}
+    assert body["briefing"]["deadletter_preview"][0]["latest_history_ts"]
     assert body["briefing"]["deadletter_preview"][0]["latest_activity"]["name"] == "governance_hold"
     assert body["briefing"]["deadletter_preview"][0]["latest_activity"]["status"] == "blocked"
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}

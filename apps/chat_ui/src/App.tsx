@@ -4540,6 +4540,7 @@ function SystemPanel(props: {
                   shiftBriefingDeadletterPresentation.visible.map((item) => {
                     const latestActivity = latestActivitySummary(item.latest_activity);
                     const updatedAt = mixedLocaleTime(item.updated_at);
+                    const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4594,6 +4595,21 @@ function SystemPanel(props: {
                           {latestActivity.observedAt ? (
                             <>
                               {" / "}at=<code>{latestActivity.observedAt}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(item.history_count || item.latest_history_event || latestHistoryAt) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          receipts=<code>{String(item.history_count || 0)}</code>
+                          {item.latest_history_event ? (
+                            <>
+                              {" / "}latest_receipt=<code>{item.latest_history_event}</code>
+                            </>
+                          ) : null}
+                          {latestHistoryAt ? (
+                            <>
+                              {" / "}receipt_at=<code>{latestHistoryAt}</code>
                             </>
                           ) : null}
                         </div>
@@ -6095,6 +6111,7 @@ function SystemPanel(props: {
               {deadletterPreviewPresentation.visible.map((item) => {
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const updatedAt = mixedLocaleTime(item.updated_at);
+                const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                 return (
                   <div
                     key={`mission-deadletter-${item.id}`}
@@ -6132,6 +6149,21 @@ function SystemPanel(props: {
                         {latestActivity.observedAt ? (
                           <>
                             {" / "}at=<code>{latestActivity.observedAt}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {(item.history_count || item.latest_history_event || latestHistoryAt) ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        receipts=<code>{String(item.history_count || 0)}</code>
+                        {item.latest_history_event ? (
+                          <>
+                            {" / "}latest_receipt=<code>{item.latest_history_event}</code>
+                          </>
+                        ) : null}
+                        {latestHistoryAt ? (
+                          <>
+                            {" / "}receipt_at=<code>{latestHistoryAt}</code>
                           </>
                         ) : null}
                       </div>

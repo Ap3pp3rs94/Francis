@@ -49,6 +49,9 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         last_task_status: "blocked",
         last_task_result_status: "failed",
         last_task_gate: "approvals_gate",
+        history_count: 4,
+        latest_history_event: "continuity_updated",
+        latest_history_ts: "2026-04-22T09:00:00+00:00",
       },
       {
         id: "mission_actionable",
@@ -78,6 +81,9 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.last_task_status, "blocked");
   assert.equal(presentation.ordered[2]?.last_task_result_status, "failed");
   assert.equal(presentation.ordered[2]?.last_task_gate, "approvals_gate");
+  assert.equal(presentation.ordered[2]?.history_count, 4);
+  assert.equal(presentation.ordered[2]?.latest_history_event, "continuity_updated");
+  assert.equal(presentation.ordered[2]?.latest_history_ts, "2026-04-22T09:00:00+00:00");
   assert.equal(presentation.total, 3);
   assert.equal(presentation.hiddenTotal, 1);
 });
@@ -224,7 +230,18 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               },
             },
           ],
-          deadletter_missions: [],
+          deadletter_missions: [
+            {
+              id: "mission_dead",
+              status: "deadlettered",
+              objective: "Deadlettered mission with persisted receipts",
+              recommended_action: "review_deadletter",
+              deadletter_reason: "manual_cleanup",
+              history_count: 3,
+              latest_history_event: "continuity_updated",
+              latest_history_ts: "2026-04-14T08:05:00Z",
+            },
+          ],
           incidents: [],
         },
         trust: { global_level: 0.6 },
@@ -345,6 +362,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.eligible, false);
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.action, "raise_trust_or_reduce_risk");
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.target_id, "tsk_blocked");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.history_count, 3);
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_event, "continuity_updated");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_ts, "2026-04-14T08:05:00Z");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
@@ -1043,6 +1064,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             last_task_status: "accepted",
             last_task_result_status: "blocked",
             last_task_gate: "approvals_gate",
+            history_count: 5,
+            latest_history_event: "continuity_updated",
+            latest_history_ts: "2026-04-14T08:01:00Z",
             updated_at: "2026-04-14T08:00:00Z",
             latest_activity: {
               name: "governance_hold",
@@ -1072,6 +1096,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_status, "accepted");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_result_status, "blocked");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_gate, "approvals_gate");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.history_count, 5);
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_event, "continuity_updated");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_ts, "2026-04-14T08:01:00Z");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_activity?.gate, "approvals_gate");
     assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");
     assert.equal(briefing.briefing?.observer?.probes?.[0]?.id, "approval_queue");

@@ -762,6 +762,9 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert deadletter_items
     assert deadletter_items[0]["id"] == dead_id
     assert deadletter_items[0]["recommended_action"] == "review_deadletter"
+    assert deadletter_items[0]["history_count"] >= 1
+    assert deadletter_items[0]["latest_history_event"] in {"status_changed", "continuity_updated"}
+    assert deadletter_items[0]["latest_history_ts"]
 
 
 def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(monkeypatch, tmp_path: Path) -> None:

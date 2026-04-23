@@ -816,6 +816,31 @@ def _mission_history_map(*item_lists: list[dict[str, Any]]) -> dict[str, list[di
     return histories
 
 
+def _mission_history_summary(history: list[dict[str, Any]]) -> dict[str, Any]:
+    latest_history = history[-1] if history and isinstance(history[-1], dict) else {}
+    return {
+        "history_count": len(history),
+        "latest_history_event": str(latest_history.get("event") or "").strip(),
+        "latest_history_ts": str(latest_history.get("ts") or "").strip(),
+    }
+
+
+def _attach_mission_history_summary(
+    items: list[dict[str, Any]],
+    histories: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        mission_id = str(item.get("id") or "").strip()
+        enriched_item = dict(item)
+        history = histories.get(mission_id, [])
+        enriched_item.update(_mission_history_summary(history))
+        enriched.append(enriched_item)
+    return enriched
+
+
 def _mission_readiness(
     mission_status_counts: dict[str, Any],
     mission_queue: list[dict[str, Any]],
@@ -1134,6 +1159,9 @@ def _mission_briefing(
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
                 "last_task_gate": str(item.get("last_task_gate") or "").strip(),
+                "history_count": int(item.get("history_count") or 0),
+                "latest_history_event": str(item.get("latest_history_event") or "").strip(),
+                "latest_history_ts": str(item.get("latest_history_ts") or "").strip(),
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
@@ -1178,6 +1206,8 @@ def mission_continuity_snapshot(
     deadletter_missions = _attach_mission_activity(
         deadletter_missions, log_limit=activity_log_limit, cache=activity_cache
     )
+    histories = _mission_history_map(mission_queue, deadletter_missions, recent_missions)
+    deadletter_missions = _attach_mission_history_summary(deadletter_missions, histories)
     mission_briefing = _mission_briefing(
         mission_status_counts,
         mission_queue,

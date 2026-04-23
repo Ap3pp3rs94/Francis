@@ -163,6 +163,13 @@ the briefing payload. Shift Briefing deadletter review can route the operator
 to the actual failed task and show whether the hold came from the task state or
 from the last blocked result instead of only naming the mission.
 
+As of `2026-04-23`, deadletter surfaces now carry a lightweight
+mission-history receipt summary instead of relying only on current state.
+Continuity deadletter review and overview deadletter cards can show how many
+mission receipts exist plus the latest recorded history event/time, which keeps
+deadletter recovery tied to persisted evidence rather than implied failure
+stories.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -174,6 +181,24 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter receipt linkage in bounded continuity surfaces. This
+advances the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line
+by making deadletter review carry mission-history evidence instead of only task
+state snapshots:
+
+- `src/francis/world_state/snapshot.py` now attaches `history_count`,
+  `latest_history_event`, and `latest_history_ts` to deadlettered missions
+  before building both world-state and continuity deadletter surfaces.
+- `apps/chat_ui/src/settings/index.ts` now preserves that receipt summary on
+  world-state deadletter items, continuity deadletter items, and the shared
+  `presentMissionDeadletterItems` contract.
+- `apps/chat_ui/src/App.tsx` now shows receipt count and latest receipt
+  event/time in both deadletter cards so bounded review stays evidence-backed.
+- `tests/test_api_continuity.py`, `tests/test_api_system_settings.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the receipt-summary
+  contract end to end.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is continuity deadletter evidence parity. This advances the active
@@ -1132,6 +1157,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 deadletter receipt linkage slice:
+
+- `python -m pytest tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `27 passed`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 continuity deadletter evidence parity slice:
 
