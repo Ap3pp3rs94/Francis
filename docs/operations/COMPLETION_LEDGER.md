@@ -118,6 +118,11 @@ explicit `advance` projection. Ready items identify bounded advance eligibility
 from the mission store contract, while dependency, approval, trust, and other
 operator-required blockers remain ineligible and explain why.
 
+As of `2026-04-22`, the dedicated mission queue client and ORB Mission Queue
+surface also preserve and use that `advance` projection. Queue cards now disable
+mutation from `advance.eligible` instead of only checking dependency action
+strings.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -129,6 +134,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue advance contract parity. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by keeping the
+dedicated queue runner path aligned with the Shift Briefing contract:
+
+- `apps/chat_ui/src/missions/index.ts` now preserves the `advance` projection on
+  mission queue items returned by `/missions/run_once`.
+- `apps/chat_ui/src/App.tsx` now renders ORB Mission Queue advance posture from
+  `advance.eligible`, disabling mutation for dependency, approval, trust, and
+  other review-required blockers.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove the queue-run path carries ready and blocked advance eligibility
+  through the API and browser parser.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is explicit mission advance eligibility for Shift Briefing. This
@@ -983,6 +1002,21 @@ Latest targeted validation for the `2026-04-22` Stage 3 explicit briefing advanc
 - `cd apps/chat_ui && npm test -- settings/index.test.ts`
   Result: `16 passed`
 - `python -m ruff check src/francis/missions/store.py src/francis/missions/runtime.py src/francis/world_state/snapshot.py tests/test_mission_store.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-22` Stage 3 mission queue advance contract parity slice:
+
+- `python -m pytest tests/test_api_missions.py -q`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test -- missions/index.test.ts`
+  Result: `16 passed`
+- `python -m ruff check tests/test_api_missions.py`
   Result: `passed`
 - `cd apps/chat_ui && npm run build`
   Result: `passed`

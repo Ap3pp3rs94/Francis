@@ -301,6 +301,12 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           recommended_action: "raise_trust_or_reduce_risk",
           action_target_id: "tsk_blocked",
           operator_hint: "Mission requires operator intervention.",
+          advance: {
+            eligible: false,
+            action: "raise_trust_or_reduce_risk",
+            target_id: "tsk_blocked",
+            reason: "A linked task is blocked by trust posture.",
+          },
           dependency_state: {
             status: "blocked",
             total: 2,
@@ -388,6 +394,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.processed, 3);
     assert.equal(response.counts?.blocked, 1);
     assert.equal(response.items[0]?.recommended_action, "raise_trust_or_reduce_risk");
+    assert.equal(response.items[0]?.advance?.eligible, false);
+    assert.equal(response.items[0]?.advance?.action, "raise_trust_or_reduce_risk");
+    assert.equal(response.items[0]?.advance?.target_id, "tsk_blocked");
     assert.equal(response.items[0]?.dependency_state?.status, "blocked");
     assert.equal(response.items[0]?.dependency_state?.unresolved, 1);
     assert.equal(response.items[0]?.dependency_state?.first_unresolved?.id, "msn_dependency");

@@ -696,8 +696,13 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     assert queue_items[0]["id"] == blocked_id
     assert queue_items[0]["recommended_action"] == "raise_trust_or_reduce_risk"
     assert queue_items[0]["action_target_id"] == blocked_operation_id
+    assert queue_items[0]["advance"]["eligible"] is False
+    assert queue_items[0]["advance"]["action"] == "raise_trust_or_reduce_risk"
+    assert queue_items[0]["advance"]["target_id"] == blocked_operation_id
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "run_linked_operation"
+    assert ready_item["advance"]["eligible"] is True
+    assert ready_item["advance"]["action"] == "run_linked_operation"
     assert ready_item["linked_task_count"] == 1
     assert ready_item["last_advance_action"] == "create_first_operation"
 
@@ -751,6 +756,9 @@ def test_mission_run_once_waits_for_unresolved_dependencies(monkeypatch, tmp_pat
     assert "Dependency" in dependent_result["message"]
     dependent_queue_item = next(item for item in first_body["items"] if item["id"] == mission_id)
     assert dependent_queue_item["recommended_action"] == "wait_for_dependency"
+    assert dependent_queue_item["advance"]["eligible"] is False
+    assert dependent_queue_item["advance"]["action"] == "wait_for_dependency"
+    assert dependent_queue_item["advance"]["target_id"] == dependency_id
     assert dependent_queue_item["dependency_state"]["status"] == "waiting"
     assert dependent_queue_item["dependency_state"]["first_unresolved"]["id"] == dependency_id
 

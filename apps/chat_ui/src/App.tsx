@@ -5602,6 +5602,10 @@ function SystemPanel(props: {
                 const dependencyAction = ["wait_for_dependency", "resolve_dependency_blocker"].includes(
                   safeString(item.recommended_action).trim(),
                 );
+                const queueAdvanceEligible = item.advance?.eligible === true;
+                const queueAdvanceAction = safeString(item.advance?.action).trim();
+                const queueAdvanceReason = safeString(item.advance?.reason).trim();
+                const queueAdvanceLabel = queueAdvanceAction === "create_first_operation" ? "Create operation" : "Advance once";
                 return (
                   <div
                     key={`mission-queue-${item.id}`}
@@ -5613,10 +5617,14 @@ function SystemPanel(props: {
                     </div>
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                       action=<code>{item.recommended_action || "review_mission"}</code>
+                      {" / "}advance=<code>{queueAdvanceEligible ? "eligible" : "review_required"}</code>
                     </div>
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       {item.operator_hint || item.next_step || "Mission queue item needs operator review."}
                     </div>
+                    {!queueAdvanceEligible && queueAdvanceReason ? (
+                      <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{queueAdvanceReason}</div>
+                    ) : null}
                     {dependencyState && Number(dependencyState.total ?? 0) > 0 ? (
                       <div style={{ fontSize: 11, color: dependencyAction ? "#ffcf9d" : THEME.muted, marginTop: 4 }}>
                         dependencies=<code>{String(dependencyState.resolved ?? 0)}/{String(dependencyState.total ?? 0)}</code>
@@ -5675,15 +5683,17 @@ function SystemPanel(props: {
                       <button
                         style={buttonStyle}
                         onClick={() => void advanceMission(item.id)}
-                        disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy || dependencyAction}
+                        disabled={!canAdvanceMission || missionActionBusy !== "" || missionQueueRunBusy || !queueAdvanceEligible}
                       >
-                        {dependencyAction
+                        {!queueAdvanceEligible && dependencyAction
                           ? dependencyStatus === "blocked"
                             ? "Dependency blocked"
                             : "Waiting on dependency"
+                          : !queueAdvanceEligible
+                            ? "Review required"
                           : missionActionBusy === "advance" && missionActionTargetId === item.id
                             ? "Advancing."
-                            : "Advance once"}
+                            : queueAdvanceLabel}
                       </button>
                       <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                         Inspect mission flow

@@ -44,6 +44,13 @@ export type MissionDependencyState = {
   first_unresolved?: MissionDependencyItem;
 };
 
+export type MissionAdvanceProjection = {
+  eligible?: boolean;
+  action?: string;
+  target_id?: string;
+  reason?: string;
+};
+
 export type MissionHistoryEntry = {
   ts?: string;
   mission_id?: string;
@@ -137,6 +144,7 @@ export type MissionQueueItem = MissionRecord & {
   recommended_action?: string;
   action_target_id?: string;
   operator_hint?: string;
+  advance?: MissionAdvanceProjection;
   dependency_state?: MissionDependencyState;
   last_task_id?: string;
   last_task_status?: string;
@@ -374,6 +382,18 @@ function parseMissionDependencyState(raw: unknown): MissionDependencyState | und
   };
 }
 
+function parseMissionAdvanceProjection(raw: unknown): MissionAdvanceProjection | undefined {
+  if (!isRecord(raw)) return undefined;
+  const projection: MissionAdvanceProjection = {
+    eligible: safeBoolean(raw.eligible, false),
+    action: safeString(raw.action, "") || undefined,
+    target_id: safeString(raw.target_id, "") || undefined,
+    reason: safeString(raw.reason, "") || undefined,
+  };
+  if (!projection.eligible && !projection.action && !projection.target_id && !projection.reason) return undefined;
+  return projection;
+}
+
 function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
   const record = parseMissionRecord(raw);
   if (!record || !isRecord(raw)) return record;
@@ -383,6 +403,7 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     recommended_action: safeString(raw.recommended_action, "") || undefined,
     action_target_id: safeString(raw.action_target_id, "") || undefined,
     operator_hint: safeString(raw.operator_hint, "") || undefined,
+    advance: parseMissionAdvanceProjection(raw.advance),
     dependency_state: parseMissionDependencyState(raw.dependency_state),
     last_task_id: safeString(raw.last_task_id, "") || undefined,
     last_task_status: safeString(raw.last_task_status, "") || undefined,
