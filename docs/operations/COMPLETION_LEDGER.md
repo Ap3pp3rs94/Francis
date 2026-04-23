@@ -144,6 +144,13 @@ post-run advance posture, approval/dependency state, last-advance outcome, and
 review links without requiring the operator to infer recovery targets from raw
 counts.
 
+As of `2026-04-23`, the bounded Mission Queue view now prioritizes
+review-required missions over already-eligible work and reports hidden queue
+counts explicitly. Return-to-work recommendations, mission selection ordering,
+and the first queue cards now reuse the same contract, so the operator is sent
+to the most constrained mission instead of whichever queue item happened to land
+first.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -155,6 +162,19 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue prioritization parity. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making bounded
+queue surfaces recover-first instead of first-come-first-shown:
+
+- `apps/chat_ui/src/missions/index.ts` now exports `presentMissionQueue`, which
+  ranks pending-approval, dependency-blocked, and other review-required missions
+  ahead of already-eligible work while reporting hidden counts.
+- `apps/chat_ui/src/App.tsx` now uses that ordering for the return-to-work queue
+  lead, mission selection candidates, and the bounded Mission Queue card list.
+- `apps/chat_ui/src/missions/index.test.ts` now proves the queue view surfaces
+  recovery-required work first and keeps hidden-count reporting truthful.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is mission queue-run recovery result parity. This advances the
@@ -1074,6 +1094,17 @@ Latest targeted validation for the `2026-04-23` Stage 3 mission queue-run recove
   Result: `16 passed`
 - `python -m ruff check src/francis/api/routes/missions.py tests/test_api_missions.py`
   Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-23` Stage 3 mission queue prioritization parity slice:
+
+- `cd apps/chat_ui && npm test -- missions/index.test.ts`
+  Result: `17 passed`
 - `cd apps/chat_ui && npm run build`
   Result: `passed`
 - `.\scripts\check.ps1`

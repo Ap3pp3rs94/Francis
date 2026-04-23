@@ -3,7 +3,7 @@ import type { ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
-import { MissionsApiError, MissionsClient } from "./missions";
+import { MissionsApiError, MissionsClient, presentMissionQueue } from "./missions";
 import type { MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
@@ -3141,6 +3141,7 @@ function SystemPanel(props: {
   const recentTasks = overview?.recent_tasks ?? [];
   const recentMissions = overview?.recent_missions ?? [];
   const missionQueue = overview?.mission_queue ?? [];
+  const missionQueuePresentation = useMemo(() => presentMissionQueue(missionQueue, 4), [missionQueue]);
   const deadletterPreview = overview?.deadletter_missions ?? [];
   const incidents = overview?.incidents ?? [];
   const pendingApprovals = overview?.pending_approvals ?? [];
@@ -3186,7 +3187,7 @@ function SystemPanel(props: {
         ? { bg: "#1a1a1a", border: "#4c4c4c", color: "#d8d8d8" }
         : { bg: "#102417", border: "#244d31", color: "#9de2ad" };
   const missionFeedDeclared = declaredMissionCount > 0 || recentMissions.length > 0;
-  const queueLead = missionQueue[0] ?? null;
+  const queueLead = missionQueuePresentation.lead ?? null;
   const leadMission =
     recentMissions.find((mission) => ["deadlettered", "blocked"].includes(safeString(mission.status).trim().toLowerCase())) ??
     recentMissions.find((mission) => safeString(mission.status).trim().toLowerCase() === "active") ??
@@ -3394,13 +3395,13 @@ function SystemPanel(props: {
 
     push(props.focusMissionId);
     shiftBriefingFocus.forEach((item) => push(item.id));
-    missionQueue.forEach((item) => push(item.id));
+    missionQueuePresentation.ordered.forEach((item) => push(item.id));
     recentDeclaredMissions.forEach((mission) => push(mission.id));
     shiftBriefingCompleted.forEach((item) => push(item.id));
     shiftBriefingDeadletter.forEach((item) => push(item.id));
     if (leadMission) push(leadMission.id);
     return ordered;
-  }, [leadMission, missionQueue, props.focusMissionId, recentDeclaredMissions, shiftBriefingCompleted, shiftBriefingDeadletter, shiftBriefingFocus]);
+  }, [leadMission, missionQueuePresentation.ordered, props.focusMissionId, recentDeclaredMissions, shiftBriefingCompleted, shiftBriefingDeadletter, shiftBriefingFocus]);
   const missionSelectionKey = missionSelectionCandidates.join("|");
   const selectedMission = missionDetail?.mission;
   const selectedMissionMeta = isRecord(selectedMission?.meta) ? selectedMission.meta : {};
@@ -5827,8 +5828,26 @@ function SystemPanel(props: {
                 ) : null}
               </div>
             ) : null}
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              showing=<code>{String(missionQueuePresentation.visible.length)}/{String(missionQueuePresentation.total)}</code>
+              {" / "}review_required=<code>{String(missionQueuePresentation.reviewRequired)}</code>
+              {" / "}eligible=<code>{String(missionQueuePresentation.eligible)}</code>
+            </div>
+            {missionQueuePresentation.hiddenTotal > 0 ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: missionQueuePresentation.hiddenReviewRequired > 0 ? "#ffcf9d" : THEME.muted,
+                  marginTop: 4,
+                }}
+              >
+                Hidden from this bounded view: review_required=
+                <code>{String(missionQueuePresentation.hiddenReviewRequired)}</code>
+                {" / "}eligible=<code>{String(missionQueuePresentation.hiddenEligible)}</code>
+              </div>
+            ) : null}
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-              {missionQueue.slice(0, 4).map((item) => {
+              {missionQueuePresentation.visible.map((item) => {
                 const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
                 const queueTargetIsMission = queueTargetId.startsWith("msn_");
                 const queueTargetIsOperation = queueTargetId.startsWith("tsk_");

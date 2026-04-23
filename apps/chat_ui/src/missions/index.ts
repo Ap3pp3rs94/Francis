@@ -234,6 +234,18 @@ export type MissionRunOnceResponse = {
   error?: string;
 };
 
+export type MissionQueuePresentation = {
+  lead?: MissionQueueItem;
+  ordered: MissionQueueItem[];
+  visible: MissionQueueItem[];
+  total: number;
+  reviewRequired: number;
+  eligible: number;
+  hiddenTotal: number;
+  hiddenReviewRequired: number;
+  hiddenEligible: number;
+};
+
 export class MissionsApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -738,6 +750,99 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
     errors,
     status: safeString(json.status, "") || undefined,
     error: safeString(json.error, "") || undefined,
+  };
+}
+
+function missionQueueNeedsReview(item: MissionQueueItem): boolean {
+  return item.advance?.eligible !== true;
+}
+
+function missionQueueHasPendingApproval(item: MissionQueueItem): boolean {
+  const approvalId = safeString(item.last_task_approval_id, "").trim();
+  if (!approvalId) return false;
+  const approvalStatus = safeString(item.last_task_approval_status, "").trim().toLowerCase();
+  return approvalStatus === "" || approvalStatus === "pending" || approvalStatus === "requested" || approvalStatus === "needs_review";
+}
+
+function missionQueueHasUnresolvedDependency(item: MissionQueueItem): boolean {
+  const dependencyState = item.dependency_state;
+  const total = Math.max(0, safeNumber(dependencyState?.total, safeNumber(item.dependency_count, 0)));
+  const resolved = Math.max(0, safeNumber(dependencyState?.resolved, 0));
+  const unresolved = Math.max(0, safeNumber(dependencyState?.unresolved, total - resolved));
+  if (unresolved > 0) return true;
+  const action = safeString(item.recommended_action, "").trim();
+  return action === "wait_for_dependency" || action === "resolve_dependency_blocker";
+}
+
+function missionQueueStatusRank(item: MissionQueueItem): number {
+  const status = safeString(item.status, "").trim().toLowerCase();
+  if (status === "blocked" || status === "deadlettered" || status === "deadletter") return 0;
+  if (status === "active") return 1;
+  if (status === "queued") return 2;
+  return 3;
+}
+
+function missionQueueRiskRank(item: MissionQueueItem): number {
+  switch (safeString(item.risk_tier, "").trim().toLowerCase()) {
+    case "critical":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    case "normal":
+      return 3;
+    case "low":
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+function missionQueueSeverityRank(item: MissionQueueItem): number {
+  if (!missionQueueNeedsReview(item)) return 3;
+  if (missionQueueHasPendingApproval(item)) return 0;
+  if (missionQueueHasUnresolvedDependency(item)) return 1;
+  return 2;
+}
+
+export function presentMissionQueue(items: MissionQueueItem[], limit = 4): MissionQueuePresentation {
+  const ranked = items
+    .map((item, index) => ({
+      item,
+      index,
+      reviewRequired: missionQueueNeedsReview(item),
+      severityRank: missionQueueSeverityRank(item),
+      statusRank: missionQueueStatusRank(item),
+      priority: safeNumber(item.priority, 0),
+      riskRank: missionQueueRiskRank(item),
+    }))
+    .sort((left, right) => {
+      if (left.reviewRequired !== right.reviewRequired) return left.reviewRequired ? -1 : 1;
+      if (left.severityRank !== right.severityRank) return left.severityRank - right.severityRank;
+      if (left.priority !== right.priority) return right.priority - left.priority;
+      if (left.statusRank !== right.statusRank) return left.statusRank - right.statusRank;
+      if (left.riskRank !== right.riskRank) return left.riskRank - right.riskRank;
+      return left.index - right.index;
+    });
+  const ordered = ranked.map((entry) => entry.item);
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : ordered.length;
+  const visible = ordered.slice(0, safeLimit);
+  const reviewRequired = ordered.filter((item) => missionQueueNeedsReview(item)).length;
+  const eligible = Math.max(0, ordered.length - reviewRequired);
+  const hidden = ordered.slice(visible.length);
+  const hiddenReviewRequired = hidden.filter((item) => missionQueueNeedsReview(item)).length;
+  const hiddenEligible = Math.max(0, hidden.length - hiddenReviewRequired);
+  return {
+    lead: ordered[0],
+    ordered,
+    visible,
+    total: ordered.length,
+    reviewRequired,
+    eligible,
+    hiddenTotal: hidden.length,
+    hiddenReviewRequired,
+    hiddenEligible,
   };
 }
 

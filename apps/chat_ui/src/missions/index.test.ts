@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MissionsClient } from "./index.ts";
+import { MissionsClient, presentMissionQueue } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -35,6 +35,81 @@ function jsonRequestBody(init?: RequestInit): unknown {
   if (typeof body !== "string" || !body.trim()) return undefined;
   return JSON.parse(body) as unknown;
 }
+
+test("presentMissionQueue prioritizes review-required missions and reports hidden counts", () => {
+  const presentation = presentMissionQueue(
+    [
+      {
+        id: "mission_eligible_low",
+        status: "queued",
+        objective: "Eligible mission should not hide review-required work",
+        priority: 1,
+        risk_tier: "medium",
+        recommended_action: "create_first_operation",
+        advance: { eligible: true, action: "create_first_operation" },
+      },
+      {
+        id: "mission_approval",
+        status: "active",
+        objective: "Approval gate should lead the queue",
+        priority: 2,
+        risk_tier: "high",
+        recommended_action: "review_pending_approval",
+        last_task_approval_id: "apr_alpha",
+        last_task_approval_status: "pending",
+        advance: { eligible: false, action: "review_pending_approval", reason: "Approval apr_alpha is pending." },
+      },
+      {
+        id: "mission_dependency",
+        status: "blocked",
+        objective: "Dependency blocker should stay near the top",
+        priority: 3,
+        risk_tier: "critical",
+        recommended_action: "wait_for_dependency",
+        dependency_count: 1,
+        dependency_state: {
+          status: "waiting",
+          total: 1,
+          resolved: 0,
+          unresolved: 1,
+          first_unresolved: { id: "msn_blocker" },
+        },
+        advance: { eligible: false, action: "wait_for_dependency", target_id: "msn_blocker" },
+      },
+      {
+        id: "mission_review_other",
+        status: "queued",
+        objective: "Other review work should still outrank eligible work",
+        priority: 4,
+        risk_tier: "medium",
+        recommended_action: "raise_trust_or_reduce_risk",
+        advance: { eligible: false, action: "raise_trust_or_reduce_risk" },
+      },
+      {
+        id: "mission_eligible_high",
+        status: "active",
+        objective: "Eligible work remains visible once review work is surfaced",
+        priority: 5,
+        risk_tier: "high",
+        recommended_action: "run_linked_operation",
+        advance: { eligible: true, action: "run_linked_operation" },
+      },
+    ],
+    3,
+  );
+
+  assert.equal(presentation.lead?.id, "mission_approval");
+  assert.deepEqual(
+    presentation.visible.map((item) => item.id),
+    ["mission_approval", "mission_dependency", "mission_review_other"],
+  );
+  assert.equal(presentation.total, 5);
+  assert.equal(presentation.reviewRequired, 3);
+  assert.equal(presentation.eligible, 2);
+  assert.equal(presentation.hiddenTotal, 2);
+  assert.equal(presentation.hiddenReviewRequired, 0);
+  assert.equal(presentation.hiddenEligible, 2);
+});
 
 test("MissionsClient.list requests the bounded mission list route and parses mission records", async () => {
   const requests: Array<{ path: string; limit: string | null; status: string | null }> = [];
