@@ -616,6 +616,7 @@ type MissionDeadletterLike = {
   latest_history_event?: string;
   latest_history_ts?: string;
   history_tail?: MissionHistoryPreviewEntry[];
+  history_summary?: string;
 };
 
 export type MissionDeadletterPresentationItem = {
@@ -634,6 +635,7 @@ export type MissionDeadletterPresentationItem = {
   latest_history_event?: string;
   latest_history_ts?: string;
   history_tail?: MissionHistoryPreviewEntry[];
+  history_summary?: string;
 };
 
 export type MissionDeadletterPresentation = {
@@ -925,28 +927,128 @@ function parseMissionHistoryPreviewEntries(raw: unknown, limit = 2): MissionHist
     .slice(0, safeLimit);
 }
 
+function summarizeMissionHistoryTail(historyTail: MissionHistoryPreviewEntry[] | undefined): string | undefined {
+  const entries = Array.isArray(historyTail) ? historyTail.filter((item) => item && (item.event || item.ts || item.details)) : [];
+  if (entries.length === 0) return undefined;
+
+  const latest = entries[entries.length - 1];
+  const previous = entries.length > 1 ? entries[entries.length - 2] : undefined;
+  const latestEvent = safeString(latest?.event, "").trim();
+  const latestDetails = isRecord(latest?.details) ? latest.details : {};
+
+  if (latestEvent === "continuity_updated") {
+    const reason = safeString(latestDetails["deadletter_reason"], "").trim();
+    const previousEvent = safeString(previous?.event, "").trim();
+    const previousDetails = isRecord(previous?.details) ? previous.details : {};
+    const from = safeString(previousDetails["from"], "").trim();
+    const to = safeString(previousDetails["to"], "").trim();
+    if (reason && previousEvent === "status_changed" && to === "deadlettered") {
+      return `Deadletter reason ${reason} was recorded after mission status moved ${from || "unknown"} -> deadlettered.`;
+    }
+    if (reason) {
+      return `Deadletter reason ${reason} was recorded in mission continuity receipts.`;
+    }
+  }
+
+  if (latestEvent === "status_changed") {
+    const from = safeString(latestDetails["from"], "").trim();
+    const to = safeString(latestDetails["to"], "").trim();
+    if (from || to) {
+      return `Mission status moved ${from || "unknown"} -> ${to || "unknown"}.`;
+    }
+  }
+
+  if (latestEvent === "linked_task_transition") {
+    const taskId = safeString(latestDetails["task_id"], "").trim();
+    const taskStatus = safeString(latestDetails["task_status"], "").trim();
+    const resultStatus = safeString(latestDetails["result_status"], "").trim();
+    const gate = safeString(latestDetails["gate"], "").trim();
+    let summary = `Linked task ${taskId || "unknown"} reported `;
+    if (resultStatus) {
+      summary += `result ${resultStatus}`;
+      if (taskStatus && taskStatus !== resultStatus) {
+        summary += ` while task remained ${taskStatus}`;
+      }
+    } else if (taskStatus) {
+      summary += `status ${taskStatus}`;
+    } else {
+      summary += `a state change`;
+    }
+    if (gate) {
+      summary += ` at ${gate}`;
+    }
+    return `${summary}.`;
+  }
+
+  if (latestEvent === "advance_receipt") {
+    const action = safeString(latestDetails["action"], "").trim();
+    const outcome = safeString(latestDetails["outcome"], "").trim();
+    const operationId = safeString(latestDetails["operation_id"], "").trim();
+    let summary = "Advance receipt recorded";
+    if (action) {
+      summary += ` for ${action}`;
+    }
+    if (outcome) {
+      summary += ` with outcome ${outcome}`;
+    }
+    if (operationId) {
+      summary += ` on task ${operationId}`;
+    }
+    return `${summary}.`;
+  }
+
+  if (latestEvent === "mission_ticked") {
+    const taskId = safeString(latestDetails["latest_task_id"], "").trim();
+    const taskStatus = safeString(latestDetails["latest_task_status"], "").trim();
+    const resultStatus = safeString(latestDetails["latest_task_result_status"], "").trim();
+    let summary = `Mission tick recorded`;
+    if (taskId) {
+      summary += ` latest task ${taskId}`;
+    }
+    if (resultStatus) {
+      summary += ` result ${resultStatus}`;
+      if (taskStatus && taskStatus !== resultStatus) {
+        summary += ` while task remained ${taskStatus}`;
+      }
+    } else if (taskStatus) {
+      summary += ` status ${taskStatus}`;
+    }
+    return `${summary}.`;
+  }
+
+  if (latestEvent) {
+    return `Latest mission receipt recorded ${latestEvent}.`;
+  }
+
+  return undefined;
+}
+
 export function presentMissionDeadletterItems(items: MissionDeadletterLike[], limit = 2): MissionDeadletterPresentation {
   const normalized = items
-    .map((item, index) => ({
-      item: {
-        id: safeString(item.id, "").trim(),
-        status: safeString(item.status, "").trim() || undefined,
-        objective: safeString(item.objective, "") || undefined,
-        reason: safeString(item.reason, "").trim() || safeString(item.deadletter_reason, "").trim() || undefined,
-        recommended_action: safeString(item.recommended_action, "").trim() || undefined,
-        updated_at: safeString(item.updated_at, "").trim() || undefined,
-        latest_activity: isRecord(item.latest_activity) ? item.latest_activity : undefined,
-        last_task_id: safeString(item.last_task_id, "").trim() || undefined,
-        last_task_status: safeString(item.last_task_status, "").trim() || undefined,
-        last_task_result_status: safeString(item.last_task_result_status, "").trim() || undefined,
-        last_task_gate: safeString(item.last_task_gate, "").trim() || undefined,
-        history_count: safeNumber(item.history_count, 0),
-        latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
-        latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,
-        history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
-      } satisfies MissionDeadletterPresentationItem,
-      index,
-    }))
+    .map((item, index) => {
+      const historyTail = parseMissionHistoryPreviewEntries(item.history_tail);
+      return {
+        item: {
+          id: safeString(item.id, "").trim(),
+          status: safeString(item.status, "").trim() || undefined,
+          objective: safeString(item.objective, "") || undefined,
+          reason: safeString(item.reason, "").trim() || safeString(item.deadletter_reason, "").trim() || undefined,
+          recommended_action: safeString(item.recommended_action, "").trim() || undefined,
+          updated_at: safeString(item.updated_at, "").trim() || undefined,
+          latest_activity: isRecord(item.latest_activity) ? item.latest_activity : undefined,
+          last_task_id: safeString(item.last_task_id, "").trim() || undefined,
+          last_task_status: safeString(item.last_task_status, "").trim() || undefined,
+          last_task_result_status: safeString(item.last_task_result_status, "").trim() || undefined,
+          last_task_gate: safeString(item.last_task_gate, "").trim() || undefined,
+          history_count: safeNumber(item.history_count, 0),
+          latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
+          latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,
+          history_tail: historyTail,
+          history_summary: safeString(item.history_summary, "").trim() || summarizeMissionHistoryTail(historyTail),
+        } satisfies MissionDeadletterPresentationItem,
+        index,
+      };
+    })
     .filter((entry) => entry.item.id.length > 0)
     .sort((left, right) => {
       const leftActionable = left.item.recommended_action ? 0 : 1;

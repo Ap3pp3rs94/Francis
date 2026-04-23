@@ -176,6 +176,11 @@ see the last two persisted mission history entries, including event names,
 timestamps, and stored details, directly in deadletter cards before opening the
 full mission inspector.
 
+As of `2026-04-23`, deadletter briefing surfaces now derive a compact operator
+receipt narrative from the bounded history tail. The cards still expose the raw
+receipts, but they also summarize the common deadletter path in plain operator
+language so continuity review does not start with event-name decoding.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -187,6 +192,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter receipt narrative clarity. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by reducing the last
+manual reconstruction step in bounded deadletter review while preserving the raw
+receipt trail underneath:
+
+- `apps/chat_ui/src/settings/index.ts` now derives `history_summary` from the
+  existing bounded `history_tail`, translating common receipt sequences such as
+  deadletter status transitions, linked-task transitions, and advance receipts
+  into direct operator-readable summaries.
+- `apps/chat_ui/src/App.tsx` now renders that derived receipt narrative in both
+  Shift Briefing deadletter review and overview deadletter cards before the raw
+  receipt entries.
+- `apps/chat_ui/src/settings/index.test.ts` now proves the shared deadletter
+  presentation helper emits the expected narrative for the common
+  status-changed-plus-deadletter-reason sequence.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is bounded deadletter history-tail visibility. This advances the
@@ -1182,6 +1204,17 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 deadletter receipt narrative clarity slice:
+
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 deadletter history-tail visibility slice:
 

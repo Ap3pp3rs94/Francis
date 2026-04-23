@@ -4584,6 +4584,9 @@ function SystemPanel(props: {
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
                       </div>
+                      {item.history_summary ? (
+                        <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
+                      ) : null}
                       {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                           latest=<code>{latestActivity.name || "activity"}</code>
@@ -6157,6 +6160,9 @@ function SystemPanel(props: {
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                       {item.reason || "Mission has been deadlettered."}
                     </div>
+                    {item.history_summary ? (
+                      <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
+                    ) : null}
                     {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                         latest=<code>{latestActivity.name || "activity"}</code>

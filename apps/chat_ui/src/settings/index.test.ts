@@ -99,6 +99,10 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.history_tail?.length, 2);
   assert.equal(presentation.ordered[2]?.history_tail?.[0]?.event, "status_changed");
   assert.equal((presentation.ordered[2]?.history_tail?.[1]?.details as Record<string, unknown>)?.deadletter_reason, "manual_review_needed");
+  assert.equal(
+    presentation.ordered[2]?.history_summary,
+    "Deadletter reason manual_review_needed was recorded after mission status moved blocked -> deadlettered.",
+  );
   assert.equal(presentation.total, 3);
   assert.equal(presentation.hiddenTotal, 1);
 });
