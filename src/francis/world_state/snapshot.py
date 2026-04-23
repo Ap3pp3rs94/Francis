@@ -818,10 +818,23 @@ def _mission_history_map(*item_lists: list[dict[str, Any]]) -> dict[str, list[di
 
 def _mission_history_summary(history: list[dict[str, Any]]) -> dict[str, Any]:
     latest_history = history[-1] if history and isinstance(history[-1], dict) else {}
+    history_tail: list[dict[str, Any]] = []
+    for entry in history[-2:]:
+        if not isinstance(entry, dict):
+            continue
+        details = entry.get("details")
+        history_tail.append(
+            {
+                "event": str(entry.get("event") or "").strip(),
+                "ts": str(entry.get("ts") or "").strip(),
+                "details": dict(details) if isinstance(details, dict) else {},
+            }
+        )
     return {
         "history_count": len(history),
         "latest_history_event": str(latest_history.get("event") or "").strip(),
         "latest_history_ts": str(latest_history.get("ts") or "").strip(),
+        "history_tail": history_tail,
     }
 
 
@@ -1162,6 +1175,9 @@ def _mission_briefing(
                 "history_count": int(item.get("history_count") or 0),
                 "latest_history_event": str(item.get("latest_history_event") or "").strip(),
                 "latest_history_ts": str(item.get("latest_history_ts") or "").strip(),
+                "history_tail": list(item.get("history_tail") or [])
+                if isinstance(item.get("history_tail"), list)
+                else [],
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)

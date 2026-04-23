@@ -4541,6 +4541,7 @@ function SystemPanel(props: {
                     const latestActivity = latestActivitySummary(item.latest_activity);
                     const updatedAt = mixedLocaleTime(item.updated_at);
                     const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
+                    const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4612,6 +4613,24 @@ function SystemPanel(props: {
                               {" / "}receipt_at=<code>{latestHistoryAt}</code>
                             </>
                           ) : null}
+                        </div>
+                      ) : null}
+                      {historyTail.length > 0 ? (
+                        <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                          {historyTail.map((entry, historyIndex) => (
+                            <div
+                              key={`shift-deadletter-history-${item.id}-${entry.ts || "unknown"}-${entry.event || historyIndex}`}
+                              style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#101010" }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                                <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.event || "receipt"}</div>
+                                <div style={{ fontSize: 11, color: THEME.muted }}>{mixedLocaleTime(entry.ts) || entry.ts || "unknown time"}</div>
+                              </div>
+                              {entry.details && Object.keys(entry.details).length > 0 ? (
+                                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{prettyData(entry.details)}</div>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ) : null}
                       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
@@ -6112,6 +6131,7 @@ function SystemPanel(props: {
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const updatedAt = mixedLocaleTime(item.updated_at);
                 const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
+                const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                 return (
                   <div
                     key={`mission-deadletter-${item.id}`}
@@ -6166,6 +6186,24 @@ function SystemPanel(props: {
                             {" / "}receipt_at=<code>{latestHistoryAt}</code>
                           </>
                         ) : null}
+                      </div>
+                    ) : null}
+                    {historyTail.length > 0 ? (
+                      <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                        {historyTail.map((entry, historyIndex) => (
+                          <div
+                            key={`overview-deadletter-history-${item.id}-${entry.ts || "unknown"}-${entry.event || historyIndex}`}
+                            style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#101010" }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                              <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.event || "receipt"}</div>
+                              <div style={{ fontSize: 11, color: THEME.muted }}>{mixedLocaleTime(entry.ts) || entry.ts || "unknown time"}</div>
+                            </div>
+                            {entry.details && Object.keys(entry.details).length > 0 ? (
+                              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{prettyData(entry.details)}</div>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>

@@ -52,6 +52,18 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         history_count: 4,
         latest_history_event: "continuity_updated",
         latest_history_ts: "2026-04-22T09:00:00+00:00",
+        history_tail: [
+          {
+            event: "status_changed",
+            ts: "2026-04-22T08:59:00+00:00",
+            details: { from: "blocked", to: "deadlettered" },
+          },
+          {
+            event: "continuity_updated",
+            ts: "2026-04-22T09:00:00+00:00",
+            details: { deadletter_reason: "manual_review_needed" },
+          },
+        ],
       },
       {
         id: "mission_actionable",
@@ -84,6 +96,9 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.history_count, 4);
   assert.equal(presentation.ordered[2]?.latest_history_event, "continuity_updated");
   assert.equal(presentation.ordered[2]?.latest_history_ts, "2026-04-22T09:00:00+00:00");
+  assert.equal(presentation.ordered[2]?.history_tail?.length, 2);
+  assert.equal(presentation.ordered[2]?.history_tail?.[0]?.event, "status_changed");
+  assert.equal((presentation.ordered[2]?.history_tail?.[1]?.details as Record<string, unknown>)?.deadletter_reason, "manual_review_needed");
   assert.equal(presentation.total, 3);
   assert.equal(presentation.hiddenTotal, 1);
 });
@@ -240,6 +255,18 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               history_count: 3,
               latest_history_event: "continuity_updated",
               latest_history_ts: "2026-04-14T08:05:00Z",
+              history_tail: [
+                {
+                  event: "status_changed",
+                  ts: "2026-04-14T08:04:00Z",
+                  details: { from: "blocked", to: "deadlettered" },
+                },
+                {
+                  event: "continuity_updated",
+                  ts: "2026-04-14T08:05:00Z",
+                  details: { deadletter_reason: "manual_cleanup" },
+                },
+              ],
             },
           ],
           incidents: [],
@@ -366,6 +393,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.history_count, 3);
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_event, "continuity_updated");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_ts, "2026-04-14T08:05:00Z");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.history_tail?.length, 2);
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.history_tail?.[0]?.event, "status_changed");
+    assert.equal(
+      (worldState.overview?.deadletter_missions?.[0]?.history_tail?.[1]?.details as Record<string, unknown>)?.deadletter_reason,
+      "manual_cleanup",
+    );
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
@@ -1067,6 +1100,18 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             history_count: 5,
             latest_history_event: "continuity_updated",
             latest_history_ts: "2026-04-14T08:01:00Z",
+            history_tail: [
+              {
+                event: "status_changed",
+                ts: "2026-04-14T08:00:30Z",
+                details: { from: "blocked", to: "deadlettered" },
+              },
+              {
+                event: "continuity_updated",
+                ts: "2026-04-14T08:01:00Z",
+                details: { deadletter_reason: "policy_blocked" },
+              },
+            ],
             updated_at: "2026-04-14T08:00:00Z",
             latest_activity: {
               name: "governance_hold",
@@ -1099,6 +1144,12 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.history_count, 5);
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_event, "continuity_updated");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_ts, "2026-04-14T08:01:00Z");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.history_tail?.length, 2);
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.history_tail?.[0]?.event, "status_changed");
+    assert.equal(
+      (briefing.briefing?.deadletter_preview?.[0]?.history_tail?.[1]?.details as Record<string, unknown>)?.deadletter_reason,
+      "policy_blocked",
+    );
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_activity?.gate, "approvals_gate");
     assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");
     assert.equal(briefing.briefing?.observer?.probes?.[0]?.id, "approval_queue");

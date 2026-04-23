@@ -253,6 +253,12 @@ export type WorldStateMissionAdvanceProjection = {
   reason?: string;
 };
 
+export type MissionHistoryPreviewEntry = {
+  event?: string;
+  ts?: string;
+  details?: Record<string, unknown>;
+};
+
 export type WorldStateMissionQueueItem = {
   id: string;
   status?: string;
@@ -283,6 +289,7 @@ export type WorldStateMissionQueueItem = {
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
+  history_tail?: MissionHistoryPreviewEntry[];
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -489,6 +496,7 @@ export type ContinuityBriefingDeadletterItem = {
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
+  history_tail?: MissionHistoryPreviewEntry[];
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -607,6 +615,7 @@ type MissionDeadletterLike = {
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
+  history_tail?: MissionHistoryPreviewEntry[];
 };
 
 export type MissionDeadletterPresentationItem = {
@@ -624,6 +633,7 @@ export type MissionDeadletterPresentationItem = {
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
+  history_tail?: MissionHistoryPreviewEntry[];
 };
 
 export type MissionDeadletterPresentation = {
@@ -893,6 +903,28 @@ function missionDeadletterTimestamp(item: MissionDeadletterPresentationItem): nu
   return 0;
 }
 
+function parseMissionHistoryPreviewEntry(raw: unknown): MissionHistoryPreviewEntry | null {
+  if (!isRecord(raw)) return null;
+  const event = safeString(raw["event"], "").trim();
+  const ts = safeString(raw["ts"], "").trim();
+  const details = isRecord(raw["details"]) ? (raw["details"] as Record<string, unknown>) : undefined;
+  if (!event && !ts && !details) return null;
+  return {
+    event: event || undefined,
+    ts: ts || undefined,
+    details,
+  };
+}
+
+function parseMissionHistoryPreviewEntries(raw: unknown, limit = 2): MissionHistoryPreviewEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : raw.length;
+  return raw
+    .map(parseMissionHistoryPreviewEntry)
+    .filter((item): item is MissionHistoryPreviewEntry => item !== null)
+    .slice(0, safeLimit);
+}
+
 export function presentMissionDeadletterItems(items: MissionDeadletterLike[], limit = 2): MissionDeadletterPresentation {
   const normalized = items
     .map((item, index) => ({
@@ -911,6 +943,7 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
         history_count: safeNumber(item.history_count, 0),
         latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
         latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,
+        history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
       } satisfies MissionDeadletterPresentationItem,
       index,
     }))
@@ -1421,6 +1454,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         history_count: safeNumber(item.history_count, 0),
         latest_history_event: safeString(item.latest_history_event, ""),
         latest_history_ts: safeString(item.latest_history_ts, ""),
+        history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1459,6 +1493,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         history_count: safeNumber(item.history_count, 0),
         latest_history_event: safeString(item.latest_history_event, ""),
         latest_history_ts: safeString(item.latest_history_ts, ""),
+        history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1775,6 +1810,7 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),
     latest_history_ts: safeString(raw["latest_history_ts"], ""),
+    history_tail: parseMissionHistoryPreviewEntries(raw["history_tail"]),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
   };
