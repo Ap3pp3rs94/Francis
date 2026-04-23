@@ -205,6 +205,7 @@ export type MissionRunOnceResult = {
   applied?: boolean;
   action?: string;
   mission?: MissionRecord;
+  queue_item?: MissionQueueItem;
   status?: string;
   operation_id?: string;
   approval_id?: string;
@@ -679,6 +680,7 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     applied: safeBoolean(raw.applied, false),
     action: safeString(raw.action, "") || undefined,
     mission: parseMissionRecord(raw.mission),
+    queue_item: parseMissionQueueItem(raw.queue_item),
     status: safeString(raw.status, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
     approval_id: safeString(raw.approval_id, "") || undefined,

@@ -337,6 +337,25 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           applied: true,
           action: "create_first_operation",
           mission: { id: "mission_ready", status: "queued" },
+          queue_item: {
+            id: "mission_ready",
+            status: "blocked",
+            objective: "Ready mission now needs approval review",
+            recommended_action: "review_pending_approval",
+            action_target_id: "tsk_ready",
+            last_task_id: "tsk_ready",
+            last_task_approval_id: "apr_ready",
+            last_task_approval_status: "pending",
+            last_advance_action: "create_first_operation",
+            last_advance_outcome: "queued",
+            last_advance_operation_id: "tsk_ready",
+            advance: {
+              eligible: false,
+              action: "review_pending_approval",
+              target_id: "tsk_ready",
+              reason: "Approval apr_ready is pending before the mission can continue.",
+            },
+          },
           status: "queued",
           operation_id: "tsk_ready",
           approval_id: "apr_ready",
@@ -404,6 +423,13 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.mission_id, "mission_ready");
     assert.equal(response.results?.[0]?.operation_id, "tsk_ready");
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");
+    assert.equal(response.results?.[0]?.queue_item?.recommended_action, "review_pending_approval");
+    assert.equal(response.results?.[0]?.queue_item?.last_task_approval_id, "apr_ready");
+    assert.equal(response.results?.[0]?.queue_item?.last_task_approval_status, "pending");
+    assert.equal(response.results?.[0]?.queue_item?.last_advance_action, "create_first_operation");
+    assert.equal(response.results?.[0]?.queue_item?.last_advance_outcome, "queued");
+    assert.equal(response.results?.[0]?.queue_item?.advance?.eligible, false);
+    assert.equal(response.results?.[0]?.queue_item?.advance?.action, "review_pending_approval");
     assert.equal(response.results?.[0]?.gate, "approvals_gate");
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
     assert.equal(response.results?.[0]?.mission?.id, "mission_ready");

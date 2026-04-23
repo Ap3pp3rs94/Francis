@@ -4,7 +4,7 @@ import type { ChatMessage } from "./chat";
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
 import { MissionsApiError, MissionsClient } from "./missions";
-import type { MissionDetail, MissionLoopState } from "./missions";
+import type { MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
@@ -2824,6 +2824,7 @@ function SystemPanel(props: {
       status?: string;
       gate?: string;
       nextStep?: string;
+      queueItem?: MissionQueueItem;
       handoffAction?: string;
       handoffDetail?: string;
       historyCount?: number;
@@ -3580,6 +3581,7 @@ function SystemPanel(props: {
           status: item.status,
           gate: item.gate,
           nextStep: item.next_step,
+          queueItem: item.queue_item,
           handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
           handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
           historyCount: item.history_count,
@@ -5661,7 +5663,29 @@ function SystemPanel(props: {
                 </div>
                 {missionQueueRunSummary.results.length > 0 ? (
                   <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                    {missionQueueRunSummary.results.map((item, index) => (
+                    {missionQueueRunSummary.results.map((item, index) => {
+                      const queueItem = item.queueItem;
+                      const queueAction = safeString(queueItem?.recommended_action).trim();
+                      const queueAdvanceEligible = queueItem?.advance?.eligible === true;
+                      const queueAdvanceReason = safeString(queueItem?.advance?.reason).trim();
+                      const queueTargetId =
+                        safeString(queueItem?.action_target_id).trim() ||
+                        item.operationId ||
+                        safeString(queueItem?.last_task_id).trim() ||
+                        safeString(queueItem?.last_advance_operation_id).trim();
+                      const queueTargetIsMission = queueTargetId.startsWith("msn_");
+                      const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
+                      const queueApprovalId = safeString(queueItem?.last_task_approval_id).trim() || item.approvalId || "";
+                      const queueApprovalStatus = safeString(queueItem?.last_task_approval_status).trim();
+                      const queueDependencyState = queueItem?.dependency_state;
+                      const queueDependencyTotal = Math.max(0, Number(queueDependencyState?.total ?? queueItem?.dependency_count ?? 0));
+                      const queueDependencyResolved = Math.max(0, Number(queueDependencyState?.resolved ?? 0));
+                      const queueDependencyStatus = safeString(queueDependencyState?.status).trim();
+                      const queueFirstDependencyId = safeString(queueDependencyState?.first_unresolved?.id).trim();
+                      const queueLastAdvanceAction = safeString(queueItem?.last_advance_action).trim();
+                      const queueLastAdvanceOutcome = safeString(queueItem?.last_advance_outcome).trim();
+                      const queueLastAdvanceOperationId = safeString(queueItem?.last_advance_operation_id).trim();
+                      return (
                       <div key={`mission-queue-summary-${item.missionId || item.operationId || index}`} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                           <div style={{ fontSize: 11, fontWeight: 600 }}>{item.missionId || "mission"}</div>
@@ -5669,9 +5693,58 @@ function SystemPanel(props: {
                             {item.action ? <span style={badgeStyle(item.action)}>{item.action}</span> : null}
                             {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
                             {item.activeStage ? <span style={badgeStyle(item.activeStage)}>{item.activeStage}</span> : null}
+                            {queueAction ? <span style={badgeStyle(queueAction)}>{queueAction}</span> : null}
                           </div>
                         </div>
                         {item.message ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{item.message}</div> : null}
+                        {queueItem ? (
+                          <div style={{ fontSize: 11, color: queueAdvanceEligible ? THEME.muted : "#ffcf9d", marginTop: 6 }}>
+                            advance=<code>{queueAdvanceEligible ? "eligible" : "review_required"}</code>
+                            {queueAdvanceReason ? (
+                              <>
+                                {" / "}{queueAdvanceReason}
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {(queueApprovalId || queueDependencyTotal > 0 || queueLastAdvanceAction) ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {queueApprovalId ? (
+                              <>
+                                approval=<code>{queueApprovalId}</code>
+                                {queueApprovalStatus ? (
+                                  <>
+                                    {" / "}status=<code>{queueApprovalStatus}</code>
+                                  </>
+                                ) : null}
+                              </>
+                            ) : null}
+                            {queueDependencyTotal > 0 ? (
+                              <>
+                                {queueApprovalId ? " / " : ""}dependencies=
+                                <code>
+                                  {String(queueDependencyResolved)}/{String(queueDependencyTotal)}
+                                </code>
+                                {queueDependencyStatus ? (
+                                  <>
+                                    {" / "}state=<code>{queueDependencyStatus}</code>
+                                  </>
+                                ) : null}
+                              </>
+                            ) : null}
+                            {queueLastAdvanceAction ? (
+                              <>
+                                {(queueApprovalId || queueDependencyTotal > 0) ? " / " : ""}last_advance=
+                                <code>{queueLastAdvanceAction}</code>
+                                {queueLastAdvanceOutcome ? (
+                                  <>
+                                    {" / "}outcome=<code>{queueLastAdvanceOutcome}</code>
+                                  </>
+                                ) : null}
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {item.handoffDetail ? (
                           <div style={{ fontSize: 11, color: "#d6e8e8", marginTop: 6 }}>
                             Handoff{item.handoffAction ? ` (${item.handoffAction})` : ""}: {item.handoffDetail}
@@ -5701,13 +5774,13 @@ function SystemPanel(props: {
                           </div>
                         ) : null}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                          {item.approvalId ? (
+                          {queueApprovalId ? (
                             <button
                               style={buttonStyle}
                               onClick={() =>
-                                props.onOpenApprovals(item.approvalId, {
+                                props.onOpenApprovals(queueApprovalId, {
                                   missionId: item.missionId,
-                                  operationId: item.operationId,
+                                  operationId: queueTargetIsOperation ? queueTargetId : item.operationId,
                                 })
                               }
                             >
@@ -5724,9 +5797,32 @@ function SystemPanel(props: {
                               Open linked task
                             </button>
                           ) : null}
+                          {queueTargetIsMission && queueTargetId !== item.missionId ? (
+                            <button style={buttonStyle} onClick={() => inspectMission(queueTargetId)}>
+                              Open dependency mission
+                            </button>
+                          ) : null}
+                          {queueTargetIsOperation && queueTargetId !== item.operationId ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(queueTargetId)}>
+                              Open action target
+                            </button>
+                          ) : null}
+                          {queueFirstDependencyId && queueFirstDependencyId !== queueTargetId && queueFirstDependencyId.startsWith("msn_") ? (
+                            <button style={buttonStyle} onClick={() => inspectMission(queueFirstDependencyId)}>
+                              Open first dependency
+                            </button>
+                          ) : null}
+                          {queueLastAdvanceOperationId &&
+                          queueLastAdvanceOperationId !== item.operationId &&
+                          queueLastAdvanceOperationId !== queueTargetId ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(queueLastAdvanceOperationId)}>
+                              Open last advanced task
+                            </button>
+                          ) : null}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

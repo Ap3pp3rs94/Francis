@@ -137,6 +137,13 @@ client, and the inspector can route the operator to the exact approval,
 dependency mission, linked task, or last advanced task without creating a new
 mutation path.
 
+As of `2026-04-23`, mission queue-run result cards now preserve and render the
+same queue actionability contract after a bounded batch pass. Each run result can
+carry its current `queue_item`, and the ORB Mission Queue summary can show
+post-run advance posture, approval/dependency state, last-advance outcome, and
+review links without requiring the operator to infer recovery targets from raw
+counts.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -148,6 +155,22 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run recovery result parity. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
+batch advancement results as actionable as the selected mission inspector:
+
+- `src/francis/api/routes/missions.py` now includes `queue_item` in each
+  `/missions/run_once` result projection.
+- `apps/chat_ui/src/missions/index.ts` now parses `queue_item` on
+  `MissionRunOnceResult`.
+- `apps/chat_ui/src/App.tsx` now renders run-once result actionability,
+  approval/dependency posture, last advance outcome, and recovery links to the
+  existing mission, operation, and approval inspectors.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove run-once results preserve queue actionability through the API and
+  browser parser.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is selected mission recovery action routing. This advances the
@@ -1042,6 +1065,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 mission queue-run recovery result parity slice:
+
+- `python -m pytest tests/test_api_missions.py -q`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test -- missions/index.test.ts`
+  Result: `16 passed`
+- `python -m ruff check src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 selected mission recovery action routing slice:
 

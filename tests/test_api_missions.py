@@ -1227,6 +1227,12 @@ def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monke
     assert mission_result["handoff"]["action"] == "review_pending_approval"
     assert mission_result["handoff"]["approval_id"] == mission_result["approval_id"]
     assert mission_result["handoff"]["operation_id"] == operation_id
+    assert mission_result["queue_item"]["recommended_action"] == "review_pending_approval"
+    assert mission_result["queue_item"]["action_target_id"] == operation_id
+    assert mission_result["queue_item"]["last_task_approval_id"] == mission_result["approval_id"]
+    assert mission_result["queue_item"]["last_task_approval_status"] == "pending"
+    assert mission_result["queue_item"]["advance"]["eligible"] is False
+    assert mission_result["queue_item"]["advance"]["action"] == "review_pending_approval"
     assert mission_result["linked_operation_count"] == 1
 
     fetched = client.get(f"/missions/{mission_id}")

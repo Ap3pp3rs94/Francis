@@ -473,8 +473,10 @@ def _mission_queue_result_projection(mission_id: str) -> dict[str, Any]:
         return {"mission_error": err or "not_found"}
     detail = _mission_detail_projection(record, log_limit=25)
     loop_state = detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {}
+    queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
     return {
         "mission": _serialize_mission(record),
+        "queue_item": queue_item,
         "loop_state": loop_state,
         "handoff": loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {},
         "history_count": len(detail.get("history")) if isinstance(detail.get("history"), list) else 0,
