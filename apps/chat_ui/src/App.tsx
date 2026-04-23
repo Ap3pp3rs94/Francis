@@ -3445,6 +3445,27 @@ function SystemPanel(props: {
   const selectedMissionAdvanceReason = safeString(selectedMissionQueueItem?.advance?.reason).trim();
   const selectedMissionAdvanceLabel =
     selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
+  const selectedMissionActionTargetId =
+    safeString(selectedMissionQueueItem?.action_target_id).trim() ||
+    safeString(selectedMissionQueueItem?.last_task_id).trim() ||
+    safeString(selectedMissionQueueItem?.last_advance_operation_id).trim();
+  const selectedMissionTargetIsMission = selectedMissionActionTargetId.startsWith("msn_");
+  const selectedMissionTargetIsOperation = selectedMissionActionTargetId.startsWith("tsk_");
+  const selectedMissionApprovalId =
+    safeString(selectedMissionQueueItem?.last_task_approval_id).trim() || safeString(missionLoopHandoff?.approval_id).trim();
+  const selectedMissionApprovalStatus = safeString(selectedMissionQueueItem?.last_task_approval_status).trim();
+  const selectedMissionFirstDependencyId =
+    safeString(selectedMissionDependencyState?.first_unresolved?.id).trim() ||
+    selectedMission?.dependency_ids?.find((dependencyId) => safeString(dependencyId).trim().length > 0) ||
+    "";
+  const selectedMissionDependencyTotal = Math.max(
+    0,
+    Number(selectedMissionDependencyState?.total ?? selectedMission?.dependency_count ?? selectedMission?.dependency_ids?.length ?? 0),
+  );
+  const selectedMissionDependencyResolved = Math.max(0, Number(selectedMissionDependencyState?.resolved ?? 0));
+  const selectedMissionLastAdvanceAction = safeString(selectedMissionQueueItem?.last_advance_action).trim();
+  const selectedMissionLastAdvanceOutcome = safeString(selectedMissionQueueItem?.last_advance_outcome).trim();
+  const selectedMissionLastAdvanceOperationId = safeString(selectedMissionQueueItem?.last_advance_operation_id).trim();
   const missionAdvanceBlockedReason = executionBlockedReason(props.operatorMode, "advancing mission continuity");
   const canAdvanceMission = missionAdvanceBlockedReason.length === 0;
   const missionQueueRunBlockedReason = executionBlockedReason(props.operatorMode, "running the mission queue");
@@ -5304,13 +5325,106 @@ function SystemPanel(props: {
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>{missionAdvanceBlockedReason}</div>
               ) : null}
               {selectedMissionQueueItem ? (
-                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
-                  action=<code>{selectedMissionRecommendedAction || "review_mission"}</code>
-                  {" / "}advance=<code>{selectedMissionAdvanceEligible ? "eligible" : "review_required"}</code>
+                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#111819", marginTop: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600 }}>Mission Actionability</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <span style={badgeStyle(selectedMissionRecommendedAction || "review_mission")}>
+                        {selectedMissionRecommendedAction || "review_mission"}
+                      </span>
+                      <span style={badgeStyle(selectedMissionAdvanceEligible ? "eligible" : "review_required")}>
+                        {selectedMissionAdvanceEligible ? "advance eligible" : "review required"}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: selectedMissionAdvanceEligible ? THEME.muted : "#ffcf9d", marginTop: 6 }}>
+                    {selectedMissionAdvanceReason ||
+                      selectedMissionQueueItem.operator_hint ||
+                      "Mission actionability is available, but no operator hint is recorded."}
+                  </div>
+                  {(selectedMissionApprovalId || selectedMissionDependencyTotal > 0 || selectedMissionLastAdvanceAction) ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      {selectedMissionApprovalId ? (
+                        <>
+                          approval <code>{selectedMissionApprovalId}</code>
+                          {selectedMissionApprovalStatus ? (
+                            <>
+                              {" / "}status <code>{selectedMissionApprovalStatus}</code>
+                            </>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {selectedMissionDependencyTotal > 0 ? (
+                        <>
+                          {selectedMissionApprovalId ? " / " : ""}dependencies{" "}
+                          <code>
+                            {String(selectedMissionDependencyResolved)}/{String(selectedMissionDependencyTotal)}
+                          </code>
+                          {selectedMissionDependencyStatus ? (
+                            <>
+                              {" / "}state <code>{selectedMissionDependencyStatus}</code>
+                            </>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {selectedMissionLastAdvanceAction ? (
+                        <>
+                          {(selectedMissionApprovalId || selectedMissionDependencyTotal > 0) ? " / " : ""}last advance{" "}
+                          <code>{selectedMissionLastAdvanceAction}</code>
+                          {selectedMissionLastAdvanceOutcome ? (
+                            <>
+                              {" / "}outcome <code>{selectedMissionLastAdvanceOutcome}</code>
+                            </>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {(selectedMissionApprovalId ||
+                    selectedMissionTargetIsMission ||
+                    selectedMissionTargetIsOperation ||
+                    selectedMissionFirstDependencyId ||
+                    selectedMissionLastAdvanceOperationId) ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      {selectedMissionApprovalId ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            props.onOpenApprovals(selectedMissionApprovalId, {
+                              missionId: selectedMission.id,
+                              operationId: selectedMissionTargetIsOperation ? selectedMissionActionTargetId : selectedMissionQueueItem.last_task_id,
+                            })
+                          }
+                        >
+                          Review approval
+                        </button>
+                      ) : null}
+                      {selectedMissionTargetIsMission ? (
+                        <button style={buttonStyle} onClick={() => inspectMission(selectedMissionActionTargetId)}>
+                          Open dependency mission
+                        </button>
+                      ) : null}
+                      {selectedMissionTargetIsOperation ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionActionTargetId)}>
+                          Open linked task
+                        </button>
+                      ) : null}
+                      {selectedMissionFirstDependencyId &&
+                      selectedMissionFirstDependencyId !== selectedMissionActionTargetId &&
+                      selectedMissionFirstDependencyId.startsWith("msn_") ? (
+                        <button style={buttonStyle} onClick={() => inspectMission(selectedMissionFirstDependencyId)}>
+                          Open first dependency
+                        </button>
+                      ) : null}
+                      {selectedMissionLastAdvanceOperationId &&
+                      selectedMissionLastAdvanceOperationId !== selectedMissionActionTargetId ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionLastAdvanceOperationId)}>
+                          Open last advanced task
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-              {!selectedMissionAdvanceEligible && selectedMissionAdvanceReason ? (
-                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{selectedMissionAdvanceReason}</div>
               ) : null}
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>

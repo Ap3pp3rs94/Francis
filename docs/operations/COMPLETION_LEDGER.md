@@ -130,6 +130,13 @@ selected mission advance control disables or labels mutation from
 `queue_item.advance.eligible` instead of offering an unconditional advance
 button.
 
+As of `2026-04-22`, the selected mission inspector now exposes recovery targets
+from the same queue actionability contract. Mission detail queue items preserve
+approval ids, approval status, and last-advance receipt metadata in the browser
+client, and the inspector can route the operator to the exact approval,
+dependency mission, linked task, or last advanced task without creating a new
+mutation path.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -141,6 +148,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-22`, the highest-confidence surface newly advanced in the current
+Stage 3 line is selected mission recovery action routing. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by turning
+non-eligible mission states into concrete review paths instead of dead-end
+disabled controls:
+
+- `apps/chat_ui/src/missions/index.ts` now preserves approval handoff and
+  last-advance receipt metadata on `MissionQueueItem`.
+- `apps/chat_ui/src/App.tsx` now renders a Mission Actionability panel for the
+  selected mission, showing recommended action, advance posture, approval state,
+  dependency counts, and last advance outcome.
+- The same panel routes to existing approval, mission, and operation inspectors
+  for review-only recovery; it does not add a new mutation path.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove approval handoff and last-advance metadata survive through mission
+  detail and browser parsing.
 
 As of `2026-04-22`, the highest-confidence surface newly advanced in the current
 Stage 3 line is mission inspector advance contract parity. This advances the
@@ -1018,6 +1042,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-22` Stage 3 selected mission recovery action routing slice:
+
+- `python -m pytest tests/test_api_missions.py -q`
+  Result: `16 passed`
+- `cd apps/chat_ui && npm test -- missions/index.test.ts`
+  Result: `16 passed`
+- `python -m ruff check tests/test_api_missions.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-22` Stage 3 mission inspector advance contract parity slice:
 

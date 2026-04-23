@@ -472,6 +472,18 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         recommended_action: "review_pending_approval",
         action_target_id: "tsk_loop",
         operator_hint: "Approval apr_loop is pending before execution can continue.",
+        last_task_id: "tsk_loop",
+        last_task_approval_id: "apr_loop",
+        last_task_previous_approval_id: "apr_old_loop",
+        last_task_approval_status: "pending",
+        last_advance_action: "run_linked_operation",
+        last_advance_outcome: "requires_operator",
+        last_advance_operation_id: "tsk_loop",
+        last_advance_operation_status: "blocked",
+        last_advance_message: "Approval apr_loop is pending before execution can continue.",
+        last_advance_actor: "test.missions",
+        last_advance_applied: false,
+        last_advance_at: "2026-04-15T12:05:00Z",
         advance: {
           eligible: false,
           action: "review_pending_approval",
@@ -552,6 +564,14 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.queue_item?.advance?.eligible, false);
     assert.equal(response.queue_item?.advance?.action, "review_pending_approval");
     assert.equal(response.queue_item?.advance?.target_id, "tsk_loop");
+    assert.equal(response.queue_item?.last_task_approval_id, "apr_loop");
+    assert.equal(response.queue_item?.last_task_previous_approval_id, "apr_old_loop");
+    assert.equal(response.queue_item?.last_task_approval_status, "pending");
+    assert.equal(response.queue_item?.last_advance_action, "run_linked_operation");
+    assert.equal(response.queue_item?.last_advance_outcome, "requires_operator");
+    assert.equal(response.queue_item?.last_advance_operation_id, "tsk_loop");
+    assert.equal(response.queue_item?.last_advance_operation_status, "blocked");
+    assert.equal(response.queue_item?.last_advance_applied, false);
   } finally {
     restoreFetch();
   }

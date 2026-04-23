@@ -1135,6 +1135,12 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     assert advanced_body["loop_state"]["handoff"]["action"] == "review_pending_approval"
     assert advanced_body["loop_state"]["handoff"]["approval_id"] == advanced_body["approval_id"]
     assert advanced_body["loop_state"]["handoff"]["operation_id"] == operation_id
+    assert advanced_body["queue_item"]["recommended_action"] == "review_pending_approval"
+    assert advanced_body["queue_item"]["action_target_id"] == operation_id
+    assert advanced_body["queue_item"]["last_task_approval_id"] == advanced_body["approval_id"]
+    assert advanced_body["queue_item"]["last_task_approval_status"] == "pending"
+    assert advanced_body["queue_item"]["advance"]["eligible"] is False
+    assert advanced_body["queue_item"]["advance"]["action"] == "review_pending_approval"
     assert advanced_body["history"][-1]["event"] == "advance_receipt"
 
     fetched = client.get(f"/missions/{mission_id}")
@@ -1142,6 +1148,9 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     fetched_body = fetched.json()
     assert fetched_body["mission"]["meta"]["last_task_gate"] == "approvals_gate"
     assert fetched_body["mission"]["meta"]["last_task_result_status"] in {"pending", "needs_approval"}
+    assert fetched_body["queue_item"]["last_task_approval_id"] == advanced_body["approval_id"]
+    assert fetched_body["queue_item"]["last_advance_operation_id"] == operation_id
+    assert fetched_body["queue_item"]["last_advance_outcome"] == "queued"
 
 
 def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monkeypatch, tmp_path: Path) -> None:

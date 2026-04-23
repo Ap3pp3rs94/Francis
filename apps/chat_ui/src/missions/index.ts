@@ -154,6 +154,17 @@ export type MissionQueueItem = MissionRecord & {
   last_task_gate?: string;
   last_task_next_step?: string;
   last_task_reason?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_approval_status?: string;
+  last_advance_action?: string;
+  last_advance_outcome?: string;
+  last_advance_operation_id?: string;
+  last_advance_operation_status?: string;
+  last_advance_message?: string;
+  last_advance_actor?: string;
+  last_advance_applied?: boolean;
+  last_advance_at?: string;
 };
 
 export type MissionAdvanceRequest = {
@@ -414,6 +425,17 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     last_task_gate: safeString(raw.last_task_gate, "") || undefined,
     last_task_next_step: safeString(raw.last_task_next_step, "") || undefined,
     last_task_reason: safeString(raw.last_task_reason, "") || undefined,
+    last_task_approval_id: safeString(raw.last_task_approval_id, "") || undefined,
+    last_task_previous_approval_id: safeString(raw.last_task_previous_approval_id, "") || undefined,
+    last_task_approval_status: safeString(raw.last_task_approval_status, "") || undefined,
+    last_advance_action: safeString(raw.last_advance_action, "") || undefined,
+    last_advance_outcome: safeString(raw.last_advance_outcome, "") || undefined,
+    last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    last_advance_operation_status: safeString(raw.last_advance_operation_status, "") || undefined,
+    last_advance_message: safeString(raw.last_advance_message, "") || undefined,
+    last_advance_actor: safeString(raw.last_advance_actor, "") || undefined,
+    last_advance_applied: safeBoolean(raw.last_advance_applied, false),
+    last_advance_at: safeString(raw.last_advance_at, "") || undefined,
   };
 }
 
