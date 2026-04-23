@@ -9,7 +9,7 @@ import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
-import { SettingsApiError, SettingsClient, toLocaleTime } from "./settings";
+import { SettingsApiError, SettingsClient, presentMissionDeadletterItems, toLocaleTime } from "./settings";
 import type {
   ContinuityBriefingSnapshot,
   ContinuityLedgerEntry,
@@ -3111,6 +3111,10 @@ function SystemPanel(props: {
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
   const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
+  const shiftBriefingDeadletterPresentation = useMemo(
+    () => presentMissionDeadletterItems(shiftBriefingDeadletter, 2),
+    [shiftBriefingDeadletter],
+  );
   const shiftBriefingReadiness = shiftBriefing?.readiness;
   const shiftBriefingReadinessCriteria = shiftBriefingReadiness?.criteria ?? [];
   const shiftBriefingObserver = shiftBriefing?.observer;
@@ -3143,6 +3147,7 @@ function SystemPanel(props: {
   const missionQueue = overview?.mission_queue ?? [];
   const missionQueuePresentation = useMemo(() => presentMissionQueue(missionQueue, 4), [missionQueue]);
   const deadletterPreview = overview?.deadletter_missions ?? [];
+  const deadletterPreviewPresentation = useMemo(() => presentMissionDeadletterItems(deadletterPreview, 2), [deadletterPreview]);
   const incidents = overview?.incidents ?? [];
   const pendingApprovals = overview?.pending_approvals ?? [];
   const queuedTasks = safeNumber(counts?.queued_tasks, safeNumber(taskStatusCounts.pending, 0) + safeNumber(taskStatusCounts.accepted, 0));
@@ -4525,30 +4530,69 @@ function SystemPanel(props: {
 
             <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Deadletter Review</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                showing=<code>{String(shiftBriefingDeadletterPresentation.visible.length)}/{String(shiftBriefingDeadletterPresentation.total)}</code>
+              </div>
               <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                {shiftBriefingDeadletter.length === 0 ? (
+                {shiftBriefingDeadletterPresentation.total === 0 ? (
                   <div style={{ fontSize: 11, color: THEME.muted }}>No deadlettered missions waiting for review.</div>
                 ) : (
-                  shiftBriefingDeadletter.slice(0, 2).map((item) => (
+                  shiftBriefingDeadletterPresentation.visible.map((item) => {
+                    const latestActivity = latestActivitySummary(item.latest_activity);
+                    const updatedAt = mixedLocaleTime(item.updated_at);
+                    return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                         <div style={{ fontSize: 11, fontWeight: 600 }}>{item.objective || item.id}</div>
-                        <span style={badgeStyle(item.recommended_action || "deadlettered")}>
-                          {item.recommended_action || "deadlettered"}
-                        </span>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <span style={badgeStyle("deadlettered")}>deadlettered</span>
+                          <span style={badgeStyle(item.recommended_action || "review_deadletter")}>
+                            {item.recommended_action || "review_deadletter"}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        action=<code>{item.recommended_action || "review_deadletter"}</code>
+                        {updatedAt ? (
+                          <>
+                            {" / "}updated=<code>{updatedAt}</code>
+                          </>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
                       </div>
+                      {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          latest=<code>{latestActivity.name || "activity"}</code>
+                          {" / "}status=<code>{latestActivity.status || "unknown"}</code>
+                          {latestActivity.gate ? (
+                            <>
+                              {" / "}gate=<code>{latestActivity.gate}</code>
+                            </>
+                          ) : null}
+                          {latestActivity.observedAt ? (
+                            <>
+                              {" / "}at=<code>{latestActivity.observedAt}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
                         <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                           Inspect
                         </button>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+              {shiftBriefingDeadletterPresentation.hiddenTotal > 0 ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+                  Hidden from this bounded view: <code>{String(shiftBriefingDeadletterPresentation.hiddenTotal)}</code>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -6016,30 +6060,76 @@ function SystemPanel(props: {
           </>
         ) : null}
 
-        {deadletterPreview.length > 0 ? (
+        {deadletterPreviewPresentation.total > 0 ? (
           <>
             <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Deadletter</div>
-            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-              {deadletterPreview.slice(0, 2).map((item) => (
-                <div
-                  key={`mission-deadletter-${item.id}`}
-                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{item.objective || item.id}</div>
-                    <span style={badgeStyle(item.status || "deadlettered")}>{item.status || "deadlettered"}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
-                    {item.deadletter_reason || item.operator_hint || "Mission has been deadlettered."}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-                    <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
-                      Inspect mission flow
-                    </button>
-                  </div>
-                </div>
-              ))}
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              showing=<code>{String(deadletterPreviewPresentation.visible.length)}/{String(deadletterPreviewPresentation.total)}</code>
             </div>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {deadletterPreviewPresentation.visible.map((item) => {
+                const latestActivity = latestActivitySummary(item.latest_activity);
+                const updatedAt = mixedLocaleTime(item.updated_at);
+                return (
+                  <div
+                    key={`mission-deadletter-${item.id}`}
+                    style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{item.objective || item.id}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <span style={badgeStyle(item.status || "deadlettered")}>{item.status || "deadlettered"}</span>
+                        <span style={badgeStyle(item.recommended_action || "review_deadletter")}>
+                          {item.recommended_action || "review_deadletter"}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      action=<code>{item.recommended_action || "review_deadletter"}</code>
+                      {updatedAt ? (
+                        <>
+                          {" / "}updated=<code>{updatedAt}</code>
+                        </>
+                      ) : null}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                      {item.reason || "Mission has been deadlettered."}
+                    </div>
+                    {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        latest=<code>{latestActivity.name || "activity"}</code>
+                        {" / "}status=<code>{latestActivity.status || "unknown"}</code>
+                        {latestActivity.gate ? (
+                          <>
+                            {" / "}gate=<code>{latestActivity.gate}</code>
+                          </>
+                        ) : null}
+                        {latestActivity.observedAt ? (
+                          <>
+                            {" / "}at=<code>{latestActivity.observedAt}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+                      {item.last_task_id ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(item.last_task_id || "")}>
+                          Open last task
+                        </button>
+                      ) : null}
+                      <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                        Inspect mission flow
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {deadletterPreviewPresentation.hiddenTotal > 0 ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+                Hidden from this bounded view: <code>{String(deadletterPreviewPresentation.hiddenTotal)}</code>
+              </div>
+            ) : null}
           </>
         ) : null}
 

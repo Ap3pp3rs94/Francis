@@ -151,6 +151,12 @@ and the first queue cards now reuse the same contract, so the operator is sent
 to the most constrained mission instead of whichever queue item happened to land
 first.
 
+As of `2026-04-23`, the deadletter preview surfaces now preserve more explicit
+failure truth from the existing payloads. Shift Briefing deadletter review and
+overview deadletter cards both show the recommended review action, latest
+recorded activity, updated time, and hidden-count disclosure instead of looking
+like a vague truncated list of failures.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -162,6 +168,22 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter preview truthfulness. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making early
+deadletter surfaces preserve why continuation failed, what review action is
+expected next, and whether additional deadlettered missions remain hidden:
+
+- `apps/chat_ui/src/settings/index.ts` now exports
+  `presentMissionDeadletterItems`, which normalizes reason fields across world
+  state and continuity deadletter payloads, orders more actionable items first,
+  and reports hidden counts for bounded views.
+- `apps/chat_ui/src/App.tsx` now uses that contract for both the Shift Briefing
+  deadletter review panel and the overview deadletter panel, showing action,
+  latest activity, updated time, and hidden-count disclosure.
+- `apps/chat_ui/src/settings/index.test.ts` now proves the deadletter
+  presentation helper preserves reason normalization and bounded ordering.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is mission queue prioritization parity. This advances the active
@@ -1085,6 +1107,17 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 deadletter preview truthfulness slice:
+
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 mission queue-run recovery result parity slice:
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SettingsClient } from "./index.ts";
+import { SettingsClient, presentMissionDeadletterItems } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -35,6 +35,45 @@ function jsonRequestBody(init?: RequestInit): unknown {
   if (typeof body !== "string" || !body.trim()) return undefined;
   return JSON.parse(body) as unknown;
 }
+
+test("presentMissionDeadletterItems normalizes reason fields and prioritizes actionable recent deadletters", () => {
+  const presentation = presentMissionDeadletterItems(
+    [
+      {
+        id: "mission_old",
+        objective: "Older deadletter with no explicit action",
+        deadletter_reason: "manual_review_needed",
+        updated_at: "2026-04-22T09:00:00Z",
+        latest_activity: { name: "deadlettered", status: "failed", ts: 1_745_312_400 },
+        last_task_id: "tsk_old",
+      },
+      {
+        id: "mission_actionable",
+        objective: "Recent deadletter with a concrete next review step",
+        reason: "approval_timeout",
+        recommended_action: "inspect approvals",
+        updated_at: "2026-04-23T09:00:00Z",
+        latest_activity: { name: "governance_hold", status: "blocked", gate: "approvals_gate", ts: 1_745_398_800 },
+      },
+      {
+        id: "mission_newer_no_action",
+        objective: "Recent deadletter without an explicit action",
+        deadletter_reason: "worker_failed_twice",
+        updated_at: "2026-04-23T08:00:00Z",
+      },
+    ],
+    2,
+  );
+
+  assert.deepEqual(
+    presentation.visible.map((item) => item.id),
+    ["mission_actionable", "mission_newer_no_action"],
+  );
+  assert.equal(presentation.visible[0]?.reason, "approval_timeout");
+  assert.equal(presentation.visible[1]?.reason, "worker_failed_twice");
+  assert.equal(presentation.total, 3);
+  assert.equal(presentation.hiddenTotal, 1);
+});
 
 test("SettingsClient.getHealth parses Francis health report envelopes without a window global", async () => {
   const requestPaths: string[] = [];

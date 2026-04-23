@@ -581,6 +581,36 @@ export type ContinuityLedgerSnapshot = {
   error?: string;
 };
 
+type MissionDeadletterLike = {
+  id: string;
+  status?: string;
+  objective?: string;
+  reason?: string;
+  recommended_action?: string;
+  updated_at?: string;
+  latest_activity?: Record<string, unknown>;
+  deadletter_reason?: string;
+  last_task_id?: string;
+};
+
+export type MissionDeadletterPresentationItem = {
+  id: string;
+  status?: string;
+  objective?: string;
+  reason?: string;
+  recommended_action?: string;
+  updated_at?: string;
+  latest_activity?: Record<string, unknown>;
+  last_task_id?: string;
+};
+
+export type MissionDeadletterPresentation = {
+  ordered: MissionDeadletterPresentationItem[];
+  visible: MissionDeadletterPresentationItem[];
+  total: number;
+  hiddenTotal: number;
+};
+
 export type ContinuityOperatorSurface = {
   available: boolean;
   error?: string;
@@ -824,6 +854,59 @@ function normalizeUnixSeconds(ts: unknown): UnixSeconds | undefined {
   // Heuristic: if it looks like milliseconds, normalize to seconds.
   if (ts > 10_000_000_000) return Math.floor(ts / 1000);
   return Math.floor(ts);
+}
+
+function missionDeadletterTimestamp(item: MissionDeadletterPresentationItem): number {
+  const updatedAt = Date.parse(safeString(item.updated_at, ""));
+  if (Number.isFinite(updatedAt)) return updatedAt;
+  const latestActivity = item.latest_activity;
+  if (isRecord(latestActivity)) {
+    const activityTs = latestActivity.ts;
+    if (typeof activityTs === "number" && Number.isFinite(activityTs)) {
+      return activityTs > 10_000_000_000 ? activityTs : activityTs * 1000;
+    }
+    const parsedActivityTs = Date.parse(safeString(activityTs, ""));
+    if (Number.isFinite(parsedActivityTs)) return parsedActivityTs;
+  }
+  return 0;
+}
+
+export function presentMissionDeadletterItems(items: MissionDeadletterLike[], limit = 2): MissionDeadletterPresentation {
+  const normalized = items
+    .map((item, index) => ({
+      item: {
+        id: safeString(item.id, "").trim(),
+        status: safeString(item.status, "").trim() || undefined,
+        objective: safeString(item.objective, "") || undefined,
+        reason: safeString(item.reason, "").trim() || safeString(item.deadletter_reason, "").trim() || undefined,
+        recommended_action: safeString(item.recommended_action, "").trim() || undefined,
+        updated_at: safeString(item.updated_at, "").trim() || undefined,
+        latest_activity: isRecord(item.latest_activity) ? item.latest_activity : undefined,
+        last_task_id: safeString(item.last_task_id, "").trim() || undefined,
+      } satisfies MissionDeadletterPresentationItem,
+      index,
+    }))
+    .filter((entry) => entry.item.id.length > 0)
+    .sort((left, right) => {
+      const leftActionable = left.item.recommended_action ? 0 : 1;
+      const rightActionable = right.item.recommended_action ? 0 : 1;
+      if (leftActionable !== rightActionable) return leftActionable - rightActionable;
+      const leftReason = left.item.reason ? 0 : 1;
+      const rightReason = right.item.reason ? 0 : 1;
+      if (leftReason !== rightReason) return leftReason - rightReason;
+      const timestampDelta = missionDeadletterTimestamp(right.item) - missionDeadletterTimestamp(left.item);
+      if (timestampDelta !== 0) return timestampDelta;
+      return left.index - right.index;
+    });
+  const ordered = normalized.map((entry) => entry.item);
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : ordered.length;
+  const visible = ordered.slice(0, safeLimit);
+  return {
+    ordered,
+    visible,
+    total: ordered.length,
+    hiddenTotal: Math.max(0, ordered.length - visible.length),
+  };
 }
 
 function normalizeBaseUrl(url: string): string {
