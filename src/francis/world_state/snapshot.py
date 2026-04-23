@@ -1130,6 +1130,10 @@ def _mission_briefing(
                 "reason": str(item.get("deadletter_reason") or "").strip(),
                 "recommended_action": str(item.get("recommended_action") or "").strip(),
                 **_mission_hold_projection(item),
+                "last_task_id": str(item.get("last_task_id") or "").strip(),
+                "last_task_status": str(item.get("last_task_status") or "").strip(),
+                "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
+                "last_task_gate": str(item.get("last_task_gate") or "").strip(),
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)

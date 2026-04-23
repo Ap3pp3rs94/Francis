@@ -479,6 +479,10 @@ export type ContinuityBriefingDeadletterItem = {
   objective?: string;
   reason?: string;
   recommended_action?: string;
+  last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_gate?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -591,6 +595,9 @@ type MissionDeadletterLike = {
   latest_activity?: Record<string, unknown>;
   deadletter_reason?: string;
   last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_gate?: string;
 };
 
 export type MissionDeadletterPresentationItem = {
@@ -602,6 +609,9 @@ export type MissionDeadletterPresentationItem = {
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
   last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_gate?: string;
 };
 
 export type MissionDeadletterPresentation = {
@@ -883,6 +893,9 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
         updated_at: safeString(item.updated_at, "").trim() || undefined,
         latest_activity: isRecord(item.latest_activity) ? item.latest_activity : undefined,
         last_task_id: safeString(item.last_task_id, "").trim() || undefined,
+        last_task_status: safeString(item.last_task_status, "").trim() || undefined,
+        last_task_result_status: safeString(item.last_task_result_status, "").trim() || undefined,
+        last_task_gate: safeString(item.last_task_gate, "").trim() || undefined,
       } satisfies MissionDeadletterPresentationItem,
       index,
     }))
@@ -1734,6 +1747,10 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     objective: safeString(raw["objective"], ""),
     reason: safeString(raw["reason"], ""),
     recommended_action: safeString(raw["recommended_action"], ""),
+    last_task_id: safeString(raw["last_task_id"], ""),
+    last_task_status: safeString(raw["last_task_status"], ""),
+    last_task_result_status: safeString(raw["last_task_result_status"], ""),
+    last_task_gate: safeString(raw["last_task_gate"], ""),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
   };

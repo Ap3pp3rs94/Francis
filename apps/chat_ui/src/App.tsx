@@ -4558,6 +4558,26 @@ function SystemPanel(props: {
                             {" / "}updated=<code>{updatedAt}</code>
                           </>
                         ) : null}
+                        {item.last_task_id ? (
+                          <>
+                            {" / "}last_task=<code>{item.last_task_id}</code>
+                          </>
+                        ) : null}
+                        {item.last_task_status ? (
+                          <>
+                            {" / "}task_status=<code>{item.last_task_status}</code>
+                          </>
+                        ) : null}
+                        {item.last_task_result_status ? (
+                          <>
+                            {" / "}result=<code>{item.last_task_result_status}</code>
+                          </>
+                        ) : null}
+                        {item.last_task_gate ? (
+                          <>
+                            {" / "}gate=<code>{item.last_task_gate}</code>
+                          </>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
@@ -4578,7 +4598,12 @@ function SystemPanel(props: {
                           ) : null}
                         </div>
                       ) : null}
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+                        {item.last_task_id ? (
+                          <button style={buttonStyle} onClick={() => props.onOpenOperation(item.last_task_id || "")}>
+                            Open last task
+                          </button>
+                        ) : null}
                         <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                           Inspect
                         </button>

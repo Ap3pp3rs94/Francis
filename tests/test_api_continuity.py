@@ -608,6 +608,13 @@ def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_p
     body = response.json()
     assert body["briefing"]["counts"]["deadlettered"] == 1
     assert body["briefing"]["deadletter_preview"][0]["id"] == mission_id
+    assert body["briefing"]["deadletter_preview"][0]["recommended_action"] == "review_deadletter"
+    assert body["briefing"]["deadletter_preview"][0]["last_task_id"] == operation_id
+    assert body["briefing"]["deadletter_preview"][0]["last_task_status"] == "accepted"
+    assert body["briefing"]["deadletter_preview"][0]["last_task_result_status"] == "blocked"
+    assert body["briefing"]["deadletter_preview"][0]["last_task_gate"] == "trust_gate"
+    assert body["briefing"]["deadletter_preview"][0]["latest_activity"]["name"] == "governance_hold"
+    assert body["briefing"]["deadletter_preview"][0]["latest_activity"]["status"] == "blocked"
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
     assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "satisfied"
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_deadletter_ids"] == [mission_id]

@@ -46,6 +46,9 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         updated_at: "2026-04-22T09:00:00Z",
         latest_activity: { name: "deadlettered", status: "failed", ts: 1_745_312_400 },
         last_task_id: "tsk_old",
+        last_task_status: "blocked",
+        last_task_result_status: "failed",
+        last_task_gate: "approvals_gate",
       },
       {
         id: "mission_actionable",
@@ -71,6 +74,10 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   );
   assert.equal(presentation.visible[0]?.reason, "approval_timeout");
   assert.equal(presentation.visible[1]?.reason, "worker_failed_twice");
+  assert.equal(presentation.visible[1]?.last_task_status, undefined);
+  assert.equal(presentation.ordered[2]?.last_task_status, "blocked");
+  assert.equal(presentation.ordered[2]?.last_task_result_status, "failed");
+  assert.equal(presentation.ordered[2]?.last_task_gate, "approvals_gate");
   assert.equal(presentation.total, 3);
   assert.equal(presentation.hiddenTotal, 1);
 });
@@ -1032,6 +1039,17 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             objective: "Retry failed sync",
             reason: "policy_blocked",
             recommended_action: "inspect approvals",
+            last_task_id: "tsk_dead",
+            last_task_status: "accepted",
+            last_task_result_status: "blocked",
+            last_task_gate: "approvals_gate",
+            updated_at: "2026-04-14T08:00:00Z",
+            latest_activity: {
+              name: "governance_hold",
+              status: "blocked",
+              gate: "approvals_gate",
+              ts: 1_744_622_800,
+            },
           },
         ],
       },
@@ -1050,6 +1068,11 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "idempotent_ticks");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_id, "tsk_dead");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_status, "accepted");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_result_status, "blocked");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_gate, "approvals_gate");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_activity?.gate, "approvals_gate");
     assert.equal(briefing.briefing?.observer?.headline, "Observer reports no active incidents.");
     assert.equal(briefing.briefing?.observer?.probes?.[0]?.id, "approval_queue");
     assert.equal(briefing.briefing?.observer?.probes?.[0]?.status, "ok");

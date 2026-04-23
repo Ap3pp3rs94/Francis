@@ -157,6 +157,12 @@ overview deadletter cards both show the recommended review action, latest
 recorded activity, updated time, and hidden-count disclosure instead of looking
 like a vague truncated list of failures.
 
+As of `2026-04-23`, the continuity deadletter preview now preserves the last
+attempted task identity, stored task state, failed attempt result, and gate in
+the briefing payload. Shift Briefing deadletter review can route the operator
+to the actual failed task and show whether the hold came from the task state or
+from the last blocked result instead of only naming the mission.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -168,6 +174,25 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-23`, the highest-confidence surface newly advanced in the current
+Stage 3 line is continuity deadletter evidence parity. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making early
+continuity deadletter review preserve the last attempted task identity and the
+exact blocked-result evidence that operators need for recovery:
+
+- `src/francis/world_state/snapshot.py` now includes `last_task_id`,
+  `last_task_status`, `last_task_result_status`, and `last_task_gate` in the
+  continuity `deadletter_preview` payload.
+- `apps/chat_ui/src/settings/index.ts` now preserves those fields on
+  `ContinuityBriefingDeadletterItem` and through
+  `presentMissionDeadletterItems`.
+- `apps/chat_ui/src/App.tsx` now shows those task/result details in Shift
+  Briefing deadletter review and exposes `Open last task` when the preview has
+  a concrete task target.
+- `tests/test_api_continuity.py` and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the backend/UI contract
+  for continuity deadletter evidence.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter preview truthfulness. This advances the active
@@ -1107,6 +1132,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-23` Stage 3 continuity deadletter evidence parity slice:
+
+- `python -m pytest tests/test_api_continuity.py -q`
+  Result: `7 passed`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py`
+  Result: `passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 deadletter preview truthfulness slice:
 
