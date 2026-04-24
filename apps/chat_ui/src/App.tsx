@@ -526,6 +526,18 @@ function approvalProjectionLineage(item: ApprovalProjectionLike | null | undefin
   return previousStatus ? `refresh of ${previousApprovalId} (${previousStatus})` : `refresh of ${previousApprovalId}`;
 }
 
+function approvalProjectionReplacementLine(item: ApprovalProjectionLike | null | undefined): string {
+  const reason = safeString(item?.replacement_reason).trim();
+  const changedKeys = Array.isArray(item?.replacement_changed_keys)
+    ? item.replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
+    : [];
+  if (!reason && changedKeys.length === 0) return "";
+  const parts: string[] = [];
+  if (reason) parts.push(reason);
+  if (changedKeys.length > 0) parts.push(`changed ${changedKeys.join(", ")}`);
+  return parts.join(" · ");
+}
+
 function approvalProjectionDetail(item: ApprovalProjectionLike | null | undefined): string {
   const factLine = approvalProjectionFactLine(item);
   if (factLine) return factLine;
@@ -2631,6 +2643,11 @@ function ApprovalsPanel(props: {
             {approvalProjectionLineage(selectedApproval) ? (
               <div style={{ fontSize: 12, color: THEME.muted }}>Lineage: {approvalProjectionLineage(selectedApproval)}</div>
             ) : null}
+            {approvalProjectionReplacementLine(selectedApproval) ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>
+                Replacement: {approvalProjectionReplacementLine(selectedApproval)}
+              </div>
+            ) : null}
             <div style={{ fontSize: 12 }}>
               Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
             </div>
@@ -2715,6 +2732,7 @@ function ApprovalsPanel(props: {
           const detail = approvalProjectionDetail(a);
           const exactAction = approvalProjectionExactActionLine(a);
           const lineage = approvalProjectionLineage(a);
+          const replacement = approvalProjectionReplacementLine(a);
           const reason = safeString(a.reason).trim();
           return (
             <div
@@ -2738,6 +2756,9 @@ function ApprovalsPanel(props: {
               <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>{inspection.scopeLabel}</div>
               {exactAction ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>exact action: {exactAction}</div> : null}
               {lineage ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div> : null}
+              {replacement ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>replacement: {replacement}</div>
+              ) : null}
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                 <code>{a.id}</code> / domain=<code>{inspection.domain}</code>
               </div>
@@ -4546,6 +4567,10 @@ function SystemPanel(props: {
                     const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                     const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
                     const approvalStatus = safeString(item.last_task_approval_status).trim();
+                    const replacementReason = safeString(item.last_task_approval_replacement_reason).trim();
+                    const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
+                      ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
+                      : [];
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4604,12 +4629,25 @@ function SystemPanel(props: {
                             {" / "}previous_status=<code>{previousApprovalStatus}</code>
                           </>
                         ) : null}
+                        {replacementReason ? (
+                          <>
+                            {" / "}replacement=<code>{replacementReason}</code>
+                          </>
+                        ) : null}
+                        {replacementChangedKeys.length > 0 ? (
+                          <>
+                            {" / "}changed_keys=<code>{replacementChangedKeys.join(",")}</code>
+                          </>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
                       </div>
                       {item.approval_summary ? (
                         <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
+                      ) : null}
+                      {item.approval_replacement_summary ? (
+                        <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_replacement_summary}</div>
                       ) : null}
                       {item.history_summary ? (
                         <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
@@ -6192,6 +6230,10 @@ function SystemPanel(props: {
                 const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                 const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
                 const approvalStatus = safeString(item.last_task_approval_status).trim();
+                const replacementReason = safeString(item.last_task_approval_replacement_reason).trim();
+                const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
+                  ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
+                  : [];
                 return (
                   <div
                     key={`mission-deadletter-${item.id}`}
@@ -6233,12 +6275,25 @@ function SystemPanel(props: {
                           {" / "}previous_status=<code>{previousApprovalStatus}</code>
                         </>
                       ) : null}
+                      {replacementReason ? (
+                        <>
+                          {" / "}replacement=<code>{replacementReason}</code>
+                        </>
+                      ) : null}
+                      {replacementChangedKeys.length > 0 ? (
+                        <>
+                          {" / "}changed_keys=<code>{replacementChangedKeys.join(",")}</code>
+                        </>
+                      ) : null}
                     </div>
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                       {item.reason || "Mission has been deadlettered."}
                     </div>
                     {item.approval_summary ? (
                       <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
+                    ) : null}
+                    {item.approval_replacement_summary ? (
+                      <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_replacement_summary}</div>
                     ) : null}
                     {item.history_summary ? (
                       <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
@@ -6673,6 +6728,7 @@ function SystemPanel(props: {
                 const detail = approvalProjectionDetail(item);
                 const exactAction = approvalProjectionExactActionLine(item);
                 const lineage = approvalProjectionLineage(item);
+                const replacement = approvalProjectionReplacementLine(item);
                 const reason = safeString(item.reason).trim();
                 return (
                   <div
@@ -6692,6 +6748,9 @@ function SystemPanel(props: {
                     ) : null}
                     {lineage ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div>
+                    ) : null}
+                    {replacement ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>replacement: {replacement}</div>
                     ) : null}
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                       <code>{item.id}</code>

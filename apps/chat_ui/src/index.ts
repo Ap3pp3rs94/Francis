@@ -37,6 +37,9 @@ export type ApprovalItem = {
   request_kind?: string;
   previous_approval_id?: string;
   previous_approval_status?: string;
+  replacement_kind?: string;
+  replacement_reason?: string;
+  replacement_changed_keys?: string[];
   payload_summary?: ApprovalPayloadSummary;
 };
 
@@ -144,6 +147,9 @@ function parseApprovalItem(raw: unknown): ApprovalItem | null {
     request_kind: safeString(raw.request_kind) || undefined,
     previous_approval_id: safeString(raw.previous_approval_id) || undefined,
     previous_approval_status: safeString(raw.previous_approval_status) || undefined,
+    replacement_kind: safeString(raw.replacement_kind) || undefined,
+    replacement_reason: safeString(raw.replacement_reason) || undefined,
+    replacement_changed_keys: safeStringList(raw.replacement_changed_keys),
   };
   if (isRecord(raw.payload_summary)) {
     item.payload_summary = parseApprovalPayloadSummary(raw.payload_summary);

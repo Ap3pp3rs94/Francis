@@ -193,6 +193,12 @@ approval is refreshed and the mission is later deadlettered, continuity and
 world-state review now preserve whether the prior approval had already been
 approved before the replacement request was issued.
 
+As of `2026-04-24`, refreshed approval review also preserves the bounded
+replacement reason and changed top-level payload keys from existing mismatch
+artifacts. Deadletter review, approval review, and world-state pending approval
+cards can show that a replacement came from `approval_payload_mismatch` and
+which request key changed without exposing raw payload values.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -204,6 +210,26 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-24`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter refreshed-approval replacement evidence. This
+advances the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line
+by preserving why a replacement approval exists when deadlettered work is
+blocked behind a refreshed exact-action approval:
+
+- `src/francis/governance/approval_projection.py` now reads bounded
+  `mismatch.json` evidence for approval records and projects
+  `replacement_reason`, `replacement_kind`, and changed top-level payload keys.
+- `src/francis/world_state/snapshot.py` now carries that replacement evidence
+  onto mission queue and deadletter items as last-task approval context before
+  building continuity and world-state projections.
+- `apps/chat_ui/src/index.ts`, `apps/chat_ui/src/settings/index.ts`, and
+  `apps/chat_ui/src/App.tsx` now preserve and render the replacement reason and
+  changed keys in approval and deadletter review surfaces.
+- `tests/test_api_approvals.py`, `tests/test_api_continuity.py`,
+  `tests/test_api_system_settings.py`, `apps/chat_ui/src/index.test.ts`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the bounded replacement
+  evidence contract.
 
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter refreshed-approval status continuity. This advances
@@ -1267,6 +1293,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-24` Stage 3 deadletter refreshed approval replacement-evidence slice:
+
+- `python -m pytest tests/test_api_approvals.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `33 passed in 37.04s`
+- `cd apps/chat_ui && npm test -- index.test.ts settings/index.test.ts`
+  Result: `18 passed`
+- `python -m ruff check src/francis/governance/approval_projection.py src/francis/world_state/snapshot.py tests/test_api_approvals.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `All checks passed!`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-24` Stage 3 deadletter refreshed approval-status continuity slice:
 

@@ -679,13 +679,19 @@ def _mission_hold_projection(item: dict[str, Any]) -> dict[str, Any]:
         "last_task_previous_approval_id": str(item.get("last_task_previous_approval_id") or "").strip(),
         "last_task_previous_approval_status": str(item.get("last_task_previous_approval_status") or "").strip(),
         "last_task_approval_status": str(item.get("last_task_approval_status") or "").strip(),
+        "last_task_approval_replacement_reason": str(item.get("last_task_approval_replacement_reason") or "").strip(),
+        "last_task_approval_replacement_changed_keys": list(
+            item.get("last_task_approval_replacement_changed_keys") or []
+        )
+        if isinstance(item.get("last_task_approval_replacement_changed_keys"), list)
+        else [],
     }
 
 
 def _mission_pending_approval_projection(
     items: list[dict[str, Any]],
     approvals_path: Path,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, Any]]:
     approval_ids: set[str] = set()
     for item in items:
         if not isinstance(item, dict):
@@ -694,7 +700,7 @@ def _mission_pending_approval_projection(
         if approval_id:
             approval_ids.add(approval_id)
 
-    projections: dict[str, dict[str, str]] = {}
+    projections: dict[str, dict[str, Any]] = {}
     for approval_id in approval_ids:
         record = _read_json(approvals_path / f"{approval_id}.json")
         if not record:
@@ -704,13 +710,17 @@ def _mission_pending_approval_projection(
             "status": str(record.get("status") or "").strip(),
             "previous_approval_id": str(artifact_projection.get("previous_approval_id") or "").strip(),
             "previous_approval_status": str(artifact_projection.get("previous_approval_status") or "").strip(),
+            "replacement_reason": str(artifact_projection.get("replacement_reason") or "").strip(),
+            "replacement_changed_keys": artifact_projection.get("replacement_changed_keys")
+            if isinstance(artifact_projection.get("replacement_changed_keys"), list)
+            else [],
         }
     return projections
 
 
 def _attach_mission_pending_approval_projection(
     items: list[dict[str, Any]],
-    projections: dict[str, dict[str, str]],
+    projections: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     if not projections:
         return items
@@ -730,12 +740,20 @@ def _attach_mission_pending_approval_projection(
         status = str(projection.get("status") or "").strip()
         previous_approval_id = str(projection.get("previous_approval_id") or "").strip()
         previous_approval_status = str(projection.get("previous_approval_status") or "").strip()
+        replacement_reason = str(projection.get("replacement_reason") or "").strip()
+        replacement_changed_keys = projection.get("replacement_changed_keys")
         if status:
             enriched["last_task_approval_status"] = status
         if previous_approval_id:
             enriched["last_task_previous_approval_id"] = previous_approval_id
         if previous_approval_status:
             enriched["last_task_previous_approval_status"] = previous_approval_status
+        if replacement_reason:
+            enriched["last_task_approval_replacement_reason"] = replacement_reason
+        if isinstance(replacement_changed_keys, list):
+            enriched["last_task_approval_replacement_changed_keys"] = [
+                str(key).strip() for key in replacement_changed_keys if str(key).strip()
+            ][:8]
         attached.append(enriched)
     return attached
 

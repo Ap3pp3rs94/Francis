@@ -980,6 +980,8 @@ def test_system_world_state_deadletter_preview_preserves_pending_approval_linkag
     assert deadletter_item["last_task_previous_approval_id"] == first_approval_id
     assert deadletter_item["last_task_previous_approval_status"] == "approved"
     assert deadletter_item["last_task_approval_status"] == "pending"
+    assert deadletter_item["last_task_approval_replacement_reason"] == "approval_payload_mismatch"
+    assert deadletter_item["last_task_approval_replacement_changed_keys"] == ["input"]
 
     deadletter_preview_item = next(
         item for item in body["overview"]["mission_briefing"]["deadletter_preview"] if item["id"] == mission_id
@@ -991,6 +993,8 @@ def test_system_world_state_deadletter_preview_preserves_pending_approval_linkag
     assert deadletter_preview_item["last_task_previous_approval_id"] == first_approval_id
     assert deadletter_preview_item["last_task_previous_approval_status"] == "approved"
     assert deadletter_preview_item["last_task_approval_status"] == "pending"
+    assert deadletter_preview_item["last_task_approval_replacement_reason"] == "approval_payload_mismatch"
+    assert deadletter_preview_item["last_task_approval_replacement_changed_keys"] == ["input"]
 
 
 def test_system_world_state_surfaces_exact_action_context_for_industrial_pending_approval(

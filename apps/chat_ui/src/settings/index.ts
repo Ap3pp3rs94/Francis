@@ -130,6 +130,9 @@ export type WorldStateApprovalSummary = {
   request_kind?: string;
   previous_approval_id?: string;
   previous_approval_status?: string;
+  replacement_kind?: string;
+  replacement_reason?: string;
+  replacement_changed_keys?: string[];
   payload_summary?: WorldStateApprovalPayloadSummary;
 };
 
@@ -282,6 +285,8 @@ export type WorldStateMissionQueueItem = {
   last_task_previous_approval_id?: string;
   last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   recommended_action?: string;
   operator_hint?: string;
   action_target_id?: string;
@@ -463,6 +468,8 @@ export type ContinuityBriefingFocusItem = {
   last_task_previous_approval_id?: string;
   last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   last_advance_action?: string;
   last_advance_outcome?: string;
   last_advance_operation_id?: string;
@@ -499,6 +506,8 @@ export type ContinuityBriefingDeadletterItem = {
   last_task_previous_approval_id?: string;
   last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -622,6 +631,8 @@ type MissionDeadletterLike = {
   last_task_previous_approval_id?: string;
   last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -645,7 +656,10 @@ export type MissionDeadletterPresentationItem = {
   last_task_previous_approval_id?: string;
   last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   approval_summary?: string;
+  approval_replacement_summary?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -1069,10 +1083,23 @@ function summarizeDeadletterApprovalLineage(item: MissionDeadletterLike): string
   return undefined;
 }
 
+function summarizeDeadletterApprovalReplacement(item: MissionDeadletterLike): string | undefined {
+  const reason = safeString(item.last_task_approval_replacement_reason, "").trim();
+  const changedKeys = safeStringArray(item.last_task_approval_replacement_changed_keys);
+  if (!reason && changedKeys.length === 0) return undefined;
+
+  let summary = reason ? `Approval replacement reason ${reason}` : "Approval replacement recorded";
+  if (changedKeys.length > 0) {
+    summary += `; changed payload keys: ${changedKeys.join(", ")}`;
+  }
+  return `${summary}.`;
+}
+
 export function presentMissionDeadletterItems(items: MissionDeadletterLike[], limit = 2): MissionDeadletterPresentation {
   const normalized = items
     .map((item, index) => {
       const historyTail = parseMissionHistoryPreviewEntries(item.history_tail);
+      const replacementChangedKeys = safeStringArray(item.last_task_approval_replacement_changed_keys);
       return {
         item: {
           id: safeString(item.id, "").trim(),
@@ -1091,7 +1118,11 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
           last_task_previous_approval_status:
             safeString(item.last_task_previous_approval_status, "").trim() || undefined,
           last_task_approval_status: safeString(item.last_task_approval_status, "").trim() || undefined,
+          last_task_approval_replacement_reason:
+            safeString(item.last_task_approval_replacement_reason, "").trim() || undefined,
+          last_task_approval_replacement_changed_keys: replacementChangedKeys,
           approval_summary: summarizeDeadletterApprovalLineage(item),
+          approval_replacement_summary: summarizeDeadletterApprovalReplacement(item),
           history_count: safeNumber(item.history_count, 0),
           latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
           latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,
@@ -1545,6 +1576,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         request_kind: safeString(item.request_kind, ""),
         previous_approval_id: safeString(item.previous_approval_id, ""),
         previous_approval_status: safeString(item.previous_approval_status, ""),
+        replacement_kind: safeString(item.replacement_kind, ""),
+        replacement_reason: safeString(item.replacement_reason, ""),
+        replacement_changed_keys: safeStringArray(item.replacement_changed_keys),
         payload_summary: isRecord(item.payload_summary)
           ? parseWorldStateApprovalPayloadSummary(item.payload_summary)
           : undefined,
@@ -1601,6 +1635,10 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
         last_task_previous_approval_status: safeString(item.last_task_previous_approval_status, ""),
         last_task_approval_status: safeString(item.last_task_approval_status, ""),
+        last_task_approval_replacement_reason: safeString(item.last_task_approval_replacement_reason, ""),
+        last_task_approval_replacement_changed_keys: safeStringArray(
+          item.last_task_approval_replacement_changed_keys,
+        ),
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
@@ -1641,6 +1679,10 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
         last_task_previous_approval_status: safeString(item.last_task_previous_approval_status, ""),
         last_task_approval_status: safeString(item.last_task_approval_status, ""),
+        last_task_approval_replacement_reason: safeString(item.last_task_approval_replacement_reason, ""),
+        last_task_approval_replacement_changed_keys: safeStringArray(
+          item.last_task_approval_replacement_changed_keys,
+        ),
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
@@ -1918,6 +1960,10 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     last_task_previous_approval_id: safeString(raw["last_task_previous_approval_id"], ""),
     last_task_previous_approval_status: safeString(raw["last_task_previous_approval_status"], ""),
     last_task_approval_status: safeString(raw["last_task_approval_status"], ""),
+    last_task_approval_replacement_reason: safeString(raw["last_task_approval_replacement_reason"], ""),
+    last_task_approval_replacement_changed_keys: safeStringArray(
+      raw["last_task_approval_replacement_changed_keys"],
+    ),
     last_advance_action: safeString(raw["last_advance_action"], ""),
     last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
     last_advance_operation_id: safeString(raw["last_advance_operation_id"], ""),
@@ -1968,6 +2014,10 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     last_task_previous_approval_id: safeString(raw["last_task_previous_approval_id"], ""),
     last_task_previous_approval_status: safeString(raw["last_task_previous_approval_status"], ""),
     last_task_approval_status: safeString(raw["last_task_approval_status"], ""),
+    last_task_approval_replacement_reason: safeString(raw["last_task_approval_replacement_reason"], ""),
+    last_task_approval_replacement_changed_keys: safeStringArray(
+      raw["last_task_approval_replacement_changed_keys"],
+    ),
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),
     latest_history_ts: safeString(raw["latest_history_ts"], ""),

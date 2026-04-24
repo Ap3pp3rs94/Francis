@@ -101,6 +101,9 @@ def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch,
     assert refreshed_item["request_kind"] == "plugin.run.request"
     assert refreshed_item["previous_approval_id"] == first_approval_id
     assert refreshed_item["previous_approval_status"] == "approved"
+    assert refreshed_item["replacement_kind"] == "plugin.run.mismatch"
+    assert refreshed_item["replacement_reason"] == "approval_payload_mismatch"
+    assert refreshed_item["replacement_changed_keys"] == ["input"]
     assert refreshed_item["payload_summary"]["plugin_id"] == plugin_id
     assert refreshed_item["payload_summary"]["requested_action"] == "deploy"
     assert refreshed_item["payload_summary"]["risk_tier"] == "critical"

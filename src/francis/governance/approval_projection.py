@@ -172,11 +172,48 @@ def approval_artifact_request(approval_id: str, *, artifact_root: Path | None = 
     return {}
 
 
+def approval_artifact_mismatch(approval_id: str, *, artifact_root: Path | None = None) -> dict[str, Any]:
+    resolved_id = _safe_str(approval_id).strip()
+    if not resolved_id:
+        return {}
+
+    artifact_base = artifact_root if artifact_root is not None else data_dir() / "artifacts"
+    candidates = [
+        artifact_base / "credentials" / "approvals" / resolved_id / "mismatch.json",
+        artifact_base / "plugins" / "approvals" / resolved_id / "mismatch.json",
+        artifact_base / "web_learning" / "approvals" / resolved_id / "mismatch.json",
+        artifact_base / "industrial" / "approvals" / resolved_id / "mismatch.json",
+        artifact_base / "git_push" / resolved_id / "mismatch.json",
+        artifact_base / "supervised_exec" / resolved_id / "mismatch.json",
+    ]
+    for path in candidates:
+        record = _read_json(path)
+        if record:
+            return record
+    return {}
+
+
+def _changed_payload_keys(expected: Any, previous: Any) -> list[str]:
+    if not isinstance(expected, dict) or not isinstance(previous, dict):
+        return []
+
+    changed: list[str] = []
+    for key in sorted(set(expected.keys()) | set(previous.keys())):
+        left = expected.get(key)
+        right = previous.get(key)
+        if json.dumps(left, sort_keys=True, default=str) != json.dumps(right, sort_keys=True, default=str):
+            text = _safe_str(key).strip()
+            if text:
+                changed.append(text)
+    return changed[:8]
+
+
 def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | None = None) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
     approval_id = _safe_str(item.get("id")).strip()
 
     artifact_request = approval_artifact_request(approval_id, artifact_root=artifact_root)
+    artifact_mismatch = approval_artifact_mismatch(approval_id, artifact_root=artifact_root)
     payload_summary = approval_payload_summary(item.get("payload"))
     artifact_payload = artifact_request.get("request")
     if isinstance(artifact_payload, dict):
@@ -197,5 +234,21 @@ def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | 
     previous_status = _safe_str(artifact_request.get("previous_status")).strip()
     if previous_status:
         out["previous_approval_status"] = previous_status
+
+    mismatch_kind = _safe_str(artifact_mismatch.get("kind")).strip()
+    if mismatch_kind:
+        out["replacement_kind"] = mismatch_kind
+        out["replacement_reason"] = (
+            "approval_payload_mismatch" if mismatch_kind.endswith(".mismatch") else mismatch_kind
+        )
+
+    expected_payload = artifact_mismatch.get("expected_payload")
+    approval_record = (
+        artifact_mismatch.get("approval_record") if isinstance(artifact_mismatch.get("approval_record"), dict) else {}
+    )
+    previous_payload = approval_record.get("payload") if isinstance(approval_record, dict) else {}
+    changed_keys = _changed_payload_keys(expected_payload, previous_payload)
+    if changed_keys:
+        out["replacement_changed_keys"] = changed_keys
 
     return out
