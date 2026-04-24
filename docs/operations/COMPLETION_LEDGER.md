@@ -199,6 +199,11 @@ artifacts. Deadletter review, approval review, and world-state pending approval
 cards can show that a replacement came from `approval_payload_mismatch` and
 which request key changed without exposing raw payload values.
 
+As of `2026-04-24`, deadletter replacement approval routing is explicit in the
+operator surface. Deadletter cards label replacement reviews distinctly, preserve
+the deadletter source/reason/changed-key context when opening approvals, and the
+approval inspector shows that context only for the focused approval it came from.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -210,6 +215,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-24`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter replacement approval routing context. This advances
+the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
+replacement review routing explicit without adding a new mutation path:
+
+- `apps/chat_ui/src/settings/index.ts` now derives bounded deadletter approval
+  review labels, distinguishing replacement approval review from ordinary
+  approval review.
+- `apps/chat_ui/src/App.tsx` now carries deadletter source, replacement reason,
+  and changed-key context through the existing `onOpenApprovals` route and shows
+  that context in the approval inspector only while the focused approval matches.
+- `apps/chat_ui/src/settings/index.test.ts` now proves the shared deadletter
+  presentation helper emits the replacement-specific review labels.
 
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter refreshed-approval replacement evidence. This
@@ -1293,6 +1312,17 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-24` Stage 3 deadletter replacement approval-routing context slice:
+
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-24` Stage 3 deadletter refreshed approval replacement-evidence slice:
 

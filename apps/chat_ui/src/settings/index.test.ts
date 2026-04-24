@@ -113,6 +113,8 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
     presentation.ordered[2]?.approval_replacement_summary,
     "Approval replacement reason approval_payload_mismatch; changed payload keys: input.",
   );
+  assert.equal(presentation.ordered[2]?.approval_review_label, "Review replacement approval");
+  assert.equal(presentation.ordered[2]?.previous_approval_review_label, "Open superseded approval");
   assert.equal(presentation.ordered[2]?.history_count, 4);
   assert.equal(presentation.ordered[2]?.latest_history_event, "continuity_updated");
   assert.equal(presentation.ordered[2]?.latest_history_ts, "2026-04-22T09:00:00+00:00");

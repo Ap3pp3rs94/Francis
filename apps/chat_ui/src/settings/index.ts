@@ -660,6 +660,8 @@ export type MissionDeadletterPresentationItem = {
   last_task_approval_replacement_changed_keys?: string[];
   approval_summary?: string;
   approval_replacement_summary?: string;
+  approval_review_label?: string;
+  previous_approval_review_label?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -1095,6 +1097,12 @@ function summarizeDeadletterApprovalReplacement(item: MissionDeadletterLike): st
   return `${summary}.`;
 }
 
+function deadletterApprovalReviewLabel(item: MissionDeadletterLike): string {
+  const reason = safeString(item.last_task_approval_replacement_reason, "").trim();
+  const changedKeys = safeStringArray(item.last_task_approval_replacement_changed_keys);
+  return reason || changedKeys.length > 0 ? "Review replacement approval" : "Review approval";
+}
+
 export function presentMissionDeadletterItems(items: MissionDeadletterLike[], limit = 2): MissionDeadletterPresentation {
   const normalized = items
     .map((item, index) => {
@@ -1123,6 +1131,8 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
           last_task_approval_replacement_changed_keys: replacementChangedKeys,
           approval_summary: summarizeDeadletterApprovalLineage(item),
           approval_replacement_summary: summarizeDeadletterApprovalReplacement(item),
+          approval_review_label: deadletterApprovalReviewLabel(item),
+          previous_approval_review_label: "Open superseded approval",
           history_count: safeNumber(item.history_count, 0),
           latest_history_event: safeString(item.latest_history_event, "").trim() || undefined,
           latest_history_ts: safeString(item.latest_history_ts, "").trim() || undefined,

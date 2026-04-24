@@ -593,6 +593,9 @@ type ApprovalInspection = {
 type ApprovalReturnContext = {
   missionId?: string;
   operationId?: string;
+  source?: string;
+  reviewReason?: string;
+  changedKeys?: string[];
 };
 
 function approvalPayload(item: ApprovalItem | null | undefined): Record<string, unknown> {
@@ -1835,6 +1838,11 @@ export default function App() {
         ? {
             missionId: safeString(returnContext.missionId).trim() || undefined,
             operationId: safeString(returnContext.operationId).trim() || undefined,
+            source: safeString(returnContext.source).trim() || undefined,
+            reviewReason: safeString(returnContext.reviewReason).trim() || undefined,
+            changedKeys: Array.isArray(returnContext.changedKeys)
+              ? returnContext.changedKeys.map((key) => safeString(key).trim()).filter(Boolean)
+              : undefined,
           }
         : null,
     );
@@ -2541,6 +2549,13 @@ function ApprovalsPanel(props: {
 
   const selectedApproval = items.find((item) => item.id === selectedApprovalId) ?? items[0] ?? null;
   const selectedInspection = inspectApproval(selectedApproval);
+  const activeReturnContext =
+    props.focusApprovalId && selectedApproval?.id === props.focusApprovalId ? props.returnContext : null;
+  const returnSource = safeString(activeReturnContext?.source).trim();
+  const returnReviewReason = safeString(activeReturnContext?.reviewReason).trim();
+  const returnChangedKeys = Array.isArray(activeReturnContext?.changedKeys)
+    ? activeReturnContext.changedKeys.map((key) => safeString(key).trim()).filter(Boolean)
+    : [];
   const approvalStats = {
     total: items.length,
     highRisk: items.filter((item) => ["high", "critical", "safety_critical"].includes(inspectApproval(item).risk.toLowerCase())).length,
@@ -2651,6 +2666,21 @@ function ApprovalsPanel(props: {
             <div style={{ fontSize: 12 }}>
               Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
             </div>
+            {activeReturnContext ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>
+                Opened from <code>{returnSource || "linked context"}</code>
+                {returnReviewReason ? (
+                  <>
+                    {" / "}reason=<code>{returnReviewReason}</code>
+                  </>
+                ) : null}
+                {returnChangedKeys.length > 0 ? (
+                  <>
+                    {" / "}changed_keys=<code>{returnChangedKeys.join(",")}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {selectedInspection.missionId || selectedInspection.operationId ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {selectedInspection.missionId && props.onOpenMission ? (
@@ -4709,10 +4739,13 @@ function SystemPanel(props: {
                               props.onOpenApprovals(approvalId, {
                                 missionId: item.id,
                                 operationId: safeString(item.last_task_id).trim() || undefined,
+                                source: "deadletter",
+                                reviewReason: replacementReason || undefined,
+                                changedKeys: replacementChangedKeys,
                               })
                             }
                           >
-                            Review approval
+                            {item.approval_review_label || "Review approval"}
                           </button>
                         ) : null}
                         {previousApprovalId && previousApprovalId !== approvalId ? (
@@ -4722,10 +4755,13 @@ function SystemPanel(props: {
                               props.onOpenApprovals(previousApprovalId, {
                                 missionId: item.id,
                                 operationId: safeString(item.last_task_id).trim() || undefined,
+                                source: "deadletter",
+                                reviewReason: replacementReason || undefined,
+                                changedKeys: replacementChangedKeys,
                               })
                             }
                           >
-                            Open previous approval
+                            {item.previous_approval_review_label || "Open previous approval"}
                           </button>
                         ) : null}
                         {item.last_task_id ? (
@@ -6355,10 +6391,13 @@ function SystemPanel(props: {
                             props.onOpenApprovals(approvalId, {
                               missionId: item.id,
                               operationId: safeString(item.last_task_id).trim() || undefined,
+                              source: "deadletter",
+                              reviewReason: replacementReason || undefined,
+                              changedKeys: replacementChangedKeys,
                             })
                           }
                         >
-                          Review approval
+                          {item.approval_review_label || "Review approval"}
                         </button>
                       ) : null}
                       {previousApprovalId && previousApprovalId !== approvalId ? (
@@ -6368,10 +6407,13 @@ function SystemPanel(props: {
                             props.onOpenApprovals(previousApprovalId, {
                               missionId: item.id,
                               operationId: safeString(item.last_task_id).trim() || undefined,
+                              source: "deadletter",
+                              reviewReason: replacementReason || undefined,
+                              changedKeys: replacementChangedKeys,
                             })
                           }
                         >
-                          Open previous approval
+                          {item.previous_approval_review_label || "Open previous approval"}
                         </button>
                       ) : null}
                       {item.last_task_id ? (
