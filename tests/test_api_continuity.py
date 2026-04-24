@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -769,8 +770,8 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     mission = client.post(
         "/missions/create",
         json={
-            "objective": "Deadletter preview should keep pending approval linkage.",
-            "summary": "Approval-backed deadletter review should keep the exact approval target.",
+            "objective": "Deadletter preview should keep refreshed approval lineage.",
+            "summary": "Approval-backed deadletter review should keep the exact superseded approval target.",
             "priority": 8,
             "requester_id": "test.continuity.deadletter_approval_projection",
         },
@@ -797,8 +798,36 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     assert pending.status_code == 200
     pending_body = pending.json()
     assert pending_body["status"] == "queued"
-    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    first_approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert first_approval_id
+
+    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    record_path = data_root / "tasks" / operation_id / "record.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["inputs"]["input"] = {"target": "staging"}
+    record_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+    mismatched = client.post(
+        f"/operations/{operation_id}/run",
+        json={"worker_id": "test.continuity.deadletter_approval_projection"},
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is True
+    assert mismatched_body["status"] == "queued"
+    mismatch_output = mismatched_body["operation"]["output"]
+    assert isinstance(mismatch_output, dict)
+    assert mismatch_output["status"] == "needs_approval"
+    assert mismatch_output["error"] == "approval_payload_mismatch"
+    approval_id = str(mismatch_output["approval_id"])
     assert approval_id
+    assert approval_id != first_approval_id
+    assert mismatch_output["previous_approval_id"] == first_approval_id
+    mismatch_meta = mismatched_body["operation"]["meta"]
+    assert mismatch_meta["approval_id"] == approval_id
 
     deadlettered = client.post(
         f"/missions/{mission_id}/deadletter",
@@ -821,4 +850,6 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     assert deadletter_item["last_task_id"] == operation_id
     assert deadletter_item["last_task_gate"] == "approvals_gate"
     assert deadletter_item["last_task_approval_id"] == approval_id
+    assert deadletter_item["last_task_previous_approval_id"] == first_approval_id
+    assert deadletter_item["last_task_previous_approval_status"] == "approved"
     assert deadletter_item["last_task_approval_status"] == "pending"

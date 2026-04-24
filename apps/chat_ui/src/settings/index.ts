@@ -280,6 +280,7 @@ export type WorldStateMissionQueueItem = {
   last_task_gate?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
   recommended_action?: string;
   operator_hint?: string;
@@ -460,6 +461,7 @@ export type ContinuityBriefingFocusItem = {
   last_task_gate?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
   last_advance_action?: string;
   last_advance_outcome?: string;
@@ -495,6 +497,7 @@ export type ContinuityBriefingDeadletterItem = {
   last_task_gate?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
   history_count?: number;
   latest_history_event?: string;
@@ -617,6 +620,7 @@ type MissionDeadletterLike = {
   last_task_gate?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
   history_count?: number;
   latest_history_event?: string;
@@ -639,6 +643,7 @@ export type MissionDeadletterPresentationItem = {
   last_task_gate?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
   approval_summary?: string;
   history_count?: number;
@@ -1036,10 +1041,14 @@ function summarizeMissionHistoryTail(historyTail: MissionHistoryPreviewEntry[] |
 function summarizeDeadletterApprovalLineage(item: MissionDeadletterLike): string | undefined {
   const approvalId = safeString(item.last_task_approval_id, "").trim();
   const previousApprovalId = safeString(item.last_task_previous_approval_id, "").trim();
+  const previousApprovalStatus = safeString(item.last_task_previous_approval_status, "").trim();
   const approvalStatus = safeString(item.last_task_approval_status, "").trim();
 
   if (approvalId && previousApprovalId) {
     const statusLabel = approvalStatus || "pending";
+    if (previousApprovalStatus) {
+      return `Approval ${approvalId} remains ${statusLabel} and supersedes prior approval ${previousApprovalId} (${previousApprovalStatus}).`;
+    }
     return `Approval ${approvalId} remains ${statusLabel} and supersedes prior approval ${previousApprovalId}.`;
   }
 
@@ -1051,6 +1060,9 @@ function summarizeDeadletterApprovalLineage(item: MissionDeadletterLike): string
   }
 
   if (previousApprovalId) {
+    if (previousApprovalStatus) {
+      return `Prior approval ${previousApprovalId} remains in mission lineage as ${previousApprovalStatus}.`;
+    }
     return `Prior approval ${previousApprovalId} remains in mission lineage.`;
   }
 
@@ -1076,6 +1088,8 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
           last_task_gate: safeString(item.last_task_gate, "").trim() || undefined,
           last_task_approval_id: safeString(item.last_task_approval_id, "").trim() || undefined,
           last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, "").trim() || undefined,
+          last_task_previous_approval_status:
+            safeString(item.last_task_previous_approval_status, "").trim() || undefined,
           last_task_approval_status: safeString(item.last_task_approval_status, "").trim() || undefined,
           approval_summary: summarizeDeadletterApprovalLineage(item),
           history_count: safeNumber(item.history_count, 0),
@@ -1585,6 +1599,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         last_task_gate: safeString(item.last_task_gate, ""),
         last_task_approval_id: safeString(item.last_task_approval_id, ""),
         last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
+        last_task_previous_approval_status: safeString(item.last_task_previous_approval_status, ""),
         last_task_approval_status: safeString(item.last_task_approval_status, ""),
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
@@ -1624,6 +1639,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         last_task_gate: safeString(item.last_task_gate, ""),
         last_task_approval_id: safeString(item.last_task_approval_id, ""),
         last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
+        last_task_previous_approval_status: safeString(item.last_task_previous_approval_status, ""),
         last_task_approval_status: safeString(item.last_task_approval_status, ""),
         recommended_action: safeString(item.recommended_action, ""),
         operator_hint: safeString(item.operator_hint, ""),
@@ -1900,6 +1916,7 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     last_task_gate: safeString(raw["last_task_gate"], ""),
     last_task_approval_id: safeString(raw["last_task_approval_id"], ""),
     last_task_previous_approval_id: safeString(raw["last_task_previous_approval_id"], ""),
+    last_task_previous_approval_status: safeString(raw["last_task_previous_approval_status"], ""),
     last_task_approval_status: safeString(raw["last_task_approval_status"], ""),
     last_advance_action: safeString(raw["last_advance_action"], ""),
     last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
@@ -1949,6 +1966,7 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     last_task_gate: safeString(raw["last_task_gate"], ""),
     last_task_approval_id: safeString(raw["last_task_approval_id"], ""),
     last_task_previous_approval_id: safeString(raw["last_task_previous_approval_id"], ""),
+    last_task_previous_approval_status: safeString(raw["last_task_previous_approval_status"], ""),
     last_task_approval_status: safeString(raw["last_task_approval_status"], ""),
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),

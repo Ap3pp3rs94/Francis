@@ -187,6 +187,12 @@ deadletter cards can show the superseded approval id when it exists and route
 the operator to either the current pending approval or the prior approval record
 through the existing approval inspector.
 
+As of `2026-04-24`, deadletter approval review now preserves superseded
+approval status as part of the same governed lineage. When an exact-action
+approval is refreshed and the mission is later deadlettered, continuity and
+world-state review now preserve whether the prior approval had already been
+approved before the replacement request was issued.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -198,6 +204,25 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-24`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter refreshed-approval status continuity. This advances
+the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
+preserving whether a superseded approval had already been approved when a
+deadlettered mission is waiting on a refreshed exact-action approval:
+
+- `src/francis/world_state/snapshot.py` now enriches mission queue and
+  deadletter items from the live pending-approval registry before building the
+  continuity briefing and world-state projections, carrying
+  `last_task_previous_approval_status` alongside the existing approval lineage.
+- `apps/chat_ui/src/settings/index.ts` and `apps/chat_ui/src/App.tsx` now keep
+  that prior approval status through the shared deadletter presentation contract
+  and show it directly in bounded deadletter cards.
+- `tests/test_api_continuity.py`,
+  `tests/test_api_system_settings.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the refreshed-approval
+  deadletter contract end to end, including `previous_approval_status:
+  approved`.
 
 As of `2026-04-23`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter approval-lineage review routing. This advances the
@@ -1242,6 +1267,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-24` Stage 3 deadletter refreshed approval-status continuity slice:
+
+- `python -m pytest tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `29 passed in 12.84s`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py tests/test_api_system_settings.py`
+  Result: `All checks passed!`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-23` Stage 3 deadletter approval-lineage review routing slice:
 

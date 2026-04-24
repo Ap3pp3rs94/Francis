@@ -51,6 +51,7 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         last_task_gate: "approvals_gate",
         last_task_approval_id: "apr_dead_old",
         last_task_previous_approval_id: "apr_dead_prev",
+        last_task_previous_approval_status: "approved",
         last_task_approval_status: "pending",
         history_count: 4,
         latest_history_event: "continuity_updated",
@@ -98,10 +99,11 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.last_task_gate, "approvals_gate");
   assert.equal(presentation.ordered[2]?.last_task_approval_id, "apr_dead_old");
   assert.equal(presentation.ordered[2]?.last_task_previous_approval_id, "apr_dead_prev");
+  assert.equal(presentation.ordered[2]?.last_task_previous_approval_status, "approved");
   assert.equal(presentation.ordered[2]?.last_task_approval_status, "pending");
   assert.equal(
     presentation.ordered[2]?.approval_summary,
-    "Approval apr_dead_old remains pending and supersedes prior approval apr_dead_prev.",
+    "Approval apr_dead_old remains pending and supersedes prior approval apr_dead_prev (approved).",
   );
   assert.equal(presentation.ordered[2]?.history_count, 4);
   assert.equal(presentation.ordered[2]?.latest_history_event, "continuity_updated");
@@ -249,6 +251,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               },
               last_task_approval_id: "apr_queue_exact",
               last_task_previous_approval_id: "apr_queue_previous",
+              last_task_previous_approval_status: "approved",
               last_task_approval_status: "pending",
               latest_activity: {
                 source: "run_ledger",
@@ -268,6 +271,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               deadletter_reason: "manual_cleanup",
               last_task_approval_id: "apr_dead_exact",
               last_task_previous_approval_id: "apr_dead_previous",
+              last_task_previous_approval_status: "approved",
               last_task_approval_status: "pending",
               history_count: 3,
               latest_history_event: "continuity_updated",
@@ -402,6 +406,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.escalation_path, "Raise trust or reduce scope.");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_id, "apr_queue_exact");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_previous_approval_id, "apr_queue_previous");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_status, "pending");
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.eligible, false);
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.action, "raise_trust_or_reduce_risk");
@@ -409,6 +414,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_id, "apr_dead_exact");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_status, "pending");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.history_count, 3);
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.latest_history_event, "continuity_updated");
@@ -1119,6 +1125,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             last_task_gate: "approvals_gate",
             last_task_approval_id: "apr_dead_exact",
             last_task_previous_approval_id: "apr_dead_previous",
+            last_task_previous_approval_status: "approved",
             last_task_approval_status: "pending",
             history_count: 5,
             latest_history_event: "continuity_updated",
@@ -1166,6 +1173,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_gate, "approvals_gate");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_id, "apr_dead_exact");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_status, "pending");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.history_count, 5);
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.latest_history_event, "continuity_updated");

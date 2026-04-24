@@ -4544,6 +4544,7 @@ function SystemPanel(props: {
                     const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                     const approvalId = safeString(item.last_task_approval_id).trim();
                     const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
+                    const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
                     const approvalStatus = safeString(item.last_task_approval_status).trim();
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
@@ -4596,6 +4597,11 @@ function SystemPanel(props: {
                         {previousApprovalId ? (
                           <>
                             {" / "}previous_approval=<code>{previousApprovalId}</code>
+                          </>
+                        ) : null}
+                        {previousApprovalStatus ? (
+                          <>
+                            {" / "}previous_status=<code>{previousApprovalStatus}</code>
                           </>
                         ) : null}
                       </div>
@@ -6184,6 +6190,7 @@ function SystemPanel(props: {
                 const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                 const approvalId = safeString(item.last_task_approval_id).trim();
                 const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
+                const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
                 const approvalStatus = safeString(item.last_task_approval_status).trim();
                 return (
                   <div
@@ -6219,6 +6226,11 @@ function SystemPanel(props: {
                       {previousApprovalId ? (
                         <>
                           {" / "}previous_approval=<code>{previousApprovalId}</code>
+                        </>
+                      ) : null}
+                      {previousApprovalStatus ? (
+                        <>
+                          {" / "}previous_status=<code>{previousApprovalStatus}</code>
                         </>
                       ) : null}
                     </div>

@@ -677,8 +677,67 @@ def _mission_hold_projection(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "last_task_approval_id": str(item.get("last_task_approval_id") or "").strip(),
         "last_task_previous_approval_id": str(item.get("last_task_previous_approval_id") or "").strip(),
+        "last_task_previous_approval_status": str(item.get("last_task_previous_approval_status") or "").strip(),
         "last_task_approval_status": str(item.get("last_task_approval_status") or "").strip(),
     }
+
+
+def _mission_pending_approval_projection(
+    items: list[dict[str, Any]],
+    approvals_path: Path,
+) -> dict[str, dict[str, str]]:
+    approval_ids: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        approval_id = str(item.get("last_task_approval_id") or "").strip()
+        if approval_id:
+            approval_ids.add(approval_id)
+
+    projections: dict[str, dict[str, str]] = {}
+    for approval_id in approval_ids:
+        record = _read_json(approvals_path / f"{approval_id}.json")
+        if not record:
+            continue
+        artifact_projection = approval_projection_fields(record)
+        projections[approval_id] = {
+            "status": str(record.get("status") or "").strip(),
+            "previous_approval_id": str(artifact_projection.get("previous_approval_id") or "").strip(),
+            "previous_approval_status": str(artifact_projection.get("previous_approval_status") or "").strip(),
+        }
+    return projections
+
+
+def _attach_mission_pending_approval_projection(
+    items: list[dict[str, Any]],
+    projections: dict[str, dict[str, str]],
+) -> list[dict[str, Any]]:
+    if not projections:
+        return items
+
+    attached: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            attached.append(item)
+            continue
+        approval_id = str(item.get("last_task_approval_id") or "").strip()
+        projection = projections.get(approval_id)
+        if not projection:
+            attached.append(item)
+            continue
+
+        enriched = dict(item)
+        status = str(projection.get("status") or "").strip()
+        previous_approval_id = str(projection.get("previous_approval_id") or "").strip()
+        previous_approval_status = str(projection.get("previous_approval_status") or "").strip()
+        if status:
+            enriched["last_task_approval_status"] = status
+        if previous_approval_id:
+            enriched["last_task_previous_approval_id"] = previous_approval_id
+        if previous_approval_status:
+            enriched["last_task_previous_approval_status"] = previous_approval_status
+        attached.append(enriched)
+    return attached
 
 
 def _activity_sort_key(item: dict[str, Any]) -> tuple[float, int, str]:
@@ -1212,6 +1271,7 @@ def mission_continuity_snapshot(
     mission_status_counts = (
         mission_summary["status_counts"] if isinstance(mission_summary.get("status_counts"), dict) else {}
     )
+    approvals_path = data_dir() / "approvals" / "pending"
     recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
     mission_queue = mission_store.mission_queue_items(limit=queue_limit, include_terminal=False)
     deadletter_missions = mission_store.deadletter_queue_items(limit=deadletter_limit)
@@ -1224,6 +1284,13 @@ def mission_continuity_snapshot(
     )
     histories = _mission_history_map(mission_queue, deadletter_missions, recent_missions)
     deadletter_missions = _attach_mission_history_summary(deadletter_missions, histories)
+    pending_approval_projection = _mission_pending_approval_projection(
+        [*recent_missions, *mission_queue, *deadletter_missions],
+        approvals_path,
+    )
+    recent_missions = _attach_mission_pending_approval_projection(recent_missions, pending_approval_projection)
+    mission_queue = _attach_mission_pending_approval_projection(mission_queue, pending_approval_projection)
+    deadletter_missions = _attach_mission_pending_approval_projection(deadletter_missions, pending_approval_projection)
     mission_briefing = _mission_briefing(
         mission_status_counts,
         mission_queue,
