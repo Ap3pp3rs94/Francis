@@ -195,6 +195,10 @@ export type MissionQueueItem = MissionRecord & {
   last_advance_actor?: string;
   last_advance_applied?: boolean;
   last_advance_at?: string;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
+  history_tail?: MissionHistoryEntry[];
 };
 
 export type MissionAdvanceRequest = {
@@ -509,6 +513,12 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     last_advance_actor: safeString(raw.last_advance_actor, "") || undefined,
     last_advance_applied: safeBoolean(raw.last_advance_applied, false),
     last_advance_at: safeString(raw.last_advance_at, "") || undefined,
+    history_count: safeNumber(raw.history_count, 0) || undefined,
+    latest_history_event: safeString(raw.latest_history_event, "") || undefined,
+    latest_history_ts: safeString(raw.latest_history_ts, "") || undefined,
+    history_tail: Array.isArray(raw.history_tail)
+      ? raw.history_tail.map(parseMissionHistoryEntry).filter((item): item is MissionHistoryEntry => item !== null)
+      : undefined,
   };
 }
 

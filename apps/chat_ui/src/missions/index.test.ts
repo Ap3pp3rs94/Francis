@@ -514,6 +514,18 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
               },
             ],
           },
+          history_count: 2,
+          latest_history_event: "mission_ticked",
+          latest_history_ts: "2026-04-15T12:10:00Z",
+          history_tail: [
+            { ts: "2026-04-15T12:00:00Z", mission_id: "mission_blocked", event: "created", details: {} },
+            {
+              ts: "2026-04-15T12:10:00Z",
+              mission_id: "mission_blocked",
+              event: "mission_ticked",
+              details: { status: "blocked" },
+            },
+          ],
         },
       ],
       deadletter: [],
@@ -551,6 +563,23 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
               target_id: "tsk_ready",
               reason: "Approval apr_ready is pending before the mission can continue.",
             },
+            history_count: 3,
+            latest_history_event: "advance_receipt",
+            latest_history_ts: "2026-04-15T12:20:00Z",
+            history_tail: [
+              {
+                ts: "2026-04-15T12:15:00Z",
+                mission_id: "mission_ready",
+                event: "mission_ticked",
+                details: { status: "queued" },
+              },
+              {
+                ts: "2026-04-15T12:20:00Z",
+                mission_id: "mission_ready",
+                event: "advance_receipt",
+                details: { applied: true },
+              },
+            ],
           },
           status: "queued",
           operation_id: "tsk_ready",
@@ -634,6 +663,10 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.items[0]?.dependency_state?.unresolved, 1);
     assert.equal(response.items[0]?.dependency_state?.first_unresolved?.id, "msn_dependency");
     assert.equal(response.items[0]?.dependency_state?.items?.[0]?.kind, "mission");
+    assert.equal(response.items[0]?.history_count, 2);
+    assert.equal(response.items[0]?.latest_history_event, "mission_ticked");
+    assert.equal(response.items[0]?.latest_history_ts, "2026-04-15T12:10:00Z");
+    assert.equal(response.items[0]?.history_tail?.[1]?.event, "mission_ticked");
     assert.equal(response.results?.[0]?.mission_id, "mission_ready");
     assert.equal(response.results?.[0]?.operation_id, "tsk_ready");
     assert.equal(response.results?.[0]?.approval_id, "apr_ready");
@@ -646,6 +679,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.queue_item?.current_task?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.queue_item?.advance?.eligible, false);
     assert.equal(response.results?.[0]?.queue_item?.advance?.action, "review_pending_approval");
+    assert.equal(response.results?.[0]?.queue_item?.history_count, 3);
+    assert.equal(response.results?.[0]?.queue_item?.latest_history_event, "advance_receipt");
+    assert.equal(response.results?.[0]?.queue_item?.history_tail?.[1]?.event, "advance_receipt");
     assert.equal(response.results?.[0]?.gate, "approvals_gate");
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
     assert.equal(response.results?.[0]?.mission?.id, "mission_ready");

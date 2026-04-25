@@ -297,6 +297,21 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 approval_id: "apr_queue_exact",
                 approval_status: "pending",
               },
+              history_count: 2,
+              latest_history_event: "mission_ticked",
+              latest_history_ts: "2026-04-14T07:45:00Z",
+              history_tail: [
+                {
+                  event: "created",
+                  ts: "2026-04-14T07:30:00Z",
+                  details: { status: "queued" },
+                },
+                {
+                  event: "mission_ticked",
+                  ts: "2026-04-14T07:45:00Z",
+                  details: { from: "queued", to: "blocked" },
+                },
+              ],
             },
           ],
           deadletter_missions: [
@@ -472,6 +487,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.eligible, false);
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.action, "raise_trust_or_reduce_risk");
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.target_id, "tsk_blocked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.history_count, 2);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_event, "mission_ticked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_ts, "2026-04-14T07:45:00Z");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.history_tail?.[1]?.event, "mission_ticked");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_id, "apr_dead_exact");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.operation_id, "tsk_dead");

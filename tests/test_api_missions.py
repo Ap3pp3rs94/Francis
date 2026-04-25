@@ -790,12 +790,18 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     assert queue_items[0]["advance"]["eligible"] is False
     assert queue_items[0]["advance"]["action"] == "raise_trust_or_reduce_risk"
     assert queue_items[0]["advance"]["target_id"] == blocked_operation_id
+    assert queue_items[0]["history_count"] >= 1
+    assert queue_items[0]["latest_history_event"]
+    assert len(queue_items[0]["history_tail"]) >= 1
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "run_linked_operation"
     assert ready_item["advance"]["eligible"] is True
     assert ready_item["advance"]["action"] == "run_linked_operation"
     assert ready_item["linked_task_count"] == 1
     assert ready_item["last_advance_action"] == "create_first_operation"
+    assert ready_item["history_count"] >= 2
+    assert ready_item["latest_history_event"]
+    assert len(ready_item["history_tail"]) >= 1
 
 
 def test_mission_run_once_waits_for_unresolved_dependencies(monkeypatch, tmp_path: Path) -> None:

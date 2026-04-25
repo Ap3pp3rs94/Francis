@@ -564,6 +564,7 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     dependency_state = _dependency_state(record, repo_root)
     recommended_action, operator_hint, action_target_id = _queue_action(record, dependency_state)
+    history_summary = _history_summary(record.mission_id, repo_root)
     return {
         "id": record.mission_id,
         "status": record.status.value,
@@ -607,6 +608,7 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
             operator_hint=operator_hint,
             action_target_id=action_target_id,
         ),
+        **history_summary,
         "deadletter_reason": record.deadletter_reason,
         "updated_at": record.updated_at,
     }
@@ -800,6 +802,29 @@ def read_history(mission_id: str, repo_root: Path | None = None, limit: int = 20
         return out
     except Exception:
         return []
+
+
+def _history_summary(mission_id: str, repo_root: Path | None = None) -> dict[str, Any]:
+    history = read_history(mission_id, repo_root, limit=200)
+    latest_history = history[-1] if history and isinstance(history[-1], dict) else {}
+    history_tail: list[dict[str, Any]] = []
+    for entry in history[-2:]:
+        if not isinstance(entry, dict):
+            continue
+        details = entry.get("details")
+        history_tail.append(
+            {
+                "event": str(entry.get("event") or "").strip(),
+                "ts": str(entry.get("ts") or "").strip(),
+                "details": dict(details) if isinstance(details, dict) else {},
+            }
+        )
+    return {
+        "history_count": len(history),
+        "latest_history_event": str(latest_history.get("event") or "").strip(),
+        "latest_history_ts": str(latest_history.get("ts") or "").strip(),
+        "history_tail": history_tail,
+    }
 
 
 def update_mission(
