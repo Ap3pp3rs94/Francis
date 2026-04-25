@@ -110,6 +110,62 @@ def test_trust_state_history_events_and_adjust_lifecycle(monkeypatch, tmp_path: 
     assert legacy_set_body["level"] == 1
 
 
+def test_trust_reason_redacts_secret_text(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.trust import tracker
+
+    client = TestClient(create_app())
+
+    raw_api_secret = "trustreasonsecret123"
+    adjusted = client.post(
+        "/trust/adjust",
+        json={
+            "op": "set",
+            "value": 3,
+            "reason": f"operator note password={raw_api_secret}",
+            "actor": "ops",
+            "ts": 1_700_000_030,
+        },
+    )
+    assert adjusted.status_code == 200
+    adjusted_body = adjusted.json()
+    assert adjusted_body["ok"] is True
+    assert adjusted_body["event"]["reason"] == "operator note password=[REDACTED:secret]"
+
+    history = client.get("/trust/history?limit=5")
+    assert history.status_code == 200
+    history_item = next(item for item in history.json()["items"] if item["level"] == 3)
+    assert history_item["reason"] == "operator note password=[REDACTED:secret]"
+
+    events = client.get("/trust/events?actor=ops")
+    assert events.status_code == 200
+    event_item = next(item for item in events.json()["items"] if item["after_level"] == 3)
+    assert event_item["reason"] == "operator note password=[REDACTED:secret]"
+
+    raw_tracker_secret = "trackerreasonsecret456"
+    tracked = tracker.adjust_level(
+        op="set",
+        value=4,
+        reason=f"tracker note token={raw_tracker_secret}",
+        actor="tracker-test",
+        ts=1_700_000_031,
+    )
+    assert tracked["ok"] is True
+    assert tracked["event"]["reason"] == "tracker note token=[REDACTED:secret]"
+
+    history_path = data_root / "trust" / "levels" / "history.jsonl"
+    history_text = history_path.read_text(encoding="utf-8")
+    assert raw_api_secret not in history_text
+    assert raw_tracker_secret not in history_text
+    assert "password=[REDACTED:secret]" in history_text
+    assert "token=[REDACTED:secret]" in history_text
+
+
 def test_trust_aliases_policy_update_and_persistence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

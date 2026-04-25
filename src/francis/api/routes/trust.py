@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 from francis.trust.levels import get_state, set_global_level
 
@@ -24,6 +25,10 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
 
 
 def _now_s() -> int:
@@ -196,7 +201,7 @@ def _normalize_event(raw: dict[str, Any]) -> dict[str, Any]:
         "after_level": after_level,
         "delta": delta,
         "tier": _tier(float(after_level)),
-        "reason": _safe_str(raw.get("reason")).strip(),
+        "reason": _redact_free_text(raw.get("reason")),
         "actor": _safe_str(raw.get("actor")).strip() or "api",
         "domain": _safe_str(raw.get("domain")).strip(),
         "source": _safe_str(raw.get("source")).strip() or "api.trust",

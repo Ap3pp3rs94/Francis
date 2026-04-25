@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 from francis.telemetry.audit import record as audit_record
 from francis.trust.calculator import evaluate, normalize_risk_tier
@@ -36,6 +37,10 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -148,7 +153,7 @@ def append_event(
         "after_level": int(after_level),
         "level": int(after_level),
         "delta": int(after_level) - int(before_level),
-        "reason": reason.strip(),
+        "reason": _redact_free_text(reason),
         "actor": actor.strip() or "system",
         "domain": domain.strip(),
         "idempotency_key": idempotency_key.strip(),

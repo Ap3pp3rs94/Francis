@@ -2131,6 +2131,80 @@ ui:
     assert body["available_modes"][3]["active"] is True
 
 
+def test_system_operator_mode_reason_redacts_secret_text(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    env_root = repo_root / "config" / "environments"
+
+    env_root.mkdir(parents=True, exist_ok=True)
+    (data_root / "runtime").mkdir(parents=True, exist_ok=True)
+
+    (env_root / "dev.yaml").write_text(
+        """
+version: 1
+profile:
+  id: dev
+  name: Development
+runtime:
+  mode: dev
+governance:
+  approvals:
+    enabled: true
+    mode: policy
+  trust:
+    minimum_operational_trust: 0
+network:
+  egress:
+    enabled: true
+features:
+  web_learning:
+    enabled: true
+    allow_search: true
+    allow_fetch: true
+    allow_ingest: false
+ui:
+  label: "DEV"
+  banner:
+    text: "DEV MODE"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_secret = "operatormodesecret123"
+    update = client.post(
+        "/system/operator_mode",
+        json={
+            "mode": "away",
+            "reason": f"coverage note password={raw_secret}",
+            "actor": "chat_ui",
+        },
+    )
+    assert update.status_code == 200
+    update_body = update.json()
+    assert update_body["ok"] is True
+    assert update_body["control_mode"]["reason"] == "coverage note password=[REDACTED:secret]"
+
+    follow_up = client.get("/system/operator_mode")
+    assert follow_up.status_code == 200
+    assert follow_up.json()["control_mode"]["reason"] == "coverage note password=[REDACTED:secret]"
+
+    control_mode_path = data_root / "runtime" / "control_mode.json"
+    persisted_text = control_mode_path.read_text(encoding="utf-8")
+    assert raw_secret not in persisted_text
+    assert "password=[REDACTED:secret]" in persisted_text
+
+
 def test_system_mutation_aliases_share_canonical_state(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

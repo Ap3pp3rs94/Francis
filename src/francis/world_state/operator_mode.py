@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir, repo_root
 from francis.trust.levels import get_state
 from francis.world_state.snapshot import mission_continuity_snapshot
@@ -60,6 +61,10 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
 
 
 def _safe_int(value: Any) -> int:
@@ -118,7 +123,7 @@ def _read_control_mode_state(data: Path) -> dict[str, Any]:
         "mode": _normalize_control_mode(state.get("mode")),
         "changed_at": _safe_int(state.get("changed_at")),
         "changed_by": _safe_str(state.get("changed_by")).strip(),
-        "reason": _safe_str(state.get("reason")).strip(),
+        "reason": _redact_free_text(state.get("reason")),
         "source": _safe_str(state.get("source")).strip() or ("persisted" if state else "default"),
     }
 
@@ -145,7 +150,7 @@ def set_control_mode(
     payload = {
         "version": 1,
         "mode": normalized_mode,
-        "reason": _safe_str(reason).strip(),
+        "reason": _redact_free_text(reason),
         "changed_by": _safe_str(actor).strip(),
         "changed_at": int(time.time()),
         "source": "operator_override",

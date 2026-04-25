@@ -105,6 +105,12 @@ records, approval list responses, and approved/rejected/emergency decision files
 preserve non-sensitive operator context while replacing secret-like password,
 token, key, and credential strings before persistence.
 
+As of `2026-04-25`, trust history and operator control-mode reason fields share
+the same free-text secret redaction posture. Trust adjust events written through
+the API or tracker and persisted control-mode overrides keep operator context
+while replacing secret-like passwords, tokens, and keys before those values reach
+history files, runtime state files, or system/operator-mode responses.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt
