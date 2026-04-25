@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_governed_value
 from francis.kernel.paths import data_dir
 from francis.telemetry.audit import record as audit_record
 from francis.telemetry.tracing import current_context
@@ -43,6 +44,10 @@ def _coerce_jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _redact_jsonable(value: Any, *, key: str = "") -> Any:
+    return _coerce_jsonable(redact_governed_value(_coerce_jsonable(value), key=key))
+
+
 def _write_line(path: Path, line: str) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,8 +62,8 @@ def log(event: str, level: str = "INFO", **fields: Any) -> None:
         "ts": time.time(),
         "level": level,
         "event": event,
-        **current_context().as_dict(),
-        **{key: _coerce_jsonable(value) for key, value in fields.items()},
+        **{key: _redact_jsonable(value, key=key) for key, value in current_context().as_dict().items()},
+        **{key: _redact_jsonable(value, key=key) for key, value in fields.items()},
     }
     line = json.dumps(payload, ensure_ascii=True) if _json_enabled() else f"{level} {event} {fields}"
     _write_line(_log_dir() / "francis.jsonl", line)
@@ -69,5 +74,10 @@ def audit(event: str, **fields: Any) -> None:
 
 
 def error(event: str, **fields: Any) -> None:
-    payload = {"ts": time.time(), "event": event, **current_context().as_dict(), **fields}
+    payload = {
+        "ts": time.time(),
+        "event": event,
+        **{key: _redact_jsonable(value, key=key) for key, value in current_context().as_dict().items()},
+        **{key: _redact_jsonable(value, key=key) for key, value in fields.items()},
+    }
     _write_line(_error_dir() / "errors.jsonl", json.dumps(payload, ensure_ascii=True))

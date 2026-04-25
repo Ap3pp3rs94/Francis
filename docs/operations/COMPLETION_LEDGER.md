@@ -127,6 +127,13 @@ responses replace secret-like free text before returning to callers. Action
 inputs remain available in local task storage for execution, but API projections
 return redacted views.
 
+As of `2026-04-25`, lower-level telemetry audit, operation log, and error log
+writers apply the same governed redaction boundary. Telemetry fields and trace
+context are coerced into JSON-safe values and secret-like passwords, tokens,
+keys, and secrets are redacted before `audit.jsonl`, `francis.jsonl`, or
+`errors.jsonl` are written or before `telemetry.audit.record` returns its
+receipt payload.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

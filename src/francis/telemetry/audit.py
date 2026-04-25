@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_governed_value
 from francis.kernel.paths import data_dir
 from francis.telemetry.tracing import current_context
 
@@ -24,6 +25,10 @@ def _coerce_jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_coerce_jsonable(item) for item in value]
     return str(value)
+
+
+def _redact_jsonable(value: Any, *, key: str = "") -> Any:
+    return _coerce_jsonable(redact_governed_value(_coerce_jsonable(value), key=key))
 
 
 def _append_line(path: Path, payload: dict[str, Any]) -> None:
@@ -49,7 +54,10 @@ def record(event: str, *, status: str = "ok", **fields: Any) -> dict[str, Any]:
         ts=time.time(),
         event=event.strip() or "unknown",
         status=status.strip() or "ok",
-        fields={**context, **{key: _coerce_jsonable(value) for key, value in fields.items()}},
+        fields={
+            **{key: _redact_jsonable(value, key=key) for key, value in context.items()},
+            **{key: _redact_jsonable(value, key=key) for key, value in fields.items()},
+        },
     ).to_dict()
     _append_line(_audit_path(), payload)
     return payload
