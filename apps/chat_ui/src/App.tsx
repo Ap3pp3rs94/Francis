@@ -9267,6 +9267,14 @@ function OperationsPanel(props: {
   const selectedMissionCurrentTaskApprovalStatus =
     safeString(selectedMissionCurrentTask?.approval_status).trim() ||
     safeString(selectedMissionLoopHandoff?.approval_status).trim();
+  const selectedMissionBridgeApprovalId =
+    safeString(selectedMissionCurrentTask?.approval_id).trim() ||
+    safeString(selectedMissionLoopHandoff?.approval_id).trim() ||
+    safeString(selectedMissionReceiptSummary?.current_approval_id).trim();
+  const selectedMissionBridgeTaskId =
+    selectedMissionCurrentTaskId ||
+    safeString(selectedMissionLoopHandoff?.operation_id).trim() ||
+    safeString(selectedMissionReceiptSummary?.current_operation_id).trim();
   const selectedMissionLoopStages = [
     { key: "plan", label: "Plan", stage: selectedMissionLoopState?.plan },
     { key: "gate", label: "Gate", stage: selectedMissionLoopState?.gate },
@@ -10189,6 +10197,31 @@ function OperationsPanel(props: {
                               trace <code>{selectedMissionLoopHandoff.trace_id}</code>
                             </>
                           ) : null}
+                        </div>
+                      ) : null}
+                      {(selectedMissionBridgeApprovalId || selectedMissionBridgeTaskId) ? (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          {selectedMissionBridgeApprovalId ? (
+                            <button
+                              style={buttonStyle}
+                              onClick={() =>
+                                props.onOpenApprovals(selectedMissionBridgeApprovalId, {
+                                  missionId: selectedMissionId,
+                                  operationId: selectedMissionBridgeTaskId || undefined,
+                                })
+                              }
+                            >
+                              Review bridge approval
+                            </button>
+                          ) : null}
+                          {selectedMissionBridgeTaskId ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionBridgeTaskId)}>
+                              {selectedMissionBridgeTaskId === selectedOperation.id ? "Open selected task" : "Open bridge task"}
+                            </button>
+                          ) : null}
+                          <button style={buttonStyle} onClick={() => props.onOpenMission(selectedMissionId)}>
+                            Open mission flow
+                          </button>
                         </div>
                       ) : null}
                       {selectedMissionLoopStages.length > 0 ? (

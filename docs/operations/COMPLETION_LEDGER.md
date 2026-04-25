@@ -967,6 +967,21 @@ inspector already receives:
   policy, or memory-write behavior changed; this only exposes existing
   mission-detail truth from the active task surface.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail mission bridge action routing. This
+advances the active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION ->
+P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line by making the selected
+operation's mission bridge actionable without raw JSON inspection:
+
+- `apps/chat_ui/src/App.tsx` now derives bridge approval and task handles from
+  linked mission current-task, loop handoff, and receipt-summary fields.
+- Operation Detail now exposes `Review bridge approval`, `Open bridge task`, and
+  `Open mission flow` actions from `Mission Loop Bridge` when those real handles
+  exist.
+- No operation mutation, mission mutation, approval decision, execution, shell,
+  policy, or memory-write behavior changed; this only routes existing handles to
+  their existing operator surfaces.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
