@@ -1033,6 +1033,107 @@ def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch
     assert recent_item["last_task_approval_status"] == "pending"
 
 
+def test_continuity_briefing_refreshes_approved_gate_into_rerun_handoff(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/approved-rerun",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Approval-bound deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    trust = client.post("/trust/set", json={"level": 6, "reason": "allow approved gate continuity test"})
+    assert trust.status_code == 200
+    assert trust.json()["ok"] is True
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Approved approval should become a rerun handoff.",
+            "summary": "Mission should not keep saying pending after approval is decided.",
+            "priority": 9,
+            "requester_id": "test.continuity.approved_gate",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "continuity approved gate rerun",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    pending = client.post(
+        f"/operations/{operation_id}/run",
+        json={"worker_id": "test.continuity.approved_gate"},
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+
+    focus_item = next(item for item in body["briefing"]["focus"] if item["id"] == mission_id)
+    assert focus_item["last_task_approval_id"] == approval_id
+    assert focus_item["last_task_approval_status"] == "approved"
+    assert focus_item["recommended_action"] == "run_linked_operation"
+    assert focus_item["operator_hint"] == (
+        f"Approval {approval_id} is approved; rerun the linked operation through the governed runtime."
+    )
+    assert focus_item["advance"]["eligible"] is True
+    assert focus_item["advance"]["action"] == "run_linked_operation"
+    assert focus_item["advance"]["target_id"] == operation_id
+    assert focus_item["current_task"]["approval_status"] == "approved"
+    assert focus_item["current_task"]["handoff_action"] == "run_linked_operation"
+
+    recent_item = next(item for item in body["recent_missions"] if item["id"] == mission_id)
+    assert recent_item["last_task_approval_id"] == approval_id
+    assert recent_item["last_task_approval_status"] == "approved"
+
+
 def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linkage(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

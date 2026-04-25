@@ -24,6 +24,13 @@ export type MissionRecord = {
   last_task_gate?: string;
   last_task_next_step?: string;
   last_advance_operation_id?: string;
+  last_task_approval_id?: string;
+  last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
+  last_task_approval_status?: string;
+  last_task_approval_replacement_kind?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   replacement_for_mission_id?: string;
   replacement_for_status?: string;
   replacement_source_objective?: string;
@@ -255,7 +262,11 @@ export type MissionQueueItem = MissionRecord & {
   last_task_reason?: string;
   last_task_approval_id?: string;
   last_task_previous_approval_id?: string;
+  last_task_previous_approval_status?: string;
   last_task_approval_status?: string;
+  last_task_approval_replacement_kind?: string;
+  last_task_approval_replacement_reason?: string;
+  last_task_approval_replacement_changed_keys?: string[];
   last_advance_action?: string;
   last_advance_outcome?: string;
   last_advance_operation_id?: string;
@@ -511,6 +522,13 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
     last_task_gate: safeString(raw.last_task_gate, "") || undefined,
     last_task_next_step: safeString(raw.last_task_next_step, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    last_task_approval_id: safeString(raw.last_task_approval_id, "") || undefined,
+    last_task_previous_approval_id: safeString(raw.last_task_previous_approval_id, "") || undefined,
+    last_task_previous_approval_status: safeString(raw.last_task_previous_approval_status, "") || undefined,
+    last_task_approval_status: safeString(raw.last_task_approval_status, "") || undefined,
+    last_task_approval_replacement_kind: safeString(raw.last_task_approval_replacement_kind, "") || undefined,
+    last_task_approval_replacement_reason: safeString(raw.last_task_approval_replacement_reason, "") || undefined,
+    last_task_approval_replacement_changed_keys: safeStringArray(raw.last_task_approval_replacement_changed_keys),
     replacement_for_mission_id: safeString(raw.replacement_for_mission_id, "") || undefined,
     replacement_for_status: safeString(raw.replacement_for_status, "") || undefined,
     replacement_source_objective: safeString(raw.replacement_source_objective, "") || undefined,
@@ -646,7 +664,11 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     last_task_reason: safeString(raw.last_task_reason, "") || undefined,
     last_task_approval_id: safeString(raw.last_task_approval_id, "") || undefined,
     last_task_previous_approval_id: safeString(raw.last_task_previous_approval_id, "") || undefined,
+    last_task_previous_approval_status: safeString(raw.last_task_previous_approval_status, "") || undefined,
     last_task_approval_status: safeString(raw.last_task_approval_status, "") || undefined,
+    last_task_approval_replacement_kind: safeString(raw.last_task_approval_replacement_kind, "") || undefined,
+    last_task_approval_replacement_reason: safeString(raw.last_task_approval_replacement_reason, "") || undefined,
+    last_task_approval_replacement_changed_keys: safeStringArray(raw.last_task_approval_replacement_changed_keys),
     last_advance_action: safeString(raw.last_advance_action, "") || undefined,
     last_advance_outcome: safeString(raw.last_advance_outcome, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,

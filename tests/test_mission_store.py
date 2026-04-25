@@ -13,6 +13,12 @@ def _write_task_record(repo_root: Path, task_id: str, payload: dict[str, object]
     (task_dir / "record.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _write_approval_record(repo_root: Path, status: str, approval_id: str, payload: dict[str, object]) -> None:
+    approval_dir = repo_root / "data" / "approvals" / status
+    approval_dir.mkdir(parents=True, exist_ok=True)
+    (approval_dir / f"{approval_id}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def test_mission_context_fields_are_typed_and_legacy_records_remain_readable(tmp_path: Path) -> None:
     mission, err = mission_store.create_mission(
         MissionCreateRequest(
@@ -174,6 +180,60 @@ def test_record_linked_task_transition_surfaces_exact_pending_approval(tmp_path:
     assert queue_item["last_task_previous_approval_id"] == "apr_old_122"
     assert queue_item["last_task_approval_status"] == "pending"
     assert queue_item["operator_hint"] == "Approval apr_exact_123 is pending before the mission can continue."
+
+
+def test_mission_queue_refreshes_approved_gate_into_rerun_action(tmp_path: Path) -> None:
+    mission, err = mission_store.create_mission(
+        MissionCreateRequest(
+            objective="Approved mission should become runnable again.",
+            requester_id="test.mission.store",
+        ),
+        repo_root=tmp_path,
+    )
+    assert err is None
+    assert mission is not None
+
+    updated, err = mission_store.record_linked_task_transition(
+        mission.mission_id,
+        "tsk_approved_gate",
+        repo_root=tmp_path,
+        task_status="accepted",
+        result_status="needs_approval",
+        governance={"gate": "approvals_gate", "next_step": "approve_exact_action", "approval_status": "pending"},
+        approval_id="apr_exact_approved",
+        actor="test.mission.store",
+        note="persist pending gate before approval decision",
+    )
+    assert err is None
+    assert updated is not None
+
+    _write_approval_record(
+        tmp_path,
+        "approved",
+        "apr_exact_approved",
+        {
+            "id": "apr_exact_approved",
+            "action": "plugin.run",
+            "reason": "approved exact action",
+            "status": "approved",
+            "payload": {"plugin_id": "builtin.echo", "action": "deploy"},
+        },
+    )
+
+    _, queue_item, err = mission_store.mission_queue_item(mission.mission_id, repo_root=tmp_path)
+    assert err is None
+    assert queue_item is not None
+    assert queue_item["last_task_approval_id"] == "apr_exact_approved"
+    assert queue_item["last_task_approval_status"] == "approved"
+    assert queue_item["recommended_action"] == "run_linked_operation"
+    assert queue_item["action_target_id"] == "tsk_approved_gate"
+    assert queue_item["advance"]["eligible"] is True
+    assert queue_item["advance"]["action"] == "run_linked_operation"
+    assert queue_item["current_task"]["approval_status"] == "approved"
+    assert (
+        queue_item["operator_hint"]
+        == "Approval apr_exact_approved is approved; rerun the linked operation through the governed runtime."
+    )
 
 
 def test_tick_mission_derives_approval_context_from_linked_task_record(tmp_path: Path) -> None:

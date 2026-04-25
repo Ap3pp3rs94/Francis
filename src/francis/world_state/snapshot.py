@@ -22,6 +22,7 @@ _TERMINAL_MISSION_STATUSES = {"completed", "failed", "deadlettered", "cancelled"
 _INCIDENT_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
 _OBSERVER_ANOMALY_WEIGHTS = {"critical": 80, "error": 50, "warning": 20, "info": 5}
 _REPLACEMENT_ATTENTION_STATUSES = {"missing", "failed", "deadlettered", "cancelled", "canceled"}
+_APPROVAL_STATUS_DIRS = ("pending", "approved", "rejected", "emergency")
 
 
 def _count_json_entries(path: Path) -> int:
@@ -734,9 +735,20 @@ def _mission_replacement_lineage_projection(item: dict[str, Any]) -> dict[str, A
     }
 
 
-def _mission_pending_approval_projection(
+def _approval_record(approval_id: str, approvals_root: Path) -> dict[str, Any]:
+    cleaned = _safe_str(approval_id).strip()
+    if not cleaned:
+        return {}
+    for status_dir in _APPROVAL_STATUS_DIRS:
+        record = _read_json(approvals_root / status_dir / f"{cleaned}.json")
+        if record:
+            return record
+    return {}
+
+
+def _mission_approval_projection(
     items: list[dict[str, Any]],
-    approvals_path: Path,
+    approvals_root: Path,
 ) -> dict[str, dict[str, Any]]:
     approval_ids: set[str] = set()
     for item in items:
@@ -748,7 +760,7 @@ def _mission_pending_approval_projection(
 
     projections: dict[str, dict[str, Any]] = {}
     for approval_id in approval_ids:
-        record = _read_json(approvals_path / f"{approval_id}.json")
+        record = _approval_record(approval_id, approvals_root)
         if not record:
             continue
         artifact_projection = approval_projection_fields(record)
@@ -1656,7 +1668,7 @@ def mission_continuity_snapshot(
     mission_status_counts = (
         mission_summary["status_counts"] if isinstance(mission_summary.get("status_counts"), dict) else {}
     )
-    approvals_path = data_dir() / "approvals" / "pending"
+    approvals_root = data_dir() / "approvals"
     recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
     mission_queue = mission_store.mission_queue_items(limit=queue_limit, include_terminal=False)
     failed_missions = mission_store.failed_queue_items(limit=deadletter_limit)
@@ -1674,14 +1686,14 @@ def mission_continuity_snapshot(
     mission_queue = _attach_mission_history_summary(mission_queue, histories)
     failed_missions = _attach_mission_history_summary(failed_missions, histories)
     deadletter_missions = _attach_mission_history_summary(deadletter_missions, histories)
-    pending_approval_projection = _mission_pending_approval_projection(
+    approval_projection = _mission_approval_projection(
         [*recent_missions, *mission_queue, *failed_missions, *deadletter_missions],
-        approvals_path,
+        approvals_root,
     )
-    recent_missions = _attach_mission_pending_approval_projection(recent_missions, pending_approval_projection)
-    mission_queue = _attach_mission_pending_approval_projection(mission_queue, pending_approval_projection)
-    failed_missions = _attach_mission_pending_approval_projection(failed_missions, pending_approval_projection)
-    deadletter_missions = _attach_mission_pending_approval_projection(deadletter_missions, pending_approval_projection)
+    recent_missions = _attach_mission_pending_approval_projection(recent_missions, approval_projection)
+    mission_queue = _attach_mission_pending_approval_projection(mission_queue, approval_projection)
+    failed_missions = _attach_mission_pending_approval_projection(failed_missions, approval_projection)
+    deadletter_missions = _attach_mission_pending_approval_projection(deadletter_missions, approval_projection)
     mission_briefing = _mission_briefing(
         mission_status_counts,
         mission_queue,

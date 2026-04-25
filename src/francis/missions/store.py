@@ -81,6 +81,7 @@ _QUEUE_STATUS_ORDER = {
 }
 AUTO_ADVANCE_ACTIONS = frozenset({"create_first_operation", "run_linked_operation"})
 RECOVERY_REVIEW_ACTIONS = frozenset({"retry_or_deadletter", "review_deadletter"})
+_APPROVAL_STATUS_DIRS = ("pending", "approved", "rejected", "emergency")
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 
 
@@ -144,6 +145,12 @@ def _tasks_dir(repo_root: Path | None = None) -> Path:
 
 def _task_record_path(task_id: str, repo_root: Path | None = None) -> Path:
     return _tasks_dir(repo_root) / task_id / "record.json"
+
+
+def _approvals_dir(repo_root: Path | None = None) -> Path:
+    if repo_root is not None:
+        return repo_root.resolve() / "data" / "approvals"
+    return data_dir() / "approvals"
 
 
 def _safe_mkdir(path: Path) -> None:
@@ -219,6 +226,56 @@ def _read_json_dict(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return raw if isinstance(raw, dict) else {}
+
+
+def _approval_record(approval_id: str, repo_root: Path | None = None) -> dict[str, Any]:
+    cleaned = str(approval_id or "").strip()
+    if not cleaned:
+        return {}
+
+    root = _approvals_dir(repo_root)
+    for status_dir in _APPROVAL_STATUS_DIRS:
+        record = _read_json_dict(root / status_dir / f"{cleaned}.json")
+        if record:
+            return record
+    return {}
+
+
+def _refresh_approval_meta(meta: dict[str, Any], repo_root: Path | None = None) -> dict[str, Any]:
+    approval_id = str(meta.get("last_task_approval_id") or "").strip()
+    if not approval_id:
+        return meta
+
+    record = _approval_record(approval_id, repo_root)
+    if not record:
+        return meta
+
+    from francis.governance.approval_projection import approval_projection_fields
+
+    refreshed = dict(meta)
+    status = str(record.get("status") or "").strip().lower()
+    if status:
+        refreshed["last_task_approval_status"] = status
+
+    projection = approval_projection_fields(record)
+    previous_approval_id = str(projection.get("previous_approval_id") or "").strip()
+    previous_approval_status = str(projection.get("previous_approval_status") or "").strip()
+    replacement_kind = str(projection.get("replacement_kind") or "").strip()
+    replacement_reason = str(projection.get("replacement_reason") or "").strip()
+    replacement_changed_keys = projection.get("replacement_changed_keys")
+    if previous_approval_id:
+        refreshed["last_task_previous_approval_id"] = previous_approval_id
+    if previous_approval_status:
+        refreshed["last_task_previous_approval_status"] = previous_approval_status
+    if replacement_kind:
+        refreshed["last_task_approval_replacement_kind"] = replacement_kind
+    if replacement_reason:
+        refreshed["last_task_approval_replacement_reason"] = replacement_reason
+    if isinstance(replacement_changed_keys, list):
+        refreshed["last_task_approval_replacement_changed_keys"] = [
+            str(key).strip() for key in replacement_changed_keys if str(key).strip()
+        ][:8]
+    return refreshed
 
 
 def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[str, Any]:
@@ -423,8 +480,18 @@ def _queue_sort_key(record: "MissionRecord") -> tuple[int, int, float, str]:
     return (status_rank, -priority, -updated_ts, record.mission_id)
 
 
-def _queue_action(record: "MissionRecord", dependency_state: dict[str, Any] | None = None) -> tuple[str, str, str]:
-    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+def _queue_action(
+    record: "MissionRecord",
+    dependency_state: dict[str, Any] | None = None,
+    meta_override: dict[str, Any] | None = None,
+) -> tuple[str, str, str]:
+    meta = (
+        dict(meta_override)
+        if isinstance(meta_override, dict)
+        else dict(record.meta)
+        if isinstance(record.meta, dict)
+        else {}
+    )
     status = str(record.status.value or "").strip().lower()
     last_task_id = str(meta.get("last_task_id") or "").strip()
     last_task_result_status = str(meta.get("last_task_result_status") or "").strip().lower()
@@ -456,6 +523,24 @@ def _queue_action(record: "MissionRecord", dependency_state: dict[str, Any] | No
         if last_task_gate == "approvals_gate" or last_task_result_status in {"pending", "needs_approval"}:
             approval_hint = ""
             if last_task_approval_id:
+                if last_task_approval_status == "approved":
+                    return (
+                        "run_linked_operation",
+                        f"Approval {last_task_approval_id} is approved; rerun the linked operation through the governed runtime.",
+                        last_task_id,
+                    )
+                if last_task_approval_status in {"rejected", "denied"}:
+                    return (
+                        "review_rejected_approval",
+                        f"Approval {last_task_approval_id} is {last_task_approval_status}; revise or replace the linked operation before retrying.",
+                        last_task_id,
+                    )
+                if last_task_approval_status == "emergency":
+                    return (
+                        "review_emergency_approval",
+                        f"Approval {last_task_approval_id} is in emergency state; review governance context before continuing.",
+                        last_task_id,
+                    )
                 approval_state = last_task_approval_status or "pending"
                 approval_hint = f"Approval {last_task_approval_id} is {approval_state} before the mission can continue."
             return (
@@ -672,8 +757,9 @@ def _queue_current_task_projection(
 
 def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[str, Any]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    meta = _refresh_approval_meta(meta, repo_root)
     dependency_state = _dependency_state(record, repo_root)
-    recommended_action, operator_hint, action_target_id = _queue_action(record, dependency_state)
+    recommended_action, operator_hint, action_target_id = _queue_action(record, dependency_state, meta)
     history_summary = _history_summary(record.mission_id, repo_root)
     return {
         "id": record.mission_id,
@@ -698,7 +784,19 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "last_task_next_step": str(meta.get("last_task_next_step") or "").strip(),
         "last_task_approval_id": str(meta.get("last_task_approval_id") or "").strip(),
         "last_task_previous_approval_id": str(meta.get("last_task_previous_approval_id") or "").strip(),
+        "last_task_previous_approval_status": str(meta.get("last_task_previous_approval_status") or "").strip(),
         "last_task_approval_status": str(meta.get("last_task_approval_status") or "").strip(),
+        "last_task_approval_replacement_kind": str(meta.get("last_task_approval_replacement_kind") or "").strip(),
+        "last_task_approval_replacement_reason": str(meta.get("last_task_approval_replacement_reason") or "").strip(),
+        "last_task_approval_replacement_changed_keys": [
+            str(key).strip()
+            for key in (
+                meta.get("last_task_approval_replacement_changed_keys")
+                if isinstance(meta.get("last_task_approval_replacement_changed_keys"), list)
+                else []
+            )
+            if str(key).strip()
+        ][:8],
         "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
         "last_advance_outcome": str(meta.get("last_advance_outcome") or "").strip(),
         "last_advance_operation_id": str(meta.get("last_advance_operation_id") or "").strip(),

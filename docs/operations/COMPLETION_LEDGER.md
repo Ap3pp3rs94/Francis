@@ -654,6 +654,29 @@ see what happened after a source mission declared replacement work:
   `tests/test_api_continuity.py`, `apps/chat_ui/src/missions/index.test.ts`,
   and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is approved-gate mission re-entry. This advances the active
+`Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
+turning a decided exact-action approval into a truthful bounded rerun handoff
+instead of leaving continuity stuck on stale pending-approval language:
+
+- `src/francis/missions/store.py` now refreshes mission queue approval posture
+  from local approval records across pending, approved, rejected, and emergency
+  buckets before deriving mission actionability.
+- Blocked missions whose exact approval is now `approved` recommend
+  `run_linked_operation` through the existing governed mission runtime; rejected
+  and emergency approval states remain review-only.
+- `src/francis/world_state/snapshot.py` reads mission approval projections from
+  all approval decision buckets so continuity and recent-mission surfaces do not
+  preserve stale `pending` status after an operator decision.
+- `apps/chat_ui/src/missions/index.ts` now preserves approval status, previous
+  approval status, and bounded replacement evidence fields through the mission
+  client contract.
+- `tests/test_mission_store.py`,
+  `tests/test_api_continuity.py`, and
+  `apps/chat_ui/src/missions/index.test.ts` now prove the approved-gate re-entry
+  contract without adding a background autonomy path.
+
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 documentation/productization line is public GitHub discoverability. This does not
 advance a runtime capability claim; it makes the public repository easier to find
@@ -1785,6 +1808,21 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 approved-gate mission re-entry slice:
+
+- `.venv\Scripts\python.exe -m pytest tests\test_mission_store.py tests\test_api_continuity.py::test_continuity_briefing_refreshes_approved_gate_into_rerun_handoff tests\test_api_missions.py::test_mission_advance_surfaces_approval_handoff_for_governed_execution -q`
+  Result: `7 passed`
+- `.venv\Scripts\python.exe -m ruff check src\francis\missions\store.py src\francis\world_state\snapshot.py tests\test_mission_store.py tests\test_api_continuity.py`
+  Result: `passed`
+- `cd apps\chat_ui; npm run test -- src/missions/index.test.ts`
+  Result: `24 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 positive ready-state continuity contract slice:
 

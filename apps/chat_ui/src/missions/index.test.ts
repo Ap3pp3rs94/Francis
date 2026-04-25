@@ -230,6 +230,13 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
           last_task_next_step: "review_pending_approval",
           last_task_reason: "Approval apr_alpha is pending.",
           last_advance_operation_id: "tsk_alpha",
+          last_task_approval_id: "apr_alpha",
+          last_task_previous_approval_id: "apr_previous",
+          last_task_previous_approval_status: "approved",
+          last_task_approval_status: "approved",
+          last_task_approval_replacement_kind: "plugin.run.mismatch",
+          last_task_approval_replacement_reason: "approval_payload_mismatch",
+          last_task_approval_replacement_changed_keys: ["input"],
         },
       ],
       total: 1,
@@ -258,6 +265,13 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
     assert.equal(response.items[0]?.last_task_next_step, "review_pending_approval");
     assert.equal(response.items[0]?.last_task_reason, "Approval apr_alpha is pending.");
     assert.equal(response.items[0]?.last_advance_operation_id, "tsk_alpha");
+    assert.equal(response.items[0]?.last_task_approval_id, "apr_alpha");
+    assert.equal(response.items[0]?.last_task_previous_approval_id, "apr_previous");
+    assert.equal(response.items[0]?.last_task_previous_approval_status, "approved");
+    assert.equal(response.items[0]?.last_task_approval_status, "approved");
+    assert.equal(response.items[0]?.last_task_approval_replacement_kind, "plugin.run.mismatch");
+    assert.equal(response.items[0]?.last_task_approval_replacement_reason, "approval_payload_mismatch");
+    assert.deepEqual(response.items[0]?.last_task_approval_replacement_changed_keys, ["input"]);
   } finally {
     restoreFetch();
   }
