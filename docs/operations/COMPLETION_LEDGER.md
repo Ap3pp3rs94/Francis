@@ -728,6 +728,21 @@ by keeping bounded queue-run failures visible inside the immediate result card:
   behavior changed; this is read-only failure visibility.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run summary posture. This advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line
+by making the queue-run summary header report status, total error count, and
+backend queue counts alongside processed/applied/advanced totals:
+
+- `apps/chat_ui/src/App.tsx` now carries `/missions/run_once` status, total
+  error count, top-level error, and queue counts into the queue-run summary.
+- The queue-run summary now renders status, error count, top-level error, and
+  queued/active/blocked/failed/deadlettered counts when returned by the backend.
+- `apps/chat_ui/src/missions/index.test.ts` now asserts the queue-run client
+  preserves the processed total and bounded error count consumed by the UI.
+- No mutation, approval decision, execution, shell, policy, or memory-write
+  behavior changed; this is read-only result posture visibility.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1946,6 +1961,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run summary posture slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run error actionability slice:
 

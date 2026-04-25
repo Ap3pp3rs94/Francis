@@ -972,6 +972,8 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
       },
     ]);
     assert.equal(response.ok, false);
+    assert.equal(response.processed, 1);
+    assert.equal(response.errors?.length, 1);
     assert.equal(response.errors?.[0]?.mission_id, "mission_error");
     assert.equal(response.errors?.[0]?.operation_id, "tsk_error");
     assert.equal(response.errors?.[0]?.approval_id, "apr_error");

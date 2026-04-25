@@ -3120,6 +3120,10 @@ function SystemPanel(props: {
     processed: number;
     applied: number;
     advanced: number;
+    status?: string;
+    error?: string;
+    errorCount: number;
+    counts: Record<string, number>;
     results: Array<{
       missionId?: string;
       operationId?: string;
@@ -4047,6 +4051,10 @@ function SystemPanel(props: {
         processed: response.processed ?? 0,
         applied: response.applied ?? 0,
         advanced: response.advanced ?? 0,
+        status: response.status,
+        error: response.error,
+        errorCount: response.errors?.length ?? 0,
+        counts: response.counts ?? {},
         results: (response.results ?? []).slice(0, 4).map((item) => ({
           missionId: item.mission_id,
           operationId: item.operation_id,
@@ -6924,7 +6932,27 @@ function SystemPanel(props: {
                   processed=<code>{String(missionQueueRunSummary.processed)}</code>
                   {" / "}applied=<code>{String(missionQueueRunSummary.applied)}</code>
                   {" / "}advanced=<code>{String(missionQueueRunSummary.advanced)}</code>
+                  {" / "}errors=<code>{String(missionQueueRunSummary.errorCount)}</code>
+                  {missionQueueRunSummary.status ? (
+                    <>
+                      {" / "}status=<code>{missionQueueRunSummary.status}</code>
+                    </>
+                  ) : null}
                 </div>
+                {Object.keys(missionQueueRunSummary.counts).length > 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    queued=<code>{String(missionQueueRunSummary.counts.queued ?? 0)}</code>
+                    {" / "}active=<code>{String(missionQueueRunSummary.counts.active ?? 0)}</code>
+                    {" / "}blocked=<code>{String(missionQueueRunSummary.counts.blocked ?? 0)}</code>
+                    {" / "}failed=<code>{String(missionQueueRunSummary.counts.failed ?? 0)}</code>
+                    {" / "}deadlettered=<code>{String(missionQueueRunSummary.counts.deadlettered ?? 0)}</code>
+                  </div>
+                ) : null}
+                {missionQueueRunSummary.error ? (
+                  <div style={{ fontSize: 11, color: THEME.danger, marginTop: 4, overflowWrap: "anywhere" }}>
+                    error=<code>{missionQueueRunSummary.error}</code>
+                  </div>
+                ) : null}
                 {missionQueueRunSummary.results.length > 0 ? (
                   <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
                     {missionQueueRunSummary.results.map((item, index) => {
