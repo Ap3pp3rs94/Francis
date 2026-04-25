@@ -252,6 +252,8 @@ def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | 
         )
 
     expected_payload = artifact_mismatch.get("expected_payload")
+    if not isinstance(expected_payload, dict) and isinstance(artifact_mismatch.get("request"), dict):
+        expected_payload = artifact_mismatch.get("request")
     approval_record = (
         artifact_mismatch.get("approval_record") if isinstance(artifact_mismatch.get("approval_record"), dict) else {}
     )

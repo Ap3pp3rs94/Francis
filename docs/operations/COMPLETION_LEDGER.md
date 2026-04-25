@@ -175,6 +175,12 @@ matching, but `/approvals/request`, `/approvals/list`, and `/approvals/decision`
 responses collapse those values to their redacted display text so operator-facing
 approval payloads do not expose raw secrets or `hmac-sha256:` digests.
 
+As of `2026-04-25`, approval mismatch projections also read request-shaped
+mismatch artifacts when `expected_payload` is not present. Industrial and
+web-learning replacement approvals can now expose bounded expected/previous key
+scope and changed-key evidence from their redacted mismatch artifacts without
+showing payload values.
+
 As of `2026-04-25`, supervised execution and git-push JSON receipt artifacts also
 collapse sealed approval values to display-redacted text. Request, pending,
 denied, error, mismatch, plan, and result artifacts can still show the bounded
