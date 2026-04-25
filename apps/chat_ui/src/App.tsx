@@ -3882,6 +3882,8 @@ function SystemPanel(props: {
     safeString(selectedMissionCurrentTask?.reason).trim() ||
     safeString(selectedMission?.last_task_reason).trim() ||
     safeString(selectedMissionMeta.last_task_reason).trim();
+  const selectedMissionCurrentTaskReceiptEvent = safeString(selectedMissionCurrentTask?.latest_receipt_event).trim();
+  const selectedMissionCurrentTaskReceiptStatus = safeString(selectedMissionCurrentTask?.latest_receipt_status).trim();
   const selectedMissionContextId = safeString(selectedMission?.id).trim() || selectedMissionId;
   const missionLinkedOperations = missionDetail?.linked_operations ?? [];
   const missionRunLedger = missionDetail?.run_ledger ?? [];
@@ -4941,6 +4943,8 @@ function SystemPanel(props: {
               const currentTaskResult = safeString(currentTask?.result_status).trim();
               const currentTaskGate = safeString(currentTask?.gate).trim();
               const currentTaskSource = safeString(currentTask?.source).trim();
+              const currentTaskReceiptEvent = safeString(currentTask?.latest_receipt_event).trim();
+              const currentTaskReceiptStatus = safeString(currentTask?.latest_receipt_status).trim();
               const dependencyState = item.dependency_state;
               const dependencyStatus = safeString(dependencyState?.status).trim();
               const dependencyIds = Array.isArray(item.dependency_ids)
@@ -5022,7 +5026,7 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
-                  {currentTaskId || currentTaskStatus || currentTaskResult || currentTaskGate ? (
+                  {currentTaskId || currentTaskStatus || currentTaskResult || currentTaskGate || currentTaskReceiptEvent || currentTaskReceiptStatus ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                       {currentTaskId ? (
                         <>
@@ -5047,6 +5051,16 @@ function SystemPanel(props: {
                       {currentTaskSource ? (
                         <>
                           {" / "}source=<code>{currentTaskSource}</code>
+                        </>
+                      ) : null}
+                      {currentTaskReceiptEvent ? (
+                        <>
+                          {" / "}receipt=<code>{currentTaskReceiptEvent}</code>
+                        </>
+                      ) : null}
+                      {currentTaskReceiptStatus ? (
+                        <>
+                          {" / "}receipt_status=<code>{currentTaskReceiptStatus}</code>
                         </>
                       ) : null}
                     </div>
@@ -6113,6 +6127,16 @@ function SystemPanel(props: {
                 {selectedMissionLastTaskStatus ? (
                   <>
                     {" / "}latest_run=<code>{selectedMissionLastTaskStatus}</code>
+                  </>
+                ) : null}
+                {selectedMissionCurrentTaskReceiptEvent ? (
+                  <>
+                    {" / "}receipt=<code>{selectedMissionCurrentTaskReceiptEvent}</code>
+                  </>
+                ) : null}
+                {selectedMissionCurrentTaskReceiptStatus ? (
+                  <>
+                    {" / "}receipt_status=<code>{selectedMissionCurrentTaskReceiptStatus}</code>
                   </>
                 ) : null}
                 {selectedMissionTaskStatus && selectedMissionTaskStatus !== selectedMissionLastTaskStatus ? (
@@ -9317,6 +9341,8 @@ function OperationsPanel(props: {
   const selectedMissionCurrentTaskResultStatus = safeString(selectedMissionCurrentTask?.result_status).trim();
   const selectedMissionCurrentTaskGate = safeString(selectedMissionCurrentTask?.gate).trim();
   const selectedMissionCurrentTaskNextStep = safeString(selectedMissionCurrentTask?.next_step).trim();
+  const selectedMissionCurrentTaskReceiptEvent = safeString(selectedMissionCurrentTask?.latest_receipt_event).trim();
+  const selectedMissionCurrentTaskReceiptStatus = safeString(selectedMissionCurrentTask?.latest_receipt_status).trim();
   const selectedMissionCurrentTaskApprovalStatus =
     safeString(selectedMissionCurrentTask?.approval_status).trim() ||
     safeString(selectedMissionLoopHandoff?.approval_status).trim();
@@ -10153,7 +10179,9 @@ function OperationsPanel(props: {
                         selectedMissionCurrentTaskApprovalStatus ||
                         selectedMissionCurrentTaskResultStatus ||
                         selectedMissionCurrentTaskGate ||
-                        selectedMissionCurrentTaskNextStep) ? (
+                        selectedMissionCurrentTaskNextStep ||
+                        selectedMissionCurrentTaskReceiptEvent ||
+                        selectedMissionCurrentTaskReceiptStatus) ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                           {selectedMissionCurrentTaskId ? (
                             <>
@@ -10202,6 +10230,33 @@ function OperationsPanel(props: {
                                 ? " / "
                                 : ""}
                               next=<code>{selectedMissionCurrentTaskNextStep}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskReceiptEvent ? (
+                            <>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskStatus ||
+                              selectedMissionCurrentTaskApprovalStatus ||
+                              selectedMissionCurrentTaskResultStatus ||
+                              selectedMissionCurrentTaskGate ||
+                              selectedMissionCurrentTaskNextStep)
+                                ? " / "
+                                : ""}
+                              receipt=<code>{selectedMissionCurrentTaskReceiptEvent}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskReceiptStatus ? (
+                            <>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskStatus ||
+                              selectedMissionCurrentTaskApprovalStatus ||
+                              selectedMissionCurrentTaskResultStatus ||
+                              selectedMissionCurrentTaskGate ||
+                              selectedMissionCurrentTaskNextStep ||
+                              selectedMissionCurrentTaskReceiptEvent)
+                                ? " / "
+                                : ""}
+                              receipt_status=<code>{selectedMissionCurrentTaskReceiptStatus}</code>
                             </>
                           ) : null}
                         </div>

@@ -163,6 +163,7 @@ export type MissionCurrentTask = {
   run_id?: string;
   artifact_dir?: string;
   latest_receipt_event?: string;
+  latest_receipt_status?: string;
   latest_receipt_ts?: string;
   last_advance_operation_id?: string;
 };
@@ -835,6 +836,7 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     run_id: safeString(raw.run_id, "") || undefined,
     artifact_dir: safeString(raw.artifact_dir, "") || undefined,
     latest_receipt_event: safeString(raw.latest_receipt_event, "") || undefined,
+    latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
     latest_receipt_ts: safeString(raw.latest_receipt_ts, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
   };
@@ -851,7 +853,8 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     !task.handoff_action &&
     !task.run_id &&
     !task.artifact_dir &&
-    !task.latest_receipt_event
+    !task.latest_receipt_event &&
+    !task.latest_receipt_status
   ) {
     return undefined;
   }

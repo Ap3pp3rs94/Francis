@@ -260,6 +260,7 @@ export type WorldStateMissionCurrentTask = {
   approval_status?: string;
   handoff_action?: string;
   latest_receipt_event?: string;
+  latest_receipt_status?: string;
   latest_receipt_ts?: string;
   last_advance_operation_id?: string;
 };
@@ -1882,6 +1883,7 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     approval_status: safeString(raw.approval_status, "") || undefined,
     handoff_action: safeString(raw.handoff_action, "") || undefined,
     latest_receipt_event: safeString(raw.latest_receipt_event, "") || undefined,
+    latest_receipt_status: safeString(raw.latest_receipt_status, "") || undefined,
     latest_receipt_ts: safeString(raw.latest_receipt_ts, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
   };
@@ -1896,7 +1898,8 @@ function parseWorldStateMissionCurrentTask(raw: unknown): WorldStateMissionCurre
     !task.reason &&
     !task.approval_id &&
     !task.handoff_action &&
-    !task.latest_receipt_event
+    !task.latest_receipt_event &&
+    !task.latest_receipt_status
   ) {
     return undefined;
   }

@@ -1020,6 +1020,7 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
             existing.get("handoff_action"), item.get("recommended_action"), _mission_default_handoff_action(item)
         ),
         "latest_receipt_event": _first_text(existing.get("latest_receipt_event"), latest_activity.get("name")),
+        "latest_receipt_status": _first_text(existing.get("latest_receipt_status"), latest_activity.get("status")),
         "latest_receipt_ts": _first_text(existing.get("latest_receipt_ts"), latest_activity.get("ts")),
         "last_advance_operation_id": _first_text(
             existing.get("last_advance_operation_id"), item.get("last_advance_operation_id")

@@ -503,6 +503,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is current-task receipt-status continuity. This advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line
+by carrying run-ledger receipt status into the mission current-task contract used
+by mission detail, world-state, continuity briefing, and chat UI operator
+surfaces:
+
+- `src/francis/api/routes/missions.py` now includes `latest_receipt_status` on
+  mission current-task projections when the selected current-task receipt has a
+  status.
+- `src/francis/world_state/snapshot.py` preserves that status when enriching
+  mission current-task data for world-state and continuity surfaces.
+- `apps/chat_ui/src/missions/index.ts` and `apps/chat_ui/src/settings/index.ts`
+  preserve the field through mission and settings/briefing parsers.
+- `apps/chat_ui/src/App.tsx` renders the status next to current-task receipt
+  context in focused operator surfaces without adding new mutation behavior.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is trace receipt-status continuity in the mission loop. This
 advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY ->
 P1_INTERFACE` line by carrying the latest run-ledger receipt status into the
@@ -2248,6 +2265,21 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 current-task receipt-status continuity slice:
+
+- `pytest tests/test_api_missions.py::test_mission_linked_governance_hold_updates_blocked_state tests/test_api_continuity.py::test_continuity_briefing_surfaces_handoff_and_recent_completion -q`
+  Result: `2 passed`
+- `python -m ruff check src/francis/api/routes/missions.py src/francis/world_state/snapshot.py tests/test_api_missions.py tests/test_api_continuity.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts src\settings\index.test.ts`
+  Result: `21 passed`
+- `cd apps\chat_ui; npm test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission loop trace receipt-status slice:
 

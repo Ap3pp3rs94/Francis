@@ -796,6 +796,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             run_id: "run_ready",
             artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_ready",
             latest_receipt_event: "governance_hold",
+            latest_receipt_status: "queued",
           },
           handoff: {
             stage: "gate",
@@ -920,6 +921,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.current_task?.handoff_action, "review_pending_approval");
     assert.equal(response.results?.[0]?.current_task?.run_id, "run_ready");
     assert.equal(response.results?.[0]?.current_task?.artifact_dir, "C:/Francis/data/artifacts/supervised_exec/apr_ready");
+    assert.equal(response.results?.[0]?.current_task?.latest_receipt_status, "queued");
     assert.equal(response.results?.[0]?.handoff?.action, "review_pending_approval");
     assert.equal(response.results?.[0]?.handoff?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.history_count, 3);
@@ -1107,6 +1109,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         run_id: "run_loop",
         artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_loop",
         latest_receipt_event: "governance_hold",
+        latest_receipt_status: "queued",
         latest_receipt_ts: "2024-03-09T16:00:01Z",
         last_advance_operation_id: "tsk_loop",
       },
@@ -1231,6 +1234,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.current_task?.run_id, "run_loop");
     assert.equal(response.current_task?.artifact_dir, "C:/Francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.current_task?.latest_receipt_event, "governance_hold");
+    assert.equal(response.current_task?.latest_receipt_status, "queued");
     assert.equal(response.current_task?.latest_receipt_ts, "2024-03-09T16:00:01Z");
     assert.equal(response.receipt_summary?.linked_operation_count, 1);
     assert.equal(response.receipt_summary?.run_ledger_count, 1);

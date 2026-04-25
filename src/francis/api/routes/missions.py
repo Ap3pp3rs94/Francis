@@ -424,6 +424,7 @@ def _mission_current_task_projection(
         "run_id": _first_text(_operation_run_id(latest_detail), handoff.get("run_id")),
         "artifact_dir": _first_text(_operation_artifact_dir(latest_detail), handoff.get("artifact_dir")),
         "latest_receipt_event": receipt.get("name"),
+        "latest_receipt_status": receipt.get("status"),
         "latest_receipt_ts": _stage_timestamp(receipt.get("ts")),
         "last_advance_operation_id": _first_text(
             task_fields["last_advance_operation_id"], queue_item.get("last_advance_operation_id")

@@ -378,6 +378,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 operation_id: "tsk_alpha",
                 task_status: "accepted",
                 latest_receipt_event: "created",
+                latest_receipt_status: "queued",
               },
               replacement_for_mission_id: "mission_failed_source",
               replacement_for_status: "failed",
@@ -702,6 +703,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.status, "queued");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_id, "tsk_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_event, "created");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_status, "queued");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
@@ -1254,6 +1256,7 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
                 approval_id: "apr_focus_exact",
                 approval_status: "pending",
                 handoff_action: "review_pending_approval",
+                latest_receipt_status: "blocked",
               },
             },
           ],
@@ -1432,6 +1435,7 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.operation_id, "tsk_focus");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.approval_id, "apr_focus_exact");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.handoff_action, "review_pending_approval");
+    assert.equal(briefing.briefing?.focus?.[0]?.current_task?.latest_receipt_status, "blocked");
     assert.equal(briefing.briefing?.focus?.[0]?.history_count, 3);
     assert.equal(briefing.briefing?.focus?.[0]?.latest_history_event, "mission_ticked");
     assert.equal(briefing.briefing?.focus?.[0]?.latest_history_ts, "2026-04-14T06:30:00Z");

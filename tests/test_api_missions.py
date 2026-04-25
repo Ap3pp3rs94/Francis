@@ -854,6 +854,7 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert loop_state["trace"]["latest_event"] == run_ledger[0]["name"]
     assert loop_state["trace"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert loop_state["trace"]["latest_ts"]
+    assert fetched_body["current_task"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert loop_state["memory"]["latest_event"] == fetched_body["history"][-1]["event"]
     assert loop_state["memory"]["latest_ts"] == fetched_body["history"][-1]["ts"]
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]

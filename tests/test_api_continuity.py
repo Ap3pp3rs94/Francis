@@ -419,6 +419,7 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["focus"][0]["current_task"]["operation_id"] == blocked_operation_id
     assert body["briefing"]["focus"][0]["current_task"]["gate"] == "trust_gate"
     assert body["briefing"]["focus"][0]["current_task"]["latest_receipt_event"] == "governance_hold"
+    assert body["briefing"]["focus"][0]["current_task"]["latest_receipt_status"] == "blocked"
     assert body["briefing"]["focus"][0]["history_count"] >= 1
     assert body["briefing"]["focus"][0]["latest_history_event"]
     assert len(body["briefing"]["focus"][0]["history_tail"]) >= 1
