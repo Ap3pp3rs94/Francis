@@ -846,9 +846,22 @@ def _operation_latest_activity(
     return dict(latest) if latest else {}
 
 
-def _mission_operation_ids(item: dict[str, Any]) -> list[str]:
+def _mission_preferred_operation_ids(item: dict[str, Any]) -> list[str]:
     candidates: list[str] = []
     seen: set[str] = set()
+
+    for field in ("last_task_id", "action_target_id", "last_advance_operation_id"):
+        value = str(item.get(field) or "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            candidates.append(value)
+
+    return candidates
+
+
+def _mission_operation_ids(item: dict[str, Any]) -> list[str]:
+    candidates = _mission_preferred_operation_ids(item)
+    seen = set(candidates)
 
     linked_task_ids = item.get("linked_task_ids")
     if isinstance(linked_task_ids, list):
@@ -858,13 +871,26 @@ def _mission_operation_ids(item: dict[str, Any]) -> list[str]:
                 seen.add(value)
                 candidates.append(value)
 
-    for field in ("last_task_id", "last_advance_operation_id", "action_target_id"):
-        value = str(item.get(field) or "").strip()
-        if value and value not in seen:
-            seen.add(value)
-            candidates.append(value)
-
     return candidates
+
+
+def _mission_current_activity(
+    item: dict[str, Any],
+    *,
+    log_limit: int = 20,
+    cache: dict[str, dict[str, Any] | None] | None = None,
+) -> dict[str, Any]:
+    for operation_id in _mission_preferred_operation_ids(item):
+        activity = _operation_latest_activity(operation_id, log_limit=log_limit, cache=cache)
+        if activity:
+            return activity
+
+    latest: dict[str, Any] = {}
+    for operation_id in _mission_operation_ids(item):
+        activity = _operation_latest_activity(operation_id, log_limit=log_limit, cache=cache)
+        if activity and (not latest or _activity_sort_key(activity) > _activity_sort_key(latest)):
+            latest = activity
+    return latest
 
 
 def _attach_mission_activity(
@@ -877,13 +903,8 @@ def _attach_mission_activity(
     for item in items:
         if not isinstance(item, dict):
             continue
-        latest: dict[str, Any] = {}
-        for operation_id in _mission_operation_ids(item):
-            activity = _operation_latest_activity(operation_id, log_limit=log_limit, cache=cache)
-            if activity and (not latest or _activity_sort_key(activity) > _activity_sort_key(latest)):
-                latest = activity
         enriched_item = dict(item)
-        enriched_item["latest_activity"] = latest
+        enriched_item["latest_activity"] = _mission_current_activity(item, log_limit=log_limit, cache=cache)
         enriched.append(enriched_item)
     return enriched
 

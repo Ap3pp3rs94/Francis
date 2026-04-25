@@ -771,6 +771,104 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert deadletter_items[0]["history_tail"][-1]["ts"]
 
 
+def test_system_world_state_mission_activity_prefers_current_task(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Keep world-state activity pinned to the current mission task",
+            "summary": "A stale linked operation must not hide the current governance hold.",
+            "requester_id": "test.system.current_activity",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    stale = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "stale linked operation",
+            "mission_id": mission_id,
+            "input": {"goal": "This older task should stay linked but not drive current activity."},
+        },
+    )
+    assert stale.status_code == 200
+    stale_operation_id = str(stale.json()["operation_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    current = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "current blocked operation",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert current.status_code == 200
+    current_operation_id = str(current.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{current_operation_id}/run", json={"worker_id": "test.system.current_activity"})
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+
+    stale_audit = data_root / "tasks" / stale_operation_id / "audit.log"
+    with stale_audit.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "ts": "2099-01-01T00:00:00+00:00",
+                    "task_id": stale_operation_id,
+                    "event": "status_updated",
+                    "details": {"to": "completed", "reason": "late stale receipt"},
+                }
+            )
+            + "\n"
+        )
+
+    response = client.get("/system/world_state")
+    assert response.status_code == 200
+    body = response.json()
+    queue_item = next(item for item in body["overview"]["mission_queue"] if item["id"] == mission_id)
+    recent_item = next(item for item in body["overview"]["recent_missions"] if item["id"] == mission_id)
+    focus_item = next(item for item in body["overview"]["mission_briefing"]["focus"] if item["id"] == mission_id)
+
+    for item in (queue_item, recent_item, focus_item):
+        assert item["last_task_id"] == current_operation_id
+        assert item["latest_activity"]["operation_id"] == current_operation_id
+        assert item["latest_activity"]["name"] == "governance_hold"
+        assert item["latest_activity"]["status"] == "blocked"
+        assert item["latest_activity"]["gate"] == "trust_gate"
+
+
 def test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

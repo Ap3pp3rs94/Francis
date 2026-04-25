@@ -234,6 +234,12 @@ newest operation timestamp, so older queued work no longer hides a newer
 governance hold in the operator-facing `plan -> gate -> execute -> trace ->
 memory` projection.
 
+As of `2026-04-25`, world-state mission activity now follows the same
+current-task truth. Mission queue, recent mission, and briefing activity
+enrichment prefer the mission record's current task target before falling back
+to newest linked-operation receipts, so a stale linked task with a later audit
+receipt cannot mask the active blocker the operator needs to review.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
