@@ -901,6 +901,23 @@ line by making important operation failures actionable in the operator console:
   mission queue behavior changed; this is a read-only operator actionability
   improvement for existing failure context.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail mission-loop bridge visibility. This
+advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY ->
+P1_INTERFACE` line by making the selected operation show its linked mission
+loop and continuity posture without forcing a raw JSON inspection:
+
+- `apps/chat_ui/src/App.tsx` now loads the selected operation's linked mission
+  detail from the existing mission detail route when a real `mission_id` is
+  present.
+- Operation Detail now renders a read-only `Mission Loop Bridge` with the
+  linked mission active stage, handoff context, plan/gate/execute/trace/memory
+  stage statuses, run receipt count, history receipt count, and latest memory
+  receipt metadata when those fields exist.
+- No operation mutation, mission mutation, approval decision, execution, shell,
+  policy, or memory-write behavior changed; this only connects existing mission
+  loop truth back to task inspection.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by

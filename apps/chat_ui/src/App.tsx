@@ -9107,6 +9107,9 @@ function OperationsPanel(props: {
   const [actionNotice, setActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [workerCycleBusy, setWorkerCycleBusy] = useState(false);
   const [workerCycleNotice, setWorkerCycleNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [selectedMissionDetail, setSelectedMissionDetail] = useState<MissionDetail | null>(null);
+  const [selectedMissionDetailBusy, setSelectedMissionDetailBusy] = useState(false);
+  const [selectedMissionDetailError, setSelectedMissionDetailError] = useState<string | null>(null);
   const [composerObjective, setComposerObjective] = useState("Create a governed plan for the current operator objective");
   const [composerReason, setComposerReason] = useState("operator_requested");
   const [composerAction, setComposerAction] = useState("plan.create");
@@ -9250,6 +9253,21 @@ function OperationsPanel(props: {
   const showSelectedRecoveryGuidance =
     selectedRecoveryGuidance.length > 0 &&
     (selectedErrorText.length > 0 || ["blocked", "denied", "error", "failed"].includes(selectedStatus));
+  const selectedMissionBridgeDetail =
+    selectedMissionDetail?.mission?.id === selectedMissionId ? selectedMissionDetail : null;
+  const selectedMissionLoopState = selectedMissionBridgeDetail?.loop_state;
+  const selectedMissionLoopHandoff = selectedMissionLoopState?.handoff;
+  const selectedMissionReceiptSummary = selectedMissionBridgeDetail?.receipt_summary;
+  const selectedMissionCurrentTask = selectedMissionBridgeDetail?.current_task;
+  const selectedMissionLoopStages = [
+    { key: "plan", label: "Plan", stage: selectedMissionLoopState?.plan },
+    { key: "gate", label: "Gate", stage: selectedMissionLoopState?.gate },
+    { key: "execute", label: "Execute", stage: selectedMissionLoopState?.execute },
+    { key: "trace", label: "Trace", stage: selectedMissionLoopState?.trace },
+    { key: "memory", label: "Memory", stage: selectedMissionLoopState?.memory },
+  ].filter((item) => item.stage);
+  const selectedMissionLatestRunAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_run_ts);
+  const selectedMissionLatestHistoryAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_history_ts);
   const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
   const hasGovernance =
     Object.keys(selectedGovernance).length > 0 || Boolean(selectedApprovalId) || Boolean(selectedOrbPlane);
@@ -9261,6 +9279,46 @@ function OperationsPanel(props: {
         : "info";
   const canRunSelected = (selectedStatus === "queued" || selectedStatus === "blocked") && runSelectedBlockedReason.length === 0;
   const canCancelSelected = selectedStatus === "queued" || selectedStatus === "running" || selectedStatus === "blocked";
+
+  useEffect(() => {
+    if (!selectedMissionId) {
+      setSelectedMissionDetail(null);
+      setSelectedMissionDetailError(null);
+      setSelectedMissionDetailBusy(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedMissionDetailBusy(true);
+    setSelectedMissionDetailError(null);
+
+    const loadLinkedMission = async () => {
+      try {
+        const nextDetail = await missionsClient.get(selectedMissionId, { timeoutMs: 10_000 });
+        if (cancelled) return;
+        setSelectedMissionDetail(nextDetail);
+        setSelectedMissionDetailError(nextDetail.ok ? null : nextDetail.error || "Linked mission detail unavailable.");
+      } catch (err) {
+        if (cancelled) return;
+        const msg =
+          err instanceof MissionsApiError
+            ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+            : err instanceof Error
+              ? err.message
+              : "Linked mission detail request failed.";
+        setSelectedMissionDetail(null);
+        setSelectedMissionDetailError(msg);
+      } finally {
+        if (!cancelled) setSelectedMissionDetailBusy(false);
+      }
+    };
+
+    void loadLinkedMission();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [missionsClient, selectedMissionId]);
 
   const runWorkerCycle = useCallback(async () => {
     if (!canRunWorkerCycle) return;
@@ -9900,6 +9958,146 @@ function OperationsPanel(props: {
               <div style={{ fontSize: 12 }}>
                 Attempts: <code>{String(safeNumber(isRecord(selectedOperation.meta) ? selectedOperation.meta.attempts : 0, 0))}</code>
               </div>
+              {selectedMissionId ? (
+                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#111819" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>Mission Loop Bridge</div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        Read-only loop posture for the mission linked to this operation.
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={badgeStyle(selectedMissionLoopState?.active_stage || "mission")}>
+                        {selectedMissionLoopState?.active_stage ? `active ${selectedMissionLoopState.active_stage}` : "mission"}
+                      </span>
+                      {selectedMissionCurrentTask?.operation_status ? (
+                        <span style={badgeStyle(selectedMissionCurrentTask.operation_status)}>
+                          {selectedMissionCurrentTask.operation_status}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {selectedMissionDetailBusy ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>Loading linked mission loop.</div>
+                  ) : selectedMissionDetailError ? (
+                    <div style={{ fontSize: 11, color: "#ffaaaa", marginTop: 8 }}>
+                      Mission loop unavailable: {selectedMissionDetailError}
+                    </div>
+                  ) : selectedMissionBridgeDetail ? (
+                    <>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                        {selectedMissionLoopState?.summary || "Mission detail is loaded, but no loop summary has been projected yet."}
+                      </div>
+                      {(selectedMissionLoopHandoff?.detail ||
+                        selectedMissionLoopHandoff?.gate ||
+                        selectedMissionLoopHandoff?.next_step ||
+                        selectedMissionLoopHandoff?.approval_id ||
+                        selectedMissionLoopHandoff?.operation_id ||
+                        selectedMissionLoopHandoff?.trace_id) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          {selectedMissionLoopHandoff?.detail ? <span>{selectedMissionLoopHandoff.detail}</span> : null}
+                          {selectedMissionLoopHandoff?.gate ? (
+                            <>
+                              {selectedMissionLoopHandoff.detail ? " / " : ""}gate <code>{selectedMissionLoopHandoff.gate}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLoopHandoff?.next_step ? (
+                            <>
+                              {(selectedMissionLoopHandoff.detail || selectedMissionLoopHandoff.gate) ? " / " : ""}next{" "}
+                              <code>{selectedMissionLoopHandoff.next_step}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLoopHandoff?.approval_id ? (
+                            <>
+                              {(selectedMissionLoopHandoff.detail ||
+                              selectedMissionLoopHandoff.gate ||
+                              selectedMissionLoopHandoff.next_step)
+                                ? " / "
+                                : ""}
+                              approval <code>{selectedMissionLoopHandoff.approval_id}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLoopHandoff?.operation_id ? (
+                            <>
+                              {(selectedMissionLoopHandoff.detail ||
+                              selectedMissionLoopHandoff.gate ||
+                              selectedMissionLoopHandoff.next_step ||
+                              selectedMissionLoopHandoff.approval_id)
+                                ? " / "
+                                : ""}
+                              task <code>{selectedMissionLoopHandoff.operation_id}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLoopHandoff?.trace_id ? (
+                            <>
+                              {(selectedMissionLoopHandoff.detail ||
+                              selectedMissionLoopHandoff.gate ||
+                              selectedMissionLoopHandoff.next_step ||
+                              selectedMissionLoopHandoff.approval_id ||
+                              selectedMissionLoopHandoff.operation_id)
+                                ? " / "
+                                : ""}
+                              trace <code>{selectedMissionLoopHandoff.trace_id}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {selectedMissionLoopStages.length > 0 ? (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          {selectedMissionLoopStages.map((item) => (
+                            <span key={`selected-operation-loop-${selectedOperation.id}-${item.key}`} style={badgeStyle(item.stage?.status || "unknown")}>
+                              {item.label}: <code>{item.stage?.status || "unknown"}</code>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                        linked_ops=<code>{String(selectedMissionReceiptSummary?.linked_operation_count ?? 0)}</code>
+                        {" / "}run_receipts=<code>{String(selectedMissionReceiptSummary?.run_ledger_count ?? 0)}</code>
+                        {" / "}history_receipts=<code>{String(selectedMissionReceiptSummary?.history_count ?? 0)}</code>
+                      </div>
+                      {(selectedMissionReceiptSummary?.latest_run_event ||
+                        selectedMissionLatestRunAt ||
+                        selectedMissionReceiptSummary?.latest_history_event ||
+                        selectedMissionLatestHistoryAt) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          {selectedMissionReceiptSummary?.latest_run_event ? (
+                            <>
+                              latest_run=<code>{selectedMissionReceiptSummary.latest_run_event}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLatestRunAt ? (
+                            <>
+                              {selectedMissionReceiptSummary?.latest_run_event ? " / " : ""}run_at=<code>{selectedMissionLatestRunAt}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionReceiptSummary?.latest_history_event ? (
+                            <>
+                              {(selectedMissionReceiptSummary?.latest_run_event || selectedMissionLatestRunAt) ? " / " : ""}
+                              memory=<code>{selectedMissionReceiptSummary.latest_history_event}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLatestHistoryAt ? (
+                            <>
+                              {(selectedMissionReceiptSummary?.latest_run_event ||
+                              selectedMissionLatestRunAt ||
+                              selectedMissionReceiptSummary?.latest_history_event)
+                                ? " / "
+                                : ""}
+                              memory_at=<code>{selectedMissionLatestHistoryAt}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                      Open mission flow to inspect loop receipts when the mission detail route is available.
+                    </div>
+                  )}
+                </div>
+              ) : null}
               {runSelectedBlockedReason && (selectedStatus === "queued" || selectedStatus === "blocked") ? (
                 <div style={{ fontSize: 11, color: "#ffcf9d" }}>{runSelectedBlockedReason}</div>
               ) : null}
