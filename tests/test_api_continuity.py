@@ -732,6 +732,9 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "attention"
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["failed_count"] == 1
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_failed_ids"] == [mission_id]
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["recovery_reviewed_failed_ids"] == [mission_id]
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["unresolved_failed_ids"] == [mission_id]
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["replacement_reviewed_failed_ids"] == []
 
 
 def test_continuity_briefing_focus_preserves_replacement_lineage(monkeypatch, tmp_path: Path) -> None:
@@ -799,6 +802,16 @@ def test_continuity_briefing_focus_preserves_replacement_lineage(monkeypatch, tm
     assert source_preview["recovery"]["last_review_outcome"] == "replacement_declared"
     assert source_preview["recovery"]["replacement_mission_id"] == replacement_id
     assert source_preview["recovery"]["replacement_status"] == "queued"
+    mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    deadletter_readiness = mission_readiness_by_id["deadletter_cleanly"]
+    assert deadletter_readiness["status"] == "satisfied"
+    assert deadletter_readiness["evidence"]["failed_count"] == 1
+    assert deadletter_readiness["evidence"]["sampled_failed_ids"] == [source_id]
+    assert deadletter_readiness["evidence"]["recovery_reviewed_failed_ids"] == [source_id]
+    assert deadletter_readiness["evidence"]["replacement_reviewed_failed_ids"] == [source_id]
+    assert deadletter_readiness["evidence"]["replacement_followthrough_ids"] == [replacement_id]
+    assert deadletter_readiness["evidence"]["replacement_attention_ids"] == []
+    assert deadletter_readiness["evidence"]["unresolved_failed_ids"] == []
 
 
 def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch, tmp_path: Path) -> None:

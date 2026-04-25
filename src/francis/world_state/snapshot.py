@@ -21,6 +21,7 @@ _TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
 _TERMINAL_MISSION_STATUSES = {"completed", "failed", "deadlettered", "cancelled"}
 _INCIDENT_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
 _OBSERVER_ANOMALY_WEIGHTS = {"critical": 80, "error": 50, "warning": 20, "info": 5}
+_REPLACEMENT_ATTENTION_STATUSES = {"missing", "failed", "deadlettered", "cancelled", "canceled"}
 
 
 def _count_json_entries(path: Path) -> int:
@@ -1087,6 +1088,65 @@ def _attach_mission_history_summary(
     return enriched
 
 
+def _history_has_recovery_review(history: list[dict[str, Any]]) -> bool:
+    return any(
+        isinstance(event, dict) and _safe_str(event.get("event")).strip() == "recovery_review" for event in history
+    )
+
+
+def _failed_recovery_readiness_evidence(
+    failed_count: int,
+    failed_missions: list[dict[str, Any]],
+    histories: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    sampled_failed_ids: list[str] = []
+    recovery_reviewed_failed_ids: list[str] = []
+    replacement_reviewed_failed_ids: list[str] = []
+    replacement_followthrough_ids: list[str] = []
+    replacement_attention_ids: list[str] = []
+    replacement_attention_reasons: dict[str, str] = {}
+    unresolved_failed_ids: list[str] = []
+
+    for item in failed_missions:
+        if not isinstance(item, dict):
+            continue
+        mission_id = _safe_str(item.get("id")).strip()
+        if not mission_id:
+            continue
+        sampled_failed_ids.append(mission_id)
+
+        recovery = item.get("recovery") if isinstance(item.get("recovery"), dict) else {}
+        review_outcome = _first_text(item.get("last_recovery_outcome"), recovery.get("last_review_outcome"))
+        has_review = bool(review_outcome) or _history_has_recovery_review(histories.get(mission_id, []))
+        if has_review:
+            recovery_reviewed_failed_ids.append(mission_id)
+
+        replacement_id = _safe_str(recovery.get("replacement_mission_id")).strip()
+        replacement_status = _safe_str(recovery.get("replacement_status")).strip().lower()
+        replacement_error = _safe_str(recovery.get("replacement_error")).strip()
+        if review_outcome == "replacement_declared" and replacement_id:
+            replacement_reviewed_failed_ids.append(mission_id)
+            replacement_followthrough_ids.append(replacement_id)
+            if replacement_error or replacement_status in _REPLACEMENT_ATTENTION_STATUSES or not replacement_status:
+                replacement_attention_ids.append(mission_id)
+                replacement_attention_reasons[mission_id] = replacement_error or replacement_status or "missing_status"
+            continue
+
+        unresolved_failed_ids.append(mission_id)
+
+    return {
+        "failed_count": failed_count,
+        "sampled_failed_ids": sampled_failed_ids,
+        "unsampled_failed_count": max(0, failed_count - len(sampled_failed_ids)),
+        "recovery_reviewed_failed_ids": recovery_reviewed_failed_ids,
+        "replacement_reviewed_failed_ids": replacement_reviewed_failed_ids,
+        "replacement_followthrough_ids": replacement_followthrough_ids,
+        "replacement_attention_ids": replacement_attention_ids,
+        "replacement_attention_reasons": replacement_attention_reasons,
+        "unresolved_failed_ids": unresolved_failed_ids,
+    }
+
+
 def _mission_readiness(
     mission_status_counts: dict[str, Any],
     mission_queue: list[dict[str, Any]],
@@ -1108,7 +1168,8 @@ def _mission_readiness(
     visible_status = bool(expected_status_keys.intersection(mission_status_counts.keys()))
 
     failed_count = int(mission_status_counts.get("failed") or 0)
-    failed_ids = [str(item.get("id") or "").strip() for item in failed_missions if isinstance(item, dict)]
+    failed_recovery = _failed_recovery_readiness_evidence(failed_count, failed_missions, histories)
+    failed_ids = list(failed_recovery["sampled_failed_ids"])
     deadlettered_count = int(mission_status_counts.get("deadlettered") or 0)
     deadletter_ids = [str(item.get("id") or "").strip() for item in deadletter_missions if isinstance(item, dict)]
     deadletter_missing_reason = [
@@ -1129,7 +1190,13 @@ def _mission_readiness(
         if not has_deadletter_transition:
             deadletter_missing_history.append(mission_id)
     if failed_count > 0:
-        deadletter_status = "attention"
+        deadletter_status = (
+            "attention"
+            if failed_recovery["unsampled_failed_count"]
+            or failed_recovery["unresolved_failed_ids"]
+            or failed_recovery["replacement_attention_ids"]
+            else "satisfied"
+        )
     elif deadlettered_count <= 0:
         deadletter_status = "not_yet_observed"
     elif deadletter_missing_reason or deadletter_missing_history:
@@ -1224,7 +1291,11 @@ def _mission_readiness(
             "label": "Failures deadletter cleanly",
             "status": deadletter_status,
             "detail": (
-                "Failed missions are waiting for an explicit retry or deadletter decision."
+                (
+                    "Failed source missions have explicit replacement follow-through; sources remain terminal but are no longer unreviewed."
+                    if deadletter_status == "satisfied"
+                    else "Failed missions are waiting for an explicit retry, deadletter, or healthy replacement follow-through."
+                )
                 if failed_count > 0
                 else (
                     "Deadlettered missions carry a reason and a status transition in mission history."
@@ -1235,6 +1306,13 @@ def _mission_readiness(
             "evidence": {
                 "failed_count": failed_count,
                 "sampled_failed_ids": failed_ids,
+                "unsampled_failed_count": failed_recovery["unsampled_failed_count"],
+                "recovery_reviewed_failed_ids": failed_recovery["recovery_reviewed_failed_ids"],
+                "replacement_reviewed_failed_ids": failed_recovery["replacement_reviewed_failed_ids"],
+                "replacement_followthrough_ids": failed_recovery["replacement_followthrough_ids"],
+                "replacement_attention_ids": failed_recovery["replacement_attention_ids"],
+                "replacement_attention_reasons": failed_recovery["replacement_attention_reasons"],
+                "unresolved_failed_ids": failed_recovery["unresolved_failed_ids"],
                 "deadlettered_count": deadlettered_count,
                 "sampled_deadletter_ids": deadletter_ids,
                 "missing_reason_ids": deadletter_missing_reason,

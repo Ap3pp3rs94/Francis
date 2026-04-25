@@ -353,6 +353,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is recovery-reviewed failure readiness. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by keeping Stage 3
+readiness tied to recovery receipts instead of raw terminal status alone:
+
+- `src/francis/world_state/snapshot.py` now distinguishes unreviewed failed
+  missions from failed source missions that have explicit
+  `replacement_declared` recovery follow-through.
+- Stage 3 readiness evidence now reports sampled failed ids, unsampled failed
+  count, recovery-reviewed failed ids, replacement-reviewed failed ids,
+  replacement follow-through ids, replacement attention ids, and unresolved
+  failed ids.
+- `tests/test_api_continuity.py` now proves an operator-reviewed failure that
+  still requires a decision remains attention-worthy, while a failed source with
+  a queued replacement no longer blocks readiness solely because the source
+  correctly remains terminal.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is replacement follow-through priority ordering. This advances the
 active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
 broken replacement references harder to miss:
@@ -1527,6 +1544,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 recovery-reviewed failure readiness slice:
+
+- `python -m pytest tests/test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery tests/test_api_continuity.py::test_continuity_briefing_focus_preserves_replacement_lineage -q`
+  Result: `2 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py`
+  Result: `passed`
+- `python -m pytest tests/test_api_continuity.py -q`
+  Result: `10 passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 replacement follow-through priority-ordering slice:
 
