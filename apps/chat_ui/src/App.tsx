@@ -6940,6 +6940,9 @@ function SystemPanel(props: {
                       const queueLastAdvanceAction = safeString(queueItem?.last_advance_action).trim();
                       const queueLastAdvanceOutcome = safeString(queueItem?.last_advance_outcome).trim();
                       const queueLastAdvanceOperationId = safeString(queueItem?.last_advance_operation_id).trim();
+                      const queueLatestHistoryEvent = safeString(queueItem?.latest_history_event).trim();
+                      const queueLatestHistoryAt = mixedLocaleTime(queueItem?.latest_history_ts);
+                      const queueHistoryTail = Array.isArray(queueItem?.history_tail) ? queueItem.history_tail.slice(-2) : [];
                       return (
                       <div key={`mission-queue-summary-${item.missionId || item.operationId || index}`} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -7055,6 +7058,60 @@ function SystemPanel(props: {
                             history=<code>{String(item.historyCount ?? 0)}</code>
                             {" / "}linked=<code>{String(item.linkedOperationCount ?? 0)}</code>
                             {" / "}ledger=<code>{String(item.runLedgerCount ?? 0)}</code>
+                          </div>
+                        ) : null}
+                        {queueLatestHistoryEvent || queueLatestHistoryAt ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {queueLatestHistoryEvent ? (
+                              <>
+                                latest_receipt=<code>{queueLatestHistoryEvent}</code>
+                              </>
+                            ) : null}
+                            {queueLatestHistoryAt ? (
+                              <>
+                                {queueLatestHistoryEvent ? " / " : ""}receipt_at=<code>{queueLatestHistoryAt}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {queueHistoryTail.length > 0 ? (
+                          <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                            {queueHistoryTail.map((entry, historyIndex) => (
+                              <div
+                                key={[
+                                  "mission-queue-summary-history",
+                                  item.missionId || item.operationId || index,
+                                  entry.ts || "unknown",
+                                  entry.event || historyIndex,
+                                ].join("-")}
+                                style={{
+                                  border: `1px solid ${THEME.panelBorder}`,
+                                  borderRadius: 8,
+                                  padding: 8,
+                                  background: "#101010",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.event || "receipt"}</div>
+                                  <div style={{ fontSize: 11, color: THEME.muted }}>
+                                    {mixedLocaleTime(entry.ts) || entry.ts || "unknown time"}
+                                  </div>
+                                </div>
+                                {entry.details && Object.keys(entry.details).length > 0 ? (
+                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                                    {prettyData(entry.details)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
                           </div>
                         ) : null}
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

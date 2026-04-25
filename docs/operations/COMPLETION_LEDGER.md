@@ -669,6 +669,19 @@ language as the selected mission inspector:
   approval posture in the UI.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run receipt continuity. This advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line
+by keeping the immediate queue-run result tied to the local mission receipt trail:
+
+- `apps/chat_ui/src/App.tsx` now renders the latest mission receipt and bounded
+  history tail inside mission queue-run result cards when the backend returns
+  `queue_item.latest_history_*` and `queue_item.history_tail`.
+- This makes the post-action result card carry the same continuity evidence
+  already visible in steady-state Mission Queue cards.
+- No mutation, approval, execution, shell, or memory-write behavior changed; this
+  is a read-only operator-truth surface.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1887,6 +1900,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run receipt continuity slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `24 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 approval-status label parity slice:
 
