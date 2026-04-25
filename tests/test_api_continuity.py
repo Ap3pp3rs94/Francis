@@ -733,6 +733,15 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["failed_count"] == 1
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_failed_ids"] == [mission_id]
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["recovery_reviewed_failed_ids"] == [mission_id]
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["recovery_review_actions"] == {
+        mission_id: "retry_or_deadletter"
+    }
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["recovery_review_outcomes"] == {
+        mission_id: "requires_operator"
+    }
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["recovery_review_targets"] == {
+        mission_id: operation_id
+    }
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["unresolved_failed_ids"] == [mission_id]
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["replacement_reviewed_failed_ids"] == []
 
@@ -808,8 +817,12 @@ def test_continuity_briefing_focus_preserves_replacement_lineage(monkeypatch, tm
     assert deadletter_readiness["evidence"]["failed_count"] == 1
     assert deadletter_readiness["evidence"]["sampled_failed_ids"] == [source_id]
     assert deadletter_readiness["evidence"]["recovery_reviewed_failed_ids"] == [source_id]
+    assert deadletter_readiness["evidence"]["recovery_review_actions"] == {source_id: "retry_or_deadletter"}
+    assert deadletter_readiness["evidence"]["recovery_review_outcomes"] == {source_id: "replacement_declared"}
+    assert deadletter_readiness["evidence"]["recovery_review_targets"] == {source_id: replacement_id}
     assert deadletter_readiness["evidence"]["replacement_reviewed_failed_ids"] == [source_id]
     assert deadletter_readiness["evidence"]["replacement_followthrough_ids"] == [replacement_id]
+    assert deadletter_readiness["evidence"]["replacement_followthrough_statuses"] == {replacement_id: "queued"}
     assert deadletter_readiness["evidence"]["replacement_attention_ids"] == []
     assert deadletter_readiness["evidence"]["unresolved_failed_ids"] == []
 

@@ -1101,8 +1101,12 @@ def _failed_recovery_readiness_evidence(
 ) -> dict[str, Any]:
     sampled_failed_ids: list[str] = []
     recovery_reviewed_failed_ids: list[str] = []
+    recovery_review_actions: dict[str, str] = {}
+    recovery_review_outcomes: dict[str, str] = {}
+    recovery_review_targets: dict[str, str] = {}
     replacement_reviewed_failed_ids: list[str] = []
     replacement_followthrough_ids: list[str] = []
+    replacement_followthrough_statuses: dict[str, str] = {}
     replacement_attention_ids: list[str] = []
     replacement_attention_reasons: dict[str, str] = {}
     unresolved_failed_ids: list[str] = []
@@ -1116,10 +1120,18 @@ def _failed_recovery_readiness_evidence(
         sampled_failed_ids.append(mission_id)
 
         recovery = item.get("recovery") if isinstance(item.get("recovery"), dict) else {}
+        review_action = _first_text(item.get("last_recovery_action"), recovery.get("last_review_action"))
         review_outcome = _first_text(item.get("last_recovery_outcome"), recovery.get("last_review_outcome"))
+        review_target = _first_text(item.get("last_recovery_target_id"), recovery.get("target_id"))
         has_review = bool(review_outcome) or _history_has_recovery_review(histories.get(mission_id, []))
         if has_review:
             recovery_reviewed_failed_ids.append(mission_id)
+            if review_action:
+                recovery_review_actions[mission_id] = review_action
+            if review_outcome:
+                recovery_review_outcomes[mission_id] = review_outcome
+            if review_target:
+                recovery_review_targets[mission_id] = review_target
 
         replacement_id = _safe_str(recovery.get("replacement_mission_id")).strip()
         replacement_status = _safe_str(recovery.get("replacement_status")).strip().lower()
@@ -1127,6 +1139,7 @@ def _failed_recovery_readiness_evidence(
         if review_outcome == "replacement_declared" and replacement_id:
             replacement_reviewed_failed_ids.append(mission_id)
             replacement_followthrough_ids.append(replacement_id)
+            replacement_followthrough_statuses[replacement_id] = replacement_status or "missing_status"
             if replacement_error or replacement_status in _REPLACEMENT_ATTENTION_STATUSES or not replacement_status:
                 replacement_attention_ids.append(mission_id)
                 replacement_attention_reasons[mission_id] = replacement_error or replacement_status or "missing_status"
@@ -1139,8 +1152,12 @@ def _failed_recovery_readiness_evidence(
         "sampled_failed_ids": sampled_failed_ids,
         "unsampled_failed_count": max(0, failed_count - len(sampled_failed_ids)),
         "recovery_reviewed_failed_ids": recovery_reviewed_failed_ids,
+        "recovery_review_actions": recovery_review_actions,
+        "recovery_review_outcomes": recovery_review_outcomes,
+        "recovery_review_targets": recovery_review_targets,
         "replacement_reviewed_failed_ids": replacement_reviewed_failed_ids,
         "replacement_followthrough_ids": replacement_followthrough_ids,
+        "replacement_followthrough_statuses": replacement_followthrough_statuses,
         "replacement_attention_ids": replacement_attention_ids,
         "replacement_attention_reasons": replacement_attention_reasons,
         "unresolved_failed_ids": unresolved_failed_ids,
@@ -1308,8 +1325,12 @@ def _mission_readiness(
                 "sampled_failed_ids": failed_ids,
                 "unsampled_failed_count": failed_recovery["unsampled_failed_count"],
                 "recovery_reviewed_failed_ids": failed_recovery["recovery_reviewed_failed_ids"],
+                "recovery_review_actions": failed_recovery["recovery_review_actions"],
+                "recovery_review_outcomes": failed_recovery["recovery_review_outcomes"],
+                "recovery_review_targets": failed_recovery["recovery_review_targets"],
                 "replacement_reviewed_failed_ids": failed_recovery["replacement_reviewed_failed_ids"],
                 "replacement_followthrough_ids": failed_recovery["replacement_followthrough_ids"],
+                "replacement_followthrough_statuses": failed_recovery["replacement_followthrough_statuses"],
                 "replacement_attention_ids": failed_recovery["replacement_attention_ids"],
                 "replacement_attention_reasons": failed_recovery["replacement_attention_reasons"],
                 "unresolved_failed_ids": failed_recovery["unresolved_failed_ids"],

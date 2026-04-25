@@ -61,8 +61,13 @@ test("presentMissionReadinessCriteria prioritizes actionable readiness evidence"
           detail: "Failed missions are waiting for a healthy replacement follow-through.",
           evidence: {
             unresolved_failed_ids: ["msn_failed"],
+            recovery_review_outcomes: { msn_failed: "requires_operator" },
+            recovery_review_actions: { msn_failed: "retry_or_deadletter" },
+            recovery_review_targets: { msn_failed: "tsk_failed" },
             replacement_attention_ids: ["msn_source"],
+            replacement_attention_reasons: { msn_source: "failed" },
             replacement_followthrough_ids: ["msn_replacement"],
+            replacement_followthrough_statuses: { msn_replacement: "failed" },
             unsampled_failed_count: 0,
           },
         },
@@ -85,9 +90,9 @@ test("presentMissionReadinessCriteria prioritizes actionable readiness evidence"
   );
   assert.deepEqual(missionReadinessEvidenceLines(presentation.visible[0], 4), [
     "unresolved failed ids=msn_failed",
-    "replacement attention ids=msn_source",
-    "replacement followthrough ids=msn_replacement",
-    "unsampled failed count=0",
+    "recovery review outcomes=msn_failed:requires_operator",
+    "recovery review actions=msn_failed:retry_or_deadletter",
+    "recovery review targets=msn_failed:tsk_failed",
   ]);
 });
 

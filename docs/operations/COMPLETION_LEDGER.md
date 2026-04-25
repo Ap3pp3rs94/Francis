@@ -353,6 +353,22 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is recovery-review readiness evidence context. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
+failed-mission readiness evidence cite bounded review outcomes instead of only
+mission ids:
+
+- `src/francis/world_state/snapshot.py` now includes recovery review action,
+  outcome, and target maps in the `deadletter_cleanly` readiness evidence for
+  sampled failed missions.
+- Replacement-declared failed sources now also expose replacement follow-through
+  status by replacement mission id, while still keeping source missions terminal
+  and non-mutating.
+- `apps/chat_ui/src/settings/index.ts` now prioritizes those recovery-review
+  evidence keys so the Shift Briefing and Mission Feed readiness panels surface
+  receipt-backed context before lower-value counts.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is shared Mission readiness evidence rendering. This advances the
 active `Phase 2 / P8_MEMORY -> P1_INTERFACE` line by keeping the Shift Briefing
 and Mission Feed overview on one read-only readiness presentation path:
@@ -1591,6 +1607,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 recovery-review readiness evidence context slice:
+
+- `python -m pytest tests/test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery tests/test_api_continuity.py::test_continuity_briefing_focus_preserves_replacement_lineage -q`
+  Result: `2 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py`
+  Result: `passed`
+- `cd apps/chat_ui; npm test -- settings`
+  Result: `24 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 shared readiness evidence renderer slice:
 

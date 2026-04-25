@@ -1224,9 +1224,14 @@ export function missionReadinessEvidenceLines(
   if (!isRecord(evidence)) return [];
   const preferredKeys = [
     "unresolved_failed_ids",
+    "recovery_review_outcomes",
+    "recovery_review_actions",
+    "recovery_review_targets",
     "replacement_attention_ids",
+    "replacement_attention_reasons",
     "replacement_reviewed_failed_ids",
     "replacement_followthrough_ids",
+    "replacement_followthrough_statuses",
     "unsampled_failed_count",
     "sampled_failed_ids",
     "sampled_deadletter_ids",
