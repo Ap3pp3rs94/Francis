@@ -254,6 +254,13 @@ operation, mission/meta `last_task_id`, task-shaped action targets, last
 advance operation, and finally linked-task fallback, reducing the chance that a
 future UI edit silently reintroduces stale mission routing.
 
+As of `2026-04-25`, ORB mission recovery targets also share a tested UI helper
+that preserves dependency mission links while routing operation links through
+current-task truth. Return-to-work queue leads, Shift Briefing focus cards,
+mission queue run summaries, and visible mission queue cards no longer prefer a
+stale task-shaped `action_target_id` over the current task id when opening
+linked work or approval context.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

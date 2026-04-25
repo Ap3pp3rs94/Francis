@@ -3,7 +3,7 @@ import type { ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
-import { MissionsApiError, MissionsClient, missionCurrentTaskId, presentMissionQueue } from "./missions";
+import { MissionsApiError, MissionsClient, missionCurrentTaskId, missionRecoveryTargetId, presentMissionQueue } from "./missions";
 import type { MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
@@ -3333,7 +3333,8 @@ function SystemPanel(props: {
   }> = [];
 
   if (queueLead) {
-    const queueTargetId = safeString(queueLead.action_target_id).trim() || safeString(queueLead.last_task_id).trim();
+    const queueTargetId = missionRecoveryTargetId(queueLead, queueLead);
+    const queueOperationTargetId = missionCurrentTaskId(queueLead, queueLead);
     const queueApprovalId = safeString(queueLead.last_task_approval_id).trim();
     const queueTargetIsMission = queueTargetId.startsWith("msn_");
     const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
@@ -3357,7 +3358,7 @@ function SystemPanel(props: {
         ? () =>
             props.onOpenApprovals(queueApprovalId, {
               missionId: queueLead.id,
-              operationId: queueTargetIsOperation ? queueTargetId : undefined,
+              operationId: queueTargetIsOperation ? queueTargetId : queueOperationTargetId || undefined,
             })
         : queueTargetId && queueTargetIsMission
           ? () => inspectMission(queueTargetId)
@@ -3546,10 +3547,7 @@ function SystemPanel(props: {
   const selectedMissionAdvanceReason = safeString(selectedMissionQueueItem?.advance?.reason).trim();
   const selectedMissionAdvanceLabel =
     selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
-  const selectedMissionActionTargetId =
-    safeString(selectedMissionQueueItem?.action_target_id).trim() ||
-    safeString(selectedMissionQueueItem?.last_task_id).trim() ||
-    safeString(selectedMissionQueueItem?.last_advance_operation_id).trim();
+  const selectedMissionActionTargetId = missionRecoveryTargetId(selectedMission, selectedMissionQueueItem, missionLoopHandoff);
   const selectedMissionTargetIsMission = selectedMissionActionTargetId.startsWith("msn_");
   const selectedMissionTargetIsOperation = selectedMissionActionTargetId.startsWith("tsk_");
   const selectedMissionApprovalId =
@@ -4441,10 +4439,8 @@ function SystemPanel(props: {
             </div>
           ) : (
             shiftBriefingFocus.slice(0, 3).map((item) => {
-              const targetId =
-                safeString(item.action_target_id).trim() ||
-                safeString(item.last_task_id).trim() ||
-                safeString(item.last_advance_operation_id).trim();
+              const targetId = missionRecoveryTargetId(item, item);
+              const targetOperationId = missionCurrentTaskId(item, item);
               const targetIsMission = targetId.startsWith("msn_");
               const targetIsOperation = targetId.startsWith("tsk_");
               const dependencyState = item.dependency_state;
@@ -4547,7 +4543,7 @@ function SystemPanel(props: {
                         onClick={() =>
                           props.onOpenApprovals(approvalId, {
                             missionId: item.id,
-                            operationId: targetIsOperation ? targetId : undefined,
+                            operationId: targetIsOperation ? targetId : targetOperationId || undefined,
                           })
                         }
                       >
@@ -5680,7 +5676,9 @@ function SystemPanel(props: {
                           onClick={() =>
                             props.onOpenApprovals(selectedMissionApprovalId, {
                               missionId: selectedMission.id,
-                              operationId: selectedMissionTargetIsOperation ? selectedMissionActionTargetId : selectedMissionQueueItem.last_task_id,
+                              operationId: selectedMissionTargetIsOperation
+                                ? selectedMissionActionTargetId
+                                : selectedMissionCurrentTaskId || selectedMissionQueueItem.last_task_id,
                             })
                           }
                         >
@@ -5954,11 +5952,12 @@ function SystemPanel(props: {
                       const queueAction = safeString(queueItem?.recommended_action).trim();
                       const queueAdvanceEligible = queueItem?.advance?.eligible === true;
                       const queueAdvanceReason = safeString(queueItem?.advance?.reason).trim();
-                      const queueTargetId =
-                        safeString(queueItem?.action_target_id).trim() ||
-                        item.operationId ||
-                        safeString(queueItem?.last_task_id).trim() ||
-                        safeString(queueItem?.last_advance_operation_id).trim();
+                      const queueTargetId = queueItem
+                        ? missionRecoveryTargetId(queueItem, queueItem) || item.operationId || ""
+                        : item.operationId || "";
+                      const queueOperationTargetId = queueItem
+                        ? missionCurrentTaskId(queueItem, queueItem) || item.operationId || ""
+                        : item.operationId || "";
                       const queueTargetIsMission = queueTargetId.startsWith("msn_");
                       const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
                       const queueApprovalId = safeString(queueItem?.last_task_approval_id).trim() || item.approvalId || "";
@@ -6066,7 +6065,7 @@ function SystemPanel(props: {
                               onClick={() =>
                                 props.onOpenApprovals(queueApprovalId, {
                                   missionId: item.missionId,
-                                  operationId: queueTargetIsOperation ? queueTargetId : item.operationId,
+                                  operationId: queueTargetIsOperation ? queueTargetId : queueOperationTargetId || undefined,
                                 })
                               }
                             >
@@ -6133,7 +6132,8 @@ function SystemPanel(props: {
             ) : null}
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {missionQueuePresentation.visible.map((item) => {
-                const queueTargetId = safeString(item.action_target_id).trim() || safeString(item.last_task_id).trim();
+                const queueTargetId = missionRecoveryTargetId(item, item);
+                const queueOperationTargetId = missionCurrentTaskId(item, item);
                 const queueTargetIsMission = queueTargetId.startsWith("msn_");
                 const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
                 const queueApprovalId = safeString(item.last_task_approval_id).trim();
@@ -6216,7 +6216,7 @@ function SystemPanel(props: {
                           onClick={() =>
                             props.onOpenApprovals(queueApprovalId, {
                               missionId: item.id,
-                              operationId: queueTargetIsOperation ? queueTargetId : undefined,
+                              operationId: queueTargetIsOperation ? queueTargetId : queueOperationTargetId || undefined,
                             })
                           }
                         >

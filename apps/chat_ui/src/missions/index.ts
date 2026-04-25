@@ -857,6 +857,16 @@ export function missionCurrentTaskId(
   return firstLinkedMissionTaskId(mission);
 }
 
+export function missionRecoveryTargetId(
+  mission: MissionTaskTarget | null | undefined,
+  queueItem?: MissionQueueTaskTarget,
+  handoff?: MissionTaskHandoffTarget,
+): string {
+  const actionTargetId = safeString(queueItem?.action_target_id).trim();
+  if (actionTargetId.startsWith("msn_")) return actionTargetId;
+  return missionCurrentTaskId(mission, queueItem, handoff);
+}
+
 export function presentMissionQueue(items: MissionQueueItem[], limit = 4): MissionQueuePresentation {
   const ranked = items
     .map((item, index) => ({

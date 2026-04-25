@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MissionsClient, missionCurrentTaskId, presentMissionQueue } from "./index.ts";
+import { MissionsClient, missionCurrentTaskId, missionRecoveryTargetId, presentMissionQueue } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -141,6 +141,23 @@ test("missionCurrentTaskId prefers explicit current-task sources before linked-t
     "tsk_advance_current",
   );
   assert.equal(missionCurrentTaskId({ linked_task_ids: [" ", "tsk_old"] }, { action_target_id: "msn_dependency" }), "tsk_old");
+});
+
+test("missionRecoveryTargetId preserves dependency missions but routes operation links through current task", () => {
+  const mission = {
+    linked_task_ids: ["tsk_old"],
+    meta: { last_task_id: "tsk_meta_current" },
+  };
+
+  assert.equal(
+    missionRecoveryTargetId(mission, { action_target_id: "msn_dependency", last_task_id: "tsk_current" }),
+    "msn_dependency",
+  );
+  assert.equal(
+    missionRecoveryTargetId(mission, { action_target_id: "tsk_stale", last_task_id: "tsk_current" }),
+    "tsk_current",
+  );
+  assert.equal(missionRecoveryTargetId(mission, { action_target_id: "tsk_stale" }), "tsk_meta_current");
 });
 
 test("MissionsClient.list requests the bounded mission list route and parses mission records", async () => {
