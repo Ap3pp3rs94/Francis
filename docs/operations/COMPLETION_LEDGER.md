@@ -655,6 +655,24 @@ see what happened after a source mission declared replacement work:
   and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is approved-gate loop-state handoff parity. This advances the
+active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE`
+line by making mission detail loop state agree with the queue-derived approval
+posture:
+
+- `src/francis/api/routes/missions.py` now passes the fresh queue item into
+  mission loop-state derivation and treats an approved exact-action approval as a
+  clear gate with an `execute` / `run_linked_operation` handoff.
+- Mission detail responses no longer show stale `plan` or `gate` handoffs when
+  the local approval record has already moved to `approved` and the queue is
+  eligible for one bounded governed advance.
+- `tests/test_api_missions.py` now proves the approved-gate detail response
+  aligns `mission`, `queue_item`, `current_task`, and `loop_state` around the
+  same `run_linked_operation` next action.
+- No new automatic execution path was added; the change only makes the existing
+  operator-facing handoff truthful.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is mission-record approved-gate projection parity. This advances
 the active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY ->
 P1_INTERFACE` line by keeping mission detail and list payloads aligned with the

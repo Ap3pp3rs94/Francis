@@ -464,6 +464,7 @@ def _mission_loop_state(
     linked_operations: list[dict[str, Any]],
     run_ledger: list[dict[str, Any]],
     history: list[dict[str, Any]],
+    queue_item: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     latest_detail = _current_operation_detail(record, linked_operations)
     latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
@@ -473,12 +474,53 @@ def _mission_loop_state(
     latest_approval_id = _operation_approval_id(latest_detail)
     latest_trace_id = _operation_trace_id(latest_detail)
     latest_next_step = _operation_next_step(latest_detail)
+    queue_payload = queue_item if isinstance(queue_item, dict) else {}
+    queue_current_task = (
+        queue_payload.get("current_task") if isinstance(queue_payload.get("current_task"), dict) else {}
+    )
+    queue_advance = queue_payload.get("advance") if isinstance(queue_payload.get("advance"), dict) else {}
+    queue_recommended_action = _safe_str(queue_payload.get("recommended_action")).strip()
+    queue_action_target_id = _safe_str(queue_payload.get("action_target_id")).strip()
+    queue_operation_id = _first_text(
+        queue_current_task.get("operation_id"),
+        queue_payload.get("last_task_id"),
+        queue_action_target_id if queue_action_target_id.startswith("tsk_") else "",
+        queue_payload.get("last_advance_operation_id"),
+    )
+    queue_gate = _first_text(queue_current_task.get("gate"), queue_payload.get("last_task_gate"))
+    queue_approval_id = _first_text(queue_current_task.get("approval_id"), queue_payload.get("last_task_approval_id"))
+    queue_approval_status = _first_text(
+        queue_current_task.get("approval_status"), queue_payload.get("last_task_approval_status")
+    ).lower()
+    queue_next_step = _first_text(
+        queue_current_task.get("next_step"),
+        queue_payload.get("last_task_next_step"),
+        queue_recommended_action,
+    )
+    queue_operator_hint = _first_text(queue_payload.get("operator_hint"), queue_advance.get("reason"))
+
+    latest_operation_id = _first_text(latest_operation_id, queue_operation_id)
+    latest_gate = _first_text(latest_gate, queue_gate)
+    latest_approval_id = _first_text(latest_approval_id, queue_approval_id)
+    latest_next_step = _first_text(latest_next_step, queue_next_step)
+    has_declared_work = bool(linked_operations or record.linked_task_ids or latest_operation_id)
+    approved_gate_can_execute = (
+        queue_approval_status == "approved" and queue_recommended_action == "run_linked_operation"
+    )
+    governance_hold_active = bool(latest_gate or latest_approval_id) and not approved_gate_can_execute
 
     if linked_operations:
         plan_stage = _loop_stage(
             "ready",
             f"{len(linked_operations)} linked operation(s) declared for this mission.",
             count=len(linked_operations),
+            operation_id=latest_operation_id,
+        )
+    elif record.linked_task_ids or latest_operation_id:
+        plan_stage = _loop_stage(
+            "ready",
+            f"{len(record.linked_task_ids) or 1} linked task id(s) declared for this mission.",
+            count=len(record.linked_task_ids) or 1,
             operation_id=latest_operation_id,
         )
     else:
@@ -488,7 +530,7 @@ def _mission_loop_state(
             count=0,
         )
 
-    if latest_gate or latest_approval_id:
+    if governance_hold_active:
         gate_status = "needs_approval" if latest_gate == "approvals_gate" or latest_approval_id else "blocked"
         gate_bits: list[str] = []
         if latest_gate:
@@ -503,7 +545,16 @@ def _mission_loop_state(
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )
-    elif linked_operations:
+    elif latest_approval_id and queue_approval_status == "approved":
+        gate_stage = _loop_stage(
+            "clear",
+            f"Approval {latest_approval_id} is approved; governance no longer holds the linked operation.",
+            gate=latest_gate,
+            approval_id=latest_approval_id,
+            operation_id=latest_operation_id,
+            next_step=latest_next_step,
+        )
+    elif has_declared_work:
         gate_stage = _loop_stage(
             "clear",
             "No active governance gate is recorded for the current linked operation.",
@@ -516,6 +567,8 @@ def _mission_loop_state(
         )
 
     execute_status = latest_operation_status or record.status.value
+    if approved_gate_can_execute and not latest_operation_status:
+        execute_status = "ready"
     if execute_status == "completed":
         execute_status = "succeeded"
     elif execute_status == "active":
@@ -524,7 +577,7 @@ def _mission_loop_state(
         execute_status = "pending"
     elif execute_status == "cancelled":
         execute_status = "canceled"
-    if linked_operations:
+    if has_declared_work:
         execute_stage = _loop_stage(
             execute_status or "unknown",
             f"The latest linked operation is currently {execute_status or 'unknown'}.",
@@ -631,7 +684,7 @@ def _mission_loop_state(
             latest_ts=latest_history_ts,
             next_step=record.next_step,
         )
-    elif latest_gate or latest_approval_id:
+    elif governance_hold_active:
         active_stage = "gate"
         summary = "The mission is waiting on a governance decision before it can continue."
         handoff = _loop_handoff(
@@ -643,7 +696,20 @@ def _mission_loop_state(
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )
-    elif not linked_operations:
+    elif approved_gate_can_execute:
+        active_stage = "execute"
+        summary = "The mission has an approved governance decision and is ready for bounded execution."
+        handoff = _loop_handoff(
+            "execute",
+            "run_linked_operation",
+            queue_operator_hint
+            or "Approval is approved; rerun the linked operation through the governed mission runtime.",
+            gate=latest_gate,
+            approval_id=latest_approval_id,
+            operation_id=latest_operation_id,
+            next_step=latest_next_step,
+        )
+    elif not has_declared_work:
         active_stage = "plan"
         summary = "The mission still needs its first linked operation."
         handoff = _loop_handoff(
@@ -652,7 +718,7 @@ def _mission_loop_state(
             "Declare or link a bounded operation before execution, trace, or memory can progress.",
             next_step=record.next_step,
         )
-    elif execute_status in {"running", "pending", "queued"}:
+    elif execute_status in {"ready", "running", "pending", "queued"}:
         active_stage = "execute"
         summary = "The mission is currently in its bounded execution phase."
         action = "wait_for_execution" if execute_status == "running" else "run_linked_operation"
@@ -693,7 +759,7 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
     run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
     _, queue_item, _ = mission_store.mission_queue_item(record.mission_id)
     queue_payload = queue_item or {}
-    loop_state = _mission_loop_state(record, linked_operations, run_ledger, history)
+    loop_state = _mission_loop_state(record, linked_operations, run_ledger, history, queue_payload)
     return {
         "history": history,
         "linked_operations": linked_operations,
