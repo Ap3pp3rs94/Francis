@@ -34,6 +34,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
     routes = _routes()
 
     endpoints = [
+        ("POST", "/chat/send"),
         ("GET", "/approvals/list"),
         ("POST", "/approvals/decision"),
         ("GET", "/continuity/ledger"),

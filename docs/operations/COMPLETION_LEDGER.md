@@ -215,6 +215,13 @@ that stage and the existing mission loop grids render it alongside the other
 loop stages, so operators can see when backend interface context is available
 without inventing UI-only state.
 
+As of `2026-04-25`, `/chat/send` has a narrow P1 mission ingress path for
+explicit `/mission ...` or `mission: ...` commands. That path creates only a
+queued mission, respects the same operator posture write guard as mission APIs,
+redacts the chat objective before mission and conversation persistence, and
+returns the mission detail loop envelope so the interface can see the resulting
+plan-stage handoff without claiming execution or autonomous routing.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is

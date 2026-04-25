@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from francis.agent.local_actions import try_handle
 from francis.chat.continuity.ledger import append
@@ -15,6 +16,28 @@ SYSTEM_PROMPT = (
     "Prefer plain language over jargon, but switch to technical precision when needed. "
     "Do not mention memory, summaries, topics, or artifacts unless asked."
 )
+
+
+@dataclass(frozen=True)
+class MissionIngressIntent:
+    objective: str
+
+
+def parse_mission_ingress(text: str) -> MissionIngressIntent | None:
+    if not isinstance(text, str):
+        return None
+
+    stripped = text.strip()
+    lowered = stripped.lower()
+    if lowered == "/mission":
+        return MissionIngressIntent(objective="")
+    if lowered.startswith("/mission "):
+        return MissionIngressIntent(objective=stripped[len("/mission ") :].strip())
+    if lowered.startswith("/mission:"):
+        return MissionIngressIntent(objective=stripped[len("/mission:") :].strip())
+    if lowered.startswith("mission:"):
+        return MissionIngressIntent(objective=stripped[len("mission:") :].strip())
+    return None
 
 
 def handle(text: str, use_llm: bool = False) -> str:
