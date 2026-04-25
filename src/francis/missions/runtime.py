@@ -36,6 +36,8 @@ def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, obj
         "gate": outcome.get("gate"),
         "next_step": outcome.get("next_step"),
         "trace_id": outcome.get("trace_id"),
+        "run_id": outcome.get("run_id"),
+        "artifact_dir": outcome.get("artifact_dir"),
         "message": outcome.get("message"),
     }
     for key, value in fields.items():
@@ -84,11 +86,39 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
         if isinstance(output_receipt.get("sandbox"), dict)
         else {}
     )
+    output_audit = output_receipt.get("audit_event") if isinstance(output_receipt.get("audit_event"), dict) else {}
+    output_sandbox_audit = (
+        output_sandbox.get("audit_event") if isinstance(output_sandbox.get("audit_event"), dict) else {}
+    )
     trace_id = (
         trace_id
         or _safe_str(operation_output.get("traceId")).strip()
         or _safe_str(output_receipt.get("trace_id")).strip()
         or _safe_str(output_sandbox.get("trace_id")).strip()
+        or _safe_str(output_audit.get("trace_id")).strip()
+        or _safe_str(output_sandbox_audit.get("trace_id")).strip()
+    )
+    run_id = (
+        _safe_str(operation_record.get("run_id")).strip()
+        or _safe_str(operation_meta.get("run_id")).strip()
+        or _safe_str(operation_output.get("run_id")).strip()
+        or _safe_str(operation_output.get("runId")).strip()
+        or _safe_str(output_receipt.get("run_id")).strip()
+        or _safe_str(output_sandbox.get("run_id")).strip()
+        or _safe_str(output_audit.get("run_id")).strip()
+        or _safe_str(output_sandbox_audit.get("run_id")).strip()
+    )
+    artifact_dir = (
+        _safe_str(operation_record.get("artifact_dir")).strip()
+        or _safe_str(operation_meta.get("artifact_dir")).strip()
+        or _safe_str(operation_output.get("artifact_dir")).strip()
+        or _safe_str(operation_output.get("artifact_path")).strip()
+        or _safe_str(output_receipt.get("artifact_dir")).strip()
+        or _safe_str(output_receipt.get("artifact_path")).strip()
+        or _safe_str(output_sandbox.get("artifact_dir")).strip()
+        or _safe_str(output_sandbox.get("artifact_path")).strip()
+        or _safe_str(output_audit.get("artifact_dir")).strip()
+        or _safe_str(output_sandbox_audit.get("artifact_dir")).strip()
     )
     message = (
         _safe_str(operation_meta.get("result_message")).strip() or _safe_str(operation_output.get("message")).strip()
@@ -102,6 +132,10 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
         handoff["next_step"] = next_step
     if trace_id:
         handoff["trace_id"] = trace_id
+    if run_id:
+        handoff["run_id"] = run_id
+    if artifact_dir:
+        handoff["artifact_dir"] = artifact_dir
     if message:
         handoff["operation_message"] = message
     return handoff
@@ -315,6 +349,8 @@ def run_queue_once(
                 "gate": _safe_str(outcome.get("gate")).strip() or None,
                 "next_step": _safe_str(outcome.get("next_step")).strip() or None,
                 "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,
+                "run_id": _safe_str(outcome.get("run_id")).strip() or None,
+                "artifact_dir": _safe_str(outcome.get("artifact_dir")).strip() or None,
             }
         )
         if bool(outcome.get("applied")):

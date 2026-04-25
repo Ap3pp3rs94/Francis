@@ -668,7 +668,9 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
     assert executed_body["ok"] is True
     assert executed_body["status"] == "succeeded"
     trace_id = str(executed_body["operation"].get("trace_id") or "")
+    run_id = str(executed_body["operation"].get("run_id") or "")
     assert trace_id.startswith("trace_")
+    assert run_id.startswith("run_")
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -677,9 +679,80 @@ def test_mission_linked_plugin_run_surfaces_operation_trace(monkeypatch, tmp_pat
     assert linked_operation["id"] == operation_id
     assert linked_operation["trace_id"] == trace_id
     assert linked_operation["meta"]["trace_id"] == trace_id
+    assert linked_operation["run_id"] == run_id
+    assert linked_operation["meta"]["run_id"] == run_id
     assert fetched_body["receipt_summary"]["current_trace_id"] == trace_id
+    assert fetched_body["receipt_summary"]["current_run_id"] == run_id
     assert fetched_body["current_task"]["trace_id"] == trace_id
+    assert fetched_body["current_task"]["run_id"] == run_id
     assert fetched_body["loop_state"]["trace"]["trace_id"] == trace_id
+
+
+def test_mission_linked_supervised_exec_surfaces_artifact_handle(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Carry artifact-backed operation continuity",
+            "summary": "Mission should surface supervised execution artifact handles.",
+            "requester_id": "test.missions.artifact",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "mission artifact projection",
+            "mission_id": mission_id,
+            "input": {"user_command": "echo mission-artifact", "cwd": str(tmp_path)},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.missions.artifact"})
+    assert pending.status_code == 200
+    approval_id = str(pending.json()["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.missions.artifact"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    artifact_dir = str(executed_body["operation"].get("artifact_dir") or "")
+    run_id = str(executed_body["operation"].get("run_id") or "")
+    assert artifact_dir
+    assert Path(artifact_dir).exists()
+    assert run_id == approval_id
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    linked_operation = fetched_body["linked_operations"][0]["operation"]
+    assert linked_operation["id"] == operation_id
+    assert linked_operation["artifact_dir"] == artifact_dir
+    assert linked_operation["meta"]["artifact_dir"] == artifact_dir
+    assert linked_operation["run_id"] == run_id
+    assert fetched_body["receipt_summary"]["current_artifact_dir"] == artifact_dir
+    assert fetched_body["receipt_summary"]["current_run_id"] == run_id
+    assert fetched_body["current_task"]["artifact_dir"] == artifact_dir
+    assert fetched_body["current_task"]["run_id"] == run_id
 
 
 def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_path: Path) -> None:

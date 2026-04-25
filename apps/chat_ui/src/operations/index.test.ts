@@ -55,9 +55,12 @@ test("OperationsClient.run posts the bounded worker request to the operation run
         ts: 1_710_000_100,
         status: "running",
         name: "plan.create",
+        run_id: "run_task_alpha",
+        artifact_dir: "C:/Francis/data/artifacts/task_alpha",
         meta: {
           objective: "Advance morning continuity",
           orb_plane: "P7_EXECUTION",
+          run_id: "run_task_alpha",
         },
       },
     });
@@ -79,6 +82,8 @@ test("OperationsClient.run posts the bounded worker request to the operation run
     assert.equal(response.message, "operation_started");
     assert.equal(response.operation?.id, "task_alpha");
     assert.equal(response.operation?.status, "running");
+    assert.equal(response.operation?.run_id, "run_task_alpha");
+    assert.equal(response.operation?.artifact_dir, "C:/Francis/data/artifacts/task_alpha");
     assert.equal(response.operation?.meta?.orb_plane, "P7_EXECUTION");
   } finally {
     restoreFetch();

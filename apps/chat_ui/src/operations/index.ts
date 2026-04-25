@@ -61,7 +61,9 @@ export type OperationRecord = {
   domain?: string;
   correlation_id?: string;
   trace_id?: string;
+  run_id?: string;
   span_id?: string;
+  artifact_dir?: string;
 
   // Timing / metrics
   duration_ms?: number;
@@ -508,7 +510,9 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
     safeString(raw.correlation_id) || safeString(raw.correlationId) || safeString(raw.corr_id) || undefined;
 
   const trace_id = safeString(raw.trace_id) || safeString(raw.traceId) || undefined;
+  const run_id = safeString(raw.run_id) || safeString(raw.runId) || undefined;
   const span_id = safeString(raw.span_id) || safeString(raw.spanId) || undefined;
+  const artifact_dir = safeString(raw.artifact_dir) || safeString(raw.artifact_path) || undefined;
 
   const duration_ms =
     safeNumber(raw.duration_ms, 0) || safeNumber(raw.elapsed_ms, 0) || safeNumber(raw.latency_ms, 0) || 0;
@@ -556,7 +560,9 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
       domain,
       correlation_id,
       trace_id,
+      run_id,
       span_id,
+      artifact_dir,
       duration_ms: duration_ms > 0 ? duration_ms : undefined,
       message: message || undefined,
       tags,
@@ -578,7 +584,9 @@ export function parseOperationRecord(raw: unknown): OperationRecord | null {
     domain,
     correlation_id,
     trace_id,
+    run_id,
     span_id,
+    artifact_dir,
     duration_ms: duration_ms > 0 ? duration_ms : undefined,
     message: message || undefined,
     tags,

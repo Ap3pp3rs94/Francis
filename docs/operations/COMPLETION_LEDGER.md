@@ -848,6 +848,28 @@ read models:
 - No queue selection, mission mutation, approval decision, shell, policy, or
   memory-write behavior changed; this only exposes existing receipt trace ids.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation receipt handle projection. This advances the
+active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE` line by
+making existing execution `run_id` and artifact handles visible beside trace
+handles in operation and mission read models:
+
+- Operation projections now lift `run_id` and `artifact_dir` from operation
+  result payloads, nested receipts, sandbox receipts, and audit events onto the
+  operation record and `operation.meta`.
+- Mission detail and queue-run projections now expose those handles through
+  current-task and receipt-summary surfaces so operators can inspect the exact
+  run or artifact directory without spelunking raw task files.
+- The chat UI parser and ORB mission inspector preserve and render those
+  handles on selected mission continuity receipts, queue-run result cards, and
+  queue-run error context.
+- API and UI client tests now prove plugin `run_id` handles and supervised
+  execution artifact directories survive operation, mission, and queue-run
+  projections.
+- No queue selection, approval decision, shell execution, policy, memory-write,
+  or hidden-autonomy behavior changed; this only exposes handles that execution
+  receipts already produced.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
@@ -2067,6 +2089,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation receipt handle projection slice:
+
+- `pytest tests/test_api_operations.py::test_operations_plugin_run_action_executes tests/test_api_operations.py::test_operations_git_push_refreshes_approval_when_remote_changes tests/test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests/test_api_missions.py::test_mission_linked_supervised_exec_surfaces_artifact_handle -q`
+  Result: `4 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation receipt trace projection slice:
 

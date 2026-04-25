@@ -318,6 +318,24 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         or _safe_str(output_audit.get("trace_id")).strip()
         or _safe_str(output_sandbox_audit.get("trace_id")).strip()
     )
+    run_id = (
+        _safe_str(output_trace.get("run_id")).strip()
+        or _safe_str(output_trace.get("runId")).strip()
+        or _safe_str(output_receipt.get("run_id")).strip()
+        or _safe_str(output_sandbox.get("run_id")).strip()
+        or _safe_str(output_audit.get("run_id")).strip()
+        or _safe_str(output_sandbox_audit.get("run_id")).strip()
+    )
+    artifact_dir = (
+        _safe_str(output_trace.get("artifact_dir")).strip()
+        or _safe_str(output_trace.get("artifact_path")).strip()
+        or _safe_str(output_receipt.get("artifact_dir")).strip()
+        or _safe_str(output_receipt.get("artifact_path")).strip()
+        or _safe_str(output_sandbox.get("artifact_dir")).strip()
+        or _safe_str(output_sandbox.get("artifact_path")).strip()
+        or _safe_str(output_audit.get("artifact_dir")).strip()
+        or _safe_str(output_sandbox_audit.get("artifact_dir")).strip()
+    )
     result_status = _result_status(task)
     governance = _result_governance(task)
     approval_id = _result_approval_id(task)
@@ -341,6 +359,8 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         "level": "error" if op_status in {"failed", "blocked"} else "warning" if governance else "info",
         "actor": _safe_str(task.get("requester_id")).strip() or "unknown",
         "trace_id": trace_id or None,
+        "run_id": run_id or None,
+        "artifact_dir": artifact_dir or None,
         "duration_ms": None,
         "input": redact_operation_value(task.get("inputs")),
         "output": output,
@@ -359,6 +379,8 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
             "result_message": result_message or None,
             "approval_id": approval_id or None,
             "trace_id": trace_id or None,
+            "run_id": run_id or None,
+            "artifact_dir": artifact_dir or None,
             "mission_id": mission_id or None,
             "governance": redact_operation_value(governance) if governance else None,
             "orb_plane": orb_plane,

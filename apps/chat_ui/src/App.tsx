@@ -3139,6 +3139,8 @@ function SystemPanel(props: {
       gate?: string;
       nextStep?: string;
       traceId?: string;
+      runId?: string;
+      artifactDir?: string;
       queueItem?: MissionQueueItem;
       currentTask?: MissionCurrentTask;
       receiptSummary?: MissionReceiptSummary;
@@ -3158,6 +3160,8 @@ function SystemPanel(props: {
       gate?: string;
       nextStep?: string;
       traceId?: string;
+      runId?: string;
+      artifactDir?: string;
       error?: string;
       message?: string;
     }>;
@@ -3809,6 +3813,11 @@ function SystemPanel(props: {
     safeString(missionReceiptSummary?.current_approval_id).trim() || safeString(selectedMissionCurrentTask?.approval_id).trim();
   const missionReceiptTraceId =
     safeString(missionReceiptSummary?.current_trace_id).trim() || safeString(selectedMissionCurrentTask?.trace_id).trim();
+  const missionReceiptRunId =
+    safeString(missionReceiptSummary?.current_run_id).trim() || safeString(selectedMissionCurrentTask?.run_id).trim();
+  const missionReceiptArtifactDir =
+    safeString(missionReceiptSummary?.current_artifact_dir).trim() ||
+    safeString(selectedMissionCurrentTask?.artifact_dir).trim();
   const missionReceiptLatestRunAt = mixedLocaleTime(missionReceiptSummary?.latest_run_ts);
   const missionReceiptLatestHistoryAt = mixedLocaleTime(missionReceiptSummary?.latest_history_ts);
   const missionLoopStages = missionLoopState
@@ -4073,6 +4082,8 @@ function SystemPanel(props: {
           gate: item.gate,
           nextStep: item.next_step,
           traceId: item.trace_id,
+          runId: item.run_id,
+          artifactDir: item.artifact_dir,
           queueItem: item.queue_item,
           currentTask: item.current_task,
           receiptSummary: item.receipt_summary,
@@ -4092,6 +4103,8 @@ function SystemPanel(props: {
           gate: safeString(item.gate).trim(),
           nextStep: safeString(item.next_step).trim(),
           traceId: safeString(item.trace_id).trim() || safeString(item.traceId).trim(),
+          runId: safeString(item.run_id).trim() || safeString(item.runId).trim(),
+          artifactDir: safeString(item.artifact_dir).trim() || safeString(item.artifact_path).trim(),
           error: safeString(item.error).trim(),
           message: safeString(item.message).trim(),
         })),
@@ -6177,6 +6190,16 @@ function SystemPanel(props: {
                         {" / "}trace=<code>{missionReceiptTraceId}</code>
                       </>
                     ) : null}
+                    {missionReceiptRunId ? (
+                      <>
+                        {" / "}run=<code>{missionReceiptRunId}</code>
+                      </>
+                    ) : null}
+                    {missionReceiptArtifactDir ? (
+                      <>
+                        {" / "}artifact=<code>{missionReceiptArtifactDir}</code>
+                      </>
+                    ) : null}
                   </div>
                   {(missionReceiptSummary.latest_run_event || missionReceiptLatestRunAt || missionReceiptSummary.latest_history_event || missionReceiptLatestHistoryAt) ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
@@ -7026,9 +7049,18 @@ function SystemPanel(props: {
                       const queueReceiptGate = safeString(queueReceiptSummary?.current_gate).trim();
                       const queueReceiptApprovalId = safeString(queueReceiptSummary?.current_approval_id).trim();
                       const queueReceiptTraceId = safeString(queueReceiptSummary?.current_trace_id).trim();
+                      const queueReceiptRunId = safeString(queueReceiptSummary?.current_run_id).trim();
+                      const queueReceiptArtifactDir = safeString(queueReceiptSummary?.current_artifact_dir).trim();
                       const queueResultTraceId = safeString(item.traceId).trim();
+                      const queueResultRunId = safeString(item.runId).trim();
+                      const queueResultArtifactDir = safeString(item.artifactDir).trim();
                       const queueCurrentTaskTraceId = safeString(queueCurrentTask?.trace_id).trim();
+                      const queueCurrentTaskRunId = safeString(queueCurrentTask?.run_id).trim();
+                      const queueCurrentTaskArtifactDir = safeString(queueCurrentTask?.artifact_dir).trim();
                       const queueVisibleTraceId = queueReceiptTraceId || queueResultTraceId || queueCurrentTaskTraceId;
+                      const queueVisibleRunId = queueReceiptRunId || queueResultRunId || queueCurrentTaskRunId;
+                      const queueVisibleArtifactDir =
+                        queueReceiptArtifactDir || queueResultArtifactDir || queueCurrentTaskArtifactDir;
                       const queueReceiptLatestRunEvent = safeString(queueReceiptSummary?.latest_run_event).trim();
                       const queueReceiptLatestRunStatus = safeString(queueReceiptSummary?.latest_run_status).trim();
                       const queueReceiptLatestRunAt = mixedLocaleTime(queueReceiptSummary?.latest_run_ts);
@@ -7125,7 +7157,9 @@ function SystemPanel(props: {
                         queueReceiptOperationStatus ||
                         queueReceiptGate ||
                         queueReceiptApprovalId ||
-                        queueVisibleTraceId ? (
+                        queueVisibleTraceId ||
+                        queueVisibleRunId ||
+                        queueVisibleArtifactDir ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                             {queueReceiptOperationId ? (
                               <>
@@ -7158,6 +7192,31 @@ function SystemPanel(props: {
                                   ? " / "
                                   : ""}
                                 trace=<code>{queueVisibleTraceId}</code>
+                              </>
+                            ) : null}
+                            {queueVisibleRunId ? (
+                              <>
+                                {(queueReceiptOperationId ||
+                                queueReceiptOperationStatus ||
+                                queueReceiptGate ||
+                                queueReceiptApprovalId ||
+                                queueVisibleTraceId)
+                                  ? " / "
+                                  : ""}
+                                run=<code>{queueVisibleRunId}</code>
+                              </>
+                            ) : null}
+                            {queueVisibleArtifactDir ? (
+                              <>
+                                {(queueReceiptOperationId ||
+                                queueReceiptOperationStatus ||
+                                queueReceiptGate ||
+                                queueReceiptApprovalId ||
+                                queueVisibleTraceId ||
+                                queueVisibleRunId)
+                                  ? " / "
+                                  : ""}
+                                artifact=<code>{queueVisibleArtifactDir}</code>
                               </>
                             ) : null}
                           </div>
@@ -7368,7 +7427,13 @@ function SystemPanel(props: {
                             </div>
                           </div>
                           <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{errorDetail}</div>
-                          {item.operationId || item.approvalId || item.gate || item.nextStep || item.traceId ? (
+                          {item.operationId ||
+                          item.approvalId ||
+                          item.gate ||
+                          item.nextStep ||
+                          item.traceId ||
+                          item.runId ||
+                          item.artifactDir ? (
                             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                               {item.operationId ? (
                                 <>
@@ -7395,6 +7460,27 @@ function SystemPanel(props: {
                                 <>
                                   {(item.operationId || item.approvalId || item.gate || item.nextStep) ? " / " : ""}
                                   trace=<code>{item.traceId}</code>
+                                </>
+                              ) : null}
+                              {item.runId ? (
+                                <>
+                                  {(item.operationId || item.approvalId || item.gate || item.nextStep || item.traceId)
+                                    ? " / "
+                                    : ""}
+                                  run=<code>{item.runId}</code>
+                                </>
+                              ) : null}
+                              {item.artifactDir ? (
+                                <>
+                                  {(item.operationId ||
+                                  item.approvalId ||
+                                  item.gate ||
+                                  item.nextStep ||
+                                  item.traceId ||
+                                  item.runId)
+                                    ? " / "
+                                    : ""}
+                                  artifact=<code>{item.artifactDir}</code>
                                 </>
                               ) : null}
                             </div>

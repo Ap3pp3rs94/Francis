@@ -365,20 +365,27 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
     assert output["ok"] is True
     assert str(output["output"]) == "Plugin response: hello from operation"
     trace_id = str(output["receipt"].get("trace_id") or "")
+    run_id = str(output["receipt"].get("run_id") or "")
     assert trace_id.startswith("trace_")
+    assert run_id.startswith("run_")
     assert run_body["operation"]["trace_id"] == trace_id
+    assert run_body["operation"]["run_id"] == run_id
     assert run_body["operation"]["meta"]["trace_id"] == trace_id
+    assert run_body["operation"]["meta"]["run_id"] == run_id
 
     fetched = client.get(f"/operations/{operation_id}")
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert fetched_body["operation"]["trace_id"] == trace_id
+    assert fetched_body["operation"]["run_id"] == run_id
     assert fetched_body["operation"]["meta"]["trace_id"] == trace_id
+    assert fetched_body["operation"]["meta"]["run_id"] == run_id
 
     listed = client.get("/operations/list")
     assert listed.status_code == 200
     listed_operation = next(item for item in listed.json()["items"] if item["id"] == operation_id)
     assert listed_operation["trace_id"] == trace_id
+    assert listed_operation["run_id"] == run_id
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:
@@ -836,6 +843,11 @@ def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch,
     assert isinstance(output, dict)
     assert output["status"] == "success"
     assert output["approval_id"] == refreshed_approval_id
+    assert output["run_id"] == refreshed_approval_id
+    assert executed_body["operation"]["run_id"] == refreshed_approval_id
+    assert executed_body["operation"]["artifact_dir"] == output["artifact_dir"]
+    assert executed_body["operation"]["meta"]["run_id"] == refreshed_approval_id
+    assert executed_body["operation"]["meta"]["artifact_dir"] == output["artifact_dir"]
     assert output["remote_url"] == str(mirror_root)
 
     mirror_branch_after = subprocess.run(

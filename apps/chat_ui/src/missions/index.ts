@@ -159,6 +159,8 @@ export type MissionCurrentTask = {
   handoff_stage?: string;
   handoff_action?: string;
   trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   latest_receipt_event?: string;
   latest_receipt_ts?: string;
   last_advance_operation_id?: string;
@@ -173,6 +175,8 @@ export type MissionReceiptSummary = {
   current_gate?: string;
   current_approval_id?: string;
   current_trace_id?: string;
+  current_run_id?: string;
+  current_artifact_dir?: string;
   latest_run_event?: string;
   latest_run_status?: string;
   latest_run_ts?: string;
@@ -306,6 +310,8 @@ export type MissionAdvanceResponse = {
   approval_id?: string;
   gate?: string;
   next_step?: string;
+  run_id?: string;
+  artifact_dir?: string;
   history?: MissionHistoryEntry[];
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
@@ -336,6 +342,8 @@ export type MissionRunOnceResult = {
   gate?: string;
   next_step?: string;
   trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
   loop_state?: MissionLoopState;
   current_task?: MissionCurrentTask;
   handoff?: MissionLoopHandoff;
@@ -821,6 +829,8 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     handoff_stage: safeString(raw.handoff_stage, "") || undefined,
     handoff_action: safeString(raw.handoff_action, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
     latest_receipt_event: safeString(raw.latest_receipt_event, "") || undefined,
     latest_receipt_ts: safeString(raw.latest_receipt_ts, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
@@ -836,6 +846,8 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
     !task.next_step &&
     !task.approval_id &&
     !task.handoff_action &&
+    !task.run_id &&
+    !task.artifact_dir &&
     !task.latest_receipt_event
   ) {
     return undefined;
@@ -854,6 +866,8 @@ function parseMissionReceiptSummary(raw: unknown): MissionReceiptSummary | undef
     current_gate: safeString(raw.current_gate, "") || undefined,
     current_approval_id: safeString(raw.current_approval_id, "") || undefined,
     current_trace_id: safeString(raw.current_trace_id, "") || undefined,
+    current_run_id: safeString(raw.current_run_id, "") || undefined,
+    current_artifact_dir: safeString(raw.current_artifact_dir, "") || undefined,
     latest_run_event: safeString(raw.latest_run_event, "") || undefined,
     latest_run_status: safeString(raw.latest_run_status, "") || undefined,
     latest_run_ts: safeString(raw.latest_run_ts, "") || undefined,
@@ -865,6 +879,8 @@ function parseMissionReceiptSummary(raw: unknown): MissionReceiptSummary | undef
     !summary.run_ledger_count &&
     !summary.history_count &&
     !summary.current_operation_id &&
+    !summary.current_run_id &&
+    !summary.current_artifact_dir &&
     !summary.latest_run_event &&
     !summary.latest_history_event
   ) {
@@ -1022,6 +1038,8 @@ function parseMissionAdvanceResponse(json: unknown): MissionAdvanceResponse {
     approval_id: safeString(json.approval_id, "") || undefined,
     gate: safeString(json.gate, "") || undefined,
     next_step: safeString(json.next_step, "") || undefined,
+    run_id: safeString(json.run_id, "") || undefined,
+    artifact_dir: safeString(json.artifact_dir, "") || undefined,
     ...parseMissionDetailParts(json, safeString(json.mission_id, "")),
     status: safeString(json.status, "") || undefined,
     message: safeString(json.message, "") || undefined,
@@ -1044,6 +1062,8 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
+    run_id: safeString(raw.run_id, "") || undefined,
+    artifact_dir: safeString(raw.artifact_dir, "") || undefined,
     loop_state: parseMissionLoopState(raw.loop_state),
     current_task: parseMissionCurrentTask(raw.current_task),
     handoff: parseMissionLoopHandoff(raw.handoff),

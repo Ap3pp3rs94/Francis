@@ -229,7 +229,11 @@ def _operation_approval_id(detail: dict[str, Any]) -> str:
     return _safe_str(meta.get("approval_id")).strip() or _safe_str(output.get("approval_id")).strip()
 
 
-def _operation_trace_id(detail: dict[str, Any]) -> str:
+def _operation_receipt_surfaces(
+    detail: dict[str, Any],
+) -> tuple[
+    dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]
+]:
     operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
     meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
     output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
@@ -243,6 +247,11 @@ def _operation_trace_id(detail: dict[str, Any]) -> str:
     )
     audit = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
     sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    return operation, meta, output, receipt, sandbox, audit, sandbox_audit
+
+
+def _operation_trace_id(detail: dict[str, Any]) -> str:
+    operation, meta, output, receipt, sandbox, audit, sandbox_audit = _operation_receipt_surfaces(detail)
     return (
         _safe_str(operation.get("trace_id")).strip()
         or _safe_str(meta.get("trace_id")).strip()
@@ -252,6 +261,36 @@ def _operation_trace_id(detail: dict[str, Any]) -> str:
         or _safe_str(sandbox.get("trace_id")).strip()
         or _safe_str(audit.get("trace_id")).strip()
         or _safe_str(sandbox_audit.get("trace_id")).strip()
+    )
+
+
+def _operation_run_id(detail: dict[str, Any]) -> str:
+    operation, meta, output, receipt, sandbox, audit, sandbox_audit = _operation_receipt_surfaces(detail)
+    return (
+        _safe_str(operation.get("run_id")).strip()
+        or _safe_str(meta.get("run_id")).strip()
+        or _safe_str(output.get("run_id")).strip()
+        or _safe_str(output.get("runId")).strip()
+        or _safe_str(receipt.get("run_id")).strip()
+        or _safe_str(sandbox.get("run_id")).strip()
+        or _safe_str(audit.get("run_id")).strip()
+        or _safe_str(sandbox_audit.get("run_id")).strip()
+    )
+
+
+def _operation_artifact_dir(detail: dict[str, Any]) -> str:
+    operation, meta, output, receipt, sandbox, audit, sandbox_audit = _operation_receipt_surfaces(detail)
+    return (
+        _safe_str(operation.get("artifact_dir")).strip()
+        or _safe_str(meta.get("artifact_dir")).strip()
+        or _safe_str(output.get("artifact_dir")).strip()
+        or _safe_str(output.get("artifact_path")).strip()
+        or _safe_str(receipt.get("artifact_dir")).strip()
+        or _safe_str(receipt.get("artifact_path")).strip()
+        or _safe_str(sandbox.get("artifact_dir")).strip()
+        or _safe_str(sandbox.get("artifact_path")).strip()
+        or _safe_str(audit.get("artifact_dir")).strip()
+        or _safe_str(sandbox_audit.get("artifact_dir")).strip()
     )
 
 
@@ -382,6 +421,8 @@ def _mission_current_task_projection(
         "handoff_stage": handoff.get("stage"),
         "handoff_action": handoff.get("action"),
         "trace_id": _first_text(_operation_trace_id(latest_detail), handoff.get("trace_id")),
+        "run_id": _first_text(_operation_run_id(latest_detail), handoff.get("run_id")),
+        "artifact_dir": _first_text(_operation_artifact_dir(latest_detail), handoff.get("artifact_dir")),
         "latest_receipt_event": receipt.get("name"),
         "latest_receipt_ts": _stage_timestamp(receipt.get("ts")),
         "last_advance_operation_id": _first_text(
@@ -413,6 +454,8 @@ def _mission_receipt_summary(
         "current_gate": _operation_gate(latest_detail),
         "current_approval_id": _operation_approval_id(latest_detail),
         "current_trace_id": _operation_trace_id(latest_detail),
+        "current_run_id": _operation_run_id(latest_detail),
+        "current_artifact_dir": _operation_artifact_dir(latest_detail),
         "latest_run_event": _safe_str(latest_receipt.get("name")).strip(),
         "latest_run_status": _safe_str(latest_receipt.get("status")).strip(),
         "latest_run_ts": _stage_timestamp(latest_receipt.get("ts")),
