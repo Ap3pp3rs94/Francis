@@ -695,6 +695,20 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert ticked.status_code == 200
     assert ticked.json()["mission"]["status"] == "failed"
 
+    reviewed = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.continuity.failed", "note": "operator reviewed failed recovery path"},
+    )
+    assert reviewed.status_code == 200
+    reviewed_body = reviewed.json()
+    assert reviewed_body["ok"] is True
+    assert reviewed_body["applied"] is False
+    assert reviewed_body["action"] == "retry_or_deadletter"
+    assert reviewed_body["operation_id"] == operation_id
+    assert reviewed_body["history"][-1]["event"] == "recovery_review"
+    assert reviewed_body["history"][-1]["details"]["source_status"] == "failed"
+    assert reviewed_body["history"][-1]["details"]["automatic_retry"] is False
+
     response = client.get("/continuity/briefing")
     assert response.status_code == 200
     body = response.json()
@@ -705,6 +719,13 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert body["briefing"]["failed_preview"][0]["recovery"]["source_status"] == "failed"
     assert body["briefing"]["failed_preview"][0]["recovery"]["target_id"] == operation_id
     assert body["briefing"]["failed_preview"][0]["recovery"]["automatic_retry"] is False
+    assert body["briefing"]["failed_preview"][0]["recovery"]["last_review_action"] == "retry_or_deadletter"
+    assert body["briefing"]["failed_preview"][0]["recovery"]["last_review_outcome"] == "requires_operator"
+    assert body["briefing"]["failed_preview"][0]["last_recovery_action"] == "retry_or_deadletter"
+    assert body["briefing"]["failed_preview"][0]["last_recovery_outcome"] == "requires_operator"
+    assert body["briefing"]["failed_preview"][0]["last_recovery_target_id"] == operation_id
+    assert body["briefing"]["failed_preview"][0]["last_recovery_source_status"] == "failed"
+    assert body["briefing"]["failed_preview"][0]["latest_history_event"] == "recovery_review"
     assert body["briefing"]["failed_preview"][0]["current_task"]["operation_id"] == operation_id
     assert body["briefing"]["failed_preview"][0]["current_task"]["handoff_action"] == "retry_or_deadletter"
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}

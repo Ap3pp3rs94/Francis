@@ -67,6 +67,11 @@ export type MissionRecoveryProjection = {
   operator_required?: boolean;
   automatic_retry?: boolean;
   read_only?: boolean;
+  last_review_action?: string;
+  last_review_outcome?: string;
+  last_review_target_id?: string;
+  last_review_actor?: string;
+  last_reviewed_at?: string;
 };
 
 export type MissionHistoryEntry = {
@@ -224,6 +229,13 @@ export type MissionQueueItem = MissionRecord & {
   last_advance_actor?: string;
   last_advance_applied?: boolean;
   last_advance_at?: string;
+  last_recovery_action?: string;
+  last_recovery_outcome?: string;
+  last_recovery_target_id?: string;
+  last_recovery_message?: string;
+  last_recovery_actor?: string;
+  last_recovery_source_status?: string;
+  last_recovery_at?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
@@ -526,6 +538,11 @@ function parseMissionRecoveryProjection(raw: unknown): MissionRecoveryProjection
     operator_required: safeBoolean(raw.operator_required, false),
     automatic_retry: safeBoolean(raw.automatic_retry, false),
     read_only: safeBoolean(raw.read_only, false),
+    last_review_action: safeString(raw.last_review_action, "") || undefined,
+    last_review_outcome: safeString(raw.last_review_outcome, "") || undefined,
+    last_review_target_id: safeString(raw.last_review_target_id, "") || undefined,
+    last_review_actor: safeString(raw.last_review_actor, "") || undefined,
+    last_reviewed_at: safeString(raw.last_reviewed_at, "") || undefined,
   };
   if (
     !projection.source_status &&
@@ -535,7 +552,12 @@ function parseMissionRecoveryProjection(raw: unknown): MissionRecoveryProjection
     !projection.next_step &&
     !projection.operator_required &&
     !projection.automatic_retry &&
-    !projection.read_only
+    !projection.read_only &&
+    !projection.last_review_action &&
+    !projection.last_review_outcome &&
+    !projection.last_review_target_id &&
+    !projection.last_review_actor &&
+    !projection.last_reviewed_at
   ) {
     return undefined;
   }
@@ -572,6 +594,13 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     last_advance_actor: safeString(raw.last_advance_actor, "") || undefined,
     last_advance_applied: safeBoolean(raw.last_advance_applied, false),
     last_advance_at: safeString(raw.last_advance_at, "") || undefined,
+    last_recovery_action: safeString(raw.last_recovery_action, "") || undefined,
+    last_recovery_outcome: safeString(raw.last_recovery_outcome, "") || undefined,
+    last_recovery_target_id: safeString(raw.last_recovery_target_id, "") || undefined,
+    last_recovery_message: safeString(raw.last_recovery_message, "") || undefined,
+    last_recovery_actor: safeString(raw.last_recovery_actor, "") || undefined,
+    last_recovery_source_status: safeString(raw.last_recovery_source_status, "") || undefined,
+    last_recovery_at: safeString(raw.last_recovery_at, "") || undefined,
     history_count: safeNumber(raw.history_count, 0) || undefined,
     latest_history_event: safeString(raw.latest_history_event, "") || undefined,
     latest_history_ts: safeString(raw.latest_history_ts, "") || undefined,

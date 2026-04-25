@@ -4,6 +4,7 @@ from francis.missions.store import (
     MissionCreateRequest,
     MissionRecord,
     MissionStatus,
+    RECOVERY_REVIEW_ACTIONS,
     create_mission,
     deadletter_mission,
     deadletter_queue_items,
@@ -14,6 +15,7 @@ from francis.missions.store import (
     mission_queue_items,
     record_advance_receipt,
     record_linked_task_transition,
+    record_recovery_review_receipt,
     read_history,
     read_mission,
     tick_all_missions,
@@ -24,6 +26,7 @@ from francis.missions.runtime import run_queue_once
 
 __all__ = [
     "MissionStatus",
+    "RECOVERY_REVIEW_ACTIONS",
     "MissionCreateRequest",
     "MissionRecord",
     "create_mission",
@@ -34,6 +37,7 @@ __all__ = [
     "mission_queue_items",
     "record_advance_receipt",
     "record_linked_task_transition",
+    "record_recovery_review_receipt",
     "run_queue_once",
     "tick_all_missions",
     "tick_mission",

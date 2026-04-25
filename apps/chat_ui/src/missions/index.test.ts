@@ -545,7 +545,18 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             operator_required: true,
             automatic_retry: false,
             read_only: true,
+            last_review_action: "retry_or_deadletter",
+            last_review_outcome: "requires_operator",
+            last_review_target_id: "tsk_failed",
+            last_review_actor: "chat_ui.orb",
+            last_reviewed_at: "2026-04-15T12:30:00Z",
           },
+          last_recovery_action: "retry_or_deadletter",
+          last_recovery_outcome: "requires_operator",
+          last_recovery_target_id: "tsk_failed",
+          last_recovery_actor: "chat_ui.orb",
+          last_recovery_source_status: "failed",
+          last_recovery_at: "2026-04-15T12:30:00Z",
         },
       ],
       deadletter: [
@@ -711,6 +722,13 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.failed[0]?.recovery?.source_status, "failed");
     assert.equal(response.failed[0]?.recovery?.target_id, "tsk_failed");
     assert.equal(response.failed[0]?.recovery?.automatic_retry, false);
+    assert.equal(response.failed[0]?.recovery?.last_review_action, "retry_or_deadletter");
+    assert.equal(response.failed[0]?.recovery?.last_review_outcome, "requires_operator");
+    assert.equal(response.failed[0]?.recovery?.last_review_target_id, "tsk_failed");
+    assert.equal(response.failed[0]?.last_recovery_action, "retry_or_deadletter");
+    assert.equal(response.failed[0]?.last_recovery_outcome, "requires_operator");
+    assert.equal(response.failed[0]?.last_recovery_actor, "chat_ui.orb");
+    assert.equal(response.failed[0]?.last_recovery_source_status, "failed");
     assert.equal(response.deadletter[0]?.recovery?.action, "review_deadletter");
     assert.equal(response.deadletter[0]?.recovery?.source_status, "deadlettered");
     assert.equal(response.deadletter[0]?.recovery?.target_id, "tsk_dead");

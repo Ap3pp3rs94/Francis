@@ -83,6 +83,14 @@ separately from deadletter review. Stage 3 readiness now treats sampled failed
 missions as attention-worthy until an explicit retry or deadletter decision is
 made.
 
+As of `2026-04-25`, operator recovery reviews for failed or deadlettered
+missions are receipted explicitly. Invoking the bounded mission advance path on
+`retry_or_deadletter` or `review_deadletter` records a `recovery_review`
+mission-history event and `last_recovery_*` metadata without reopening the
+mission, retrying automatically, or implying hidden autonomy. World-state,
+continuity, mission clients, and ORB recovery cards can surface the latest
+review action, outcome, target, actor, and timestamp.
+
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
 return the current mission history, linked operations, run-ledger projection, and
@@ -1480,6 +1488,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission recovery-review receipt slice:
+
+- `pytest tests/test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery tests/test_api_missions.py::test_mission_deadletter_endpoint_moves_blocked_mission_cleanly -q`
+  Result: `2 passed`
+- `pytest tests/test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery -q`
+  Result: `1 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `21 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-24` public GitHub discoverability slice:
 

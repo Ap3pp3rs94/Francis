@@ -224,6 +224,13 @@ export type WorldStateMissionSummary = {
   last_task_gate?: string;
   last_task_next_step?: string;
   last_task_updated_at?: string;
+  last_recovery_action?: string;
+  last_recovery_outcome?: string;
+  last_recovery_target_id?: string;
+  last_recovery_message?: string;
+  last_recovery_actor?: string;
+  last_recovery_source_status?: string;
+  last_recovery_at?: string;
   created_at?: string;
   updated_at?: string;
   terminal?: boolean;
@@ -287,6 +294,11 @@ export type WorldStateMissionRecoveryProjection = {
   operator_required?: boolean;
   automatic_retry?: boolean;
   read_only?: boolean;
+  last_review_action?: string;
+  last_review_outcome?: string;
+  last_review_target_id?: string;
+  last_review_actor?: string;
+  last_reviewed_at?: string;
 };
 
 export type MissionHistoryPreviewEntry = {
@@ -332,6 +344,13 @@ export type WorldStateMissionQueueItem = {
   latest_history_event?: string;
   latest_history_ts?: string;
   history_tail?: MissionHistoryPreviewEntry[];
+  last_recovery_action?: string;
+  last_recovery_outcome?: string;
+  last_recovery_target_id?: string;
+  last_recovery_message?: string;
+  last_recovery_actor?: string;
+  last_recovery_source_status?: string;
+  last_recovery_at?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -518,11 +537,25 @@ export type ContinuityBriefingFocusItem = {
   last_advance_actor?: string;
   last_advance_applied?: boolean;
   last_advance_at?: string;
+  last_recovery_action?: string;
+  last_recovery_outcome?: string;
+  last_recovery_target_id?: string;
+  last_recovery_message?: string;
+  last_recovery_actor?: string;
+  last_recovery_source_status?: string;
+  last_recovery_at?: string;
   deadletter_reason?: string;
   history_count?: number;
   latest_history_event?: string;
   latest_history_ts?: string;
   history_tail?: MissionHistoryPreviewEntry[];
+  last_recovery_action?: string;
+  last_recovery_outcome?: string;
+  last_recovery_target_id?: string;
+  last_recovery_message?: string;
+  last_recovery_actor?: string;
+  last_recovery_source_status?: string;
+  last_recovery_at?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -1591,6 +1624,7 @@ function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary |
     last_task_gate: safeString(raw.last_task_gate, ""),
     last_task_next_step: safeString(raw.last_task_next_step, ""),
     last_task_updated_at: safeString(raw.last_task_updated_at, ""),
+    ...parseMissionRecoveryReviewFields(raw),
     created_at: safeString(raw.created_at, ""),
     updated_at: safeString(raw.updated_at, ""),
     terminal: safeBoolean(raw.terminal, false),
@@ -1779,6 +1813,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_history_event: safeString(item.latest_history_event, ""),
         latest_history_ts: safeString(item.latest_history_ts, ""),
         history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
+        ...parseMissionRecoveryReviewFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1826,6 +1861,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_history_event: safeString(item.latest_history_event, ""),
         latest_history_ts: safeString(item.latest_history_ts, ""),
         history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
+        ...parseMissionRecoveryReviewFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1873,6 +1909,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_history_event: safeString(item.latest_history_event, ""),
         latest_history_ts: safeString(item.latest_history_ts, ""),
         history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
+        ...parseMissionRecoveryReviewFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -2122,6 +2159,11 @@ function parseWorldStateMissionRecoveryProjection(raw: unknown): WorldStateMissi
     operator_required: safeBoolean(raw["operator_required"], false),
     automatic_retry: safeBoolean(raw["automatic_retry"], false),
     read_only: safeBoolean(raw["read_only"], false),
+    last_review_action: safeString(raw["last_review_action"], ""),
+    last_review_outcome: safeString(raw["last_review_outcome"], ""),
+    last_review_target_id: safeString(raw["last_review_target_id"], ""),
+    last_review_actor: safeString(raw["last_review_actor"], ""),
+    last_reviewed_at: safeString(raw["last_reviewed_at"], ""),
   };
   if (
     !projection.source_status &&
@@ -2131,11 +2173,28 @@ function parseWorldStateMissionRecoveryProjection(raw: unknown): WorldStateMissi
     !projection.next_step &&
     !projection.operator_required &&
     !projection.automatic_retry &&
-    !projection.read_only
+    !projection.read_only &&
+    !projection.last_review_action &&
+    !projection.last_review_outcome &&
+    !projection.last_review_target_id &&
+    !projection.last_review_actor &&
+    !projection.last_reviewed_at
   ) {
     return undefined;
   }
   return projection;
+}
+
+function parseMissionRecoveryReviewFields(raw: Record<string, unknown>) {
+  return {
+    last_recovery_action: safeString(raw["last_recovery_action"], ""),
+    last_recovery_outcome: safeString(raw["last_recovery_outcome"], ""),
+    last_recovery_target_id: safeString(raw["last_recovery_target_id"], ""),
+    last_recovery_message: safeString(raw["last_recovery_message"], ""),
+    last_recovery_actor: safeString(raw["last_recovery_actor"], ""),
+    last_recovery_source_status: safeString(raw["last_recovery_source_status"], ""),
+    last_recovery_at: safeString(raw["last_recovery_at"], ""),
+  };
 }
 
 function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | null {
@@ -2183,6 +2242,7 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     last_advance_actor: safeString(raw["last_advance_actor"], ""),
     last_advance_applied: safeBoolean(raw["last_advance_applied"], false),
     last_advance_at: safeString(raw["last_advance_at"], ""),
+    ...parseMissionRecoveryReviewFields(raw),
     deadletter_reason: safeString(raw["deadletter_reason"], ""),
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),
@@ -2245,6 +2305,7 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     latest_history_event: safeString(raw["latest_history_event"], ""),
     latest_history_ts: safeString(raw["latest_history_ts"], ""),
     history_tail: parseMissionHistoryPreviewEntries(raw["history_tail"]),
+    ...parseMissionRecoveryReviewFields(raw),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
   };

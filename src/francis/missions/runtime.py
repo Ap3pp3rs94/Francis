@@ -160,6 +160,21 @@ def advance_mission(
         )
         if receipt_err:
             return {"ok": False, "applied": False, "error": receipt_err}
+        if action in mission_store.RECOVERY_REVIEW_ACTIONS:
+            recovery_record, recovery_err = mission_store.record_recovery_review_receipt(
+                mission_id,
+                action=action,
+                outcome="requires_operator",
+                actor=actor,
+                note=note,
+                target_id=action_target_id,
+                message=operator_hint or "Mission requires operator intervention.",
+                source_status=record.status.value,
+            )
+            if recovery_err:
+                return {"ok": False, "applied": False, "error": recovery_err}
+            if recovery_record is not None:
+                updated_record = recovery_record
         return {
             "ok": True,
             "applied": False,

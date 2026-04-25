@@ -14,6 +14,7 @@ from francis.kernel.paths import data_dir
 
 __all__ = [
     "AUTO_ADVANCE_ACTIONS",
+    "RECOVERY_REVIEW_ACTIONS",
     "MissionStatus",
     "MissionCreateRequest",
     "MissionRecord",
@@ -24,6 +25,7 @@ __all__ = [
     "mission_queue_item",
     "mission_queue_items",
     "record_advance_receipt",
+    "record_recovery_review_receipt",
     "record_linked_task_transition",
     "run_queue_once",
     "tick_all_missions",
@@ -76,6 +78,7 @@ _QUEUE_STATUS_ORDER = {
     MissionStatus.DEADLETTERED.value: 10,
 }
 AUTO_ADVANCE_ACTIONS = frozenset({"create_first_operation", "run_linked_operation"})
+RECOVERY_REVIEW_ACTIONS = frozenset({"retry_or_deadletter", "review_deadletter"})
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
 
 
@@ -512,6 +515,7 @@ def _recovery_projection(
     if status not in {MissionStatus.FAILED.value, MissionStatus.DEADLETTERED.value}:
         return {}
 
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     target_id = str(action_target_id or "").strip()
     reason = _first_text(record.deadletter_reason, operator_hint, record.next_step)
     if status == MissionStatus.DEADLETTERED.value:
@@ -534,6 +538,11 @@ def _recovery_projection(
         "operator_required": True,
         "automatic_retry": False,
         "read_only": True,
+        "last_review_action": str(meta.get("last_recovery_action") or "").strip(),
+        "last_review_outcome": str(meta.get("last_recovery_outcome") or "").strip(),
+        "last_review_target_id": str(meta.get("last_recovery_target_id") or "").strip(),
+        "last_review_actor": str(meta.get("last_recovery_actor") or "").strip(),
+        "last_reviewed_at": str(meta.get("last_recovery_at") or "").strip(),
     }
 
 
@@ -634,6 +643,13 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "last_advance_actor": str(meta.get("last_advance_actor") or "").strip(),
         "last_advance_applied": bool(meta.get("last_advance_applied")),
         "last_advance_at": str(meta.get("last_advance_at") or "").strip(),
+        "last_recovery_action": str(meta.get("last_recovery_action") or "").strip(),
+        "last_recovery_outcome": str(meta.get("last_recovery_outcome") or "").strip(),
+        "last_recovery_target_id": str(meta.get("last_recovery_target_id") or "").strip(),
+        "last_recovery_message": str(meta.get("last_recovery_message") or "").strip(),
+        "last_recovery_actor": str(meta.get("last_recovery_actor") or "").strip(),
+        "last_recovery_source_status": str(meta.get("last_recovery_source_status") or "").strip(),
+        "last_recovery_at": str(meta.get("last_recovery_at") or "").strip(),
         "recommended_action": recommended_action,
         "operator_hint": operator_hint,
         "action_target_id": action_target_id,
@@ -1365,6 +1381,70 @@ def record_advance_receipt(
                 "operation_status": str(operation_status or "").strip() or None,
                 "message": str(message or "").strip() or None,
                 "applied": bool(applied),
+            },
+            repo_root,
+        )
+        return record, None
+    except Exception as exc:
+        return None, f"update_failed:{type(exc).__name__}"
+
+
+def record_recovery_review_receipt(
+    mission_id: str,
+    repo_root: Path | None = None,
+    *,
+    action: str,
+    outcome: str,
+    actor: str | None = None,
+    note: str | None = None,
+    target_id: str = "",
+    message: str = "",
+    source_status: str = "",
+) -> tuple[MissionRecord | None, str | None]:
+    record, err = read_mission(mission_id, repo_root)
+    if not record:
+        return None, err
+
+    normalized_action = str(action or "").strip() or "review_mission"
+    if normalized_action not in RECOVERY_REVIEW_ACTIONS:
+        return record, None
+    status = str(source_status or record.status.value or "").strip().lower()
+    if status not in {MissionStatus.FAILED.value, MissionStatus.DEADLETTERED.value}:
+        return None, "invalid_recovery_review_source_status"
+
+    reviewed_at = _now()
+    record.meta = dict(record.meta)
+    record.meta.update(
+        {
+            "last_recovery_action": normalized_action,
+            "last_recovery_outcome": str(outcome or "").strip() or None,
+            "last_recovery_target_id": str(target_id or "").strip() or None,
+            "last_recovery_message": str(message or "").strip() or None,
+            "last_recovery_actor": str(actor or "").strip() or None,
+            "last_recovery_source_status": status,
+            "last_recovery_at": reviewed_at,
+        }
+    )
+    record.updated_at = reviewed_at
+
+    try:
+        _atomic_write_text(
+            _record_path(record.mission_id, repo_root),
+            json.dumps(record.to_json_dict(), indent=2, ensure_ascii=False),
+        )
+        _append_history(
+            record.mission_id,
+            "recovery_review",
+            {
+                "action": normalized_action,
+                "outcome": str(outcome or "").strip() or None,
+                "actor": str(actor or "").strip() or None,
+                "note": str(note or "").strip() or None,
+                "target_id": str(target_id or "").strip() or None,
+                "message": str(message or "").strip() or None,
+                "source_status": status,
+                "operator_required": True,
+                "automatic_retry": False,
             },
             repo_root,
         )

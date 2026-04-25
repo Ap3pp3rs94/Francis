@@ -3620,6 +3620,10 @@ function SystemPanel(props: {
   const selectedMissionLastAdvanceAction = safeString(selectedMissionQueueItem?.last_advance_action).trim();
   const selectedMissionLastAdvanceOutcome = safeString(selectedMissionQueueItem?.last_advance_outcome).trim();
   const selectedMissionLastAdvanceOperationId = safeString(selectedMissionQueueItem?.last_advance_operation_id).trim();
+  const selectedMissionLastRecoveryAction = safeString(selectedMissionQueueItem?.last_recovery_action).trim();
+  const selectedMissionLastRecoveryOutcome = safeString(selectedMissionQueueItem?.last_recovery_outcome).trim();
+  const selectedMissionLastRecoveryTargetId = safeString(selectedMissionQueueItem?.last_recovery_target_id).trim();
+  const selectedMissionLastRecoveryAt = mixedLocaleTime(selectedMissionQueueItem?.last_recovery_at);
   const missionAdvanceBlockedReason = executionBlockedReason(props.operatorMode, "advancing mission continuity");
   const canAdvanceMission = missionAdvanceBlockedReason.length === 0;
   const missionQueueRunBlockedReason = executionBlockedReason(props.operatorMode, "running the mission queue");
@@ -4846,6 +4850,13 @@ function SystemPanel(props: {
                       safeString(item.last_task_id).trim();
                     const recoveryReason = safeString(recovery?.reason).trim() || safeString(item.reason).trim();
                     const recoveryNextStep = safeString(recovery?.next_step).trim();
+                    const lastRecoveryAction =
+                      safeString(item.last_recovery_action).trim() || safeString(recovery?.last_review_action).trim();
+                    const lastRecoveryOutcome =
+                      safeString(item.last_recovery_outcome).trim() || safeString(recovery?.last_review_outcome).trim();
+                    const lastRecoveryAt = mixedLocaleTime(
+                      safeString(item.last_recovery_at).trim() || safeString(recovery?.last_reviewed_at).trim(),
+                    );
                     const failedTaskStatus =
                       safeString(failedCurrentTask?.task_status).trim() ||
                       safeString(failedCurrentTask?.operation_status).trim() ||
@@ -4873,6 +4884,21 @@ function SystemPanel(props: {
                         ) : null}
                         {recoveryNextStep ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                        ) : null}
+                        {lastRecoveryAction ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            reviewed=<code>{lastRecoveryAction}</code>
+                            {lastRecoveryOutcome ? (
+                              <>
+                                {" / "}outcome=<code>{lastRecoveryOutcome}</code>
+                              </>
+                            ) : null}
+                            {lastRecoveryAt ? (
+                              <>
+                                {" / "}at=<code>{lastRecoveryAt}</code>
+                              </>
+                            ) : null}
+                          </div>
                         ) : null}
                         {failedTaskStatus || failedTaskResult ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
@@ -4949,6 +4975,13 @@ function SystemPanel(props: {
                     const recoveryReason = safeString(recovery?.reason).trim();
                     const recoveryNextStep = safeString(recovery?.next_step).trim();
                     const recoverySourceStatus = safeString(recovery?.source_status).trim();
+                    const lastRecoveryAction =
+                      safeString(item.last_recovery_action).trim() || safeString(recovery?.last_review_action).trim();
+                    const lastRecoveryOutcome =
+                      safeString(item.last_recovery_outcome).trim() || safeString(recovery?.last_review_outcome).trim();
+                    const lastRecoveryAt = mixedLocaleTime(
+                      safeString(item.last_recovery_at).trim() || safeString(recovery?.last_reviewed_at).trim(),
+                    );
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -5050,6 +5083,21 @@ function SystemPanel(props: {
                       ) : null}
                       {recoveryNextStep ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                      ) : null}
+                      {lastRecoveryAction ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          reviewed=<code>{lastRecoveryAction}</code>
+                          {lastRecoveryOutcome ? (
+                            <>
+                              {" / "}outcome=<code>{lastRecoveryOutcome}</code>
+                            </>
+                          ) : null}
+                          {lastRecoveryAt ? (
+                            <>
+                              {" / "}at=<code>{lastRecoveryAt}</code>
+                            </>
+                          ) : null}
+                        </div>
                       ) : null}
                       {item.approval_summary ? (
                         <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
@@ -6101,6 +6149,26 @@ function SystemPanel(props: {
                       {selectedMissionRecoveryNextStep ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{selectedMissionRecoveryNextStep}</div>
                       ) : null}
+                      {selectedMissionLastRecoveryAction ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          reviewed=<code>{selectedMissionLastRecoveryAction}</code>
+                          {selectedMissionLastRecoveryOutcome ? (
+                            <>
+                              {" / "}outcome=<code>{selectedMissionLastRecoveryOutcome}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLastRecoveryTargetId ? (
+                            <>
+                              {" / "}target=<code>{selectedMissionLastRecoveryTargetId}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionLastRecoveryAt ? (
+                            <>
+                              {" / "}at=<code>{selectedMissionLastRecoveryAt}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {(selectedMissionApprovalId || selectedMissionDependencyTotal > 0 || selectedMissionLastAdvanceAction) ? (
@@ -6912,6 +6980,13 @@ function SystemPanel(props: {
                   safeString(item.last_task_id).trim();
                 const recoveryReason = safeString(recovery?.reason).trim() || safeString(item.operator_hint).trim();
                 const recoveryNextStep = safeString(recovery?.next_step).trim();
+                const lastRecoveryAction =
+                  safeString(item.last_recovery_action).trim() || safeString(recovery?.last_review_action).trim();
+                const lastRecoveryOutcome =
+                  safeString(item.last_recovery_outcome).trim() || safeString(recovery?.last_review_outcome).trim();
+                const lastRecoveryAt = mixedLocaleTime(
+                  safeString(item.last_recovery_at).trim() || safeString(recovery?.last_reviewed_at).trim(),
+                );
                 const failedTaskStatus =
                   safeString(failedCurrentTask?.task_status).trim() ||
                   safeString(failedCurrentTask?.operation_status).trim() ||
@@ -6942,6 +7017,21 @@ function SystemPanel(props: {
                     ) : null}
                     {recoveryNextStep ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                    ) : null}
+                    {lastRecoveryAction ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        reviewed=<code>{lastRecoveryAction}</code>
+                        {lastRecoveryOutcome ? (
+                          <>
+                            {" / "}outcome=<code>{lastRecoveryOutcome}</code>
+                          </>
+                        ) : null}
+                        {lastRecoveryAt ? (
+                          <>
+                            {" / "}at=<code>{lastRecoveryAt}</code>
+                          </>
+                        ) : null}
+                      </div>
                     ) : null}
                     {failedTaskStatus || failedTaskResult ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
@@ -7016,6 +7106,13 @@ function SystemPanel(props: {
                 const recoveryReason = safeString(recovery?.reason).trim();
                 const recoveryNextStep = safeString(recovery?.next_step).trim();
                 const recoverySourceStatus = safeString(recovery?.source_status).trim();
+                const lastRecoveryAction =
+                  safeString(item.last_recovery_action).trim() || safeString(recovery?.last_review_action).trim();
+                const lastRecoveryOutcome =
+                  safeString(item.last_recovery_outcome).trim() || safeString(recovery?.last_review_outcome).trim();
+                const lastRecoveryAt = mixedLocaleTime(
+                  safeString(item.last_recovery_at).trim() || safeString(recovery?.last_reviewed_at).trim(),
+                );
                 return (
                   <div
                     key={`mission-deadletter-${item.id}`}
@@ -7100,6 +7197,21 @@ function SystemPanel(props: {
                     ) : null}
                     {recoveryNextStep ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                    ) : null}
+                    {lastRecoveryAction ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        reviewed=<code>{lastRecoveryAction}</code>
+                        {lastRecoveryOutcome ? (
+                          <>
+                            {" / "}outcome=<code>{lastRecoveryOutcome}</code>
+                          </>
+                        ) : null}
+                        {lastRecoveryAt ? (
+                          <>
+                            {" / "}at=<code>{lastRecoveryAt}</code>
+                          </>
+                        ) : null}
+                      </div>
                     ) : null}
                     {item.approval_summary ? (
                       <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>

@@ -345,7 +345,18 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 operator_required: true,
                 automatic_retry: false,
                 read_only: true,
+                last_review_action: "retry_or_deadletter",
+                last_review_outcome: "requires_operator",
+                last_review_target_id: "tsk_failed",
+                last_review_actor: "chat_ui.orb",
+                last_reviewed_at: "2026-04-14T08:10:00Z",
               },
+              last_recovery_action: "retry_or_deadletter",
+              last_recovery_outcome: "requires_operator",
+              last_recovery_target_id: "tsk_failed",
+              last_recovery_actor: "chat_ui.orb",
+              last_recovery_source_status: "failed",
+              last_recovery_at: "2026-04-14T08:10:00Z",
               current_task: {
                 mission_id: "mission_failed",
                 source: "mission_meta",
@@ -546,6 +557,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.action, "retry_or_deadletter");
     assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.source_status, "failed");
     assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.target_id, "tsk_failed");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.last_review_action, "retry_or_deadletter");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.last_review_outcome, "requires_operator");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_action, "retry_or_deadletter");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_outcome, "requires_operator");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_actor, "chat_ui.orb");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_source_status, "failed");
     assert.equal(worldState.overview?.failed_missions?.[0]?.current_task?.operation_id, "tsk_failed");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.action, "review_deadletter");
@@ -1351,7 +1368,18 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               operator_required: true,
               automatic_retry: false,
               read_only: true,
+              last_review_action: "retry_or_deadletter",
+              last_review_outcome: "requires_operator",
+              last_review_target_id: "tsk_failed",
+              last_review_actor: "chat_ui.orb",
+              last_reviewed_at: "2026-04-14T08:10:00Z",
             },
+            last_recovery_action: "retry_or_deadletter",
+            last_recovery_outcome: "requires_operator",
+            last_recovery_target_id: "tsk_failed",
+            last_recovery_actor: "chat_ui.orb",
+            last_recovery_source_status: "failed",
+            last_recovery_at: "2026-04-14T08:10:00Z",
             current_task: {
               mission_id: "mission_failed",
               source: "mission_meta",
@@ -1447,6 +1475,11 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.target_id, "tsk_failed");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.last_review_action, "retry_or_deadletter");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.last_review_outcome, "requires_operator");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.last_recovery_action, "retry_or_deadletter");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.last_recovery_outcome, "requires_operator");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.last_recovery_source_status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.current_task?.operation_id, "tsk_failed");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.action, "review_deadletter");
