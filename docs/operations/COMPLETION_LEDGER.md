@@ -982,6 +982,22 @@ operation's mission bridge actionable without raw JSON inspection:
   policy, or memory-write behavior changed; this only routes existing handles to
   their existing operator surfaces.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail mission bridge stage receipt
+visibility. This advances the active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION
+-> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line by making the selected
+operation's mission bridge show the same loop-stage evidence already projected
+by mission detail:
+
+- `apps/chat_ui/src/App.tsx` now renders bridge loop stages as compact cards
+  with stage detail, count, gate, approval status, next step, task id, trace id,
+  latest receipt event, and latest receipt time when those real fields exist.
+- Bridge stage cards expose `Review stage approval` and `Open stage task`
+  actions only when the backend-projected loop stage carries those handles.
+- No operation mutation, mission mutation, approval decision, execution, shell,
+  policy, or memory-write behavior changed; this only makes existing loop
+  receipt evidence visible from operation inspection.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by

@@ -10225,12 +10225,109 @@ function OperationsPanel(props: {
                         </div>
                       ) : null}
                       {selectedMissionLoopStages.length > 0 ? (
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                          {selectedMissionLoopStages.map((item) => (
-                            <span key={`selected-operation-loop-${selectedOperation.id}-${item.key}`} style={badgeStyle(item.stage?.status || "unknown")}>
-                              {item.label}: <code>{item.stage?.status || "unknown"}</code>
-                            </span>
-                          ))}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
+                          {selectedMissionLoopStages.map((item) => {
+                            const stage = item.stage;
+                            const stageLatestAt = stage?.latest_ts ? toLocaleTime(stage.latest_ts) : "";
+                            return (
+                              <div
+                                key={`selected-operation-loop-${selectedOperation.id}-${item.key}`}
+                                style={{
+                                  border: `1px solid ${selectedMissionLoopState?.active_stage === item.key ? "#3a5c67" : THEME.panelBorder}`,
+                                  borderRadius: 10,
+                                  padding: 8,
+                                  background: selectedMissionLoopState?.active_stage === item.key ? "#10181b" : "#121212",
+                                }}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                                  <div style={{ fontSize: 11, color: THEME.muted }}>{item.label}</div>
+                                  <span style={badgeStyle(stage?.status || "unknown")}>{stage?.status || "unknown"}</span>
+                                </div>
+                                <div style={{ fontSize: 11, color: THEME.text, marginTop: 6 }}>
+                                  {stage?.detail || "No receipt is recorded for this stage yet."}
+                                </div>
+                                {(stage?.count !== undefined || stage?.gate || stage?.approval_status || stage?.next_step) ? (
+                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                                    {stage?.count !== undefined ? (
+                                      <>
+                                        count <code>{String(stage.count)}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.gate ? (
+                                      <>
+                                        {stage?.count !== undefined ? " / " : ""}gate <code>{stage.gate}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.approval_status ? (
+                                      <>
+                                        {(stage?.count !== undefined || stage?.gate) ? " / " : ""}approval_status{" "}
+                                        <code>{stage.approval_status}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.next_step ? (
+                                      <>
+                                        {(stage?.count !== undefined || stage?.gate || stage?.approval_status) ? " / " : ""}next{" "}
+                                        <code>{stage.next_step}</code>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                                {(stage?.approval_id || stage?.operation_id || stage?.trace_id || stage?.latest_event || stageLatestAt) ? (
+                                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                                    {stage?.approval_id ? (
+                                      <>
+                                        approval <code>{stage.approval_id}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.operation_id ? (
+                                      <>
+                                        {stage?.approval_id ? " / " : ""}task <code>{stage.operation_id}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.trace_id ? (
+                                      <>
+                                        {(stage?.approval_id || stage?.operation_id) ? " / " : ""}trace <code>{stage.trace_id}</code>
+                                      </>
+                                    ) : null}
+                                    {stage?.latest_event ? (
+                                      <>
+                                        {(stage?.approval_id || stage?.operation_id || stage?.trace_id) ? " / " : ""}latest{" "}
+                                        <code>{stage.latest_event}</code>
+                                      </>
+                                    ) : null}
+                                    {stageLatestAt ? (
+                                      <>
+                                        {(stage?.approval_id || stage?.operation_id || stage?.trace_id || stage?.latest_event) ? " / " : ""}at{" "}
+                                        <code>{stageLatestAt}</code>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                                {(stage?.approval_id || stage?.operation_id) ? (
+                                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                                    {stage?.approval_id ? (
+                                      <button
+                                        style={buttonStyle}
+                                        onClick={() =>
+                                          props.onOpenApprovals(stage.approval_id || "", {
+                                            missionId: selectedMissionId,
+                                            operationId: stage.operation_id || selectedMissionBridgeTaskId || undefined,
+                                          })
+                                        }
+                                      >
+                                        Review stage approval
+                                      </button>
+                                    ) : null}
+                                    {stage?.operation_id ? (
+                                      <button style={buttonStyle} onClick={() => props.onOpenOperation(stage.operation_id || "")}>
+                                        {stage.operation_id === selectedOperation.id ? "Open selected task" : "Open stage task"}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
