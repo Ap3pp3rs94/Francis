@@ -991,6 +991,7 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             "errors": [{"error": blocked_reason}],
             "counts": {},
             "status": "blocked",
+            "error": blocked_reason,
         }
     try:
         safe_limit = max(1, min(int(payload.limit), 5000))
@@ -1010,6 +1011,7 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             item.update(projection_cache[mission_id])
         return result
     except Exception as exc:
+        error = str(exc)
         return {
             "ok": False,
             "items": [],
@@ -1020,8 +1022,10 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             "advanced": 0,
             "results": [],
             "processed": 0,
-            "errors": [{"error": str(exc)}],
+            "errors": [{"error": error}],
             "counts": {},
+            "status": "failed",
+            "error": error,
         }
 
 

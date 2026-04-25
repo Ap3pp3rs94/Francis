@@ -371,6 +371,7 @@ def test_mission_mutation_routes_are_blocked_in_observe_mode(monkeypatch, tmp_pa
     run_once_body = run_once.json()
     assert run_once_body["ok"] is False
     assert run_once_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in run_once_body["error"]
     assert run_once_body["items"] == []
     assert run_once_body["advanced"] == 0
     assert run_once_body["processed"] == 0
@@ -386,6 +387,32 @@ def test_mission_mutation_routes_are_blocked_in_observe_mode(monkeypatch, tmp_pa
     assert fetched_body["mission"]["deadletter_reason"] is None
     history_events = [str(item.get("event")) for item in fetched_body["history"]]
     assert history_events == ["created"]
+
+
+def test_mission_run_once_reports_failed_status_for_runtime_errors(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import missions as mission_routes
+
+    def boom(**_: object) -> dict[str, object]:
+        raise RuntimeError("queue run exploded")
+
+    monkeypatch.setattr(mission_routes.mission_runtime, "run_queue_once", boom)
+
+    client = TestClient(create_app())
+    run_once = client.post("/missions/run_once", json={"actor": "tests", "limit": 10})
+    assert run_once.status_code == 200
+    body = run_once.json()
+    assert body["ok"] is False
+    assert body["status"] == "failed"
+    assert body["error"] == "queue run exploded"
+    assert body["errors"][0]["error"] == "queue run exploded"
+    assert body["results"] == []
+    assert body["processed"] == 0
 
 
 def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tmp_path: Path) -> None:
@@ -1071,6 +1098,7 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     assert run_once.status_code == 200
     run_once_body = run_once.json()
     assert run_once_body["ok"] is True
+    assert run_once_body["status"] == "succeeded"
     assert run_once_body["processed"] >= 2
     assert run_once_body["advanced"] == 1
     assert run_once_body["counts"]["blocked"] >= 1
@@ -1232,6 +1260,7 @@ def test_mission_run_once_executes_linked_queued_operation(monkeypatch, tmp_path
     assert run_once.status_code == 200
     run_once_body = run_once.json()
     assert run_once_body["ok"] is True
+    assert run_once_body["status"] == "succeeded"
     assert run_once_body["advanced"] == 1
     results = run_once_body["results"]
     mission_result = next(item for item in results if item["mission_id"] == mission_id)
@@ -1279,6 +1308,7 @@ def test_mission_store_run_once_uses_bounded_runtime_path(monkeypatch, tmp_path:
 
     result = mission_run_queue_once(limit=10, actor="test.missions.store", note="store queue run")
     assert result["ok"] is True
+    assert result["status"] == "succeeded"
     assert result["advanced"] == 1
     mission_result = next(item for item in result["results"] if item["mission_id"] == mission_id)
     assert mission_result["applied"] is True

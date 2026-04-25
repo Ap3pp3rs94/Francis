@@ -15,6 +15,13 @@ def _safe_str(value: Any) -> str:
         return ""
 
 
+def _queue_run_error(errors: list[dict[str, object]]) -> str:
+    if not errors:
+        return ""
+    first = errors[0]
+    return _safe_str(first.get("error") or first.get("message")).strip() or "mission_queue_run_failed"
+
+
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -275,7 +282,8 @@ def run_queue_once(
         if status in counts:
             counts[status] += 1
 
-    return {
+    status = "failed" if errors else "succeeded"
+    response: dict[str, object] = {
         "ok": not errors,
         "items": queue_items,
         "failed": failed_items,
@@ -287,4 +295,8 @@ def run_queue_once(
         "processed": len(records),
         "errors": errors,
         "counts": counts,
+        "status": status,
     }
+    if errors:
+        response["error"] = _queue_run_error(errors)
+    return response

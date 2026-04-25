@@ -173,6 +173,13 @@ def _redact_optional_text(value: Any) -> str | None:
     return text or None
 
 
+def _queue_run_error(errors: list[dict[str, Any]]) -> str:
+    if not errors:
+        return ""
+    first = errors[0]
+    return _redact_free_text(first.get("error") or first.get("message")) or "mission_queue_run_failed"
+
+
 def _redact_meta(value: Any) -> dict[str, Any]:
     return redact_governed_metadata(value)
 
@@ -1592,7 +1599,8 @@ def run_queue_once(
             status = str(item.get("status") or "").strip().lower()
             if status in counts:
                 counts[status] += 1
-        return {
+        status = "failed" if errors else "succeeded"
+        response: dict[str, Any] = {
             "ok": not errors,
             "items": queue_items,
             "failed": failed_items,
@@ -1602,7 +1610,11 @@ def run_queue_once(
             "errors": errors,
             "counts": counts,
             "processed": len(records),
+            "status": status,
         }
+        if errors:
+            response["error"] = _queue_run_error(errors)
+        return response
     from francis.missions import runtime as mission_runtime
 
     return mission_runtime.run_queue_once(

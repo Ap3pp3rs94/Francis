@@ -599,6 +599,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
       applied: 2,
       advanced: 1,
       processed: 3,
+      status: "succeeded",
       counts: { queued: 1, blocked: 1, failed: 1, deadlettered: 1 },
       items: [
         {
@@ -845,6 +846,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.applied, 2);
     assert.equal(response.advanced, 1);
     assert.equal(response.processed, 3);
+    assert.equal(response.status, "succeeded");
     assert.equal(response.counts?.blocked, 1);
     assert.equal(response.counts?.failed, 1);
     assert.equal(response.failed[0]?.recovery?.action, "retry_or_deadletter");
