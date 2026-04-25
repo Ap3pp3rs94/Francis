@@ -102,6 +102,26 @@ export type MissionLoopState = {
   memory?: MissionLoopStage;
 };
 
+export type MissionCurrentTask = {
+  mission_id?: string;
+  source?: string;
+  operation_id?: string;
+  task_status?: string;
+  operation_status?: string;
+  result_status?: string;
+  gate?: string;
+  next_step?: string;
+  reason?: string;
+  approval_id?: string;
+  approval_status?: string;
+  handoff_stage?: string;
+  handoff_action?: string;
+  trace_id?: string;
+  latest_receipt_event?: string;
+  latest_receipt_ts?: string;
+  last_advance_operation_id?: string;
+};
+
 export type MissionDetail = {
   ok: boolean;
   mission?: MissionRecord;
@@ -109,6 +129,7 @@ export type MissionDetail = {
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
   loop_state?: MissionLoopState;
+  current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
   error?: string;
 };
@@ -144,6 +165,7 @@ export type MissionCreateResponse = {
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
   loop_state?: MissionLoopState;
+  current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
   message?: string;
   error?: string;
@@ -194,6 +216,7 @@ export type MissionAdvanceResponse = {
   linked_operations?: OperationDetail[];
   run_ledger?: OperationRecord[];
   loop_state?: MissionLoopState;
+  current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
   status?: string;
   message?: string;
@@ -219,6 +242,7 @@ export type MissionRunOnceResult = {
   gate?: string;
   next_step?: string;
   loop_state?: MissionLoopState;
+  current_task?: MissionCurrentTask;
   handoff?: MissionLoopHandoff;
   history_count?: number;
   linked_operation_count?: number;
@@ -584,6 +608,46 @@ function parseMissionLoopState(raw: unknown): MissionLoopState | undefined {
   return state;
 }
 
+function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const task: MissionCurrentTask = {
+    mission_id: safeString(raw.mission_id, "") || undefined,
+    source: safeString(raw.source, "") || undefined,
+    operation_id: safeString(raw.operation_id, "") || undefined,
+    task_status: safeString(raw.task_status, "") || undefined,
+    operation_status: safeString(raw.operation_status, "") || undefined,
+    result_status: safeString(raw.result_status, "") || undefined,
+    gate: safeString(raw.gate, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    reason: safeString(raw.reason, "") || undefined,
+    approval_id: safeString(raw.approval_id, "") || undefined,
+    approval_status: safeString(raw.approval_status, "") || undefined,
+    handoff_stage: safeString(raw.handoff_stage, "") || undefined,
+    handoff_action: safeString(raw.handoff_action, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
+    latest_receipt_event: safeString(raw.latest_receipt_event, "") || undefined,
+    latest_receipt_ts: safeString(raw.latest_receipt_ts, "") || undefined,
+    last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+  };
+
+  if (
+    !task.mission_id &&
+    !task.operation_id &&
+    !task.task_status &&
+    !task.operation_status &&
+    !task.result_status &&
+    !task.gate &&
+    !task.next_step &&
+    !task.approval_id &&
+    !task.handoff_action &&
+    !task.latest_receipt_event
+  ) {
+    return undefined;
+  }
+  return task;
+}
+
 function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
   if (!isRecord(json)) {
     return {
@@ -629,6 +693,7 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
     linked_operations,
     run_ledger,
     loop_state: parseMissionLoopState(json.loop_state),
+    current_task: parseMissionCurrentTask(json.current_task),
     queue_item: parseMissionQueueItem(json.queue_item),
     error: safeString(json.error, "") || undefined,
   };
@@ -636,7 +701,7 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
 
 function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""): Pick<
   MissionDetail,
-  "history" | "linked_operations" | "run_ledger" | "loop_state" | "queue_item"
+  "history" | "linked_operations" | "run_ledger" | "loop_state" | "current_task" | "queue_item"
 > {
   const parsed = parseMissionDetail(json, missionId);
   return {
@@ -644,6 +709,7 @@ function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""):
     linked_operations: parsed.linked_operations,
     run_ledger: parsed.run_ledger,
     loop_state: parsed.loop_state,
+    current_task: parsed.current_task,
     queue_item: parsed.queue_item,
   };
 }
@@ -729,6 +795,7 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
     loop_state: parseMissionLoopState(raw.loop_state),
+    current_task: parseMissionCurrentTask(raw.current_task),
     handoff: parseMissionLoopHandoff(raw.handoff),
     history_count: safeNumber(raw.history_count, 0) || undefined,
     linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,

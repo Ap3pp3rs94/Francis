@@ -537,6 +537,21 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
               operation_id: "tsk_ready",
             },
           },
+          current_task: {
+            mission_id: "mission_ready",
+            source: "mission_meta",
+            operation_id: "tsk_ready",
+            task_status: "accepted",
+            operation_status: "queued",
+            result_status: "pending",
+            gate: "approvals_gate",
+            next_step: "approve_exact_action",
+            approval_id: "apr_ready",
+            approval_status: "pending",
+            handoff_stage: "gate",
+            handoff_action: "review_pending_approval",
+            latest_receipt_event: "governance_hold",
+          },
           handoff: {
             stage: "gate",
             action: "review_pending_approval",
@@ -600,6 +615,12 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
     assert.equal(response.results?.[0]?.mission?.id, "mission_ready");
     assert.equal(response.results?.[0]?.loop_state?.active_stage, "gate");
+    assert.equal(response.results?.[0]?.current_task?.source, "mission_meta");
+    assert.equal(response.results?.[0]?.current_task?.operation_id, "tsk_ready");
+    assert.equal(response.results?.[0]?.current_task?.task_status, "accepted");
+    assert.equal(response.results?.[0]?.current_task?.gate, "approvals_gate");
+    assert.equal(response.results?.[0]?.current_task?.approval_id, "apr_ready");
+    assert.equal(response.results?.[0]?.current_task?.handoff_action, "review_pending_approval");
     assert.equal(response.results?.[0]?.handoff?.action, "review_pending_approval");
     assert.equal(response.results?.[0]?.handoff?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.history_count, 3);
@@ -683,6 +704,25 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           reason: "Mission requires approval apr_loop before advancing.",
         },
       },
+      current_task: {
+        mission_id: "mission_loop",
+        source: "mission_meta",
+        operation_id: "tsk_loop",
+        task_status: "accepted",
+        operation_status: "queued",
+        result_status: "pending",
+        gate: "approvals_gate",
+        next_step: "review_pending_approval",
+        reason: "Approval apr_loop is pending before execution can continue.",
+        approval_id: "apr_loop",
+        approval_status: "pending",
+        handoff_stage: "gate",
+        handoff_action: "review_pending_approval",
+        trace_id: "trace_loop",
+        latest_receipt_event: "governance_hold",
+        latest_receipt_ts: "2024-03-09T16:00:01Z",
+        last_advance_operation_id: "tsk_loop",
+      },
       loop_state: {
         summary: "The mission is waiting on a governance decision before it can continue.",
         active_stage: "gate",
@@ -764,6 +804,19 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.queue_item?.last_advance_operation_id, "tsk_loop");
     assert.equal(response.queue_item?.last_advance_operation_status, "blocked");
     assert.equal(response.queue_item?.last_advance_applied, false);
+    assert.equal(response.current_task?.source, "mission_meta");
+    assert.equal(response.current_task?.operation_id, "tsk_loop");
+    assert.equal(response.current_task?.task_status, "accepted");
+    assert.equal(response.current_task?.operation_status, "queued");
+    assert.equal(response.current_task?.result_status, "pending");
+    assert.equal(response.current_task?.gate, "approvals_gate");
+    assert.equal(response.current_task?.approval_id, "apr_loop");
+    assert.equal(response.current_task?.approval_status, "pending");
+    assert.equal(response.current_task?.handoff_stage, "gate");
+    assert.equal(response.current_task?.handoff_action, "review_pending_approval");
+    assert.equal(response.current_task?.trace_id, "trace_loop");
+    assert.equal(response.current_task?.latest_receipt_event, "governance_hold");
+    assert.equal(response.current_task?.latest_receipt_ts, "2024-03-09T16:00:01Z");
   } finally {
     restoreFetch();
   }

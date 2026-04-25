@@ -1232,6 +1232,16 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     assert advanced_body["queue_item"]["last_task_approval_status"] == "pending"
     assert advanced_body["queue_item"]["advance"]["eligible"] is False
     assert advanced_body["queue_item"]["advance"]["action"] == "review_pending_approval"
+    assert advanced_body["current_task"]["source"] == "mission_meta"
+    assert advanced_body["current_task"]["operation_id"] == operation_id
+    assert advanced_body["current_task"]["task_status"] == "accepted"
+    assert advanced_body["current_task"]["operation_status"] == "queued"
+    assert advanced_body["current_task"]["result_status"] in {"pending", "needs_approval"}
+    assert advanced_body["current_task"]["gate"] == "approvals_gate"
+    assert advanced_body["current_task"]["approval_id"] == advanced_body["approval_id"]
+    assert advanced_body["current_task"]["approval_status"] == "pending"
+    assert advanced_body["current_task"]["handoff_action"] == "review_pending_approval"
+    assert advanced_body["current_task"]["latest_receipt_event"] == "governance_hold"
     assert advanced_body["history"][-1]["event"] == "advance_receipt"
 
     fetched = client.get(f"/missions/{mission_id}")
@@ -1239,6 +1249,8 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     fetched_body = fetched.json()
     assert fetched_body["mission"]["meta"]["last_task_gate"] == "approvals_gate"
     assert fetched_body["mission"]["meta"]["last_task_result_status"] in {"pending", "needs_approval"}
+    assert fetched_body["current_task"]["operation_id"] == operation_id
+    assert fetched_body["current_task"]["approval_id"] == advanced_body["approval_id"]
     assert fetched_body["queue_item"]["last_task_approval_id"] == advanced_body["approval_id"]
     assert fetched_body["queue_item"]["last_advance_operation_id"] == operation_id
     assert fetched_body["queue_item"]["last_advance_outcome"] == "queued"
@@ -1324,6 +1336,13 @@ def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monke
     assert mission_result["queue_item"]["last_task_approval_status"] == "pending"
     assert mission_result["queue_item"]["advance"]["eligible"] is False
     assert mission_result["queue_item"]["advance"]["action"] == "review_pending_approval"
+    assert mission_result["current_task"]["source"] == "mission_meta"
+    assert mission_result["current_task"]["operation_id"] == operation_id
+    assert mission_result["current_task"]["task_status"] == "accepted"
+    assert mission_result["current_task"]["gate"] == "approvals_gate"
+    assert mission_result["current_task"]["approval_id"] == mission_result["approval_id"]
+    assert mission_result["current_task"]["approval_status"] == "pending"
+    assert mission_result["current_task"]["handoff_action"] == "review_pending_approval"
     assert mission_result["linked_operation_count"] == 1
 
     fetched = client.get(f"/missions/{mission_id}")

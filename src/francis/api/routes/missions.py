@@ -39,10 +39,32 @@ def _stage_timestamp(value: Any) -> str:
     return text
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _mission_current_task_fields(record: mission_store.MissionRecord) -> dict[str, str]:
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    return {
+        "last_task_id": _safe_str(meta.get("last_task_id")).strip(),
+        "last_task_status": _safe_str(meta.get("last_task_status")).strip(),
+        "last_task_result_status": _safe_str(meta.get("last_task_result_status")).strip(),
+        "last_task_reason": _safe_str(meta.get("last_task_reason")).strip(),
+        "last_task_gate": _safe_str(meta.get("last_task_gate")).strip(),
+        "last_task_next_step": _safe_str(meta.get("last_task_next_step")).strip(),
+        "last_advance_operation_id": _safe_str(meta.get("last_advance_operation_id")).strip(),
+    }
+
+
 def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, Any]:
     if record is None:
         return {}
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    current_task_fields = _mission_current_task_fields(record)
     return {
         "id": record.mission_id,
         "status": record.status.value,
@@ -59,13 +81,7 @@ def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, 
         "linked_task_ids": list(record.linked_task_ids),
         "linked_task_count": len(record.linked_task_ids),
         "deadletter_reason": record.deadletter_reason,
-        "last_task_id": _safe_str(meta.get("last_task_id")).strip(),
-        "last_task_status": _safe_str(meta.get("last_task_status")).strip(),
-        "last_task_result_status": _safe_str(meta.get("last_task_result_status")).strip(),
-        "last_task_reason": _safe_str(meta.get("last_task_reason")).strip(),
-        "last_task_gate": _safe_str(meta.get("last_task_gate")).strip(),
-        "last_task_next_step": _safe_str(meta.get("last_task_next_step")).strip(),
-        "last_advance_operation_id": _safe_str(meta.get("last_advance_operation_id")).strip(),
+        **current_task_fields,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "meta": meta,
@@ -179,8 +195,7 @@ def _current_operation_detail(
     if not linked_operations:
         return {}
 
-    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
-    last_task_id = _safe_str(meta.get("last_task_id")).strip()
+    last_task_id = _mission_current_task_fields(record)["last_task_id"]
     if last_task_id:
         for detail in linked_operations:
             if _operation_id(detail) == last_task_id:
@@ -189,6 +204,106 @@ def _current_operation_detail(
     ranked = [(_operation_sort_ts(detail), index, detail) for index, detail in enumerate(linked_operations)]
     ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
     return ranked[0][2]
+
+
+def _current_task_receipt(run_ledger: list[dict[str, Any]], operation_id: str) -> dict[str, Any]:
+    for entry in run_ledger:
+        if not isinstance(entry, dict):
+            continue
+        if operation_id and _safe_str(entry.get("operation_id")).strip() == operation_id:
+            return entry
+    if not operation_id and run_ledger and isinstance(run_ledger[0], dict):
+        return run_ledger[0]
+    return {}
+
+
+def _mission_current_task_projection(
+    record: mission_store.MissionRecord,
+    linked_operations: list[dict[str, Any]],
+    run_ledger: list[dict[str, Any]],
+    loop_state: dict[str, Any],
+    queue_item: dict[str, Any],
+) -> dict[str, Any]:
+    task_fields = _mission_current_task_fields(record)
+    latest_detail = _current_operation_detail(record, linked_operations)
+    linked_operation_id = _operation_id(latest_detail)
+    handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
+    queue_advance = queue_item.get("advance") if isinstance(queue_item.get("advance"), dict) else {}
+
+    operation_id = _first_text(
+        task_fields["last_task_id"],
+        queue_item.get("last_task_id"),
+        linked_operation_id,
+        task_fields["last_advance_operation_id"],
+        queue_item.get("last_advance_operation_id"),
+    )
+    receipt = _current_task_receipt(run_ledger, operation_id)
+    has_meta_task = any(
+        task_fields[key]
+        for key in (
+            "last_task_id",
+            "last_task_status",
+            "last_task_result_status",
+            "last_task_reason",
+            "last_task_gate",
+            "last_task_next_step",
+        )
+    )
+
+    if has_meta_task:
+        source = "mission_meta"
+    elif linked_operation_id:
+        source = "linked_operation"
+    elif _safe_str(queue_item.get("last_task_id")).strip():
+        source = "queue_item"
+    else:
+        source = "mission_handoff"
+
+    payload: dict[str, Any] = {
+        "mission_id": record.mission_id,
+        "source": source,
+    }
+    values = {
+        "operation_id": operation_id,
+        "task_status": _first_text(task_fields["last_task_status"], queue_item.get("last_task_status")),
+        "operation_status": _first_text(
+            _operation_status(latest_detail), queue_item.get("last_advance_operation_status")
+        ),
+        "result_status": _first_text(task_fields["last_task_result_status"], queue_item.get("last_task_result_status")),
+        "gate": _first_text(
+            task_fields["last_task_gate"],
+            queue_item.get("last_task_gate"),
+            _operation_gate(latest_detail),
+            handoff.get("gate"),
+        ),
+        "next_step": _first_text(
+            task_fields["last_task_next_step"],
+            queue_item.get("last_task_next_step"),
+            handoff.get("next_step"),
+            _operation_next_step(latest_detail),
+            record.next_step,
+        ),
+        "reason": _first_text(
+            task_fields["last_task_reason"], queue_item.get("operator_hint"), queue_advance.get("reason")
+        ),
+        "approval_id": _first_text(
+            queue_item.get("last_task_approval_id"), _operation_approval_id(latest_detail), handoff.get("approval_id")
+        ),
+        "approval_status": queue_item.get("last_task_approval_status"),
+        "handoff_stage": handoff.get("stage"),
+        "handoff_action": handoff.get("action"),
+        "trace_id": _first_text(_operation_trace_id(latest_detail), handoff.get("trace_id")),
+        "latest_receipt_event": receipt.get("name"),
+        "latest_receipt_ts": _stage_timestamp(receipt.get("ts")),
+        "last_advance_operation_id": _first_text(
+            task_fields["last_advance_operation_id"], queue_item.get("last_advance_operation_id")
+        ),
+    }
+    for key, value in values.items():
+        text = _safe_str(value).strip()
+        if text:
+            payload[key] = text
+    return payload
 
 
 def _loop_stage(
@@ -495,12 +610,17 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
     history = mission_store.read_history(record.mission_id)
     run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
     _, queue_item, _ = mission_store.mission_queue_item(record.mission_id)
+    queue_payload = queue_item or {}
+    loop_state = _mission_loop_state(record, linked_operations, run_ledger, history)
     return {
         "history": history,
         "linked_operations": linked_operations,
         "run_ledger": run_ledger,
-        "loop_state": _mission_loop_state(record, linked_operations, run_ledger, history),
-        "queue_item": queue_item or {},
+        "loop_state": loop_state,
+        "current_task": _mission_current_task_projection(
+            record, linked_operations, run_ledger, loop_state, queue_payload
+        ),
+        "queue_item": queue_payload,
     }
 
 
@@ -518,6 +638,7 @@ def _mission_queue_result_projection(mission_id: str) -> dict[str, Any]:
         "mission": _serialize_mission(record),
         "queue_item": queue_item,
         "loop_state": loop_state,
+        "current_task": detail.get("current_task") if isinstance(detail.get("current_task"), dict) else {},
         "handoff": loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {},
         "history_count": len(detail.get("history")) if isinstance(detail.get("history"), list) else 0,
         "linked_operation_count": len(detail.get("linked_operations"))

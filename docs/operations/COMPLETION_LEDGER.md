@@ -281,6 +281,13 @@ result, gate, and reason badges in the ORB mission detail surface now follow
 the mission record contract instead of requiring callers to know where the
 backend used to store those values internally.
 
+As of `2026-04-25`, mission detail and post-run payloads also include a bounded
+`current_task` projection. It carries the active mission task id, operation
+status, task status, result, gate, approval handoff, latest receipt, and source
+lineage so clients can show the live mission target without reconstructing it
+from meta, queue items, loop state, linked operations, and run-ledger receipts
+separately.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
