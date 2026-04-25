@@ -16,6 +16,7 @@ from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
 from francis.governance.redaction import (
+    redact_governed_display_value,
     redact_governed_metadata,
     redact_governed_value,
     seal_governed_approval_value,
@@ -118,6 +119,11 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _atomic_write_display_json(path: Path, payload: dict[str, Any]) -> None:
+    display_payload = redact_governed_display_value(payload)
+    _atomic_write(path, display_payload if isinstance(display_payload, dict) else {})
 
 
 def _load_registry() -> dict[str, Any]:
@@ -473,7 +479,7 @@ def _request_exact_approval(
         request_body["previous_status"] = previous_status
     if isinstance(previous_record, dict):
         request_body["previous_approval"] = previous_record
-    _atomic_write(art / "request.json", request_body)
+    _atomic_write_display_json(art / "request.json", request_body)
     return approval_id, art
 
 
@@ -1432,8 +1438,8 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                         "request": request_payload,
                         "approval_record": approval_record,
                     }
-                    _atomic_write(art / "mismatch.json", mismatch_body)
-                    _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+                    _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+                    _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
                     validation = _normalize_validation(
                         validation_id,
                         {
@@ -1696,7 +1702,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
                 interventions[record_idx] = intervention
             else:
                 interventions.append(intervention)
-            _atomic_write(
+            _atomic_write_display_json(
                 art / "error.json",
                 {
                     "kind": "industrial.intervention.request.error",
@@ -1772,8 +1778,8 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
                 "request": request_payload,
                 "approval_record": approval_record,
             }
-            _atomic_write(art / "mismatch.json", mismatch_body)
-            _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
             intervention = {
                 "id": intervention_id,
                 "ts": _now_s(),
@@ -1971,7 +1977,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
                     interventions[record_idx]["status"] = "pending"
                     interventions[record_idx]["request_id"] = request_id
                     interventions[record_idx]["ts"] = _now_s()
-                _atomic_write(
+                _atomic_write_display_json(
                     art / "error.json",
                     {
                         "kind": "industrial.intervention.execute.error",
@@ -2056,8 +2062,8 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
                     "request": request_payload,
                     "approval_record": approval_record,
                 }
-                _atomic_write(art / "mismatch.json", mismatch_body)
-                _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+                _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+                _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
                 _append_telemetry(
                     registry,
                     target_id,
@@ -2353,7 +2359,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         actions[action_idx] = record
                     else:
                         actions.append(record)
-                    _atomic_write(
+                    _atomic_write_display_json(
                         art / "error.json",
                         {
                             "kind": "industrial.digital_twin.action.error",
@@ -2462,8 +2468,8 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "request": request_payload,
                         "approval_record": approval_record,
                     }
-                    _atomic_write(art / "mismatch.json", mismatch_body)
-                    _atomic_write(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+                    _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+                    _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
                     record = {
                         "id": action_id,
                         "ts": _now_s(),

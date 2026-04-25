@@ -179,6 +179,13 @@ request, error, and mismatch artifacts can preserve action shape and redacted UR
 or note context without exposing sealed HMAC proof material. Persisted approval
 records remain the exact-action replay source of truth.
 
+As of `2026-04-25`, industrial approval receipt artifacts also use the display
+redaction boundary. Safety validation, intervention request/execute, and digital
+twin action approval request, error, and mismatch artifacts can preserve target,
+action, and redacted parameter context without exposing sealed HMAC proof
+material. Persisted approval records remain the exact-action replay source of
+truth.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

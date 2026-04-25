@@ -6,6 +6,14 @@ import json
 from pathlib import Path
 
 
+def _assert_display_artifact(path: Path, *raw_values: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    assert "hmac-sha256:" not in text
+    for value in raw_values:
+        assert value not in text
+    return text
+
+
 def test_industrial_lifecycle_runs_safety_and_interventions(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -577,7 +585,9 @@ def test_industrial_intervention_request_seals_sensitive_params_without_weakenin
     assert approval_payload["payload"]["payload"]["params"]["token_count"] == 5
 
     artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
-    assert artifact_payload["request"]["payload"]["params"]["api_key"] == sealed_key
+    assert artifact_payload["request"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
+    assert artifact_payload["approval"]["payload"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
+    _assert_display_artifact(artifact_path, raw_key)
 
     persisted_text = "\n".join(
         [
@@ -619,6 +629,17 @@ def test_industrial_intervention_request_seals_sensitive_params_without_weakenin
     assert mismatched_body["status"] == "needs_approval"
     assert mismatched_body["error"] == "approval_payload_mismatch"
     assert str(mismatched_body["approval_id"]) != approval_id
+
+    refreshed_artifact_dir = Path(str(mismatched_body["artifact_dir"]))
+    refreshed_request_artifact = refreshed_artifact_dir / "request.json"
+    refreshed_mismatch_artifact = refreshed_artifact_dir / "mismatch.json"
+    previous_mismatch_artifact = data_root / "artifacts" / "industrial" / "approvals" / approval_id / "mismatch.json"
+    for artifact in (refreshed_request_artifact, refreshed_mismatch_artifact, previous_mismatch_artifact):
+        assert artifact.exists()
+        _assert_display_artifact(artifact, raw_key, different_key)
+    mismatch_payload = json.loads(refreshed_mismatch_artifact.read_text(encoding="utf-8"))
+    assert mismatch_payload["request"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
+    assert mismatch_payload["approval_record"]["payload"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
 
     registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
     registry_text = json.dumps(registry_payload, sort_keys=True)
@@ -902,6 +923,15 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
     assert mismatched_body["id"] == validation_id
     artifact_dir = Path(str(mismatched_body["artifact_dir"]))
     assert (artifact_dir / "mismatch.json").exists()
+    refreshed_request_artifact = artifact_dir / "request.json"
+    refreshed_mismatch_artifact = artifact_dir / "mismatch.json"
+    previous_mismatch_artifact = data_root / "artifacts" / "industrial" / "approvals" / approval_id / "mismatch.json"
+    for artifact in (refreshed_request_artifact, refreshed_mismatch_artifact, previous_mismatch_artifact):
+        assert artifact.exists()
+        _assert_display_artifact(artifact, raw_key)
+    mismatch_payload = json.loads(refreshed_mismatch_artifact.read_text(encoding="utf-8"))
+    assert mismatch_payload["request"]["params"]["api_key"] == "[REDACTED:secret]"
+    assert mismatch_payload["approval_record"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
 
     approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
     assert approved_refreshed.status_code == 200
@@ -1090,6 +1120,15 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
     assert mismatched_body["action_id"] == action_id
     artifact_dir = Path(str(mismatched_body["artifact_dir"]))
     assert (artifact_dir / "mismatch.json").exists()
+    refreshed_request_artifact = artifact_dir / "request.json"
+    refreshed_mismatch_artifact = artifact_dir / "mismatch.json"
+    previous_mismatch_artifact = data_root / "artifacts" / "industrial" / "approvals" / approval_id / "mismatch.json"
+    for artifact in (refreshed_request_artifact, refreshed_mismatch_artifact, previous_mismatch_artifact):
+        assert artifact.exists()
+        _assert_display_artifact(artifact, raw_key)
+    mismatch_payload = json.loads(refreshed_mismatch_artifact.read_text(encoding="utf-8"))
+    assert mismatch_payload["request"]["params"]["api_key"] == "[REDACTED:secret]"
+    assert mismatch_payload["approval_record"]["payload"]["params"]["api_key"] == "[REDACTED:secret]"
 
     approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
     assert approved_refreshed.status_code == 200
