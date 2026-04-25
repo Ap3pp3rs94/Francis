@@ -60,11 +60,26 @@ def _mission_current_task_fields(record: mission_store.MissionRecord) -> dict[st
     }
 
 
+def _mission_replacement_lineage_fields(record: mission_store.MissionRecord) -> dict[str, str]:
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    return {
+        "replacement_for_mission_id": _safe_str(meta.get("replacement_for_mission_id")).strip(),
+        "replacement_for_status": _safe_str(meta.get("replacement_for_status")).strip(),
+        "replacement_source_objective": _safe_str(meta.get("replacement_source_objective")).strip(),
+        "replacement_source_action": _safe_str(meta.get("replacement_source_action")).strip(),
+        "replacement_source_target_id": _safe_str(meta.get("replacement_source_target_id")).strip(),
+        "replacement_reason": _safe_str(meta.get("replacement_reason")).strip(),
+        "replacement_declared_by": _safe_str(meta.get("replacement_declared_by")).strip(),
+        "replacement_note": _safe_str(meta.get("replacement_note")).strip(),
+    }
+
+
 def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, Any]:
     if record is None:
         return {}
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     current_task_fields = _mission_current_task_fields(record)
+    replacement_lineage_fields = _mission_replacement_lineage_fields(record)
     return {
         "id": record.mission_id,
         "status": record.status.value,
@@ -82,6 +97,7 @@ def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, 
         "linked_task_count": len(record.linked_task_ids),
         "deadletter_reason": record.deadletter_reason,
         **current_task_fields,
+        **replacement_lineage_fields,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "meta": meta,

@@ -734,6 +734,69 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_failed_ids"] == [mission_id]
 
 
+def test_continuity_briefing_focus_preserves_replacement_lineage(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    source = client.post(
+        "/missions/create",
+        json={
+            "objective": "Source mission needing replacement",
+            "summary": "The replacement should carry explicit source lineage.",
+            "requester_id": "test.continuity.replacement",
+            "priority": 8,
+        },
+    )
+    assert source.status_code == 200
+    source_id = str(source.json()["mission_id"])
+
+    failed = client.patch(
+        f"/missions/{source_id}",
+        json={
+            "status": "failed",
+            "actor": "test.continuity.replacement",
+            "meta": {
+                "last_task_id": "tsk_replacement_source",
+                "last_task_status": "failed",
+                "last_task_result_status": "failed",
+                "last_task_reason": "source operation failed before replacement",
+            },
+        },
+    )
+    assert failed.status_code == 200
+    assert failed.json()["mission"]["status"] == "failed"
+
+    replaced = client.post(
+        f"/missions/{source_id}/replace",
+        json={
+            "objective": "Replacement mission with lineage",
+            "actor": "test.continuity.replacement",
+            "note": "continuity lineage projection",
+        },
+    )
+    assert replaced.status_code == 200
+    assert replaced.json()["ok"] is True
+    replacement_id = str(replaced.json()["replacement_mission_id"])
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+    body = response.json()
+    focus_item = next(item for item in body["briefing"]["focus"] if item["id"] == replacement_id)
+    assert focus_item["status"] == "queued"
+    assert focus_item["replacement_for_mission_id"] == source_id
+    assert focus_item["replacement_for_status"] == "failed"
+    assert focus_item["replacement_source_action"] == "retry_or_deadletter"
+    assert focus_item["replacement_source_target_id"] == "tsk_replacement_source"
+    assert focus_item["replacement_declared_by"] == "test.continuity.replacement"
+    assert focus_item["linked_task_count"] == 0
+
+
 def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

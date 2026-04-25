@@ -3513,6 +3513,21 @@ function SystemPanel(props: {
   const missionSelectionKey = missionSelectionCandidates.join("|");
   const selectedMission = missionDetail?.mission;
   const selectedMissionMeta = isRecord(selectedMission?.meta) ? selectedMission.meta : {};
+  const selectedMissionReplacementForId =
+    safeString(selectedMission?.replacement_for_mission_id).trim() ||
+    safeString(selectedMissionMeta.replacement_for_mission_id).trim();
+  const selectedMissionReplacementForStatus =
+    safeString(selectedMission?.replacement_for_status).trim() ||
+    safeString(selectedMissionMeta.replacement_for_status).trim();
+  const selectedMissionReplacementSourceAction =
+    safeString(selectedMission?.replacement_source_action).trim() ||
+    safeString(selectedMissionMeta.replacement_source_action).trim();
+  const selectedMissionReplacementSourceTargetId =
+    safeString(selectedMission?.replacement_source_target_id).trim() ||
+    safeString(selectedMissionMeta.replacement_source_target_id).trim();
+  const selectedMissionReplacementReason =
+    safeString(selectedMission?.replacement_reason).trim() ||
+    safeString(selectedMissionMeta.replacement_reason).trim();
   const selectedMissionCurrentTask = missionDetail?.current_task;
   const selectedMissionTaskStatus = safeString(selectedMissionCurrentTask?.task_status).trim();
   const selectedMissionLastTaskStatus =
@@ -5776,6 +5791,41 @@ function SystemPanel(props: {
               ) : null}
               {selectedMission.deadletter_reason ? (
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{selectedMission.deadletter_reason}</div>
+              ) : null}
+              {selectedMissionReplacementForId ? (
+                <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#111819", marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: "#cce7e2" }}>
+                    replacement_for=<code>{selectedMissionReplacementForId}</code>
+                    {selectedMissionReplacementForStatus ? (
+                      <>
+                        {" / "}source_status=<code>{selectedMissionReplacementForStatus}</code>
+                      </>
+                    ) : null}
+                    {selectedMissionReplacementSourceAction ? (
+                      <>
+                        {" / "}source_action=<code>{selectedMissionReplacementSourceAction}</code>
+                      </>
+                    ) : null}
+                    {selectedMissionReplacementSourceTargetId ? (
+                      <>
+                        {" / "}source_target=<code>{selectedMissionReplacementSourceTargetId}</code>
+                      </>
+                    ) : null}
+                  </div>
+                  {selectedMissionReplacementReason ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{selectedMissionReplacementReason}</div>
+                  ) : null}
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <button style={buttonStyle} onClick={() => inspectMission(selectedMissionReplacementForId)}>
+                      Open source mission
+                    </button>
+                    {selectedMissionReplacementSourceTargetId.startsWith("tsk_") ? (
+                      <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionReplacementSourceTargetId)}>
+                        Open source task
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               ) : null}
               <div
                 style={{

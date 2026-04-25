@@ -671,6 +671,7 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
                 "last_recovery_actor": str(meta.get("last_recovery_actor") or "").strip(),
                 "last_recovery_source_status": str(meta.get("last_recovery_source_status") or "").strip(),
                 "last_recovery_at": str(meta.get("last_recovery_at") or "").strip(),
+                **_mission_replacement_lineage_projection(meta),
                 "created_at": record.created_at,
                 "updated_at": record.updated_at,
                 "terminal": status in _TERMINAL_MISSION_STATUSES,
@@ -716,6 +717,19 @@ def _mission_recovery_review_projection(item: dict[str, Any]) -> dict[str, Any]:
         "last_recovery_actor": str(item.get("last_recovery_actor") or "").strip(),
         "last_recovery_source_status": str(item.get("last_recovery_source_status") or "").strip(),
         "last_recovery_at": str(item.get("last_recovery_at") or "").strip(),
+    }
+
+
+def _mission_replacement_lineage_projection(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "replacement_for_mission_id": str(item.get("replacement_for_mission_id") or "").strip(),
+        "replacement_for_status": str(item.get("replacement_for_status") or "").strip(),
+        "replacement_source_objective": str(item.get("replacement_source_objective") or "").strip(),
+        "replacement_source_action": str(item.get("replacement_source_action") or "").strip(),
+        "replacement_source_target_id": str(item.get("replacement_source_target_id") or "").strip(),
+        "replacement_reason": str(item.get("replacement_reason") or "").strip(),
+        "replacement_declared_by": str(item.get("replacement_declared_by") or "").strip(),
+        "replacement_note": str(item.get("replacement_note") or "").strip(),
     }
 
 
@@ -1380,6 +1394,7 @@ def _mission_briefing(
                 "last_advance_applied": bool(item.get("last_advance_applied")),
                 "last_advance_at": str(item.get("last_advance_at") or "").strip(),
                 **_mission_recovery_review_projection(item),
+                **_mission_replacement_lineage_projection(item),
                 "deadletter_reason": str(item.get("deadletter_reason") or "").strip(),
                 "history_count": int(item.get("history_count") or 0),
                 "latest_history_event": str(item.get("latest_history_event") or "").strip(),
@@ -1410,6 +1425,7 @@ def _mission_briefing(
                 if isinstance(item.get("current_task"), dict)
                 else {},
                 **_mission_hold_projection(item),
+                **_mission_replacement_lineage_projection(item),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
                 "history_count": int(item.get("history_count") or 0),
@@ -1443,6 +1459,7 @@ def _mission_briefing(
                 "recovery": recovery,
                 **_mission_hold_projection(item),
                 **_mission_recovery_review_projection(item),
+                **_mission_replacement_lineage_projection(item),
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
@@ -1476,6 +1493,7 @@ def _mission_briefing(
                 "recovery": dict(item.get("recovery") or {}) if isinstance(item.get("recovery"), dict) else {},
                 **_mission_hold_projection(item),
                 **_mission_recovery_review_projection(item),
+                **_mission_replacement_lineage_projection(item),
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),

@@ -231,6 +231,14 @@ export type WorldStateMissionSummary = {
   last_recovery_actor?: string;
   last_recovery_source_status?: string;
   last_recovery_at?: string;
+  replacement_for_mission_id?: string;
+  replacement_for_status?: string;
+  replacement_source_objective?: string;
+  replacement_source_action?: string;
+  replacement_source_target_id?: string;
+  replacement_reason?: string;
+  replacement_declared_by?: string;
+  replacement_note?: string;
   created_at?: string;
   updated_at?: string;
   terminal?: boolean;
@@ -351,6 +359,14 @@ export type WorldStateMissionQueueItem = {
   last_recovery_actor?: string;
   last_recovery_source_status?: string;
   last_recovery_at?: string;
+  replacement_for_mission_id?: string;
+  replacement_for_status?: string;
+  replacement_source_objective?: string;
+  replacement_source_action?: string;
+  replacement_source_target_id?: string;
+  replacement_reason?: string;
+  replacement_declared_by?: string;
+  replacement_note?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -544,6 +560,14 @@ export type ContinuityBriefingFocusItem = {
   last_recovery_actor?: string;
   last_recovery_source_status?: string;
   last_recovery_at?: string;
+  replacement_for_mission_id?: string;
+  replacement_for_status?: string;
+  replacement_source_objective?: string;
+  replacement_source_action?: string;
+  replacement_source_target_id?: string;
+  replacement_reason?: string;
+  replacement_declared_by?: string;
+  replacement_note?: string;
   deadletter_reason?: string;
   history_count?: number;
   latest_history_event?: string;
@@ -567,6 +591,14 @@ export type ContinuityBriefingCompletedItem = {
   last_task_id?: string;
   last_advance_action?: string;
   last_advance_outcome?: string;
+  replacement_for_mission_id?: string;
+  replacement_for_status?: string;
+  replacement_source_objective?: string;
+  replacement_source_action?: string;
+  replacement_source_target_id?: string;
+  replacement_reason?: string;
+  replacement_declared_by?: string;
+  replacement_note?: string;
   current_task?: WorldStateMissionCurrentTask;
   history_count?: number;
   latest_history_event?: string;
@@ -1625,6 +1657,7 @@ function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary |
     last_task_next_step: safeString(raw.last_task_next_step, ""),
     last_task_updated_at: safeString(raw.last_task_updated_at, ""),
     ...parseMissionRecoveryReviewFields(raw),
+    ...parseMissionReplacementLineageFields(raw),
     created_at: safeString(raw.created_at, ""),
     updated_at: safeString(raw.updated_at, ""),
     terminal: safeBoolean(raw.terminal, false),
@@ -1814,6 +1847,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_history_ts: safeString(item.latest_history_ts, ""),
         history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
         ...parseMissionRecoveryReviewFields(item),
+        ...parseMissionReplacementLineageFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1862,6 +1896,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_history_ts: safeString(item.latest_history_ts, ""),
         history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
         ...parseMissionRecoveryReviewFields(item),
+        ...parseMissionReplacementLineageFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -1910,6 +1945,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_history_ts: safeString(item.latest_history_ts, ""),
         history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
         ...parseMissionRecoveryReviewFields(item),
+        ...parseMissionReplacementLineageFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
@@ -2197,6 +2233,19 @@ function parseMissionRecoveryReviewFields(raw: Record<string, unknown>) {
   };
 }
 
+function parseMissionReplacementLineageFields(raw: Record<string, unknown>) {
+  return {
+    replacement_for_mission_id: safeString(raw["replacement_for_mission_id"], ""),
+    replacement_for_status: safeString(raw["replacement_for_status"], ""),
+    replacement_source_objective: safeString(raw["replacement_source_objective"], ""),
+    replacement_source_action: safeString(raw["replacement_source_action"], ""),
+    replacement_source_target_id: safeString(raw["replacement_source_target_id"], ""),
+    replacement_reason: safeString(raw["replacement_reason"], ""),
+    replacement_declared_by: safeString(raw["replacement_declared_by"], ""),
+    replacement_note: safeString(raw["replacement_note"], ""),
+  };
+}
+
 function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw["id"], "").trim();
@@ -2243,6 +2292,7 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     last_advance_applied: safeBoolean(raw["last_advance_applied"], false),
     last_advance_at: safeString(raw["last_advance_at"], ""),
     ...parseMissionRecoveryReviewFields(raw),
+    ...parseMissionReplacementLineageFields(raw),
     deadletter_reason: safeString(raw["deadletter_reason"], ""),
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),
@@ -2267,6 +2317,7 @@ function parseContinuityCompletedItem(raw: unknown): ContinuityBriefingCompleted
     last_task_id: safeString(raw["last_task_id"], ""),
     last_advance_action: safeString(raw["last_advance_action"], ""),
     last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
+    ...parseMissionReplacementLineageFields(raw),
     current_task: parseWorldStateMissionCurrentTask(raw["current_task"]),
     history_count: safeNumber(raw["history_count"], 0),
     latest_history_event: safeString(raw["latest_history_event"], ""),

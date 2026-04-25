@@ -547,6 +547,19 @@ def _recovery_projection(
     }
 
 
+def _replacement_lineage_projection(meta: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "replacement_for_mission_id": str(meta.get("replacement_for_mission_id") or "").strip(),
+        "replacement_for_status": str(meta.get("replacement_for_status") or "").strip(),
+        "replacement_source_objective": str(meta.get("replacement_source_objective") or "").strip(),
+        "replacement_source_action": str(meta.get("replacement_source_action") or "").strip(),
+        "replacement_source_target_id": str(meta.get("replacement_source_target_id") or "").strip(),
+        "replacement_reason": str(meta.get("replacement_reason") or "").strip(),
+        "replacement_declared_by": str(meta.get("replacement_declared_by") or "").strip(),
+        "replacement_note": str(meta.get("replacement_note") or "").strip(),
+    }
+
+
 def _first_text(*values: Any) -> str:
     for value in values:
         text = str(value or "").strip()
@@ -651,6 +664,7 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "last_recovery_actor": str(meta.get("last_recovery_actor") or "").strip(),
         "last_recovery_source_status": str(meta.get("last_recovery_source_status") or "").strip(),
         "last_recovery_at": str(meta.get("last_recovery_at") or "").strip(),
+        **_replacement_lineage_projection(meta),
         "recommended_action": recommended_action,
         "operator_hint": operator_hint,
         "action_target_id": action_target_id,

@@ -24,6 +24,14 @@ export type MissionRecord = {
   last_task_gate?: string;
   last_task_next_step?: string;
   last_advance_operation_id?: string;
+  replacement_for_mission_id?: string;
+  replacement_for_status?: string;
+  replacement_source_objective?: string;
+  replacement_source_action?: string;
+  replacement_source_target_id?: string;
+  replacement_reason?: string;
+  replacement_declared_by?: string;
+  replacement_note?: string;
   created_at?: string;
   updated_at?: string;
   meta?: Record<string, unknown>;
@@ -494,6 +502,14 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
     last_task_gate: safeString(raw.last_task_gate, "") || undefined,
     last_task_next_step: safeString(raw.last_task_next_step, "") || undefined,
     last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
+    replacement_for_mission_id: safeString(raw.replacement_for_mission_id, "") || undefined,
+    replacement_for_status: safeString(raw.replacement_for_status, "") || undefined,
+    replacement_source_objective: safeString(raw.replacement_source_objective, "") || undefined,
+    replacement_source_action: safeString(raw.replacement_source_action, "") || undefined,
+    replacement_source_target_id: safeString(raw.replacement_source_target_id, "") || undefined,
+    replacement_reason: safeString(raw.replacement_reason, "") || undefined,
+    replacement_declared_by: safeString(raw.replacement_declared_by, "") || undefined,
+    replacement_note: safeString(raw.replacement_note, "") || undefined,
     created_at: safeString(raw.created_at, "") || undefined,
     updated_at: safeString(raw.updated_at, "") || undefined,
     meta: isRecord(raw.meta) ? raw.meta : undefined,

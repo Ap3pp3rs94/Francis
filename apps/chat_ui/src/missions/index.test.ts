@@ -497,6 +497,12 @@ test("MissionsClient.replace posts a bounded replacement declaration and preserv
         id: "msn_replacement",
         status: "queued",
         objective: "Replacement mission",
+        replacement_for_mission_id: "msn_failed",
+        replacement_for_status: "failed",
+        replacement_source_action: "retry_or_deadletter",
+        replacement_source_target_id: "tsk_failed",
+        replacement_reason: "failed source receipts",
+        replacement_declared_by: "chat_ui.orb",
         meta: {
           replacement_for_mission_id: "msn_failed",
           replacement_source_action: "retry_or_deadletter",
@@ -543,6 +549,9 @@ test("MissionsClient.replace posts a bounded replacement declaration and preserv
     assert.equal(response.source_queue_item?.recovery?.last_review_target_id, "msn_replacement");
     assert.equal(response.source_queue_item?.recovery?.automatic_retry, false);
     assert.equal(response.mission?.id, "msn_replacement");
+    assert.equal(response.mission?.replacement_for_mission_id, "msn_failed");
+    assert.equal(response.mission?.replacement_source_action, "retry_or_deadletter");
+    assert.equal(response.mission?.replacement_source_target_id, "tsk_failed");
     assert.equal(response.mission?.meta?.replacement_for_mission_id, "msn_failed");
     assert.equal(response.history?.[1]?.event, "replacement_declared");
     assert.equal(response.linked_operations?.length, 0);

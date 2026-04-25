@@ -818,6 +818,11 @@ def test_mission_replace_declares_bounded_replacement_from_failed_source(monkeyp
     assert replacement["meta"]["replacement_source_action"] == "retry_or_deadletter"
     assert replacement["meta"]["replacement_source_target_id"] == "tsk_failed_replacement"
     assert replacement["meta"]["replacement_declared_by"] == "test.missions.replace"
+    assert replacement["replacement_for_mission_id"] == mission_id
+    assert replacement["replacement_for_status"] == "failed"
+    assert replacement["replacement_source_action"] == "retry_or_deadletter"
+    assert replacement["replacement_source_target_id"] == "tsk_failed_replacement"
+    assert replacement["replacement_declared_by"] == "test.missions.replace"
     assert body["linked_operations"] == []
     assert body["run_ledger"] == []
 

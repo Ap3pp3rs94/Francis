@@ -98,6 +98,12 @@ terminal recovery state, receives a `recovery_review` receipt with outcome
 metadata linking it to the source mission, action, target, actor, and reason. No
 linked task is retried or run automatically by this path.
 
+As of `2026-04-25`, replacement mission lineage is visible without raw metadata
+inspection. Mission detail/list payloads, queue items, world-state recent/queue
+surfaces, continuity focus items, and the selected ORB mission inspector can
+surface the replacement source mission id, source status, recovery action,
+source target, reason, actor, and note as bounded fields.
+
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
 return the current mission history, linked operations, run-ledger projection, and
@@ -1466,6 +1472,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 replacement lineage visibility slice:
+
+- `pytest tests/test_api_missions.py::test_mission_replace_declares_bounded_replacement_from_failed_source tests/test_api_system_settings.py::test_system_world_state_projects_mission_queue_and_deadletter_preview tests/test_api_continuity.py::test_continuity_briefing_focus_preserves_replacement_lineage -q`
+  Result: `3 passed`
+- `cd apps/chat_ui; npm test -- missions settings`
+  Result: `22 passed`
+- `.\.venv\Scripts\python.exe -m ruff check src/francis/missions/store.py src/francis/missions/__init__.py src/francis/api/routes/missions.py src/francis/world_state/snapshot.py tests/test_api_missions.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src/francis/missions/store.py src/francis/missions/__init__.py src/francis/api/routes/missions.py src/francis/world_state/snapshot.py tests/test_api_missions.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `7 files already formatted`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 replacement mission declaration slice:
 

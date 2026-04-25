@@ -250,6 +250,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 task_status: "accepted",
                 latest_receipt_event: "created",
               },
+              replacement_for_mission_id: "mission_failed_source",
+              replacement_for_status: "failed",
+              replacement_source_action: "retry_or_deadletter",
+              replacement_source_target_id: "tsk_failed_source",
+              replacement_reason: "source operation failed before replacement",
+              replacement_declared_by: "chat_ui.orb",
             },
           ],
           mission_queue: [
@@ -311,6 +317,12 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 approval_id: "apr_queue_exact",
                 approval_status: "pending",
               },
+              replacement_for_mission_id: "mission_failed_source",
+              replacement_for_status: "failed",
+              replacement_source_action: "retry_or_deadletter",
+              replacement_source_target_id: "tsk_failed_source",
+              replacement_reason: "source operation failed before replacement",
+              replacement_declared_by: "chat_ui.orb",
               history_count: 2,
               latest_history_event: "mission_ticked",
               latest_history_ts: "2026-04-14T07:45:00Z",
@@ -527,6 +539,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_event, "created");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_source_action, "retry_or_deadletter");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_source_target_id, "tsk_failed_source");
     assert.equal(worldState.overview?.mission_queue?.[0]?.current_task?.operation_id, "tsk_blocked");
     assert.equal(worldState.overview?.mission_queue?.[0]?.current_task?.approval_id, "apr_queue_exact");
     assert.equal(worldState.overview?.mission_queue?.[0]?.current_task?.gate, "trust_gate");
@@ -550,6 +565,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.action, "raise_trust_or_reduce_risk");
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.target_id, "tsk_blocked");
     assert.equal(worldState.overview?.mission_queue?.[0]?.history_count, 2);
+    assert.equal(worldState.overview?.mission_queue?.[0]?.replacement_for_mission_id, "mission_failed_source");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.replacement_for_status, "failed");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.replacement_declared_by, "chat_ui.orb");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_event, "mission_ticked");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_ts, "2026-04-14T07:45:00Z");
     assert.equal(worldState.overview?.mission_queue?.[0]?.history_tail?.[1]?.event, "mission_ticked");
@@ -1022,6 +1040,12 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               last_task_approval_id: "apr_focus_exact",
               last_task_previous_approval_id: "apr_focus_previous",
               last_task_approval_status: "pending",
+              replacement_for_mission_id: "mission_failed_source",
+              replacement_for_status: "failed",
+              replacement_source_action: "retry_or_deadletter",
+              replacement_source_target_id: "tsk_failed_source",
+              replacement_reason: "source operation failed before replacement",
+              replacement_declared_by: "chat_ui.orb",
               history_count: 3,
               latest_history_event: "mission_ticked",
               latest_history_ts: "2026-04-14T06:30:00Z",
@@ -1213,6 +1237,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_id, "apr_focus_exact");
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_previous_approval_id, "apr_focus_previous");
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_status, "pending");
+    assert.equal(briefing.briefing?.focus?.[0]?.replacement_for_mission_id, "mission_failed_source");
+    assert.equal(briefing.briefing?.focus?.[0]?.replacement_source_action, "retry_or_deadletter");
+    assert.equal(briefing.briefing?.focus?.[0]?.replacement_source_target_id, "tsk_failed_source");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.operation_id, "tsk_focus");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.approval_id, "apr_focus_exact");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.handoff_action, "review_pending_approval");

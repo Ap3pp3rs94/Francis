@@ -765,6 +765,19 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert failed_tick.status_code == 200
     assert failed_tick.json()["mission"]["status"] == "failed"
 
+    replacement = client.post(
+        f"/missions/{failed_id}/replace",
+        json={
+            "objective": "Replacement mission from failed preview",
+            "actor": "test.system.queue",
+            "note": "world state lineage projection",
+        },
+    )
+    assert replacement.status_code == 200
+    replacement_body = replacement.json()
+    assert replacement_body["ok"] is True
+    replacement_id = str(replacement_body["replacement_mission_id"])
+
     deadlettered = client.post(
         f"/missions/{dead_id}/deadletter",
         json={"reason": "manual_cleanup", "actor": "test.system.queue"},
@@ -797,6 +810,17 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert ready_item["latest_activity"] == {}
     assert ready_item["current_task"]["source"] == "mission"
     assert ready_item["current_task"]["handoff_action"] == "create_first_operation"
+    replacement_item = next(item for item in queue_items if item["id"] == replacement_id)
+    assert replacement_item["status"] == "queued"
+    assert replacement_item["replacement_for_mission_id"] == failed_id
+    assert replacement_item["replacement_for_status"] == "failed"
+    assert replacement_item["replacement_source_action"] == "retry_or_deadletter"
+    assert replacement_item["replacement_source_target_id"] == failed_operation_id
+    assert replacement_item["replacement_declared_by"] == "test.system.queue"
+    assert replacement_item["linked_task_ids"] == []
+    recent_replacement = next(item for item in body["overview"]["recent_missions"] if item["id"] == replacement_id)
+    assert recent_replacement["replacement_for_mission_id"] == failed_id
+    assert recent_replacement["replacement_source_action"] == "retry_or_deadletter"
     failed_items = body["overview"]["failed_missions"]
     assert failed_items
     assert failed_items[0]["id"] == failed_id
@@ -804,6 +828,8 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert failed_items[0]["recovery"]["source_status"] == "failed"
     assert failed_items[0]["recovery"]["action"] == "retry_or_deadletter"
     assert failed_items[0]["recovery"]["target_id"] == failed_operation_id
+    assert failed_items[0]["recovery"]["last_review_outcome"] == "replacement_declared"
+    assert failed_items[0]["recovery"]["last_review_target_id"] == replacement_id
     assert failed_items[0]["recovery"]["operator_required"] is True
     assert failed_items[0]["recovery"]["automatic_retry"] is False
     assert failed_items[0]["current_task"]["operation_id"] == failed_operation_id
