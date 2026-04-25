@@ -4873,7 +4873,7 @@ function SystemPanel(props: {
                       approval=<code>{approvalId}</code>
                       {approvalStatus ? (
                         <>
-                          {" / "}status=<code>{approvalStatus}</code>
+                          {" / "}approval_status=<code>{approvalStatus}</code>
                         </>
                       ) : null}
                     </div>
@@ -6969,7 +6969,7 @@ function SystemPanel(props: {
                                 approval=<code>{queueApprovalId}</code>
                                 {queueApprovalStatus ? (
                                   <>
-                                    {" / "}status=<code>{queueApprovalStatus}</code>
+                                    {" / "}approval_status=<code>{queueApprovalStatus}</code>
                                   </>
                                 ) : null}
                               </>
@@ -7198,7 +7198,7 @@ function SystemPanel(props: {
                         approval=<code>{queueApprovalId}</code>
                         {queueApprovalStatus ? (
                           <>
-                            {" / "}status=<code>{queueApprovalStatus}</code>
+                            {" / "}approval_status=<code>{queueApprovalStatus}</code>
                           </>
                         ) : null}
                       </div>

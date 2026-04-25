@@ -655,6 +655,20 @@ see what happened after a source mission declared replacement work:
   and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is approval-status label parity across mission cards. This advances
+the active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE`
+line by making compact briefing and queue surfaces use the same approval
+language as the selected mission inspector:
+
+- `apps/chat_ui/src/App.tsx` now renders explicit `approval_status` labels in
+  Shift Briefing focus cards, mission queue-run result cards, and Mission Queue
+  cards when approval posture is available.
+- This keeps compact operator surfaces aligned with the selected mission ORB
+  Loop State inspector instead of relying on a generic `status` label.
+- No mutation or execution path changed; this only clarifies already-projected
+  approval posture in the UI.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1873,6 +1887,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 approval-status label parity slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `24 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 approved-gate mission re-entry slice:
 
