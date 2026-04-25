@@ -12,6 +12,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from francis.governance.operation_redaction import (
+    redact_operation_optional_text,
+    redact_operation_text,
+    redact_operation_value,
+)
 from francis.kernel.paths import data_dir
 
 logger = logging.getLogger(__name__)
@@ -105,7 +110,7 @@ class DelegationRecord:
             priority=int(data.get("priority", 5)),
             ttl_sec=int(data.get("ttl_sec", 3600)),
             assigned_to=(str(data["assigned_to"]) if data.get("assigned_to") else None),
-            status_reason=(str(data["status_reason"]) if data.get("status_reason") else None),
+            status_reason=redact_operation_optional_text(data.get("status_reason")),
             attempts=int(data.get("attempts", 0)),
             result=(dict(data["result"]) if isinstance(data.get("result"), dict) else None),
         )
@@ -184,7 +189,13 @@ def _atomic_write_text(path: Path, text: str) -> None:
 
 
 def _append_audit(task_id: str, event: str, details: dict[str, Any], repo_root: Path | None = None) -> None:
-    line = {"ts": _now(), "task_id": task_id, "event": event, "details": details}
+    redacted_details = redact_operation_value(details)
+    line = {
+        "ts": _now(),
+        "task_id": task_id,
+        "event": event,
+        "details": redacted_details if isinstance(redacted_details, dict) else {},
+    }
     path = _audit_path(task_id, repo_root)
     _safe_mkdir(path.parent)
     with path.open("a", encoding="utf-8", newline="\n") as f:
@@ -223,7 +234,7 @@ def create_delegation(
         status=TaskStatus.PENDING,
         requester_id=request.requester_id.strip(),
         capability=request.capability.strip(),
-        objective=request.objective.strip(),
+        objective=redact_operation_text(request.objective),
         inputs=request.inputs,
         priority=int(request.priority),
         ttl_sec=int(request.ttl_sec),
@@ -280,7 +291,7 @@ def update_status(
     if assigned_to is not None:
         record.assigned_to = str(assigned_to)
     if status_reason is not None:
-        record.status_reason = str(status_reason)
+        record.status_reason = redact_operation_text(status_reason)
     if result is not None:
         record.result = result
 

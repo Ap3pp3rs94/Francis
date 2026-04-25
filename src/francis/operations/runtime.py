@@ -10,6 +10,13 @@ from typing import Any
 from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
 from francis.agent.delegation import DelegationRequest
+from francis.governance.operation_redaction import (
+    redact_operation_metadata,
+    redact_operation_optional_text,
+    redact_operation_task,
+    redact_operation_text,
+    redact_operation_value,
+)
 from francis.kernel.paths import data_dir
 from francis.missions import store as mission_store
 
@@ -222,12 +229,11 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
     updated["status"] = "accepted"
     updated["updated_at"] = _now_iso()
     payload = _result_payload(task)
-    updated["status_reason"] = (
+    updated["status_reason"] = redact_operation_optional_text(
         _safe_str(payload.get("error")).strip()
         or _safe_str(payload.get("message")).strip()
         or result_status
         or _safe_str(task.get("status_reason")).strip()
-        or None
     )
 
     inputs = dict(updated.get("inputs") or {}) if isinstance(updated.get("inputs"), dict) else {}
@@ -260,7 +266,7 @@ def _hold_retryable_governance_task(task_id: str, task: dict[str, Any]) -> dict[
                 "status": result_status,
                 "approval_id": approval_id or None,
                 "gate": _safe_str(governance.get("gate")).strip() or None,
-                "next_step": _safe_str(governance.get("next_step")).strip() or None,
+                "next_step": redact_operation_optional_text(governance.get("next_step")),
                 "reason": updated.get("status_reason"),
             },
         )
@@ -290,17 +296,16 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     ts = _parse_iso_to_unix(updated_at) or _parse_iso_to_unix(created_at) or int(datetime.now(UTC).timestamp())
 
     result_obj = task.get("result") if isinstance(task.get("result"), dict) else {}
-    output = result_obj.get("data")
+    output = redact_operation_value(result_obj.get("data"))
     result_status = _result_status(task)
     governance = _result_governance(task)
     approval_id = _result_approval_id(task)
-    error = _safe_str(task.get("status_reason")).strip() or None
+    error = redact_operation_optional_text(task.get("status_reason"))
     if not error:
-        error = _safe_str(
+        error = redact_operation_optional_text(
             (result_obj.get("data") or {}).get("error") if isinstance(result_obj.get("data"), dict) else ""
         )
-        error = error or None
-    result_message = _safe_str(
+    result_message = redact_operation_text(
         (result_obj.get("data") or {}).get("message") if isinstance(result_obj.get("data"), dict) else ""
     )
     orb_plane = _operation_plane(raw_status, result_status, governance)
@@ -315,13 +320,13 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         "level": "error" if op_status in {"failed", "blocked"} else "warning" if governance else "info",
         "actor": _safe_str(task.get("requester_id")).strip() or "unknown",
         "duration_ms": None,
-        "input": task.get("inputs"),
+        "input": redact_operation_value(task.get("inputs")),
         "output": output,
         "error": error,
         "tags": task.get("tags") if isinstance(task.get("tags"), list) else None,
         "meta": {
             "raw_status": raw_status,
-            "objective": task.get("objective"),
+            "objective": redact_operation_optional_text(task.get("objective")),
             "priority": task.get("priority"),
             "ttl_sec": task.get("ttl_sec"),
             "assigned_to": task.get("assigned_to"),
@@ -332,7 +337,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
             "result_message": result_message or None,
             "approval_id": approval_id or None,
             "mission_id": mission_id or None,
-            "governance": governance or None,
+            "governance": redact_operation_value(governance) if governance else None,
             "orb_plane": orb_plane,
         },
     }
@@ -341,7 +346,9 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
 def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[str, Any]:
     ts = _parse_iso_to_unix(event.get("ts")) or int(datetime.now(UTC).timestamp())
     event_name = _safe_str(event.get("event")).strip() or "event"
-    details = event.get("details") if isinstance(event.get("details"), dict) else {}
+    raw_details = event.get("details") if isinstance(event.get("details"), dict) else {}
+    details = redact_operation_value(raw_details)
+    details = details if isinstance(details, dict) else {}
     status = "unknown"
     level = "info"
     if event_name == "created":
@@ -365,9 +372,9 @@ def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[s
         "output": details or event.get("details"),
         "meta": {
             "task_id": task_id,
-            "reason": details.get("reason") if isinstance(details, dict) else None,
-            "gate": details.get("gate") if isinstance(details, dict) else None,
-            "next_step": details.get("next_step") if isinstance(details, dict) else None,
+            "reason": redact_operation_optional_text(details.get("reason")),
+            "gate": details.get("gate"),
+            "next_step": redact_operation_optional_text(details.get("next_step")),
             "orb_plane": "P3_GOVERNANCE" if event_name == "governance_hold" else None,
         },
     }
@@ -402,7 +409,7 @@ def get_operation_detail(
     payload: dict[str, object] = {
         "ok": True,
         "operation": _task_to_operation(task),
-        "meta": {"task": task},
+        "meta": {"task": redact_operation_task(task)},
     }
     payload["logs"] = operation_logs(op_id, limit=log_limit) if include_logs else []
     return payload
@@ -470,7 +477,7 @@ def create_operation(
         }
 
     requester_id = _safe_str(actor).strip() or "api"
-    effective_objective = _safe_str(objective).strip() or _safe_str(reason).strip() or action.strip()
+    effective_objective = redact_operation_text(objective or reason or action)
     mission_ref = _safe_str(mission_id).strip()
 
     if mission_ref:
@@ -486,7 +493,7 @@ def create_operation(
     existing_meta = inputs.get("meta")
     merged_meta = dict(existing_meta) if isinstance(existing_meta, dict) else {}
     if meta:
-        merged_meta.update(meta)
+        merged_meta.update(redact_operation_metadata(meta))
     if mission_ref:
         inputs["mission_id"] = mission_ref
         merged_meta["mission_id"] = mission_ref

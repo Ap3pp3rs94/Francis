@@ -58,6 +58,98 @@ def test_operations_create_list_get_cancel(monkeypatch, tmp_path: Path) -> None:
     assert cancelled_body["status"] in {"queued", "running", "failed", "canceled", "succeeded", "unknown"}
 
 
+def test_operations_operator_surfaces_redact_secret_text(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "operator reason password=operationreasonsecret123",
+            "input": {"goal": "draft plan token=operationinputsecret123"},
+            "meta": {"ticket": "OPS-1", "operator_note": "secret=operationmetasecret123"},
+        },
+    )
+    assert created.status_code == 200
+    created_body = created.json()
+    assert created_body["ok"] is True
+    operation_id = str(created_body["operation_id"])
+    assert created_body["operation"]["meta"]["objective"] == "operator reason password=[REDACTED:secret]"
+    assert created_body["operation"]["input"]["goal"] == "draft plan token=[REDACTED:secret]"
+    assert created_body["operation"]["input"]["meta"]["operator_note"] == "secret=[REDACTED:secret]"
+    assert created_body["operation"]["input"]["meta"]["ticket"] == "OPS-1"
+
+    patched = client.patch(
+        f"/operations/{operation_id}",
+        json={
+            "note": "patch note token=operationpatchnotesecret123",
+            "meta": {"operator_note": "password=operationpatchmetasecret123"},
+        },
+    )
+    assert patched.status_code == 200
+    patched_body = patched.json()
+    assert patched_body["ok"] is True
+
+    fetched = client.get(f"/operations/{operation_id}")
+    listed = client.get("/operations/list")
+    many = client.post("/operations/get_many", json={"ids": [operation_id]})
+    exported = client.get("/operations/export?format=json")
+    assert fetched.status_code == 200
+    assert listed.status_code == 200
+    assert many.status_code == 200
+    assert exported.status_code == 200
+
+    fetched_body = fetched.json()
+    assert fetched_body["meta"]["task"]["objective"] == "operator reason password=[REDACTED:secret]"
+    assert fetched_body["meta"]["task"]["inputs"]["goal"] == "draft plan token=[REDACTED:secret]"
+    assert fetched_body["meta"]["task"]["meta"]["note"] == "patch note token=[REDACTED:secret]"
+    assert fetched_body["meta"]["task"]["meta"]["operator_note"] == "password=[REDACTED:secret]"
+
+    cancelled = client.post(
+        f"/operations/{operation_id}/cancel",
+        json={"reason": "cancel reason secret=operationcancelsecret123"},
+    )
+    assert cancelled.status_code == 200
+
+    combined_response_text = "\n".join(
+        [
+            json.dumps(created_body, sort_keys=True),
+            json.dumps(patched_body, sort_keys=True),
+            json.dumps(fetched_body, sort_keys=True),
+            json.dumps(listed.json(), sort_keys=True),
+            json.dumps(many.json(), sort_keys=True),
+            exported.text,
+            json.dumps(cancelled.json(), sort_keys=True),
+        ]
+    )
+    for raw in (
+        "operationreasonsecret123",
+        "operationinputsecret123",
+        "operationmetasecret123",
+        "operationpatchnotesecret123",
+        "operationpatchmetasecret123",
+        "operationcancelsecret123",
+    ):
+        assert raw not in combined_response_text
+
+    record_text = (data_root / "tasks" / operation_id / "record.json").read_text(encoding="utf-8")
+    audit_text = (data_root / "tasks" / operation_id / "audit.log").read_text(encoding="utf-8")
+    assert "operationreasonsecret123" not in record_text
+    assert "operationmetasecret123" not in record_text
+    assert "operationpatchnotesecret123" not in record_text
+    assert "operationpatchmetasecret123" not in record_text
+    assert "operationcancelsecret123" not in record_text
+    assert "operationcancelsecret123" not in audit_text
+    assert "operationinputsecret123" in record_text
+
+
 def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
