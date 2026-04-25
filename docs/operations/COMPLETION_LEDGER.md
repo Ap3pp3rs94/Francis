@@ -353,6 +353,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is the positive ready-state continuity contract. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY` line by proving the mission
+readiness model can reach a fully satisfied state from real API paths:
+
+- `tests/test_api_continuity.py` now constructs a completed mission plus a clean
+  deadlettered mission through the public mission APIs.
+- The resulting continuity briefing must report Stage 3 mission readiness
+  `ready`, `5/5` criteria satisfied, and empty blocked/attention/review
+  closure lists.
+- The test asserts the ready state is backed by tick evidence, persisted mission
+  history, reconstruction context, and clean deadletter evidence instead of a
+  hand-written readiness fixture.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is readiness closure blocker disclosure. This advances the active
 `Phase 2 / P8_MEMORY -> P1_INTERFACE` line by making Stage 3 readiness summaries
 name their own unresolved closure criteria:
@@ -1621,6 +1635,15 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 positive ready-state continuity contract slice:
+
+- `python -m pytest tests/test_api_continuity.py::test_continuity_briefing_reports_ready_stage3_mission_posture tests/test_api_continuity.py::test_continuity_briefing_marks_clean_deadletter_readiness -q`
+  Result: `2 passed`
+- `python -m ruff check tests/test_api_continuity.py`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 readiness closure blocker disclosure slice:
 

@@ -664,6 +664,94 @@ def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_p
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["missing_history_ids"] == []
 
 
+def test_continuity_briefing_reports_ready_stage3_mission_posture(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    completed = client.post(
+        "/missions/create",
+        json={
+            "objective": "Complete Stage 3 readiness proof mission",
+            "summary": "This mission proves tick, completion, history, and reconstruction context.",
+            "requester_id": "test.continuity.stage3.ready",
+        },
+    )
+    assert completed.status_code == 200
+    completed_id = str(completed.json()["mission_id"])
+
+    first_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.continuity.stage3.ready"},
+    )
+    assert first_advance.status_code == 200
+    assert first_advance.json()["ok"] is True
+    assert first_advance.json()["applied"] is True
+
+    second_advance = client.post(
+        f"/missions/{completed_id}/advance",
+        json={"actor": "test.continuity.stage3.ready", "worker_id": "test.continuity.stage3.ready"},
+    )
+    assert second_advance.status_code == 200
+    assert second_advance.json()["ok"] is True
+    assert second_advance.json()["applied"] is True
+
+    deadlettered = client.post(
+        "/missions/create",
+        json={
+            "objective": "Deadletter Stage 3 readiness proof mission",
+            "summary": "This mission proves clean deadletter evidence.",
+            "requester_id": "test.continuity.stage3.ready",
+        },
+    )
+    assert deadlettered.status_code == 200
+    deadlettered_id = str(deadlettered.json()["mission_id"])
+
+    reviewed_deadletter = client.post(
+        f"/missions/{deadlettered_id}/deadletter",
+        json={
+            "reason": "stage3_ready_state_deadletter_contract",
+            "actor": "test.continuity.stage3.ready",
+            "note": "prove clean Stage 3 deadletter readiness",
+        },
+    )
+    assert reviewed_deadletter.status_code == 200
+    assert reviewed_deadletter.json()["ok"] is True
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+    body = response.json()
+    readiness = body["briefing"]["readiness"]
+
+    assert readiness["stage"] == "Stage 3 - Missions"
+    assert readiness["status"] == "ready"
+    assert readiness["satisfied"] == readiness["total"] == 5
+    assert readiness["blocked_criteria_ids"] == []
+    assert readiness["attention_criteria_ids"] == []
+    assert readiness["review_criteria_ids"] == []
+    assert readiness["next_action"] == "Stage 3 mission criteria are satisfied for the current local state."
+
+    mission_readiness_by_id = {item["id"]: item for item in readiness["criteria"]}
+    assert {item["status"] for item in mission_readiness_by_id.values()} == {"satisfied"}
+    assert mission_readiness_by_id["idempotent_ticks"]["evidence"]["mission_ticked_count"] >= 1
+    assert completed_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_history"]
+    assert deadlettered_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_history"]
+    assert completed_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["context_mission_ids"]
+    assert deadlettered_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["context_mission_ids"]
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_deadletter_ids"] == [deadlettered_id]
+
+
 def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"
