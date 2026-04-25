@@ -19,6 +19,12 @@ router = APIRouter()
 
 _CREDENTIAL_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _ALLOWED_STATUS = {"active", "revoked", "expired", "pending", "error"}
+_SENSITIVE_META_KEY_RE = re.compile(
+    r"(api[_-]?key|apikey|access[_-]?key|auth[_-]?token|bearer|client[_-]?secret|password|private[_-]?key|"
+    r"refresh[_-]?token|secret)",
+    re.IGNORECASE,
+)
+_REDACTED_SECRET = "[REDACTED:secret]"
 
 
 def _credentials_dir() -> Path:
@@ -173,6 +179,59 @@ def _hint_for_credential(credential_id: str, provider: str) -> str:
     return f"...{tail}"
 
 
+def _redact_secret_text(value: str) -> str:
+    out = re.sub(
+        r"(?i)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})",
+        lambda match: f"{match.group(1)}={_REDACTED_SECRET}",
+        value,
+    )
+    out = re.sub(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----", _REDACTED_SECRET, out, flags=re.I)
+    out = re.sub(r"\bsk-[A-Za-z0-9]{20,}\b", _REDACTED_SECRET, out)
+    out = re.sub(r"\bghp_[A-Za-z0-9]{30,}\b", _REDACTED_SECRET, out)
+    out = re.sub(r"\bAKIA[0-9A-Z]{16}\b", _REDACTED_SECRET, out)
+    out = re.sub(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b", _REDACTED_SECRET, out)
+    return out
+
+
+def _normalize_meta_value(value: Any, *, key: str = "") -> Any:
+    if key.strip().lower() == "token" or _SENSITIVE_META_KEY_RE.search(key):
+        return _REDACTED_SECRET
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        return _redact_secret_text(value)
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for raw_key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
+            normalized_key = _safe_str(raw_key).strip()
+            if not normalized_key:
+                continue
+            normalized[normalized_key] = _normalize_meta_value(value.get(raw_key), key=normalized_key)
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [_normalize_meta_value(item, key=key) for item in value]
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+    except Exception:
+        return _redact_secret_text(_safe_str(value))
+
+
+def _credential_meta(meta: Any, *, drop_control_keys: bool = False) -> dict[str, Any]:
+    if not isinstance(meta, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for raw_key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
+        key = _safe_str(raw_key).strip()
+        if not key:
+            continue
+        if drop_control_keys and key in {"approval_id", "force"}:
+            continue
+        normalized[key] = _normalize_meta_value(meta.get(raw_key), key=key)
+    return normalized
+
+
 def _normalize_credential_record(credential_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     created_ts = int(raw.get("created_ts") or _now_s())
     last_used_ts = int(raw.get("last_used_ts") or 0)
@@ -192,7 +251,7 @@ def _normalize_credential_record(credential_id: str, raw: dict[str, Any]) -> dic
         "label": _safe_str(raw.get("label")).strip() or credential_id,
         "fingerprint": _safe_str(raw.get("fingerprint")).strip() or "",
         "hint": _safe_str(raw.get("hint")).strip() or _hint_for_credential(credential_id, provider),
-        "meta": dict(raw.get("meta") or {}) if isinstance(raw.get("meta"), dict) else {},
+        "meta": _credential_meta(raw.get("meta")),
     }
     return out
 
@@ -797,6 +856,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
         cred_type = _safe_str(payload.type).strip().lower() or "api_key"
         reason = _safe_str(payload.reason).strip() or "requested"
         label = _safe_str(payload.label).strip() or f"{provider or 'credential'}:{scope_id}"
+        request_meta = _credential_meta(payload.meta, drop_control_keys=True)
 
         request_id = _new_request_id("creq")
         approval = approval_store.request(
@@ -808,7 +868,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                 "type": cred_type,
                 "label": label,
                 "request_id": request_id,
-                "meta": dict(payload.meta or {}),
+                "meta": request_meta,
             },
         )
         approval_id = _safe_str(approval.get("id")).strip()
@@ -821,7 +881,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
             "type": cred_type,
             "label": label,
             "request_id": request_id,
-            "meta": dict(payload.meta or {}),
+            "meta": request_meta,
         }
         _atomic_write_json(
             _approval_artifact_dir(approval_id) / "request.json",
@@ -848,7 +908,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                 "label": label,
                 "hint": _hint_for_credential(credential_id, provider),
                 "meta": {
-                    **dict(payload.meta or {}),
+                    **request_meta,
                     "request_id": request_id,
                     "approval_id": approval_id,
                     "reason": reason,

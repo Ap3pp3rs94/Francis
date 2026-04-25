@@ -98,6 +98,88 @@ def test_credentials_request_revoke_and_scopes(monkeypatch, tmp_path: Path) -> N
     assert credential_id in registry["credentials"]
 
 
+def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approval_surfaces(
+    monkeypatch, tmp_path: Path
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_openai_key = "sk-" + ("a" * 32)
+    raw_github_pat = "ghp_" + ("b" * 36)
+    raw_password = "supersecret123"
+
+    requested = client.post(
+        "/credentials/request",
+        json={
+            "scope_id": "openai_readonly",
+            "provider": "openai",
+            "type": "api_key",
+            "label": "OpenAI Redacted",
+            "reason": "secret_redaction_contract",
+            "meta": {
+                "ticket": "FR-SEC",
+                "api_key": raw_openai_key,
+                "approval_id": "spoofed-control-key",
+                "nested": {"refresh_token": raw_github_pat},
+                "note": f"operator note password={raw_password}",
+                "token_count": 42,
+            },
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    assert requested_body["ok"] is True
+    credential_id = str(requested_body["id"])
+    approval_id = str(requested_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "credentials" / "approvals" / approval_id / "request.json"
+    registry_path = data_root / "credentials" / "_registry.json"
+    assert approval_path.exists()
+    assert artifact_path.exists()
+    assert registry_path.exists()
+
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval_meta = approval_payload["payload"]["meta"]
+    assert approval_meta["ticket"] == "FR-SEC"
+    assert approval_meta["api_key"] == "[REDACTED:secret]"
+    assert approval_meta["nested"]["refresh_token"] == "[REDACTED:secret]"
+    assert approval_meta["note"] == "operator note password=[REDACTED:secret]"
+    assert approval_meta["token_count"] == 42
+    assert "approval_id" not in approval_meta
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["meta"] == approval_meta
+
+    listed = client.get("/credentials/list?status=pending")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == credential_id)
+    listed_meta = listed_item["meta"]
+    assert listed_meta["ticket"] == "FR-SEC"
+    assert listed_meta["api_key"] == "[REDACTED:secret]"
+    assert listed_meta["nested"]["refresh_token"] == "[REDACTED:secret]"
+    assert listed_meta["note"] == "operator note password=[REDACTED:secret]"
+    assert listed_meta["token_count"] == 42
+
+    persisted_text = "\n".join(
+        [
+            approval_path.read_text(encoding="utf-8"),
+            artifact_path.read_text(encoding="utf-8"),
+            registry_path.read_text(encoding="utf-8"),
+            json.dumps(listed.json(), ensure_ascii=False),
+        ]
+    )
+    assert raw_openai_key not in persisted_text
+    assert raw_github_pat not in persisted_text
+    assert raw_password not in persisted_text
+
+
 def test_credentials_request_approval_reconciles_active_status(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

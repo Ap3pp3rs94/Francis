@@ -56,6 +56,14 @@ This matches the current canonical build priority in `docs/BUILD_ORDER.md`:
 2. complete the end-to-end plan -> gate -> execute -> trace -> memory loop
 3. expose that loop clearly in the chat UI
 
+As of `2026-04-25`, credential request metadata has a bounded secret-redaction
+contract at the identity/governance boundary. Sensitive metadata keys and
+secret-like string values are redacted before credential request data reaches
+approval records, approval artifacts, credential registry state, or credential
+list responses, while non-sensitive audit context such as ticket ids remains
+inspectable. `tests/test_api_credentials.py` proves raw OpenAI-key-like,
+GitHub-token-like, and password-like values do not appear in those surfaces.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt
