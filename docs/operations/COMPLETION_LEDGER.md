@@ -275,6 +275,12 @@ reason, and last advance operation id, and the chat UI mission client preserves
 those fields so current-task selectors can rely on the mission record contract
 when queue context is not present.
 
+As of `2026-04-25`, the selected mission inspector also reads those direct
+mission current-task fields before falling back to legacy `meta`. Latest run,
+result, gate, and reason badges in the ORB mission detail surface now follow
+the mission record contract instead of requiring callers to know where the
+backend used to store those values internally.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

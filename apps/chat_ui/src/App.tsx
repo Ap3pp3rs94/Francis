@@ -3502,6 +3502,14 @@ function SystemPanel(props: {
   const missionSelectionKey = missionSelectionCandidates.join("|");
   const selectedMission = missionDetail?.mission;
   const selectedMissionMeta = isRecord(selectedMission?.meta) ? selectedMission.meta : {};
+  const selectedMissionLastTaskStatus =
+    safeString(selectedMission?.last_task_status).trim() || safeString(selectedMissionMeta.last_task_status).trim();
+  const selectedMissionLastTaskResultStatus =
+    safeString(selectedMission?.last_task_result_status).trim() || safeString(selectedMissionMeta.last_task_result_status).trim();
+  const selectedMissionLastTaskGate =
+    safeString(selectedMission?.last_task_gate).trim() || safeString(selectedMissionMeta.last_task_gate).trim();
+  const selectedMissionLastTaskReason =
+    safeString(selectedMission?.last_task_reason).trim() || safeString(selectedMissionMeta.last_task_reason).trim();
   const selectedMissionContextId = safeString(selectedMission?.id).trim() || selectedMissionId;
   const missionLinkedOperations = missionDetail?.linked_operations ?? [];
   const missionRunLedger = missionDetail?.run_ledger ?? [];
@@ -5288,19 +5296,19 @@ function SystemPanel(props: {
               {selectedMission.summary ? <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>{selectedMission.summary}</div> : null}
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                 next_step=<code>{selectedMission.next_step || "unset"}</code>
-                {safeString(selectedMissionMeta.last_task_status).trim() ? (
+                {selectedMissionLastTaskStatus ? (
                   <>
-                    {" / "}latest_run=<code>{safeString(selectedMissionMeta.last_task_status).trim()}</code>
+                    {" / "}latest_run=<code>{selectedMissionLastTaskStatus}</code>
                   </>
                 ) : null}
-                {safeString(selectedMissionMeta.last_task_result_status).trim() ? (
+                {selectedMissionLastTaskResultStatus ? (
                   <>
-                    {" / "}result=<code>{safeString(selectedMissionMeta.last_task_result_status).trim()}</code>
+                    {" / "}result=<code>{selectedMissionLastTaskResultStatus}</code>
                   </>
                 ) : null}
-                {safeString(selectedMissionMeta.last_task_gate).trim() ? (
+                {selectedMissionLastTaskGate ? (
                   <>
-                    {" / "}gate=<code>{safeString(selectedMissionMeta.last_task_gate).trim()}</code>
+                    {" / "}gate=<code>{selectedMissionLastTaskGate}</code>
                   </>
                 ) : null}
               </div>
@@ -5322,8 +5330,8 @@ function SystemPanel(props: {
                   ))}
                 </div>
               ) : null}
-              {safeString(selectedMissionMeta.last_task_reason).trim() ? (
-                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{safeString(selectedMissionMeta.last_task_reason).trim()}</div>
+              {selectedMissionLastTaskReason ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{selectedMissionLastTaskReason}</div>
               ) : null}
               {selectedMission.deadletter_reason ? (
                 <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{selectedMission.deadletter_reason}</div>
