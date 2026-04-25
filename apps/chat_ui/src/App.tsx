@@ -9280,6 +9280,44 @@ function OperationsPanel(props: {
   const canRunSelected = (selectedStatus === "queued" || selectedStatus === "blocked") && runSelectedBlockedReason.length === 0;
   const canCancelSelected = selectedStatus === "queued" || selectedStatus === "running" || selectedStatus === "blocked";
 
+  const loadSelectedMissionDetail = useCallback(
+    async (missionId: string, opts?: { apply?: () => boolean; showBusy?: boolean }) => {
+      const cleaned = safeString(missionId).trim();
+      if (!cleaned) {
+        setSelectedMissionDetail(null);
+        setSelectedMissionDetailError(null);
+        setSelectedMissionDetailBusy(false);
+        return null;
+      }
+      const showBusy = opts?.showBusy !== false;
+      if (showBusy) setSelectedMissionDetailBusy(true);
+      setSelectedMissionDetailError(null);
+      try {
+        const nextDetail = await missionsClient.get(cleaned, { timeoutMs: 10_000 });
+        if (opts?.apply && !opts.apply()) return nextDetail;
+        setSelectedMissionDetail(nextDetail);
+        setSelectedMissionDetailError(nextDetail.ok ? null : nextDetail.error || "Linked mission detail unavailable.");
+        return nextDetail;
+      } catch (err) {
+        if (opts?.apply && !opts.apply()) return null;
+        const msg =
+          err instanceof MissionsApiError
+            ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+            : err instanceof Error
+              ? err.message
+              : "Linked mission detail request failed.";
+        setSelectedMissionDetail(null);
+        setSelectedMissionDetailError(msg);
+        return null;
+      } finally {
+        if (!opts?.apply || opts.apply()) {
+          if (showBusy) setSelectedMissionDetailBusy(false);
+        }
+      }
+    },
+    [missionsClient],
+  );
+
   useEffect(() => {
     if (!selectedMissionId) {
       setSelectedMissionDetail(null);
@@ -9289,36 +9327,12 @@ function OperationsPanel(props: {
     }
 
     let cancelled = false;
-    setSelectedMissionDetailBusy(true);
-    setSelectedMissionDetailError(null);
-
-    const loadLinkedMission = async () => {
-      try {
-        const nextDetail = await missionsClient.get(selectedMissionId, { timeoutMs: 10_000 });
-        if (cancelled) return;
-        setSelectedMissionDetail(nextDetail);
-        setSelectedMissionDetailError(nextDetail.ok ? null : nextDetail.error || "Linked mission detail unavailable.");
-      } catch (err) {
-        if (cancelled) return;
-        const msg =
-          err instanceof MissionsApiError
-            ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
-            : err instanceof Error
-              ? err.message
-              : "Linked mission detail request failed.";
-        setSelectedMissionDetail(null);
-        setSelectedMissionDetailError(msg);
-      } finally {
-        if (!cancelled) setSelectedMissionDetailBusy(false);
-      }
-    };
-
-    void loadLinkedMission();
+    void loadSelectedMissionDetail(selectedMissionId, { apply: () => !cancelled });
 
     return () => {
       cancelled = true;
     };
-  }, [missionsClient, selectedMissionId]);
+  }, [loadSelectedMissionDetail, selectedMissionId]);
 
   const runWorkerCycle = useCallback(async () => {
     if (!canRunWorkerCycle) return;
@@ -9338,7 +9352,11 @@ function OperationsPanel(props: {
       });
       await refresh();
       if (selectedOperationId) {
-        await loadDetail(selectedOperationId);
+        const nextDetail = await loadDetail(selectedOperationId);
+        const bridgeMissionId = operationMissionId(nextDetail?.operation) || selectedMissionId;
+        if (bridgeMissionId) {
+          await loadSelectedMissionDetail(bridgeMissionId, { showBusy: false });
+        }
       }
       if (!response.ok) {
         setWorkerCycleNotice({
@@ -9358,7 +9376,18 @@ function OperationsPanel(props: {
     } finally {
       setWorkerCycleBusy(false);
     }
-  }, [canRunWorkerCycle, client, loadDetail, operationsError, refresh, selectedOperationId, workerProfile, workerRunMode]);
+  }, [
+    canRunWorkerCycle,
+    client,
+    loadDetail,
+    loadSelectedMissionDetail,
+    operationsError,
+    refresh,
+    selectedMissionId,
+    selectedOperationId,
+    workerProfile,
+    workerRunMode,
+  ]);
 
   const submitComposedRequest = useCallback(
     async (runImmediately: boolean) => {
@@ -9439,6 +9468,10 @@ function OperationsPanel(props: {
         setSelectedOperationId(createdOperationId);
         await refresh();
         const createdDetail = await loadDetail(createdOperationId);
+        const createdBridgeMissionId = missionId || operationMissionId(createdDetail?.operation);
+        if (createdBridgeMissionId) {
+          await loadSelectedMissionDetail(createdBridgeMissionId, { showBusy: false });
+        }
 
         if (runImmediately) {
           const runResponse = await client.run(createdOperationId, { worker_id: "chat_ui.operations" });
@@ -9447,6 +9480,10 @@ function OperationsPanel(props: {
           }
           await refresh();
           const nextDetail = await loadDetail(createdOperationId);
+          const runBridgeMissionId = missionId || operationMissionId(nextDetail?.operation);
+          if (runBridgeMissionId) {
+            await loadSelectedMissionDetail(runBridgeMissionId, { showBusy: false });
+          }
           const resolvedApprovalId =
             safeString(runResponse.operation?.meta?.approval_id) ||
             safeString(isRecord(runResponse.operation?.output) ? runResponse.operation?.output.approval_id : "") ||
@@ -9506,6 +9543,7 @@ function OperationsPanel(props: {
       composerReason,
       composerRiskTier,
       loadDetail,
+      loadSelectedMissionDetail,
       missionsClient,
       refresh,
       upsertOperation,
@@ -9526,6 +9564,10 @@ function OperationsPanel(props: {
         nextDetail?.operation.status ?? response.operation?.status ?? response.status,
         "unknown",
       );
+      const bridgeMissionId = operationMissionId(nextDetail?.operation) || selectedMissionId;
+      if (bridgeMissionId) {
+        await loadSelectedMissionDetail(bridgeMissionId, { showBusy: false });
+      }
       if (!response.ok) {
         setActionNotice({
           tone: "error",
@@ -9545,7 +9587,16 @@ function OperationsPanel(props: {
     } finally {
       setActionBusy("");
     }
-  }, [canRunSelected, client, loadDetail, operationsError, selectedOperationId, upsertOperation]);
+  }, [
+    canRunSelected,
+    client,
+    loadDetail,
+    loadSelectedMissionDetail,
+    operationsError,
+    selectedMissionId,
+    selectedOperationId,
+    upsertOperation,
+  ]);
 
   const cancelSelectedOperation = useCallback(async () => {
     if (!selectedOperationId || !canCancelSelected) return;
@@ -9557,6 +9608,10 @@ function OperationsPanel(props: {
       const response = await client.cancel(selectedOperationId, { reason: "cancelled_from_chat_ui" });
       const nextDetail = await loadDetail(selectedOperationId);
       const nextStatus = safeString(nextDetail?.operation.status ?? response.status, "unknown");
+      const bridgeMissionId = operationMissionId(nextDetail?.operation) || selectedMissionId;
+      if (bridgeMissionId) {
+        await loadSelectedMissionDetail(bridgeMissionId, { showBusy: false });
+      }
       if (!response.ok) {
         setActionNotice({
           tone: "error",
@@ -9570,7 +9625,7 @@ function OperationsPanel(props: {
     } finally {
       setActionBusy("");
     }
-  }, [canCancelSelected, client, loadDetail, operationsError, selectedOperationId]);
+  }, [canCancelSelected, client, loadDetail, loadSelectedMissionDetail, operationsError, selectedMissionId, selectedOperationId]);
 
   return (
     <section style={panelStyle}>

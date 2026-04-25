@@ -918,6 +918,22 @@ loop and continuity posture without forcing a raw JSON inspection:
   policy, or memory-write behavior changed; this only connects existing mission
   loop truth back to task inspection.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail mission-loop refresh fidelity. This
+advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY ->
+P1_INTERFACE` line by keeping the operation-to-mission loop bridge current after
+explicit operator actions:
+
+- `apps/chat_ui/src/App.tsx` now reuses a bounded linked-mission detail refresh
+  helper instead of only loading the bridge when the selected operation's
+  `mission_id` changes.
+- Operation Detail now refreshes the linked mission loop after `Create request`,
+  `Create + run now`, `Run now`, `Cancel`, and `Run worker cycle` paths when a
+  real linked mission id is available.
+- No operation mutation, mission mutation, approval decision, execution, shell,
+  policy, or memory-write behavior changed; this only prevents stale
+  operator-facing loop and continuity posture after live-path actions.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
