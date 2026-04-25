@@ -240,6 +240,13 @@ enrichment prefer the mission record's current task target before falling back
 to newest linked-operation receipts, so a stale linked task with a later audit
 receipt cannot mask the active blocker the operator needs to review.
 
+As of `2026-04-25`, the ORB chat UI also prefers current mission task truth for
+mission recovery links. Selected mission recovery posture, return-to-work
+mission actions, and recent mission progress cards use `last_task_id`, loop
+handoff operation, or queue actionability targets before falling back to the
+first linked task, so operators are routed to the active mission task rather
+than an older linked operation.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

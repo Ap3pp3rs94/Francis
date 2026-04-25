@@ -130,13 +130,62 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-function firstLinkedTaskId(mission: WorldStateMissionSummary | null | undefined): string {
+type MissionTargetLike = {
+  linked_task_ids?: unknown[];
+  last_task_id?: unknown;
+  meta?: Record<string, unknown>;
+};
+
+type MissionQueueTargetLike = {
+  action_target_id?: unknown;
+  last_task_id?: unknown;
+  last_advance_operation_id?: unknown;
+};
+
+function firstLinkedTaskId(mission: MissionTargetLike | null | undefined): string {
   if (!mission || !Array.isArray(mission.linked_task_ids)) return "";
   for (const taskId of mission.linked_task_ids) {
     const cleaned = safeString(taskId).trim();
     if (cleaned) return cleaned;
   }
   return "";
+}
+
+function missionCurrentTaskId(
+  mission: MissionTargetLike | null | undefined,
+  queueItem?: MissionQueueTargetLike,
+  handoff?: { operation_id?: unknown },
+): string {
+  const queueLastTaskId = safeString(queueItem?.last_task_id).trim();
+  if (queueLastTaskId) return queueLastTaskId;
+
+  const handoffOperationId = safeString(handoff?.operation_id).trim();
+  if (handoffOperationId) return handoffOperationId;
+
+  const missionLastTaskId = safeString(mission?.last_task_id).trim();
+  if (missionLastTaskId) return missionLastTaskId;
+
+  const metaLastTaskId = isRecord(mission?.meta) ? safeString(mission.meta.last_task_id).trim() : "";
+  if (metaLastTaskId) return metaLastTaskId;
+
+  const actionTargetId = safeString(queueItem?.action_target_id).trim();
+  if (actionTargetId.startsWith("tsk_")) return actionTargetId;
+
+  const lastAdvanceOperationId = safeString(queueItem?.last_advance_operation_id).trim();
+  if (lastAdvanceOperationId) return lastAdvanceOperationId;
+
+  return firstLinkedTaskId(mission);
+}
+
+function operationDetailId(detail: OperationDetail | null | undefined): string {
+  return safeString(detail?.operation?.id).trim();
+}
+
+function missionCurrentOperation(linkedOperations: OperationDetail[], currentTaskId: string): OperationRecord | null {
+  const current = currentTaskId
+    ? linkedOperations.find((detail) => operationDetailId(detail) === currentTaskId)
+    : undefined;
+  return (current ?? linkedOperations[0])?.operation ?? null;
 }
 
 function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
@@ -3364,7 +3413,7 @@ function SystemPanel(props: {
             : undefined,
     });
   } else if (leadMission) {
-    const linkedTaskId = firstLinkedTaskId(leadMission);
+    const linkedTaskId = missionCurrentTaskId(leadMission);
     const missionDetail =
       safeString(leadMission.last_task_next_step).trim() ||
       safeString(leadMission.next_step).trim() ||
@@ -3509,6 +3558,8 @@ function SystemPanel(props: {
   const missionHistory = missionDetail?.history ?? [];
   const missionLoopState: MissionLoopState | undefined = missionDetail?.loop_state;
   const missionLoopHandoff = missionLoopState?.handoff;
+  const selectedMissionQueueItem = missionDetail?.mission?.id === selectedMission?.id ? missionDetail.queue_item : undefined;
+  const selectedMissionCurrentTaskId = missionCurrentTaskId(selectedMission, selectedMissionQueueItem, missionLoopHandoff);
   const missionLoopStages = missionLoopState
     ? ([
         { key: "plan", label: "Plan", stage: missionLoopState.plan },
@@ -3518,7 +3569,7 @@ function SystemPanel(props: {
         { key: "memory", label: "Memory", stage: missionLoopState.memory },
       ] as const).filter((item) => item.stage)
     : [];
-  const primaryMissionOperation = missionLinkedOperations[0]?.operation ?? null;
+  const primaryMissionOperation = missionCurrentOperation(missionLinkedOperations, selectedMissionCurrentTaskId);
   const primaryMissionOperationStatus = operationStatus(primaryMissionOperation);
   const primaryMissionOperationApprovalId = operationApprovalId(primaryMissionOperation);
   const primaryMissionRecoverySummary =
@@ -3531,9 +3582,6 @@ function SystemPanel(props: {
           : primaryMissionOperationStatus === "failed"
             ? "The latest linked operation failed. Review the ledger and linked task before deciding whether to rerun or revise the plan."
             : "This mission is currently in a steady state. Review continuity and linked traces before changing course.";
-  const selectedMissionLatestTaskId =
-    selectedMission?.linked_task_ids?.find((taskId) => safeString(taskId).trim().length > 0) ?? "";
-  const selectedMissionQueueItem = missionDetail?.mission?.id === selectedMission?.id ? missionDetail.queue_item : undefined;
   const selectedMissionRecommendedAction = safeString(selectedMissionQueueItem?.recommended_action).trim();
   const selectedMissionDependencyState = selectedMissionQueueItem?.dependency_state;
   const selectedMissionDependencyStatus = safeString(selectedMissionDependencyState?.status).trim();
@@ -5284,8 +5332,8 @@ function SystemPanel(props: {
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <span style={badgeStyle(`priority-${String(selectedMission.priority ?? 0)}`)}>priority {selectedMission.priority ?? 0}</span>
-                  <span style={badgeStyle(operationMetaString(missionLinkedOperations[0]?.operation ?? null, "orb_plane") || "mission")}>
-                    {operationMetaString(missionLinkedOperations[0]?.operation ?? null, "orb_plane") || "mission"}
+                  <span style={badgeStyle(operationMetaString(primaryMissionOperation, "orb_plane") || "mission")}>
+                    {operationMetaString(primaryMissionOperation, "orb_plane") || "mission"}
                   </span>
                 </div>
               </div>
@@ -5733,9 +5781,9 @@ function SystemPanel(props: {
                         ? "Advancing."
                         : selectedMissionAdvanceLabel}
                 </button>
-                {selectedMissionLatestTaskId ? (
-                  <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionLatestTaskId)}>
-                    Open latest task
+                {selectedMissionCurrentTaskId ? (
+                  <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionCurrentTaskId)}>
+                    Open current task
                   </button>
                 ) : null}
               </div>
@@ -6501,7 +6549,7 @@ function SystemPanel(props: {
             <div style={{ fontSize: 12, color: THEME.muted }}>No mission progress has been recorded yet.</div>
           ) : missionFeedDeclared ? (
             recentDeclaredMissions.map((mission) => {
-              const linkedTaskId = firstLinkedTaskId(mission);
+              const linkedTaskId = missionCurrentTaskId(mission);
               const latestActivity = latestActivitySummary(mission.latest_activity);
               return (
                 <div
