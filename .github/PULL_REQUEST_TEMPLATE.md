@@ -22,6 +22,10 @@ List commands actually run.
 
 Call out any impact to approvals, policy, shell execution, memory, logging, receipts, auditability, ORB/HUD truth, hit testing, focus, or z-order.
 
+## Ownership / License
+
+Confirm that you have the right to submit this work and agree to the repository ownership terms in `LICENSE`.
+
 ## Screenshots
 
 Required for visible UI changes. Otherwise write `Not applicable`.

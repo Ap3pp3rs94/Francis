@@ -134,6 +134,10 @@ Start with [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the s
 
 Local checkout rule: if a repo root contains `.francis-mirror`, standard runtime entrypoints refuse to start there. Use that marker for mirror-only copies and run Francis from the primary checkout instead.
 
+## License
+
+Francis is proprietary and all rights are reserved by Austin Peppers. Viewing, cloning, forking, or submitting material to this repository does not grant permission to use, copy, distribute, commercialize, or create derivative works from Francis except under a separate written agreement. See [LICENSE](LICENSE).
+
 ## GitHub Engagement
 
 This repository is public, but it is not looking for speculative feature sprawl. Useful issues and PRs should improve one of the active Phase 2 surfaces: governance, identity, observability, mission continuity, memory contracts, local execution, or truthful operator UI.

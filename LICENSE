@@ -1,1 +1,38 @@
+Francis Proprietary License
 
+Copyright (c) 2026 Austin Peppers. All rights reserved.
+
+Francis, including all original source code, documentation, designs, workflows,
+assets, architecture, names, and related project materials in this repository, is
+proprietary. Ownership of the Francis project and all original Francis materials
+is reserved solely to Austin Peppers unless a separate written agreement signed
+by Austin Peppers states otherwise.
+
+Except for rights required by the repository hosting platform to host, display,
+and technically operate this repository, no license, permission, or ownership
+interest is granted by publication, possession, cloning, forking, downloading,
+viewing, or use of this repository. Without prior written permission from Austin
+Peppers, no person or entity may copy, modify, merge, publish, distribute,
+sublicense, sell, host as a service, train or fine-tune models on, create
+derivative works from, or otherwise use Francis or any original Francis
+materials.
+
+All contributions, suggestions, patches, pull requests, issues, discussions,
+designs, documentation, code, tests, assets, or other materials submitted to this
+repository are accepted only on the condition that, to the maximum extent
+permitted by law, the submitter assigns to Austin Peppers all right, title, and
+interest in the submitted materials, including copyright and related rights. If
+assignment is not legally possible, the submitter grants Austin Peppers an
+exclusive, perpetual, irrevocable, worldwide, royalty-free, fully paid,
+transferable, and sublicensable license to use, reproduce, modify, distribute,
+prepare derivative works from, publicly display, publicly perform, commercialize,
+and otherwise exploit the submitted materials for any purpose.
+
+Third-party dependencies, vendored materials, and external packages referenced by
+Francis remain governed by their own licenses. This license does not grant rights
+to those third-party materials, and third-party licenses do not grant rights to
+original Francis materials.
+
+Any permission exception, commercial license, transfer, assignment, or waiver must
+be in a separate written agreement signed by Austin Peppers. All rights not
+expressly granted in such a written agreement are reserved.

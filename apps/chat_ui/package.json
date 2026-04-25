@@ -2,6 +2,7 @@
   "name": "francis-chat-ui",
   "private": true,
   "version": "0.3.1",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",
