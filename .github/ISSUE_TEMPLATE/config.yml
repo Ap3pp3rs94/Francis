@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the shipped-state ledger first
+    url: https://github.com/Ap3pp3rs94/Francis/blob/main/docs/operations/COMPLETION_LEDGER.md
+    about: Check what is materially true in the repo before proposing broad changes.
+  - name: Read the canonical roadmap
+    url: https://github.com/Ap3pp3rs94/Francis/blob/main/docs/canonical/ROADMAP.md
+    about: Use the roadmap for target-state direction and avoid redefining Francis in issues.

@@ -1,0 +1,55 @@
+name: Roadmap-Aligned Slice
+description: Propose a bounded implementation slice tied to the Francis roadmap.
+title: "slice(<plane>): "
+labels:
+  - roadmap
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for implementation proposals that preserve Francis as a governed local operator layer. Do not use it for speculative autonomy, demo UX, or roadmap redefinition.
+  - type: dropdown
+    id: plane
+    attributes:
+      label: Primary Plane
+      description: Pick the plane this slice most directly advances.
+      options:
+        - P1_INTERFACE
+        - P2_IDENTITY
+        - P3_GOVERNANCE
+        - P4_COGNITION
+        - P7_EXECUTION
+        - P8_MEMORY
+        - P9_OBSERVABILITY
+        - Documentation / productization
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What current repo behavior or gap does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-slice
+    attributes:
+      label: Proposed Bounded Slice
+      description: Describe the smallest coherent change. Include likely files if known.
+    validations:
+      required: true
+  - type: textarea
+    id: trust-boundary
+    attributes:
+      label: Governance / Trust Boundary
+      description: Name any file mutation, external action, memory write, UX meaning change, or approval/policy surface involved.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Expected Validation
+      description: Which narrow tests or runtime checks should prove this path?
+      placeholder: "pytest ..., npm test, .\\scripts\\check.ps1"
+    validations:
+      required: true

@@ -1,0 +1,58 @@
+name: Bug Report
+description: Report a reproducible issue in a shipped Francis path.
+title: "bug(<surface>): "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Francis is Phase 2. Please report behavior against repo truth, not aspirational roadmap behavior.
+  - type: input
+    id: surface
+    attributes:
+      label: Surface
+      description: Name the affected runtime, API, UI, governance, memory, mission, or shell surface.
+      placeholder: "missions queue, approvals list, ORB briefing, supervised exec"
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed Behavior
+      description: What happened? Include exact errors, receipts, approval ids, or command output when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened according to current docs or implementation contracts?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction Steps
+      description: Provide the narrowest steps needed to reproduce.
+      placeholder: |
+        1. Run ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation Already Run
+      description: List commands or checks you actually ran. Do not claim unrun validation.
+      placeholder: ".\\scripts\\check.ps1, pytest tests/test_api_missions.py -q"
+    validations:
+      required: false
+  - type: checkboxes
+    id: protected-surfaces
+    attributes:
+      label: Protected Surface Check
+      options:
+        - label: This may affect governance, approvals, shell execution, memory, ORB/HUD truth, logging, receipts, or auditability.
+          required: false

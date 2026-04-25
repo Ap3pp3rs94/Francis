@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "francis"
 version = "0.3.1"
-description = "Local-first, policy-guarded, auditable autonomous colleague."
+description = "Local-first, policy-guarded, auditable AI operator layer."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []

@@ -215,6 +215,12 @@ mismatch key scope. Approval list/world-state projections can show the expected
 and prior top-level payload keys involved in an exact-action mismatch, while
 still withholding raw expected and approved payload values.
 
+As of `2026-04-24`, Francis has a more explicit public GitHub discovery posture.
+The repository README, package metadata, issue templates, PR template, GitHub
+description, topics, discussions setting, and `roadmap` label now present Francis
+as a Phase 2 local-first governed AI operator layer without claiming finished
+autonomy.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -226,6 +232,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-24`, the highest-confidence surface newly advanced in the current
+documentation/productization line is public GitHub discoverability. This does not
+advance a runtime capability claim; it makes the public repository easier to find
+and easier to engage with while preserving shipped-state truth:
+
+- `README.md` now includes CI/build/posture badges, a concise "Why Watch Francis"
+  section, and contribution guidance for roadmap-aligned public engagement.
+- `.github/ISSUE_TEMPLATE/` now includes bug and roadmap-slice forms that require
+  affected surface, trust-boundary, and validation details.
+- `.github/PULL_REQUEST_TEMPLATE.md` now asks contributors to name roadmap
+  surface, validation, governance/trust-boundary impact, UI screenshots, and
+  residual risk.
+- GitHub repository metadata now includes a truthful description, issues and
+  discussions are enabled, discovery topics are set, and a `roadmap` label exists.
+- `pyproject.toml` now describes Francis as a local-first, policy-guarded,
+  auditable AI operator layer instead of implying finished colleague behavior.
 
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 Stage 3 line is approval replacement mismatch key-scope review. This advances
@@ -1359,6 +1382,19 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-24` public GitHub discoverability slice:
+
+- `gh repo view Ap3pp3rs94/Francis --json nameWithOwner,description,homepageUrl,repositoryTopics,hasIssuesEnabled,hasDiscussionsEnabled,url,visibility`
+  Result: description set, issues enabled, discussions enabled, visibility
+  `PUBLIC`, and topics include `local-first`, `governance`, `auditability`,
+  `digital-twin`, `observability`, `memory`, `fastapi`, `react`, and `python`.
+- `gh label list --limit 100`
+  Result: `roadmap` label exists with description `Roadmap-aligned implementation slice`.
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-24` Stage 3 approval replacement mismatch key-scope slice:
 

@@ -1,8 +1,28 @@
 # Francis
 
+[![CI](https://github.com/Ap3pp3rs94/Francis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ap3pp3rs94/Francis/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
+![Build Posture](https://img.shields.io/badge/build-Phase%202-orange)
+![Local First](https://img.shields.io/badge/posture-local--first-brightgreen)
+![Governed](https://img.shields.io/badge/actions-policy--guarded-2f6f9f)
+
 Francis is a local-first, policy-guarded, auditable operator layer for a personal computing environment. It is being built as an OS-layer Digital Twin Operator: a resident system that can understand work context, carry mission continuity, stage and execute bounded actions, and leave receipts for what happened.
 
 Francis is not a chatbot wrapper, demo UI, generic agent loop, or dashboard with a model attached. The project goal is a governed operating layer where cognition, approval, execution, observability, and memory are separated by explicit contracts.
+
+## Why Watch Francis
+
+Most AI tooling optimizes for prompts, agents, or dashboards. Francis is being built around a different target: a governed local operator layer that can carry missions across sessions without hiding authority, faking progress, or treating model output as permission.
+
+Current work is focused on the hard parts that make that credible:
+
+- local-first runtime behavior before cloud dependency
+- policy and approvals before side effects
+- receipts and audit trails before autonomy claims
+- mission continuity before generic agent loops
+- operator-facing truth before cosmetic UX
+
+If you are interested in trustworthy local AI systems, governed automation, auditable agent execution, or OS-layer operator interfaces, this repository is the build log and implementation spine.
 
 ## Current Build Posture
 
@@ -109,3 +129,9 @@ If the run returns `needs_approval`, approve the exact `approval_id` and rerun w
 Start with [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the shipped-state ledger before making non-trivial changes. Keep diffs bounded, roadmap-aligned, and validated with the narrowest meaningful tests. When touching operator-facing behavior, report exactly what was validated and what remains partial.
 
 Local checkout rule: if a repo root contains `.francis-mirror`, standard runtime entrypoints refuse to start there. Use that marker for mirror-only copies and run Francis from the primary checkout instead.
+
+## GitHub Engagement
+
+This repository is public, but it is not looking for speculative feature sprawl. Useful issues and PRs should improve one of the active Phase 2 surfaces: governance, identity, observability, mission continuity, memory contracts, local execution, or truthful operator UI.
+
+Good contributions name the roadmap surface, describe the trust boundary involved, include validation that actually ran, and avoid claiming scaffolded behavior as finished capability.
