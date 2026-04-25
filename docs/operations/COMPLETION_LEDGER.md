@@ -148,6 +148,51 @@ keys, and secrets are redacted before `audit.jsonl`, `francis.jsonl`, or
 `errors.jsonl` are written or before `telemetry.audit.record` returns its
 receipt payload.
 
+As of `2026-04-25`, memory timeline writes, reads, and exports share the
+governed secret-redaction boundary. `POST /memory/timeline/record` normalizes
+free text, tags, payloads, artifacts, and metadata before persistence, while
+`/memory/timeline/get`, `/memory/timeline/list`, and
+`/memory/timeline/export` return the same redacted event shape without dropping
+non-sensitive audit context. Timeline projections also expose explicit
+`provenance` and `retention` hints when those fields are backed by event fields
+or metadata, and the chat UI memory timeline client preserves that context
+without inventing memory truth. Timeline events can also carry bounded
+mission/operation/trace references and can be filtered by `mission_id`,
+`operation_id`, or `trace_id`, giving existing operator surfaces a contract for
+opening memory evidence only when backed by real ids. `tests/test_api_memory_timeline.py`
+proves raw OpenAI-key-like, GitHub-token-like, and HTTPS userinfo secret values
+do not appear in the local timeline registry or API/export payloads, while
+`apps/chat_ui/src/memory_timeline/index.test.ts` proves the browser client keeps
+the returned provenance, retention, and reference contract.
+
+As of `2026-04-25`, the operations detail surface can use that memory timeline
+contract from the mission loop bridge. When a selected operation exposes a real
+mission id, linked operation id, or trace id, the chat UI can issue bounded
+`/memory/timeline/list` lookups for those exact ids, de-duplicate returned
+events, and render only receipt-backed memory timeline entries. The UI does not
+invent memory status when the timeline route returns no entries or is
+unavailable.
+
+As of `2026-04-25`, those operations memory-evidence query rules are covered by
+a direct UI contract helper. The chat UI builds only mission, linked-task or
+fallback-task, and trace filters from real ids, keeps payloads out of the bounded
+timeline list requests, de-duplicates returned events by id, and sorts newest
+receipt-backed evidence first before rendering it.
+
+As of `2026-04-25`, continuity ledger entries imported into the memory timeline
+preserve bounded mission, operation, trace, approval, run, and artifact
+references from ledger metadata. This lets memory timeline filters find existing
+continuity receipts by the same real ids exposed in operation and mission loop
+surfaces, without requiring a separate manual `/memory/timeline/record` write for
+ledger-backed continuity evidence.
+
+As of `2026-04-25`, completed mission-linked operation runs now append a bounded
+continuity receipt that the memory timeline can retrieve by mission,
+operation, and trace id. `operations.runtime.run_operation` records this only
+after an actual mission-linked operation returns the `succeeded` operation
+status, preserving the execution -> trace -> memory link without inventing
+memory state for blocked, failed, unlinked, or merely queued work.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
@@ -2265,6 +2310,65 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 completed mission operation memory receipt slice:
+
+- `python -m ruff format --no-cache src\francis\operations\runtime.py tests\test_api_memory_timeline.py`
+  Result: `src\francis\operations\runtime.py left unchanged; tests\test_api_memory_timeline.py reformatted after approved retry`
+- `python -m ruff check --no-cache src\francis\operations\runtime.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py::test_memory_timeline_finds_completed_mission_operation_receipt -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-25` Stage 3 memory evidence UI contract slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `30 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
+
+- `python -m ruff format --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files left unchanged`
+- `python -m ruff check --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py tests\unit\test_governance_redaction.py -q`
+  Result: `6 passed`
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation memory evidence interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `27 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py tests\unit\test_governance_redaction.py -q`
+  Result: `5 passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-25` Stage 3 memory timeline redaction and context projection slice:
+
+- `python -m ruff format --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files left unchanged`
+- `python -m ruff check --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py tests\unit\test_governance_redaction.py -q`
+  Result: `5 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `27 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `61 passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 current-task receipt-status continuity slice:
 

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from francis.chat.continuity.ledger import tail as continuity_tail
+from francis.governance.redaction import redact_governed_metadata, redact_governed_value, redact_secret_text
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -105,6 +106,27 @@ def _meta(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _redact_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
+
+
+def _redact_tags(value: Any) -> list[str]:
+    tags: list[str] = []
+    for item in _parse_list(value):
+        redacted = _redact_text(item)
+        if redacted and redacted not in tags:
+            tags.append(redacted)
+    return tags
+
+
 def _path() -> Path:
     return data_dir() / "memory" / "timeline" / "_events.json"
 
@@ -126,22 +148,22 @@ def _normalize_artifact(raw: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "id": artifact_id,
-        "kind": _safe_str(raw.get("kind")).strip(),
-        "url": _safe_str(raw.get("url")).strip(),
-        "path": _safe_str(raw.get("path")).strip(),
-        "content_type": _safe_str(raw.get("content_type") or raw.get("contentType")).strip(),
+        "kind": _redact_text(raw.get("kind")),
+        "url": _redact_text(raw.get("url")),
+        "path": _redact_text(raw.get("path")),
+        "content_type": _redact_text(raw.get("content_type") or raw.get("contentType")),
         "size_bytes": int(raw.get("size_bytes") or raw.get("sizeBytes") or 0),
-        "sha256": _safe_str(raw.get("sha256")).strip(),
-        "meta": _meta(raw.get("meta")),
+        "sha256": _redact_text(raw.get("sha256")),
+        "meta": redact_governed_metadata(raw.get("meta")),
     }
 
 
 def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     payload_value = raw.get("payload") if "payload" in raw else raw.get("data")
     if isinstance(payload_value, (dict, list, str, int, float, bool)) or payload_value is None:
-        payload = payload_value
+        payload = redact_governed_value(payload_value, key="payload")
     else:
-        payload = _safe_str(payload_value)
+        payload = _redact_text(payload_value)
 
     artifacts_raw = (
         raw.get("artifacts")
@@ -155,25 +177,37 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": event_id,
         "ts": _normalize_ts(raw.get("ts") or raw.get("created_ts") or raw.get("time") or _now_s()),
-        "kind": _safe_str(raw.get("kind") or raw.get("type")).strip() or "memory_write",
-        "severity": _safe_str(raw.get("severity") or raw.get("level")).strip(),
-        "domain": _safe_str(raw.get("domain")).strip(),
-        "actor": _safe_str(raw.get("actor") or raw.get("role")).strip(),
-        "scope": _safe_str(raw.get("scope") or raw.get("scope_id")).strip(),
-        "correlation_id": _safe_str(
-            raw.get("correlation_id") or raw.get("trace_id") or raw.get("correlationId")
-        ).strip(),
-        "parent_id": _safe_str(raw.get("parent_id") or raw.get("parentId")).strip(),
-        "title": _safe_str(raw.get("title")).strip(),
-        "message": _safe_str(raw.get("message") or raw.get("summary") or raw.get("content")).strip(),
-        "tags": _parse_list(raw.get("tags")),
+        "kind": _redact_text(raw.get("kind") or raw.get("type")) or "memory_write",
+        "severity": _redact_text(raw.get("severity") or raw.get("level")),
+        "domain": _redact_text(raw.get("domain")),
+        "actor": _redact_text(raw.get("actor") or raw.get("role")),
+        "scope": _redact_text(raw.get("scope") or raw.get("scope_id")),
+        "correlation_id": _redact_text(raw.get("correlation_id") or raw.get("trace_id") or raw.get("correlationId")),
+        "trace_id": _redact_text(raw.get("trace_id") or _meta(raw.get("meta")).get("trace_id")),
+        "mission_id": _redact_text(raw.get("mission_id") or _meta(raw.get("meta")).get("mission_id")),
+        "operation_id": _redact_text(
+            raw.get("operation_id") or raw.get("task_id") or _meta(raw.get("meta")).get("operation_id")
+        ),
+        "approval_id": _redact_text(raw.get("approval_id") or _meta(raw.get("meta")).get("approval_id")),
+        "run_id": _redact_text(raw.get("run_id") or _meta(raw.get("meta")).get("run_id")),
+        "artifact_dir": _redact_text(
+            raw.get("artifact_dir")
+            or raw.get("artifact_path")
+            or _meta(raw.get("meta")).get("artifact_dir")
+            or _meta(raw.get("meta")).get("artifact_path")
+        ),
+        "parent_id": _redact_text(raw.get("parent_id") or raw.get("parentId")),
+        "title": _redact_text(raw.get("title")),
+        "message": _redact_text(raw.get("message") or raw.get("summary") or raw.get("content")),
+        "tags": _redact_tags(raw.get("tags")),
         "payload": payload,
         "artifacts": artifacts,
-        "meta": _meta(raw.get("meta")),
+        "meta": redact_governed_metadata(raw.get("meta")),
     }
 
 
 def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, Any]:
+    meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
     out = {
         "id": item.get("id"),
         "ts": item.get("ts"),
@@ -188,8 +222,46 @@ def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, A
         "message": item.get("message"),
         "tags": item.get("tags") if isinstance(item.get("tags"), list) else [],
         "artifacts": item.get("artifacts") if isinstance(item.get("artifacts"), list) else [],
-        "meta": item.get("meta") if isinstance(item.get("meta"), dict) else {},
+        "meta": meta,
     }
+    provenance: dict[str, Any] = {}
+    source = _safe_str(meta.get("source")).strip()
+    if source:
+        provenance["source"] = source
+    for key in ("domain", "actor", "scope", "correlation_id", "parent_id"):
+        value = _safe_str(item.get(key)).strip()
+        if value:
+            provenance[key] = value
+    if provenance:
+        out["provenance"] = provenance
+
+    references: dict[str, Any] = {}
+    for key in ("mission_id", "operation_id", "trace_id", "approval_id", "run_id", "artifact_dir"):
+        value = _safe_str(item.get(key)).strip()
+        if value:
+            references[key] = value
+    if references:
+        out["references"] = references
+
+    retention: dict[str, Any] = {}
+    retention_policy = _safe_str(meta.get("retention_policy") or meta.get("retentionPolicy")).strip()
+    if retention_policy:
+        retention["policy"] = retention_policy
+    retention_class = _safe_str(meta.get("retention_class") or meta.get("retentionClass")).strip()
+    if retention_class:
+        retention["class"] = retention_class
+    retention_until = _safe_str(meta.get("retention_until") or meta.get("retentionUntil")).strip()
+    if retention_until:
+        retention["until"] = retention_until
+    expires_at = _safe_str(meta.get("expires_at") or meta.get("expiresAt")).strip()
+    if expires_at:
+        retention["expires_at"] = expires_at
+    ttl_seconds = meta.get("ttl_seconds") if "ttl_seconds" in meta else meta.get("ttlSeconds")
+    if isinstance(ttl_seconds, (int, float)):
+        retention["ttl_seconds"] = int(ttl_seconds)
+    if retention:
+        out["retention"] = retention
+
     if include_payload:
         out["payload"] = item.get("payload")
     return out
@@ -263,6 +335,7 @@ def _timeline_from_continuity(limit: int = 10_000) -> list[dict[str, Any]]:
         ts = _normalize_ts(ts_raw if ts_raw is not None else _now_s())
         role = _safe_str(item.get("role")).strip() or "unknown"
         content = _safe_str(item.get("content")).strip()
+        meta = _meta(item.get("meta"))
         digest = hashlib.sha1(f"{ts}:{role}:{content}".encode("utf-8", errors="ignore")).hexdigest()[:12]
         event_id = f"ledger_{digest}"
         out.append(
@@ -273,13 +346,21 @@ def _timeline_from_continuity(limit: int = 10_000) -> list[dict[str, Any]]:
                     "ts": ts,
                     "kind": "ledger_append",
                     "severity": "info",
-                    "domain": _safe_str((_meta(item.get("meta"))).get("domain")).strip(),
+                    "domain": _safe_str(meta.get("domain")).strip(),
                     "actor": role,
+                    "scope": _safe_str(meta.get("scope") or meta.get("scope_id")).strip(),
+                    "correlation_id": _first_text(meta.get("correlation_id"), meta.get("trace_id")),
+                    "trace_id": _safe_str(meta.get("trace_id")).strip(),
+                    "mission_id": _safe_str(meta.get("mission_id")).strip(),
+                    "operation_id": _first_text(meta.get("operation_id"), meta.get("task_id")),
+                    "approval_id": _safe_str(meta.get("approval_id")).strip(),
+                    "run_id": _safe_str(meta.get("run_id")).strip(),
+                    "artifact_dir": _first_text(meta.get("artifact_dir"), meta.get("artifact_path")),
                     "title": f"Ledger append ({role})",
                     "message": content[:512],
-                    "payload": {"content": content, "meta": _meta(item.get("meta"))},
+                    "payload": {"content": content, "meta": meta},
                     "tags": ["continuity", "ledger"],
-                    "meta": {"source": "continuity.ledger"},
+                    "meta": {"source": "continuity.ledger", **meta},
                 },
             )
         )
@@ -316,6 +397,9 @@ def _filter_events(
     actor: str = "",
     scope: str = "",
     correlation_id: str = "",
+    trace_id: str = "",
+    mission_id: str = "",
+    operation_id: str = "",
     tags: list[str] | None = None,
     start_ts: int | None = None,
     end_ts: int | None = None,
@@ -327,6 +411,9 @@ def _filter_events(
     actor_filter = actor.strip().lower()
     scope_filter = scope.strip().lower()
     correlation_filter = correlation_id.strip().lower()
+    trace_filter = trace_id.strip().lower()
+    mission_filter = mission_id.strip().lower()
+    operation_filter = operation_id.strip().lower()
     tag_filter = {entry.strip().lower() for entry in (tags or []) if entry.strip()}
     search_filter = search.strip().lower()
 
@@ -344,6 +431,15 @@ def _filter_events(
         if scope_filter and _safe_str(item.get("scope")).strip().lower() != scope_filter:
             continue
         if correlation_filter and _safe_str(item.get("correlation_id")).strip().lower() != correlation_filter:
+            continue
+        if trace_filter and not (
+            _safe_str(item.get("trace_id")).strip().lower() == trace_filter
+            or _safe_str(item.get("correlation_id")).strip().lower() == trace_filter
+        ):
+            continue
+        if mission_filter and _safe_str(item.get("mission_id")).strip().lower() != mission_filter:
+            continue
+        if operation_filter and _safe_str(item.get("operation_id")).strip().lower() != operation_filter:
             continue
 
         if tag_filter:
@@ -483,6 +579,9 @@ def list_timeline(
     actor: str | None = None,
     scope: str | None = None,
     correlation_id: str | None = None,
+    trace_id: str | None = None,
+    mission_id: str | None = None,
+    operation_id: str | None = None,
     search: str | None = None,
     tags: list[str] | None = Query(default=None),
     include_payload: bool = False,
@@ -497,6 +596,9 @@ def list_timeline(
             actor=_safe_str(actor),
             scope=_safe_str(scope),
             correlation_id=_safe_str(correlation_id),
+            trace_id=_safe_str(trace_id),
+            mission_id=_safe_str(mission_id),
+            operation_id=_safe_str(operation_id),
             tags=_parse_list(tags),
             start_ts=start_ts,
             end_ts=end_ts,
@@ -557,6 +659,9 @@ def export_timeline(
     actor: str | None = None,
     scope: str | None = None,
     correlation_id: str | None = None,
+    trace_id: str | None = None,
+    mission_id: str | None = None,
+    operation_id: str | None = None,
     search: str | None = None,
     tags: list[str] | None = Query(default=None),
     include_payload: bool = True,
@@ -579,6 +684,9 @@ def export_timeline(
             actor=_safe_str(actor),
             scope=_safe_str(scope),
             correlation_id=_safe_str(correlation_id),
+            trace_id=_safe_str(trace_id),
+            mission_id=_safe_str(mission_id),
+            operation_id=_safe_str(operation_id),
             tags=_parse_list(tags),
             start_ts=start_ts,
             end_ts=end_ts,
@@ -633,6 +741,7 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
             (idx for idx, item in enumerate(events_obj) if _safe_str((item or {}).get("id")).strip() == event_id), -1
         )
         existing = events_obj[existing_idx] if existing_idx >= 0 and isinstance(events_obj[existing_idx], dict) else {}
+        payload_meta = _meta(payload.get("meta"))
 
         merged = {
             **existing,
@@ -645,6 +754,26 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
             "scope": _safe_str(payload.get("scope")).strip() or _safe_str(existing.get("scope")).strip(),
             "correlation_id": _safe_str(payload.get("correlation_id") or payload.get("trace_id")).strip()
             or _safe_str(existing.get("correlation_id")).strip(),
+            "trace_id": _first_text(payload.get("trace_id"), payload_meta.get("trace_id"), existing.get("trace_id")),
+            "mission_id": _first_text(
+                payload.get("mission_id"), payload_meta.get("mission_id"), existing.get("mission_id")
+            ),
+            "operation_id": _first_text(
+                payload.get("operation_id"),
+                payload.get("task_id"),
+                payload_meta.get("operation_id"),
+                existing.get("operation_id"),
+            ),
+            "approval_id": _first_text(
+                payload.get("approval_id"), payload_meta.get("approval_id"), existing.get("approval_id")
+            ),
+            "run_id": _first_text(payload.get("run_id"), payload_meta.get("run_id"), existing.get("run_id")),
+            "artifact_dir": _first_text(
+                payload.get("artifact_dir"),
+                payload.get("artifact_path"),
+                payload_meta.get("artifact_dir"),
+                existing.get("artifact_dir"),
+            ),
             "parent_id": _safe_str(payload.get("parent_id")).strip() or _safe_str(existing.get("parent_id")).strip(),
             "title": _safe_str(payload.get("title")).strip() or _safe_str(existing.get("title")).strip(),
             "message": _safe_str(payload.get("message") or payload.get("summary")).strip()

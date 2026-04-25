@@ -12,6 +12,13 @@ import {
   presentMissionQueue,
 } from "./missions";
 import type { MissionCurrentTask, MissionDetail, MissionLoopState, MissionQueueItem, MissionReceiptSummary } from "./missions";
+import {
+  buildMemoryEvidenceQueries,
+  memoryEvidenceQueryKey,
+  mergeMemoryEvidenceResponses,
+} from "./memory_evidence";
+import { MemoryTimelineApiError, MemoryTimelineClient } from "./memory_timeline";
+import type { MemoryTimelineEvent } from "./memory_timeline";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
@@ -223,6 +230,22 @@ function operationArtifactDir(record: OperationRecord | null | undefined): strin
     safeString(sandbox.artifact_dir).trim() ||
     safeString(sandbox.artifact_path).trim()
   );
+}
+
+function memoryTimelineEventSummary(event: MemoryTimelineEvent): string {
+  return safeString(event.title).trim() || safeString(event.message).trim() || safeString(event.kind).trim() || event.id;
+}
+
+function memoryTimelineEventReferenceLine(event: MemoryTimelineEvent): string {
+  const refs = event.references;
+  const parts: string[] = [];
+  if (refs?.mission_id) parts.push(`mission ${refs.mission_id}`);
+  if (refs?.operation_id) parts.push(`task ${refs.operation_id}`);
+  if (refs?.trace_id) parts.push(`trace ${refs.trace_id}`);
+  if (refs?.approval_id) parts.push(`approval ${refs.approval_id}`);
+  if (refs?.run_id) parts.push(`run ${refs.run_id}`);
+  if (refs?.artifact_dir) parts.push(`artifact ${refs.artifact_dir}`);
+  return parts.join(" / ");
 }
 
 function operationRecoveryGuidance(record: OperationRecord | null | undefined): string {
@@ -9174,6 +9197,7 @@ function OperationsPanel(props: {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const memoryTimelineClient = useMemo(() => new MemoryTimelineClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [items, setItems] = useState<OperationRecord[]>([]);
   const [selectedOperationId, setSelectedOperationId] = useState("");
   const [detail, setDetail] = useState<OperationDetail | null>(null);
@@ -9187,6 +9211,10 @@ function OperationsPanel(props: {
   const [selectedMissionDetail, setSelectedMissionDetail] = useState<MissionDetail | null>(null);
   const [selectedMissionDetailBusy, setSelectedMissionDetailBusy] = useState(false);
   const [selectedMissionDetailError, setSelectedMissionDetailError] = useState<string | null>(null);
+  const [selectedMemoryEvidence, setSelectedMemoryEvidence] = useState<MemoryTimelineEvent[]>([]);
+  const [selectedMemoryEvidenceBusy, setSelectedMemoryEvidenceBusy] = useState(false);
+  const [selectedMemoryEvidenceError, setSelectedMemoryEvidenceError] = useState<string | null>(null);
+  const [selectedMemoryEvidenceLoadedAt, setSelectedMemoryEvidenceLoadedAt] = useState<number | null>(null);
   const [composerObjective, setComposerObjective] = useState("Create a governed plan for the current operator objective");
   const [composerReason, setComposerReason] = useState("operator_requested");
   const [composerAction, setComposerAction] = useState("plan.create");
@@ -9354,6 +9382,22 @@ function OperationsPanel(props: {
     selectedMissionCurrentTaskId ||
     safeString(selectedMissionLoopHandoff?.operation_id).trim() ||
     safeString(selectedMissionReceiptSummary?.current_operation_id).trim();
+  const selectedMissionMemoryTraceId =
+    safeString(selectedMissionCurrentTask?.trace_id).trim() ||
+    safeString(selectedMissionLoopHandoff?.trace_id).trim() ||
+    safeString(selectedMissionReceiptSummary?.current_trace_id).trim() ||
+    selectedTraceId;
+  const selectedMemoryEvidenceQueries = useMemo(
+    () =>
+      buildMemoryEvidenceQueries({
+        missionId: selectedMissionId,
+        operationId: selectedMissionBridgeTaskId,
+        fallbackOperationId: selectedOperation?.id,
+        traceId: selectedMissionMemoryTraceId,
+      }),
+    [selectedMissionBridgeTaskId, selectedMissionId, selectedMissionMemoryTraceId, selectedOperation?.id],
+  );
+  const selectedMemoryEvidenceQueryKey = memoryEvidenceQueryKey(selectedMemoryEvidenceQueries);
   const selectedMissionLoopStages = [
     { key: "plan", label: "Plan", stage: selectedMissionLoopState?.plan },
     { key: "gate", label: "Gate", stage: selectedMissionLoopState?.gate },
@@ -9436,6 +9480,45 @@ function OperationsPanel(props: {
       cancelled = true;
     };
   }, [loadSelectedMissionDetail, selectedMissionId]);
+
+  useEffect(() => {
+    setSelectedMemoryEvidence([]);
+    setSelectedMemoryEvidenceError(null);
+    setSelectedMemoryEvidenceLoadedAt(null);
+  }, [selectedMemoryEvidenceQueryKey]);
+
+  const loadSelectedMemoryEvidence = useCallback(async () => {
+    if (!selectedMemoryEvidenceQueries.length) {
+      setSelectedMemoryEvidence([]);
+      setSelectedMemoryEvidenceLoadedAt(null);
+      setSelectedMemoryEvidenceError("No mission, task, or trace id is available for memory evidence.");
+      return;
+    }
+
+    setSelectedMemoryEvidenceBusy(true);
+    setSelectedMemoryEvidenceError(null);
+    try {
+      const responses = await Promise.all(
+        selectedMemoryEvidenceQueries.map((query) =>
+          memoryTimelineClient.list(query.filters, { timeoutMs: 10_000 }),
+        ),
+      );
+      setSelectedMemoryEvidence(mergeMemoryEvidenceResponses(responses, 10));
+      setSelectedMemoryEvidenceLoadedAt(nowUnixSeconds());
+    } catch (err) {
+      const msg =
+        err instanceof MemoryTimelineApiError
+          ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+          : err instanceof Error
+            ? err.message
+            : "Memory timeline request failed.";
+      setSelectedMemoryEvidence([]);
+      setSelectedMemoryEvidenceLoadedAt(null);
+      setSelectedMemoryEvidenceError(msg);
+    } finally {
+      setSelectedMemoryEvidenceBusy(false);
+    }
+  }, [memoryTimelineClient, selectedMemoryEvidenceQueries]);
 
   const refreshSelectedOperationView = useCallback(async () => {
     await refresh();
@@ -10315,7 +10398,7 @@ function OperationsPanel(props: {
                           ) : null}
                         </div>
                       ) : null}
-                      {(selectedMissionBridgeApprovalId || selectedMissionBridgeTaskId) ? (
+                      {(selectedMissionBridgeApprovalId || selectedMissionBridgeTaskId || selectedMemoryEvidenceQueries.length > 0) ? (
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                           {selectedMissionBridgeApprovalId ? (
                             <button
@@ -10333,6 +10416,15 @@ function OperationsPanel(props: {
                           {selectedMissionBridgeTaskId ? (
                             <button style={buttonStyle} onClick={() => props.onOpenOperation(selectedMissionBridgeTaskId)}>
                               {selectedMissionBridgeTaskId === selectedOperation.id ? "Open selected task" : "Open bridge task"}
+                            </button>
+                          ) : null}
+                          {selectedMemoryEvidenceQueries.length > 0 ? (
+                            <button
+                              style={buttonStyle}
+                              disabled={selectedMemoryEvidenceBusy}
+                              onClick={() => void loadSelectedMemoryEvidence()}
+                            >
+                              {selectedMemoryEvidenceBusy ? "Loading memory." : "Load memory evidence"}
                             </button>
                           ) : null}
                           <button style={buttonStyle} onClick={() => props.onOpenMission(selectedMissionId)}>
@@ -10504,6 +10596,63 @@ function OperationsPanel(props: {
                                 : ""}
                               memory_at=<code>{selectedMissionLatestHistoryAt}</code>
                             </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(selectedMemoryEvidenceBusy ||
+                        selectedMemoryEvidenceError ||
+                        selectedMemoryEvidenceLoadedAt !== null ||
+                        selectedMemoryEvidence.length > 0) ? (
+                        <div
+                          style={{
+                            border: `1px solid ${THEME.panelBorder}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            marginTop: 8,
+                            background: "#101214",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>Memory Evidence</div>
+                            {selectedMemoryEvidenceLoadedAt !== null ? (
+                              <div style={{ fontSize: 11, color: THEME.muted }}>
+                                loaded <code>{toLocaleTime(selectedMemoryEvidenceLoadedAt)}</code>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {selectedMemoryEvidenceQueries.map((query) => query.label).join(" / ")}
+                          </div>
+                          {selectedMemoryEvidenceBusy ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>Loading timeline events.</div>
+                          ) : selectedMemoryEvidenceError ? (
+                            <div style={{ fontSize: 11, color: "#ffaaaa", marginTop: 8 }}>
+                              Memory timeline unavailable: {selectedMemoryEvidenceError}
+                            </div>
+                          ) : selectedMemoryEvidenceLoadedAt !== null && selectedMemoryEvidence.length === 0 ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                              No timeline events returned for the selected ids.
+                            </div>
+                          ) : selectedMemoryEvidence.length > 0 ? (
+                            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                              {selectedMemoryEvidence.map((event) => {
+                                const referenceLine = memoryTimelineEventReferenceLine(event);
+                                return (
+                                  <div key={event.id} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                                      <div style={{ fontSize: 12, color: THEME.text }}>{memoryTimelineEventSummary(event)}</div>
+                                      <span style={badgeStyle(event.kind || "memory")}>{event.kind || "memory"}</span>
+                                    </div>
+                                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                                      event <code>{event.id}</code> / at <code>{toLocaleTime(event.ts)}</code>
+                                    </div>
+                                    {referenceLine ? (
+                                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{referenceLine}</div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           ) : null}
                         </div>
                       ) : null}

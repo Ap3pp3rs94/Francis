@@ -10,6 +10,7 @@ from typing import Any
 from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
 from francis.agent.delegation import DelegationRequest
+from francis.chat.continuity.ledger import append as append_continuity_ledger
 from francis.governance.operation_redaction import (
     redact_operation_metadata,
     redact_operation_optional_text,
@@ -388,6 +389,36 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _append_completed_mission_operation_receipt(task: dict[str, Any], operation: dict[str, Any]) -> None:
+    mission_id = _task_mission_id(task)
+    operation_id = _safe_str(operation.get("id")).strip() or _safe_str(task.get("task_id")).strip()
+    operation_status = _safe_str(operation.get("status")).strip().lower()
+    if not mission_id or not operation_id or operation_status != "succeeded":
+        return
+
+    trace_id = _safe_str(operation.get("trace_id")).strip()
+    run_id = _safe_str(operation.get("run_id")).strip()
+    artifact_dir = _safe_str(operation.get("artifact_dir")).strip()
+    capability = _safe_str(operation.get("name")).strip()
+    meta = {
+        "domain": "operations",
+        "scope": "mission.loop",
+        "mission_id": mission_id,
+        "operation_id": operation_id,
+        "trace_id": trace_id or None,
+        "run_id": run_id or None,
+        "artifact_dir": artifact_dir or None,
+        "operation_status": operation_status,
+        "capability": capability or None,
+        "subsystem": "operations.runtime",
+    }
+    append_continuity_ledger(
+        "system",
+        f"Mission operation completed: mission={mission_id} operation={operation_id} status={operation_status}",
+        {key: value for key, value in meta.items() if value is not None},
+    )
+
+
 def _event_to_operation(task_id: str, idx: int, event: dict[str, Any]) -> dict[str, Any]:
     ts = _parse_iso_to_unix(event.get("ts")) or int(datetime.now(UTC).timestamp())
     event_name = _safe_str(event.get("event")).strip() or "event"
@@ -619,6 +650,8 @@ def run_operation(operation_id: str, *, worker_id: str = "api.operations") -> di
     if isinstance(updated, dict):
         updated = _hold_retryable_governance_task(op_id, updated)
     operation = _task_to_operation(updated)
+    if isinstance(updated, dict):
+        _append_completed_mission_operation_receipt(updated, operation)
     return {
         "ok": _operation_request_ok(operation.get("status")),
         "status": operation.get("status", "unknown"),

@@ -33,12 +33,23 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
             "actor": "francis",
             "scope": "chat.session",
             "correlation_id": "corr-1",
+            "trace_id": "trace-memory-a",
+            "mission_id": "mission-memory-a",
+            "operation_id": "tsk-memory-a",
+            "approval_id": "apr-memory-a",
+            "run_id": "run-memory-a",
+            "artifact_dir": "D:/francis/data/artifacts/memory-a",
             "title": "Session write",
             "message": "Stored summary memory block.",
             "tags": ["session-a", "write"],
             "payload": {"token_count": 320},
             "artifacts": [{"id": "art-1", "kind": "summary", "path": "data/memory/summary-1.json"}],
-            "meta": {"source": "unit_test"},
+            "meta": {
+                "source": "unit_test",
+                "retention_policy": "mission_trace",
+                "retention_until": "2026-05-01T00:00:00Z",
+                "ttl_seconds": 86400,
+            },
         },
     )
     assert one.status_code == 200
@@ -92,9 +103,37 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
     assert "evt-b" not in ids
     first_item = next(item for item in listed_body["items"] if str(item.get("id")) == "evt-a")
     assert first_item["payload"]["token_count"] == 320
+    assert first_item["provenance"] == {
+        "source": "unit_test",
+        "domain": "operations",
+        "actor": "francis",
+        "scope": "chat.session",
+        "correlation_id": "corr-1",
+    }
+    assert first_item["references"] == {
+        "mission_id": "mission-memory-a",
+        "operation_id": "tsk-memory-a",
+        "trace_id": "trace-memory-a",
+        "approval_id": "apr-memory-a",
+        "run_id": "run-memory-a",
+        "artifact_dir": "D:/francis/data/artifacts/memory-a",
+    }
+    assert first_item["retention"] == {
+        "policy": "mission_trace",
+        "until": "2026-05-01T00:00:00Z",
+        "ttl_seconds": 86400,
+    }
     assert listed_body["events"] == listed_body["items"]
     assert listed_body["entries"] == listed_body["items"]
     assert listed_body["timeline"] == listed_body["items"]
+
+    trace_listed = client.get("/memory/timeline/list?trace_id=trace-memory-a&mission_id=mission-memory-a")
+    assert trace_listed.status_code == 200
+    assert [item["id"] for item in trace_listed.json()["items"]] == ["evt-a"]
+
+    operation_listed = client.get("/memory/timeline/list?operation_id=tsk-memory-a")
+    assert operation_listed.status_code == 200
+    assert [item["id"] for item in operation_listed.json()["items"]] == ["evt-a"]
 
     listed_no_payload = client.get("/memory/timeline/list?kinds=memory_write")
     assert listed_no_payload.status_code == 200
@@ -181,3 +220,215 @@ def test_memory_timeline_create_alias_and_persistence(monkeypatch, tmp_path: Pat
     persisted = client2.get("/memory/timeline/get?id=evt-persist")
     assert persisted.status_code == 200
     assert persisted.json()["ok"] is True
+
+
+def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat.continuity.ledger import append
+
+    append(
+        "assistant",
+        "Mission continuity receipt for memory evidence.",
+        {
+            "domain": "operations",
+            "scope": "mission.loop",
+            "mission_id": "msn-ledger-memory",
+            "operation_id": "tsk-ledger-memory",
+            "trace_id": "trace-ledger-memory",
+            "approval_id": "apr-ledger-memory",
+            "run_id": "run-ledger-memory",
+            "artifact_dir": "D:/francis/data/artifacts/ledger-memory",
+        },
+    )
+
+    client = TestClient(create_app())
+
+    listed = client.get(
+        "/memory/timeline/list?mission_id=msn-ledger-memory&operation_id=tsk-ledger-memory&trace_id=trace-ledger-memory"
+    )
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["kind"] == "ledger_append"
+    assert item["provenance"] == {
+        "source": "continuity.ledger",
+        "domain": "operations",
+        "actor": "assistant",
+        "scope": "mission.loop",
+        "correlation_id": "trace-ledger-memory",
+    }
+    assert item["references"] == {
+        "mission_id": "msn-ledger-memory",
+        "operation_id": "tsk-ledger-memory",
+        "trace_id": "trace-ledger-memory",
+        "approval_id": "apr-ledger-memory",
+        "run_id": "run-ledger-memory",
+        "artifact_dir": "D:/francis/data/artifacts/ledger-memory",
+    }
+
+    operation_listed = client.get("/memory/timeline/list?operation_id=tsk-ledger-memory")
+    assert operation_listed.status_code == 200
+    assert [event["id"] for event in operation_listed.json()["items"]] == [item["id"]]
+
+
+def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Carry completed operation receipt into memory timeline",
+            "summary": "Completed mission-linked operation should create ledger-backed memory evidence.",
+            "requester_id": "test.memory.timeline.mission_receipt",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    built = client.post(
+        "/plugins/build",
+        json={"name": "Memory Evidence Plugin", "description": "receipt-backed memory evidence"},
+    )
+    assert built.status_code == 200
+    plugin_id = str(built.json()["plugin_id"])
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "memory evidence completion receipt",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "run", "input": "memory evidence"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    advanced = client.post(
+        f"/missions/{mission_id}/advance",
+        json={"actor": "test.memory.timeline.mission_receipt", "worker_id": "test.memory.timeline.mission_receipt"},
+    )
+    assert advanced.status_code == 200
+    advanced_body = advanced.json()
+    assert advanced_body["ok"] is True
+    assert advanced_body["applied"] is True
+    assert advanced_body["status"] == "succeeded"
+    trace_id = str(advanced_body.get("trace_id") or "")
+    run_id = str(advanced_body.get("run_id") or "")
+    assert trace_id.startswith("trace_")
+    assert run_id.startswith("run_")
+
+    listed = client.get(
+        f"/memory/timeline/list?mission_id={mission_id}&operation_id={operation_id}&trace_id={trace_id}&include_payload=1"
+    )
+    assert listed.status_code == 200
+    body = listed.json()
+    receipts = [
+        item
+        for item in body["items"]
+        if item.get("kind") == "ledger_append"
+        and item.get("references", {}).get("mission_id") == mission_id
+        and item.get("references", {}).get("operation_id") == operation_id
+    ]
+    assert receipts
+    receipt = receipts[0]
+    assert "Mission operation completed" in receipt["message"]
+    assert receipt["provenance"]["source"] == "continuity.ledger"
+    assert receipt["provenance"]["domain"] == "operations"
+    assert receipt["provenance"]["scope"] == "mission.loop"
+    assert receipt["references"]["trace_id"] == trace_id
+    assert receipt["references"]["run_id"] == run_id
+    assert receipt["payload"]["meta"]["subsystem"] == "operations.runtime"
+    assert receipt["payload"]["meta"]["operation_status"] == "succeeded"
+
+
+def test_memory_timeline_redacts_secrets_from_persistence_and_api(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance.redaction import REDACTED_SECRET
+
+    client = TestClient(create_app())
+
+    raw_openai_key = "sk-proj-" + ("a" * 48)
+    raw_github_pat = "github_pat_" + ("B" * 64)
+    raw_remote = "https://token-secret-123456@github.com/owner/repo.git"
+
+    created = client.post(
+        "/memory/timeline/record",
+        json={
+            "id": "evt-redaction",
+            "kind": "memory_write",
+            "severity": "info",
+            "domain": "operations",
+            "actor": "francis",
+            "scope": "mission.loop",
+            "correlation_id": "trace-redaction",
+            "title": f"Captured {raw_openai_key}",
+            "message": f"Operator note api_key={raw_openai_key} remote {raw_remote}",
+            "tags": ["mission", raw_github_pat],
+            "payload": {
+                "api_key": raw_openai_key,
+                "remote": raw_remote,
+                "nested": {"note": f"token={raw_github_pat}", "ticket": "FR-123"},
+            },
+            "artifacts": [
+                {
+                    "id": "art-redaction",
+                    "kind": "trace",
+                    "url": raw_remote,
+                    "meta": {"token": raw_github_pat, "ticket": "FR-123"},
+                }
+            ],
+            "meta": {"password": "correcthorsebattery", "ticket": "FR-123"},
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["ok"] is True
+
+    registry_path = data_root / "memory" / "timeline" / "_events.json"
+    stored_text = registry_path.read_text(encoding="utf-8")
+    assert raw_openai_key not in stored_text
+    assert raw_github_pat not in stored_text
+    assert raw_remote not in stored_text
+    assert REDACTED_SECRET in stored_text
+    assert "FR-123" in stored_text
+
+    fetched = client.get("/memory/timeline/get?id=evt-redaction")
+    assert fetched.status_code == 200
+    fetched_text = json.dumps(fetched.json(), sort_keys=True)
+    assert raw_openai_key not in fetched_text
+    assert raw_github_pat not in fetched_text
+    assert raw_remote not in fetched_text
+    assert REDACTED_SECRET in fetched_text
+
+    listed = client.get("/memory/timeline/list?include_payload=1&search=FR-123")
+    assert listed.status_code == 200
+    listed_text = json.dumps(listed.json(), sort_keys=True)
+    assert raw_openai_key not in listed_text
+    assert raw_github_pat not in listed_text
+    assert raw_remote not in listed_text
+    assert "FR-123" in listed_text
+
+    exported = client.get("/memory/timeline/export?format=json&include_payload=1&search=FR-123")
+    assert exported.status_code == 200
+    assert raw_openai_key not in exported.text
+    assert raw_github_pat not in exported.text
+    assert raw_remote not in exported.text
+    assert REDACTED_SECRET in exported.text

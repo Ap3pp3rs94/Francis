@@ -90,6 +90,9 @@ export type MemoryTimelineListFilters = Pagination &
     actor?: string; // e.g. "francis", "user", "daemon", "worker:xyz"
     scope?: string; // optional governance scope
     correlation_id?: string; // trace/correlation id for linking events across subsystems
+    trace_id?: string;
+    mission_id?: string;
+    operation_id?: string;
 
     search?: string; // backend-dependent full text search
     tags?: string[];
@@ -105,6 +108,32 @@ export type ArtifactRef = {
   size_bytes?: number;
   sha256?: string;
   meta?: Record<string, unknown>;
+};
+
+export type MemoryTimelineProvenance = {
+  source?: string;
+  domain?: string;
+  actor?: string;
+  scope?: string;
+  correlation_id?: string;
+  parent_id?: string;
+};
+
+export type MemoryTimelineRetention = {
+  policy?: string;
+  class?: string;
+  until?: string;
+  expires_at?: string;
+  ttl_seconds?: number;
+};
+
+export type MemoryTimelineReferences = {
+  mission_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  approval_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
 };
 
 export type MemoryTimelineEvent = {
@@ -138,6 +167,10 @@ export type MemoryTimelineEvent = {
   payload?: unknown;
 
   artifacts?: ArtifactRef[];
+
+  provenance?: MemoryTimelineProvenance;
+  retention?: MemoryTimelineRetention;
+  references?: MemoryTimelineReferences;
 
   meta?: Record<string, unknown>;
 };
@@ -277,7 +310,7 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return;
 
   await new Promise<void>((resolve, reject) => {
-    const t = window.setTimeout(() => {
+    const t = globalThis.setTimeout(() => {
       cleanup();
       resolve();
     }, ms);
@@ -288,7 +321,7 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     };
 
     const cleanup = () => {
-      window.clearTimeout(t);
+      globalThis.clearTimeout(t);
       if (signal) signal.removeEventListener("abort", onAbort);
     };
 
@@ -336,6 +369,90 @@ function parseArtifact(raw: unknown): ArtifactRef | null {
   if (isRecord(raw.meta)) a.meta = raw.meta;
 
   return a;
+}
+
+function parseProvenance(raw: unknown, fallback: Record<string, unknown>): MemoryTimelineProvenance | undefined {
+  const sourceRecord = isRecord(raw) ? raw : {};
+  const p: MemoryTimelineProvenance = {};
+
+  const source = safeString(sourceRecord.source, safeString(fallback.source, ""));
+  if (source) p.source = source;
+
+  const domain = safeString(sourceRecord.domain, safeString(fallback.domain, ""));
+  if (domain) p.domain = domain;
+
+  const actor = safeString(sourceRecord.actor, safeString(fallback.actor, safeString(fallback.role, "")));
+  if (actor) p.actor = actor;
+
+  const scope = safeString(sourceRecord.scope, safeString(fallback.scope, safeString(fallback.scope_id, "")));
+  if (scope) p.scope = scope;
+
+  const corr = safeString(
+    sourceRecord.correlation_id,
+    safeString(fallback.correlation_id, safeString(fallback.trace_id, safeString(fallback.correlationId, ""))),
+  );
+  if (corr) p.correlation_id = corr;
+
+  const parent = safeString(sourceRecord.parent_id, safeString(fallback.parent_id, safeString(fallback.parentId, "")));
+  if (parent) p.parent_id = parent;
+
+  return Object.keys(p).length ? p : undefined;
+}
+
+function parseRetention(raw: unknown, fallback: Record<string, unknown>): MemoryTimelineRetention | undefined {
+  const sourceRecord = isRecord(raw) ? raw : {};
+  const r: MemoryTimelineRetention = {};
+
+  const policy = safeString(sourceRecord.policy, safeString(fallback.retention_policy, safeString(fallback.retentionPolicy, "")));
+  if (policy) r.policy = policy;
+
+  const retentionClass = safeString(
+    sourceRecord.class,
+    safeString(fallback.retention_class, safeString(fallback.retentionClass, "")),
+  );
+  if (retentionClass) r.class = retentionClass;
+
+  const until = safeString(sourceRecord.until, safeString(fallback.retention_until, safeString(fallback.retentionUntil, "")));
+  if (until) r.until = until;
+
+  const expiresAt = safeString(sourceRecord.expires_at, safeString(fallback.expires_at, safeString(fallback.expiresAt, "")));
+  if (expiresAt) r.expires_at = expiresAt;
+
+  const ttlSeconds = safeNumber(sourceRecord.ttl_seconds, safeNumber(fallback.ttl_seconds, safeNumber(fallback.ttlSeconds, 0)));
+  if (ttlSeconds > 0) r.ttl_seconds = ttlSeconds;
+
+  return Object.keys(r).length ? r : undefined;
+}
+
+function parseReferences(raw: unknown, fallback: Record<string, unknown>): MemoryTimelineReferences | undefined {
+  const sourceRecord = isRecord(raw) ? raw : {};
+  const r: MemoryTimelineReferences = {};
+
+  const missionId = safeString(sourceRecord.mission_id, safeString(fallback.mission_id, ""));
+  if (missionId) r.mission_id = missionId;
+
+  const operationId = safeString(
+    sourceRecord.operation_id,
+    safeString(fallback.operation_id, safeString(fallback.task_id, "")),
+  );
+  if (operationId) r.operation_id = operationId;
+
+  const traceId = safeString(sourceRecord.trace_id, safeString(fallback.trace_id, ""));
+  if (traceId) r.trace_id = traceId;
+
+  const approvalId = safeString(sourceRecord.approval_id, safeString(fallback.approval_id, ""));
+  if (approvalId) r.approval_id = approvalId;
+
+  const runId = safeString(sourceRecord.run_id, safeString(fallback.run_id, ""));
+  if (runId) r.run_id = runId;
+
+  const artifactDir = safeString(
+    sourceRecord.artifact_dir,
+    safeString(fallback.artifact_dir, safeString(fallback.artifact_path, "")),
+  );
+  if (artifactDir) r.artifact_dir = artifactDir;
+
+  return Object.keys(r).length ? r : undefined;
 }
 
 function parseEvent(raw: unknown): MemoryTimelineEvent | null {
@@ -399,6 +516,15 @@ function parseEvent(raw: unknown): MemoryTimelineEvent | null {
 
   if (isRecord(raw.meta)) e.meta = raw.meta;
 
+  const provenance = parseProvenance(raw.provenance, { ...raw, ...(isRecord(raw.meta) ? raw.meta : {}) });
+  if (provenance) e.provenance = provenance;
+
+  const retention = parseRetention(raw.retention, isRecord(raw.meta) ? raw.meta : {});
+  if (retention) e.retention = retention;
+
+  const references = parseReferences(raw.references, { ...raw, ...(isRecord(raw.meta) ? raw.meta : {}) });
+  if (references) e.references = references;
+
   return e;
 }
 
@@ -426,6 +552,9 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         actor: q?.actor,
         scope: q?.scope,
         correlation_id: q?.correlation_id,
+        trace_id: q?.trace_id,
+        mission_id: q?.mission_id,
+        operation_id: q?.operation_id,
         search: q?.search,
         include_payload: q?.include_payload ? "1" : undefined,
         tags: q?.tags,
@@ -447,6 +576,9 @@ export function defaultMemoryTimelineEndpoints(): MemoryTimelineEndpoints {
         actor: q?.actor,
         scope: q?.scope,
         correlation_id: q?.correlation_id,
+        trace_id: q?.trace_id,
+        mission_id: q?.mission_id,
+        operation_id: q?.operation_id,
         search: q?.search,
         tags: q?.tags,
         kinds: q?.kinds,
@@ -514,9 +646,9 @@ export class MemoryTimelineClient {
     const controller = new AbortController();
     let timedOut = false;
 
-    let timeoutId: number | null = null;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
     if (timeoutMs > 0) {
-      timeoutId = window.setTimeout(() => {
+      timeoutId = globalThis.setTimeout(() => {
         timedOut = true;
         controller.abort();
       }, timeoutMs);
@@ -548,7 +680,7 @@ export class MemoryTimelineClient {
       }
       throw err;
     } finally {
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
       if (externalSignal && !externalSignal.aborted) externalSignal.removeEventListener("abort", onExternalAbort);
     }
   }
