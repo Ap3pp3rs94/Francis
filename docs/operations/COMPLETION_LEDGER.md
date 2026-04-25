@@ -288,6 +288,11 @@ lineage so clients can show the live mission target without reconstructing it
 from meta, queue items, loop state, linked operations, and run-ledger receipts
 separately.
 
+As of `2026-04-25`, the ORB selected mission inspector now consumes that
+`current_task` projection first for the current task id, latest run status,
+task status, result, gate, approval id/status, and recovery target. Existing
+mission, queue, and loop-state fields remain as fallback compatibility paths.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

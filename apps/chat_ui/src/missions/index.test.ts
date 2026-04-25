@@ -123,6 +123,15 @@ test("missionCurrentTaskId prefers explicit current-task sources before linked-t
       mission,
       { last_task_id: "tsk_queue_current", action_target_id: "tsk_action_current", last_advance_operation_id: "tsk_advance_current" },
       { operation_id: "tsk_handoff_current" },
+      { operation_id: "tsk_contract_current" },
+    ),
+    "tsk_contract_current",
+  );
+  assert.equal(
+    missionCurrentTaskId(
+      mission,
+      { last_task_id: "tsk_queue_current", action_target_id: "tsk_action_current", last_advance_operation_id: "tsk_advance_current" },
+      { operation_id: "tsk_handoff_current" },
     ),
     "tsk_queue_current",
   );
@@ -154,9 +163,12 @@ test("missionRecoveryTargetId preserves dependency missions but routes operation
     "msn_dependency",
   );
   assert.equal(
-    missionRecoveryTargetId(mission, { action_target_id: "tsk_stale", last_task_id: "tsk_current" }),
-    "tsk_current",
+    missionRecoveryTargetId(mission, { action_target_id: "tsk_stale", last_task_id: "tsk_current" }, undefined, {
+      operation_id: "tsk_contract_current",
+    }),
+    "tsk_contract_current",
   );
+  assert.equal(missionRecoveryTargetId(mission, { action_target_id: "tsk_stale", last_task_id: "tsk_current" }), "tsk_current");
   assert.equal(missionRecoveryTargetId(mission, { action_target_id: "tsk_stale" }), "tsk_meta_current");
 });
 

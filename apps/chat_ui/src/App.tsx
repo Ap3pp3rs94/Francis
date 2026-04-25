@@ -3502,14 +3502,25 @@ function SystemPanel(props: {
   const missionSelectionKey = missionSelectionCandidates.join("|");
   const selectedMission = missionDetail?.mission;
   const selectedMissionMeta = isRecord(selectedMission?.meta) ? selectedMission.meta : {};
+  const selectedMissionCurrentTask = missionDetail?.current_task;
+  const selectedMissionTaskStatus = safeString(selectedMissionCurrentTask?.task_status).trim();
   const selectedMissionLastTaskStatus =
-    safeString(selectedMission?.last_task_status).trim() || safeString(selectedMissionMeta.last_task_status).trim();
+    safeString(selectedMissionCurrentTask?.operation_status).trim() ||
+    selectedMissionTaskStatus ||
+    safeString(selectedMission?.last_task_status).trim() ||
+    safeString(selectedMissionMeta.last_task_status).trim();
   const selectedMissionLastTaskResultStatus =
-    safeString(selectedMission?.last_task_result_status).trim() || safeString(selectedMissionMeta.last_task_result_status).trim();
+    safeString(selectedMissionCurrentTask?.result_status).trim() ||
+    safeString(selectedMission?.last_task_result_status).trim() ||
+    safeString(selectedMissionMeta.last_task_result_status).trim();
   const selectedMissionLastTaskGate =
-    safeString(selectedMission?.last_task_gate).trim() || safeString(selectedMissionMeta.last_task_gate).trim();
+    safeString(selectedMissionCurrentTask?.gate).trim() ||
+    safeString(selectedMission?.last_task_gate).trim() ||
+    safeString(selectedMissionMeta.last_task_gate).trim();
   const selectedMissionLastTaskReason =
-    safeString(selectedMission?.last_task_reason).trim() || safeString(selectedMissionMeta.last_task_reason).trim();
+    safeString(selectedMissionCurrentTask?.reason).trim() ||
+    safeString(selectedMission?.last_task_reason).trim() ||
+    safeString(selectedMissionMeta.last_task_reason).trim();
   const selectedMissionContextId = safeString(selectedMission?.id).trim() || selectedMissionId;
   const missionLinkedOperations = missionDetail?.linked_operations ?? [];
   const missionRunLedger = missionDetail?.run_ledger ?? [];
@@ -3517,7 +3528,12 @@ function SystemPanel(props: {
   const missionLoopState: MissionLoopState | undefined = missionDetail?.loop_state;
   const missionLoopHandoff = missionLoopState?.handoff;
   const selectedMissionQueueItem = missionDetail?.mission?.id === selectedMission?.id ? missionDetail.queue_item : undefined;
-  const selectedMissionCurrentTaskId = missionCurrentTaskId(selectedMission, selectedMissionQueueItem, missionLoopHandoff);
+  const selectedMissionCurrentTaskId = missionCurrentTaskId(
+    selectedMission,
+    selectedMissionQueueItem,
+    missionLoopHandoff,
+    selectedMissionCurrentTask,
+  );
   const missionLoopStages = missionLoopState
     ? ([
         { key: "plan", label: "Plan", stage: missionLoopState.plan },
@@ -3529,7 +3545,8 @@ function SystemPanel(props: {
     : [];
   const primaryMissionOperation = missionCurrentOperation(missionLinkedOperations, selectedMissionCurrentTaskId);
   const primaryMissionOperationStatus = operationStatus(primaryMissionOperation);
-  const primaryMissionOperationApprovalId = operationApprovalId(primaryMissionOperation);
+  const primaryMissionOperationApprovalId =
+    safeString(selectedMissionCurrentTask?.approval_id).trim() || operationApprovalId(primaryMissionOperation);
   const primaryMissionRecoverySummary =
     primaryMissionOperationStatus === "running"
       ? "Execution is live for this mission. You can monitor the linked task here or cancel it if the plan needs to stop."
@@ -3551,12 +3568,20 @@ function SystemPanel(props: {
   const selectedMissionAdvanceReason = safeString(selectedMissionQueueItem?.advance?.reason).trim();
   const selectedMissionAdvanceLabel =
     selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
-  const selectedMissionActionTargetId = missionRecoveryTargetId(selectedMission, selectedMissionQueueItem, missionLoopHandoff);
+  const selectedMissionActionTargetId = missionRecoveryTargetId(
+    selectedMission,
+    selectedMissionQueueItem,
+    missionLoopHandoff,
+    selectedMissionCurrentTask,
+  );
   const selectedMissionTargetIsMission = selectedMissionActionTargetId.startsWith("msn_");
   const selectedMissionTargetIsOperation = selectedMissionActionTargetId.startsWith("tsk_");
   const selectedMissionApprovalId =
-    safeString(selectedMissionQueueItem?.last_task_approval_id).trim() || safeString(missionLoopHandoff?.approval_id).trim();
-  const selectedMissionApprovalStatus = safeString(selectedMissionQueueItem?.last_task_approval_status).trim();
+    safeString(selectedMissionCurrentTask?.approval_id).trim() ||
+    safeString(selectedMissionQueueItem?.last_task_approval_id).trim() ||
+    safeString(missionLoopHandoff?.approval_id).trim();
+  const selectedMissionApprovalStatus =
+    safeString(selectedMissionCurrentTask?.approval_status).trim() || safeString(selectedMissionQueueItem?.last_task_approval_status).trim();
   const selectedMissionFirstDependencyId =
     safeString(selectedMissionDependencyState?.first_unresolved?.id).trim() ||
     selectedMission?.dependency_ids?.find((dependencyId) => safeString(dependencyId).trim().length > 0) ||
@@ -3618,10 +3643,16 @@ function SystemPanel(props: {
         const nextDetail = await loadMissionDetail(cleaned);
         await refresh();
         const actionHandoff = response.loop_state?.handoff ?? nextDetail?.loop_state?.handoff;
-        const nextMissionCurrentTaskId = missionCurrentTaskId(nextDetail?.mission, nextDetail?.queue_item, actionHandoff);
+        const responseCurrentTask = response.current_task ?? nextDetail?.current_task;
+        const nextMissionCurrentTaskId = missionCurrentTaskId(
+          nextDetail?.mission,
+          nextDetail?.queue_item,
+          actionHandoff,
+          responseCurrentTask,
+        );
         const resolvedOperation =
           response.operation ?? missionCurrentOperation(nextDetail?.linked_operations ?? [], nextMissionCurrentTaskId);
-        const approvalId = operationApprovalId(resolvedOperation);
+        const approvalId = safeString(responseCurrentTask?.approval_id).trim() || operationApprovalId(resolvedOperation);
         const nextStatus = safeString(response.status || nextDetail?.mission?.status || response.mission?.status, "unknown");
         if (!response.ok) {
           setMissionActionNotice({
@@ -3639,7 +3670,11 @@ function SystemPanel(props: {
         const approvalMessage = approvalId ? ` Review approval ${approvalId}.` : "";
         setMissionActionResult({
           missionId: cleaned,
-          operationId: safeString(response.operation_id).trim() || safeString(resolvedOperation?.id).trim() || undefined,
+          operationId:
+            safeString(responseCurrentTask?.operation_id).trim() ||
+            safeString(response.operation_id).trim() ||
+            safeString(resolvedOperation?.id).trim() ||
+            undefined,
           approvalId: approvalId || undefined,
         });
         setMissionActionNotice({
@@ -5295,10 +5330,20 @@ function SystemPanel(props: {
 
               {selectedMission.summary ? <div style={{ fontSize: 12, color: THEME.muted, marginTop: 8 }}>{selectedMission.summary}</div> : null}
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
-                next_step=<code>{selectedMission.next_step || "unset"}</code>
+                next_step=<code>{safeString(selectedMissionCurrentTask?.next_step).trim() || selectedMission.next_step || "unset"}</code>
+                {selectedMissionCurrentTaskId ? (
+                  <>
+                    {" / "}current_task=<code>{selectedMissionCurrentTaskId}</code>
+                  </>
+                ) : null}
                 {selectedMissionLastTaskStatus ? (
                   <>
                     {" / "}latest_run=<code>{selectedMissionLastTaskStatus}</code>
+                  </>
+                ) : null}
+                {selectedMissionTaskStatus && selectedMissionTaskStatus !== selectedMissionLastTaskStatus ? (
+                  <>
+                    {" / "}task_status=<code>{selectedMissionTaskStatus}</code>
                   </>
                 ) : null}
                 {selectedMissionLastTaskResultStatus ? (
@@ -5309,6 +5354,11 @@ function SystemPanel(props: {
                 {selectedMissionLastTaskGate ? (
                   <>
                     {" / "}gate=<code>{selectedMissionLastTaskGate}</code>
+                  </>
+                ) : null}
+                {selectedMissionCurrentTask?.source ? (
+                  <>
+                    {" / "}source=<code>{selectedMissionCurrentTask.source}</code>
                   </>
                 ) : null}
               </div>

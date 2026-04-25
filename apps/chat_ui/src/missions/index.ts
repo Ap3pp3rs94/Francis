@@ -293,6 +293,10 @@ export type MissionTaskHandoffTarget = {
   operation_id?: unknown;
 };
 
+export type MissionCurrentTaskTarget = {
+  operation_id?: unknown;
+};
+
 export class MissionsApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -916,7 +920,11 @@ export function missionCurrentTaskId(
   mission: MissionTaskTarget | null | undefined,
   queueItem?: MissionQueueTaskTarget,
   handoff?: MissionTaskHandoffTarget,
+  currentTask?: MissionCurrentTaskTarget,
 ): string {
+  const currentTaskOperationId = safeString(currentTask?.operation_id).trim();
+  if (currentTaskOperationId) return currentTaskOperationId;
+
   const queueLastTaskId = safeString(queueItem?.last_task_id).trim();
   if (queueLastTaskId) return queueLastTaskId;
 
@@ -942,10 +950,11 @@ export function missionRecoveryTargetId(
   mission: MissionTaskTarget | null | undefined,
   queueItem?: MissionQueueTaskTarget,
   handoff?: MissionTaskHandoffTarget,
+  currentTask?: MissionCurrentTaskTarget,
 ): string {
   const actionTargetId = safeString(queueItem?.action_target_id).trim();
   if (actionTargetId.startsWith("msn_")) return actionTargetId;
-  return missionCurrentTaskId(mission, queueItem, handoff);
+  return missionCurrentTaskId(mission, queueItem, handoff, currentTask);
 }
 
 function operationDetailId(detail: OperationDetail | null | undefined): string {
