@@ -934,6 +934,22 @@ explicit operator actions:
   policy, or memory-write behavior changed; this only prevents stale
   operator-facing loop and continuity posture after live-path actions.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail mission-loop retry visibility. This
+advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY ->
+P1_INTERFACE` line by making reconnect/retry behavior visible from task
+inspection:
+
+- `apps/chat_ui/src/App.tsx` now makes the Operations panel `Refresh` action
+  reload the operation list, selected operation detail, and linked mission loop
+  bridge together instead of only refreshing the list.
+- The Operation Detail `Mission Loop Bridge` now exposes an explicit
+  `Refresh loop` action so a transient linked-mission read failure can be
+  retried in place.
+- No operation mutation, mission mutation, approval decision, execution, shell,
+  policy, or memory-write behavior changed; this only makes the existing read
+  path recoverable after reconnect or route failure.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by

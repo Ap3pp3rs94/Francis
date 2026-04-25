@@ -9334,6 +9334,16 @@ function OperationsPanel(props: {
     };
   }, [loadSelectedMissionDetail, selectedMissionId]);
 
+  const refreshSelectedOperationView = useCallback(async () => {
+    await refresh();
+    if (!selectedOperationId) return;
+    const nextDetail = await loadDetail(selectedOperationId);
+    const bridgeMissionId = operationMissionId(nextDetail?.operation) || selectedMissionId;
+    if (bridgeMissionId) {
+      await loadSelectedMissionDetail(bridgeMissionId, { showBusy: false });
+    }
+  }, [loadDetail, loadSelectedMissionDetail, refresh, selectedMissionId, selectedOperationId]);
+
   const runWorkerCycle = useCallback(async () => {
     if (!canRunWorkerCycle) return;
     setWorkerCycleBusy(true);
@@ -9656,7 +9666,7 @@ function OperationsPanel(props: {
             <option value="failed">Failed</option>
             <option value="canceled">Canceled</option>
           </select>
-          <button onClick={() => void refresh()} disabled={busy || actionBusy !== "" || workerCycleBusy} style={buttonStyle}>
+          <button onClick={() => void refreshSelectedOperationView()} disabled={busy || detailBusy || actionBusy !== "" || workerCycleBusy} style={buttonStyle}>
             {busy ? "Refreshing." : "Refresh"}
           </button>
         </div>
@@ -10031,6 +10041,13 @@ function OperationsPanel(props: {
                           {selectedMissionCurrentTask.operation_status}
                         </span>
                       ) : null}
+                      <button
+                        style={{ ...buttonStyle, padding: "4px 8px", fontSize: 11 }}
+                        disabled={selectedMissionDetailBusy}
+                        onClick={() => void loadSelectedMissionDetail(selectedMissionId)}
+                      >
+                        {selectedMissionDetailBusy ? "Refreshing." : "Refresh loop"}
+                      </button>
                     </div>
                   </div>
                   {selectedMissionDetailBusy ? (
