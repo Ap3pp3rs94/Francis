@@ -134,6 +134,13 @@ keys, and secrets are redacted before `audit.jsonl`, `francis.jsonl`, or
 `errors.jsonl` are written or before `telemetry.audit.record` returns its
 receipt payload.
 
+As of `2026-04-25`, supervised execution approval and artifact surfaces no
+longer persist raw secret-like command text or command output. Approval payloads
+seal secret-bearing commands with HMAC-backed values so exact-action matching is
+preserved, while request, plan, mismatch, result, stdout, and stderr artifacts
+store redacted views. Raw task inputs still remain in local task records for the
+approved execution path and API projections continue to return redacted views.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

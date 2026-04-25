@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.governance import approvals
+from francis.governance.redaction import redact_governed_value, redact_secret_text, seal_governed_approval_value
 from francis.kernel.paths import data_dir, repo_root
 
 
@@ -27,7 +28,13 @@ def _artifact_dir(run_id: str) -> Path:
 
 def _write_json(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    redacted = redact_governed_value(obj)
+    path.write_text(json.dumps(redacted, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+
+def _write_redacted_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(redact_secret_text(value or ""), encoding="utf-8")
 
 
 def _find_approval(approval_id: str) -> tuple[str, dict[str, Any] | None]:
@@ -108,6 +115,20 @@ def _approval_payload(
     }
 
 
+def _approval_contract_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "objective": seal_governed_approval_value(payload.get("objective"), key="objective"),
+        "user_command": seal_governed_approval_value(payload.get("user_command"), key="user_command"),
+        "cwd": seal_governed_approval_value(payload.get("cwd"), key="cwd"),
+        "timeout_sec": _normalize_timeout_sec(payload.get("timeout_sec")),
+        "expected_artifacts": seal_governed_approval_value(
+            _normalize_string_list(payload.get("expected_artifacts")),
+            key="expected_artifacts",
+        ),
+        "prechecks": seal_governed_approval_value(_normalize_string_list(payload.get("prechecks")), key="prechecks"),
+    }
+
+
 def _request_approval(
     *,
     objective: str,
@@ -152,15 +173,7 @@ def _approval_matches_request(approval_record: dict[str, Any] | None, expected_p
     if not isinstance(payload, dict):
         return False
 
-    approved_payload = _approval_payload(
-        objective=_safe_str(payload.get("objective")),
-        user_command=_safe_str(payload.get("user_command")),
-        cwd=_safe_str(payload.get("cwd")),
-        timeout_sec=payload.get("timeout_sec"),
-        expected_artifacts=payload.get("expected_artifacts"),
-        prechecks=payload.get("prechecks"),
-    )
-    return approved_payload == expected_payload
+    return payload == expected_payload
 
 
 def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -183,7 +196,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
     timeout_sec = _normalize_timeout_sec(inputs.get("timeout_sec"))
     expected_artifacts = _normalize_string_list(inputs.get("expected_artifacts"))
     prechecks = _normalize_string_list(inputs.get("prechecks"))
-    request_payload = _approval_payload(
+    raw_request_payload = _approval_payload(
         objective=_safe_str(objective),
         user_command=user_command,
         cwd=cwd,
@@ -191,6 +204,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         expected_artifacts=expected_artifacts,
         prechecks=prechecks,
     )
+    request_payload = _approval_contract_payload(raw_request_payload)
 
     approval_id = _safe_str(inputs.get("approval_id")).strip()
 
@@ -366,8 +380,8 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             env=os.environ.copy(),
         )
         dt = time.time() - t0
-        (art / "stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
-        (art / "stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+        _write_redacted_text(art / "stdout.txt", proc.stdout or "")
+        _write_redacted_text(art / "stderr.txt", proc.stderr or "")
         _write_json(
             art / "result.json",
             {

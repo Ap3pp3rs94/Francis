@@ -835,6 +835,123 @@ def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch,
     assert mirror_branch_after.stdout.strip()
 
 
+def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_secret = "supervisedexecsecret123"
+    command = f"echo password={raw_secret}"
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "run approved secret-bearing command",
+            "input": {"user_command": command, "cwd": str(tmp_path)},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.supervised_secret"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    assert pending_body["operation"]["input"]["user_command"] == "echo password=[REDACTED:secret]"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    approval_text = approval_path.read_text(encoding="utf-8")
+    assert raw_secret not in approval_text
+    approval_payload = json.loads(approval_text)
+    sealed_command = approval_payload["payload"]["user_command"]
+    assert sealed_command["kind"] == "sealed_secret"
+    assert sealed_command["redacted"] == "echo password=[REDACTED:secret]"
+    assert str(sealed_command["digest"]).startswith("hmac-sha256:")
+
+    request_artifact = data_root / "artifacts" / "supervised_exec" / approval_id / "request.json"
+    assert raw_secret not in request_artifact.read_text(encoding="utf-8")
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.supervised_secret"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    output = executed_body["operation"]["output"]
+    assert isinstance(output, dict)
+    assert output["status"] == "success"
+    art = Path(str(output["artifact_dir"]))
+    assert raw_secret not in (art / "stdout.txt").read_text(encoding="utf-8")
+    assert "password=[REDACTED:secret]" in (art / "stdout.txt").read_text(encoding="utf-8")
+    assert raw_secret not in (art / "plan.json").read_text(encoding="utf-8")
+    assert raw_secret not in (art / "result.json").read_text(encoding="utf-8")
+
+    mismatch_secret = "supervisedmismatchsecret123"
+    different_secret = "superviseddifferentsecret123"
+    mismatch_created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "verify sealed mismatch",
+            "input": {"user_command": f"echo password={mismatch_secret}", "cwd": str(tmp_path)},
+        },
+    )
+    assert mismatch_created.status_code == 200
+    mismatch_operation_id = str(mismatch_created.json()["operation_id"])
+
+    mismatch_pending = client.post(
+        f"/operations/{mismatch_operation_id}/run",
+        json={"worker_id": "test.operations.supervised_mismatch"},
+    )
+    assert mismatch_pending.status_code == 200
+    first_approval_id = str(mismatch_pending.json()["operation"]["meta"]["approval_id"])
+    assert first_approval_id
+
+    first_approval = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    assert first_approval.status_code == 200
+    assert first_approval.json()["ok"] is True
+
+    record_path = data_root / "tasks" / mismatch_operation_id / "record.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["inputs"]["user_command"] = f"echo password={different_secret}"
+    record_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+    mismatched = client.post(
+        f"/operations/{mismatch_operation_id}/run",
+        json={"worker_id": "test.operations.supervised_mismatch"},
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["status"] == "queued"
+    mismatch_output = mismatched_body["operation"]["output"]
+    assert isinstance(mismatch_output, dict)
+    assert mismatch_output["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatch_output["approval_id"])
+    assert refreshed_approval_id != first_approval_id
+
+    refreshed_art = Path(str(mismatch_output["artifact_dir"]))
+    mismatch_artifact_text = (refreshed_art / "mismatch.json").read_text(encoding="utf-8")
+    assert mismatch_secret not in mismatch_artifact_text
+    assert different_secret not in mismatch_artifact_text
+    refreshed_approval_text = (data_root / "approvals" / "pending" / f"{refreshed_approval_id}.json").read_text(
+        encoding="utf-8"
+    )
+    assert different_secret not in refreshed_approval_text
+
+
 def test_operations_supervised_exec_refreshes_stale_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
