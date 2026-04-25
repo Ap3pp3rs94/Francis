@@ -681,6 +681,15 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert deadlettered_body["loop_state"]["active_stage"] == "deadletter"
     assert deadlettered_body["loop_state"]["handoff"]["action"] == "review_deadletter"
     assert deadlettered_body["loop_state"]["handoff"]["operation_id"] == operation_id
+    recovery = deadlettered_body["queue_item"]["recovery"]
+    assert recovery["source_status"] == "deadlettered"
+    assert recovery["action"] == "review_deadletter"
+    assert recovery["target_id"] == operation_id
+    assert recovery["reason"] == "operator_abandoned_after_governance_hold"
+    assert "not reopened automatically" in recovery["next_step"]
+    assert recovery["operator_required"] is True
+    assert recovery["automatic_retry"] is False
+    assert recovery["read_only"] is True
 
     history_events = [str(item.get("event")) for item in deadlettered_body["history"]]
     assert "status_changed" in history_events
@@ -691,6 +700,7 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     fetched_body = fetched.json()
     assert fetched_body["mission"]["status"] == "deadlettered"
     assert fetched_body["mission"]["meta"]["last_task_result_status"] == "blocked"
+    assert fetched_body["queue_item"]["recovery"]["action"] == "review_deadletter"
 
     ticked = client.post(f"/missions/{mission_id}/tick", json={"actor": "test.missions.deadletter"})
     assert ticked.status_code == 200

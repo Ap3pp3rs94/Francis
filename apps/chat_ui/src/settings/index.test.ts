@@ -43,6 +43,16 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         id: "mission_old",
         objective: "Older deadletter with no explicit action",
         deadletter_reason: "manual_review_needed",
+        recovery: {
+          source_status: "deadlettered",
+          action: "review_deadletter",
+          target_id: "tsk_old",
+          reason: "manual_review_needed",
+          next_step: "Review receipts before declaring replacement work.",
+          operator_required: true,
+          automatic_retry: false,
+          read_only: true,
+        },
         updated_at: "2026-04-22T09:00:00Z",
         latest_activity: { name: "deadlettered", status: "failed", ts: 1_745_312_400 },
         last_task_id: "tsk_old",
@@ -98,6 +108,10 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.visible[1]?.reason, "worker_failed_twice");
   assert.equal(presentation.visible[1]?.last_task_status, undefined);
   assert.equal(presentation.ordered[2]?.last_task_status, "blocked");
+  assert.equal(presentation.ordered[2]?.recovery?.action, "review_deadletter");
+  assert.equal(presentation.ordered[2]?.recovery?.target_id, "tsk_old");
+  assert.equal(presentation.ordered[2]?.recovery?.automatic_retry, false);
+  assert.equal(presentation.ordered[2]?.recovery?.read_only, true);
   assert.equal(presentation.ordered[2]?.last_task_result_status, "failed");
   assert.equal(presentation.ordered[2]?.last_task_gate, "approvals_gate");
   assert.equal(presentation.ordered[2]?.last_task_approval_id, "apr_dead_old");
@@ -321,6 +335,16 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               objective: "Deadlettered mission with persisted receipts",
               recommended_action: "review_deadletter",
               deadletter_reason: "manual_cleanup",
+              recovery: {
+                source_status: "deadlettered",
+                action: "review_deadletter",
+                target_id: "tsk_dead",
+                reason: "manual_cleanup",
+                next_step: "Review receipts and declare replacement work if continuation is still needed.",
+                operator_required: true,
+                automatic_retry: false,
+                read_only: true,
+              },
               last_task_approval_id: "apr_dead_exact",
               last_task_previous_approval_id: "apr_dead_previous",
               last_task_previous_approval_status: "approved",
@@ -492,6 +516,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_ts, "2026-04-14T07:45:00Z");
     assert.equal(worldState.overview?.mission_queue?.[0]?.history_tail?.[1]?.event, "mission_ticked");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.action, "review_deadletter");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.target_id, "tsk_dead");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.automatic_retry, false);
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.read_only, true);
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_id, "apr_dead_exact");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.operation_id, "tsk_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.approval_id, "apr_dead_exact");
@@ -1279,6 +1307,16 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             objective: "Retry failed sync",
             reason: "policy_blocked",
             recommended_action: "inspect approvals",
+            recovery: {
+              source_status: "deadlettered",
+              action: "review_deadletter",
+              target_id: "tsk_dead_current",
+              reason: "policy_blocked",
+              next_step: "Review receipts before declaring replacement work.",
+              operator_required: true,
+              automatic_retry: false,
+              read_only: true,
+            },
             last_task_id: "tsk_dead",
             last_task_status: "accepted",
             last_task_result_status: "blocked",
@@ -1346,6 +1384,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_history_event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.action, "review_deadletter");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.target_id, "tsk_dead_current");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.automatic_retry, false);
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.read_only, true);
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_id, "tsk_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.operation_id, "tsk_dead_current");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.approval_id, "apr_dead_exact");

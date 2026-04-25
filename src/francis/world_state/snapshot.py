@@ -1385,6 +1385,7 @@ def _mission_briefing(
                 "objective": str(item.get("objective") or "").strip(),
                 "reason": str(item.get("deadletter_reason") or "").strip(),
                 "recommended_action": str(item.get("recommended_action") or "").strip(),
+                "recovery": dict(item.get("recovery") or {}) if isinstance(item.get("recovery"), dict) else {},
                 **_mission_hold_projection(item),
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
                 "last_task_status": str(item.get("last_task_status") or "").strip(),

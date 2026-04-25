@@ -68,6 +68,13 @@ not a completion claim. Mission continuity can now report which Stage 3 criteria
 are satisfied, missing, or attention-worthy from the current local mission
 records, queue, deadletter, history, and briefing context.
 
+As of `2026-04-25`, failed and deadlettered mission queue items carry a
+read-only `recovery` projection. The projection records source status, review
+action, target task, recovery reason, next step, operator-required posture, and
+the fact that automatic retry is not enabled. Mission detail, world-state
+deadletter lists, continuity deadletter previews, and ORB deadletter cards can
+show this recovery posture without implying a reopen or retry mutation path.
+
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
 return the current mission history, linked operations, run-ledger projection, and

@@ -500,6 +500,42 @@ def _advance_projection(recommended_action: str, action_target_id: str, operator
     }
 
 
+def _recovery_projection(
+    record: "MissionRecord",
+    *,
+    recommended_action: str,
+    action_target_id: str,
+    operator_hint: str,
+) -> dict[str, Any]:
+    status = str(record.status.value or "").strip().lower()
+    if status not in {MissionStatus.FAILED.value, MissionStatus.DEADLETTERED.value}:
+        return {}
+
+    target_id = str(action_target_id or "").strip()
+    reason = _first_text(record.deadletter_reason, operator_hint, record.next_step)
+    if status == MissionStatus.DEADLETTERED.value:
+        next_step = (
+            "Review mission receipts and declare replacement work if continuation is still needed; "
+            "deadlettered missions are not reopened automatically."
+        )
+    else:
+        next_step = (
+            "Review the failed linked task, then retry through existing governed operation paths or "
+            "deadletter the mission explicitly."
+        )
+
+    return {
+        "source_status": status,
+        "action": str(recommended_action or "").strip() or "review_mission",
+        "target_id": target_id,
+        "reason": reason or "Mission requires operator recovery review.",
+        "next_step": next_step,
+        "operator_required": True,
+        "automatic_retry": False,
+        "read_only": True,
+    }
+
+
 def _first_text(*values: Any) -> str:
     for value in values:
         text = str(value or "").strip()
@@ -601,6 +637,12 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "operator_hint": operator_hint,
         "action_target_id": action_target_id,
         "advance": _advance_projection(recommended_action, action_target_id, operator_hint),
+        "recovery": _recovery_projection(
+            record,
+            recommended_action=recommended_action,
+            action_target_id=action_target_id,
+            operator_hint=operator_hint,
+        ),
         "current_task": _queue_current_task_projection(
             record,
             meta,

@@ -470,7 +470,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
       applied: 2,
       advanced: 1,
       processed: 3,
-      counts: { queued: 1, blocked: 1, deadlettered: 0 },
+      counts: { queued: 1, blocked: 1, deadlettered: 1 },
       items: [
         {
           id: "mission_blocked",
@@ -528,7 +528,26 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           ],
         },
       ],
-      deadletter: [],
+      deadletter: [
+        {
+          id: "mission_dead",
+          status: "deadlettered",
+          objective: "Review deadlettered work",
+          recommended_action: "review_deadletter",
+          action_target_id: "tsk_dead",
+          deadletter_reason: "operator_abandoned_after_governance_hold",
+          recovery: {
+            source_status: "deadlettered",
+            action: "review_deadletter",
+            target_id: "tsk_dead",
+            reason: "operator_abandoned_after_governance_hold",
+            next_step: "Review receipts and declare replacement work.",
+            operator_required: true,
+            automatic_retry: false,
+            read_only: true,
+          },
+        },
+      ],
       results: [
         {
           mission_id: "mission_ready",
@@ -667,6 +686,12 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.advanced, 1);
     assert.equal(response.processed, 3);
     assert.equal(response.counts?.blocked, 1);
+    assert.equal(response.deadletter[0]?.recovery?.action, "review_deadletter");
+    assert.equal(response.deadletter[0]?.recovery?.source_status, "deadlettered");
+    assert.equal(response.deadletter[0]?.recovery?.target_id, "tsk_dead");
+    assert.equal(response.deadletter[0]?.recovery?.operator_required, true);
+    assert.equal(response.deadletter[0]?.recovery?.automatic_retry, false);
+    assert.equal(response.deadletter[0]?.recovery?.read_only, true);
     assert.equal(response.items[0]?.recommended_action, "raise_trust_or_reduce_risk");
     assert.equal(response.items[0]?.advance?.eligible, false);
     assert.equal(response.items[0]?.advance?.action, "raise_trust_or_reduce_risk");

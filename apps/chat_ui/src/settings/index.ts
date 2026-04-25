@@ -277,6 +277,17 @@ export type WorldStateMissionAdvanceProjection = {
   reason?: string;
 };
 
+export type WorldStateMissionRecoveryProjection = {
+  source_status?: string;
+  action?: string;
+  target_id?: string;
+  reason?: string;
+  next_step?: string;
+  operator_required?: boolean;
+  automatic_retry?: boolean;
+  read_only?: boolean;
+};
+
 export type MissionHistoryPreviewEntry = {
   event?: string;
   ts?: string;
@@ -313,6 +324,7 @@ export type WorldStateMissionQueueItem = {
   operator_hint?: string;
   action_target_id?: string;
   advance?: WorldStateMissionAdvanceProjection;
+  recovery?: WorldStateMissionRecoveryProjection;
   current_task?: WorldStateMissionCurrentTask;
   deadletter_reason?: string;
   history_count?: number;
@@ -483,6 +495,7 @@ export type ContinuityBriefingFocusItem = {
   operator_hint?: string;
   action_target_id?: string;
   advance?: WorldStateMissionAdvanceProjection;
+  recovery?: WorldStateMissionRecoveryProjection;
   current_task?: WorldStateMissionCurrentTask;
   last_task_id?: string;
   last_task_status?: string;
@@ -532,6 +545,7 @@ export type ContinuityBriefingDeadletterItem = {
   objective?: string;
   reason?: string;
   recommended_action?: string;
+  recovery?: WorldStateMissionRecoveryProjection;
   last_task_id?: string;
   last_task_status?: string;
   last_task_result_status?: string;
@@ -656,6 +670,7 @@ type MissionDeadletterLike = {
   objective?: string;
   reason?: string;
   recommended_action?: string;
+  recovery?: WorldStateMissionRecoveryProjection;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
   current_task?: WorldStateMissionCurrentTask;
@@ -684,6 +699,7 @@ export type MissionDeadletterPresentationItem = {
   objective?: string;
   reason?: string;
   recommended_action?: string;
+  recovery?: WorldStateMissionRecoveryProjection;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
   current_task?: WorldStateMissionCurrentTask;
@@ -1160,6 +1176,7 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
           objective: safeString(item.objective, "") || undefined,
           reason: safeString(item.reason, "").trim() || safeString(item.deadletter_reason, "").trim() || undefined,
           recommended_action: safeString(item.recommended_action, "").trim() || undefined,
+          recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
           updated_at: safeString(item.updated_at, "").trim() || undefined,
           latest_activity: isRecord(item.latest_activity) ? item.latest_activity : undefined,
           current_task: item.current_task,
@@ -1742,6 +1759,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
+        recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
         current_task: parseWorldStateMissionCurrentTask(item.current_task),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         history_count: safeNumber(item.history_count, 0),
@@ -1788,6 +1806,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         operator_hint: safeString(item.operator_hint, ""),
         action_target_id: safeString(item.action_target_id, ""),
         advance: parseWorldStateMissionAdvanceProjection(item.advance),
+        recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
         current_task: parseWorldStateMissionCurrentTask(item.current_task),
         deadletter_reason: safeString(item.deadletter_reason, ""),
         history_count: safeNumber(item.history_count, 0),
@@ -2032,6 +2051,33 @@ function parseWorldStateMissionAdvanceProjection(raw: unknown): WorldStateMissio
   return projection;
 }
 
+function parseWorldStateMissionRecoveryProjection(raw: unknown): WorldStateMissionRecoveryProjection | undefined {
+  if (!isRecord(raw)) return undefined;
+  const projection: WorldStateMissionRecoveryProjection = {
+    source_status: safeString(raw["source_status"], ""),
+    action: safeString(raw["action"], ""),
+    target_id: safeString(raw["target_id"], ""),
+    reason: safeString(raw["reason"], ""),
+    next_step: safeString(raw["next_step"], ""),
+    operator_required: safeBoolean(raw["operator_required"], false),
+    automatic_retry: safeBoolean(raw["automatic_retry"], false),
+    read_only: safeBoolean(raw["read_only"], false),
+  };
+  if (
+    !projection.source_status &&
+    !projection.action &&
+    !projection.target_id &&
+    !projection.reason &&
+    !projection.next_step &&
+    !projection.operator_required &&
+    !projection.automatic_retry &&
+    !projection.read_only
+  ) {
+    return undefined;
+  }
+  return projection;
+}
+
 function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw["id"], "").trim();
@@ -2054,6 +2100,7 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     operator_hint: safeString(raw["operator_hint"], ""),
     action_target_id: safeString(raw["action_target_id"], ""),
     advance: parseWorldStateMissionAdvanceProjection(raw["advance"]),
+    recovery: parseWorldStateMissionRecoveryProjection(raw["recovery"]),
     current_task: parseWorldStateMissionCurrentTask(raw["current_task"]),
     last_task_id: safeString(raw["last_task_id"], ""),
     last_task_status: safeString(raw["last_task_status"], ""),
@@ -2119,6 +2166,7 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     objective: safeString(raw["objective"], ""),
     reason: safeString(raw["reason"], ""),
     recommended_action: safeString(raw["recommended_action"], ""),
+    recovery: parseWorldStateMissionRecoveryProjection(raw["recovery"]),
     last_task_id: safeString(raw["last_task_id"], ""),
     last_task_status: safeString(raw["last_task_status"], ""),
     last_task_result_status: safeString(raw["last_task_result_status"], ""),

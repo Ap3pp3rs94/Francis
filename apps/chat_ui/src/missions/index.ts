@@ -58,6 +58,17 @@ export type MissionAdvanceProjection = {
   reason?: string;
 };
 
+export type MissionRecoveryProjection = {
+  source_status?: string;
+  action?: string;
+  target_id?: string;
+  reason?: string;
+  next_step?: string;
+  operator_required?: boolean;
+  automatic_retry?: boolean;
+  read_only?: boolean;
+};
+
 export type MissionHistoryEntry = {
   ts?: string;
   mission_id?: string;
@@ -193,6 +204,7 @@ export type MissionQueueItem = MissionRecord & {
   action_target_id?: string;
   operator_hint?: string;
   advance?: MissionAdvanceProjection;
+  recovery?: MissionRecoveryProjection;
   dependency_state?: MissionDependencyState;
   current_task?: MissionCurrentTask;
   last_task_id?: string;
@@ -502,6 +514,33 @@ function parseMissionAdvanceProjection(raw: unknown): MissionAdvanceProjection |
   return projection;
 }
 
+function parseMissionRecoveryProjection(raw: unknown): MissionRecoveryProjection | undefined {
+  if (!isRecord(raw)) return undefined;
+  const projection: MissionRecoveryProjection = {
+    source_status: safeString(raw.source_status, "") || undefined,
+    action: safeString(raw.action, "") || undefined,
+    target_id: safeString(raw.target_id, "") || undefined,
+    reason: safeString(raw.reason, "") || undefined,
+    next_step: safeString(raw.next_step, "") || undefined,
+    operator_required: safeBoolean(raw.operator_required, false),
+    automatic_retry: safeBoolean(raw.automatic_retry, false),
+    read_only: safeBoolean(raw.read_only, false),
+  };
+  if (
+    !projection.source_status &&
+    !projection.action &&
+    !projection.target_id &&
+    !projection.reason &&
+    !projection.next_step &&
+    !projection.operator_required &&
+    !projection.automatic_retry &&
+    !projection.read_only
+  ) {
+    return undefined;
+  }
+  return projection;
+}
+
 function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
   const record = parseMissionRecord(raw);
   if (!record || !isRecord(raw)) return record;
@@ -512,6 +551,7 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     action_target_id: safeString(raw.action_target_id, "") || undefined,
     operator_hint: safeString(raw.operator_hint, "") || undefined,
     advance: parseMissionAdvanceProjection(raw.advance),
+    recovery: parseMissionRecoveryProjection(raw.recovery),
     dependency_state: parseMissionDependencyState(raw.dependency_state),
     current_task: parseMissionCurrentTask(raw.current_task),
     last_task_id: safeString(raw.last_task_id, "") || undefined,

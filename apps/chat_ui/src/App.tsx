@@ -3581,6 +3581,12 @@ function SystemPanel(props: {
   const selectedMissionAdvanceEligible = selectedMissionQueueItem?.advance?.eligible === true;
   const selectedMissionAdvanceAction = safeString(selectedMissionQueueItem?.advance?.action).trim();
   const selectedMissionAdvanceReason = safeString(selectedMissionQueueItem?.advance?.reason).trim();
+  const selectedMissionRecovery = selectedMissionQueueItem?.recovery;
+  const selectedMissionRecoveryAction = safeString(selectedMissionRecovery?.action).trim();
+  const selectedMissionRecoveryTargetId = safeString(selectedMissionRecovery?.target_id).trim();
+  const selectedMissionRecoveryReason = safeString(selectedMissionRecovery?.reason).trim();
+  const selectedMissionRecoveryNextStep = safeString(selectedMissionRecovery?.next_step).trim();
+  const selectedMissionRecoverySourceStatus = safeString(selectedMissionRecovery?.source_status).trim();
   const selectedMissionAdvanceLabel =
     selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
   const selectedMissionActionTargetId = missionRecoveryTargetId(
@@ -4855,6 +4861,12 @@ function SystemPanel(props: {
                     const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
                       ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
                       : [];
+                    const recovery = item.recovery;
+                    const recoveryAction = safeString(recovery?.action).trim();
+                    const recoveryTargetId = safeString(recovery?.target_id).trim();
+                    const recoveryReason = safeString(recovery?.reason).trim();
+                    const recoveryNextStep = safeString(recovery?.next_step).trim();
+                    const recoverySourceStatus = safeString(recovery?.source_status).trim();
                     return (
                     <div key={`shift-deadletter-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4932,6 +4944,31 @@ function SystemPanel(props: {
                       <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>
                         {item.reason || "Mission has been deadlettered and needs review."}
                       </div>
+                      {recovery ? (
+                        <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+                          recovery=<code>{recoveryAction || item.recommended_action || "review_deadletter"}</code>
+                          {recoverySourceStatus ? (
+                            <>
+                              {" / "}source=<code>{recoverySourceStatus}</code>
+                            </>
+                          ) : null}
+                          {recoveryTargetId ? (
+                            <>
+                              {" / "}target=<code>{recoveryTargetId}</code>
+                            </>
+                          ) : null}
+                          {" / "}operator_required=<code>{recovery.operator_required ? "true" : "false"}</code>
+                          {" / "}automatic_retry=<code>{recovery.automatic_retry ? "true" : "false"}</code>
+                          {recoveryReason ? (
+                            <>
+                              {" / "}reason=<code>{recoveryReason}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {recoveryNextStep ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                      ) : null}
                       {item.approval_summary ? (
                         <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
                       ) : null}
@@ -5959,6 +5996,31 @@ function SystemPanel(props: {
                       selectedMissionQueueItem.operator_hint ||
                       "Mission actionability is available, but no operator hint is recorded."}
                   </div>
+                  {selectedMissionRecovery ? (
+                    <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#101010", marginTop: 8 }}>
+                      <div style={{ fontSize: 11, color: "#cce7e2" }}>
+                        recovery=<code>{selectedMissionRecoveryAction || selectedMissionRecommendedAction || "review_mission"}</code>
+                        {selectedMissionRecoverySourceStatus ? (
+                          <>
+                            {" / "}source=<code>{selectedMissionRecoverySourceStatus}</code>
+                          </>
+                        ) : null}
+                        {selectedMissionRecoveryTargetId ? (
+                          <>
+                            {" / "}target=<code>{selectedMissionRecoveryTargetId}</code>
+                          </>
+                        ) : null}
+                        {" / "}operator_required=<code>{selectedMissionRecovery.operator_required ? "true" : "false"}</code>
+                        {" / "}automatic_retry=<code>{selectedMissionRecovery.automatic_retry ? "true" : "false"}</code>
+                      </div>
+                      {selectedMissionRecoveryReason ? (
+                        <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{selectedMissionRecoveryReason}</div>
+                      ) : null}
+                      {selectedMissionRecoveryNextStep ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{selectedMissionRecoveryNextStep}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {(selectedMissionApprovalId || selectedMissionDependencyTotal > 0 || selectedMissionLastAdvanceAction) ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                       {selectedMissionApprovalId ? (
@@ -6781,6 +6843,12 @@ function SystemPanel(props: {
                 const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
                   ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
                   : [];
+                const recovery = item.recovery;
+                const recoveryAction = safeString(recovery?.action).trim();
+                const recoveryTargetId = safeString(recovery?.target_id).trim();
+                const recoveryReason = safeString(recovery?.reason).trim();
+                const recoveryNextStep = safeString(recovery?.next_step).trim();
+                const recoverySourceStatus = safeString(recovery?.source_status).trim();
                 return (
                   <div
                     key={`mission-deadletter-${item.id}`}
@@ -6841,6 +6909,31 @@ function SystemPanel(props: {
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
                       {item.reason || "Mission has been deadlettered."}
                     </div>
+                    {recovery ? (
+                      <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+                        recovery=<code>{recoveryAction || item.recommended_action || "review_deadletter"}</code>
+                        {recoverySourceStatus ? (
+                          <>
+                            {" / "}source=<code>{recoverySourceStatus}</code>
+                          </>
+                        ) : null}
+                        {recoveryTargetId ? (
+                          <>
+                            {" / "}target=<code>{recoveryTargetId}</code>
+                          </>
+                        ) : null}
+                        {" / "}operator_required=<code>{recovery.operator_required ? "true" : "false"}</code>
+                        {" / "}automatic_retry=<code>{recovery.automatic_retry ? "true" : "false"}</code>
+                        {recoveryReason ? (
+                          <>
+                            {" / "}reason=<code>{recoveryReason}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {recoveryNextStep ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                    ) : null}
                     {item.approval_summary ? (
                       <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.approval_summary}</div>
                     ) : null}
