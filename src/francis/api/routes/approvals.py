@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import decide as decide_request, list_requests, request as create_request
+from francis.governance.redaction import redact_governed_display_value
 
 router = APIRouter()
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
@@ -39,7 +40,8 @@ def _is_local_client(host: str) -> bool:
 
 def _approval_item(record: dict[str, Any]) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
-    out = dict(item)
+    out = redact_governed_display_value(item)
+    out = out if isinstance(out, dict) else {}
     out.update(approval_projection_fields(item))
     return out
 
@@ -59,7 +61,8 @@ class ApprovalDecisionIn(BaseModel):
 @router.post("/request")
 def request_approval(payload: ApprovalIn) -> dict[str, object]:
     try:
-        return create_request(payload.action, payload.reason, payload.payload)
+        item = create_request(payload.action, payload.reason, payload.payload)
+        return _approval_item(item)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -78,7 +81,11 @@ def decide_approval(request: Request, payload: ApprovalDecisionIn) -> dict[str, 
         client_host = request.client.host if request.client is not None else ""
         if not _remote_decisions_allowed() and not _is_local_client(client_host):
             raise HTTPException(status_code=403, detail="approval decisions require a local caller")
-        return decide_request(payload.id, payload.action, payload.comment)
+        result = decide_request(payload.id, payload.action, payload.comment)
+        if isinstance(result.get("item"), dict):
+            result = dict(result)
+            result["item"] = _approval_item(result["item"])
+        return result
     except Exception as exc:
         if isinstance(exc, HTTPException):
             raise

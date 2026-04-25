@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_governed_display_value
 from francis.kernel.paths import data_dir
 
 
@@ -30,8 +31,10 @@ def approval_payload_summary(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
 
-    payload_obj = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
-    summary_payload = payload_obj if payload_obj else payload
+    display_payload = redact_governed_display_value(payload)
+    payload_root = display_payload if isinstance(display_payload, dict) else payload
+    payload_obj = payload_root.get("payload") if isinstance(payload_root.get("payload"), dict) else {}
+    summary_payload = payload_obj if payload_obj else payload_root
 
     input_obj = summary_payload.get("input") if isinstance(summary_payload.get("input"), dict) else {}
     meta_obj = summary_payload.get("meta") if isinstance(summary_payload.get("meta"), dict) else {}

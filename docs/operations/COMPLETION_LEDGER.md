@@ -148,6 +148,12 @@ mismatch, result, stdout, and stderr artifacts persist redacted views instead of
 raw secret-like remote credentials. Raw task/result records may still retain live
 execution data locally, but operation API projections redact those values.
 
+As of `2026-04-25`, approval API read projections redact sealed-secret internals.
+Persisted approval records can retain HMAC-backed sealed values for exact-action
+matching, but `/approvals/request`, `/approvals/list`, and `/approvals/decision`
+responses collapse those values to their redacted display text so operator-facing
+approval payloads do not expose raw secrets or `hmac-sha256:` digests.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

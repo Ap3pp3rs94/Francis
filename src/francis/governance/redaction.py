@@ -82,7 +82,7 @@ def _is_sealed_secret(value: Any) -> bool:
         return False
     return (
         _safe_str(value.get("kind")).strip() == SEALED_SECRET_KIND
-        and _safe_str(value.get("redacted")).strip() == REDACTED_SECRET
+        and bool(_safe_str(value.get("redacted")).strip())
         and _safe_str(value.get("digest")).startswith("hmac-sha256:")
     )
 
@@ -150,6 +150,34 @@ def redact_governed_value(value: Any, *, key: str = "") -> Any:
         return normalized
     if isinstance(value, (list, tuple)):
         return [redact_governed_value(item, key=key) for item in value]
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+    except Exception:
+        return redact_secret_text(_safe_str(value))
+
+
+def redact_governed_display_value(value: Any, *, key: str = "") -> Any:
+    if _is_sealed_secret(value):
+        redacted = _safe_str(value.get("redacted")).strip()
+        return redacted or REDACTED_SECRET
+    if key.strip().lower() == "token" or _SENSITIVE_META_KEY_RE.search(key):
+        return REDACTED_SECRET
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        return redact_secret_text(value)
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for raw_key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
+            normalized_key = _safe_str(raw_key).strip()
+            if not normalized_key:
+                continue
+            normalized[normalized_key] = redact_governed_display_value(value.get(raw_key), key=normalized_key)
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [redact_governed_display_value(item, key=key) for item in value]
     try:
         return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
     except Exception:

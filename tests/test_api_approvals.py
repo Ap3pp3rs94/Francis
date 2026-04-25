@@ -91,6 +91,57 @@ def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_pa
     assert raw_comment_secret not in approved_text
 
 
+def test_approval_api_redacts_sealed_payload_digests(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_secret = "approvaldigestsecret123"
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "supervised_exec",
+            "reason": "approval list digest redaction",
+            "input": {"user_command": f"echo password={raw_secret}", "cwd": str(tmp_path)},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.approvals.digest_redaction"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    persisted_text = (data_root / "approvals" / "pending" / f"{approval_id}.json").read_text(encoding="utf-8")
+    assert raw_secret not in persisted_text
+    assert "hmac-sha256:" in persisted_text
+
+    listed = client.get("/approvals/list?status=pending&limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
+    listed_text = json.dumps(listed_item, sort_keys=True)
+    assert raw_secret not in listed_text
+    assert "hmac-sha256:" not in listed_text
+    assert listed_item["payload"]["user_command"] == "echo password=[REDACTED:secret]"
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    decision_text = json.dumps(approved_body["item"], sort_keys=True)
+    assert raw_secret not in decision_text
+    assert "hmac-sha256:" not in decision_text
+    assert approved_body["item"]["payload"]["user_command"] == "echo password=[REDACTED:secret]"
+
+
 def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
