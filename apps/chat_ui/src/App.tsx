@@ -29,6 +29,7 @@ import type {
   ContinuityBriefingSnapshot,
   ContinuityLedgerEntry,
   ContinuityLedgerSnapshot,
+  MissionReadinessSummary,
   ObserverAnomalySummary,
   ObserverEventsSnapshot,
   ObserverScanReceiptSummary,
@@ -450,6 +451,121 @@ function badgeStyle(status: string): React.CSSProperties {
     color: tone.color,
     whiteSpace: "nowrap",
   };
+}
+
+function MissionReadinessEvidencePanel(props: {
+  title: string;
+  readiness?: MissionReadinessSummary;
+  keyPrefix: string;
+  criterionLimit?: number;
+  evidenceLimit?: number;
+  showCriteriaBadges?: boolean;
+  detailCards?: boolean;
+  marginTop?: number;
+}): React.ReactElement | null {
+  const readiness = props.readiness;
+  if (!readiness) return null;
+
+  const presentation = presentMissionReadinessCriteria(readiness, props.criterionLimit ?? 3);
+  const criteria = readiness.criteria ?? [];
+  const evidenceLimit = props.evidenceLimit ?? 4;
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${THEME.panelBorder}`,
+        borderRadius: 10,
+        padding: 10,
+        background: "#121212",
+        marginTop: props.marginTop ?? 10,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: props.detailCards ? "center" : "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>{props.title}</div>
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+            {readiness.stage || "Stage 3 - Missions"}
+            {typeof readiness.satisfied === "number" && typeof readiness.total === "number"
+              ? ` / ${readiness.satisfied}/${readiness.total} criteria`
+              : ""}
+          </div>
+        </div>
+        {readiness.status ? <span style={badgeStyle(readiness.status)}>{readiness.status}</span> : null}
+      </div>
+      {readiness.next_action ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{readiness.next_action}</div> : null}
+      {props.showCriteriaBadges && criteria.length ? (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+          {criteria.map((criterion, index) => (
+            <span
+              key={`${props.keyPrefix}-badge-${criterion.id || criterion.label || index}`}
+              style={badgeStyle(criterion.status || "unknown")}
+            >
+              {criterion.label || criterion.id || "criterion"}: {criterion.status || "unknown"}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {presentation.visible.length ? (
+        <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          {presentation.visible.map((criterion) => {
+            const evidenceLines = missionReadinessEvidenceLines(criterion, evidenceLimit);
+            const label = criterion.label || criterion.id || "criterion";
+            const status = criterion.status || "unknown";
+            const key = `${props.keyPrefix}-detail-${criterion.id || criterion.label}`;
+
+            if (!props.detailCards) {
+              return (
+                <div key={key} style={{ fontSize: 11 }}>
+                  <span style={badgeStyle(status)}>{status}</span> <span style={{ color: "#f1f1f1" }}>{label}</span>
+                  {evidenceLines.length ? (
+                    <div style={{ fontSize: 10, color: "#cce7e2", marginTop: 4 }}>
+                      evidence: <code>{evidenceLines.join(" / ")}</code>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={key}
+                style={{
+                  border: `1px solid ${THEME.panelBorder}`,
+                  borderRadius: 8,
+                  padding: 8,
+                  background: "#0f0f0f",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600 }}>{label}</div>
+                  <span style={badgeStyle(status)}>{status}</span>
+                </div>
+                {criterion.detail ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 5 }}>{criterion.detail}</div> : null}
+                {evidenceLines.length ? (
+                  <div style={{ fontSize: 10, color: "#cce7e2", marginTop: 5 }}>
+                    evidence: <code>{evidenceLines.join(" / ")}</code>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+          {presentation.hiddenTotal > 0 ? (
+            <div style={{ fontSize: 10, color: THEME.muted }}>
+              Hidden readiness criteria: <code>{String(presentation.hiddenTotal)}</code>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 type RecoveryFollowthroughLike = {
@@ -3293,11 +3409,6 @@ function SystemPanel(props: {
     [shiftBriefingDeadletter],
   );
   const shiftBriefingReadiness = shiftBriefing?.readiness;
-  const shiftBriefingReadinessCriteria = shiftBriefingReadiness?.criteria ?? [];
-  const shiftBriefingReadinessPresentation = useMemo(
-    () => presentMissionReadinessCriteria(shiftBriefingReadiness, 3),
-    [shiftBriefingReadiness],
-  );
   const shiftBriefingObserver = shiftBriefing?.observer;
   const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
   const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
@@ -3324,10 +3435,6 @@ function SystemPanel(props: {
   const taskStatusCounts = overview?.task_status_counts ?? {};
   const missionStatusCounts = overview?.mission_status_counts ?? {};
   const overviewMissionReadiness = overview?.mission_briefing?.readiness ?? shiftBriefingReadiness;
-  const overviewMissionReadinessPresentation = useMemo(
-    () => presentMissionReadinessCriteria(overviewMissionReadiness, 2),
-    [overviewMissionReadiness],
-  );
   const recentTasks = overview?.recent_tasks ?? [];
   const recentMissions = overview?.recent_missions ?? [];
   const missionQueue = overview?.mission_queue ?? [];
@@ -4333,72 +4440,16 @@ function SystemPanel(props: {
           </div>
         ) : null}
 
-        {shiftBriefingReadiness ? (
-          <div style={{ marginTop: 10, border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>Mission readiness</div>
-                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                  {shiftBriefingReadiness.stage || "Stage 3 - Missions"}
-                  {typeof shiftBriefingReadiness.satisfied === "number" && typeof shiftBriefingReadiness.total === "number"
-                    ? ` / ${shiftBriefingReadiness.satisfied}/${shiftBriefingReadiness.total} criteria`
-                    : ""}
-                </div>
-              </div>
-              {shiftBriefingReadiness.status ? (
-                <span style={badgeStyle(shiftBriefingReadiness.status)}>{shiftBriefingReadiness.status}</span>
-              ) : null}
-            </div>
-            {shiftBriefingReadiness.next_action ? (
-              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{shiftBriefingReadiness.next_action}</div>
-            ) : null}
-            {shiftBriefingReadinessCriteria.length ? (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                {shiftBriefingReadinessCriteria.map((criterion) => (
-                  <span key={`mission-readiness-${criterion.id || criterion.label}`} style={badgeStyle(criterion.status || "unknown")}>
-                    {criterion.label || criterion.id || "criterion"}: {criterion.status || "unknown"}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {shiftBriefingReadinessPresentation.visible.length ? (
-              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                {shiftBriefingReadinessPresentation.visible.map((criterion) => {
-                  const evidenceLines = missionReadinessEvidenceLines(criterion, 4);
-                  return (
-                    <div
-                      key={`mission-readiness-detail-${criterion.id || criterion.label}`}
-                      style={{
-                        border: `1px solid ${THEME.panelBorder}`,
-                        borderRadius: 8,
-                        padding: 8,
-                        background: "#0f0f0f",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 11, fontWeight: 600 }}>{criterion.label || criterion.id || "criterion"}</div>
-                        <span style={badgeStyle(criterion.status || "unknown")}>{criterion.status || "unknown"}</span>
-                      </div>
-                      {criterion.detail ? (
-                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 5 }}>{criterion.detail}</div>
-                      ) : null}
-                      {evidenceLines.length ? (
-                        <div style={{ fontSize: 10, color: "#cce7e2", marginTop: 5 }}>
-                          evidence: <code>{evidenceLines.join(" / ")}</code>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-                {shiftBriefingReadinessPresentation.hiddenTotal > 0 ? (
-                  <div style={{ fontSize: 10, color: THEME.muted }}>
-                    Hidden readiness criteria: <code>{String(shiftBriefingReadinessPresentation.hiddenTotal)}</code>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <MissionReadinessEvidencePanel
+          title="Mission readiness"
+          readiness={shiftBriefingReadiness}
+          keyPrefix="mission-readiness"
+          criterionLimit={3}
+          evidenceLimit={4}
+          showCriteriaBadges
+          detailCards
+          marginTop={10}
+        />
 
         {(continuityOperatorSurface || continuityOrbSurface) && !continuityBriefingError ? (
           <div
@@ -5825,50 +5876,14 @@ function SystemPanel(props: {
 
         <div style={{ fontSize: 12, color: controlTone.color, marginTop: 10 }}>{controlModeGuidance}</div>
 
-        {overviewMissionReadiness ? (
-          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>Mission Readiness Evidence</div>
-                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                  {overviewMissionReadiness.stage || "Stage 3 - Missions"}
-                  {typeof overviewMissionReadiness.satisfied === "number" && typeof overviewMissionReadiness.total === "number"
-                    ? ` / ${overviewMissionReadiness.satisfied}/${overviewMissionReadiness.total} criteria`
-                    : ""}
-                </div>
-              </div>
-              {overviewMissionReadiness.status ? (
-                <span style={badgeStyle(overviewMissionReadiness.status)}>{overviewMissionReadiness.status}</span>
-              ) : null}
-            </div>
-            {overviewMissionReadiness.next_action ? (
-              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{overviewMissionReadiness.next_action}</div>
-            ) : null}
-            {overviewMissionReadinessPresentation.visible.length ? (
-              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                {overviewMissionReadinessPresentation.visible.map((criterion) => {
-                  const evidenceLines = missionReadinessEvidenceLines(criterion, 3);
-                  return (
-                    <div key={`overview-readiness-${criterion.id || criterion.label}`} style={{ fontSize: 11 }}>
-                      <span style={badgeStyle(criterion.status || "unknown")}>{criterion.status || "unknown"}</span>{" "}
-                      <span style={{ color: "#f1f1f1" }}>{criterion.label || criterion.id || "criterion"}</span>
-                      {evidenceLines.length ? (
-                        <div style={{ fontSize: 10, color: "#cce7e2", marginTop: 4 }}>
-                          evidence: <code>{evidenceLines.join(" / ")}</code>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-                {overviewMissionReadinessPresentation.hiddenTotal > 0 ? (
-                  <div style={{ fontSize: 10, color: THEME.muted }}>
-                    Hidden readiness criteria: <code>{String(overviewMissionReadinessPresentation.hiddenTotal)}</code>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <MissionReadinessEvidencePanel
+          title="Mission Readiness Evidence"
+          readiness={overviewMissionReadiness}
+          keyPrefix="overview-readiness"
+          criterionLimit={2}
+          evidenceLimit={3}
+          marginTop={12}
+        />
 
         <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>

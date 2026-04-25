@@ -353,6 +353,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is shared Mission readiness evidence rendering. This advances the
+active `Phase 2 / P8_MEMORY -> P1_INTERFACE` line by keeping the Shift Briefing
+and Mission Feed overview on one read-only readiness presentation path:
+
+- `apps/chat_ui/src/App.tsx` now uses a shared
+  `MissionReadinessEvidencePanel` for both readiness surfaces instead of
+  duplicating JSX and presentation state.
+- The Shift Briefing preserves its fuller readiness view: criterion badges,
+  prioritized detail cards, bounded evidence lines, and hidden-count disclosure.
+- The Mission Feed overview preserves its compact readiness view with the same
+  prioritized criteria and bounded evidence formatting, reducing drift risk
+  without changing mission mutation, policy, or recovery behavior.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is overview Mission readiness evidence parity. This advances the
 active `Phase 2 / P8_MEMORY -> P1_INTERFACE` line by making the same readiness
 blocker evidence visible in the Mission Feed overview, not only the Shift
@@ -1577,6 +1591,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 shared readiness evidence renderer slice:
+
+- `git diff --check`
+  Result: `passed`
+- `cd apps/chat_ui; npm test -- settings`
+  Result: `24 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 overview readiness evidence parity slice:
 
