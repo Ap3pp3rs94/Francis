@@ -892,7 +892,9 @@ def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monke
     assert str(sealed_remote["digest"]).startswith("hmac-sha256:")
 
     request_artifact = data_root / "artifacts" / "git_push" / first_approval_id / "request.json"
-    assert origin_secret not in request_artifact.read_text(encoding="utf-8")
+    request_artifact_text = request_artifact.read_text(encoding="utf-8")
+    assert origin_secret not in request_artifact_text
+    assert "hmac-sha256:" not in request_artifact_text
 
     approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
     assert approved.status_code == 200
@@ -914,6 +916,7 @@ def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monke
     mismatch_artifact_text = (refreshed_art / "mismatch.json").read_text(encoding="utf-8")
     assert origin_secret not in mismatch_artifact_text
     assert mirror_secret not in mismatch_artifact_text
+    assert "hmac-sha256:" not in mismatch_artifact_text
     refreshed_approval_text = (data_root / "approvals" / "pending" / f"{refreshed_approval_id}.json").read_text(
         encoding="utf-8"
     )
@@ -940,6 +943,7 @@ def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monke
         artifact_text = (art / artifact_name).read_text(encoding="utf-8")
         assert origin_secret not in artifact_text
         assert mirror_secret not in artifact_text
+        assert "hmac-sha256:" not in artifact_text
 
     if output["status"] == "success":
         mirror_branch_after = subprocess.run(
@@ -1016,6 +1020,7 @@ def test_operations_git_push_seals_https_userinfo_remote_and_redacts_projection(
     request_artifact = data_root / "artifacts" / "git_push" / approval_id / "request.json"
     request_artifact_text = request_artifact.read_text(encoding="utf-8")
     assert raw_userinfo not in request_artifact_text
+    assert "hmac-sha256:" not in request_artifact_text
     assert redacted_remote in request_artifact_text
 
     listed = client.get("/approvals/list?status=pending&limit=20")
@@ -1071,7 +1076,9 @@ def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     assert str(sealed_command["digest"]).startswith("hmac-sha256:")
 
     request_artifact = data_root / "artifacts" / "supervised_exec" / approval_id / "request.json"
-    assert raw_secret not in request_artifact.read_text(encoding="utf-8")
+    request_artifact_text = request_artifact.read_text(encoding="utf-8")
+    assert raw_secret not in request_artifact_text
+    assert "hmac-sha256:" not in request_artifact_text
 
     approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
     assert approved.status_code == 200
@@ -1088,8 +1095,12 @@ def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     art = Path(str(output["artifact_dir"]))
     assert raw_secret not in (art / "stdout.txt").read_text(encoding="utf-8")
     assert "password=[REDACTED:secret]" in (art / "stdout.txt").read_text(encoding="utf-8")
-    assert raw_secret not in (art / "plan.json").read_text(encoding="utf-8")
-    assert raw_secret not in (art / "result.json").read_text(encoding="utf-8")
+    plan_text = (art / "plan.json").read_text(encoding="utf-8")
+    result_text = (art / "result.json").read_text(encoding="utf-8")
+    assert raw_secret not in plan_text
+    assert raw_secret not in result_text
+    assert "hmac-sha256:" not in plan_text
+    assert "hmac-sha256:" not in result_text
 
     mismatch_secret = "supervisedmismatchsecret123"
     different_secret = "superviseddifferentsecret123"
@@ -1138,6 +1149,7 @@ def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     mismatch_artifact_text = (refreshed_art / "mismatch.json").read_text(encoding="utf-8")
     assert mismatch_secret not in mismatch_artifact_text
     assert different_secret not in mismatch_artifact_text
+    assert "hmac-sha256:" not in mismatch_artifact_text
     refreshed_approval_text = (data_root / "approvals" / "pending" / f"{refreshed_approval_id}.json").read_text(
         encoding="utf-8"
     )

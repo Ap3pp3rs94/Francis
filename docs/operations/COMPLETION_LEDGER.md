@@ -161,6 +161,12 @@ matching, but `/approvals/request`, `/approvals/list`, and `/approvals/decision`
 responses collapse those values to their redacted display text so operator-facing
 approval payloads do not expose raw secrets or `hmac-sha256:` digests.
 
+As of `2026-04-25`, supervised execution and git-push JSON receipt artifacts also
+collapse sealed approval values to display-redacted text. Request, pending,
+denied, error, mismatch, plan, and result artifacts can still show the bounded
+action shape, but they no longer expose `hmac-sha256:` proof material. Persisted
+approval records remain the exact-action matching source of truth.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

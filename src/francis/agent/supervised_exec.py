@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from francis.governance import approvals
-from francis.governance.redaction import redact_governed_value, redact_secret_text, seal_governed_approval_value
+from francis.governance.redaction import (
+    redact_governed_display_value,
+    redact_secret_text,
+    seal_governed_approval_value,
+)
 from francis.kernel.paths import data_dir, repo_root
 
 
@@ -28,7 +32,7 @@ def _artifact_dir(run_id: str) -> Path:
 
 def _write_json(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    redacted = redact_governed_value(obj)
+    redacted = redact_governed_display_value(obj)
     path.write_text(json.dumps(redacted, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
 
