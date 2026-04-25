@@ -561,6 +561,31 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               },
             },
           ],
+          mission_briefing: {
+            headline: "1 failed mission needs recovery review.",
+            counts: { failed: 1, queued: 1 },
+            readiness: {
+              stage: "Stage 3 - Missions",
+              status: "attention",
+              satisfied: 4,
+              total: 5,
+              next_action: "Repair mission continuity evidence before treating Stage 3 as complete.",
+              criteria: [
+                {
+                  id: "deadletter_cleanly",
+                  label: "Failures deadletter cleanly",
+                  status: "attention",
+                  detail: "Failed missions are waiting for a healthy replacement follow-through.",
+                  evidence: {
+                    unresolved_failed_ids: ["mission_failed"],
+                    replacement_attention_ids: ["mission_failed"],
+                    replacement_followthrough_ids: ["mission_replacement"],
+                    unsampled_failed_count: 0,
+                  },
+                },
+              ],
+            },
+          },
           incidents: [],
         },
         trust: { global_level: 0.6 },
@@ -746,6 +771,16 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(
       (worldState.overview?.deadletter_missions?.[0]?.history_tail?.[1]?.details as Record<string, unknown>)?.deadletter_reason,
       "manual_cleanup",
+    );
+    assert.equal(worldState.overview?.mission_briefing?.readiness?.status, "attention");
+    assert.equal(worldState.overview?.mission_briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
+    assert.deepEqual(
+      missionReadinessEvidenceLines(worldState.overview?.mission_briefing?.readiness?.criteria?.[0], 3),
+      [
+        "unresolved failed ids=mission_failed",
+        "replacement attention ids=mission_failed",
+        "replacement followthrough ids=mission_replacement",
+      ],
     );
     assert.equal(worldState.overview?.pending_approvals?.[0]?.request_kind, "plugin.run.request");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_id, "apr_plugin_old");

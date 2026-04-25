@@ -389,6 +389,7 @@ export type WorldStateOverview = {
   mission_queue: WorldStateMissionQueueItem[];
   failed_missions: WorldStateMissionQueueItem[];
   deadletter_missions: WorldStateMissionQueueItem[];
+  mission_briefing?: ContinuityBriefingPayload;
   incidents: WorldStateIncidentSummary[];
 };
 
@@ -1947,6 +1948,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
   const missionStatusCountsRaw = isRecord(overviewRaw.mission_status_counts)
     ? (overviewRaw.mission_status_counts as Record<string, unknown>)
     : {};
+  const missionBriefingRaw = isRecord(overviewRaw.mission_briefing)
+    ? (overviewRaw.mission_briefing as Record<string, unknown>)
+    : undefined;
 
   const overview: WorldStateOverview = {
     pending_approvals: approvalsRaw
@@ -2141,6 +2145,13 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
       }))
       .filter((item) => item.id),
+    mission_briefing: missionBriefingRaw
+      ? {
+          headline: safeString(missionBriefingRaw.headline, ""),
+          counts: parseNumberMap(missionBriefingRaw.counts),
+          readiness: parseObserverReadinessSummary(missionBriefingRaw.readiness),
+        }
+      : undefined,
     incidents: incidentsRaw
       .map(parseWorldStateIncidentSummary)
       .filter((item): item is WorldStateIncidentSummary => item !== null),
