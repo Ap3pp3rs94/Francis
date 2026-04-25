@@ -335,6 +335,7 @@ export type MissionRunOnceResult = {
   approval_id?: string;
   gate?: string;
   next_step?: string;
+  trace_id?: string;
   loop_state?: MissionLoopState;
   current_task?: MissionCurrentTask;
   handoff?: MissionLoopHandoff;
@@ -1042,6 +1043,7 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     approval_id: safeString(raw.approval_id, "") || undefined,
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
+    trace_id: safeString(raw.trace_id, "") || undefined,
     loop_state: parseMissionLoopState(raw.loop_state),
     current_task: parseMissionCurrentTask(raw.current_task),
     handoff: parseMissionLoopHandoff(raw.handoff),

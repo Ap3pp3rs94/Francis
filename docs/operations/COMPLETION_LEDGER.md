@@ -811,6 +811,24 @@ keeping failed advance traces attached to immediate queue-run error cards:
   visible when the runtime returns it.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run result trace visibility. This advances the
+active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE` line by
+keeping successful advance trace handles attached to immediate queue-run result
+cards:
+
+- `src/francis/missions/runtime.py` now preserves `trace_id` on queue-run result
+  records when a mission advance outcome or operation handoff returns one.
+- `apps/chat_ui/src/missions/index.ts` now preserves result-level `trace_id`
+  through the bounded `/missions/run_once` client contract.
+- `apps/chat_ui/src/App.tsx` now renders a queue-run result trace from receipt
+  summary, direct result context, or current-task context, in that order.
+- Backend and UI client tests now prove queue-run result trace handles are not
+  dropped.
+- No queue selection, mission mutation, approval decision, shell, policy, or
+  memory-write behavior changed; this only keeps an existing trace handle
+  reachable when returned.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -2029,6 +2047,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run result trace visibility slice:
+
+- `pytest tests/test_api_missions.py::test_mission_run_once_results_preserve_advance_trace tests/test_api_missions.py::test_mission_run_once_error_records_preserve_advance_context tests/test_api_missions.py::test_mission_run_once_advances_safe_queue_actions -q`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run failure trace visibility slice:
 

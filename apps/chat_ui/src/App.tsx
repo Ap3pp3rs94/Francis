@@ -3138,6 +3138,7 @@ function SystemPanel(props: {
       status?: string;
       gate?: string;
       nextStep?: string;
+      traceId?: string;
       queueItem?: MissionQueueItem;
       currentTask?: MissionCurrentTask;
       receiptSummary?: MissionReceiptSummary;
@@ -4071,6 +4072,7 @@ function SystemPanel(props: {
           status: item.status,
           gate: item.gate,
           nextStep: item.next_step,
+          traceId: item.trace_id,
           queueItem: item.queue_item,
           currentTask: item.current_task,
           receiptSummary: item.receipt_summary,
@@ -7024,6 +7026,9 @@ function SystemPanel(props: {
                       const queueReceiptGate = safeString(queueReceiptSummary?.current_gate).trim();
                       const queueReceiptApprovalId = safeString(queueReceiptSummary?.current_approval_id).trim();
                       const queueReceiptTraceId = safeString(queueReceiptSummary?.current_trace_id).trim();
+                      const queueResultTraceId = safeString(item.traceId).trim();
+                      const queueCurrentTaskTraceId = safeString(queueCurrentTask?.trace_id).trim();
+                      const queueVisibleTraceId = queueReceiptTraceId || queueResultTraceId || queueCurrentTaskTraceId;
                       const queueReceiptLatestRunEvent = safeString(queueReceiptSummary?.latest_run_event).trim();
                       const queueReceiptLatestRunStatus = safeString(queueReceiptSummary?.latest_run_status).trim();
                       const queueReceiptLatestRunAt = mixedLocaleTime(queueReceiptSummary?.latest_run_ts);
@@ -7120,7 +7125,7 @@ function SystemPanel(props: {
                         queueReceiptOperationStatus ||
                         queueReceiptGate ||
                         queueReceiptApprovalId ||
-                        queueReceiptTraceId ? (
+                        queueVisibleTraceId ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                             {queueReceiptOperationId ? (
                               <>
@@ -7144,7 +7149,7 @@ function SystemPanel(props: {
                                 receipt_approval=<code>{queueReceiptApprovalId}</code>
                               </>
                             ) : null}
-                            {queueReceiptTraceId ? (
+                            {queueVisibleTraceId ? (
                               <>
                                 {(queueReceiptOperationId ||
                                 queueReceiptOperationStatus ||
@@ -7152,7 +7157,7 @@ function SystemPanel(props: {
                                 queueReceiptApprovalId)
                                   ? " / "
                                   : ""}
-                                trace=<code>{queueReceiptTraceId}</code>
+                                trace=<code>{queueVisibleTraceId}</code>
                               </>
                             ) : null}
                           </div>

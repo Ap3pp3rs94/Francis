@@ -71,6 +71,11 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
     )
     gate = _safe_str(governance.get("gate")).strip()
     next_step = _safe_str(governance.get("next_step")).strip()
+    trace_id = (
+        _safe_str(operation_record.get("trace_id")).strip()
+        or _safe_str(operation_meta.get("trace_id")).strip()
+        or _safe_str(operation_output.get("trace_id")).strip()
+    )
     message = (
         _safe_str(operation_meta.get("result_message")).strip() or _safe_str(operation_output.get("message")).strip()
     )
@@ -81,6 +86,8 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
         handoff["gate"] = gate
     if next_step:
         handoff["next_step"] = next_step
+    if trace_id:
+        handoff["trace_id"] = trace_id
     if message:
         handoff["operation_message"] = message
     return handoff
@@ -293,6 +300,7 @@ def run_queue_once(
                 "approval_id": _safe_str(outcome.get("approval_id")).strip() or None,
                 "gate": _safe_str(outcome.get("gate")).strip() or None,
                 "next_step": _safe_str(outcome.get("next_step")).strip() or None,
+                "trace_id": _safe_str(outcome.get("trace_id")).strip() or None,
             }
         )
         if bool(outcome.get("applied")):

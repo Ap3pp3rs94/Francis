@@ -767,6 +767,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           approval_id: "apr_ready",
           gate: "approvals_gate",
           next_step: "approve_exact_action",
+          trace_id: "trace_result",
           loop_state: {
             active_stage: "gate",
             handoff: {
@@ -900,6 +901,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.queue_item?.history_tail?.[1]?.event, "advance_receipt");
     assert.equal(response.results?.[0]?.gate, "approvals_gate");
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
+    assert.equal(response.results?.[0]?.trace_id, "trace_result");
     assert.equal(response.results?.[0]?.mission?.id, "mission_ready");
     assert.equal(response.results?.[0]?.loop_state?.active_stage, "gate");
     assert.equal(response.results?.[0]?.current_task?.source, "mission_meta");
