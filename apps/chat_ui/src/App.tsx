@@ -9259,6 +9259,14 @@ function OperationsPanel(props: {
   const selectedMissionLoopHandoff = selectedMissionLoopState?.handoff;
   const selectedMissionReceiptSummary = selectedMissionBridgeDetail?.receipt_summary;
   const selectedMissionCurrentTask = selectedMissionBridgeDetail?.current_task;
+  const selectedMissionCurrentTaskId = safeString(selectedMissionCurrentTask?.operation_id).trim();
+  const selectedMissionCurrentTaskStatus = safeString(selectedMissionCurrentTask?.operation_status).trim();
+  const selectedMissionCurrentTaskResultStatus = safeString(selectedMissionCurrentTask?.result_status).trim();
+  const selectedMissionCurrentTaskGate = safeString(selectedMissionCurrentTask?.gate).trim();
+  const selectedMissionCurrentTaskNextStep = safeString(selectedMissionCurrentTask?.next_step).trim();
+  const selectedMissionCurrentTaskApprovalStatus =
+    safeString(selectedMissionCurrentTask?.approval_status).trim() ||
+    safeString(selectedMissionLoopHandoff?.approval_status).trim();
   const selectedMissionLoopStages = [
     { key: "plan", label: "Plan", stage: selectedMissionLoopState?.plan },
     { key: "gate", label: "Gate", stage: selectedMissionLoopState?.gate },
@@ -10036,9 +10044,19 @@ function OperationsPanel(props: {
                       <span style={badgeStyle(selectedMissionLoopState?.active_stage || "mission")}>
                         {selectedMissionLoopState?.active_stage ? `active ${selectedMissionLoopState.active_stage}` : "mission"}
                       </span>
-                      {selectedMissionCurrentTask?.operation_status ? (
-                        <span style={badgeStyle(selectedMissionCurrentTask.operation_status)}>
-                          {selectedMissionCurrentTask.operation_status}
+                      {selectedMissionCurrentTaskStatus ? (
+                        <span style={badgeStyle(selectedMissionCurrentTaskStatus)}>
+                          {selectedMissionCurrentTaskStatus}
+                        </span>
+                      ) : null}
+                      {selectedMissionCurrentTaskApprovalStatus ? (
+                        <span style={badgeStyle(selectedMissionCurrentTaskApprovalStatus)}>
+                          approval {selectedMissionCurrentTaskApprovalStatus}
+                        </span>
+                      ) : null}
+                      {selectedMissionCurrentTaskResultStatus ? (
+                        <span style={badgeStyle(selectedMissionCurrentTaskResultStatus)}>
+                          result {selectedMissionCurrentTaskResultStatus}
                         </span>
                       ) : null}
                       <button
@@ -10061,6 +10079,64 @@ function OperationsPanel(props: {
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                         {selectedMissionLoopState?.summary || "Mission detail is loaded, but no loop summary has been projected yet."}
                       </div>
+                      {(selectedMissionCurrentTaskId ||
+                        selectedMissionCurrentTaskStatus ||
+                        selectedMissionCurrentTaskApprovalStatus ||
+                        selectedMissionCurrentTaskResultStatus ||
+                        selectedMissionCurrentTaskGate ||
+                        selectedMissionCurrentTaskNextStep) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                          {selectedMissionCurrentTaskId ? (
+                            <>
+                              current_task=<code>{selectedMissionCurrentTaskId}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskStatus ? (
+                            <>
+                              {selectedMissionCurrentTaskId ? " / " : ""}task_status=<code>{selectedMissionCurrentTaskStatus}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskApprovalStatus ? (
+                            <>
+                              {(selectedMissionCurrentTaskId || selectedMissionCurrentTaskStatus) ? " / " : ""}
+                              approval_status=<code>{selectedMissionCurrentTaskApprovalStatus}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskResultStatus ? (
+                            <>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskStatus ||
+                              selectedMissionCurrentTaskApprovalStatus)
+                                ? " / "
+                                : ""}
+                              result=<code>{selectedMissionCurrentTaskResultStatus}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskGate ? (
+                            <>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskStatus ||
+                              selectedMissionCurrentTaskApprovalStatus ||
+                              selectedMissionCurrentTaskResultStatus)
+                                ? " / "
+                                : ""}
+                              gate=<code>{selectedMissionCurrentTaskGate}</code>
+                            </>
+                          ) : null}
+                          {selectedMissionCurrentTaskNextStep ? (
+                            <>
+                              {(selectedMissionCurrentTaskId ||
+                              selectedMissionCurrentTaskStatus ||
+                              selectedMissionCurrentTaskApprovalStatus ||
+                              selectedMissionCurrentTaskResultStatus ||
+                              selectedMissionCurrentTaskGate)
+                                ? " / "
+                                : ""}
+                              next=<code>{selectedMissionCurrentTaskNextStep}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {(selectedMissionLoopHandoff?.detail ||
                         selectedMissionLoopHandoff?.gate ||
                         selectedMissionLoopHandoff?.next_step ||

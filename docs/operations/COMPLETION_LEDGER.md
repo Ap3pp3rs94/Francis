@@ -950,6 +950,23 @@ inspection:
   policy, or memory-write behavior changed; this only makes the existing read
   path recoverable after reconnect or route failure.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail mission current-task posture
+visibility. This advances the active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION
+-> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line by making the selected
+operation's mission bridge show the same current-task posture that the mission
+inspector already receives:
+
+- `apps/chat_ui/src/App.tsx` now derives current-task id, task status, approval
+  status, result status, gate, and next step from the linked mission detail
+  bridge.
+- Operation Detail now renders those fields inside `Mission Loop Bridge` so the
+  task inspection path shows gate, approval state, execution result, and
+  continuity context together.
+- No operation mutation, mission mutation, approval decision, execution, shell,
+  policy, or memory-write behavior changed; this only exposes existing
+  mission-detail truth from the active task surface.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
