@@ -39,6 +39,12 @@ export type ChatEvent = {
   meta?: Record<string, unknown>;
 };
 
+export type ChatSendResult = {
+  message?: ChatMessage;
+  error?: string;
+  meta?: Record<string, unknown>;
+};
+
 export class ChatProtocolError extends Error {
   readonly raw?: unknown;
 
@@ -65,6 +71,52 @@ function normalizeTimestamp(ts?: unknown): number | undefined {
   if (typeof ts !== "number" || !Number.isFinite(ts)) return undefined;
   // Heuristic: seconds vs ms
   return ts > 10_000_000_000 ? Math.floor(ts / 1000) : ts;
+}
+
+const CHAT_SEND_META_KEYS = [
+  "ok",
+  "mode",
+  "status",
+  "error",
+  "mission_id",
+  "mission",
+  "queue_item",
+  "loop_state",
+  "current_task",
+  "receipt_summary",
+] as const;
+
+function chatResponseMeta(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const meta: Record<string, unknown> = {};
+  for (const key of CHAT_SEND_META_KEYS) {
+    if (raw[key] !== undefined) meta[key] = raw[key];
+  }
+  return Object.keys(meta).length > 0 ? meta : undefined;
+}
+
+/**
+ * Parse the HTTP /chat/send response into the same message shape used by
+ * WebSocket chat events, preserving only backend-returned metadata.
+ */
+export function parseChatSendResponse(raw: unknown): ChatSendResult {
+  if (!isRecord(raw)) {
+    return { error: "Invalid chat response" };
+  }
+
+  const result: ChatSendResult = {};
+  const reply = safeString(raw.reply).trim();
+  const error = safeString(raw.error).trim();
+  const meta = chatResponseMeta(raw);
+  if (error) result.error = error;
+  if (meta) result.meta = meta;
+
+  if (reply) {
+    const message: ChatMessage = { role: "assistant", content: reply };
+    if (meta) message.meta = meta;
+    result.message = message;
+  }
+
+  return result;
 }
 
 /**

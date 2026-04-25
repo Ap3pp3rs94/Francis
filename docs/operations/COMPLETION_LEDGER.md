@@ -229,6 +229,13 @@ path. Mission ingress replies are returned as structured assistant events with
 bounded mission loop metadata; ordinary WebSocket fallback replies remain plain
 text for compatibility.
 
+As of `2026-04-25`, the chat UI preserves explicit mission ingress metadata from
+both `/chat/send` responses and structured WebSocket message events. When the
+backend returns a real mission id, the chat surface can show the queued mission
+status, active loop stage, next backend handoff, and an `Open mission flow`
+action that jumps to the existing mission inspector. The UI does not create this
+surface for ordinary chat replies or mission-less responses.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
@@ -2346,6 +2353,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 chat mission ingress interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `33 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_chat.py tests\test_api_contract_chat_ui.py -q`
+  Result: `4 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `61 passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 Shift Briefing memory receipt interface slice:
 

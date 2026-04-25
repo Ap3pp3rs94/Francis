@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage } from "./chat";
+import { parseChatSendResponse, type ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
@@ -82,6 +82,13 @@ type ChatSession = {
   updatedTs: number;
 };
 
+type ChatMissionSurface = {
+  missionId: string;
+  status?: string;
+  activeStage?: string;
+  nextStep?: string;
+};
+
 const DEFAULT_SETTINGS: UiSettings = {
   proactive: true,
   sensingMode: "text_only",
@@ -152,6 +159,30 @@ function safeNumber(v: unknown, fallback = 0): number {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+function chatMissionSurface(message: ChatMessage): ChatMissionSurface | null {
+  const meta = isRecord(message.meta) ? message.meta : {};
+  if (safeString(meta.mode).trim() !== "mission_ingress") return null;
+
+  const mission = isRecord(meta.mission) ? meta.mission : {};
+  const loopState = isRecord(meta.loop_state) ? meta.loop_state : {};
+  const handoff = isRecord(loopState.handoff) ? loopState.handoff : {};
+  const currentTask = isRecord(meta.current_task) ? meta.current_task : {};
+  const missionId = safeString(meta.mission_id).trim() || safeString(mission.id).trim();
+  if (!missionId) return null;
+
+  const surface: ChatMissionSurface = { missionId };
+  const status = safeString(meta.status).trim();
+  const activeStage = safeString(loopState.active_stage).trim();
+  const nextStep =
+    safeString(currentTask.next_step).trim() ||
+    safeString(handoff.next_step).trim() ||
+    safeString(handoff.action).trim();
+  if (status) surface.status = status;
+  if (activeStage) surface.activeStage = activeStage;
+  if (nextStep) surface.nextStep = nextStep;
+  return surface;
 }
 
 function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
@@ -1380,6 +1411,7 @@ function ChatPanel(props: {
   busy: boolean;
   error: string | null;
   onSend: (text: string) => void;
+  onOpenMission: (missionId: string) => void;
   onSpeak: (text: string) => void;
 }) {
   const [input, setInput] = useState("");
@@ -1421,6 +1453,7 @@ function ChatPanel(props: {
         ) : null}
         {props.messages.map((m, idx) => {
           const isUser = m.role === "user";
+          const missionSurface = isUser ? null : chatMissionSurface(m);
           return (
             <div
               key={`${m.role}-${idx}`}
@@ -1438,6 +1471,37 @@ function ChatPanel(props: {
                 {isUser ? "You" : "Francis"}
               </div>
               <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
+              {missionSurface ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: `1px solid ${THEME.panelBorder}`,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={badgeStyle(missionSurface.status || "mission")}>
+                      {missionSurface.status || "mission"}
+                    </span>
+                    {missionSurface.activeStage ? (
+                      <span style={badgeStyle(missionSurface.activeStage)}>{missionSurface.activeStage}</span>
+                    ) : null}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted }}>
+                    Mission <code>{missionSurface.missionId}</code>
+                    {missionSurface.nextStep ? ` / ${missionSurface.nextStep}` : ""}
+                  </div>
+                  <button
+                    style={{ ...buttonStyle, alignSelf: "flex-start", fontSize: 11, padding: "6px 8px" }}
+                    onClick={() => props.onOpenMission(missionSurface.missionId)}
+                  >
+                    Open mission flow
+                  </button>
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -2146,14 +2210,17 @@ export default function App() {
           setError(`HTTP ${res.status}`);
           return;
         }
-        const json = (await res.json()) as { reply?: string };
-        const reply = (json.reply ?? "").trim();
-        if (reply) {
+        const parsed = parseChatSendResponse(await res.json());
+        const parsedMessage = parsed.message;
+        if (parsed.error && !parsedMessage) {
+          setError(parsed.error);
+        }
+        if (parsedMessage) {
           updateSession(activeSession.id, (s) => ({
             ...s,
             messages: [
               ...s.messages,
-              { role: "assistant", content: reply, ts: Math.floor(Date.now() / 1000) },
+              { ...parsedMessage, ts: Math.floor(Date.now() / 1000) },
             ],
             updatedTs: Date.now(),
           }));
@@ -2660,6 +2727,7 @@ export default function App() {
                   busy={busy}
                   error={error}
                   onSend={onSend}
+                  onOpenMission={openMissionPanel}
                   onSpeak={speak}
                 />
               ) : (
