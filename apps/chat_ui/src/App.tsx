@@ -3849,7 +3849,9 @@ function SystemPanel(props: {
     safeString(selectedMissionQueueItem?.last_task_approval_id).trim() ||
     safeString(missionLoopHandoff?.approval_id).trim();
   const selectedMissionApprovalStatus =
-    safeString(selectedMissionCurrentTask?.approval_status).trim() || safeString(selectedMissionQueueItem?.last_task_approval_status).trim();
+    safeString(selectedMissionCurrentTask?.approval_status).trim() ||
+    safeString(missionLoopHandoff?.approval_status).trim() ||
+    safeString(selectedMissionQueueItem?.last_task_approval_status).trim();
   const selectedMissionFirstDependencyId =
     safeString(selectedMissionDependencyState?.first_unresolved?.id).trim() ||
     selectedMission?.dependency_ids?.find((dependencyId) => safeString(dependencyId).trim().length > 0) ||
@@ -6220,26 +6222,43 @@ function SystemPanel(props: {
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                         {missionLoopHandoff.detail || "No loop handoff has been projected for this mission yet."}
                       </div>
-                      {(missionLoopHandoff.gate || missionLoopHandoff.next_step || missionLoopHandoff.latest_event || missionLoopHandoff.latest_ts) ? (
+                      {(missionLoopHandoff.gate ||
+                        missionLoopHandoff.approval_status ||
+                        missionLoopHandoff.next_step ||
+                        missionLoopHandoff.latest_event ||
+                        missionLoopHandoff.latest_ts) ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                           {missionLoopHandoff.gate ? (
                             <>
                               gate <code>{missionLoopHandoff.gate}</code>
                             </>
                           ) : null}
+                          {missionLoopHandoff.approval_status ? (
+                            <>
+                              {missionLoopHandoff.gate ? " / " : ""}approval_status <code>{missionLoopHandoff.approval_status}</code>
+                            </>
+                          ) : null}
                           {missionLoopHandoff.next_step ? (
                             <>
-                              {missionLoopHandoff.gate ? " / " : ""}next <code>{missionLoopHandoff.next_step}</code>
+                              {(missionLoopHandoff.gate || missionLoopHandoff.approval_status) ? " / " : ""}next{" "}
+                              <code>{missionLoopHandoff.next_step}</code>
                             </>
                           ) : null}
                           {missionLoopHandoff.latest_event ? (
                             <>
-                              {(missionLoopHandoff.gate || missionLoopHandoff.next_step) ? " / " : ""}latest <code>{missionLoopHandoff.latest_event}</code>
+                              {(missionLoopHandoff.gate || missionLoopHandoff.approval_status || missionLoopHandoff.next_step) ? " / " : ""}
+                              latest <code>{missionLoopHandoff.latest_event}</code>
                             </>
                           ) : null}
                           {missionLoopHandoff.latest_ts ? (
                             <>
-                              {(missionLoopHandoff.gate || missionLoopHandoff.next_step || missionLoopHandoff.latest_event) ? " / " : ""}at <code>{toLocaleTime(missionLoopHandoff.latest_ts)}</code>
+                              {(missionLoopHandoff.gate ||
+                              missionLoopHandoff.approval_status ||
+                              missionLoopHandoff.next_step ||
+                              missionLoopHandoff.latest_event)
+                                ? " / "
+                                : ""}
+                              at <code>{toLocaleTime(missionLoopHandoff.latest_ts)}</code>
                             </>
                           ) : null}
                         </div>
@@ -6306,7 +6325,7 @@ function SystemPanel(props: {
                         <div style={{ fontSize: 11, color: THEME.text, marginTop: 8 }}>
                           {item.stage?.detail || "No receipt is recorded for this stage yet."}
                         </div>
-                        {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.next_step) ? (
+                        {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.approval_status || item.stage?.next_step) ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                             {item.stage?.count !== undefined ? (
                               <>
@@ -6318,9 +6337,16 @@ function SystemPanel(props: {
                                 {item.stage?.count !== undefined ? " / " : ""}gate <code>{item.stage.gate}</code>
                               </>
                             ) : null}
+                            {item.stage?.approval_status ? (
+                              <>
+                                {(item.stage?.count !== undefined || item.stage?.gate) ? " / " : ""}approval_status{" "}
+                                <code>{item.stage.approval_status}</code>
+                              </>
+                            ) : null}
                             {item.stage?.next_step ? (
                               <>
-                                {(item.stage?.count !== undefined || item.stage?.gate) ? " / " : ""}next <code>{item.stage.next_step}</code>
+                                {(item.stage?.count !== undefined || item.stage?.gate || item.stage?.approval_status) ? " / " : ""}
+                                next <code>{item.stage.next_step}</code>
                               </>
                             ) : null}
                           </div>

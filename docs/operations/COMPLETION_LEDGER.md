@@ -655,6 +655,19 @@ see what happened after a source mission declared replacement work:
   and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is visible loop approval status. This advances the active
+`Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
+showing the loop-level approval posture in the operator mission inspector:
+
+- `apps/chat_ui/src/App.tsx` now renders `approval_status` on the selected
+  mission ORB Loop State handoff and per-stage cards when the backend provides
+  it.
+- The selected mission actionability summary now falls back to loop handoff
+  approval status when current-task or queue status is unavailable.
+- No mutation or execution path changed; this only makes an already-projected
+  contract visible to the operator.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is loop-state approval-status contract parity. This advances the
 active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE`
 line by making the mission loop contract carry approval posture directly:
