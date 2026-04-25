@@ -42,6 +42,7 @@ def _stage_timestamp(value: Any) -> str:
 def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, Any]:
     if record is None:
         return {}
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     return {
         "id": record.mission_id,
         "status": record.status.value,
@@ -58,9 +59,16 @@ def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, 
         "linked_task_ids": list(record.linked_task_ids),
         "linked_task_count": len(record.linked_task_ids),
         "deadletter_reason": record.deadletter_reason,
+        "last_task_id": _safe_str(meta.get("last_task_id")).strip(),
+        "last_task_status": _safe_str(meta.get("last_task_status")).strip(),
+        "last_task_result_status": _safe_str(meta.get("last_task_result_status")).strip(),
+        "last_task_reason": _safe_str(meta.get("last_task_reason")).strip(),
+        "last_task_gate": _safe_str(meta.get("last_task_gate")).strip(),
+        "last_task_next_step": _safe_str(meta.get("last_task_next_step")).strip(),
+        "last_advance_operation_id": _safe_str(meta.get("last_advance_operation_id")).strip(),
         "created_at": record.created_at,
         "updated_at": record.updated_at,
-        "meta": dict(record.meta),
+        "meta": meta,
     }
 
 

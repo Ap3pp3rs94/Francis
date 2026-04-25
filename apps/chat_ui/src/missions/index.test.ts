@@ -211,6 +211,13 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
           escalation_path: "Review with operator if blocked.",
           linked_task_ids: ["tsk_alpha"],
           linked_task_count: 1,
+          last_task_id: "tsk_alpha",
+          last_task_status: "blocked",
+          last_task_result_status: "needs_approval",
+          last_task_gate: "approvals_gate",
+          last_task_next_step: "review_pending_approval",
+          last_task_reason: "Approval apr_alpha is pending.",
+          last_advance_operation_id: "tsk_alpha",
         },
       ],
       total: 1,
@@ -232,6 +239,13 @@ test("MissionsClient.list requests the bounded mission list route and parses mis
     assert.equal(response.items[0]?.dependency_count, 2);
     assert.equal(response.items[0]?.escalation_path, "Review with operator if blocked.");
     assert.equal(response.items[0]?.linked_task_ids?.[0], "tsk_alpha");
+    assert.equal(response.items[0]?.last_task_id, "tsk_alpha");
+    assert.equal(response.items[0]?.last_task_status, "blocked");
+    assert.equal(response.items[0]?.last_task_result_status, "needs_approval");
+    assert.equal(response.items[0]?.last_task_gate, "approvals_gate");
+    assert.equal(response.items[0]?.last_task_next_step, "review_pending_approval");
+    assert.equal(response.items[0]?.last_task_reason, "Approval apr_alpha is pending.");
+    assert.equal(response.items[0]?.last_advance_operation_id, "tsk_alpha");
   } finally {
     restoreFetch();
   }

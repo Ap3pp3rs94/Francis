@@ -268,6 +268,13 @@ matches current mission task truth before falling back to the first linked
 operation, so multi-operation missions do not surface approval context from
 older work.
 
+As of `2026-04-25`, mission API records now expose bounded current-task fields
+directly, not only inside `meta` or queue projections. Mission detail/list
+payloads can carry `last_task_id`, last task status/result/gate/next-step
+reason, and last advance operation id, and the chat UI mission client preserves
+those fields so current-task selectors can rely on the mission record contract
+when queue context is not present.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

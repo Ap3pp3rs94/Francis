@@ -17,6 +17,13 @@ export type MissionRecord = {
   linked_task_ids?: string[];
   linked_task_count?: number;
   deadletter_reason?: string;
+  last_task_id?: string;
+  last_task_status?: string;
+  last_task_result_status?: string;
+  last_task_reason?: string;
+  last_task_gate?: string;
+  last_task_next_step?: string;
+  last_advance_operation_id?: string;
   created_at?: string;
   updated_at?: string;
   meta?: Record<string, unknown>;
@@ -386,6 +393,13 @@ function parseMissionRecord(raw: unknown): MissionRecord | undefined {
     linked_task_ids: safeStringArray(raw.linked_task_ids),
     linked_task_count: safeNumber(raw.linked_task_count, 0) || undefined,
     deadletter_reason: safeString(raw.deadletter_reason, "") || undefined,
+    last_task_id: safeString(raw.last_task_id, "") || undefined,
+    last_task_status: safeString(raw.last_task_status, "") || undefined,
+    last_task_result_status: safeString(raw.last_task_result_status, "") || undefined,
+    last_task_reason: safeString(raw.last_task_reason, "") || undefined,
+    last_task_gate: safeString(raw.last_task_gate, "") || undefined,
+    last_task_next_step: safeString(raw.last_task_next_step, "") || undefined,
+    last_advance_operation_id: safeString(raw.last_advance_operation_id, "") || undefined,
     created_at: safeString(raw.created_at, "") || undefined,
     updated_at: safeString(raw.updated_at, "") || undefined,
     meta: isRecord(raw.meta) ? raw.meta : undefined,

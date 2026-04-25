@@ -311,6 +311,8 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     fetched_body = fetched.json()
     assert fetched_body["ok"] is True
     assert fetched_body["mission"]["status"] == "completed"
+    assert fetched_body["mission"]["last_task_id"] == operation_id
+    assert fetched_body["mission"]["last_task_status"] == "completed"
     assert fetched_body["mission"]["meta"]["last_task_id"] == operation_id
     assert fetched_body["mission"]["meta"]["last_task_status"] == "completed"
     linked_operations = fetched_body["linked_operations"]
@@ -507,6 +509,10 @@ def test_mission_loop_state_uses_current_task_when_multiple_operations_are_linke
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert fetched_body["mission"]["linked_task_ids"] == [first_operation_id, second_operation_id]
+    assert fetched_body["mission"]["last_task_id"] == second_operation_id
+    assert fetched_body["mission"]["last_task_result_status"] == "blocked"
+    assert fetched_body["mission"]["last_task_gate"] == "trust_gate"
+    assert fetched_body["mission"]["last_task_next_step"] == "raise_trust_or_reduce_risk"
     assert fetched_body["mission"]["meta"]["last_task_id"] == second_operation_id
 
     loop_state = fetched_body["loop_state"]
