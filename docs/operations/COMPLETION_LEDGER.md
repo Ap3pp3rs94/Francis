@@ -85,6 +85,13 @@ approved input for execution, but returned `output`, `receipt.output`, and
 so generated echo-style plugin responses do not turn approved secret-bearing
 inputs into operator-facing secret replay.
 
+As of `2026-04-25`, web-learning runtime records redact secret-like request
+surface values before persisting or returning them through registry-backed
+requests, records, events, lists, and exports. Raw URLs, titles, summaries,
+actors, sources, and reasons are still used for policy checks and exact approval
+matching, but operator-facing runtime state stores the governed redacted values
+so approved learn requests do not replay inline tokens or passwords.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

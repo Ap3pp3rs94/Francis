@@ -16,7 +16,11 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
-from francis.governance.redaction import redact_governed_metadata, seal_governed_approval_value
+from francis.governance.redaction import (
+    redact_governed_metadata,
+    redact_governed_value,
+    seal_governed_approval_value,
+)
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -32,6 +36,11 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redacted_text(value: str, *, key: str) -> str:
+    redacted = redact_governed_value(value, key=key)
+    return redacted if isinstance(redacted, str) else _safe_str(redacted)
 
 
 def _to_bool(value: Any, *, default: bool) -> bool:
@@ -419,6 +428,10 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     domain = _safe_str(payload.get("domain")).strip().lower() or parsed_domain
     req_meta = redact_governed_metadata(payload.get("meta"))
     force = _to_bool(req_meta.get("force"), default=False)
+    recorded_url = _redacted_text(normalized_url, key="url")
+    recorded_actor = _redacted_text(actor, key="actor")
+    recorded_reason = _redacted_text(reason, key="reason")
+    recorded_source = _redacted_text(source, key="source")
 
     request_id = _new_id("wlreq", domain)
     record_id = _new_id("wlr", domain)
@@ -432,11 +445,11 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
         {
             "id": request_id,
             "ts": ts,
-            "url": normalized_url,
+            "url": recorded_url,
             "status": "received",
-            "reason": reason,
+            "reason": recorded_reason,
             "domain": domain,
-            "actor": actor,
+            "actor": recorded_actor,
             "meta": req_meta,
         }
     )
@@ -450,13 +463,13 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
             {
                 "ts": ts,
                 "kind": "policy_block",
-                "url": normalized_url,
+                "url": recorded_url,
                 "record_id": record_id,
                 "status": "disabled",
                 "message": "Web learning is disabled.",
-                "actor": actor,
+                "actor": recorded_actor,
                 "domain": domain,
-                "source": source,
+                "source": recorded_source,
                 "correlation_id": request_id,
             },
         )
@@ -473,27 +486,27 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
             {
                 "id": record_id,
                 "ts": ts,
-                "url": normalized_url,
+                "url": recorded_url,
                 "status": record_status,
                 "method": "GET",
                 "domain": domain,
-                "source": source,
+                "source": recorded_source,
                 "summary": "Blocked by policy and held in quarantine.",
                 "quarantine_id": quarantine_id,
                 "error": verdict_reason,
-                "meta": {"reason": reason, "request_id": request_id, "force": force},
+                "meta": {"reason": recorded_reason, "request_id": request_id, "force": force},
             }
         )
         quarantine.append(
             {
                 "id": quarantine_id,
                 "ts": ts,
-                "url": normalized_url,
+                "url": recorded_url,
                 "reason": verdict_reason,
                 "status": "quarantined",
                 "record_id": record_id,
                 "domain": domain,
-                "source": source,
+                "source": recorded_source,
                 "evidence": "Policy validation denied this URL.",
                 "meta": {"request_id": request_id},
             }
@@ -505,14 +518,14 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
             {
                 "ts": ts,
                 "kind": "policy_block",
-                "url": normalized_url,
+                "url": recorded_url,
                 "record_id": record_id,
                 "status": record_status,
                 "message": verdict_reason,
                 "quarantine_id": quarantine_id,
-                "actor": actor,
+                "actor": recorded_actor,
                 "domain": domain,
-                "source": source,
+                "source": recorded_source,
                 "correlation_id": request_id,
             },
         )
@@ -521,14 +534,14 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
             {
                 "ts": ts,
                 "kind": "quarantine",
-                "url": normalized_url,
+                "url": recorded_url,
                 "record_id": record_id,
                 "status": "quarantined",
                 "message": "Request moved to quarantine.",
                 "quarantine_id": quarantine_id,
-                "actor": actor,
+                "actor": recorded_actor,
                 "domain": domain,
-                "source": source,
+                "source": recorded_source,
                 "correlation_id": request_id,
             },
         )
@@ -550,6 +563,8 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     content_type = _safe_str(payload.get("content_type")).strip() or "text/html"
     title = _safe_str(payload.get("title")).strip() or f"Learned from {domain}"
     summary = _safe_str(payload.get("summary")).strip() or "Learn request accepted and ingested."
+    recorded_title = _redacted_text(title, key="title")
+    recorded_summary = _redacted_text(summary, key="summary")
     approvals_required = _to_bool(policy.get("approvals_required"), default=True)
     approval_action = "web_learning.request"
     approval_id = _approval_id_from_payload(payload)
@@ -590,15 +605,15 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
                 {
                     "id": record_id,
                     "ts": ts,
-                    "url": normalized_url,
+                    "url": recorded_url,
                     "status": "pending",
                     "method": "GET",
                     "http_status": 202,
                     "domain": domain,
-                    "source": source,
+                    "source": recorded_source,
                     "approval_id": approval_id,
                     "summary": "Pending approval before web learning execution.",
-                    "meta": {"reason": reason, "request_id": request_id, "force": force},
+                    "meta": {"reason": recorded_reason, "request_id": request_id, "force": force},
                 }
             )
             registry["records"] = records
@@ -607,14 +622,14 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
                 {
                     "ts": ts,
                     "kind": "approval_requested",
-                    "url": normalized_url,
+                    "url": recorded_url,
                     "record_id": record_id,
                     "status": "pending",
                     "message": "Learn request requires approval.",
                     "approval_id": approval_id,
-                    "actor": actor,
+                    "actor": recorded_actor,
                     "domain": domain,
-                    "source": source,
+                    "source": recorded_source,
                     "correlation_id": request_id,
                 },
             )
@@ -659,17 +674,17 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
                 {
                     "ts": ts,
                     "kind": "approval_requested",
-                    "url": normalized_url,
+                    "url": recorded_url,
                     "record_id": record_id,
                     "status": "needs_approval",
                     "message": "Learn request approval was missing; a fresh exact-action approval is required.",
                     "approval_id": refreshed_id,
-                    "actor": actor,
+                    "actor": recorded_actor,
                     "domain": domain,
-                    "source": source,
+                    "source": recorded_source,
                     "correlation_id": request_id,
                     "meta": {
-                        "reason": reason,
+                        "reason": recorded_reason,
                         "action": approval_action,
                         "previous_approval_id": approval_id,
                         "previous_status": approval_status,
@@ -748,17 +763,17 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
                 {
                     "ts": ts,
                     "kind": "approval_requested",
-                    "url": normalized_url,
+                    "url": recorded_url,
                     "record_id": record_id,
                     "status": "needs_approval",
                     "message": "Learn request approval did not match the exact action and was refreshed.",
                     "approval_id": refreshed_id,
-                    "actor": actor,
+                    "actor": recorded_actor,
                     "domain": domain,
-                    "source": source,
+                    "source": recorded_source,
                     "correlation_id": request_id,
                     "meta": {
-                        "reason": reason,
+                        "reason": recorded_reason,
                         "action": approval_action,
                         "previous_approval_id": approval_id,
                         "previous_status": approval_status,
@@ -783,18 +798,18 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     ingested_record = {
         "id": record_id,
         "ts": ts,
-        "url": normalized_url,
+        "url": recorded_url,
         "status": "ingested",
         "method": "GET",
         "http_status": 200,
         "content_type": content_type,
         "bytes": byte_count,
         "duration_ms": duration_ms,
-        "title": title,
-        "summary": summary,
+        "title": recorded_title,
+        "summary": recorded_summary,
         "domain": domain,
-        "source": source,
-        "meta": {"reason": reason, "request_id": request_id, "force": force},
+        "source": recorded_source,
+        "meta": {"reason": recorded_reason, "request_id": request_id, "force": force},
     }
     if approval_id:
         ingested_record["approval_id"] = approval_id
@@ -805,11 +820,11 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     registry["records"] = records
     event_meta = {
         "ts": ts,
-        "url": normalized_url,
+        "url": recorded_url,
         "record_id": record_id,
-        "actor": actor,
+        "actor": recorded_actor,
         "domain": domain,
-        "source": source,
+        "source": recorded_source,
         "correlation_id": request_id,
     }
     if approval_id:

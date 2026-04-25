@@ -311,12 +311,15 @@ def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_ap
 
     client = TestClient(create_app())
 
+    raw_url_token = "learnurlsecret123"
+    request_url = f"https://example.org/sealed?token={raw_url_token}"
+    redacted_url = "https://example.org/sealed?token=[REDACTED:secret]"
     raw_password = "learnsecret123"
     different_password = "learnsecret456"
     pending = client.post(
         "/web_learning/request",
         json={
-            "url": "https://example.org/sealed",
+            "url": request_url,
             "reason": "approval_path",
             "actor": "operator:sealed",
             "bytes": 128,
@@ -330,16 +333,26 @@ def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_ap
 
     approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
     artifact_path = data_root / "artifacts" / "web_learning" / "approvals" / approval_id / "request.json"
+    registry_path = data_root / "web_learning" / "_registry.json"
     approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    sealed_url = approval_payload["payload"]["payload"]["url"]
+    assert sealed_url["kind"] == "sealed_secret"
+    assert sealed_url["redacted"] == redacted_url
+    assert str(sealed_url["digest"]).startswith("hmac-sha256:")
     sealed_title = approval_payload["payload"]["payload"]["title"]
     assert sealed_title["kind"] == "sealed_secret"
     assert sealed_title["redacted"] == "Operator note password=[REDACTED:secret]"
     assert str(sealed_title["digest"]).startswith("hmac-sha256:")
 
     artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["payload"]["url"] == sealed_url
     assert artifact_payload["request"]["payload"]["title"] == sealed_title
     assert raw_password not in approval_path.read_text(encoding="utf-8")
     assert raw_password not in artifact_path.read_text(encoding="utf-8")
+    assert raw_url_token not in approval_path.read_text(encoding="utf-8")
+    assert raw_url_token not in artifact_path.read_text(encoding="utf-8")
+    assert raw_url_token not in registry_path.read_text(encoding="utf-8")
+    assert redacted_url in registry_path.read_text(encoding="utf-8")
 
     approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
     assert approved.status_code == 200
@@ -348,7 +361,7 @@ def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_ap
     mismatched = client.post(
         "/web_learning/request",
         json={
-            "url": "https://example.org/sealed",
+            "url": request_url,
             "reason": "approval_path",
             "actor": "operator:sealed",
             "bytes": 128,
@@ -362,6 +375,39 @@ def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_ap
     assert mismatched_body["status"] == "needs_approval"
     assert mismatched_body["error"] == "approval_payload_mismatch"
     assert str(mismatched_body["approval_id"]) != approval_id
+
+    refreshed_id = str(mismatched_body["approval_id"])
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    executed = client.post(
+        "/web_learning/request",
+        json={
+            "url": request_url,
+            "reason": "approval_path",
+            "actor": "operator:sealed",
+            "bytes": 128,
+            "title": f"Operator note password={different_password}",
+            "approval_id": refreshed_id,
+        },
+    )
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "ingested"
+
+    registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry_text = json.dumps(registry_payload, sort_keys=True)
+    assert raw_url_token not in registry_text
+    assert raw_password not in registry_text
+    assert different_password not in registry_text
+    assert redacted_url in registry_text
+
+    record = next(item for item in registry_payload["records"] if item["id"] == executed_body["record_id"])
+    assert record["url"] == redacted_url
+    assert record["title"] == "Operator note password=[REDACTED:secret]"
+    assert all(event["url"] == redacted_url for event in registry_payload["events"] if "url" in event)
 
 
 def test_web_learning_request_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
