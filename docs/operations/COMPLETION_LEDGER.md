@@ -64,6 +64,13 @@ list responses, while non-sensitive audit context such as ticket ids remains
 inspectable. `tests/test_api_credentials.py` proves raw OpenAI-key-like,
 GitHub-token-like, and password-like values do not appear in those surfaces.
 
+As of `2026-04-25`, credential request and revoke free-text reasons share that
+redaction posture across identity/governance receipt surfaces. Approval records,
+approval artifacts, credential metadata, credential registry events, and
+delegation/list projections preserve operator context while replacing
+secret-like password, token, key, and credential strings before persistence or
+return.
+
 As of `2026-04-25`, the same metadata redaction contract is shared by governed
 approval-backed plugin, industrial intervention, and web-learning request
 surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction

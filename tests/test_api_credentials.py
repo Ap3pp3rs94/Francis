@@ -113,6 +113,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     raw_openai_key = "sk-" + ("a" * 32)
     raw_github_pat = "ghp_" + ("b" * 36)
     raw_password = "supersecret123"
+    raw_reason_secret = "credentialreasonsecret123"
 
     requested = client.post(
         "/credentials/request",
@@ -121,7 +122,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
             "provider": "openai",
             "type": "api_key",
             "label": "OpenAI Redacted",
-            "reason": "secret_redaction_contract",
+            "reason": f"secret_redaction_contract password={raw_reason_secret}",
             "meta": {
                 "ticket": "FR-SEC",
                 "api_key": raw_openai_key,
@@ -146,6 +147,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     assert registry_path.exists()
 
     approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    assert approval_payload["reason"] == "secret_redaction_contract password=[REDACTED:secret]"
     approval_meta = approval_payload["payload"]["meta"]
     assert approval_meta["ticket"] == "FR-SEC"
     assert approval_meta["api_key"] == "[REDACTED:secret]"
@@ -166,6 +168,11 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     assert listed_meta["nested"]["refresh_token"] == "[REDACTED:secret]"
     assert listed_meta["note"] == "operator note password=[REDACTED:secret]"
     assert listed_meta["token_count"] == 42
+    assert listed_meta["reason"] == "secret_redaction_contract password=[REDACTED:secret]"
+
+    registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    event = next(item for item in registry_payload["events"] if item.get("event_type") == "credential.request")
+    assert event["reason"] == "secret_redaction_contract password=[REDACTED:secret]"
 
     persisted_text = "\n".join(
         [
@@ -178,6 +185,7 @@ def test_credentials_request_redacts_sensitive_metadata_from_identity_and_approv
     assert raw_openai_key not in persisted_text
     assert raw_github_pat not in persisted_text
     assert raw_password not in persisted_text
+    assert raw_reason_secret not in persisted_text
 
 
 def test_credentials_request_approval_reconciles_active_status(monkeypatch, tmp_path: Path) -> None:
@@ -260,11 +268,19 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
     assert len(active_items) == 1
     assert active_items[0]["status"] == "active"
 
-    revoked = client.post("/credentials/revoke", json={"id": credential_id, "reason": "cleanup"})
+    raw_revoke_secret = "credentialrevokesecret456"
+    revoked = client.post(
+        "/credentials/revoke",
+        json={"id": credential_id, "reason": f"cleanup token={raw_revoke_secret}"},
+    )
     assert revoked.status_code == 200
     revoked_body = revoked.json()
     assert revoked_body["ok"] is True
     revoke_approval_id = str(revoked_body["approval_id"])
+    revoke_artifact_path = data_root / "artifacts" / "credentials" / "approvals" / revoke_approval_id / "request.json"
+    assert revoke_artifact_path.exists()
+    revoke_artifact = json.loads(revoke_artifact_path.read_text(encoding="utf-8"))
+    assert revoke_artifact["request"]["reason"] == "cleanup token=[REDACTED:secret]"
 
     approved_revoke = client.post("/approvals/decision", json={"id": revoke_approval_id, "action": "approve"})
     assert approved_revoke.status_code == 200
@@ -278,12 +294,27 @@ def test_credentials_revocation_approval_reconciles_revoked_status(monkeypatch, 
     assert items[0]["status"] == "revoked"
     assert items[0]["meta"]["revocation_approval_status"] == "approved"
     assert items[0]["meta"]["revocation_requested"] is False
+    assert items[0]["meta"]["revocation_reason"] == "cleanup token=[REDACTED:secret]"
 
     registry = json.loads((data_root / "credentials" / "_registry.json").read_text(encoding="utf-8"))
     record = registry["credentials"][credential_id]
     assert record["status"] == "revoked"
     assert record["meta"]["revocation_approval_status"] == "approved"
     assert record["meta"]["revocation_requested"] is False
+    assert record["meta"]["revocation_reason"] == "cleanup token=[REDACTED:secret]"
+    revoke_event = next(
+        item
+        for item in registry["events"]
+        if item.get("event_type") == "credential.revoke" and item.get("approval_id") == revoke_approval_id
+    )
+    assert revoke_event["reason"] == "cleanup token=[REDACTED:secret]"
+    assert raw_revoke_secret not in "\n".join(
+        [
+            revoke_artifact_path.read_text(encoding="utf-8"),
+            json.dumps(registry, ensure_ascii=False),
+            json.dumps(listed_body, ensure_ascii=False),
+        ]
+    )
 
 
 def test_credentials_request_missing_approval_reconciles_error_status(monkeypatch, tmp_path: Path) -> None:

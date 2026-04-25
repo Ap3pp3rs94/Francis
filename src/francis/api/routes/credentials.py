@@ -13,7 +13,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
-from francis.governance.redaction import redact_governed_metadata
+from francis.governance.redaction import (
+    redact_governed_display_value,
+    redact_governed_metadata,
+    redact_secret_text,
+)
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -102,6 +106,15 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _atomic_write_display_json(path: Path, payload: dict[str, Any]) -> None:
+    display_payload = redact_governed_display_value(payload)
+    _atomic_write_json(path, display_payload if isinstance(display_payload, dict) else {})
+
+
+def _redact_reason(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
 
 
 def _default_registry() -> dict[str, Any]:
@@ -801,6 +814,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
         provider = _safe_str(payload.provider).strip().lower()
         cred_type = _safe_str(payload.type).strip().lower() or "api_key"
         reason = _safe_str(payload.reason).strip() or "requested"
+        display_reason = _redact_reason(reason) or "requested"
         label = _safe_str(payload.label).strip() or f"{provider or 'credential'}:{scope_id}"
         request_meta = _credential_meta(payload.meta, drop_control_keys=True)
 
@@ -829,7 +843,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
             "request_id": request_id,
             "meta": request_meta,
         }
-        _atomic_write_json(
+        _atomic_write_display_json(
             _approval_artifact_dir(approval_id) / "request.json",
             {
                 "kind": "credential.request.request",
@@ -857,7 +871,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                     **request_meta,
                     "request_id": request_id,
                     "approval_id": approval_id,
-                    "reason": reason,
+                    "reason": display_reason,
                     "approval_status": _safe_str(approval.get("status")).strip() or "pending",
                 },
             },
@@ -872,7 +886,7 @@ def request_credential(payload: CredentialRequestIn) -> dict[str, object]:
                 "provider": provider,
                 "request_id": request_id,
                 "approval_id": approval_id,
-                "reason": reason,
+                "reason": display_reason,
                 "actor": "credential_manager_api",
             },
         )
@@ -896,6 +910,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
     try:
         credential_id = _validate_credential_id(payload.id)
         reason = _safe_str(payload.reason).strip() or "requested"
+        display_reason = _redact_reason(reason) or "requested"
 
         registry = _load_registry()
         changed = _seed_from_vault(registry)
@@ -914,7 +929,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
             },
         )
         approval_id = _safe_str(approval.get("id")).strip()
-        _atomic_write_json(
+        _atomic_write_display_json(
             _approval_artifact_dir(approval_id) / "request.json",
             {
                 "kind": "credential.revoke.request",
@@ -924,7 +939,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
                     "credential_id": credential_id,
                     "scope_id": _safe_str(current.get("scope_id")).strip(),
                     "provider": _safe_str(current.get("provider")).strip(),
-                    "reason": reason,
+                    "reason": display_reason,
                 },
             },
         )
@@ -937,7 +952,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
         current_meta_obj["revocation_previous_status"] = previous_status
         current_meta_obj["revocation_approval_id"] = approval_id
         current_meta_obj["revocation_approval_status"] = _safe_str(approval.get("status")).strip() or "pending"
-        current_meta_obj["revocation_reason"] = reason
+        current_meta_obj["revocation_reason"] = display_reason
         current["meta"] = current_meta_obj
         _write_credential(registry, _normalize_credential_record(credential_id, current))
         _append_event(
@@ -946,7 +961,7 @@ def revoke_credential(payload: CredentialRevokeIn) -> dict[str, object]:
             {
                 "credential_id": credential_id,
                 "approval_id": approval_id,
-                "reason": reason,
+                "reason": display_reason,
                 "scope_id": _safe_str(current.get("scope_id")).strip(),
                 "actor": "credential_manager_api",
             },
