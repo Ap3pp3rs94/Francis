@@ -641,7 +641,7 @@ def _parse_delegation_yaml(path: Path) -> dict[str, Any] | None:
         "to": delegate,
         "scope_id": scope_ids[0] if scope_ids else "",
         "status": status or "draft",
-        "reason": reason,
+        "reason": _redact_reason(reason),
         "meta": {"scope_ids": scope_ids, "source": str(path.relative_to(_credentials_dir()))},
     }
 

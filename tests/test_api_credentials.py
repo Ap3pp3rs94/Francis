@@ -462,6 +462,7 @@ def test_credentials_seed_from_vault_and_parse_delegation_files(monkeypatch, tmp
 
     delegations_dir = credentials_dir / "delegations"
     delegations_dir.mkdir(parents=True, exist_ok=True)
+    raw_delegation_secret = "delegationsecret789"
     (delegations_dir / "ops.delegate.yaml").write_text(
         "\n".join(
             [
@@ -478,7 +479,7 @@ def test_credentials_seed_from_vault_and_parse_delegation_files(monkeypatch, tmp
                 "  audit:",
                 '    created_at: "2026-01-01T00:00:00Z"',
                 "  meta:",
-                '    description: "Allow llm.generate for ops tasks"',
+                f'    description: "Allow llm.generate for ops tasks password={raw_delegation_secret}"',
             ]
         ),
         encoding="utf-8",
@@ -514,6 +515,8 @@ def test_credentials_seed_from_vault_and_parse_delegation_files(monkeypatch, tmp
     assert target[0]["from"] == "operator:alice"
     assert target[0]["to"] == "agent:francis"
     assert target[0]["scope_id"] == "llm.generate"
+    assert target[0]["reason"] == "Allow llm.generate for ops tasks password=[REDACTED:secret]"
+    assert raw_delegation_secret not in json.dumps(delegations_body, ensure_ascii=False)
 
     status = client.get("/credentials/status")
     assert status.status_code == 200
