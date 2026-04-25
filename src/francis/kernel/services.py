@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_secret_text
 from francis.kernel.feature_flags import get_flag
 from francis.kernel.paths import repo_root
 from francis.telemetry.audit import record as audit_record
@@ -25,6 +26,13 @@ _SERVICE_PATHS: dict[str, tuple[str, ...]] = {
     "plugins": ("plugins",),
 }
 _ALLOWED_ACTIONS = {"status", "probe", "start", "stop", "restart", "reload"}
+
+
+def _redact_free_text(value: Any) -> str:
+    try:
+        return redact_secret_text(str(value or "").strip())
+    except Exception:
+        return ""
 
 
 def _service_path(name: str) -> Path:
@@ -103,7 +111,7 @@ def services_action(action: str, services: list[str] | None = None) -> dict[str,
     for name in selected:
         normalized_name = (name or "").strip()
         if normalized_name not in _KNOWN_SERVICES:
-            unknown.append(normalized_name)
+            unknown.append(_redact_free_text(normalized_name))
             continue
         item = _service_record(normalized_name)
         item["requested_action"] = normalized_action

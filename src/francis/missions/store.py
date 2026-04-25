@@ -10,6 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_governed_metadata, redact_governed_value, redact_secret_text
 from francis.kernel.paths import data_dir
 
 __all__ = [
@@ -156,8 +157,26 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(str(value or "").strip())
+
+
+def _redact_optional_text(value: Any) -> str | None:
+    text = _redact_free_text(value)
+    return text or None
+
+
+def _redact_meta(value: Any) -> dict[str, Any]:
+    return redact_governed_metadata(value)
+
+
+def _redact_history_details(details: dict[str, Any]) -> dict[str, Any]:
+    redacted = redact_governed_value(details)
+    return redacted if isinstance(redacted, dict) else {}
+
+
 def _append_history(mission_id: str, event: str, details: dict[str, Any], repo_root: Path | None = None) -> None:
-    line = {"ts": _now(), "mission_id": mission_id, "event": event, "details": details}
+    line = {"ts": _now(), "mission_id": mission_id, "event": event, "details": _redact_history_details(details)}
     path = _history_path(mission_id, repo_root)
     _safe_mkdir(path.parent)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -218,12 +237,12 @@ def _linked_task_snapshot(task_id: str, repo_root: Path | None = None) -> dict[s
         "task_id": str(task.get("task_id") or task_id).strip(),
         "task_status": _normalize_task_status(task.get("status")),
         "result_status": _normalize_task_status(payload.get("status")),
-        "status_reason": str(task.get("status_reason") or payload.get("error") or payload.get("message") or "").strip(),
+        "status_reason": _redact_free_text(task.get("status_reason") or payload.get("error") or payload.get("message")),
         "gate": str(governance.get("gate") or "").strip(),
         "approval_id": approval_id,
         "previous_approval_id": previous_approval_id,
         "approval_status": approval_status,
-        "next_step": str(governance.get("next_step") or "").strip(),
+        "next_step": _redact_free_text(governance.get("next_step")),
         "updated_at": updated_at,
         "created_at": created_at,
         "_sort_ts": _parse_ts(updated_at) or _parse_ts(created_at),
@@ -789,8 +808,8 @@ class MissionRecord:
             dependency_ids=_normalize_task_ids(list(data.get("dependency_ids") or [])),
             escalation_path=str(data.get("escalation_path") or ""),
             linked_task_ids=_normalize_task_ids(list(data.get("linked_task_ids") or [])),
-            deadletter_reason=(str(data.get("deadletter_reason")) if data.get("deadletter_reason") else None),
-            meta=dict(data.get("meta") or {}) if isinstance(data.get("meta"), dict) else {},
+            deadletter_reason=_redact_optional_text(data.get("deadletter_reason")),
+            meta=_redact_meta(data.get("meta")),
         )
 
 
@@ -819,7 +838,7 @@ def create_mission(
         dependency_ids=_normalize_task_ids(request.dependency_ids),
         escalation_path=str(request.escalation_path or "").strip(),
         linked_task_ids=_normalize_task_ids(request.linked_task_ids),
-        meta=dict(request.meta or {}),
+        meta=_redact_meta(request.meta),
     )
 
     try:
@@ -890,7 +909,7 @@ def create_replacement_mission(
         "Operator declared replacement mission.",
     )
     cleaned_actor = str(actor or "").strip()
-    cleaned_note = str(note or "").strip()
+    cleaned_note = _redact_free_text(note)
 
     replacement_meta = dict(meta or {})
     replacement_meta.update(
@@ -1114,7 +1133,7 @@ def update_mission(
             changes["escalation_path"] = record.escalation_path
 
     if deadletter_reason is not None:
-        cleaned_reason = str(deadletter_reason or "").strip() or None
+        cleaned_reason = _redact_optional_text(deadletter_reason)
         if cleaned_reason != record.deadletter_reason:
             record.deadletter_reason = cleaned_reason
             changes["deadletter_reason"] = cleaned_reason
@@ -1137,7 +1156,7 @@ def update_mission(
         merged = dict(record.meta)
         merged.update(meta_updates)
         if merged != record.meta:
-            record.meta = merged
+            record.meta = _redact_meta(merged)
             changes["meta_keys"] = sorted(meta_updates.keys())
 
     if not changes:
@@ -1157,7 +1176,7 @@ def update_mission(
                 {
                     **dict(changes["status"]),
                     "actor": str(actor or "").strip() or None,
-                    "note": str(note or "").strip() or None,
+                    "note": _redact_optional_text(note),
                     "deadletter_reason": record.deadletter_reason,
                 },
                 repo_root,
@@ -1195,7 +1214,7 @@ def update_mission(
                 {
                     **continuity_changes,
                     "actor": str(actor or "").strip() or None,
-                    "note": str(note or "").strip() or None,
+                    "note": _redact_optional_text(note),
                 },
                 repo_root,
             )
@@ -1279,12 +1298,12 @@ def record_linked_task_transition(
             "last_task_id": cleaned_task_id,
             "last_task_status": normalized_task_status or None,
             "last_task_result_status": normalized_result_status or None,
-            "last_task_reason": str(status_reason or "").strip() or None,
+            "last_task_reason": _redact_optional_text(status_reason),
             "last_task_gate": str(governance_payload.get("gate") or "").strip() or None,
             "last_task_approval_id": cleaned_approval_id or None,
             "last_task_previous_approval_id": cleaned_previous_approval_id or None,
             "last_task_approval_status": cleaned_approval_status or None,
-            "last_task_next_step": str(governance_payload.get("next_step") or "").strip() or None,
+            "last_task_next_step": _redact_optional_text(governance_payload.get("next_step")),
             "last_task_updated_at": _now(),
         }
     )
@@ -1306,14 +1325,14 @@ def record_linked_task_transition(
                 "task_id": cleaned_task_id,
                 "task_status": normalized_task_status or None,
                 "result_status": normalized_result_status or None,
-                "status_reason": str(status_reason or "").strip() or None,
+                "status_reason": _redact_optional_text(status_reason),
                 "gate": str(governance_payload.get("gate") or "").strip() or None,
                 "approval_id": cleaned_approval_id or None,
                 "previous_approval_id": cleaned_previous_approval_id or None,
                 "approval_status": cleaned_approval_status or None,
-                "next_step": str(governance_payload.get("next_step") or "").strip() or None,
+                "next_step": _redact_optional_text(governance_payload.get("next_step")),
                 "actor": str(actor or "").strip() or None,
-                "note": str(note or "").strip() or None,
+                "note": _redact_optional_text(note),
                 "mission_status_before": previous_status.value,
                 "mission_status_after": record.status.value,
             },
@@ -1380,7 +1399,7 @@ def tick_mission(
             "mission_ticked",
             {
                 "actor": str(actor or "").strip() or None,
-                "note": str(note or "").strip() or None,
+                "note": _redact_optional_text(note),
                 "mission_status_before": previous_status.value,
                 "mission_status_after": record.status.value,
                 "latest_task_id": meta_updates["last_task_id"],
@@ -1491,7 +1510,7 @@ def run_queue_once(
     return mission_runtime.run_queue_once(
         limit=limit,
         actor=str(actor or "").strip() or "missions.runner",
-        note=str(note or "").strip() or "mission_queue_run_once",
+        note=_redact_free_text(note) or "mission_queue_run_once",
     )
 
 
@@ -1519,7 +1538,7 @@ def record_advance_receipt(
             "last_advance_outcome": str(outcome or "").strip() or None,
             "last_advance_operation_id": str(operation_id or "").strip() or None,
             "last_advance_operation_status": str(operation_status or "").strip() or None,
-            "last_advance_message": str(message or "").strip() or None,
+            "last_advance_message": _redact_optional_text(message),
             "last_advance_actor": str(actor or "").strip() or None,
             "last_advance_applied": bool(applied),
             "last_advance_at": _now(),
@@ -1539,10 +1558,10 @@ def record_advance_receipt(
                 "action": str(action or "").strip() or None,
                 "outcome": str(outcome or "").strip() or None,
                 "actor": str(actor or "").strip() or None,
-                "note": str(note or "").strip() or None,
+                "note": _redact_optional_text(note),
                 "operation_id": str(operation_id or "").strip() or None,
                 "operation_status": str(operation_status or "").strip() or None,
-                "message": str(message or "").strip() or None,
+                "message": _redact_optional_text(message),
                 "applied": bool(applied),
             },
             repo_root,
@@ -1582,7 +1601,7 @@ def record_recovery_review_receipt(
             "last_recovery_action": normalized_action,
             "last_recovery_outcome": str(outcome or "").strip() or None,
             "last_recovery_target_id": str(target_id or "").strip() or None,
-            "last_recovery_message": str(message or "").strip() or None,
+            "last_recovery_message": _redact_optional_text(message),
             "last_recovery_actor": str(actor or "").strip() or None,
             "last_recovery_source_status": status,
             "last_recovery_at": reviewed_at,
@@ -1602,9 +1621,9 @@ def record_recovery_review_receipt(
                 "action": normalized_action,
                 "outcome": str(outcome or "").strip() or None,
                 "actor": str(actor or "").strip() or None,
-                "note": str(note or "").strip() or None,
+                "note": _redact_optional_text(note),
                 "target_id": str(target_id or "").strip() or None,
-                "message": str(message or "").strip() or None,
+                "message": _redact_optional_text(message),
                 "source_status": status,
                 "operator_required": True,
                 "automatic_retry": False,
@@ -1629,7 +1648,7 @@ def deadletter_mission(
         return None, err
     if record.status in {MissionStatus.COMPLETED, MissionStatus.CANCELLED, MissionStatus.DEADLETTERED}:
         return None, "invalid_deadletter_source_status"
-    cleaned_reason = str(reason or "").strip() or "manual_deadletter"
+    cleaned_reason = _redact_free_text(reason) or "manual_deadletter"
     return update_mission(
         mission_id,
         repo_root,

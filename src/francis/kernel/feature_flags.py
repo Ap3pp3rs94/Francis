@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_governed_metadata, redact_secret_text
 from francis.kernel.paths import data_dir
 
 __all__ = ["get_flag", "list_flags", "set_flag"]
@@ -23,6 +24,14 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
+
+
+def _redact_meta(value: Any) -> dict[str, Any]:
+    return redact_governed_metadata(value)
 
 
 def _to_bool(value: Any, *, default: bool) -> bool:
@@ -98,9 +107,9 @@ def _normalize_flag_record(key: str, record: dict[str, Any]) -> dict[str, Any]:
         "key": key,
         "enabled": _to_bool(record.get("enabled"), default=False),
         "source": _safe_str(record.get("source")).strip() or "runtime",
-        "description": _safe_str(record.get("description")).strip() or "",
+        "description": _redact_free_text(record.get("description")),
         "ts": int(record.get("ts") or _utc_now_s()),
-        "meta": dict(record.get("meta") or {}) if isinstance(record.get("meta"), dict) else {},
+        "meta": _redact_meta(record.get("meta")),
     }
 
 
@@ -186,9 +195,9 @@ def set_flag(
     current[normalized_key] = {
         "enabled": bool(enabled),
         "source": _safe_str(source).strip() or "api",
-        "description": _safe_str(description).strip(),
+        "description": _redact_free_text(description),
         "ts": _utc_now_s(),
-        "meta": dict(meta or {}),
+        "meta": _redact_meta(meta),
     }
     _write_file_flags(current)
     return _normalize_flag_record(normalized_key, current[normalized_key])

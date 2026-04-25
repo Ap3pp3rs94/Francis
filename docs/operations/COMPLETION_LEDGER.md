@@ -111,6 +111,14 @@ the API or tracker and persisted control-mode overrides keep operator context
 while replacing secret-like passwords, tokens, and keys before those values reach
 history files, runtime state files, or system/operator-mode responses.
 
+As of `2026-04-25`, mission recovery receipts and system mutation context share
+that redaction posture. Mission deadletter reasons, mission history notes,
+linked-task status reasons, feature flag descriptions/meta, observer scan
+reasons/meta, service-action unknown target names, and runtime-setting mutation
+response metadata preserve non-sensitive audit context while replacing
+secret-like passwords, tokens, keys, and secrets before those values reach
+operator-facing receipts or local runtime files.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

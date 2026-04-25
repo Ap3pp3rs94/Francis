@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from francis.api.routes._operator_posture import posture_write_guard
+from francis.governance.redaction import redact_governed_metadata, redact_secret_text
 from francis.kernel import feature_flags
 from francis.kernel.health import health_report
 from francis.kernel.paths import data_dir
@@ -50,6 +51,14 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
+
+
+def _redact_meta(value: Any) -> dict[str, Any]:
+    return redact_governed_metadata(value)
 
 
 def _now_s() -> int:
@@ -497,8 +506,8 @@ def observer_scan(payload: ObserverScanIn | None = None, recent_limit: int = 10)
                 probe_statuses=summary["probe_statuses"],
                 anomaly=summary["anomaly"],
                 actor=body.actor or "operator",
-                reason=body.reason or "manual_scan",
-                meta=body.meta,
+                reason=_redact_free_text(body.reason or "manual_scan"),
+                meta=_redact_meta(body.meta),
             )
         response = _observer_state_payload(recent_limit=recent_limit)
         response["receipt"] = observer_scan_event_projection(receipt)
@@ -598,8 +607,8 @@ def set_feature_flag_for_key(key: str, payload: FlagSetIn) -> dict[str, object]:
             source=payload.source,
             description=payload.description,
             meta={
-                **dict(payload.meta or {}),
-                "reason": payload.reason or "",
+                **_redact_meta(payload.meta),
+                "reason": _redact_free_text(payload.reason or ""),
             },
         )
         return {"ok": True, "applied": True, "status": "applied", "item": item}
@@ -644,6 +653,7 @@ def mutate_config(payload: ConfigMutationIn) -> dict[str, object]:
             value=payload.value,
         )
         _write_runtime_overrides(updated)
+        request_meta = _redact_meta(payload.meta)
         return {
             "ok": True,
             "applied": True,
@@ -651,12 +661,12 @@ def mutate_config(payload: ConfigMutationIn) -> dict[str, object]:
             "resulting_value": resulting,
             "message": "mutation_applied",
             "meta": {
+                **request_meta,
                 "op": payload.op,
                 "path": payload.path,
-                "reason": payload.reason or "",
+                "reason": _redact_free_text(payload.reason or ""),
                 "domain": payload.domain or "",
                 "actor": payload.actor or "",
-                **dict(payload.meta or {}),
             },
         }
     except Exception as exc:

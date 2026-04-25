@@ -128,6 +128,55 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert fetched_events.count("status_changed") >= 2
 
 
+def test_mission_deadletter_reason_and_notes_redact_secret_text(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": "Redact mission recovery context",
+            "summary": "Mission exists to verify governed recovery text.",
+            "next_step": "Deadletter with operator context.",
+            "requester_id": "test.missions.redaction",
+        },
+    )
+    assert created.status_code == 200
+    mission_id = str(created.json()["mission_id"])
+
+    raw_reason = "operator note password=missiondeadlettersecret123"
+    raw_note = "review note token=missionnotesecret456"
+    deadlettered = client.post(
+        f"/missions/{mission_id}/deadletter",
+        json={"reason": raw_reason, "actor": "test.missions.redaction", "note": raw_note},
+    )
+
+    assert deadlettered.status_code == 200
+    body = deadlettered.json()
+    assert body["ok"] is True
+    assert body["mission"]["deadletter_reason"] == "operator note password=[REDACTED:secret]"
+    assert body["queue_item"]["recovery"]["reason"] == "operator note password=[REDACTED:secret]"
+    history_text = (data_root / "missions" / mission_id / "history.jsonl").read_text(encoding="utf-8")
+    record_text = (data_root / "missions" / mission_id / "record.json").read_text(encoding="utf-8")
+    assert "missiondeadlettersecret123" not in history_text
+    assert "missionnotesecret456" not in history_text
+    assert "missiondeadlettersecret123" not in record_text
+    assert "password=[REDACTED:secret]" in history_text
+    assert "token=[REDACTED:secret]" in history_text
+
+    queue = client.get("/missions/queue")
+    assert queue.status_code == 200
+    deadletter_item = next(item for item in queue.json()["deadletter"] if item.get("id") == mission_id)
+    assert deadletter_item["deadletter_reason"] == "operator note password=[REDACTED:secret]"
+    assert deadletter_item["history_tail"][-1]["details"]["note"] == "review note token=[REDACTED:secret]"
+
+
 def test_missions_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

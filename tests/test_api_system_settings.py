@@ -2377,6 +2377,91 @@ def test_system_flags_set_and_list(monkeypatch, tmp_path: Path) -> None:
     assert target[0]["enabled"] is False
 
 
+def test_system_mutation_context_redacts_secret_text(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    observer = client.post(
+        "/system/observer/scan",
+        json={
+            "reason": "scan note password=observerscansecret123",
+            "actor": "test.system.redaction",
+            "meta": {"ticket": "OBS-1", "token": "observermetasecret123"},
+        },
+    )
+    assert observer.status_code == 200
+    assert observer.json()["receipt"]["reason"] == "scan note password=[REDACTED:secret]"
+
+    flag = client.post(
+        "/system/flags/set",
+        json={
+            "key": "ui.secret_redaction",
+            "enabled": True,
+            "reason": "flag reason token=flagreasonsecret123",
+            "description": "flag desc password=flagdescriptionsecret123",
+            "meta": {"ticket": "FLAG-1", "operator_note": "token=flagnote_secret123"},
+        },
+    )
+    assert flag.status_code == 200
+    flag_body = flag.json()
+    assert flag_body["ok"] is True
+    assert flag_body["item"]["description"] == "flag desc password=[REDACTED:secret]"
+    assert flag_body["item"]["meta"]["reason"] == "flag reason token=[REDACTED:secret]"
+    assert flag_body["item"]["meta"]["operator_note"] == "token=[REDACTED:secret]"
+    assert flag_body["item"]["meta"]["ticket"] == "FLAG-1"
+
+    config = client.post(
+        "/system/config/mutate",
+        json={
+            "op": "set",
+            "path": "ui.preferences.redaction_mode",
+            "value": "enabled",
+            "reason": "config reason secret=configreasonsecret123",
+            "meta": {"ticket": "CFG-1", "operator_note": "password=confignotesecret123"},
+        },
+    )
+    assert config.status_code == 200
+    config_body = config.json()
+    assert config_body["ok"] is True
+    assert config_body["meta"]["reason"] == "config reason secret=[REDACTED:secret]"
+    assert config_body["meta"]["operator_note"] == "password=[REDACTED:secret]"
+    assert config_body["meta"]["ticket"] == "CFG-1"
+
+    services = client.post(
+        "/system/services/action",
+        json={"action": "probe", "services": ["api", "token=serviceunknownsecret123"]},
+    )
+    assert services.status_code == 200
+    services_body = services.json()
+    assert services_body["status"] == "partial"
+    assert services_body["unknown_services"] == ["token=[REDACTED:secret]"]
+
+    audit_text = (data_root / "logs" / "audit" / "audit.jsonl").read_text(encoding="utf-8")
+    flag_text = (data_root / "runtime" / "feature_flags.json").read_text(encoding="utf-8")
+    config_text = (data_root / "runtime" / "system_settings.json").read_text(encoding="utf-8")
+    combined = "\n".join([audit_text, flag_text, config_text])
+    for raw in (
+        "observerscansecret123",
+        "observermetasecret123",
+        "flagreasonsecret123",
+        "flagdescriptionsecret123",
+        "flagnote_secret123",
+        "configreasonsecret123",
+        "confignotesecret123",
+        "serviceunknownsecret123",
+    ):
+        assert raw not in combined
+    assert "OBS-1" in audit_text
+    assert "FLAG-1" in flag_text
+    assert "CFG-1" not in config_text
+
+
 def test_system_mutations_are_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
