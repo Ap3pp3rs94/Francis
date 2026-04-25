@@ -3139,6 +3139,17 @@ function SystemPanel(props: {
       runLedgerCount?: number;
       message?: string;
     }>;
+    errors: Array<{
+      missionId?: string;
+      operationId?: string;
+      approvalId?: string;
+      action?: string;
+      status?: string;
+      gate?: string;
+      nextStep?: string;
+      error?: string;
+      message?: string;
+    }>;
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -4054,6 +4065,17 @@ function SystemPanel(props: {
           linkedOperationCount: item.linked_operation_count,
           runLedgerCount: item.run_ledger_count,
           message: item.message,
+        })),
+        errors: (response.errors ?? []).slice(0, 4).map((item) => ({
+          missionId: safeString(item.mission_id).trim(),
+          operationId: safeString(item.operation_id).trim() || safeString(item.task_id).trim(),
+          approvalId: safeString(item.approval_id).trim(),
+          action: safeString(item.action).trim(),
+          status: safeString(item.status).trim(),
+          gate: safeString(item.gate).trim(),
+          nextStep: safeString(item.next_step).trim(),
+          error: safeString(item.error).trim(),
+          message: safeString(item.message).trim(),
         })),
       });
 
@@ -7255,6 +7277,94 @@ function SystemPanel(props: {
                           ) : null}
                         </div>
                       </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {missionQueueRunSummary.errors.length > 0 ? (
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {missionQueueRunSummary.errors.map((item, index) => {
+                      const errorDetail = item.error || item.message || "No error detail was provided.";
+                      return (
+                        <div
+                          key={`mission-queue-error-${item.missionId || item.operationId || index}`}
+                          style={{
+                            border: `1px solid ${THEME.panelBorder}`,
+                            borderRadius: 10,
+                            padding: 10,
+                            background: "#1b1212",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div style={{ fontSize: 11, fontWeight: 600 }}>{item.missionId || "queue_run_error"}</div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <span style={badgeStyle("failed")}>queue_error</span>
+                              {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
+                              {item.action ? <span style={badgeStyle(item.action)}>{item.action}</span> : null}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{errorDetail}</div>
+                          {item.operationId || item.approvalId || item.gate || item.nextStep ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                              {item.operationId ? (
+                                <>
+                                  operation=<code>{item.operationId}</code>
+                                </>
+                              ) : null}
+                              {item.approvalId ? (
+                                <>
+                                  {item.operationId ? " / " : ""}approval=<code>{item.approvalId}</code>
+                                </>
+                              ) : null}
+                              {item.gate ? (
+                                <>
+                                  {(item.operationId || item.approvalId) ? " / " : ""}gate=<code>{item.gate}</code>
+                                </>
+                              ) : null}
+                              {item.nextStep ? (
+                                <>
+                                  {(item.operationId || item.approvalId || item.gate) ? " / " : ""}next=
+                                  <code>{item.nextStep}</code>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {item.missionId || item.operationId || item.approvalId ? (
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                              {item.approvalId ? (
+                                <button
+                                  style={buttonStyle}
+                                  onClick={() =>
+                                    props.onOpenApprovals(item.approvalId || "", {
+                                      missionId: item.missionId || undefined,
+                                      operationId: item.operationId || undefined,
+                                    })
+                                  }
+                                >
+                                  Review approval
+                                </button>
+                              ) : null}
+                              {item.missionId ? (
+                                <button style={buttonStyle} onClick={() => inspectMission(item.missionId || "")}>
+                                  Inspect mission flow
+                                </button>
+                              ) : null}
+                              {item.operationId ? (
+                                <button style={buttonStyle} onClick={() => props.onOpenOperation(item.operationId || "")}>
+                                  Open task
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>

@@ -920,6 +920,71 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
   }
 });
 
+test("MissionsClient.runOnce preserves bounded queue error records for UI actionability", async () => {
+  const requests: Array<{ path: string; method: string; body: unknown }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      body: jsonRequestBody(init),
+    });
+
+    return jsonResponse({
+      ok: false,
+      items: [],
+      failed: [],
+      deadletter: [],
+      total: 0,
+      applied: 0,
+      advanced: 0,
+      processed: 1,
+      results: [],
+      errors: [
+        {
+          mission_id: "mission_error",
+          operation_id: "tsk_error",
+          approval_id: "apr_error",
+          action: "advance_once",
+          status: "failed",
+          gate: "runtime_gate",
+          next_step: "inspect_task",
+          error: "advance_failed",
+        },
+      ],
+      counts: { failed: 1 },
+      status: "failed",
+    });
+  });
+
+  try {
+    const client = new MissionsClient("http://127.0.0.1:8000");
+    const response = await client.runOnce({ actor: "chat_ui.operations", limit: 1 }, { timeoutMs: 50 });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/missions/run_once",
+        method: "POST",
+        body: {
+          actor: "chat_ui.operations",
+          limit: 1,
+        },
+      },
+    ]);
+    assert.equal(response.ok, false);
+    assert.equal(response.errors?.[0]?.mission_id, "mission_error");
+    assert.equal(response.errors?.[0]?.operation_id, "tsk_error");
+    assert.equal(response.errors?.[0]?.approval_id, "apr_error");
+    assert.equal(response.errors?.[0]?.gate, "runtime_gate");
+    assert.equal(response.errors?.[0]?.next_step, "inspect_task");
+    assert.equal(response.errors?.[0]?.error, "advance_failed");
+    assert.equal(response.counts?.failed, 1);
+    assert.equal(response.status, "failed");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("MissionsClient.get preserves the mission loop state used by the ORB mission inspector", async () => {
   const requests: Array<{ path: string; method: string }> = [];
   const restoreFetch = installFetch(async (url, init) => {

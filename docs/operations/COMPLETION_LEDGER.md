@@ -712,6 +712,22 @@ from the immediate queue-run result:
   inspection panels.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run error actionability. This advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line
+by keeping bounded queue-run failures visible inside the immediate result card:
+
+- `apps/chat_ui/src/App.tsx` now carries bounded `errors` from
+  `/missions/run_once` into the queue-run summary and renders error cards with
+  mission, operation, approval, gate, next-step, status, and action context when
+  present.
+- Queue-run error cards now route to existing mission, task, and approval
+  inspection surfaces rather than hiding all detail behind a single notice.
+- `apps/chat_ui/src/missions/index.test.ts` now proves the client preserves
+  bounded queue error records for UI actionability.
+- No mutation, approval decision, execution, shell, policy, or memory-write
+  behavior changed; this is read-only failure visibility.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1930,6 +1946,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run error actionability slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run receipt target reachability slice:
 
