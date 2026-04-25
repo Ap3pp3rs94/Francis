@@ -3,7 +3,14 @@ import type { ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
-import { MissionsApiError, MissionsClient, missionCurrentTaskId, missionRecoveryTargetId, presentMissionQueue } from "./missions";
+import {
+  MissionsApiError,
+  MissionsClient,
+  missionCurrentOperation,
+  missionCurrentTaskId,
+  missionRecoveryTargetId,
+  presentMissionQueue,
+} from "./missions";
 import type { MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
@@ -128,17 +135,6 @@ function safeNumber(v: unknown, fallback = 0): number {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
-}
-
-function operationDetailId(detail: OperationDetail | null | undefined): string {
-  return safeString(detail?.operation?.id).trim();
-}
-
-function missionCurrentOperation(linkedOperations: OperationDetail[], currentTaskId: string): OperationRecord | null {
-  const current = currentTaskId
-    ? linkedOperations.find((detail) => operationDetailId(detail) === currentTaskId)
-    : undefined;
-  return (current ?? linkedOperations[0])?.operation ?? null;
 }
 
 function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
@@ -3613,9 +3609,11 @@ function SystemPanel(props: {
         });
         const nextDetail = await loadMissionDetail(cleaned);
         await refresh();
-        const resolvedOperation = response.operation ?? nextDetail?.linked_operations?.[0]?.operation ?? null;
-        const approvalId = operationApprovalId(resolvedOperation);
         const actionHandoff = response.loop_state?.handoff ?? nextDetail?.loop_state?.handoff;
+        const nextMissionCurrentTaskId = missionCurrentTaskId(nextDetail?.mission, nextDetail?.queue_item, actionHandoff);
+        const resolvedOperation =
+          response.operation ?? missionCurrentOperation(nextDetail?.linked_operations ?? [], nextMissionCurrentTaskId);
+        const approvalId = operationApprovalId(resolvedOperation);
         const nextStatus = safeString(response.status || nextDetail?.mission?.status || response.mission?.status, "unknown");
         if (!response.ok) {
           setMissionActionNotice({
@@ -3633,7 +3631,7 @@ function SystemPanel(props: {
         const approvalMessage = approvalId ? ` Review approval ${approvalId}.` : "";
         setMissionActionResult({
           missionId: cleaned,
-          operationId: safeString(response.operation_id).trim() || undefined,
+          operationId: safeString(response.operation_id).trim() || safeString(resolvedOperation?.id).trim() || undefined,
           approvalId: approvalId || undefined,
         });
         setMissionActionNotice({

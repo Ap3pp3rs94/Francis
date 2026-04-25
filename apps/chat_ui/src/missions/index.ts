@@ -867,6 +867,17 @@ export function missionRecoveryTargetId(
   return missionCurrentTaskId(mission, queueItem, handoff);
 }
 
+function operationDetailId(detail: OperationDetail | null | undefined): string {
+  return safeString(detail?.operation?.id).trim();
+}
+
+export function missionCurrentOperation(linkedOperations: OperationDetail[], currentTaskId: string): OperationRecord | null {
+  const current = currentTaskId
+    ? linkedOperations.find((detail) => operationDetailId(detail) === currentTaskId)
+    : undefined;
+  return (current ?? linkedOperations[0])?.operation ?? null;
+}
+
 export function presentMissionQueue(items: MissionQueueItem[], limit = 4): MissionQueuePresentation {
   const ranked = items
     .map((item, index) => ({

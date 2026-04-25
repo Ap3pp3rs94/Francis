@@ -261,6 +261,13 @@ mission queue run summaries, and visible mission queue cards no longer prefer a
 stale task-shaped `action_target_id` over the current task id when opening
 linked work or approval context.
 
+As of `2026-04-25`, selected mission post-advance approval notices now use the
+same current-operation contract. When an advance response needs to fall back to
+the refreshed mission detail payload, the UI selects the linked operation that
+matches current mission task truth before falling back to the first linked
+operation, so multi-operation missions do not surface approval context from
+older work.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

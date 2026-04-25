@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MissionsClient, missionCurrentTaskId, missionRecoveryTargetId, presentMissionQueue } from "./index.ts";
+import { MissionsClient, missionCurrentOperation, missionCurrentTaskId, missionRecoveryTargetId, presentMissionQueue } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -158,6 +158,34 @@ test("missionRecoveryTargetId preserves dependency missions but routes operation
     "tsk_current",
   );
   assert.equal(missionRecoveryTargetId(mission, { action_target_id: "tsk_stale" }), "tsk_meta_current");
+});
+
+test("missionCurrentOperation selects the current linked operation before first-linked fallback", () => {
+  const linkedOperations = [
+    {
+      operation: {
+        id: "tsk_old",
+        ts: 1710000000,
+        status: "queued",
+        meta: { approval_id: "apr_old" },
+      },
+      logs: [],
+    },
+    {
+      operation: {
+        id: "tsk_current",
+        ts: 1710000001,
+        status: "blocked",
+        meta: { approval_id: "apr_current" },
+      },
+      logs: [],
+    },
+  ];
+
+  assert.equal(missionCurrentOperation(linkedOperations, "tsk_current")?.id, "tsk_current");
+  assert.equal(missionCurrentOperation(linkedOperations, "tsk_missing")?.id, "tsk_old");
+  assert.equal(missionCurrentOperation(linkedOperations, "")?.id, "tsk_old");
+  assert.equal(missionCurrentOperation([], "tsk_current"), null);
 });
 
 test("MissionsClient.list requests the bounded mission list route and parses mission records", async () => {
