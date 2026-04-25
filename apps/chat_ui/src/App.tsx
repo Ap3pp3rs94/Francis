@@ -444,6 +444,78 @@ function badgeStyle(status: string): React.CSSProperties {
   };
 }
 
+type RecoveryFollowthroughLike = {
+  replacement_mission_id?: string;
+  replacement_status?: string;
+  replacement_objective?: string;
+  replacement_next_step?: string;
+  replacement_last_task_id?: string;
+  replacement_last_task_status?: string;
+  replacement_updated_at?: string;
+  replacement_terminal?: boolean;
+  replacement_error?: string;
+};
+
+function MissionRecoveryFollowthroughCard(props: {
+  recovery?: RecoveryFollowthroughLike | null;
+  onOpenMission?: (missionId: string) => void;
+}): React.ReactElement | null {
+  const replacementId = safeString(props.recovery?.replacement_mission_id).trim();
+  if (!replacementId) return null;
+
+  const status = safeString(props.recovery?.replacement_status).trim();
+  const objective = safeString(props.recovery?.replacement_objective).trim();
+  const nextStep = safeString(props.recovery?.replacement_next_step).trim();
+  const lastTaskId = safeString(props.recovery?.replacement_last_task_id).trim();
+  const lastTaskStatus = safeString(props.recovery?.replacement_last_task_status).trim();
+  const updatedAt = mixedLocaleTime(props.recovery?.replacement_updated_at);
+  const error = safeString(props.recovery?.replacement_error).trim();
+
+  return (
+    <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#111819", marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 11, fontWeight: 600 }}>Replacement follow-through</div>
+        {status ? <span style={badgeStyle(status)}>{status}</span> : null}
+      </div>
+      <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+        replacement=<code>{replacementId}</code>
+        {lastTaskId ? (
+          <>
+            {" / "}last_task=<code>{lastTaskId}</code>
+          </>
+        ) : null}
+        {lastTaskStatus ? (
+          <>
+            {" / "}task_status=<code>{lastTaskStatus}</code>
+          </>
+        ) : null}
+        {updatedAt ? (
+          <>
+            {" / "}updated=<code>{updatedAt}</code>
+          </>
+        ) : null}
+        {props.recovery?.replacement_terminal ? (
+          <>
+            {" / "}terminal=<code>true</code>
+          </>
+        ) : null}
+      </div>
+      {objective ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{truncateText(objective, 180)}</div> : null}
+      {error ? (
+        <div style={{ fontSize: 11, color: "#ffb0b0", marginTop: 4 }}>
+          replacement_error=<code>{error}</code>
+        </div>
+      ) : null}
+      {nextStep ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{nextStep}</div> : null}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+        <button style={buttonStyle} onClick={() => props.onOpenMission?.(replacementId)} disabled={!props.onOpenMission}>
+          Open replacement
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function summaryCardStyle(): React.CSSProperties {
   return {
     border: `1px solid ${THEME.panelBorder}`,
@@ -4958,6 +5030,7 @@ function SystemPanel(props: {
                         {recoveryNextStep ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
                         ) : null}
+                        <MissionRecoveryFollowthroughCard recovery={recovery} onOpenMission={inspectMission} />
                         {lastRecoveryAction ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                             reviewed=<code>{lastRecoveryAction}</code>
@@ -5157,6 +5230,7 @@ function SystemPanel(props: {
                       {recoveryNextStep ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
                       ) : null}
+                      <MissionRecoveryFollowthroughCard recovery={recovery} onOpenMission={inspectMission} />
                       {lastRecoveryAction ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                           reviewed=<code>{lastRecoveryAction}</code>
@@ -7188,6 +7262,7 @@ function SystemPanel(props: {
                     {recoveryNextStep ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
                     ) : null}
+                    <MissionRecoveryFollowthroughCard recovery={recovery} onOpenMission={inspectMission} />
                     {lastRecoveryAction ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                         reviewed=<code>{lastRecoveryAction}</code>
@@ -7368,6 +7443,7 @@ function SystemPanel(props: {
                     {recoveryNextStep ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
                     ) : null}
+                    <MissionRecoveryFollowthroughCard recovery={recovery} onOpenMission={inspectMission} />
                     {lastRecoveryAction ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                         reviewed=<code>{lastRecoveryAction}</code>

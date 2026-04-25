@@ -398,6 +398,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 operator_required: true,
                 automatic_retry: false,
                 read_only: true,
+                replacement_mission_id: "mission_dead_replacement",
+                replacement_status: "queued",
+                replacement_objective: "Replacement for deadlettered mission",
+                replacement_next_step: "Declare the first bounded operation.",
               },
               last_task_approval_id: "apr_dead_exact",
               last_task_previous_approval_id: "apr_dead_previous",
@@ -594,6 +598,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.target_id, "tsk_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.automatic_retry, false);
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.read_only, true);
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.replacement_mission_id, "mission_dead_replacement");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.replacement_status, "queued");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_id, "apr_dead_exact");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.operation_id, "tsk_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.approval_id, "apr_dead_exact");
@@ -1442,6 +1448,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               operator_required: true,
               automatic_retry: false,
               read_only: true,
+              replacement_mission_id: "mission_dead_replacement",
+              replacement_status: "completed",
+              replacement_last_task_id: "tsk_dead_replacement",
+              replacement_last_task_status: "completed",
             },
             last_task_id: "tsk_dead",
             last_task_status: "accepted",
@@ -1527,6 +1537,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.target_id, "tsk_dead_current");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.automatic_retry, false);
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.read_only, true);
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.replacement_mission_id, "mission_dead_replacement");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.replacement_status, "completed");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.replacement_last_task_id, "tsk_dead_replacement");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_id, "tsk_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.operation_id, "tsk_dead_current");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.approval_id, "apr_dead_exact");

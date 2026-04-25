@@ -109,6 +109,8 @@ replacement follow-through. When a failed or deadlettered mission has declared a
 replacement, its recovery projection can show the replacement mission id, live
 status, objective, next step, latest task, update time, terminal posture, or a
 missing-reference error without reopening the source or implying automatic retry.
+Shift Briefing and overview recovery cards can show the same follow-through
+without requiring the operator to open the selected mission inspector first.
 
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
@@ -346,6 +348,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is replacement follow-through card parity. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by bringing the
+read-only replacement status context into the broader recovery surfaces:
+
+- `apps/chat_ui/src/App.tsx` now renders replacement follow-through in Shift
+  Briefing and overview failed/deadletter recovery cards, with a bounded route to
+  open the replacement mission.
+- `apps/chat_ui/src/settings/index.test.ts` now proves world-state and
+  continuity deadletter recovery payloads preserve replacement follow-through
+  fields through the presentation path.
+- No new mutation path was added; source missions remain failed/deadlettered
+  until explicit governed action changes them.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is replacement follow-through visibility. This advances the active
@@ -1494,6 +1510,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 replacement follow-through card parity slice:
+
+- `cd apps/chat_ui; npm test -- settings`
+  Result: `22 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 replacement lineage visibility slice:
 
