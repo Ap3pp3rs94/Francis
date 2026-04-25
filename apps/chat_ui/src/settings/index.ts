@@ -815,6 +815,23 @@ export type MissionDeadletterPresentation = {
   hiddenTotal: number;
 };
 
+type MissionRecoverySortable = {
+  id?: string;
+  reason?: string;
+  operator_hint?: string;
+  recommended_action?: string;
+  recovery?: WorldStateMissionRecoveryProjection;
+  updated_at?: string;
+  latest_activity?: Record<string, unknown>;
+};
+
+export type MissionRecoveryPresentation<T extends MissionRecoverySortable> = {
+  ordered: T[];
+  visible: T[];
+  total: number;
+  hiddenTotal: number;
+};
+
 export type ContinuityOperatorSurface = {
   available: boolean;
   error?: string;
@@ -1060,7 +1077,7 @@ function normalizeUnixSeconds(ts: unknown): UnixSeconds | undefined {
   return Math.floor(ts);
 }
 
-function missionDeadletterTimestamp(item: MissionDeadletterPresentationItem): number {
+function missionRecoveryTimestamp(item: { updated_at?: string; latest_activity?: Record<string, unknown> }): number {
   const updatedAt = Date.parse(safeString(item.updated_at, ""));
   if (Number.isFinite(updatedAt)) return updatedAt;
   const latestActivity = item.latest_activity;
@@ -1073,6 +1090,54 @@ function missionDeadletterTimestamp(item: MissionDeadletterPresentationItem): nu
     if (Number.isFinite(parsedActivityTs)) return parsedActivityTs;
   }
   return 0;
+}
+
+function missionDeadletterTimestamp(item: MissionDeadletterPresentationItem): number {
+  return missionRecoveryTimestamp(item);
+}
+
+function missionRecoveryReplacementRank(recovery: WorldStateMissionRecoveryProjection | undefined): number {
+  const projection = parseWorldStateMissionRecoveryProjection(recovery);
+  const replacementId = safeString(projection?.replacement_mission_id, "").trim();
+  const status = safeString(projection?.replacement_status, "").trim().toLowerCase();
+  const error = safeString(projection?.replacement_error, "").trim();
+  if (!replacementId && !status && !error) return 3;
+  if (error || status === "missing") return 0;
+  if (["failed", "deadlettered", "cancelled", "canceled"].includes(status)) return 1;
+  if (["blocked", "queued", "active", "running"].includes(status)) return 2;
+  return 3;
+}
+
+export function presentMissionRecoveryItems<T extends MissionRecoverySortable>(
+  items: T[],
+  limit = 2,
+): MissionRecoveryPresentation<T> {
+  const normalized = items
+    .map((item, index) => ({ item, index }))
+    .filter((entry) => safeString(entry.item.id, "").trim().length > 0)
+    .sort((left, right) => {
+      const replacementDelta =
+        missionRecoveryReplacementRank(left.item.recovery) - missionRecoveryReplacementRank(right.item.recovery);
+      if (replacementDelta !== 0) return replacementDelta;
+      const leftActionable = left.item.recommended_action ? 0 : 1;
+      const rightActionable = right.item.recommended_action ? 0 : 1;
+      if (leftActionable !== rightActionable) return leftActionable - rightActionable;
+      const leftReason = safeString(left.item.reason, "").trim() || safeString(left.item.operator_hint, "").trim() ? 0 : 1;
+      const rightReason = safeString(right.item.reason, "").trim() || safeString(right.item.operator_hint, "").trim() ? 0 : 1;
+      if (leftReason !== rightReason) return leftReason - rightReason;
+      const timestampDelta = missionRecoveryTimestamp(right.item) - missionRecoveryTimestamp(left.item);
+      if (timestampDelta !== 0) return timestampDelta;
+      return left.index - right.index;
+    });
+  const ordered = normalized.map((entry) => entry.item);
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : ordered.length;
+  const visible = ordered.slice(0, safeLimit);
+  return {
+    ordered,
+    visible,
+    total: ordered.length,
+    hiddenTotal: Math.max(0, ordered.length - visible.length),
+  };
 }
 
 function parseMissionHistoryPreviewEntry(raw: unknown): MissionHistoryPreviewEntry | null {
@@ -1292,6 +1357,9 @@ export function presentMissionDeadletterItems(items: MissionDeadletterLike[], li
     })
     .filter((entry) => entry.item.id.length > 0)
     .sort((left, right) => {
+      const replacementDelta =
+        missionRecoveryReplacementRank(left.item.recovery) - missionRecoveryReplacementRank(right.item.recovery);
+      if (replacementDelta !== 0) return replacementDelta;
       const leftActionable = left.item.recommended_action ? 0 : 1;
       const rightActionable = right.item.recommended_action ? 0 : 1;
       if (leftActionable !== rightActionable) return leftActionable - rightActionable;

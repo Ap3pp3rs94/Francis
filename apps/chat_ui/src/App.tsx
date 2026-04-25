@@ -16,7 +16,7 @@ import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
-import { SettingsApiError, SettingsClient, presentMissionDeadletterItems, toLocaleTime } from "./settings";
+import { SettingsApiError, SettingsClient, presentMissionDeadletterItems, presentMissionRecoveryItems, toLocaleTime } from "./settings";
 import type {
   ContinuityBriefingSnapshot,
   ContinuityLedgerEntry,
@@ -3275,6 +3275,10 @@ function SystemPanel(props: {
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
   const shiftBriefingFailed = shiftBriefing?.failed_preview ?? [];
+  const shiftBriefingFailedPresentation = useMemo(
+    () => presentMissionRecoveryItems(shiftBriefingFailed, 2),
+    [shiftBriefingFailed],
+  );
   const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
   const shiftBriefingDeadletterPresentation = useMemo(
     () => presentMissionDeadletterItems(shiftBriefingDeadletter, 2),
@@ -3312,6 +3316,7 @@ function SystemPanel(props: {
   const missionQueue = overview?.mission_queue ?? [];
   const missionQueuePresentation = useMemo(() => presentMissionQueue(missionQueue, 4), [missionQueue]);
   const failedPreview = overview?.failed_missions ?? [];
+  const failedPreviewPresentation = useMemo(() => presentMissionRecoveryItems(failedPreview, 2), [failedPreview]);
   const deadletterPreview = overview?.deadletter_missions ?? [];
   const deadletterPreviewPresentation = useMemo(() => presentMissionDeadletterItems(deadletterPreview, 2), [deadletterPreview]);
   const incidents = overview?.incidents ?? [];
@@ -4981,10 +4986,10 @@ function SystemPanel(props: {
             <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Failed Mission Recovery</div>
               <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                {shiftBriefingFailed.length === 0 ? (
+                {shiftBriefingFailedPresentation.total === 0 ? (
                   <div style={{ fontSize: 11, color: THEME.muted }}>No failed missions waiting for recovery.</div>
                 ) : (
-                  shiftBriefingFailed.slice(0, 2).map((item) => {
+                  shiftBriefingFailedPresentation.visible.map((item) => {
                     const failedCurrentTask = item.current_task;
                     const recovery = item.recovery;
                     const recoveryAction = safeString(recovery?.action).trim() || safeString(item.recommended_action).trim();
@@ -5075,6 +5080,11 @@ function SystemPanel(props: {
                   })
                 )}
               </div>
+              {shiftBriefingFailedPresentation.hiddenTotal > 0 ? (
+                <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+                  Hidden from this bounded view: <code>{String(shiftBriefingFailedPresentation.hiddenTotal)}</code>
+                </div>
+              ) : null}
             </div>
 
             <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
@@ -7206,14 +7216,14 @@ function SystemPanel(props: {
           </>
         ) : null}
 
-        {failedPreview.length > 0 ? (
+        {failedPreviewPresentation.total > 0 ? (
           <>
             <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Failed Mission Recovery</div>
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-              showing=<code>{String(Math.min(failedPreview.length, 2))}/{String(failedPreview.length)}</code>
+              showing=<code>{String(failedPreviewPresentation.visible.length)}/{String(failedPreviewPresentation.total)}</code>
             </div>
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-              {failedPreview.slice(0, 2).map((item) => {
+              {failedPreviewPresentation.visible.map((item) => {
                 const failedCurrentTask = item.current_task;
                 const recovery = item.recovery;
                 const recoveryAction = safeString(recovery?.action).trim() || safeString(item.recommended_action).trim();
@@ -7306,9 +7316,9 @@ function SystemPanel(props: {
                 );
               })}
             </div>
-            {failedPreview.length > 2 ? (
+            {failedPreviewPresentation.hiddenTotal > 0 ? (
               <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
-                Hidden from this bounded view: <code>{String(failedPreview.length - 2)}</code>
+                Hidden from this bounded view: <code>{String(failedPreviewPresentation.hiddenTotal)}</code>
               </div>
             ) : null}
           </>

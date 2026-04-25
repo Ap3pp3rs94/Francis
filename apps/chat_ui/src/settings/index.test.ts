@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SettingsClient, presentMissionDeadletterItems } from "./index.ts";
+import { SettingsClient, presentMissionDeadletterItems, presentMissionRecoveryItems } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -143,6 +143,75 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   );
   assert.equal(presentation.total, 3);
   assert.equal(presentation.hiddenTotal, 1);
+});
+
+test("mission recovery presentation prioritizes broken replacement follow-through", () => {
+  const recoveryPresentation = presentMissionRecoveryItems(
+    [
+      {
+        id: "mission_active_replacement",
+        objective: "Replacement is still running",
+        recommended_action: "retry_or_deadletter",
+        recovery: {
+          replacement_mission_id: "msn_active",
+          replacement_status: "active",
+          replacement_last_task_id: "tsk_active",
+        },
+        updated_at: "2026-04-25T09:20:00Z",
+      },
+      {
+        id: "mission_missing_replacement",
+        objective: "Replacement record is missing",
+        recovery: {
+          replacement_mission_id: "msn_missing",
+          replacement_status: "missing",
+          replacement_error: "not_found",
+        },
+        updated_at: "2026-04-24T09:00:00Z",
+      },
+      {
+        id: "mission_failed_replacement",
+        objective: "Replacement terminal failed",
+        recovery: {
+          replacement_mission_id: "msn_failed",
+          replacement_status: "failed",
+        },
+        updated_at: "2026-04-25T09:10:00Z",
+      },
+    ],
+    2,
+  );
+
+  assert.deepEqual(
+    recoveryPresentation.visible.map((item) => item.id),
+    ["mission_missing_replacement", "mission_failed_replacement"],
+  );
+  assert.equal(recoveryPresentation.hiddenTotal, 1);
+
+  const deadletterPresentation = presentMissionDeadletterItems(
+    [
+      {
+        id: "deadletter_actionable",
+        recommended_action: "review_deadletter",
+        reason: "recent ordinary deadletter",
+        updated_at: "2026-04-25T10:00:00Z",
+      },
+      {
+        id: "deadletter_missing_replacement",
+        recovery: {
+          replacement_mission_id: "msn_missing_deadletter",
+          replacement_status: "missing",
+          replacement_error: "not_found",
+        },
+        updated_at: "2026-04-24T10:00:00Z",
+      },
+    ],
+    1,
+  );
+
+  assert.equal(deadletterPresentation.visible[0]?.id, "deadletter_missing_replacement");
+  assert.equal(deadletterPresentation.visible[0]?.recovery?.replacement_error, "not_found");
+  assert.equal(deadletterPresentation.hiddenTotal, 1);
 });
 
 test("SettingsClient.getHealth parses Francis health report envelopes without a window global", async () => {

@@ -111,6 +111,9 @@ status, objective, next step, latest task, update time, terminal posture, or a
 missing-reference error without reopening the source or implying automatic retry.
 Shift Briefing and overview recovery cards can show the same follow-through
 without requiring the operator to open the selected mission inspector first.
+Those recovery cards now prioritize missing or failed replacement follow-through
+ahead of ordinary review items, so broken continuation links do not hide behind
+newer but lower-risk recovery work.
 
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
@@ -348,6 +351,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is replacement follow-through priority ordering. This advances the
+active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
+broken replacement references harder to miss:
+
+- `apps/chat_ui/src/settings/index.ts` now exports a shared recovery
+  presentation sorter and ranks missing, errored, failed, deadlettered, or
+  cancelled replacement follow-through ahead of ordinary review cards.
+- `apps/chat_ui/src/App.tsx` now uses that sorter for Shift Briefing and
+  overview failed-mission recovery cards, while deadletter cards share the same
+  replacement severity rank.
+- `apps/chat_ui/src/settings/index.test.ts` now proves both failed-recovery and
+  deadletter presentation paths prioritize broken replacement follow-through.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is replacement follow-through card parity. This advances the active
@@ -1510,6 +1527,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 replacement follow-through priority-ordering slice:
+
+- `cd apps/chat_ui; npm test -- settings`
+  Result: `23 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 replacement follow-through card parity slice:
 
