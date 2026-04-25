@@ -53,6 +53,7 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
         last_task_previous_approval_id: "apr_dead_prev",
         last_task_previous_approval_status: "approved",
         last_task_approval_status: "pending",
+        last_task_approval_replacement_kind: "plugin.run.mismatch",
         last_task_approval_replacement_reason: "approval_payload_mismatch",
         last_task_approval_replacement_changed_keys: ["input"],
         history_count: 4,
@@ -103,6 +104,7 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   assert.equal(presentation.ordered[2]?.last_task_previous_approval_id, "apr_dead_prev");
   assert.equal(presentation.ordered[2]?.last_task_previous_approval_status, "approved");
   assert.equal(presentation.ordered[2]?.last_task_approval_status, "pending");
+  assert.equal(presentation.ordered[2]?.last_task_approval_replacement_kind, "plugin.run.mismatch");
   assert.equal(presentation.ordered[2]?.last_task_approval_replacement_reason, "approval_payload_mismatch");
   assert.deepEqual(presentation.ordered[2]?.last_task_approval_replacement_changed_keys, ["input"]);
   assert.equal(
@@ -111,7 +113,7 @@ test("presentMissionDeadletterItems normalizes reason fields and prioritizes act
   );
   assert.equal(
     presentation.ordered[2]?.approval_replacement_summary,
-    "Approval replacement reason approval_payload_mismatch; changed payload keys: input.",
+    "Approval replacement reason approval_payload_mismatch; artifact kind: plugin.run.mismatch; changed payload keys: input.",
   );
   assert.equal(presentation.ordered[2]?.approval_review_label, "Review replacement approval");
   assert.equal(presentation.ordered[2]?.previous_approval_review_label, "Open superseded approval");
@@ -266,6 +268,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               last_task_previous_approval_id: "apr_queue_previous",
               last_task_previous_approval_status: "approved",
               last_task_approval_status: "pending",
+              last_task_approval_replacement_kind: "plugin.run.mismatch",
               last_task_approval_replacement_reason: "approval_payload_mismatch",
               last_task_approval_replacement_changed_keys: ["input"],
               latest_activity: {
@@ -288,6 +291,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               last_task_previous_approval_id: "apr_dead_previous",
               last_task_previous_approval_status: "approved",
               last_task_approval_status: "pending",
+              last_task_approval_replacement_kind: "plugin.run.mismatch",
               last_task_approval_replacement_reason: "approval_payload_mismatch",
               last_task_approval_replacement_changed_keys: ["input"],
               history_count: 3,
@@ -425,6 +429,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_previous_approval_id, "apr_queue_previous");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_status, "pending");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.last_task_approval_replacement_kind, "plugin.run.mismatch");
     assert.equal(
       worldState.overview?.mission_queue?.[0]?.last_task_approval_replacement_reason,
       "approval_payload_mismatch",
@@ -438,6 +443,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_status, "pending");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_replacement_kind, "plugin.run.mismatch");
     assert.equal(
       worldState.overview?.deadletter_missions?.[0]?.last_task_approval_replacement_reason,
       "approval_payload_mismatch",
@@ -1160,6 +1166,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             last_task_previous_approval_id: "apr_dead_previous",
             last_task_previous_approval_status: "approved",
             last_task_approval_status: "pending",
+            last_task_approval_replacement_kind: "plugin.run.mismatch",
             last_task_approval_replacement_reason: "approval_payload_mismatch",
             last_task_approval_replacement_changed_keys: ["input"],
             history_count: 5,
@@ -1210,6 +1217,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_status, "pending");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_replacement_kind, "plugin.run.mismatch");
     assert.equal(
       briefing.briefing?.deadletter_preview?.[0]?.last_task_approval_replacement_reason,
       "approval_payload_mismatch",

@@ -527,12 +527,14 @@ function approvalProjectionLineage(item: ApprovalProjectionLike | null | undefin
 }
 
 function approvalProjectionReplacementLine(item: ApprovalProjectionLike | null | undefined): string {
+  const kind = safeString(item?.replacement_kind).trim();
   const reason = safeString(item?.replacement_reason).trim();
   const changedKeys = Array.isArray(item?.replacement_changed_keys)
     ? item.replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
     : [];
-  if (!reason && changedKeys.length === 0) return "";
+  if (!kind && !reason && changedKeys.length === 0) return "";
   const parts: string[] = [];
+  if (kind) parts.push(`kind ${kind}`);
   if (reason) parts.push(reason);
   if (changedKeys.length > 0) parts.push(`changed ${changedKeys.join(", ")}`);
   return parts.join(" · ");
@@ -594,6 +596,7 @@ type ApprovalReturnContext = {
   missionId?: string;
   operationId?: string;
   source?: string;
+  reviewKind?: string;
   reviewReason?: string;
   changedKeys?: string[];
 };
@@ -2552,6 +2555,7 @@ function ApprovalsPanel(props: {
   const activeReturnContext =
     props.focusApprovalId && selectedApproval?.id === props.focusApprovalId ? props.returnContext : null;
   const returnSource = safeString(activeReturnContext?.source).trim();
+  const returnReviewKind = safeString(activeReturnContext?.reviewKind).trim();
   const returnReviewReason = safeString(activeReturnContext?.reviewReason).trim();
   const returnChangedKeys = Array.isArray(activeReturnContext?.changedKeys)
     ? activeReturnContext.changedKeys.map((key) => safeString(key).trim()).filter(Boolean)
@@ -2669,6 +2673,11 @@ function ApprovalsPanel(props: {
             {activeReturnContext ? (
               <div style={{ fontSize: 12, color: THEME.muted }}>
                 Opened from <code>{returnSource || "linked context"}</code>
+                {returnReviewKind ? (
+                  <>
+                    {" / "}kind=<code>{returnReviewKind}</code>
+                  </>
+                ) : null}
                 {returnReviewReason ? (
                   <>
                     {" / "}reason=<code>{returnReviewReason}</code>
@@ -4597,6 +4606,7 @@ function SystemPanel(props: {
                     const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                     const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
                     const approvalStatus = safeString(item.last_task_approval_status).trim();
+                    const replacementKind = safeString(item.last_task_approval_replacement_kind).trim();
                     const replacementReason = safeString(item.last_task_approval_replacement_reason).trim();
                     const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
                       ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
@@ -4657,6 +4667,11 @@ function SystemPanel(props: {
                         {previousApprovalStatus ? (
                           <>
                             {" / "}previous_status=<code>{previousApprovalStatus}</code>
+                          </>
+                        ) : null}
+                        {replacementKind ? (
+                          <>
+                            {" / "}replacement_kind=<code>{replacementKind}</code>
                           </>
                         ) : null}
                         {replacementReason ? (
@@ -4740,6 +4755,7 @@ function SystemPanel(props: {
                                 missionId: item.id,
                                 operationId: safeString(item.last_task_id).trim() || undefined,
                                 source: "deadletter",
+                                reviewKind: replacementKind || undefined,
                                 reviewReason: replacementReason || undefined,
                                 changedKeys: replacementChangedKeys,
                               })
@@ -4756,6 +4772,7 @@ function SystemPanel(props: {
                                 missionId: item.id,
                                 operationId: safeString(item.last_task_id).trim() || undefined,
                                 source: "deadletter",
+                                reviewKind: replacementKind || undefined,
                                 reviewReason: replacementReason || undefined,
                                 changedKeys: replacementChangedKeys,
                               })
@@ -6266,6 +6283,7 @@ function SystemPanel(props: {
                 const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                 const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
                 const approvalStatus = safeString(item.last_task_approval_status).trim();
+                const replacementKind = safeString(item.last_task_approval_replacement_kind).trim();
                 const replacementReason = safeString(item.last_task_approval_replacement_reason).trim();
                 const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
                   ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
@@ -6309,6 +6327,11 @@ function SystemPanel(props: {
                       {previousApprovalStatus ? (
                         <>
                           {" / "}previous_status=<code>{previousApprovalStatus}</code>
+                        </>
+                      ) : null}
+                      {replacementKind ? (
+                        <>
+                          {" / "}replacement_kind=<code>{replacementKind}</code>
                         </>
                       ) : null}
                       {replacementReason ? (
@@ -6392,6 +6415,7 @@ function SystemPanel(props: {
                               missionId: item.id,
                               operationId: safeString(item.last_task_id).trim() || undefined,
                               source: "deadletter",
+                              reviewKind: replacementKind || undefined,
                               reviewReason: replacementReason || undefined,
                               changedKeys: replacementChangedKeys,
                             })
@@ -6408,6 +6432,7 @@ function SystemPanel(props: {
                               missionId: item.id,
                               operationId: safeString(item.last_task_id).trim() || undefined,
                               source: "deadletter",
+                              reviewKind: replacementKind || undefined,
                               reviewReason: replacementReason || undefined,
                               changedKeys: replacementChangedKeys,
                             })

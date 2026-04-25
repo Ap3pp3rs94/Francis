@@ -643,6 +643,9 @@ def _mission_summary(limit: int = 10) -> dict[str, Any]:
                 "last_task_approval_id": str(meta.get("last_task_approval_id") or "").strip(),
                 "last_task_previous_approval_id": str(meta.get("last_task_previous_approval_id") or "").strip(),
                 "last_task_approval_status": str(meta.get("last_task_approval_status") or "").strip(),
+                "last_task_approval_replacement_kind": str(
+                    meta.get("last_task_approval_replacement_kind") or ""
+                ).strip(),
                 "last_task_next_step": str(meta.get("last_task_next_step") or "").strip(),
                 "last_task_updated_at": str(meta.get("last_task_updated_at") or "").strip(),
                 "last_advance_action": str(meta.get("last_advance_action") or "").strip(),
@@ -679,6 +682,7 @@ def _mission_hold_projection(item: dict[str, Any]) -> dict[str, Any]:
         "last_task_previous_approval_id": str(item.get("last_task_previous_approval_id") or "").strip(),
         "last_task_previous_approval_status": str(item.get("last_task_previous_approval_status") or "").strip(),
         "last_task_approval_status": str(item.get("last_task_approval_status") or "").strip(),
+        "last_task_approval_replacement_kind": str(item.get("last_task_approval_replacement_kind") or "").strip(),
         "last_task_approval_replacement_reason": str(item.get("last_task_approval_replacement_reason") or "").strip(),
         "last_task_approval_replacement_changed_keys": list(
             item.get("last_task_approval_replacement_changed_keys") or []
@@ -710,6 +714,7 @@ def _mission_pending_approval_projection(
             "status": str(record.get("status") or "").strip(),
             "previous_approval_id": str(artifact_projection.get("previous_approval_id") or "").strip(),
             "previous_approval_status": str(artifact_projection.get("previous_approval_status") or "").strip(),
+            "replacement_kind": str(artifact_projection.get("replacement_kind") or "").strip(),
             "replacement_reason": str(artifact_projection.get("replacement_reason") or "").strip(),
             "replacement_changed_keys": artifact_projection.get("replacement_changed_keys")
             if isinstance(artifact_projection.get("replacement_changed_keys"), list)
@@ -740,6 +745,7 @@ def _attach_mission_pending_approval_projection(
         status = str(projection.get("status") or "").strip()
         previous_approval_id = str(projection.get("previous_approval_id") or "").strip()
         previous_approval_status = str(projection.get("previous_approval_status") or "").strip()
+        replacement_kind = str(projection.get("replacement_kind") or "").strip()
         replacement_reason = str(projection.get("replacement_reason") or "").strip()
         replacement_changed_keys = projection.get("replacement_changed_keys")
         if status:
@@ -748,6 +754,8 @@ def _attach_mission_pending_approval_projection(
             enriched["last_task_previous_approval_id"] = previous_approval_id
         if previous_approval_status:
             enriched["last_task_previous_approval_status"] = previous_approval_status
+        if replacement_kind:
+            enriched["last_task_approval_replacement_kind"] = replacement_kind
         if replacement_reason:
             enriched["last_task_approval_replacement_reason"] = replacement_reason
         if isinstance(replacement_changed_keys, list):

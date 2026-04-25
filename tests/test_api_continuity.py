@@ -853,5 +853,6 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     assert deadletter_item["last_task_previous_approval_id"] == first_approval_id
     assert deadletter_item["last_task_previous_approval_status"] == "approved"
     assert deadletter_item["last_task_approval_status"] == "pending"
+    assert deadletter_item["last_task_approval_replacement_kind"] == "plugin.run.mismatch"
     assert deadletter_item["last_task_approval_replacement_reason"] == "approval_payload_mismatch"
     assert deadletter_item["last_task_approval_replacement_changed_keys"] == ["input"]

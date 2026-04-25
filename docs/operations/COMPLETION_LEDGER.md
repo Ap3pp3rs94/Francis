@@ -204,6 +204,12 @@ operator surface. Deadletter cards label replacement reviews distinctly, preserv
 the deadletter source/reason/changed-key context when opening approvals, and the
 approval inspector shows that context only for the focused approval it came from.
 
+As of `2026-04-24`, deadletter approval replacement review also preserves the
+bounded mismatch artifact kind. Continuity and world-state mission items now
+carry `last_task_approval_replacement_kind`, and deadletter cards plus approval
+return context can show `plugin.run.mismatch`-style provenance without exposing
+raw expected or actual payload values.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -215,6 +221,25 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-24`, the highest-confidence surface newly advanced in the current
+Stage 3 line is deadletter replacement artifact-kind continuity. This advances
+the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by keeping
+replacement approval provenance visible across backend, continuity, and UI
+review surfaces without adding a new mutation path:
+
+- `src/francis/world_state/snapshot.py` now carries bounded
+  `replacement_kind` from approval projection into mission queue, recent mission,
+  and deadletter hold projections as `last_task_approval_replacement_kind`.
+- `apps/chat_ui/src/settings/index.ts` now parses and presents that field in
+  world-state and continuity deadletter contracts, including the shared
+  replacement summary and review-label logic.
+- `apps/chat_ui/src/App.tsx` now renders replacement artifact kind on
+  deadletter cards and carries it through approval return context for the
+  focused approval review.
+- `tests/test_api_system_settings.py`, `tests/test_api_continuity.py`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the replacement-kind
+  contract on the deadletter review path.
 
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter replacement approval routing context. This advances
@@ -1312,6 +1337,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-24` Stage 3 deadletter replacement artifact-kind continuity slice:
+
+- `python -m pytest tests/test_api_system_settings.py::test_system_world_state_deadletter_preview_preserves_pending_approval_linkage tests/test_api_continuity.py::test_continuity_briefing_deadletter_preview_preserves_pending_approval_linkage -q`
+  Result: `2 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_system_settings.py tests/test_api_continuity.py`
+  Result: `All checks passed!`
+- `cd apps/chat_ui && npm test -- settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-24` Stage 3 deadletter replacement approval-routing context slice:
 
