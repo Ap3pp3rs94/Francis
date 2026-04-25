@@ -684,6 +684,13 @@ export type ObserverReadinessSummary = {
 export type MissionReadinessCriterion = ObserverReadinessCriterion;
 export type MissionReadinessSummary = ObserverReadinessSummary;
 
+export type MissionReadinessCriteriaPresentation = {
+  ordered: MissionReadinessCriterion[];
+  visible: MissionReadinessCriterion[];
+  total: number;
+  hiddenTotal: number;
+};
+
 export type ObserverScanReceiptSummary = {
   ts?: number;
   receipt_id?: string;
@@ -1138,6 +1145,113 @@ export function presentMissionRecoveryItems<T extends MissionRecoverySortable>(
     total: ordered.length,
     hiddenTotal: Math.max(0, ordered.length - visible.length),
   };
+}
+
+function missionReadinessStatusRank(status: string | undefined): number {
+  const normalized = safeString(status, "").trim().toLowerCase();
+  if (normalized === "attention") return 0;
+  if (normalized === "review" || normalized === "not_yet_observed") return 1;
+  if (normalized === "unknown") return 2;
+  if (normalized === "satisfied" || normalized === "ready") return 3;
+  return 2;
+}
+
+export function presentMissionReadinessCriteria(
+  readiness: MissionReadinessSummary | undefined,
+  limit = 3,
+): MissionReadinessCriteriaPresentation {
+  const criteria = Array.isArray(readiness?.criteria) ? readiness.criteria : [];
+  const normalized = criteria
+    .map((criterion, index) => ({ criterion, index }))
+    .filter((entry) => safeString(entry.criterion.id || entry.criterion.label, "").trim().length > 0)
+    .sort((left, right) => {
+      const rankDelta =
+        missionReadinessStatusRank(left.criterion.status) - missionReadinessStatusRank(right.criterion.status);
+      if (rankDelta !== 0) return rankDelta;
+      return left.index - right.index;
+    });
+  const ordered = normalized.map((entry) => entry.criterion);
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : ordered.length;
+  const visible = ordered.slice(0, safeLimit);
+  return {
+    ordered,
+    visible,
+    total: ordered.length,
+    hiddenTotal: Math.max(0, ordered.length - visible.length),
+  };
+}
+
+function readinessEvidenceKeyLabel(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
+function readinessEvidencePrimitive(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return "";
+}
+
+function readinessEvidenceValue(value: unknown): string {
+  const primitive = readinessEvidencePrimitive(value);
+  if (primitive) return primitive;
+  if (Array.isArray(value)) {
+    const items = value.map(readinessEvidencePrimitive).filter(Boolean);
+    if (!items.length) return "none";
+    const shown = items.slice(0, 3).join(", ");
+    return items.length > 3 ? `${shown} +${items.length - 3}` : shown;
+  }
+  if (isRecord(value)) {
+    const entries = Object.entries(value)
+      .map(([key, entryValue]) => {
+        const entry = readinessEvidencePrimitive(entryValue);
+        return entry ? `${key}:${entry}` : "";
+      })
+      .filter(Boolean);
+    if (!entries.length) return `${Object.keys(value).length} field(s)`;
+    const shown = entries.slice(0, 3).join(", ");
+    return entries.length > 3 ? `${shown} +${entries.length - 3}` : shown;
+  }
+  return "";
+}
+
+export function missionReadinessEvidenceLines(
+  criterion: MissionReadinessCriterion | undefined,
+  limit = 4,
+): string[] {
+  const evidence = criterion?.evidence;
+  if (!isRecord(evidence)) return [];
+  const preferredKeys = [
+    "unresolved_failed_ids",
+    "replacement_attention_ids",
+    "replacement_reviewed_failed_ids",
+    "replacement_followthrough_ids",
+    "unsampled_failed_count",
+    "sampled_failed_ids",
+    "sampled_deadletter_ids",
+    "missing_reason_ids",
+    "missing_history_ids",
+    "mission_ticked_count",
+    "sampled_mission_ids",
+    "missions_with_history",
+    "context_mission_ids",
+    "dependency_context_ids",
+    "queue_count",
+    "recent_count",
+    "mission_count",
+  ];
+  const keys = [
+    ...preferredKeys.filter((key) => Object.prototype.hasOwnProperty.call(evidence, key)),
+    ...Object.keys(evidence).filter((key) => !preferredKeys.includes(key)).sort(),
+  ];
+  const lines = keys
+    .map((key) => {
+      const value = readinessEvidenceValue(evidence[key]);
+      return value ? `${readinessEvidenceKeyLabel(key)}=${value}` : "";
+    })
+    .filter(Boolean);
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : lines.length;
+  return lines.slice(0, safeLimit);
 }
 
 function parseMissionHistoryPreviewEntry(raw: unknown): MissionHistoryPreviewEntry | null {

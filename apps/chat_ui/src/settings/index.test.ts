@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SettingsClient, presentMissionDeadletterItems, presentMissionRecoveryItems } from "./index.ts";
+import {
+  SettingsClient,
+  missionReadinessEvidenceLines,
+  presentMissionDeadletterItems,
+  presentMissionReadinessCriteria,
+  presentMissionRecoveryItems,
+} from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -35,6 +41,55 @@ function jsonRequestBody(init?: RequestInit): unknown {
   if (typeof body !== "string" || !body.trim()) return undefined;
   return JSON.parse(body) as unknown;
 }
+
+test("presentMissionReadinessCriteria prioritizes actionable readiness evidence", () => {
+  const presentation = presentMissionReadinessCriteria(
+    {
+      stage: "Stage 3 - Missions",
+      status: "attention",
+      criteria: [
+        {
+          id: "visible_status",
+          label: "Mission status is visible",
+          status: "satisfied",
+          evidence: { queue_count: 2, recent_count: 3 },
+        },
+        {
+          id: "deadletter_cleanly",
+          label: "Failures deadletter cleanly",
+          status: "attention",
+          detail: "Failed missions are waiting for a healthy replacement follow-through.",
+          evidence: {
+            unresolved_failed_ids: ["msn_failed"],
+            replacement_attention_ids: ["msn_source"],
+            replacement_followthrough_ids: ["msn_replacement"],
+            unsampled_failed_count: 0,
+          },
+        },
+        {
+          id: "idempotent_ticks",
+          label: "Mission ticks are idempotent",
+          status: "not_yet_observed",
+          evidence: { mission_ticked_count: 0, sampled_mission_ids: ["msn_failed", "msn_replacement"] },
+        },
+      ],
+    },
+    2,
+  );
+
+  assert.equal(presentation.total, 3);
+  assert.equal(presentation.hiddenTotal, 1);
+  assert.deepEqual(
+    presentation.visible.map((criterion) => criterion.id),
+    ["deadletter_cleanly", "idempotent_ticks"],
+  );
+  assert.deepEqual(missionReadinessEvidenceLines(presentation.visible[0], 4), [
+    "unresolved failed ids=msn_failed",
+    "replacement attention ids=msn_source",
+    "replacement followthrough ids=msn_replacement",
+    "unsampled failed count=0",
+  ]);
+});
 
 test("presentMissionDeadletterItems normalizes reason fields and prioritizes actionable recent deadletters", () => {
   const presentation = presentMissionDeadletterItems(

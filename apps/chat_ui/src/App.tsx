@@ -16,7 +16,15 @@ import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
 import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
-import { SettingsApiError, SettingsClient, presentMissionDeadletterItems, presentMissionRecoveryItems, toLocaleTime } from "./settings";
+import {
+  SettingsApiError,
+  SettingsClient,
+  missionReadinessEvidenceLines,
+  presentMissionDeadletterItems,
+  presentMissionReadinessCriteria,
+  presentMissionRecoveryItems,
+  toLocaleTime,
+} from "./settings";
 import type {
   ContinuityBriefingSnapshot,
   ContinuityLedgerEntry,
@@ -3286,6 +3294,10 @@ function SystemPanel(props: {
   );
   const shiftBriefingReadiness = shiftBriefing?.readiness;
   const shiftBriefingReadinessCriteria = shiftBriefingReadiness?.criteria ?? [];
+  const shiftBriefingReadinessPresentation = useMemo(
+    () => presentMissionReadinessCriteria(shiftBriefingReadiness, 3),
+    [shiftBriefingReadiness],
+  );
   const shiftBriefingObserver = shiftBriefing?.observer;
   const shiftBriefingObserverCounts = shiftBriefingObserver?.counts ?? {};
   const shiftBriefingObserverFocus = shiftBriefingObserver?.focus ?? [];
@@ -4342,6 +4354,42 @@ function SystemPanel(props: {
                     {criterion.label || criterion.id || "criterion"}: {criterion.status || "unknown"}
                   </span>
                 ))}
+              </div>
+            ) : null}
+            {shiftBriefingReadinessPresentation.visible.length ? (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {shiftBriefingReadinessPresentation.visible.map((criterion) => {
+                  const evidenceLines = missionReadinessEvidenceLines(criterion, 4);
+                  return (
+                    <div
+                      key={`mission-readiness-detail-${criterion.id || criterion.label}`}
+                      style={{
+                        border: `1px solid ${THEME.panelBorder}`,
+                        borderRadius: 8,
+                        padding: 8,
+                        background: "#0f0f0f",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600 }}>{criterion.label || criterion.id || "criterion"}</div>
+                        <span style={badgeStyle(criterion.status || "unknown")}>{criterion.status || "unknown"}</span>
+                      </div>
+                      {criterion.detail ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 5 }}>{criterion.detail}</div>
+                      ) : null}
+                      {evidenceLines.length ? (
+                        <div style={{ fontSize: 10, color: "#cce7e2", marginTop: 5 }}>
+                          evidence: <code>{evidenceLines.join(" / ")}</code>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {shiftBriefingReadinessPresentation.hiddenTotal > 0 ? (
+                  <div style={{ fontSize: 10, color: THEME.muted }}>
+                    Hidden readiness criteria: <code>{String(shiftBriefingReadinessPresentation.hiddenTotal)}</code>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

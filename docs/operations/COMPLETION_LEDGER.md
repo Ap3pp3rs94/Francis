@@ -353,6 +353,22 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission readiness evidence rendering. This advances the active
+`Phase 2 / P8_MEMORY -> P1_INTERFACE` line by making readiness blockers
+inspectable in the operator briefing instead of leaving them as badge-only
+signals:
+
+- `apps/chat_ui/src/settings/index.ts` now exports a tested readiness
+  presentation helper that orders attention/review criteria before satisfied
+  criteria and formats bounded evidence lines from the readiness payload.
+- `apps/chat_ui/src/App.tsx` now shows the highest-priority Mission readiness
+  criteria with detail text and compact evidence in the Shift Briefing card,
+  including hidden-count disclosure for criteria outside the bounded view.
+- `apps/chat_ui/src/settings/index.test.ts` now proves readiness criteria are
+  prioritized and that failed/replacement follow-through evidence is formatted
+  without exposing raw payloads.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is recovery-reviewed failure readiness. This advances the active
 `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by keeping Stage 3
 readiness tied to recovery receipts instead of raw terminal status alone:
@@ -1544,6 +1560,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission readiness evidence rendering slice:
+
+- `cd apps/chat_ui; npm test -- settings`
+  Result: `24 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 recovery-reviewed failure readiness slice:
 
