@@ -195,6 +195,36 @@ function operationTraceId(record: OperationRecord | null | undefined): string {
   return safeString(record?.trace_id).trim() || operationMetaString(record, "trace_id");
 }
 
+function operationRunId(record: OperationRecord | null | undefined): string {
+  const output = operationOutputRecord(record);
+  const receipt = isRecord(output.receipt) ? output.receipt : {};
+  const sandbox = isRecord(output.sandbox) ? output.sandbox : isRecord(receipt.sandbox) ? receipt.sandbox : {};
+  return (
+    safeString(record?.run_id).trim() ||
+    operationMetaString(record, "run_id") ||
+    safeString(output.run_id).trim() ||
+    safeString(output.runId).trim() ||
+    safeString(receipt.run_id).trim() ||
+    safeString(sandbox.run_id).trim()
+  );
+}
+
+function operationArtifactDir(record: OperationRecord | null | undefined): string {
+  const output = operationOutputRecord(record);
+  const receipt = isRecord(output.receipt) ? output.receipt : {};
+  const sandbox = isRecord(output.sandbox) ? output.sandbox : isRecord(receipt.sandbox) ? receipt.sandbox : {};
+  return (
+    safeString(record?.artifact_dir).trim() ||
+    operationMetaString(record, "artifact_dir") ||
+    safeString(output.artifact_dir).trim() ||
+    safeString(output.artifact_path).trim() ||
+    safeString(receipt.artifact_dir).trim() ||
+    safeString(receipt.artifact_path).trim() ||
+    safeString(sandbox.artifact_dir).trim() ||
+    safeString(sandbox.artifact_path).trim()
+  );
+}
+
 function truncateText(value: string, maxChars = 180): string {
   const cleaned = safeString(value).trim();
   if (!cleaned) return "";
@@ -9171,6 +9201,8 @@ function OperationsPanel(props: {
   const selectedOrbPlane = safeString(selectedMeta.orb_plane);
   const selectedResultMessage = safeString(selectedMeta.result_message);
   const selectedTraceId = operationTraceId(selectedOperation);
+  const selectedRunId = operationRunId(selectedOperation);
+  const selectedArtifactDir = operationArtifactDir(selectedOperation);
   const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
   const hasGovernance =
     Object.keys(selectedGovernance).length > 0 || Boolean(selectedApprovalId) || Boolean(selectedOrbPlane);
@@ -9806,6 +9838,16 @@ function OperationsPanel(props: {
               {selectedTraceId ? (
                 <div style={{ fontSize: 12 }}>
                   Trace: <code>{selectedTraceId}</code>
+                </div>
+              ) : null}
+              {selectedRunId ? (
+                <div style={{ fontSize: 12 }}>
+                  Run: <code>{selectedRunId}</code>
+                </div>
+              ) : null}
+              {selectedArtifactDir ? (
+                <div style={{ fontSize: 12 }}>
+                  Artifact: <code>{selectedArtifactDir}</code>
                 </div>
               ) : null}
               <div style={{ fontSize: 12 }}>

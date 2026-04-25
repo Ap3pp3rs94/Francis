@@ -870,6 +870,22 @@ handles in operation and mission read models:
   or hidden-autonomy behavior changed; this only exposes handles that execution
   receipts already produced.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail receipt-handle visibility. This
+advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE`
+line by making operation inspection show receipt run and artifact handles
+directly instead of requiring raw JSON inspection:
+
+- `apps/chat_ui/src/App.tsx` now derives operation `run_id` and `artifact_dir`
+  from the operation record, metadata, result output, nested receipt, or sandbox
+  receipt using the same defensive pattern already used for trace handles.
+- The Operation Detail panel now renders `Run` and `Artifact` beside `Trace`
+  when those handles exist, so opening a receipt task exposes inspectable
+  evidence without terminal spelunking.
+- No operation mutation, approval decision, execution, shell, policy, memory, or
+  mission queue behavior changed; this is a read-only operator visibility
+  improvement for existing receipt handles.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
@@ -2089,6 +2105,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation detail receipt-handle visibility slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation receipt handle projection slice:
 
