@@ -64,6 +64,13 @@ list responses, while non-sensitive audit context such as ticket ids remains
 inspectable. `tests/test_api_credentials.py` proves raw OpenAI-key-like,
 GitHub-token-like, and password-like values do not appear in those surfaces.
 
+As of `2026-04-25`, the same metadata redaction contract is shared by governed
+approval-backed plugin, industrial intervention, and web-learning request
+surfaces. `src/francis/governance/redaction.py` now owns the reusable redaction
+rules, and focused API tests prove sensitive metadata is removed from approval
+records, approval artifacts, and relevant local registries while non-sensitive
+audit fields remain available.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

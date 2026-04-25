@@ -239,6 +239,66 @@ def test_web_learning_request_refreshes_mismatched_approval(monkeypatch, tmp_pat
     assert matching_records[0]["approval_id"] == refreshed_approval_id
 
 
+def test_web_learning_request_redacts_sensitive_approval_metadata(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_key = "sk-" + ("g" * 32)
+    raw_token = "ghp_" + ("h" * 36)
+    raw_password = "weblearningsecret123"
+    pending = client.post(
+        "/web_learning/request",
+        json={
+            "url": "https://example.org/redaction",
+            "reason": "approval_path",
+            "actor": "operator:redaction",
+            "bytes": 128,
+            "meta": {
+                "ticket": "FR-WEB",
+                "api_key": raw_key,
+                "nested": {"refresh_token": raw_token},
+                "note": f"operator note password={raw_password}",
+                "token_count": 13,
+            },
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "web_learning" / "approvals" / approval_id / "request.json"
+    registry_path = data_root / "web_learning" / "_registry.json"
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval_meta = approval_payload["payload"]["payload"]["meta"]
+    assert approval_meta["ticket"] == "FR-WEB"
+    assert approval_meta["api_key"] == "[REDACTED:secret]"
+    assert approval_meta["nested"]["refresh_token"] == "[REDACTED:secret]"
+    assert approval_meta["note"] == "operator note password=[REDACTED:secret]"
+    assert approval_meta["token_count"] == 13
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["payload"]["meta"] == approval_meta
+
+    persisted_text = "\n".join(
+        [
+            approval_path.read_text(encoding="utf-8"),
+            artifact_path.read_text(encoding="utf-8"),
+            registry_path.read_text(encoding="utf-8"),
+        ]
+    )
+    assert raw_key not in persisted_text
+    assert raw_token not in persisted_text
+    assert raw_password not in persisted_text
+
+
 def test_web_learning_request_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -13,18 +13,13 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
+from francis.governance.redaction import redact_governed_metadata
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
 
 _CREDENTIAL_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _ALLOWED_STATUS = {"active", "revoked", "expired", "pending", "error"}
-_SENSITIVE_META_KEY_RE = re.compile(
-    r"(api[_-]?key|apikey|access[_-]?key|auth[_-]?token|bearer|client[_-]?secret|password|private[_-]?key|"
-    r"refresh[_-]?token|secret)",
-    re.IGNORECASE,
-)
-_REDACTED_SECRET = "[REDACTED:secret]"
 
 
 def _credentials_dir() -> Path:
@@ -179,57 +174,8 @@ def _hint_for_credential(credential_id: str, provider: str) -> str:
     return f"...{tail}"
 
 
-def _redact_secret_text(value: str) -> str:
-    out = re.sub(
-        r"(?i)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})",
-        lambda match: f"{match.group(1)}={_REDACTED_SECRET}",
-        value,
-    )
-    out = re.sub(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----", _REDACTED_SECRET, out, flags=re.I)
-    out = re.sub(r"\bsk-[A-Za-z0-9]{20,}\b", _REDACTED_SECRET, out)
-    out = re.sub(r"\bghp_[A-Za-z0-9]{30,}\b", _REDACTED_SECRET, out)
-    out = re.sub(r"\bAKIA[0-9A-Z]{16}\b", _REDACTED_SECRET, out)
-    out = re.sub(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b", _REDACTED_SECRET, out)
-    return out
-
-
-def _normalize_meta_value(value: Any, *, key: str = "") -> Any:
-    if key.strip().lower() == "token" or _SENSITIVE_META_KEY_RE.search(key):
-        return _REDACTED_SECRET
-    if value is None or isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value
-    if isinstance(value, str):
-        return _redact_secret_text(value)
-    if isinstance(value, dict):
-        normalized: dict[str, Any] = {}
-        for raw_key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
-            normalized_key = _safe_str(raw_key).strip()
-            if not normalized_key:
-                continue
-            normalized[normalized_key] = _normalize_meta_value(value.get(raw_key), key=normalized_key)
-        return normalized
-    if isinstance(value, (list, tuple)):
-        return [_normalize_meta_value(item, key=key) for item in value]
-    try:
-        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
-    except Exception:
-        return _redact_secret_text(_safe_str(value))
-
-
 def _credential_meta(meta: Any, *, drop_control_keys: bool = False) -> dict[str, Any]:
-    if not isinstance(meta, dict):
-        return {}
-    normalized: dict[str, Any] = {}
-    for raw_key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
-        key = _safe_str(raw_key).strip()
-        if not key:
-            continue
-        if drop_control_keys and key in {"approval_id", "force"}:
-            continue
-        normalized[key] = _normalize_meta_value(meta.get(raw_key), key=key)
-    return normalized
+    return redact_governed_metadata(meta, drop_control_keys=drop_control_keys)
 
 
 def _normalize_credential_record(credential_id: str, raw: dict[str, Any]) -> dict[str, Any]:

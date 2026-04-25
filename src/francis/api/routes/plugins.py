@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
+from francis.governance.redaction import redact_governed_metadata
 from francis.kernel.paths import data_dir, repo_root
 from francis.plugin_factory.spec_builder import build_plugin
 from francis.plugin_system import (
@@ -554,15 +555,7 @@ def _normalize_approval_value(value: Any) -> Any:
 
 
 def _plugin_approval_meta(meta: Any) -> dict[str, Any]:
-    if not isinstance(meta, dict):
-        return {}
-    normalized: dict[str, Any] = {}
-    for key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
-        normalized_key = _safe_str(key).strip()
-        if not normalized_key or normalized_key in {"approval_id", "force"}:
-            continue
-        normalized[normalized_key] = _normalize_approval_value(meta.get(key))
-    return normalized
+    return redact_governed_metadata(meta, drop_control_keys=True)
 
 
 def _plugin_approval_payload(

@@ -457,6 +457,76 @@ def test_industrial_request_refreshes_mismatched_approval(monkeypatch, tmp_path:
     assert interventions[0]["previous_approval_id"] == approval_id
 
 
+def test_industrial_intervention_request_redacts_sensitive_approval_metadata(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Compressor Secret", "asset_type": "compressor", "risk": "high"}
+    )
+    assert asset_created.status_code == 200
+    asset_id = str(asset_created.json()["id"])
+
+    raw_key = "sk-" + ("e" * 32)
+    raw_token = "ghp_" + ("f" * 36)
+    raw_password = "industrialsecret123"
+    pending = client.post(
+        "/industrial/interventions/request",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "action": "dispatch_crew",
+            "reason": "operator_request",
+            "dry_run": False,
+            "risk": "high",
+            "actor": "operator:redaction",
+            "params": {"crew": "alpha"},
+            "meta": {
+                "ticket": "FR-IND",
+                "api_key": raw_key,
+                "nested": {"refresh_token": raw_token},
+                "note": f"operator note password={raw_password}",
+                "token_count": 11,
+            },
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "industrial" / "approvals" / approval_id / "request.json"
+    registry_path = data_root / "industrial" / "_registry.json"
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval_meta = approval_payload["payload"]["payload"]["meta"]
+    assert approval_meta["ticket"] == "FR-IND"
+    assert approval_meta["api_key"] == "[REDACTED:secret]"
+    assert approval_meta["nested"]["refresh_token"] == "[REDACTED:secret]"
+    assert approval_meta["note"] == "operator note password=[REDACTED:secret]"
+    assert approval_meta["token_count"] == 11
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["payload"]["meta"] == approval_meta
+
+    persisted_text = "\n".join(
+        [
+            approval_path.read_text(encoding="utf-8"),
+            artifact_path.read_text(encoding="utf-8"),
+            registry_path.read_text(encoding="utf-8"),
+        ]
+    )
+    assert raw_key not in persisted_text
+    assert raw_token not in persisted_text
+    assert raw_password not in persisted_text
+
+
 def test_industrial_execute_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

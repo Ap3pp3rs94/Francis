@@ -15,6 +15,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
+from francis.governance.redaction import redact_governed_metadata
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -444,15 +445,7 @@ def _normalize_approval_value(value: Any) -> Any:
 
 
 def _approval_meta(meta: Any) -> dict[str, Any]:
-    if not isinstance(meta, dict):
-        return {}
-    normalized: dict[str, Any] = {}
-    for key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
-        normalized_key = _safe_str(key).strip()
-        if not normalized_key or normalized_key in {"approval_id", "force"}:
-            continue
-        normalized[normalized_key] = _normalize_approval_value(meta.get(key))
-    return normalized
+    return redact_governed_metadata(meta, drop_control_keys=True)
 
 
 def _approval_request_payload(action: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1597,7 +1590,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
         domain = _safe_str(payload.get("domain")).strip()
         actor = _safe_str(payload.get("actor")).strip()
         params = _normalize_meta(payload.get("params"))
-        meta = _normalize_meta(payload.get("meta"))
+        meta = redact_governed_metadata(payload.get("meta"))
         approval_action = "industrial.intervention.request"
         approval_id = _approval_id_from_payload(payload)
         request_id = _safe_str(payload.get("request_id")).strip() or _new_id("ireq", f"{target_kind}_{target_id}")
@@ -1879,7 +1872,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
         domain = _safe_str(payload.get("domain")).strip()
         actor = _safe_str(payload.get("actor")).strip()
         params = _normalize_meta(payload.get("params"))
-        meta = _normalize_meta(payload.get("meta"))
+        meta = redact_governed_metadata(payload.get("meta"))
         request_id = _new_id("iexec", f"{target_kind}_{target_id}")
         approval_action = "industrial.intervention.execute"
         approval_id = _approval_id_from_payload(payload)

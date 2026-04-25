@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
+from francis.governance.redaction import redact_governed_metadata
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -368,15 +369,7 @@ def _normalize_approval_value(value: Any) -> Any:
 
 
 def _approval_meta(meta: Any) -> dict[str, Any]:
-    if not isinstance(meta, dict):
-        return {}
-    normalized: dict[str, Any] = {}
-    for key in sorted(meta, key=lambda item: _safe_str(item).strip().lower()):
-        normalized_key = _safe_str(key).strip()
-        if not normalized_key or normalized_key in {"approval_id", "force"}:
-            continue
-        normalized[normalized_key] = _normalize_approval_value(meta.get(key))
-    return normalized
+    return redact_governed_metadata(meta, drop_control_keys=True)
 
 
 def _approval_request_payload(action: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -439,7 +432,7 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     reason = _safe_str(payload.get("reason")).strip() or "requested"
     source = _safe_str(payload.get("source")).strip() or actor
     domain = _safe_str(payload.get("domain")).strip().lower() or parsed_domain
-    req_meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+    req_meta = redact_governed_metadata(payload.get("meta"))
     force = _to_bool(req_meta.get("force"), default=False)
 
     request_id = _new_id("wlreq", domain)
@@ -887,7 +880,7 @@ def _set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
     reason = _safe_str(payload.get("reason")).strip() or "requested"
     actor = _safe_str(payload.get("actor")).strip() or "api"
     domain = _safe_str(payload.get("domain")).strip().lower()
-    meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+    meta = redact_governed_metadata(payload.get("meta"))
     force = _to_bool(meta.get("force"), default=False)
 
     registry = _load()
@@ -1131,7 +1124,7 @@ def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     reason = _safe_str(payload.get("reason")).strip() or "requested"
     actor = _safe_str(payload.get("actor")).strip() or "api"
     domain = _safe_str(payload.get("domain")).strip().lower()
-    meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+    meta = redact_governed_metadata(payload.get("meta"))
     force = _to_bool(meta.get("force"), default=False)
     ts = _now_s()
 

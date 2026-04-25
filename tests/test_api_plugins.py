@@ -309,6 +309,87 @@ def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path
     assert executed_body["status"] == "ok"
 
 
+def test_plugins_run_redacts_sensitive_approval_metadata(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "approval metadata redaction"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    raw_key = "sk-" + ("c" * 32)
+    raw_token = "ghp_" + ("d" * 36)
+    raw_password = "pluginsecret123"
+    pending = client.post(
+        "/plugins/run",
+        json={
+            "id": plugin_id,
+            "action": "deploy",
+            "input": {"target": "prod"},
+            "meta": {
+                "ticket": "FR-PLUGIN",
+                "api_key": raw_key,
+                "nested": {"refresh_token": raw_token},
+                "note": f"operator note password={raw_password}",
+                "token_count": 7,
+            },
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "plugins" / "approvals" / approval_id / "request.json"
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval_meta = approval_payload["payload"]["meta"]
+    assert approval_meta["ticket"] == "FR-PLUGIN"
+    assert approval_meta["api_key"] == "[REDACTED:secret]"
+    assert approval_meta["nested"]["refresh_token"] == "[REDACTED:secret]"
+    assert approval_meta["note"] == "operator note password=[REDACTED:secret]"
+    assert approval_meta["token_count"] == 7
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["meta"] == approval_meta
+
+    persisted_text = "\n".join(
+        [
+            approval_path.read_text(encoding="utf-8"),
+            artifact_path.read_text(encoding="utf-8"),
+        ]
+    )
+    assert raw_key not in persisted_text
+    assert raw_token not in persisted_text
+    assert raw_password not in persisted_text
+
+
 def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
