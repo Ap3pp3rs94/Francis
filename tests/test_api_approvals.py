@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -31,6 +32,63 @@ def test_approval_decision_requires_local_client(monkeypatch, tmp_path: Path) ->
     approved_body = approved.json()
     assert approved_body["ok"] is True
     assert approved_body["status"] == "approved"
+
+
+def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_reason_secret = "approvalreasonsecret123"
+    requested = client.post(
+        "/approvals/request",
+        json={
+            "action": "plugin.run",
+            "reason": f"operator note password={raw_reason_secret}",
+            "payload": {"plugin_id": "builtin.echo"},
+        },
+    )
+    assert requested.status_code == 200
+    requested_body = requested.json()
+    approval_id = str(requested_body["id"])
+    assert requested_body["reason"] == "operator note password=[REDACTED:secret]"
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    pending_payload = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending_payload["reason"] == "operator note password=[REDACTED:secret]"
+    assert raw_reason_secret not in pending_path.read_text(encoding="utf-8")
+
+    listed = client.get("/approvals/list?status=pending&limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
+    assert listed_item["reason"] == "operator note password=[REDACTED:secret]"
+
+    raw_comment_secret = "approvalcommentsecret456"
+    approved = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "comment": f"reviewed token={raw_comment_secret}",
+        },
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["item"]["comment"] == "reviewed token=[REDACTED:secret]"
+
+    approved_path = data_root / "approvals" / "approved" / f"{approval_id}.json"
+    approved_payload = json.loads(approved_path.read_text(encoding="utf-8"))
+    assert approved_payload["reason"] == "operator note password=[REDACTED:secret]"
+    assert approved_payload["comment"] == "reviewed token=[REDACTED:secret]"
+    approved_text = approved_path.read_text(encoding="utf-8")
+    assert raw_reason_secret not in approved_text
+    assert raw_comment_secret not in approved_text
 
 
 def test_approval_list_surfaces_refresh_lineage_and_payload_summary(monkeypatch, tmp_path: Path) -> None:

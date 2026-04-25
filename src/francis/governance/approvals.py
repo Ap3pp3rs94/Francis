@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
 
@@ -36,12 +37,25 @@ REJECTED = rejected_dir()
 EMERGENCY = emergency_dir()
 
 
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
+
+
 def request(action: str, reason: str, payload: dict[str, Any]) -> dict[str, Any]:
     req = {
         "id": str(uuid.uuid4()),
         "ts": time.time(),
         "action": action,
-        "reason": reason,
+        "reason": _redact_free_text(reason),
         "payload": payload,
         "status": "pending",
     }
@@ -100,7 +114,7 @@ def decide(approval_id: str, action: str, comment: str | None = None) -> dict[st
     req["status"] = status
     req["decision"] = action
     if comment:
-        req["comment"] = comment
+        req["comment"] = _redact_free_text(comment)
     req["decided_ts"] = time.time()
 
     dest = {
