@@ -485,6 +485,15 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             target_id: "tsk_blocked",
             reason: "A linked task is blocked by trust posture.",
           },
+          current_task: {
+            mission_id: "mission_blocked",
+            source: "mission_meta",
+            operation_id: "tsk_blocked",
+            task_status: "accepted",
+            result_status: "blocked",
+            gate: "trust_gate",
+            handoff_action: "raise_trust_or_reduce_risk",
+          },
           dependency_state: {
             status: "blocked",
             total: 2,
@@ -527,6 +536,15 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             last_advance_action: "create_first_operation",
             last_advance_outcome: "queued",
             last_advance_operation_id: "tsk_ready",
+            current_task: {
+              mission_id: "mission_ready",
+              source: "mission_meta",
+              operation_id: "tsk_ready",
+              gate: "approvals_gate",
+              approval_id: "apr_ready",
+              approval_status: "pending",
+              handoff_action: "review_pending_approval",
+            },
             advance: {
               eligible: false,
               action: "review_pending_approval",
@@ -609,6 +627,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.items[0]?.advance?.eligible, false);
     assert.equal(response.items[0]?.advance?.action, "raise_trust_or_reduce_risk");
     assert.equal(response.items[0]?.advance?.target_id, "tsk_blocked");
+    assert.equal(response.items[0]?.current_task?.source, "mission_meta");
+    assert.equal(response.items[0]?.current_task?.operation_id, "tsk_blocked");
+    assert.equal(response.items[0]?.current_task?.gate, "trust_gate");
     assert.equal(response.items[0]?.dependency_state?.status, "blocked");
     assert.equal(response.items[0]?.dependency_state?.unresolved, 1);
     assert.equal(response.items[0]?.dependency_state?.first_unresolved?.id, "msn_dependency");
@@ -621,6 +642,8 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.queue_item?.last_task_approval_status, "pending");
     assert.equal(response.results?.[0]?.queue_item?.last_advance_action, "create_first_operation");
     assert.equal(response.results?.[0]?.queue_item?.last_advance_outcome, "queued");
+    assert.equal(response.results?.[0]?.queue_item?.current_task?.operation_id, "tsk_ready");
+    assert.equal(response.results?.[0]?.queue_item?.current_task?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.queue_item?.advance?.eligible, false);
     assert.equal(response.results?.[0]?.queue_item?.advance?.action, "review_pending_approval");
     assert.equal(response.results?.[0]?.gate, "approvals_gate");

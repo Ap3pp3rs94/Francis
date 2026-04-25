@@ -754,11 +754,17 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert queue_items[0]["latest_activity"]["name"] == "governance_hold"
     assert queue_items[0]["latest_activity"]["status"] == "blocked"
     assert queue_items[0]["latest_activity"]["gate"] == "trust_gate"
+    assert queue_items[0]["current_task"]["source"] == "mission_meta"
+    assert queue_items[0]["current_task"]["operation_id"] == blocked_operation_id
+    assert queue_items[0]["current_task"]["gate"] == "trust_gate"
+    assert queue_items[0]["current_task"]["latest_receipt_event"] == "governance_hold"
     ready_item = next(item for item in queue_items if item["id"] == ready_id)
     assert ready_item["recommended_action"] == "create_first_operation"
     assert ready_item["advance"]["eligible"] is True
     assert ready_item["advance"]["action"] == "create_first_operation"
     assert ready_item["latest_activity"] == {}
+    assert ready_item["current_task"]["source"] == "mission"
+    assert ready_item["current_task"]["handoff_action"] == "create_first_operation"
     deadletter_items = body["overview"]["deadletter_missions"]
     assert deadletter_items
     assert deadletter_items[0]["id"] == dead_id
@@ -863,6 +869,10 @@ def test_system_world_state_mission_activity_prefers_current_task(monkeypatch, t
 
     for item in (queue_item, recent_item, focus_item):
         assert item["last_task_id"] == current_operation_id
+        assert item["current_task"]["source"] == "mission_meta"
+        assert item["current_task"]["operation_id"] == current_operation_id
+        assert item["current_task"]["gate"] == "trust_gate"
+        assert item["current_task"]["latest_receipt_event"] == "governance_hold"
         assert item["latest_activity"]["operation_id"] == current_operation_id
         assert item["latest_activity"]["name"] == "governance_hold"
         assert item["latest_activity"]["status"] == "blocked"

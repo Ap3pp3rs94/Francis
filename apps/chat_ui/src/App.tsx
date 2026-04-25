@@ -11,7 +11,7 @@ import {
   missionRecoveryTargetId,
   presentMissionQueue,
 } from "./missions";
-import type { MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
+import type { MissionCurrentTask, MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
@@ -2916,6 +2916,7 @@ function SystemPanel(props: {
       gate?: string;
       nextStep?: string;
       queueItem?: MissionQueueItem;
+      currentTask?: MissionCurrentTask;
       handoffAction?: string;
       handoffDetail?: string;
       historyCount?: number;
@@ -3721,6 +3722,7 @@ function SystemPanel(props: {
           gate: item.gate,
           nextStep: item.next_step,
           queueItem: item.queue_item,
+          currentTask: item.current_task,
           handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
           handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
           historyCount: item.history_count,
@@ -6005,19 +6007,33 @@ function SystemPanel(props: {
                   <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
                     {missionQueueRunSummary.results.map((item, index) => {
                       const queueItem = item.queueItem;
+                      const queueCurrentTask = item.currentTask ?? queueItem?.current_task;
                       const queueAction = safeString(queueItem?.recommended_action).trim();
                       const queueAdvanceEligible = queueItem?.advance?.eligible === true;
                       const queueAdvanceReason = safeString(queueItem?.advance?.reason).trim();
                       const queueTargetId = queueItem
-                        ? missionRecoveryTargetId(queueItem, queueItem) || item.operationId || ""
+                        ? missionRecoveryTargetId(queueItem, queueItem, undefined, queueCurrentTask) || item.operationId || ""
                         : item.operationId || "";
                       const queueOperationTargetId = queueItem
-                        ? missionCurrentTaskId(queueItem, queueItem) || item.operationId || ""
+                        ? missionCurrentTaskId(queueItem, queueItem, undefined, queueCurrentTask) || item.operationId || ""
                         : item.operationId || "";
                       const queueTargetIsMission = queueTargetId.startsWith("msn_");
                       const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
-                      const queueApprovalId = safeString(queueItem?.last_task_approval_id).trim() || item.approvalId || "";
-                      const queueApprovalStatus = safeString(queueItem?.last_task_approval_status).trim();
+                      const queueApprovalId =
+                        safeString(queueCurrentTask?.approval_id).trim() ||
+                        safeString(queueItem?.last_task_approval_id).trim() ||
+                        item.approvalId ||
+                        "";
+                      const queueApprovalStatus =
+                        safeString(queueCurrentTask?.approval_status).trim() ||
+                        safeString(queueItem?.last_task_approval_status).trim();
+                      const queueCurrentTaskId = safeString(queueCurrentTask?.operation_id).trim();
+                      const queueCurrentTaskStatus =
+                        safeString(queueCurrentTask?.task_status).trim() ||
+                        safeString(queueCurrentTask?.operation_status).trim();
+                      const queueCurrentTaskResult = safeString(queueCurrentTask?.result_status).trim();
+                      const queueCurrentTaskGate = safeString(queueCurrentTask?.gate).trim();
+                      const queueCurrentTaskSource = safeString(queueCurrentTask?.source).trim();
                       const queueDependencyState = queueItem?.dependency_state;
                       const queueDependencyTotal = Math.max(0, Number(queueDependencyState?.total ?? queueItem?.dependency_count ?? 0));
                       const queueDependencyResolved = Math.max(0, Number(queueDependencyState?.resolved ?? 0));
@@ -6082,6 +6098,35 @@ function SystemPanel(props: {
                                     {" / "}outcome=<code>{queueLastAdvanceOutcome}</code>
                                   </>
                                 ) : null}
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {queueCurrentTaskId || queueCurrentTaskStatus || queueCurrentTaskResult || queueCurrentTaskGate ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {queueCurrentTaskId ? (
+                              <>
+                                current_task=<code>{queueCurrentTaskId}</code>
+                              </>
+                            ) : null}
+                            {queueCurrentTaskStatus ? (
+                              <>
+                                {queueCurrentTaskId ? " / " : ""}task_status=<code>{queueCurrentTaskStatus}</code>
+                              </>
+                            ) : null}
+                            {queueCurrentTaskResult ? (
+                              <>
+                                {(queueCurrentTaskId || queueCurrentTaskStatus) ? " / " : ""}result=<code>{queueCurrentTaskResult}</code>
+                              </>
+                            ) : null}
+                            {queueCurrentTaskGate ? (
+                              <>
+                                {(queueCurrentTaskId || queueCurrentTaskStatus || queueCurrentTaskResult) ? " / " : ""}gate=<code>{queueCurrentTaskGate}</code>
+                              </>
+                            ) : null}
+                            {queueCurrentTaskSource ? (
+                              <>
+                                {" / "}source=<code>{queueCurrentTaskSource}</code>
                               </>
                             ) : null}
                           </div>
@@ -6188,12 +6233,21 @@ function SystemPanel(props: {
             ) : null}
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {missionQueuePresentation.visible.map((item) => {
-                const queueTargetId = missionRecoveryTargetId(item, item);
-                const queueOperationTargetId = missionCurrentTaskId(item, item);
+                const queueCurrentTask = item.current_task;
+                const queueTargetId = missionRecoveryTargetId(item, item, undefined, queueCurrentTask);
+                const queueOperationTargetId = missionCurrentTaskId(item, item, undefined, queueCurrentTask);
                 const queueTargetIsMission = queueTargetId.startsWith("msn_");
                 const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
-                const queueApprovalId = safeString(item.last_task_approval_id).trim();
-                const queueApprovalStatus = safeString(item.last_task_approval_status).trim();
+                const queueApprovalId =
+                  safeString(queueCurrentTask?.approval_id).trim() || safeString(item.last_task_approval_id).trim();
+                const queueApprovalStatus =
+                  safeString(queueCurrentTask?.approval_status).trim() || safeString(item.last_task_approval_status).trim();
+                const queueCurrentTaskId = safeString(queueCurrentTask?.operation_id).trim();
+                const queueCurrentTaskStatus =
+                  safeString(queueCurrentTask?.task_status).trim() || safeString(queueCurrentTask?.operation_status).trim();
+                const queueCurrentTaskResult = safeString(queueCurrentTask?.result_status).trim();
+                const queueCurrentTaskGate = safeString(queueCurrentTask?.gate).trim();
+                const queueCurrentTaskSource = safeString(queueCurrentTask?.source).trim();
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const dependencyState = item.dependency_state;
                 const dependencyStatus = safeString(dependencyState?.status).trim();
@@ -6245,6 +6299,35 @@ function SystemPanel(props: {
                         {queueApprovalStatus ? (
                           <>
                             {" / "}status=<code>{queueApprovalStatus}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {queueCurrentTaskId || queueCurrentTaskStatus || queueCurrentTaskResult || queueCurrentTaskGate ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {queueCurrentTaskId ? (
+                          <>
+                            current_task=<code>{queueCurrentTaskId}</code>
+                          </>
+                        ) : null}
+                        {queueCurrentTaskStatus ? (
+                          <>
+                            {queueCurrentTaskId ? " / " : ""}task_status=<code>{queueCurrentTaskStatus}</code>
+                          </>
+                        ) : null}
+                        {queueCurrentTaskResult ? (
+                          <>
+                            {(queueCurrentTaskId || queueCurrentTaskStatus) ? " / " : ""}result=<code>{queueCurrentTaskResult}</code>
+                          </>
+                        ) : null}
+                        {queueCurrentTaskGate ? (
+                          <>
+                            {(queueCurrentTaskId || queueCurrentTaskStatus || queueCurrentTaskResult) ? " / " : ""}gate=<code>{queueCurrentTaskGate}</code>
+                          </>
+                        ) : null}
+                        {queueCurrentTaskSource ? (
+                          <>
+                            {" / "}source=<code>{queueCurrentTaskSource}</code>
                           </>
                         ) : null}
                       </div>
@@ -6365,16 +6448,26 @@ function SystemPanel(props: {
             </div>
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {deadletterPreviewPresentation.visible.map((item) => {
+                const deadletterCurrentTask = item.current_task;
                 const latestActivity = latestActivitySummary(item.latest_activity);
                 const updatedAt = mixedLocaleTime(item.updated_at);
                 const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                 const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
-                const approvalId = safeString(item.last_task_approval_id).trim();
+                const deadletterOperationId =
+                  safeString(deadletterCurrentTask?.operation_id).trim() || safeString(item.last_task_id).trim();
+                const approvalId =
+                  safeString(deadletterCurrentTask?.approval_id).trim() || safeString(item.last_task_approval_id).trim();
                 const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                 const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
-                const approvalStatus = safeString(item.last_task_approval_status).trim();
+                const approvalStatus =
+                  safeString(deadletterCurrentTask?.approval_status).trim() || safeString(item.last_task_approval_status).trim();
                 const replacementKind = safeString(item.last_task_approval_replacement_kind).trim();
                 const replacementReason = safeString(item.last_task_approval_replacement_reason).trim();
+                const deadletterCurrentTaskStatus =
+                  safeString(deadletterCurrentTask?.task_status).trim() ||
+                  safeString(deadletterCurrentTask?.operation_status).trim();
+                const deadletterCurrentTaskResult = safeString(deadletterCurrentTask?.result_status).trim();
+                const deadletterCurrentTaskGate = safeString(deadletterCurrentTask?.gate).trim();
                 const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
                   ? item.last_task_approval_replacement_changed_keys.map((key) => safeString(key).trim()).filter(Boolean)
                   : [];
@@ -6447,6 +6540,30 @@ function SystemPanel(props: {
                     {item.history_summary ? (
                       <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>{item.history_summary}</div>
                     ) : null}
+                    {deadletterOperationId || deadletterCurrentTaskStatus || deadletterCurrentTaskResult || deadletterCurrentTaskGate ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {deadletterOperationId ? (
+                          <>
+                            current_task=<code>{deadletterOperationId}</code>
+                          </>
+                        ) : null}
+                        {deadletterCurrentTaskStatus ? (
+                          <>
+                            {deadletterOperationId ? " / " : ""}task_status=<code>{deadletterCurrentTaskStatus}</code>
+                          </>
+                        ) : null}
+                        {deadletterCurrentTaskResult ? (
+                          <>
+                            {(deadletterOperationId || deadletterCurrentTaskStatus) ? " / " : ""}result=<code>{deadletterCurrentTaskResult}</code>
+                          </>
+                        ) : null}
+                        {deadletterCurrentTaskGate ? (
+                          <>
+                            {(deadletterOperationId || deadletterCurrentTaskStatus || deadletterCurrentTaskResult) ? " / " : ""}gate=<code>{deadletterCurrentTaskGate}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {latestActivity.name || latestActivity.status || latestActivity.gate || latestActivity.observedAt ? (
                       <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                         latest=<code>{latestActivity.name || "activity"}</code>
@@ -6503,7 +6620,7 @@ function SystemPanel(props: {
                           onClick={() =>
                             props.onOpenApprovals(approvalId, {
                               missionId: item.id,
-                              operationId: safeString(item.last_task_id).trim() || undefined,
+                              operationId: deadletterOperationId || undefined,
                               source: "deadletter",
                               reviewKind: replacementKind || undefined,
                               reviewReason: replacementReason || undefined,
@@ -6520,7 +6637,7 @@ function SystemPanel(props: {
                           onClick={() =>
                             props.onOpenApprovals(previousApprovalId, {
                               missionId: item.id,
-                              operationId: safeString(item.last_task_id).trim() || undefined,
+                              operationId: deadletterOperationId || undefined,
                               source: "deadletter",
                               reviewKind: replacementKind || undefined,
                               reviewReason: replacementReason || undefined,
@@ -6531,9 +6648,9 @@ function SystemPanel(props: {
                           {item.previous_approval_review_label || "Open previous approval"}
                         </button>
                       ) : null}
-                      {item.last_task_id ? (
-                        <button style={buttonStyle} onClick={() => props.onOpenOperation(item.last_task_id || "")}>
-                          Open last task
+                      {deadletterOperationId ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(deadletterOperationId)}>
+                          Open current task
                         </button>
                       ) : null}
                       <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
@@ -6558,8 +6675,15 @@ function SystemPanel(props: {
             <div style={{ fontSize: 12, color: THEME.muted }}>No mission progress has been recorded yet.</div>
           ) : missionFeedDeclared ? (
             recentDeclaredMissions.map((mission) => {
-              const linkedTaskId = missionCurrentTaskId(mission);
+              const missionCurrentTask = mission.current_task;
+              const linkedTaskId = missionCurrentTaskId(mission, undefined, undefined, missionCurrentTask);
               const latestActivity = latestActivitySummary(mission.latest_activity);
+              const currentTaskStatus =
+                safeString(missionCurrentTask?.task_status).trim() || safeString(missionCurrentTask?.operation_status).trim();
+              const currentTaskResult = safeString(missionCurrentTask?.result_status).trim();
+              const currentTaskGate = safeString(missionCurrentTask?.gate).trim();
+              const currentTaskNextStep = safeString(missionCurrentTask?.next_step).trim();
+              const currentTaskReason = safeString(missionCurrentTask?.reason).trim();
               return (
                 <div
                   key={`mission-progress-${mission.id}`}
@@ -6571,19 +6695,24 @@ function SystemPanel(props: {
                   </div>
                   {mission.summary ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{mission.summary}</div> : null}
                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                    next_step=<code>{mission.next_step || "unset"}</code>
+                    next_step=<code>{currentTaskNextStep || mission.next_step || "unset"}</code>
                   </div>
-                  {mission.last_task_status || mission.last_task_result_status ? (
+                  {currentTaskStatus || currentTaskResult || mission.last_task_status || mission.last_task_result_status ? (
                     <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                      latest_run=<code>{mission.last_task_status || "unknown"}</code>
-                      {mission.last_task_result_status ? (
+                      latest_run=<code>{currentTaskStatus || mission.last_task_status || "unknown"}</code>
+                      {currentTaskResult || mission.last_task_result_status ? (
                         <>
-                          {" / "}result=<code>{mission.last_task_result_status}</code>
+                          {" / "}result=<code>{currentTaskResult || mission.last_task_result_status}</code>
                         </>
                       ) : null}
-                      {mission.last_task_gate ? (
+                      {currentTaskGate || mission.last_task_gate ? (
                         <>
-                          {" / "}gate=<code>{mission.last_task_gate}</code>
+                          {" / "}gate=<code>{currentTaskGate || mission.last_task_gate}</code>
+                        </>
+                      ) : null}
+                      {linkedTaskId ? (
+                        <>
+                          {" / "}current_task=<code>{linkedTaskId}</code>
                         </>
                       ) : null}
                     </div>
@@ -6608,8 +6737,8 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
-                  {mission.last_task_reason ? (
-                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.last_task_reason}</div>
+                  {currentTaskReason || mission.last_task_reason ? (
+                    <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{currentTaskReason || mission.last_task_reason}</div>
                   ) : null}
                   {mission.deadletter_reason ? (
                     <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{mission.deadletter_reason}</div>

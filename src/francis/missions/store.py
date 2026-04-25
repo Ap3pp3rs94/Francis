@@ -500,6 +500,66 @@ def _advance_projection(recommended_action: str, action_target_id: str, operator
     }
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _queue_current_task_projection(
+    record: "MissionRecord",
+    meta: dict[str, Any],
+    *,
+    recommended_action: str,
+    operator_hint: str,
+    action_target_id: str,
+) -> dict[str, Any]:
+    action_target = str(action_target_id or "").strip()
+    last_task_id = str(meta.get("last_task_id") or "").strip()
+    last_advance_operation_id = str(meta.get("last_advance_operation_id") or "").strip()
+    has_meta_task = any(
+        str(meta.get(key) or "").strip()
+        for key in (
+            "last_task_id",
+            "last_task_status",
+            "last_task_result_status",
+            "last_task_reason",
+            "last_task_gate",
+            "last_task_next_step",
+        )
+    )
+    operation_id = _first_text(
+        last_task_id,
+        action_target if action_target.startswith("tsk_") else "",
+        last_advance_operation_id,
+    )
+    source = "mission_meta" if has_meta_task else "queue_item" if operation_id else "mission"
+    payload: dict[str, Any] = {
+        "mission_id": record.mission_id,
+        "source": source,
+    }
+    values = {
+        "operation_id": operation_id,
+        "task_status": meta.get("last_task_status"),
+        "operation_status": meta.get("last_advance_operation_status"),
+        "result_status": meta.get("last_task_result_status"),
+        "gate": meta.get("last_task_gate"),
+        "next_step": _first_text(meta.get("last_task_next_step"), record.next_step),
+        "reason": _first_text(meta.get("last_task_reason"), operator_hint),
+        "approval_id": meta.get("last_task_approval_id"),
+        "approval_status": meta.get("last_task_approval_status"),
+        "handoff_action": recommended_action,
+        "last_advance_operation_id": last_advance_operation_id,
+    }
+    for key, value in values.items():
+        text = str(value or "").strip()
+        if text:
+            payload[key] = text
+    return payload
+
+
 def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[str, Any]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
     dependency_state = _dependency_state(record, repo_root)
@@ -522,7 +582,9 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "last_task_id": str(meta.get("last_task_id") or "").strip(),
         "last_task_status": str(meta.get("last_task_status") or "").strip(),
         "last_task_result_status": str(meta.get("last_task_result_status") or "").strip(),
+        "last_task_reason": str(meta.get("last_task_reason") or "").strip(),
         "last_task_gate": str(meta.get("last_task_gate") or "").strip(),
+        "last_task_next_step": str(meta.get("last_task_next_step") or "").strip(),
         "last_task_approval_id": str(meta.get("last_task_approval_id") or "").strip(),
         "last_task_previous_approval_id": str(meta.get("last_task_previous_approval_id") or "").strip(),
         "last_task_approval_status": str(meta.get("last_task_approval_status") or "").strip(),
@@ -538,6 +600,13 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "operator_hint": operator_hint,
         "action_target_id": action_target_id,
         "advance": _advance_projection(recommended_action, action_target_id, operator_hint),
+        "current_task": _queue_current_task_projection(
+            record,
+            meta,
+            recommended_action=recommended_action,
+            operator_hint=operator_hint,
+            action_target_id=action_target_id,
+        ),
         "deadletter_reason": record.deadletter_reason,
         "updated_at": record.updated_at,
     }

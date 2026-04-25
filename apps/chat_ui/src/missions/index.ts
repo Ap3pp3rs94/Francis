@@ -177,6 +177,7 @@ export type MissionQueueItem = MissionRecord & {
   operator_hint?: string;
   advance?: MissionAdvanceProjection;
   dependency_state?: MissionDependencyState;
+  current_task?: MissionCurrentTask;
   last_task_id?: string;
   last_task_status?: string;
   last_task_result_status?: string;
@@ -490,6 +491,7 @@ function parseMissionQueueItem(raw: unknown): MissionQueueItem | undefined {
     operator_hint: safeString(raw.operator_hint, "") || undefined,
     advance: parseMissionAdvanceProjection(raw.advance),
     dependency_state: parseMissionDependencyState(raw.dependency_state),
+    current_task: parseMissionCurrentTask(raw.current_task),
     last_task_id: safeString(raw.last_task_id, "") || undefined,
     last_task_status: safeString(raw.last_task_status, "") || undefined,
     last_task_result_status: safeString(raw.last_task_result_status, "") || undefined,

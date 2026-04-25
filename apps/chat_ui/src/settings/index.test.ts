@@ -229,6 +229,13 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 status: "queued",
                 ts: 1_710_000_654,
               },
+              current_task: {
+                mission_id: "mission_alpha",
+                source: "mission_meta",
+                operation_id: "tsk_alpha",
+                task_status: "accepted",
+                latest_receipt_event: "created",
+              },
             },
           ],
           mission_queue: [
@@ -280,6 +287,16 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 gate: "trust_gate",
                 ts: 1_710_000_655,
               },
+              current_task: {
+                mission_id: "mission_blocked",
+                source: "mission_meta",
+                operation_id: "tsk_blocked",
+                task_status: "accepted",
+                result_status: "blocked",
+                gate: "trust_gate",
+                approval_id: "apr_queue_exact",
+                approval_status: "pending",
+              },
             },
           ],
           deadletter_missions: [
@@ -311,6 +328,16 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                   details: { deadletter_reason: "manual_cleanup" },
                 },
               ],
+              current_task: {
+                mission_id: "mission_dead",
+                source: "mission_meta",
+                operation_id: "tsk_dead",
+                task_status: "accepted",
+                result_status: "blocked",
+                gate: "approvals_gate",
+                approval_id: "apr_dead_exact",
+                approval_status: "pending",
+              },
             },
           ],
           incidents: [],
@@ -419,8 +446,13 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.escalation_path, "Review with operator if blocked.");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.name, "created");
     assert.equal(worldState.overview?.recent_missions?.[0]?.latest_activity?.status, "queued");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_id, "tsk_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_event, "created");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.current_task?.operation_id, "tsk_blocked");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.current_task?.approval_id, "apr_queue_exact");
+    assert.equal(worldState.overview?.mission_queue?.[0]?.current_task?.gate, "trust_gate");
     assert.equal(worldState.overview?.mission_queue?.[0]?.owner_id, "owner.blocked");
     assert.deepEqual(worldState.overview?.mission_queue?.[0]?.dependency_ids, ["dep_policy", "dep_trust"]);
     assert.equal(worldState.overview?.mission_queue?.[0]?.dependency_count, 2);
@@ -442,6 +474,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.advance?.target_id, "tsk_blocked");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_id, "apr_dead_exact");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.operation_id, "tsk_dead");
+    assert.equal(worldState.overview?.deadletter_missions?.[0]?.current_task?.approval_id, "apr_dead_exact");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_id, "apr_dead_previous");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_previous_approval_status, "approved");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.last_task_approval_status, "pending");

@@ -1232,6 +1232,10 @@ def test_mission_advance_surfaces_approval_handoff_for_governed_execution(monkey
     assert advanced_body["queue_item"]["last_task_approval_status"] == "pending"
     assert advanced_body["queue_item"]["advance"]["eligible"] is False
     assert advanced_body["queue_item"]["advance"]["action"] == "review_pending_approval"
+    assert advanced_body["queue_item"]["current_task"]["source"] == "mission_meta"
+    assert advanced_body["queue_item"]["current_task"]["operation_id"] == operation_id
+    assert advanced_body["queue_item"]["current_task"]["gate"] == "approvals_gate"
+    assert advanced_body["queue_item"]["current_task"]["approval_id"] == advanced_body["approval_id"]
     assert advanced_body["current_task"]["source"] == "mission_meta"
     assert advanced_body["current_task"]["operation_id"] == operation_id
     assert advanced_body["current_task"]["task_status"] == "accepted"
@@ -1336,6 +1340,10 @@ def test_mission_run_once_surfaces_approval_handoff_for_governed_execution(monke
     assert mission_result["queue_item"]["last_task_approval_status"] == "pending"
     assert mission_result["queue_item"]["advance"]["eligible"] is False
     assert mission_result["queue_item"]["advance"]["action"] == "review_pending_approval"
+    assert mission_result["queue_item"]["current_task"]["source"] == "mission_meta"
+    assert mission_result["queue_item"]["current_task"]["operation_id"] == operation_id
+    assert mission_result["queue_item"]["current_task"]["gate"] == "approvals_gate"
+    assert mission_result["queue_item"]["current_task"]["approval_id"] == mission_result["approval_id"]
     assert mission_result["current_task"]["source"] == "mission_meta"
     assert mission_result["current_task"]["operation_id"] == operation_id
     assert mission_result["current_task"]["task_status"] == "accepted"

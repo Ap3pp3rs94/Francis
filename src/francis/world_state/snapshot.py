@@ -88,6 +88,14 @@ def _safe_str(value: Any) -> str:
         return ""
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
 def _observer_anomaly_projection(raw: Any) -> dict[str, Any]:
     payload = raw if isinstance(raw, dict) else {}
     level = _safe_str(payload.get("level")).strip().lower()
@@ -762,6 +770,7 @@ def _attach_mission_pending_approval_projection(
             enriched["last_task_approval_replacement_changed_keys"] = [
                 str(key).strip() for key in replacement_changed_keys if str(key).strip()
             ][:8]
+        enriched["current_task"] = _mission_current_task_projection(enriched)
         attached.append(enriched)
     return attached
 
@@ -893,6 +902,77 @@ def _mission_current_activity(
     return latest
 
 
+def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
+    existing = item.get("current_task") if isinstance(item.get("current_task"), dict) else {}
+    latest_activity = item.get("latest_activity") if isinstance(item.get("latest_activity"), dict) else {}
+    action_target_id = _safe_str(item.get("action_target_id")).strip()
+    has_meta_task = any(
+        _safe_str(item.get(field)).strip()
+        for field in (
+            "last_task_id",
+            "last_task_status",
+            "last_task_result_status",
+            "last_task_reason",
+            "last_task_gate",
+            "last_task_next_step",
+        )
+    )
+    operation_id = _first_text(
+        existing.get("operation_id"),
+        item.get("last_task_id"),
+        action_target_id if action_target_id.startswith("tsk_") else "",
+        item.get("last_advance_operation_id"),
+        latest_activity.get("operation_id"),
+    )
+    source = _first_text(
+        existing.get("source"),
+        "mission_meta" if has_meta_task else "",
+        "latest_activity" if latest_activity else "",
+        "mission",
+    )
+    payload: dict[str, Any] = {
+        "mission_id": _first_text(existing.get("mission_id"), item.get("id")),
+        "source": source,
+    }
+    values = {
+        "operation_id": operation_id,
+        "task_status": _first_text(existing.get("task_status"), item.get("last_task_status")),
+        "operation_status": _first_text(
+            existing.get("operation_status"),
+            latest_activity.get("operation_status"),
+            latest_activity.get("status"),
+            item.get("last_advance_operation_status"),
+        ),
+        "result_status": _first_text(existing.get("result_status"), item.get("last_task_result_status")),
+        "gate": _first_text(existing.get("gate"), item.get("last_task_gate"), latest_activity.get("gate")),
+        "next_step": _first_text(
+            existing.get("next_step"),
+            item.get("last_task_next_step"),
+            latest_activity.get("next_step"),
+            item.get("next_step"),
+        ),
+        "reason": _first_text(
+            existing.get("reason"),
+            item.get("last_task_reason"),
+            latest_activity.get("reason"),
+            item.get("operator_hint"),
+        ),
+        "approval_id": _first_text(existing.get("approval_id"), item.get("last_task_approval_id")),
+        "approval_status": _first_text(item.get("last_task_approval_status"), existing.get("approval_status")),
+        "handoff_action": _first_text(existing.get("handoff_action"), item.get("recommended_action")),
+        "latest_receipt_event": _first_text(existing.get("latest_receipt_event"), latest_activity.get("name")),
+        "latest_receipt_ts": _first_text(existing.get("latest_receipt_ts"), latest_activity.get("ts")),
+        "last_advance_operation_id": _first_text(
+            existing.get("last_advance_operation_id"), item.get("last_advance_operation_id")
+        ),
+    }
+    for key, value in values.items():
+        text = _safe_str(value).strip()
+        if text:
+            payload[key] = text
+    return payload
+
+
 def _attach_mission_activity(
     items: list[dict[str, Any]],
     *,
@@ -905,6 +985,7 @@ def _attach_mission_activity(
             continue
         enriched_item = dict(item)
         enriched_item["latest_activity"] = _mission_current_activity(item, log_limit=log_limit, cache=cache)
+        enriched_item["current_task"] = _mission_current_task_projection(enriched_item)
         enriched.append(enriched_item)
     return enriched
 
@@ -1223,6 +1304,9 @@ def _mission_briefing(
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
                 "last_task_gate": str(item.get("last_task_gate") or "").strip(),
+                "current_task": dict(item.get("current_task") or {})
+                if isinstance(item.get("current_task"), dict)
+                else {},
                 **_mission_hold_projection(item),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
@@ -1252,6 +1336,9 @@ def _mission_briefing(
                 "objective": str(item.get("objective") or "").strip(),
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "last_task_id": str(item.get("last_task_id") or "").strip(),
+                "current_task": dict(item.get("current_task") or {})
+                if isinstance(item.get("current_task"), dict)
+                else {},
                 **_mission_hold_projection(item),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
@@ -1278,6 +1365,9 @@ def _mission_briefing(
                 "last_task_status": str(item.get("last_task_status") or "").strip(),
                 "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
                 "last_task_gate": str(item.get("last_task_gate") or "").strip(),
+                "current_task": dict(item.get("current_task") or {})
+                if isinstance(item.get("current_task"), dict)
+                else {},
                 "history_count": int(item.get("history_count") or 0),
                 "latest_history_event": str(item.get("latest_history_event") or "").strip(),
                 "latest_history_ts": str(item.get("latest_history_ts") or "").strip(),
