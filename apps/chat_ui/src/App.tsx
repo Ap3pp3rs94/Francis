@@ -540,6 +540,20 @@ function approvalProjectionReplacementLine(item: ApprovalProjectionLike | null |
   return parts.join(" · ");
 }
 
+function approvalProjectionReplacementScopeLine(item: ApprovalProjectionLike | null | undefined): string {
+  const expectedKeys = Array.isArray(item?.replacement_expected_payload_keys)
+    ? item.replacement_expected_payload_keys.map((key) => safeString(key).trim()).filter(Boolean)
+    : [];
+  const previousKeys = Array.isArray(item?.replacement_previous_payload_keys)
+    ? item.replacement_previous_payload_keys.map((key) => safeString(key).trim()).filter(Boolean)
+    : [];
+  if (expectedKeys.length === 0 && previousKeys.length === 0) return "";
+  const parts: string[] = [];
+  if (expectedKeys.length > 0) parts.push(`expected keys ${expectedKeys.join(", ")}`);
+  if (previousKeys.length > 0) parts.push(`previous keys ${previousKeys.join(", ")}`);
+  return parts.join(" · ");
+}
+
 function approvalProjectionDetail(item: ApprovalProjectionLike | null | undefined): string {
   const factLine = approvalProjectionFactLine(item);
   if (factLine) return factLine;
@@ -704,6 +718,16 @@ function inspectApproval(item: ApprovalItem | null | undefined): ApprovalInspect
   );
   pushEvidence("Dry run", typeof summary?.dry_run === "boolean" ? String(summary.dry_run) : "");
   pushEvidence("Idempotency key", approvalTextField(payload, "idempotency_key"));
+  pushEvidence("Replacement reason", safeString(item?.replacement_reason).trim());
+  if (Array.isArray(item?.replacement_expected_payload_keys) && item.replacement_expected_payload_keys.length > 0) {
+    evidenceItems.push(`Expected payload keys: ${item.replacement_expected_payload_keys.join(", ")}`);
+  }
+  if (Array.isArray(item?.replacement_previous_payload_keys) && item.replacement_previous_payload_keys.length > 0) {
+    evidenceItems.push(`Previous payload keys: ${item.replacement_previous_payload_keys.join(", ")}`);
+  }
+  if (Array.isArray(item?.replacement_changed_keys) && item.replacement_changed_keys.length > 0) {
+    evidenceItems.push(`Changed payload keys: ${item.replacement_changed_keys.join(", ")}`);
+  }
   if (Array.isArray(summary?.input_keys) && summary.input_keys.length > 0) {
     evidenceItems.push(`Input keys: ${summary.input_keys.join(", ")}`);
   }
@@ -2667,6 +2691,11 @@ function ApprovalsPanel(props: {
                 Replacement: {approvalProjectionReplacementLine(selectedApproval)}
               </div>
             ) : null}
+            {approvalProjectionReplacementScopeLine(selectedApproval) ? (
+              <div style={{ fontSize: 12, color: THEME.muted }}>
+                Mismatch scope: {approvalProjectionReplacementScopeLine(selectedApproval)}
+              </div>
+            ) : null}
             <div style={{ fontSize: 12 }}>
               Created: <code>{selectedApproval.ts ? toLocaleTime(selectedApproval.ts) : "unknown"}</code>
             </div>
@@ -2772,6 +2801,7 @@ function ApprovalsPanel(props: {
           const exactAction = approvalProjectionExactActionLine(a);
           const lineage = approvalProjectionLineage(a);
           const replacement = approvalProjectionReplacementLine(a);
+          const replacementScope = approvalProjectionReplacementScopeLine(a);
           const reason = safeString(a.reason).trim();
           return (
             <div
@@ -2797,6 +2827,9 @@ function ApprovalsPanel(props: {
               {lineage ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>lineage: {lineage}</div> : null}
               {replacement ? (
                 <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>replacement: {replacement}</div>
+              ) : null}
+              {replacementScope ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>mismatch scope: {replacementScope}</div>
               ) : null}
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                 <code>{a.id}</code> / domain=<code>{inspection.domain}</code>

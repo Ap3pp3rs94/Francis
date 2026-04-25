@@ -199,6 +199,8 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               previous_approval_status: "approved",
               replacement_kind: "plugin.run.mismatch",
               replacement_reason: "approval_payload_mismatch",
+              replacement_expected_payload_keys: ["action", "input", "plugin_id"],
+              replacement_previous_payload_keys: ["action", "input", "plugin_id"],
               replacement_changed_keys: ["input"],
               payload_summary: {
                 requested_action: "deploy",
@@ -465,6 +467,16 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.pending_approvals?.[0]?.previous_approval_status, "approved");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.replacement_kind, "plugin.run.mismatch");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.replacement_reason, "approval_payload_mismatch");
+    assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.replacement_expected_payload_keys, [
+      "action",
+      "input",
+      "plugin_id",
+    ]);
+    assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.replacement_previous_payload_keys, [
+      "action",
+      "input",
+      "plugin_id",
+    ]);
     assert.deepEqual(worldState.overview?.pending_approvals?.[0]?.replacement_changed_keys, ["input"]);
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.requested_action, "deploy");
     assert.equal(worldState.overview?.pending_approvals?.[0]?.payload_summary?.plugin_id, "plugin.deploy");

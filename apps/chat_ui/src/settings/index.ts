@@ -132,6 +132,8 @@ export type WorldStateApprovalSummary = {
   previous_approval_status?: string;
   replacement_kind?: string;
   replacement_reason?: string;
+  replacement_expected_payload_keys?: string[];
+  replacement_previous_payload_keys?: string[];
   replacement_changed_keys?: string[];
   payload_summary?: WorldStateApprovalPayloadSummary;
 };
@@ -1600,6 +1602,8 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         previous_approval_status: safeString(item.previous_approval_status, ""),
         replacement_kind: safeString(item.replacement_kind, ""),
         replacement_reason: safeString(item.replacement_reason, ""),
+        replacement_expected_payload_keys: safeStringArray(item.replacement_expected_payload_keys),
+        replacement_previous_payload_keys: safeStringArray(item.replacement_previous_payload_keys),
         replacement_changed_keys: safeStringArray(item.replacement_changed_keys),
         payload_summary: isRecord(item.payload_summary)
           ? parseWorldStateApprovalPayloadSummary(item.payload_summary)

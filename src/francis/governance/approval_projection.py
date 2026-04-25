@@ -208,6 +208,12 @@ def _changed_payload_keys(expected: Any, previous: Any) -> list[str]:
     return changed[:8]
 
 
+def _payload_keys(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    return sorted(_safe_str(key).strip() for key in payload.keys() if _safe_str(key).strip())[:8]
+
+
 def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | None = None) -> dict[str, Any]:
     item = dict(record) if isinstance(record, dict) else {}
     approval_id = _safe_str(item.get("id")).strip()
@@ -247,6 +253,12 @@ def approval_projection_fields(record: dict[str, Any], *, artifact_root: Path | 
         artifact_mismatch.get("approval_record") if isinstance(artifact_mismatch.get("approval_record"), dict) else {}
     )
     previous_payload = approval_record.get("payload") if isinstance(approval_record, dict) else {}
+    expected_payload_keys = _payload_keys(expected_payload)
+    previous_payload_keys = _payload_keys(previous_payload)
+    if expected_payload_keys:
+        out["replacement_expected_payload_keys"] = expected_payload_keys
+    if previous_payload_keys:
+        out["replacement_previous_payload_keys"] = previous_payload_keys
     changed_keys = _changed_payload_keys(expected_payload, previous_payload)
     if changed_keys:
         out["replacement_changed_keys"] = changed_keys

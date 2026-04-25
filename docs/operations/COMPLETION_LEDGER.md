@@ -210,6 +210,11 @@ carry `last_task_approval_replacement_kind`, and deadletter cards plus approval
 return context can show `plugin.run.mismatch`-style provenance without exposing
 raw expected or actual payload values.
 
+As of `2026-04-24`, approval replacement review now also preserves bounded
+mismatch key scope. Approval list/world-state projections can show the expected
+and prior top-level payload keys involved in an exact-action mismatch, while
+still withholding raw expected and approved payload values.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
@@ -221,6 +226,23 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-24`, the highest-confidence surface newly advanced in the current
+Stage 3 line is approval replacement mismatch key-scope review. This advances
+the active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
+replacement approval review more inspectable without exposing payload values or
+adding a new mutation path:
+
+- `src/francis/governance/approval_projection.py` now projects bounded
+  `replacement_expected_payload_keys` and `replacement_previous_payload_keys`
+  from mismatch artifacts.
+- `apps/chat_ui/src/index.ts` and `apps/chat_ui/src/settings/index.ts` now
+  preserve those fields in approval-list and world-state approval summaries.
+- `apps/chat_ui/src/App.tsx` now shows mismatch key scope in approval review
+  cards and the selected approval evidence panel.
+- `tests/test_api_approvals.py`, `apps/chat_ui/src/index.test.ts`, and
+  `apps/chat_ui/src/settings/index.test.ts` now prove the bounded key-scope
+  contract.
 
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 Stage 3 line is deadletter replacement artifact-kind continuity. This advances
@@ -1337,6 +1359,21 @@ Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 - Criterion statuses:
   Result: evidence-backed incidents, traceable scans, receipted findings,
   presence truth link, and non-invasive awareness all reported `satisfied`.
+
+Latest targeted validation for the `2026-04-24` Stage 3 approval replacement mismatch key-scope slice:
+
+- `python -m pytest tests/test_api_approvals.py::test_approval_list_surfaces_refresh_lineage_and_payload_summary -q`
+  Result: `1 passed`
+- `python -m ruff check src/francis/governance/approval_projection.py tests/test_api_approvals.py`
+  Result: `All checks passed!`
+- `cd apps/chat_ui && npm test -- index.test.ts settings/index.test.ts`
+  Result: `18 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-24` Stage 3 deadletter replacement artifact-kind continuity slice:
 
