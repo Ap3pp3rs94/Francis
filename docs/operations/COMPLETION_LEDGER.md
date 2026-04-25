@@ -173,6 +173,12 @@ show the plugin id, action, changed payload shape, and redacted input values, bu
 they no longer expose sealed HMAC proof material. The persisted approval store
 continues to hold sealed payloads for exact-action replay protection.
 
+As of `2026-04-25`, web-learning approval receipt artifacts also use the display
+redaction boundary. Learn-request, enable/disable, and quarantine-delete approval
+request, error, and mismatch artifacts can preserve action shape and redacted URL
+or note context without exposing sealed HMAC proof material. Persisted approval
+records remain the exact-action replay source of truth.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

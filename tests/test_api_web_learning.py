@@ -344,13 +344,17 @@ def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_ap
     assert sealed_title["redacted"] == "Operator note password=[REDACTED:secret]"
     assert str(sealed_title["digest"]).startswith("hmac-sha256:")
 
-    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
-    assert artifact_payload["request"]["payload"]["url"] == sealed_url
-    assert artifact_payload["request"]["payload"]["title"] == sealed_title
+    artifact_text = artifact_path.read_text(encoding="utf-8")
+    artifact_payload = json.loads(artifact_text)
+    assert artifact_payload["request"]["payload"]["url"] == redacted_url
+    assert artifact_payload["request"]["payload"]["title"] == "Operator note password=[REDACTED:secret]"
+    assert artifact_payload["approval"]["payload"]["payload"]["url"] == redacted_url
+    assert artifact_payload["approval"]["payload"]["payload"]["title"] == "Operator note password=[REDACTED:secret]"
     assert raw_password not in approval_path.read_text(encoding="utf-8")
-    assert raw_password not in artifact_path.read_text(encoding="utf-8")
+    assert raw_password not in artifact_text
     assert raw_url_token not in approval_path.read_text(encoding="utf-8")
-    assert raw_url_token not in artifact_path.read_text(encoding="utf-8")
+    assert raw_url_token not in artifact_text
+    assert "hmac-sha256:" not in artifact_text
     assert raw_url_token not in registry_path.read_text(encoding="utf-8")
     assert redacted_url in registry_path.read_text(encoding="utf-8")
 
@@ -377,6 +381,18 @@ def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_ap
     assert str(mismatched_body["approval_id"]) != approval_id
 
     refreshed_id = str(mismatched_body["approval_id"])
+    refreshed_artifact_dir = Path(str(mismatched_body["artifact_dir"]))
+    refreshed_request_text = (refreshed_artifact_dir / "request.json").read_text(encoding="utf-8")
+    refreshed_mismatch_text = (refreshed_artifact_dir / "mismatch.json").read_text(encoding="utf-8")
+    original_mismatch_text = (
+        data_root / "artifacts" / "web_learning" / "approvals" / approval_id / "mismatch.json"
+    ).read_text(encoding="utf-8")
+    for artifact_text in (refreshed_request_text, refreshed_mismatch_text, original_mismatch_text):
+        assert raw_url_token not in artifact_text
+        assert raw_password not in artifact_text
+        assert different_password not in artifact_text
+        assert "hmac-sha256:" not in artifact_text
+
     approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_id, "action": "approve"})
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True

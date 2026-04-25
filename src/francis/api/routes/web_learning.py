@@ -17,6 +17,7 @@ from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
 from francis.governance.redaction import (
+    redact_governed_display_value,
     redact_governed_metadata,
     redact_governed_value,
     seal_governed_approval_value,
@@ -323,6 +324,11 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def _atomic_write_display_json(path: Path, payload: dict[str, Any]) -> None:
+    display_payload = redact_governed_display_value(payload)
+    _atomic_write_json(path, display_payload if isinstance(display_payload, dict) else {})
+
+
 def _approval_artifact_dir(approval_id: str) -> Path:
     return data_dir() / "artifacts" / "web_learning" / "approvals" / _safe_str(approval_id).strip()
 
@@ -397,7 +403,7 @@ def _request_exact_approval(
         request_body["previous_status"] = previous_status
     if isinstance(previous_record, dict):
         request_body["previous_approval"] = previous_record
-    _atomic_write_json(art / "request.json", request_body)
+    _atomic_write_display_json(art / "request.json", request_body)
     return approval_id, art
 
 
@@ -659,7 +665,7 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
             if record_idx >= 0:
                 records[record_idx]["approval_id"] = refreshed_id
                 registry["records"] = records
-            _atomic_write_json(
+            _atomic_write_display_json(
                 art / "error.json",
                 {
                     "kind": "web_learning.request.error",
@@ -756,8 +762,8 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
                 "request": request_payload,
                 "approval_record": approval_record,
             }
-            _atomic_write_json(art / "mismatch.json", mismatch_body)
-            _atomic_write_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
             _append_event(
                 registry,
                 {
@@ -949,7 +955,7 @@ def _set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
                 previous_status=approval_status,
                 previous_record=approval_record,
             )
-            _atomic_write_json(
+            _atomic_write_display_json(
                 art / "error.json",
                 {
                     "kind": "web_learning.set_enabled.error",
@@ -1043,8 +1049,8 @@ def _set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
                 "request": request_payload,
                 "approval_record": approval_record,
             }
-            _atomic_write_json(art / "mismatch.json", mismatch_body)
-            _atomic_write_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
             _append_event(
                 registry,
                 {
@@ -1201,7 +1207,7 @@ def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             q["approval_id"] = refreshed_id
             quarantine[idx] = q
             registry["quarantine"] = quarantine
-            _atomic_write_json(
+            _atomic_write_display_json(
                 art / "error.json",
                 {
                     "kind": "web_learning.quarantine.delete.error",
@@ -1292,8 +1298,8 @@ def _decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
                 "request": request_payload,
                 "approval_record": approval_record,
             }
-            _atomic_write_json(art / "mismatch.json", mismatch_body)
-            _atomic_write_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(art / "mismatch.json", mismatch_body)
+            _atomic_write_display_json(_approval_artifact_dir(approval_id) / "mismatch.json", mismatch_body)
             _append_event(
                 registry,
                 {
