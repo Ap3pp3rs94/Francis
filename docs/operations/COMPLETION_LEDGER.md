@@ -78,6 +78,13 @@ rules, and focused API tests prove sensitive metadata is removed from approval
 records, approval artifacts, and relevant local registries while non-sensitive
 audit fields remain available.
 
+As of `2026-04-25`, the shared redaction contract recognizes additional common
+token families in free text and approval-bound values, including OpenAI
+project-style keys, GitHub fine-grained PATs, GitLab PATs, Slack tokens, Google
+API keys, AWS access keys, and JWT-shaped strings. Unit tests prove those values
+are redacted from display text and sealed when used in exact-action approval
+payloads.
+
 As of `2026-04-25`, governed exact-action approval payloads can seal
 secret-like action values without dropping exact-match protection. Plugin run
 inputs, industrial intervention params, and web-learning request payload fields

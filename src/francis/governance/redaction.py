@@ -19,13 +19,25 @@ _SENSITIVE_META_KEY_RE = re.compile(
     r"refresh[_-]?token|secret)",
     re.IGNORECASE,
 )
+_KEY_VALUE_SECRET_RE = re.compile(
+    r"\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})",
+    re.IGNORECASE,
+)
+_KNOWN_SECRET_TOKEN_RE = re.compile(
+    r"\b("
+    r"sk-[A-Za-z0-9_-]{20,}"
+    r"|github_pat_[A-Za-z0-9_]{22,}"
+    r"|ghp_[A-Za-z0-9]{30,}"
+    r"|glpat-[A-Za-z0-9_-]{20,}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|AIza[0-9A-Za-z_-]{20,}"
+    r"|eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}"
+    r")\b"
+)
 _SECRET_TEXT_RE = re.compile(
-    r"(?i)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})"
-    r"|\b(?:https?|git\+https)://[^\s/@]+@"
-    r"|\bsk-[A-Za-z0-9]{20,}\b"
-    r"|\bghp_[A-Za-z0-9]{30,}\b"
-    r"|\bAKIA[0-9A-Z]{16}\b"
-    r"|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b"
+    _KEY_VALUE_SECRET_RE.pattern + r"|\b(?:https?|git\+https)://[^\s/@]+@" + rf"|{_KNOWN_SECRET_TOKEN_RE.pattern}",
+    re.IGNORECASE,
 )
 _URL_USERINFO_RE = re.compile(r"\b((?:https?|git\+https)://)([^\s/@]+@)", re.IGNORECASE)
 
@@ -40,17 +52,10 @@ def _safe_str(value: Any) -> str:
 
 
 def redact_secret_text(value: str) -> str:
-    out = re.sub(
-        r"(?i)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})",
-        lambda match: f"{match.group(1)}={REDACTED_SECRET}",
-        value,
-    )
+    out = _KEY_VALUE_SECRET_RE.sub(lambda match: f"{match.group(1)}={REDACTED_SECRET}", value)
     out = _URL_USERINFO_RE.sub(lambda match: f"{match.group(1)}{REDACTED_SECRET}@", out)
     out = re.sub(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----", REDACTED_SECRET, out, flags=re.I)
-    out = re.sub(r"\bsk-[A-Za-z0-9]{20,}\b", REDACTED_SECRET, out)
-    out = re.sub(r"\bghp_[A-Za-z0-9]{30,}\b", REDACTED_SECRET, out)
-    out = re.sub(r"\bAKIA[0-9A-Z]{16}\b", REDACTED_SECRET, out)
-    out = re.sub(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b", REDACTED_SECRET, out)
+    out = _KNOWN_SECRET_TOKEN_RE.sub(REDACTED_SECRET, out)
     return out
 
 
