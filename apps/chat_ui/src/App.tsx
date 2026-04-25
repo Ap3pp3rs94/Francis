@@ -3124,6 +3124,11 @@ function SystemPanel(props: {
     error?: string;
     errorCount: number;
     counts: Record<string, number>;
+    request?: {
+      actor?: string;
+      note?: string;
+      limit?: number;
+    };
     results: Array<{
       missionId?: string;
       operationId?: string;
@@ -4055,6 +4060,7 @@ function SystemPanel(props: {
         error: response.error,
         errorCount: response.errors?.length ?? 0,
         counts: response.counts ?? {},
+        request: response.request,
         results: (response.results ?? []).slice(0, 4).map((item) => ({
           missionId: item.mission_id,
           operationId: item.operation_id,
@@ -6946,6 +6952,21 @@ function SystemPanel(props: {
                     {" / "}blocked=<code>{String(missionQueueRunSummary.counts.blocked ?? 0)}</code>
                     {" / "}failed=<code>{String(missionQueueRunSummary.counts.failed ?? 0)}</code>
                     {" / "}deadlettered=<code>{String(missionQueueRunSummary.counts.deadlettered ?? 0)}</code>
+                  </div>
+                ) : null}
+                {missionQueueRunSummary.request ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4, overflowWrap: "anywhere" }}>
+                    actor=<code>{missionQueueRunSummary.request.actor || "unknown"}</code>
+                    {typeof missionQueueRunSummary.request.limit === "number" ? (
+                      <>
+                        {" / "}limit=<code>{String(missionQueueRunSummary.request.limit)}</code>
+                      </>
+                    ) : null}
+                    {missionQueueRunSummary.request.note ? (
+                      <>
+                        {" / "}note=<code>{missionQueueRunSummary.request.note}</code>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
                 {missionQueueRunSummary.error ? (

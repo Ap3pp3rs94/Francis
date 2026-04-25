@@ -600,6 +600,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
       advanced: 1,
       processed: 3,
       status: "succeeded",
+      request: { actor: "chat_ui.operations", note: "run_queue_once_from_ui", limit: 6 },
       counts: { queued: 1, blocked: 1, failed: 1, deadlettered: 1 },
       items: [
         {
@@ -847,6 +848,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.advanced, 1);
     assert.equal(response.processed, 3);
     assert.equal(response.status, "succeeded");
+    assert.deepEqual(response.request, { actor: "chat_ui.operations", note: "run_queue_once_from_ui", limit: 6 });
     assert.equal(response.counts?.blocked, 1);
     assert.equal(response.counts?.failed, 1);
     assert.equal(response.failed[0]?.recovery?.action, "retry_or_deadletter");
@@ -956,6 +958,7 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
       ],
       counts: { failed: 1 },
       status: "failed",
+      request: { actor: "chat_ui.operations", limit: 1 },
     });
   });
 
@@ -984,6 +987,7 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
     assert.equal(response.errors?.[0]?.error, "advance_failed");
     assert.equal(response.counts?.failed, 1);
     assert.equal(response.status, "failed");
+    assert.deepEqual(response.request, { actor: "chat_ui.operations", limit: 1 });
   } finally {
     restoreFetch();
   }

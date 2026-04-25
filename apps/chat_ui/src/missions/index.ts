@@ -359,6 +359,7 @@ export type MissionRunOnceResponse = {
   errors?: Array<Record<string, unknown>>;
   status?: string;
   error?: string;
+  request?: MissionRunOnceRequest;
 };
 
 export type MissionQueuePresentation = {
@@ -1085,6 +1086,17 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
         ),
       )
     : undefined;
+  let request: MissionRunOnceRequest | undefined;
+  if (isRecord(json.request)) {
+    request = {};
+    const actor = safeString(json.request.actor, "");
+    const note = safeString(json.request.note, "");
+    const limit = safeNumber(json.request.limit, 0);
+    if (actor) request.actor = actor;
+    if (note) request.note = note;
+    if (limit) request.limit = limit;
+    if (Object.keys(request).length === 0) request = undefined;
+  }
 
   return {
     ok: safeBoolean(json.ok, false),
@@ -1100,6 +1112,7 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
     errors,
     status: safeString(json.status, "") || undefined,
     error: safeString(json.error, "") || undefined,
+    request,
   };
 }
 

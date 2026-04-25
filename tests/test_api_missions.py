@@ -366,12 +366,18 @@ def test_mission_mutation_routes_are_blocked_in_observe_mode(monkeypatch, tmp_pa
     assert tick_all_body["applied"] == 0
     assert "Observe mode keeps Francis read-only." in tick_all_body["errors"][0]["error"]
 
-    run_once = client.post("/missions/run_once", json={"actor": "tests", "limit": 10})
+    run_once = client.post(
+        "/missions/run_once", json={"actor": "tests", "note": "observe token=missionreadonlysecret123", "limit": 10}
+    )
     assert run_once.status_code == 200
     run_once_body = run_once.json()
     assert run_once_body["ok"] is False
     assert run_once_body["status"] == "blocked"
     assert "Observe mode keeps Francis read-only." in run_once_body["error"]
+    assert run_once_body["request"]["actor"] == "tests"
+    assert run_once_body["request"]["limit"] == 10
+    assert run_once_body["request"]["note"] == "observe token=[REDACTED:secret]"
+    assert "missionreadonlysecret123" not in str(run_once_body["request"])
     assert run_once_body["items"] == []
     assert run_once_body["advanced"] == 0
     assert run_once_body["processed"] == 0
@@ -404,13 +410,19 @@ def test_mission_run_once_reports_failed_status_for_runtime_errors(monkeypatch, 
     monkeypatch.setattr(mission_routes.mission_runtime, "run_queue_once", boom)
 
     client = TestClient(create_app())
-    run_once = client.post("/missions/run_once", json={"actor": "tests", "limit": 10})
+    run_once = client.post(
+        "/missions/run_once", json={"actor": "tests", "note": "runtime token=missionfailuresecret123", "limit": 10}
+    )
     assert run_once.status_code == 200
     body = run_once.json()
     assert body["ok"] is False
     assert body["status"] == "failed"
     assert body["error"] == "queue run exploded"
     assert body["errors"][0]["error"] == "queue run exploded"
+    assert body["request"]["actor"] == "tests"
+    assert body["request"]["limit"] == 10
+    assert body["request"]["note"] == "runtime token=[REDACTED:secret]"
+    assert "missionfailuresecret123" not in str(body["request"])
     assert body["results"] == []
     assert body["processed"] == 0
 
@@ -1099,6 +1111,11 @@ def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Pat
     run_once_body = run_once.json()
     assert run_once_body["ok"] is True
     assert run_once_body["status"] == "succeeded"
+    assert run_once_body["request"] == {
+        "actor": "test.missions.queue",
+        "note": "queue reconcile",
+        "limit": 10,
+    }
     assert run_once_body["processed"] >= 2
     assert run_once_body["advanced"] == 1
     assert run_once_body["counts"]["blocked"] >= 1
@@ -1309,6 +1326,11 @@ def test_mission_store_run_once_uses_bounded_runtime_path(monkeypatch, tmp_path:
     result = mission_run_queue_once(limit=10, actor="test.missions.store", note="store queue run")
     assert result["ok"] is True
     assert result["status"] == "succeeded"
+    assert result["request"] == {
+        "actor": "test.missions.store",
+        "note": "store queue run",
+        "limit": 10,
+    }
     assert result["advanced"] == 1
     mission_result = next(item for item in result["results"] if item["mission_id"] == mission_id)
     assert mission_result["applied"] is True

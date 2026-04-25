@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from francis.api.routes._operator_posture import posture_write_guard
+from francis.governance.redaction import redact_secret_text
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
@@ -21,6 +22,18 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
+
+
+def _queue_run_request(actor: Any, note: Any, limit: int) -> dict[str, object]:
+    return {
+        "actor": _redact_free_text(actor) or "missions.runner",
+        "note": _redact_free_text(note) or "mission_queue_run_once",
+        "limit": max(1, int(limit)),
+    }
 
 
 def _mission_write_posture_guard(action_label: str) -> str:
@@ -976,6 +989,10 @@ def tick_missions(payload: MissionTickManyIn) -> dict[str, object]:
 
 @router.post("/run_once")
 def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
+    safe_limit = max(1, min(int(payload.limit), 5000))
+    actor = _safe_str(payload.actor).strip() or "missions.runner"
+    note = _safe_str(payload.note).strip() or "mission_queue_run_once"
+    request = _queue_run_request(actor, note, safe_limit)
     blocked_reason = _mission_write_posture_guard("running the mission queue")
     if blocked_reason:
         return {
@@ -992,12 +1009,11 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             "counts": {},
             "status": "blocked",
             "error": blocked_reason,
+            "request": request,
         }
     try:
-        safe_limit = max(1, min(int(payload.limit), 5000))
-        actor = _safe_str(payload.actor).strip() or "missions.runner"
-        note = _safe_str(payload.note).strip() or "mission_queue_run_once"
         result = mission_runtime.run_queue_once(limit=safe_limit, actor=actor, note=note)
+        result["request"] = request
         result_items = result.get("results") if isinstance(result.get("results"), list) else []
         projection_cache: dict[str, dict[str, Any]] = {}
         for item in result_items:
@@ -1026,6 +1042,7 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
             "counts": {},
             "status": "failed",
             "error": error,
+            "request": request,
         }
 
 

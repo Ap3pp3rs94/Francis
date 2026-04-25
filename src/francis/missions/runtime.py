@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from francis.governance.redaction import redact_secret_text
 import francis.missions.store as mission_store
 from francis.operations import runtime as operations_runtime
 
@@ -20,6 +21,18 @@ def _queue_run_error(errors: list[dict[str, object]]) -> str:
         return ""
     first = errors[0]
     return _safe_str(first.get("error") or first.get("message")).strip() or "mission_queue_run_failed"
+
+
+def _redact_free_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value).strip())
+
+
+def _queue_run_request(actor: Any, note: Any, limit: int) -> dict[str, object]:
+    return {
+        "actor": _redact_free_text(actor) or "missions.runner",
+        "note": _redact_free_text(note) or "mission_queue_run_once",
+        "limit": max(1, int(limit)),
+    }
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -296,6 +309,7 @@ def run_queue_once(
         "errors": errors,
         "counts": counts,
         "status": status,
+        "request": _queue_run_request(actor, note, safe_limit),
     }
     if errors:
         response["error"] = _queue_run_error(errors)

@@ -762,6 +762,25 @@ to operators:
   memory-write behavior changed; this only makes the queue-run envelope truthful.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run request identity visibility. This advances the
+active `Phase 2 / P2_IDENTITY -> P7_EXECUTION -> P9_OBSERVABILITY ->
+P1_INTERFACE` line by making queue-run envelopes identify the bounded request
+that caused the pass:
+
+- `src/francis/api/routes/missions.py`, `src/francis/missions/runtime.py`, and
+  `src/francis/missions/store.py` now return a bounded `request` projection with
+  redacted `actor`, redacted `note`, and effective `limit` for successful,
+  blocked, and failed queue-run responses.
+- `apps/chat_ui/src/missions/index.ts` now preserves that request projection
+  without materializing absent optional fields.
+- `apps/chat_ui/src/App.tsx` now renders queue-run actor, limit, and note inside
+  the immediate queue-run summary when returned by the backend.
+- `tests/test_api_missions.py` now proves request identity is present on success,
+  blocked, and runtime-failure paths and that secret-like note text is redacted.
+- No queue selection, mission mutation, approval decision, shell, policy, or
+  memory-write behavior changed; this is bounded request identity visibility.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1980,6 +1999,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run request identity visibility slice:
+
+- `pytest tests/test_api_missions.py::test_mission_mutation_routes_are_blocked_in_observe_mode tests/test_api_missions.py::test_mission_run_once_reports_failed_status_for_runtime_errors tests/test_api_missions.py::test_mission_run_once_advances_safe_queue_actions tests/test_api_missions.py::test_mission_run_once_executes_linked_queued_operation tests/test_api_missions.py::test_mission_store_run_once_uses_bounded_runtime_path -q`
+  Result: `5 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run top-level status truth slice:
 

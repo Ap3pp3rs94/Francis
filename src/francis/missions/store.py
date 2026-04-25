@@ -180,6 +180,14 @@ def _queue_run_error(errors: list[dict[str, Any]]) -> str:
     return _redact_free_text(first.get("error") or first.get("message")) or "mission_queue_run_failed"
 
 
+def _queue_run_request(actor: Any, note: Any, limit: int) -> dict[str, Any]:
+    return {
+        "actor": _redact_free_text(actor) or "missions.runner",
+        "note": _redact_free_text(note) or "mission_queue_run_once",
+        "limit": max(1, int(limit)),
+    }
+
+
 def _redact_meta(value: Any) -> dict[str, Any]:
     return redact_governed_metadata(value)
 
@@ -1611,6 +1619,7 @@ def run_queue_once(
             "counts": counts,
             "processed": len(records),
             "status": status,
+            "request": _queue_run_request(actor, note or "mission_queue_run_once", safe_limit),
         }
         if errors:
             response["error"] = _queue_run_error(errors)
