@@ -78,6 +78,13 @@ replace inline secret-like values with redacted HMAC-backed sealed values before
 approval records or artifacts are written. Replays with different secret values
 still produce `approval_payload_mismatch` instead of reusing the prior approval.
 
+As of `2026-04-25`, plugin execution responses redact secret-like receipt output
+before returning it to API callers. The plugin handler still receives the raw
+approved input for execution, but returned `output`, `receipt.output`, and
+`receipt.sandbox.output` are normalized through the governed redaction contract,
+so generated echo-style plugin responses do not turn approved secret-bearing
+inputs into operator-facing secret replay.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

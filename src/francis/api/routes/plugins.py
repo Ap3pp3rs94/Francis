@@ -16,7 +16,11 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
-from francis.governance.redaction import redact_governed_metadata, seal_governed_approval_value
+from francis.governance.redaction import (
+    redact_governed_metadata,
+    redact_governed_value,
+    seal_governed_approval_value,
+)
 from francis.kernel.paths import data_dir, repo_root
 from francis.plugin_factory.spec_builder import build_plugin
 from francis.plugin_system import (
@@ -537,6 +541,11 @@ def _plugin_run_approval_id(payload: "PluginRunIn") -> str:
 
 def _normalize_approval_value(value: Any) -> Any:
     return seal_governed_approval_value(value)
+
+
+def _redact_plugin_receipt(receipt: Any) -> dict[str, Any]:
+    redacted = redact_governed_value(receipt)
+    return redacted if isinstance(redacted, dict) else {}
 
 
 def _plugin_approval_meta(meta: Any) -> dict[str, Any]:
@@ -2216,7 +2225,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                 }
 
         dry_run = _to_bool((payload.meta or {}).get("dry_run"), default=False)
-        receipt = _execute_plugin_action(current, capability, payload.input, dry_run=dry_run)
+        receipt = _redact_plugin_receipt(_execute_plugin_action(current, capability, payload.input, dry_run=dry_run))
         current["updated_ts"] = _now_s()
         _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
         _save_registry_and_catalog(registry)

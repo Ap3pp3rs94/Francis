@@ -474,6 +474,29 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
     assert mismatched_body["error"] == "approval_payload_mismatch"
     assert str(mismatched_body["approval_id"]) != approval_id
 
+    refreshed_approval_id = str(mismatched_body["approval_id"])
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    executed = client.post(
+        "/plugins/run",
+        json={
+            "id": plugin_id,
+            "action": "deploy",
+            "approval_id": refreshed_approval_id,
+            "input": {"target": "prod", "api_key": different_key, "token_count": 3},
+        },
+    )
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["output"]["echo"]["api_key"] == "[REDACTED:secret]"
+    assert executed_body["receipt"]["output"]["echo"]["api_key"] == "[REDACTED:secret]"
+    assert executed_body["receipt"]["sandbox"]["output"]["echo"]["api_key"] == "[REDACTED:secret]"
+    assert executed_body["output"]["echo"]["token_count"] == 3
+    assert different_key not in json.dumps(executed_body, ensure_ascii=False)
+
 
 def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
