@@ -682,6 +682,20 @@ by keeping the immediate queue-run result tied to the local mission receipt trai
   is a read-only operator-truth surface.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run trace posture. This advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY -> P1_INTERFACE` line
+by making immediate queue-run results show the trace-bearing receipt summary:
+
+- `apps/chat_ui/src/App.tsx` now carries `receipt_summary` into mission queue-run
+  result cards and renders receipt task, receipt status, receipt gate,
+  receipt approval, trace id, latest run event, run status, and run time when
+  present.
+- `apps/chat_ui/src/missions/index.test.ts` now asserts the queue-run client
+  preserves the trace and latest-run receipt fields consumed by the UI.
+- No new execution, approval, shell, policy, or memory-write path was added; this
+  only exposes already-returned receipt metadata.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1900,6 +1914,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run trace posture slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `24 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run receipt continuity slice:
 

@@ -911,7 +911,10 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.run_ledger_count, 2);
     assert.equal(response.results?.[0]?.receipt_summary?.current_operation_id, "tsk_ready");
     assert.equal(response.results?.[0]?.receipt_summary?.current_gate, "approvals_gate");
+    assert.equal(response.results?.[0]?.receipt_summary?.current_trace_id, "trace_ready");
     assert.equal(response.results?.[0]?.receipt_summary?.latest_run_event, "governance_hold");
+    assert.equal(response.results?.[0]?.receipt_summary?.latest_run_status, "queued");
+    assert.equal(response.results?.[0]?.receipt_summary?.latest_run_ts, "2026-04-15T12:20:00Z");
   } finally {
     restoreFetch();
   }

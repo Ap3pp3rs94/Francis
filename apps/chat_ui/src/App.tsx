@@ -11,7 +11,7 @@ import {
   missionRecoveryTargetId,
   presentMissionQueue,
 } from "./missions";
-import type { MissionCurrentTask, MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
+import type { MissionCurrentTask, MissionDetail, MissionLoopState, MissionQueueItem, MissionReceiptSummary } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
 import type { PluginRef, PluginRunResponse, PluginToolRef, PluginToolRunRequest } from "./plugin_browser";
@@ -3131,6 +3131,7 @@ function SystemPanel(props: {
       nextStep?: string;
       queueItem?: MissionQueueItem;
       currentTask?: MissionCurrentTask;
+      receiptSummary?: MissionReceiptSummary;
       handoffAction?: string;
       handoffDetail?: string;
       historyCount?: number;
@@ -4046,6 +4047,7 @@ function SystemPanel(props: {
           nextStep: item.next_step,
           queueItem: item.queue_item,
           currentTask: item.current_task,
+          receiptSummary: item.receipt_summary,
           handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
           handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
           historyCount: item.history_count,
@@ -6943,6 +6945,15 @@ function SystemPanel(props: {
                       const queueLatestHistoryEvent = safeString(queueItem?.latest_history_event).trim();
                       const queueLatestHistoryAt = mixedLocaleTime(queueItem?.latest_history_ts);
                       const queueHistoryTail = Array.isArray(queueItem?.history_tail) ? queueItem.history_tail.slice(-2) : [];
+                      const queueReceiptSummary = item.receiptSummary;
+                      const queueReceiptOperationId = safeString(queueReceiptSummary?.current_operation_id).trim();
+                      const queueReceiptOperationStatus = safeString(queueReceiptSummary?.current_operation_status).trim();
+                      const queueReceiptGate = safeString(queueReceiptSummary?.current_gate).trim();
+                      const queueReceiptApprovalId = safeString(queueReceiptSummary?.current_approval_id).trim();
+                      const queueReceiptTraceId = safeString(queueReceiptSummary?.current_trace_id).trim();
+                      const queueReceiptLatestRunEvent = safeString(queueReceiptSummary?.latest_run_event).trim();
+                      const queueReceiptLatestRunStatus = safeString(queueReceiptSummary?.latest_run_status).trim();
+                      const queueReceiptLatestRunAt = mixedLocaleTime(queueReceiptSummary?.latest_run_ts);
                       return (
                       <div key={`mission-queue-summary-${item.missionId || item.operationId || index}`} style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -7028,6 +7039,67 @@ function SystemPanel(props: {
                             {queueCurrentTaskSource ? (
                               <>
                                 {" / "}source=<code>{queueCurrentTaskSource}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {queueReceiptOperationId ||
+                        queueReceiptOperationStatus ||
+                        queueReceiptGate ||
+                        queueReceiptApprovalId ||
+                        queueReceiptTraceId ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {queueReceiptOperationId ? (
+                              <>
+                                receipt_task=<code>{queueReceiptOperationId}</code>
+                              </>
+                            ) : null}
+                            {queueReceiptOperationStatus ? (
+                              <>
+                                {queueReceiptOperationId ? " / " : ""}receipt_status=<code>{queueReceiptOperationStatus}</code>
+                              </>
+                            ) : null}
+                            {queueReceiptGate ? (
+                              <>
+                                {(queueReceiptOperationId || queueReceiptOperationStatus) ? " / " : ""}receipt_gate=
+                                <code>{queueReceiptGate}</code>
+                              </>
+                            ) : null}
+                            {queueReceiptApprovalId ? (
+                              <>
+                                {(queueReceiptOperationId || queueReceiptOperationStatus || queueReceiptGate) ? " / " : ""}
+                                receipt_approval=<code>{queueReceiptApprovalId}</code>
+                              </>
+                            ) : null}
+                            {queueReceiptTraceId ? (
+                              <>
+                                {(queueReceiptOperationId ||
+                                queueReceiptOperationStatus ||
+                                queueReceiptGate ||
+                                queueReceiptApprovalId)
+                                  ? " / "
+                                  : ""}
+                                trace=<code>{queueReceiptTraceId}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {queueReceiptLatestRunEvent || queueReceiptLatestRunStatus || queueReceiptLatestRunAt ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {queueReceiptLatestRunEvent ? (
+                              <>
+                                latest_run=<code>{queueReceiptLatestRunEvent}</code>
+                              </>
+                            ) : null}
+                            {queueReceiptLatestRunStatus ? (
+                              <>
+                                {queueReceiptLatestRunEvent ? " / " : ""}run_status=<code>{queueReceiptLatestRunStatus}</code>
+                              </>
+                            ) : null}
+                            {queueReceiptLatestRunAt ? (
+                              <>
+                                {(queueReceiptLatestRunEvent || queueReceiptLatestRunStatus) ? " / " : ""}run_at=
+                                <code>{queueReceiptLatestRunAt}</code>
                               </>
                             ) : null}
                           </div>
