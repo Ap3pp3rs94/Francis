@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Ap3pp3rs94/Francis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ap3pp3rs94/Francis/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
-![Build Posture](https://img.shields.io/badge/build-Phase%202-orange)
+![Build Posture](https://img.shields.io/badge/build-ledger--grounded-orange)
 ![Local First](https://img.shields.io/badge/posture-local--first-brightgreen)
 ![Governed](https://img.shields.io/badge/actions-policy--guarded-2f6f9f)
 
@@ -28,14 +28,14 @@ If you are interested in trustworthy local AI systems, governed automation, audi
 
 ## Current Build Posture
 
-Francis is in **Phase 2**. The strongest shipped posture is a governed runtime spine, not a finished operator product.
+Francis should be read from current repo truth, not from a hard-coded phase label. The strongest shipped posture is a governed runtime spine, not a finished operator product.
 
 - `P9_OBSERVABILITY` is the strongest plane today.
 - `P3_GOVERNANCE` is materially real.
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Current priority is the end-to-end `plan -> gate -> execute -> trace -> memory` path, then making that path clear in the operator UI.
 
-Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order.
+Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 
 ## ORB Runtime Model
 
@@ -140,6 +140,6 @@ Francis is proprietary and all rights are reserved by Austin Peppers. Viewing, c
 
 ## GitHub Engagement
 
-This repository is public, but it is not looking for speculative feature sprawl. Useful issues and PRs should improve one of the active Phase 2 surfaces: governance, identity, observability, mission continuity, memory contracts, local execution, or truthful operator UI.
+This repository is public, but it is not looking for speculative feature sprawl. Useful issues and PRs should improve one of the active roadmap surfaces reflected in the ledger and build manifest: governance, identity, observability, mission continuity, memory contracts, local execution, or truthful operator UI.
 
 Good contributions name the roadmap surface, describe the trust boundary involved, include validation that actually ran, and avoid claiming scaffolded behavior as finished capability.

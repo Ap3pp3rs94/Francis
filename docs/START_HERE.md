@@ -6,19 +6,19 @@ This page is a first-reader route for GitHub visitors. It explains where the rep
 
 ## Current Truth
 
-Francis is in Phase 2. The strongest shipped posture is a governed runtime spine: observability and governance are more mature than the product-facing operator surface.
+Francis's current posture should be read from repo truth, not from a fixed phase label. The strongest shipped posture is a governed runtime spine: observability and governance are more mature than the product-facing operator surface.
 
 - Strongest today: `P9_OBSERVABILITY` and `P3_GOVERNANCE`
 - Partial and active: `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY`
 - Current priority: make the `plan -> gate -> execute -> trace -> memory` loop real, visible, and truthful
 
-Use [docs/operations/COMPLETION_LEDGER.md](operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](canonical/BUILD_MANIFEST.md) for target state and build order.
+Use [docs/operations/COMPLETION_LEDGER.md](operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; do not lock a build pass to one phase when the ledger and roadmap indicate a different active priority.
 
 ## Read This Path
 
 1. [README.md](../README.md) for the public project overview, quick start, and validation commands.
 2. [docs/operations/COMPLETION_LEDGER.md](operations/COMPLETION_LEDGER.md) for what is materially true in the repo.
-3. [docs/canonical/BUILD_MANIFEST.md](canonical/BUILD_MANIFEST.md) for the Phase 2 control plane and quality gates.
+3. [docs/canonical/BUILD_MANIFEST.md](canonical/BUILD_MANIFEST.md) for the current control plane and quality gates.
 4. [docs/PLANES.md](PLANES.md) and [meta/plane_map.yaml](../meta/plane_map.yaml) for ORB plane responsibilities and transition rules.
 5. [AGENTS.md](../AGENTS.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) before making changes.
 
@@ -36,7 +36,7 @@ Do not treat scaffolding as finished capability. Do not add fake progress signal
 
 ## Useful Contribution Areas
 
-High-value Phase 2 contributions improve one of these surfaces:
+High-value contributions improve one of the active roadmap surfaces reflected in the ledger and build manifest:
 
 - governance and approval contracts
 - observer/readiness and receipt-backed truth
