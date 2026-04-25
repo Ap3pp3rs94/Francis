@@ -222,6 +222,13 @@ redacts the chat objective before mission and conversation persistence, and
 returns the mission detail loop envelope so the interface can see the resulting
 plan-stage handoff without claiming execution or autonomous routing.
 
+As of `2026-04-25`, `/chat/ws` accepts the structured chat message envelope that
+the browser chat client already sends, extracts only `message.content`, and
+routes explicit mission ingress through the same guarded mission declaration
+path. Mission ingress replies are returned as structured assistant events with
+bounded mission loop metadata; ordinary WebSocket fallback replies remain plain
+text for compatibility.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is

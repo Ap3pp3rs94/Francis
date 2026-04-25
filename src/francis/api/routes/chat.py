@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -25,6 +26,59 @@ def health() -> dict[str, object]:
 class ChatIn(BaseModel):
     message: str
     use_llm: bool = False
+
+
+def _chat_text_from_wire(raw: str) -> str:
+    if not isinstance(raw, str):
+        return str(raw)
+
+    stripped = raw.strip()
+    if not stripped:
+        return ""
+
+    try:
+        decoded = json.loads(stripped)
+    except Exception:
+        return raw
+    if not isinstance(decoded, dict):
+        return raw
+
+    message = decoded.get("message") if isinstance(decoded.get("message"), dict) else decoded
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content
+    return raw
+
+
+def _mission_ingress_ws_event(payload: dict[str, object]) -> str:
+    reply = str(payload.get("reply") or "")
+    meta = {
+        key: payload[key]
+        for key in (
+            "ok",
+            "mode",
+            "status",
+            "error",
+            "mission_id",
+            "mission",
+            "queue_item",
+            "loop_state",
+            "current_task",
+            "receipt_summary",
+        )
+        if key in payload
+    }
+    return json.dumps(
+        {
+            "type": "message",
+            "message": {
+                "role": "assistant",
+                "content": reply,
+                "meta": meta,
+            },
+        },
+        ensure_ascii=True,
+    )
 
 
 def _mission_ingress_reply(payload: ChatIn) -> dict[str, object] | None:
@@ -121,7 +175,12 @@ async def ws(websocket: WebSocket) -> None:
     await manager.connect(websocket)
     try:
         while True:
-            msg = await websocket.receive_text()
+            raw_msg = await websocket.receive_text()
+            msg = _chat_text_from_wire(raw_msg)
+            mission_reply = _mission_ingress_reply(ChatIn(message=msg, use_llm=False))
+            if mission_reply is not None:
+                await websocket.send_text(_mission_ingress_ws_event(mission_reply))
+                continue
             reply = handle(msg, use_llm=False)
             await websocket.send_text(reply)
     except WebSocketDisconnect:

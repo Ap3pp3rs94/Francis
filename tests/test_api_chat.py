@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -80,3 +81,48 @@ def test_chat_mission_command_respects_observe_mode(monkeypatch, tmp_path: Path)
 
     mission_root = data_root / "missions"
     assert not mission_root.exists() or not any(mission_root.iterdir())
+
+
+def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    with client.websocket_connect("/chat/ws") as websocket:
+        websocket.send_text(
+            json.dumps(
+                {
+                    "type": "message",
+                    "message": {
+                        "role": "user",
+                        "content": "mission: Preserve websocket mission token=chatwssecret123",
+                        "ts": 1777160000,
+                    },
+                }
+            )
+        )
+        event = json.loads(websocket.receive_text())
+
+    assert event["type"] == "message"
+    assert event["message"]["role"] == "assistant"
+    assert "Mission " in event["message"]["content"]
+    meta = event["message"]["meta"]
+    mission_id = str(meta["mission_id"])
+    assert meta["ok"] is True
+    assert meta["mode"] == "mission_ingress"
+    assert meta["status"] == "queued"
+    assert meta["mission"]["id"] == mission_id
+    assert meta["mission"]["objective"] == "Preserve websocket mission token=[REDACTED:secret]"
+    assert meta["queue_item"]["recommended_action"] == "create_first_operation"
+    assert meta["loop_state"]["active_stage"] == "plan"
+    assert meta["loop_state"]["interface"]["status"] == "available"
+    assert meta["current_task"]["handoff_action"] == "link_operation"
+
+    record_text = (data_root / "missions" / mission_id / "record.json").read_text(encoding="utf-8")
+    ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
+    assert "chatwssecret123" not in record_text
+    assert "chatwssecret123" not in ledger_text
