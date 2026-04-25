@@ -23,6 +23,27 @@ def _queue_run_error(errors: list[dict[str, object]]) -> str:
     return _safe_str(first.get("error") or first.get("message")).strip() or "mission_queue_run_failed"
 
 
+def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, object]) -> dict[str, object]:
+    record: dict[str, object] = {
+        "mission_id": mission_id,
+        "error": _safe_str(outcome.get("error")).strip() or "advance_failed",
+    }
+    fields = {
+        "action": action,
+        "status": outcome.get("status"),
+        "operation_id": outcome.get("operation_id"),
+        "approval_id": outcome.get("approval_id"),
+        "gate": outcome.get("gate"),
+        "next_step": outcome.get("next_step"),
+        "message": outcome.get("message"),
+    }
+    for key, value in fields.items():
+        text = _safe_str(value).strip()
+        if text:
+            record[key] = text
+    return record
+
+
 def _redact_free_text(value: Any) -> str:
     return redact_secret_text(_safe_str(value).strip())
 
@@ -276,9 +297,7 @@ def run_queue_once(
         if bool(outcome.get("applied")):
             advanced += 1
         elif outcome.get("ok") is False:
-            errors.append(
-                {"mission_id": mission_id, "error": _safe_str(outcome.get("error")).strip() or "advance_failed"}
-            )
+            errors.append(_queue_run_error_record(mission_id, action, outcome))
 
     queue_items = mission_store.mission_queue_items(limit=safe_limit, include_terminal=False)
     failed_items = mission_store.failed_queue_items(limit=min(safe_limit, 20))

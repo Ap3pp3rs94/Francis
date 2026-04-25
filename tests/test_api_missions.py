@@ -427,6 +427,62 @@ def test_mission_run_once_reports_failed_status_for_runtime_errors(monkeypatch, 
     assert body["processed"] == 0
 
 
+def test_mission_run_once_error_records_preserve_advance_context(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.missions import runtime as mission_runtime
+
+    client = TestClient(create_app())
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Failed queue advance should keep actionable context",
+            "summary": "Queue-run errors should preserve bounded handoff fields for the UI.",
+            "requester_id": "test.missions.queue",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    def fail_advance(target_mission_id: str, **_: object) -> dict[str, object]:
+        assert target_mission_id == mission_id
+        return {
+            "ok": False,
+            "applied": False,
+            "action": "create_first_operation",
+            "status": "blocked",
+            "operation_id": "tsk_failed_context",
+            "approval_id": "apr_failed_context",
+            "gate": "approvals_gate",
+            "next_step": "review_pending_approval",
+            "message": "Approval review is required before execution can continue.",
+            "error": "advance_failed_context",
+        }
+
+    monkeypatch.setattr(mission_runtime, "advance_mission", fail_advance)
+
+    run_once = client.post("/missions/run_once", json={"actor": "test.missions.queue", "limit": 10})
+    assert run_once.status_code == 200
+    body = run_once.json()
+    assert body["ok"] is False
+    assert body["status"] == "failed"
+    assert body["error"] == "advance_failed_context"
+    error = body["errors"][0]
+    assert error["mission_id"] == mission_id
+    assert error["error"] == "advance_failed_context"
+    assert error["action"] == "create_first_operation"
+    assert error["status"] == "blocked"
+    assert error["operation_id"] == "tsk_failed_context"
+    assert error["approval_id"] == "apr_failed_context"
+    assert error["gate"] == "approvals_gate"
+    assert error["next_step"] == "review_pending_approval"
+    assert error["message"] == "Approval review is required before execution can continue."
+
+
 def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

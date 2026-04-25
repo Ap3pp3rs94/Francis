@@ -781,6 +781,21 @@ that caused the pass:
   memory-write behavior changed; this is bounded request identity visibility.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run failure context parity. This advances the
+active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE` line by
+making runtime queue-run failure records carry the same bounded handoff context
+the UI already knows how to render:
+
+- `src/francis/missions/runtime.py` now enriches failed queue-advance error
+  records with action, status, operation id, approval id, gate, next step, and
+  message when those fields are returned by the failed advance outcome.
+- `tests/test_api_missions.py` now proves `/missions/run_once` preserves that
+  context in the top-level `errors` list for operator actionability.
+- No queue selection, mission mutation, approval decision, shell, policy, or
+  memory-write behavior changed; this only keeps existing failure context
+  attached to the immediate queue-run result.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1999,6 +2014,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run failure context parity slice:
+
+- `pytest tests/test_api_missions.py::test_mission_run_once_error_records_preserve_advance_context tests/test_api_missions.py::test_mission_run_once_reports_failed_status_for_runtime_errors tests/test_api_missions.py::test_mission_run_once_advances_safe_queue_actions -q`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run request identity visibility slice:
 
