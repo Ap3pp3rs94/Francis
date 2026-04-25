@@ -7200,6 +7200,19 @@ function SystemPanel(props: {
                               Review approval
                             </button>
                           ) : null}
+                          {queueReceiptApprovalId && queueReceiptApprovalId !== queueApprovalId ? (
+                            <button
+                              style={buttonStyle}
+                              onClick={() =>
+                                props.onOpenApprovals(queueReceiptApprovalId, {
+                                  missionId: item.missionId,
+                                  operationId: queueReceiptOperationId || queueOperationTargetId || undefined,
+                                })
+                              }
+                            >
+                              Review receipt approval
+                            </button>
+                          ) : null}
                           {item.missionId ? (
                             <button style={buttonStyle} onClick={() => inspectMission(item.missionId || "")}>
                               Inspect mission flow
@@ -7230,6 +7243,14 @@ function SystemPanel(props: {
                           queueLastAdvanceOperationId !== queueTargetId ? (
                             <button style={buttonStyle} onClick={() => props.onOpenOperation(queueLastAdvanceOperationId)}>
                               Open last advanced task
+                            </button>
+                          ) : null}
+                          {queueReceiptOperationId &&
+                          queueReceiptOperationId !== item.operationId &&
+                          queueReceiptOperationId !== queueTargetId &&
+                          queueReceiptOperationId !== queueLastAdvanceOperationId ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(queueReceiptOperationId)}>
+                              Open receipt task
                             </button>
                           ) : null}
                         </div>

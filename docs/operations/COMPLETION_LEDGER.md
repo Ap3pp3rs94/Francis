@@ -696,6 +696,22 @@ by making immediate queue-run results show the trace-bearing receipt summary:
   only exposes already-returned receipt metadata.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run receipt target reachability. This advances the
+active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P9_OBSERVABILITY ->
+P1_INTERFACE` line by making receipt-only approval and task references actionable
+from the immediate queue-run result:
+
+- `apps/chat_ui/src/App.tsx` now offers `Review receipt approval` when a
+  queue-run receipt summary carries an approval id not already exposed by the
+  queue item/result envelope.
+- `apps/chat_ui/src/App.tsx` now offers `Open receipt task` when the receipt
+  summary's current operation is not already reachable through the linked task,
+  action target, or last-advanced task buttons.
+- No new mutation, approval decision, execution, shell, policy, or memory-write
+  behavior was added; this only routes the operator to existing governed
+  inspection panels.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -1914,6 +1930,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run receipt target reachability slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `24 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run trace posture slice:
 
