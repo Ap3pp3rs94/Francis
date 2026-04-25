@@ -33,7 +33,7 @@ INTERNAL_ALWAYS_KEEP: set[Path] = {
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Restore Francis working tree from an allowlist")
-    parser.add_argument("--root", type=Path, default=Path("C:/Francis"), help="Repo root")
+    parser.add_argument("--root", type=Path, default=Path("D:/francis"), help="Repo root")
     parser.add_argument("--allowlist", type=Path, default=DEFAULT_ALLOWLIST)
     parser.add_argument("--dry-run", action="store_true", default=True, help="Only report changes")
     parser.add_argument("--apply", action="store_true", help="Apply the restore actions")

@@ -30,7 +30,7 @@ version: 1
 meta:
   owner: "francis"
   intent: "code_specialization"
-  repo_root_hint: "C:/Francis"
+  repo_root_hint: "D:/francis"
   notes:
     - "Defaults tuned for repo-scale refactors and safe patch workflows."
     - "No secrets in code outputs."

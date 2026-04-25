@@ -15,7 +15,7 @@ $markerPath = Join-Path $Root '.francis-mirror'
 if (Test-Path -LiteralPath $markerPath) {
   $message = @"
 This checkout is marked mirror-only and must not be used for runtime operations.
-Primary runtime repo: C:\Francis
+Primary runtime repo: D:\francis
 Current checkout: $Root
 Marker: $markerPath
 Remove the marker only if you intentionally promote this checkout.

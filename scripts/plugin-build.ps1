@@ -1,17 +1,17 @@
 <#
-C:\Francis\scripts\plugin-build.ps1
+D:\francis\scripts\plugin-build.ps1
 
 Generic “plugin build” runner for a Node-based plugin project (optionally validates ai-plugin.json + OpenAPI YAML/JSON).
 Creates logs + a build report + a zipped artifact.
 
 Defaults:
-  Root        : C:\Francis
-  ProjectPath : C:\Francis\plugin
-  Output      : C:\Francis\data\artifacts\plugins
+  Root        : D:\francis
+  ProjectPath : D:\francis\plugin
+  Output      : D:\francis\data\artifacts\plugins
 
 Examples:
   pwsh -File .\plugin-build.ps1
-  pwsh -File .\plugin-build.ps1 -ProjectPath C:\Francis\plugins\my-plugin -All
+  pwsh -File .\plugin-build.ps1 -ProjectPath D:\francis\plugins\my-plugin -All
   pwsh -File .\plugin-build.ps1 -Clean -Install -Build -Pack
   pwsh -File .\plugin-build.ps1 -Mode Build
   pwsh -File .\plugin-build.ps1 -Mode Pack -SkipValidate
@@ -37,7 +37,7 @@ param(
   [ValidateSet('All','Clean','Install','Lint','Test','Build','Pack')]
   [string]$Mode = 'All',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
   [string]$ProjectPath = '',
   [string]$OutputDir = '',
 

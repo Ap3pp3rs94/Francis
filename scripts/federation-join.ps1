@@ -7,7 +7,7 @@
     - Joins this machine to an AD domain (Add-Computer)
     - Optional: restart after join
     - Writes logs + JSON report under:
-        C:\Francis\data\logs\operations\federation_join\
+        D:\francis\data\logs\operations\federation_join\
 
   SAFE DEFAULTS:
     - DRY RUN unless -Execute is provided
@@ -15,28 +15,28 @@
 
   Examples:
     # Dry run (no changes)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\federation-join.ps1 -DomainName corp.example.com
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\federation-join.ps1 -DomainName corp.example.com
 
     # Join using interactive credential prompt + restart
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\federation-join.ps1 -Execute `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\federation-join.ps1 -Execute `
       -DomainName corp.example.com -Credential (Get-Credential) -Restart
 
     # Join and place in a specific OU
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\federation-join.ps1 -Execute `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\federation-join.ps1 -Execute `
       -DomainName corp.example.com -OUPath "OU=Workstations,OU=NYC,DC=corp,DC=example,DC=com" -Credential (Get-Credential) -Restart
 
     # Stage DNS (use your DC/DNS IPs), then join
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\federation-join.ps1 -Execute `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\federation-join.ps1 -Execute `
       -DomainName corp.example.com -DnsServers 10.0.0.10,10.0.0.11 -Credential (Get-Credential) -Restart
 
     # Rename computer first (then join)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\federation-join.ps1 -Execute `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\federation-join.ps1 -Execute `
       -DomainName corp.example.com -NewComputerName POS-TERM-014 -Credential (Get-Credential) -Restart
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
 param(
-  [Parameter()][string]$Root = "C:\Francis",
+  [Parameter()][string]$Root = "D:\francis",
   [Parameter()][string]$Tag  = "federation_join",
 
   # Safety latch: nothing changes unless this is set

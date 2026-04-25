@@ -7,16 +7,16 @@
   - Compatible with Windows PowerShell 5.1 + PowerShell 7+ (no ?? operator)
 
   Defaults:
-    Root: C:\Francis
-    Output: C:\Francis\data\logs\operations\file_sanity_<timestamp>.csv
+    Root: D:\francis
+    Output: D:\francis\data\logs\operations\file_sanity_<timestamp>.csv
 
   Run:
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\credential-delegate.ps1
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\credential-delegate.ps1
 #>
 
 [CmdletBinding()]
 param(
-  [string]$Root = "C:\Francis",
+  [string]$Root = "D:\francis",
 
   # Where the report goes (default stays under $Root)
   [string]$OutDir = "",

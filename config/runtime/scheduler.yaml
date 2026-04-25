@@ -16,9 +16,9 @@
 #    - Works in local, edge, and federated deployments.
 #
 #  Primary data paths (runtime):
-#    - State:  C:\Francis\data\state\runtime\**
-#    - Logs:   C:\Francis\data\logs\operations\francis.jsonl
-#    - Jobs:   C:\Francis\data\artifacts\runbooks\** (optional exports)
+#    - State:  D:\francis\data\state\runtime\**
+#    - Logs:   D:\francis\data\logs\operations\francis.jsonl
+#    - Jobs:   D:\francis\data\artifacts\runbooks\** (optional exports)
 #
 # ==============================================================================
 

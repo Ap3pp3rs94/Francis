@@ -102,7 +102,7 @@ function buildProxy(target: string, ws: boolean): ProxyOptions {
 export default defineConfig(({ mode, command }): UserConfig => {
   /**
    * Repo layout:
-   *   C:\Francis\apps\chat_ui\vite.config.ts
+   *   D:\francis\apps\chat_ui\vite.config.ts
    * Repo root is two parents up.
    */
   const repoRoot = path.resolve(__dirname, "..", "..");

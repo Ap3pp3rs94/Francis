@@ -7,7 +7,7 @@
   SAFE DEFAULTS:
     - DRY RUN unless -Execute is provided
     - Uses ShouldProcess (supports -WhatIf / -Confirm)
-    - Logs everything under: C:\Francis\data\logs\operations\emergency_shutdown\
+    - Logs everything under: D:\francis\data\logs\operations\emergency_shutdown\
 
   Actions you can enable:
     - Stop specific services
@@ -18,24 +18,24 @@
 
   Examples:
     # Dry run (prints plan + writes report)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\emergency-shutdown.ps1
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\emergency-shutdown.ps1
 
     # Stop services + processes (execute)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\emergency-shutdown.ps1 -Execute `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\emergency-shutdown.ps1 -Execute `
       -ServiceName "MyAppService","W3SVC" -ProcessName "node","python" -Force
 
     # Containment: disable NICs (execute) - WARNING: you may lose remote connectivity
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\emergency-shutdown.ps1 -Execute -DisableNetwork
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\emergency-shutdown.ps1 -Execute -DisableNetwork
 
     # Full: stop stuff, disable NICs, then shutdown in 30 seconds
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\emergency-shutdown.ps1 -Execute `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\emergency-shutdown.ps1 -Execute `
       -ServiceName "MyAppService" -ProcessName "node" -DisableNetwork -Shutdown -DelaySeconds 30 -Force
 
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
 param(
-  [Parameter()][string]$Root = "C:\Francis",
+  [Parameter()][string]$Root = "D:\francis",
   [Parameter()][string]$Tag  = "emergency_shutdown",
 
   # Safety latch: nothing changes unless this is set

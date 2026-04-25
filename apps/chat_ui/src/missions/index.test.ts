@@ -769,7 +769,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           next_step: "approve_exact_action",
           trace_id: "trace_result",
           run_id: "run_ready",
-          artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_ready",
+          artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_ready",
           loop_state: {
             active_stage: "gate",
             handoff: {
@@ -794,7 +794,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             handoff_stage: "gate",
             handoff_action: "review_pending_approval",
             run_id: "run_ready",
-            artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_ready",
+            artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_ready",
             latest_receipt_event: "governance_hold",
             latest_receipt_status: "queued",
           },
@@ -818,7 +818,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
             current_approval_id: "apr_ready",
             current_trace_id: "trace_ready",
             current_run_id: "run_ready",
-            current_artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_ready",
+            current_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_ready",
             latest_run_event: "governance_hold",
             latest_run_status: "queued",
             latest_run_ts: "2026-04-15T12:20:00Z",
@@ -910,7 +910,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.next_step, "approve_exact_action");
     assert.equal(response.results?.[0]?.trace_id, "trace_result");
     assert.equal(response.results?.[0]?.run_id, "run_ready");
-    assert.equal(response.results?.[0]?.artifact_dir, "C:/Francis/data/artifacts/supervised_exec/apr_ready");
+    assert.equal(response.results?.[0]?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_ready");
     assert.equal(response.results?.[0]?.mission?.id, "mission_ready");
     assert.equal(response.results?.[0]?.loop_state?.active_stage, "gate");
     assert.equal(response.results?.[0]?.current_task?.source, "mission_meta");
@@ -920,7 +920,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.current_task?.approval_id, "apr_ready");
     assert.equal(response.results?.[0]?.current_task?.handoff_action, "review_pending_approval");
     assert.equal(response.results?.[0]?.current_task?.run_id, "run_ready");
-    assert.equal(response.results?.[0]?.current_task?.artifact_dir, "C:/Francis/data/artifacts/supervised_exec/apr_ready");
+    assert.equal(response.results?.[0]?.current_task?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_ready");
     assert.equal(response.results?.[0]?.current_task?.latest_receipt_status, "queued");
     assert.equal(response.results?.[0]?.handoff?.action, "review_pending_approval");
     assert.equal(response.results?.[0]?.handoff?.approval_id, "apr_ready");
@@ -933,7 +933,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.receipt_summary?.current_run_id, "run_ready");
     assert.equal(
       response.results?.[0]?.receipt_summary?.current_artifact_dir,
-      "C:/Francis/data/artifacts/supervised_exec/apr_ready",
+      "D:/francis/data/artifacts/supervised_exec/apr_ready",
     );
     assert.equal(response.results?.[0]?.receipt_summary?.latest_run_event, "governance_hold");
     assert.equal(response.results?.[0]?.receipt_summary?.latest_run_status, "queued");
@@ -1044,12 +1044,12 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
             name: "plugin.run",
             trace_id: "trace_loop",
             run_id: "run_loop",
-            artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_loop",
+            artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
             meta: {
               orb_plane: "P3_GOVERNANCE",
               approval_id: "apr_loop",
               run_id: "run_loop",
-              artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_loop",
+              artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
               governance: { gate: "approvals_gate", next_step: "review_pending_approval" },
             },
           },
@@ -1107,7 +1107,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         handoff_action: "review_pending_approval",
         trace_id: "trace_loop",
         run_id: "run_loop",
-        artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_loop",
+        artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         latest_receipt_event: "governance_hold",
         latest_receipt_status: "queued",
         latest_receipt_ts: "2024-03-09T16:00:01Z",
@@ -1123,7 +1123,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         current_approval_id: "apr_loop",
         current_trace_id: "trace_loop",
         current_run_id: "run_loop",
-        current_artifact_dir: "C:/Francis/data/artifacts/supervised_exec/apr_loop",
+        current_artifact_dir: "D:/francis/data/artifacts/supervised_exec/apr_loop",
         latest_run_event: "governance_hold",
         latest_run_status: "queued",
         latest_run_ts: "2024-03-09T16:00:01Z",
@@ -1232,7 +1232,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.current_task?.handoff_action, "review_pending_approval");
     assert.equal(response.current_task?.trace_id, "trace_loop");
     assert.equal(response.current_task?.run_id, "run_loop");
-    assert.equal(response.current_task?.artifact_dir, "C:/Francis/data/artifacts/supervised_exec/apr_loop");
+    assert.equal(response.current_task?.artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.current_task?.latest_receipt_event, "governance_hold");
     assert.equal(response.current_task?.latest_receipt_status, "queued");
     assert.equal(response.current_task?.latest_receipt_ts, "2024-03-09T16:00:01Z");
@@ -1245,7 +1245,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.receipt_summary?.current_approval_id, "apr_loop");
     assert.equal(response.receipt_summary?.current_trace_id, "trace_loop");
     assert.equal(response.receipt_summary?.current_run_id, "run_loop");
-    assert.equal(response.receipt_summary?.current_artifact_dir, "C:/Francis/data/artifacts/supervised_exec/apr_loop");
+    assert.equal(response.receipt_summary?.current_artifact_dir, "D:/francis/data/artifacts/supervised_exec/apr_loop");
     assert.equal(response.receipt_summary?.latest_run_event, "governance_hold");
     assert.equal(response.receipt_summary?.latest_history_event, "advance_receipt");
   } finally {

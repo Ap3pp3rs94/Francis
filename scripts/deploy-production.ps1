@@ -5,7 +5,7 @@
     Deploy a new "release" into a stable "current" directory with rollback, logging, and optional restarts.
 
   Layout (defaults):
-    C:\Francis\
+    D:\francis\
       app\
         current\                (active)
         releases\               (timestamped staged releases)
@@ -19,24 +19,24 @@
 
   Examples:
     # Deploy from zip:
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\deploy-production.ps1 `
-      -SourceType Zip -Source C:\Francis\staging\build.zip -ServiceName "FrancisSvc" `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\deploy-production.ps1 `
+      -SourceType Zip -Source D:\francis\staging\build.zip -ServiceName "FrancisSvc" `
       -HealthUrl "http://localhost:8080/health"
 
     # Deploy from folder (robocopy):
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\deploy-production.ps1 `
-      -SourceType Folder -Source C:\Francis\staging\build -IISSiteName "Francis" `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\deploy-production.ps1 `
+      -SourceType Folder -Source D:\francis\staging\build -IISSiteName "Francis" `
       -HealthUrl "http://localhost/health"
 
     # Dry run:
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\deploy-production.ps1 `
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\deploy-production.ps1 `
       -SourceType Zip -Source C:\temp\build.zip -WhatIf
 
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
 param(
-  [Parameter()][string]$Root = "C:\Francis",
+  [Parameter()][string]$Root = "D:\francis",
 
   [Parameter(Mandatory=$true)]
   [ValidateSet("Zip","Folder","Git")]

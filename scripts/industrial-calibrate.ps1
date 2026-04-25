@@ -18,30 +18,30 @@
 
   Output:
     - Logs + JSON report + CSV checks under:
-        C:\Francis\data\logs\operations\industrial_calibrate\
+        D:\francis\data\logs\operations\industrial_calibrate\
 
   Examples:
     # Dry run: gather info + checks only
-    pwsh -File C:\Francis\scripts\industrial-calibrate.ps1 -DomainName corp.example.com
+    pwsh -File D:\francis\scripts\industrial-calibrate.ps1 -DomainName corp.example.com
 
     # Apply baseline (power plan + sleep/hibernate + ensure services), then show results
-    pwsh -File C:\Francis\scripts\industrial-calibrate.ps1 -Execute `
+    pwsh -File D:\francis\scripts\industrial-calibrate.ps1 -Execute `
       -DomainName corp.example.com -PowerPlan HighPerformance -DisableSleep -DisableHibernate `
       -EnsureServices Spooler,W32Time -RestartIfNeeded
 
     # Stage DNS to DC/DNS IPs, then run connectivity checks
-    pwsh -File C:\Francis\scripts\industrial-calibrate.ps1 -Execute `
+    pwsh -File D:\francis\scripts\industrial-calibrate.ps1 -Execute `
       -DomainName corp.example.com -DnsServers 10.0.0.10,10.0.0.11 -EnsureServices W32Time `
       -TestTargets corp.example.com,fileserver01,printer01 -TestPorts "fileserver01:445","corp.example.com:389"
 
     # Set timezone + resync time (common for kiosks/pos)
-    pwsh -File C:\Francis\scripts\industrial-calibrate.ps1 -Execute `
+    pwsh -File D:\francis\scripts\industrial-calibrate.ps1 -Execute `
       -TimeZone "Eastern Standard Time" -NtpServer time.windows.com -ResyncTime
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
 param(
-  [Parameter()][string]$Root = "C:\Francis",
+  [Parameter()][string]$Root = "D:\francis",
   [Parameter()][string]$Tag  = "industrial_calibrate",
   [Parameter()][switch]$Execute,
 

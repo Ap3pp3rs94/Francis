@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\restore.ps1
+D:\francis\scripts\restore.ps1
 
 Purpose
   Restore a "baseline working state" for the Francis workspace after cleanup/reset:
@@ -20,13 +20,13 @@ Logging
 
 Examples
   # Show what would happen (no changes)
-  pwsh -File C:\Francis\scripts\restore.ps1 -Mode Minimal -WhatIf
+  pwsh -File D:\francis\scripts\restore.ps1 -Mode Minimal -WhatIf
 
   # Restore folders + check tooling + build plugin + pull models (requires Force for network)
-  pwsh -File C:\Francis\scripts\restore.ps1 -Mode Standard -Force -RestorePlugin -PullModels
+  pwsh -File D:\francis\scripts\restore.ps1 -Mode Standard -Force -RestorePlugin -PullModels
 
   # Full restore + sanity scan
-  pwsh -File C:\Francis\scripts\restore.ps1 -Mode Full -Force -RestorePlugin -PullModels -SanityCheck
+  pwsh -File D:\francis\scripts\restore.ps1 -Mode Full -Force -RestorePlugin -PullModels -SanityCheck
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
@@ -34,7 +34,7 @@ param(
   [ValidateSet('Minimal','Standard','Full')]
   [string]$Mode = 'Minimal',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # Required for actions that pull/download/install (npm install, ollama pull, installers)
   [switch]$Force,

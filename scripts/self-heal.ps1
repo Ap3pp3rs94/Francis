@@ -1,11 +1,11 @@
 <#
-C:\Francis\scripts\self-evolve.ps1
+D:\francis\scripts\self-evolve.ps1
 
 Purpose
   "Self-evolve" = controlled update of the Francis workspace from a trusted source snapshot.
 
 What it does
-  - Creates a change plan by comparing a Source snapshot (folder or zip) to your Root (default C:\Francis)
+  - Creates a change plan by comparing a Source snapshot (folder or zip) to your Root (default D:\francis)
   - Applies changes with strong safety rails and full logging
   - Creates a rollback backup so you can restore prior state
   - Optionally verifies changed files (PowerShell parse / JSON parse / YAML parse if available)
@@ -22,22 +22,22 @@ Logs / outputs
 
 Examples
   # Plan changes (no modifications)
-  pwsh -File C:\Francis\scripts\self-evolve.ps1 -Mode Plan -SourcePath C:\temp\francis_snapshot
+  pwsh -File D:\francis\scripts\self-evolve.ps1 -Mode Plan -SourcePath C:\temp\francis_snapshot
 
   # Apply changes to scripts only (no deletes)
-  pwsh -File C:\Francis\scripts\self-evolve.ps1 -Mode Apply -SourcePath C:\temp\francis_snapshot -Verify
+  pwsh -File D:\francis\scripts\self-evolve.ps1 -Mode Apply -SourcePath C:\temp\francis_snapshot -Verify
 
   # Apply from a zip
-  pwsh -File C:\Francis\scripts\self-evolve.ps1 -Mode Apply -SourcePath C:\temp\francis_snapshot.zip -Verify
+  pwsh -File D:\francis\scripts\self-evolve.ps1 -Mode Apply -SourcePath C:\temp\francis_snapshot.zip -Verify
 
   # Allow deletes (destructive -> requires -Force)
-  pwsh -File C:\Francis\scripts\self-evolve.ps1 -Mode Apply -SourcePath C:\temp\francis_snapshot -AllowDeletes -Force
+  pwsh -File D:\francis\scripts\self-evolve.ps1 -Mode Apply -SourcePath C:\temp\francis_snapshot -AllowDeletes -Force
 
   # Rollback using a backup folder
-  pwsh -File C:\Francis\scripts\self-evolve.ps1 -Mode Rollback -BackupDir C:\Francis\data\backups\self_evolve\20260102_123456 -Force
+  pwsh -File D:\francis\scripts\self-evolve.ps1 -Mode Rollback -BackupDir D:\francis\data\backups\self_evolve\20260102_123456 -Force
 
   # Show current state / latest backup
-  pwsh -File C:\Francis\scripts\self-evolve.ps1 -Mode Status
+  pwsh -File D:\francis\scripts\self-evolve.ps1 -Mode Status
 
 Safety rails
   - Blocks dangerous targets (drive roots, Windows folders, Program Files, ProgramData)
@@ -51,7 +51,7 @@ param(
   [ValidateSet('Status','Plan','Apply','Rollback','Verify','CleanTemp')]
   [string]$Mode = 'Status',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # Source snapshot path (directory or .zip). Required for Plan/Apply.
   [string]$SourcePath = '',

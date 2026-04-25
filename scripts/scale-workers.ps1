@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\scale-workers.ps1
+D:\francis\scripts\scale-workers.ps1
 
 Purpose
   Manage and scale a local pool of "worker" processes on Windows in a controlled way.
@@ -21,20 +21,20 @@ Safety
 
 Examples
   # Show status (no changes)
-  pwsh -File C:\Francis\scripts\scale-workers.ps1 -WorkerName plugin -Mode Status
+  pwsh -File D:\francis\scripts\scale-workers.ps1 -WorkerName plugin -Mode Status
 
   # Scale to exactly 3 node workers
-  pwsh -File C:\Francis\scripts\scale-workers.ps1 -Mode Scale -WorkerName plugin -Count 3 `
-    -Command node -Args @("dist\worker.js") -WorkingDirectory C:\Francis\plugin
+  pwsh -File D:\francis\scripts\scale-workers.ps1 -Mode Scale -WorkerName plugin -Count 3 `
+    -Command node -Args @("dist\worker.js") -WorkingDirectory D:\francis\plugin
 
   # Scale down to 1 (requires Force because it stops workers)
-  pwsh -File C:\Francis\scripts\scale-workers.ps1 -Mode Scale -WorkerName plugin -Count 1 -Force
+  pwsh -File D:\francis\scripts\scale-workers.ps1 -Mode Scale -WorkerName plugin -Count 1 -Force
 
   # Stop all tracked workers (requires Force)
-  pwsh -File C:\Francis\scripts\scale-workers.ps1 -Mode Stop -WorkerName plugin -Force
+  pwsh -File D:\francis\scripts\scale-workers.ps1 -Mode Stop -WorkerName plugin -Force
 
   # Restart to 2 workers (requires Force)
-  pwsh -File C:\Francis\scripts\scale-workers.ps1 -Mode Restart -WorkerName plugin -Count 2 -Force
+  pwsh -File D:\francis\scripts\scale-workers.ps1 -Mode Restart -WorkerName plugin -Count 2 -Force
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
@@ -42,7 +42,7 @@ param(
   [ValidateSet('Status','Start','Scale','Stop','Restart','CleanState')]
   [string]$Mode = 'Status',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
   [string]$WorkerName = 'default',
 
   # Desired worker count (used by Start/Scale/Restart)

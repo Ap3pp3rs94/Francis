@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\reset-local-state.ps1
+D:\francis\scripts\reset-local-state.ps1
 
 Purpose
   Reset local "workspace state" under a Francis root in a controlled way:
@@ -8,26 +8,26 @@ Purpose
     - Hard     : Standard + optionally delete more artifacts + optionally remove node_modules
 
 Safety
-  - By default, this script will only delete paths UNDER -Root (default C:\Francis).
+  - By default, this script will only delete paths UNDER -Root (default D:\francis).
   - Blocks dangerous paths (drive roots, Windows folders, etc.)
   - Destructive modes require -Force.
 
 Logging
-  - Transcript: C:\Francis\data\logs\operations\reset_local_state_<timestamp>.log
-  - CSV      : C:\Francis\data\logs\operations\reset_local_state_<timestamp>.csv
+  - Transcript: D:\francis\data\logs\operations\reset_local_state_<timestamp>.log
+  - CSV      : D:\francis\data\logs\operations\reset_local_state_<timestamp>.csv
 
 Examples
   # See what would happen
-  pwsh -File C:\Francis\scripts\reset-local-state.ps1 -Mode Soft -WhatIf
+  pwsh -File D:\francis\scripts\reset-local-state.ps1 -Mode Soft -WhatIf
 
   # Standard cleanup (requires Force)
-  pwsh -File C:\Francis\scripts\reset-local-state.ps1 -Mode Standard -Force -ResetPlugin
+  pwsh -File D:\francis\scripts\reset-local-state.ps1 -Mode Standard -Force -ResetPlugin
 
-  # Hard cleanup including node_modules and all artifacts under C:\Francis\data\artifacts
-  pwsh -File C:\Francis\scripts\reset-local-state.ps1 -Mode Hard -Force -ResetPlugin -RemoveNodeModules -ClearArtifactsAll
+  # Hard cleanup including node_modules and all artifacts under D:\francis\data\artifacts
+  pwsh -File D:\francis\scripts\reset-local-state.ps1 -Mode Hard -Force -ResetPlugin -RemoveNodeModules -ClearArtifactsAll
 
   # Also do a soft Ollama stop/reset using your existing script (if present)
-  pwsh -File C:\Francis\scripts\reset-local-state.ps1 -Mode Standard -Force -ResetOllama
+  pwsh -File D:\francis\scripts\reset-local-state.ps1 -Mode Standard -Force -ResetOllama
 
 Notes
   - This is intentionally conservative. If you truly want to delete outside of -Root, use -OverrideSafety.
@@ -38,7 +38,7 @@ param(
   [ValidateSet('Soft','Standard','Hard')]
   [string]$Mode = 'Soft',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # Required for Standard/Hard (destructive modes)
   [switch]$Force,

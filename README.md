@@ -66,7 +66,7 @@ The rule is simple: proposal is not execution. Model output does not grant autho
 From PowerShell:
 
 ```powershell
-cd C:\Francis
+cd D:\francis
 .\scripts\bootstrap.ps1
 .\scripts\francis.ps1 api
 ```

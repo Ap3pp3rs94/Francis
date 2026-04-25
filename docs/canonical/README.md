@@ -21,7 +21,7 @@ Related authoritative references remain outside this folder:
 
 Notes:
 
-- `ROADMAP.md` is the repo-local copy of the canonical roadmap so `C:\Francis`
+- `ROADMAP.md` is the repo-local copy of the canonical roadmap so `D:\francis`
   contains the build plan and implementation together.
 - Root-level project entrypoints such as `README.md`, `CONTRIBUTING.md`,
   `SECURITY.md`, and `CHANGELOG.md` stay at the repo root on purpose.

@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\service-install.ps1
+D:\francis\scripts\service-install.ps1
 
 Purpose
   Install / update / uninstall / manage Windows Services in a controlled, logged way.
@@ -44,11 +44,11 @@ Config file format (YAML)
     description: Background worker
     exe: C:\Program Files\nodejs\node.exe
     args: [server.js, --port, "4010"]
-    workingDir: C:\Francis\workers\worker1
+    workingDir: D:\francis\workers\worker1
     startType: AutomaticDelayedStart
     useWrapper: true
-    stdout: C:\Francis\data\logs\services\worker1_out.log
-    stderr: C:\Francis\data\logs\services\worker1_err.log
+    stdout: D:\francis\data\logs\services\worker1_out.log
+    stderr: D:\francis\data\logs\services\worker1_err.log
     recovery:
       enabled: true
       restartDelaySec: 5
@@ -58,30 +58,30 @@ Config file format (YAML)
 
 Examples
   # Status of a service
-  pwsh -File C:\Francis\scripts\service-install.ps1 -Mode Status -ServiceName Francis-Worker-1
+  pwsh -File D:\francis\scripts\service-install.ps1 -Mode Status -ServiceName Francis-Worker-1
 
   # Install a service directly (no wrapper)
-  pwsh -File C:\Francis\scripts\service-install.ps1 -Mode Install `
+  pwsh -File D:\francis\scripts\service-install.ps1 -Mode Install `
     -ServiceName Francis-Plugin `
     -DisplayName "Francis Plugin" `
     -Description "Francis plugin HTTP service" `
     -Executable "C:\Program Files\nodejs\node.exe" `
     -Arguments @("server.js","--port","3000") `
-    -WorkingDirectory "C:\Francis\plugin" `
+    -WorkingDirectory "D:\francis\plugin" `
     -StartType AutomaticDelayedStart `
     -SetRecovery `
     -StartAfterInstall
 
   # Install/update all services from config
-  pwsh -File C:\Francis\scripts\service-install.ps1 -Mode Install -ConfigPath C:\Francis\data\config\services.json
+  pwsh -File D:\francis\scripts\service-install.ps1 -Mode Install -ConfigPath D:\francis\data\config\services.json
 
   # Update binPath/args for an existing service
-  pwsh -File C:\Francis\scripts\service-install.ps1 -Mode Update -ServiceName Francis-Plugin `
+  pwsh -File D:\francis\scripts\service-install.ps1 -Mode Update -ServiceName Francis-Plugin `
     -Executable "C:\Program Files\nodejs\node.exe" -Arguments @("server.js","--port","3001") `
-    -WorkingDirectory "C:\Francis\plugin" -UseWrapper -StartType AutomaticDelayedStart
+    -WorkingDirectory "D:\francis\plugin" -UseWrapper -StartType AutomaticDelayedStart
 
   # Uninstall (requires -Force)
-  pwsh -File C:\Francis\scripts\service-install.ps1 -Mode Uninstall -ServiceName Francis-Plugin -Force
+  pwsh -File D:\francis\scripts\service-install.ps1 -Mode Uninstall -ServiceName Francis-Plugin -Force
 
 #>
 
@@ -90,7 +90,7 @@ param(
   [ValidateSet('Status','Install','Update','Uninstall','Start','Stop','Restart')]
   [string]$Mode = 'Status',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # If provided, installs/updates/services from a config file (JSON or YAML).
   [string]$ConfigPath = '',

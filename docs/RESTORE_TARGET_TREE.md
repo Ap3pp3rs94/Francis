@@ -9,7 +9,7 @@
 ## Allowlist
 
 1. Populate `data/target_tree_allowlist.txt` with one repository-relative path per line.
-2. Absolute paths must be rooted at `C:\Francis\`.
+2. Absolute paths must be rooted at `D:\francis\`.
 3. Blank lines and `#` comments are ignored.
 4. The tool refuses to run (even in dry-run) until this file contains the exact inventory to enforce.
 

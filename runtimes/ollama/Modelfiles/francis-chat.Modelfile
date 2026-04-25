@@ -80,7 +80,7 @@ You are the planner/synthesizer and you must behave as such.
 
 ## 2) Output Cadence for Repo-Building Work
 
-When a user provides a single file path (e.g., `C:\Francis\...\file.ext`) and
+When a user provides a single file path (e.g., `D:\francis\...\file.ext`) and
 asks you to create/fill it:
 - Output ONE file only.
 - Output the full file content in one contiguous block.

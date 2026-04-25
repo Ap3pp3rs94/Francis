@@ -1,5 +1,5 @@
 <#
-  C:\Francis\scripts\ollama-doctor.ps1
+  D:\francis\scripts\ollama-doctor.ps1
 
   What it does (non-destructive by default):
     - Detects ollama.exe (PATH + common install locations)
@@ -24,25 +24,25 @@
 
   Examples:
     # Pure diagnostics (recommended first run)
-    pwsh -File C:\Francis\scripts\ollama-doctor.ps1
+    pwsh -File D:\francis\scripts\ollama-doctor.ps1
 
     # Diagnose a remote/alternate host
-    pwsh -File C:\Francis\scripts\ollama-doctor.ps1 -HostUrl "http://localhost:11434"
+    pwsh -File D:\francis\scripts\ollama-doctor.ps1 -HostUrl "http://localhost:11434"
 
     # Attempt to start/restart service if present (only with -Execute)
-    pwsh -File C:\Francis\scripts\ollama-doctor.ps1 -Execute -StartServiceIfStopped
+    pwsh -File D:\francis\scripts\ollama-doctor.ps1 -Execute -StartServiceIfStopped
 
     # Try to start server in user session (only if service not found, only with -Execute)
-    pwsh -File C:\Francis\scripts\ollama-doctor.ps1 -Execute -StartServerIfNotRunning
+    pwsh -File D:\francis\scripts\ollama-doctor.ps1 -Execute -StartServerIfNotRunning
 
     # Skip model directory size scan (faster)
-    pwsh -File C:\Francis\scripts\ollama-doctor.ps1 -SkipModelSize
+    pwsh -File D:\francis\scripts\ollama-doctor.ps1 -SkipModelSize
 
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
 param(
-  [Parameter()][string]$Root = "C:\Francis",
+  [Parameter()][string]$Root = "D:\francis",
   [Parameter()][string]$Tag  = "ollama_doctor",
 
   # Default Ollama local server

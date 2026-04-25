@@ -5,7 +5,7 @@
  optional compression/encryption, and verification.
 
  Location:
-   C:\Francis\scripts\backup.ps1
+   D:\francis\scripts\backup.ps1
 
  Design stance:
    - Default-safe: excludes secrets unless explicitly included.

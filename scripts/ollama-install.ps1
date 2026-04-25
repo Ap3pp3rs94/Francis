@@ -42,10 +42,10 @@
   Run the installer interactively (no /SILENT flags).
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\ollama-install.ps1
+  powershell -ExecutionPolicy Bypass -File D:\francis\scripts\ollama-install.ps1
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\ollama-install.ps1 `
+  powershell -ExecutionPolicy Bypass -File D:\francis\scripts\ollama-install.ps1 `
     -ModelsDir "D:\LLM\Ollama\models" -PullModels @("llama3.2","mistral") -StartServerIfNeeded
 
 .NOTES
@@ -55,13 +55,13 @@
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-  [string]$Root = "C:\Francis",
+  [string]$Root = "D:\francis",
 
   [string]$InstallerUrl = "https://ollama.com/download/OllamaSetup.exe",
 
   [string]$InstallDir = "",
 
-  [string]$ModelsDir = (Join-Path "C:\Francis" "data\models\ollama"),
+  [string]$ModelsDir = (Join-Path "D:\francis" "data\models\ollama"),
 
   [switch]$SkipSignatureCheck,
 

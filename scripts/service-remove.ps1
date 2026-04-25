@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\service-remove.ps1
+D:\francis\scripts\service-remove.ps1
 
 Purpose
   Remove Windows Services in a controlled, logged way (with optional cleanup of runtime + logs).
@@ -28,16 +28,16 @@ Logs
 
 Examples
   # Status check
-  pwsh -File C:\Francis\scripts\service-remove.ps1 -Mode Status -ServiceName Francis-Plugin
+  pwsh -File D:\francis\scripts\service-remove.ps1 -Mode Status -ServiceName Francis-Plugin
 
   # Remove a service
-  pwsh -File C:\Francis\scripts\service-remove.ps1 -Mode Remove -ServiceName Francis-Plugin -Force
+  pwsh -File D:\francis\scripts\service-remove.ps1 -Mode Remove -ServiceName Francis-Plugin -Force
 
   # Remove and cleanup runtime wrapper dir + logs (if configured)
-  pwsh -File C:\Francis\scripts\service-remove.ps1 -Mode Remove -ServiceName Francis-Plugin -Force -CleanupRuntime -CleanupLogs
+  pwsh -File D:\francis\scripts\service-remove.ps1 -Mode Remove -ServiceName Francis-Plugin -Force -CleanupRuntime -CleanupLogs
 
   # Remove services from config
-  pwsh -File C:\Francis\scripts\service-remove.ps1 -Mode Remove -ConfigPath C:\Francis\data\config\services.json -Force -CleanupRuntime -CleanupLogs
+  pwsh -File D:\francis\scripts\service-remove.ps1 -Mode Remove -ConfigPath D:\francis\data\config\services.json -Force -CleanupRuntime -CleanupLogs
 
 #>
 
@@ -46,7 +46,7 @@ param(
   [ValidateSet('Status','Remove')]
   [string]$Mode = 'Remove',
 
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # Optional: config file (JSON/YAML) that contains an array of services (or object with .services)
   [string]$ConfigPath = '',

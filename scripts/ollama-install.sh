@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# C:\Francis\scripts\ollama-install.sh
+# D:\francis\scripts\ollama-install.sh
 #
 # Installs / updates Ollama on Linux (including WSL2 Linux) using the official installer.
 # Logs under: <FrancisRoot>/data/logs/operations/

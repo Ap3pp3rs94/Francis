@@ -1,5 +1,5 @@
 <# 
-C:\Francis\scripts\ollama-pull-models.ps1
+D:\francis\scripts\ollama-pull-models.ps1
 
 Pull one or more Ollama models and produce an operations log + CSV report.
 
@@ -8,7 +8,7 @@ Examples:
   .\ollama-pull-models.ps1 -Models "llama3.1:8b","qwen2.5:7b"
 
   # Pull from a text file (one model per line, # comments allowed)
-  .\ollama-pull-models.ps1 -ModelsFile "C:\Francis\data\config\ollama-models.txt" -SkipExisting
+  .\ollama-pull-models.ps1 -ModelsFile "D:\francis\data\config\ollama-models.txt" -SkipExisting
 
   # Just verify API + list currently installed models
   .\ollama-pull-models.ps1 -ListOnly
@@ -20,7 +20,7 @@ Notes:
 
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
-  [string]   $Root = "C:\Francis",
+  [string]   $Root = "D:\francis",
 
   # Model names like: llama3.1:8b, mistral, qwen2.5:7b, etc.
   [string[]] $Models = @(),

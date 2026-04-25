@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\web-learn.ps1
+D:\francis\scripts\web-learn.ps1
 
 Purpose
   Crawl one or more websites (politely) and generate a local “learning corpus”:
@@ -11,7 +11,7 @@ Purpose
     <Root>\data\logs\operations\
 
 Defaults / Layout
-  Root:      C:\Francis
+  Root:      D:\francis
   Data dir:  <Root>\data\learn\web\run_<timestamp>\
     pages\   -> <sha1>.txt + <sha1>.meta.json
     raw\     -> (optional) <sha1>.html
@@ -20,13 +20,13 @@ Defaults / Layout
 
 Examples
   # Crawl a site (max 100 pages, depth 2)
-  pwsh -File C:\Francis\scripts\web-learn.ps1 -Urls "https://example.com" -MaxPages 100 -MaxDepth 2
+  pwsh -File D:\francis\scripts\web-learn.ps1 -Urls "https://example.com" -MaxPages 100 -MaxDepth 2
 
   # Crawl multiple start URLs
   pwsh -File .\web-learn.ps1 -Urls "https://example.com","https://docs.example.com" -IncludeSubdomains
 
   # From file (one URL per line; # comments allowed)
-  pwsh -File .\web-learn.ps1 -UrlsFile "C:\Francis\data\config\web-seeds.txt"
+  pwsh -File .\web-learn.ps1 -UrlsFile "D:\francis\data\config\web-seeds.txt"
 
   # Include sitemap discovery + raw HTML + JSONL
   pwsh -File .\web-learn.ps1 -Urls "https://example.com" -UseSitemap -SaveRawHtml -WriteJsonl
@@ -42,7 +42,7 @@ Notes
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
 param(
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   [string[]]$Urls = @(),
   [string]  $UrlsFile = '',

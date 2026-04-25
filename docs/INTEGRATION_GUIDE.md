@@ -7,7 +7,7 @@
 
 ## Install (recommended)
 ```powershell
-cd C:\Francis
+cd D:\francis
 uv venv
 uv pip install -e .
 ```
@@ -25,9 +25,9 @@ python -m francis healthcheck
 
 ## Run Tests
 ```powershell
-python -m pytest C:\Francis\tests
+python -m pytest D:\francis\tests
 ```
 
 ## Environment Notes
 - `FRANCIS_ALLOWED_ORIGINS` controls CORS for the API.
-- Logs and artifacts are written under `C:\Francis\data\logs`.
+- Logs and artifacts are written under `D:\francis\data\logs`.

@@ -11,25 +11,25 @@
     - Exports: log, JSON summary, and multiple CSV datasets
 
   Output folder (default):
-    C:\Francis\data\logs\operations\domain_learn\
+    D:\francis\data\logs\operations\domain_learn\
 
   Examples:
     # Quick domain learn (safe defaults)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\domain-learn.ps1
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\domain-learn.ps1
 
     # Specify domain explicitly
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\domain-learn.ps1 -Domain "corp.example.com"
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\domain-learn.ps1 -Domain "corp.example.com"
 
     # Include computers + users (limited)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\domain-learn.ps1 -IncludeComputers -IncludeUsers -MaxComputers 2000 -MaxUsers 2000
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\domain-learn.ps1 -IncludeComputers -IncludeUsers -MaxComputers 2000 -MaxUsers 2000
 
     # Include GPO list (requires GroupPolicy module)
-    powershell -ExecutionPolicy Bypass -File C:\Francis\scripts\domain-learn.ps1 -IncludeGPOs
+    powershell -ExecutionPolicy Bypass -File D:\francis\scripts\domain-learn.ps1 -IncludeGPOs
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
-  [Parameter()][string]$Root = "C:\Francis",
+  [Parameter()][string]$Root = "D:\francis",
   [Parameter()][string]$Domain = "",
   [Parameter()][string]$Tag = "domain_learn",
 

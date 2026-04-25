@@ -324,7 +324,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
         counts: { queued_tasks: 3 },
         paths: {
           data: {
-            path: "C:/Francis/data",
+            path: "D:/francis/data",
             exists: true,
             is_dir: true,
           },
@@ -693,7 +693,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     ]);
     assert.equal(worldState.ok, true);
     assert.equal(worldState.counts?.queued_tasks, 3);
-    assert.equal(worldState.paths.data?.path, "C:/Francis/data");
+    assert.equal(worldState.paths.data?.path, "D:/francis/data");
     assert.equal(worldState.overview?.recent_missions?.[0]?.id, "mission_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.owner_id, "owner.alpha");
     assert.deepEqual(worldState.overview?.recent_missions?.[0]?.dependency_ids, ["dep_one"]);

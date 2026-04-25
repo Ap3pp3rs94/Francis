@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\ollama-reset.ps1
+D:\francis\scripts\ollama-reset.ps1
 
 Purpose
   Reset Ollama on Windows in a controlled way:
@@ -49,7 +49,7 @@ param(
   [switch]$OverrideSafety,
 
   # Script logging root
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # If Ollama is installed as a Windows service under a custom name, add it here.
   [string[]]$ServiceNames = @('Ollama','ollama'),

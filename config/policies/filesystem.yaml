@@ -93,7 +93,7 @@ path_safety:
 roots:
   enabled: true
 
-  # Repo root is assumed to be C:\Francis (this policy file lives under it).
+  # Repo root is assumed to be D:\francis (this policy file lives under it).
   repo_root: "C:\\Francis"
 
   # Read roots: where Francis may read from without special approval.

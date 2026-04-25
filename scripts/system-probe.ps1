@@ -1,5 +1,5 @@
 <#
-C:\Francis\scripts\system-probe.ps1
+D:\francis\scripts\system-probe.ps1
 
 Purpose
   "System probe" / inventory + diagnostics snapshot for the Francis environment.
@@ -17,19 +17,19 @@ What it collects (best-effort, safe read-only)
 
 Examples
   # Basic probe
-  pwsh -File C:\Francis\scripts\system-probe.ps1
+  pwsh -File D:\francis\scripts\system-probe.ps1
 
   # Quick (less output)
-  pwsh -File C:\Francis\scripts\system-probe.ps1 -Quick
+  pwsh -File D:\francis\scripts\system-probe.ps1 -Quick
 
   # Include Ollama API/model inventory
-  pwsh -File C:\Francis\scripts\system-probe.ps1 -IncludeOllama
+  pwsh -File D:\francis\scripts\system-probe.ps1 -IncludeOllama
 
   # Include a public IP check (external call) - OFF by default
-  pwsh -File C:\Francis\scripts\system-probe.ps1 -IncludePublicIP
+  pwsh -File D:\francis\scripts\system-probe.ps1 -IncludePublicIP
 
   # Save outputs somewhere else
-  pwsh -File C:\Francis\scripts\system-probe.ps1 -Root D:\Francis
+  pwsh -File D:\francis\scripts\system-probe.ps1 -Root D:\Francis
 
 Notes
   - No changes are made to the system.
@@ -39,7 +39,7 @@ Notes
 
 [CmdletBinding()]
 param(
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
 
   # Reduce the amount of data collected (still writes JSON/CSV/log)
   [switch]$Quick,

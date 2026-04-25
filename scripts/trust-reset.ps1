@@ -1,25 +1,25 @@
 <#
-C:\Francis\scripts\trust-reset.ps1
+D:\francis\scripts\trust-reset.ps1
 
 Purpose
   Controlled reset of trust state while preserving history.
 
 Safety
   - Default is dry run.
-  - Writes only under -Root (default C:\Francis).
+  - Writes only under -Root (default D:\francis).
   - Creates a backup of the prior state before reset.
 
 Examples
   # Dry run
-  pwsh -File C:\Francis\scripts\trust-reset.ps1
+  pwsh -File D:\francis\scripts\trust-reset.ps1
 
   # Apply reset with a reason
-  pwsh -File C:\Francis\scripts\trust-reset.ps1 -Apply -Reason "post-incident reset"
+  pwsh -File D:\francis\scripts\trust-reset.ps1 -Apply -Reason "post-incident reset"
 #>
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
 param(
-  [string]$Root = 'C:\Francis',
+  [string]$Root = 'D:\francis',
   [switch]$Apply,
   [string]$Reason = 'manual_reset',
   [switch]$OverrideSafety

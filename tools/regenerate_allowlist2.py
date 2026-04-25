@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
 
-root = Path("C:/Francis").resolve()
+root = Path("D:/francis").resolve()
 skip_roots = [root / "data" / "logs" / "operations", root / "data" / "quarantine", root / ".ruff_cache"]
 skip_files = {root / "tools" / "regenerate_allowlist2.py", root / "tools" / "append_stub_comments.py"}
 entries = set()

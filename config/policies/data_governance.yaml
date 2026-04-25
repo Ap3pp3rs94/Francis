@@ -8,12 +8,12 @@
 #    exports, and deletes data across the entire project tree.
 #
 #  Scope:
-#    - Runtime data under:      C:\Francis\data\**
-#    - Config/secrets under:    C:\Francis\config\**
-#    - Generated artifacts:     C:\Francis\data\artifacts\**
-#    - Logs/telemetry:          C:\Francis\data\logs\**
-#    - Web knowledge cache:     C:\Francis\data\web_knowledge\**
-#    - Vectors/embeddings:      C:\Francis\data\vectors\**
+#    - Runtime data under:      D:\francis\data\**
+#    - Config/secrets under:    D:\francis\config\**
+#    - Generated artifacts:     D:\francis\data\artifacts\**
+#    - Logs/telemetry:          D:\francis\data\logs\**
+#    - Web knowledge cache:     D:\francis\data\web_knowledge\**
+#    - Vectors/embeddings:      D:\francis\data\vectors\**
 #
 #  Design principles:
 #    - Minimize sensitive data collection by default.

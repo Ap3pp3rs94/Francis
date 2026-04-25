@@ -2,7 +2,7 @@
 
 
 
-This document describes how to report security issues and the security expectations for the **Francis** workspace (scripts, configs, services, and supporting tooling under `C:\Francis`).
+This document describes how to report security issues and the security expectations for the **Francis** workspace (scripts, configs, services, and supporting tooling under `D:\francis`).
 
 
 
@@ -64,7 +64,7 @@ Please include:
 
 - A clear description of the issue and potential impact.
 
-- The affected file(s)/script(s) (example: `C:\Francis\scripts\plugin-build.ps1`).
+- The affected file(s)/script(s) (example: `D:\francis\scripts\plugin-build.ps1`).
 
 - Exact steps to reproduce (commands run, inputs used).
 
@@ -118,13 +118,13 @@ Please allow time for a fix before public disclosure. We support coordinated dis
 
 
 
-- Scripts and automation under `C:\Francis\scripts`
+- Scripts and automation under `D:\francis\scripts`
 
-- Configuration files under `C:\Francis\data\config` (and related config locations)
+- Configuration files under `D:\francis\data\config` (and related config locations)
 
 - Local services installed/managed by Francis scripts
 
-- Logging/report outputs under `C:\Francis\data\logs`
+- Logging/report outputs under `D:\francis\data\logs`
 
 
 
@@ -156,7 +156,7 @@ These are the baseline expectations for a secure deployment.
 
 
 
-Many scripts under `C:\Francis\scripts` can:
+Many scripts under `D:\francis\scripts` can:
 
 - install services
 
@@ -178,7 +178,7 @@ Only run scripts you trust and that you have reviewed.
 
 - Run from a PowerShell session with least privileges whenever possible
 
-- Keep `C:\Francis` ACLs restricted (Admins + the service account only)
+- Keep `D:\francis` ACLs restricted (Admins + the service account only)
 
 
 
@@ -186,7 +186,7 @@ Only run scripts you trust and that you have reviewed.
 
 
 
-**Do not store secrets in the repo or in plaintext files** under `C:\Francis` unless they are properly protected and explicitly intended.
+**Do not store secrets in the repo or in plaintext files** under `D:\francis` unless they are properly protected and explicitly intended.
 
 
 
@@ -224,7 +224,7 @@ Some scripts may download installers or run remote install scripts.
 
 - Prefer vendor HTTPS endpoints
 
-- Record installer actions into logs under `C:\Francis\data\logs\operations`
+- Record installer actions into logs under `D:\francis\data\logs\operations`
 
 - Avoid `curl | sh` patterns unless you trust the source and understand the risk
 
@@ -254,7 +254,7 @@ Requirements:
 
 - If logs capture command output, ensure sensitive parameters are redacted.
 
-- Keep logs under `C:\Francis\data\logs\operations` and restrict access.
+- Keep logs under `D:\francis\data\logs\operations` and restrict access.
 
 
 
@@ -278,7 +278,7 @@ If any service binds to a TCP port (example: local APIs):
 
 - Consider code signing for PowerShell scripts.
 
-- Monitor file integrity for `C:\Francis\scripts` (hashes, change alerts).
+- Monitor file integrity for `D:\francis\scripts` (hashes, change alerts).
 
 - Ensure only authorized users can modify scripts executed by scheduled tasks/services.
 
@@ -350,7 +350,7 @@ If you suspect a security incident:
 
 2. **Preserve logs**:
 
-   - `C:\Francis\data\logs\operations`
+   - `D:\francis\data\logs\operations`
 
    - Windows Event Logs relevant to script execution and services
 
@@ -358,7 +358,7 @@ If you suspect a security incident:
 
 4. Rotate credentials that may have been exposed.
 
-5. Review script modifications under `C:\Francis\scripts` (hash comparison).
+5. Review script modifications under `D:\francis\scripts` (hash comparison).
 
 6. Only after evidence is preserved, proceed with cleanup and restoration.
 
