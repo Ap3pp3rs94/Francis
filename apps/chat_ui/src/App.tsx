@@ -469,6 +469,9 @@ function MissionReadinessEvidencePanel(props: {
   const presentation = presentMissionReadinessCriteria(readiness, props.criterionLimit ?? 3);
   const criteria = readiness.criteria ?? [];
   const evidenceLimit = props.evidenceLimit ?? 4;
+  const blockedCriteriaIds = readiness.blocked_criteria_ids ?? [];
+  const attentionCriteriaIds = readiness.attention_criteria_ids ?? [];
+  const reviewCriteriaIds = readiness.review_criteria_ids ?? [];
 
   return (
     <div
@@ -501,6 +504,21 @@ function MissionReadinessEvidencePanel(props: {
         {readiness.status ? <span style={badgeStyle(readiness.status)}>{readiness.status}</span> : null}
       </div>
       {readiness.next_action ? <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>{readiness.next_action}</div> : null}
+      {blockedCriteriaIds.length ? (
+        <div style={{ fontSize: 10, color: "#cce7e2", marginTop: 6 }}>
+          blockers=<code>{blockedCriteriaIds.join(", ")}</code>
+          {attentionCriteriaIds.length ? (
+            <>
+              {" / "}attention=<code>{attentionCriteriaIds.join(", ")}</code>
+            </>
+          ) : null}
+          {reviewCriteriaIds.length ? (
+            <>
+              {" / "}review=<code>{reviewCriteriaIds.join(", ")}</code>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {props.showCriteriaBadges && criteria.length ? (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
           {criteria.map((criterion, index) => (

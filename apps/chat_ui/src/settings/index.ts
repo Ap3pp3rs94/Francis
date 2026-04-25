@@ -679,6 +679,9 @@ export type ObserverReadinessSummary = {
   criteria?: ObserverReadinessCriterion[];
   satisfied?: number;
   total?: number;
+  blocked_criteria_ids?: string[];
+  attention_criteria_ids?: string[];
+  review_criteria_ids?: string[];
   next_action?: string;
 };
 
@@ -2726,12 +2729,18 @@ function parseObserverReadinessSummary(raw: unknown): ObserverReadinessSummary |
     .filter((item): item is ObserverReadinessCriterion => item !== null);
   const satisfied = safeNumber(raw["satisfied"], Number.NaN);
   const total = safeNumber(raw["total"], Number.NaN);
+  const blockedCriteriaIds = safeStringArray(raw["blocked_criteria_ids"]);
+  const attentionCriteriaIds = safeStringArray(raw["attention_criteria_ids"]);
+  const reviewCriteriaIds = safeStringArray(raw["review_criteria_ids"]);
   const summary: ObserverReadinessSummary = {
     stage: safeString(raw["stage"], "").trim(),
     status: safeString(raw["status"], "").trim(),
     criteria,
     satisfied,
     total,
+    blocked_criteria_ids: blockedCriteriaIds,
+    attention_criteria_ids: attentionCriteriaIds,
+    review_criteria_ids: reviewCriteriaIds,
     next_action: safeString(raw["next_action"], "").trim(),
   };
 
@@ -2740,6 +2749,9 @@ function parseObserverReadinessSummary(raw: unknown): ObserverReadinessSummary |
   if (!summary.criteria?.length) delete summary.criteria;
   if (!Number.isFinite(satisfied)) delete summary.satisfied;
   if (!Number.isFinite(total)) delete summary.total;
+  if (!blockedCriteriaIds.length) delete summary.blocked_criteria_ids;
+  if (!attentionCriteriaIds.length) delete summary.attention_criteria_ids;
+  if (!reviewCriteriaIds.length) delete summary.review_criteria_ids;
   if (!summary.next_action) delete summary.next_action;
 
   return summary.status || summary.criteria?.length ? summary : undefined;

@@ -182,6 +182,19 @@ def test_continuity_briefing_reports_idle_operator_start_state(monkeypatch, tmp_
     assert body["briefing"]["readiness"]["status"] == "review"
     assert body["briefing"]["readiness"]["satisfied"] == 1
     assert body["briefing"]["readiness"]["total"] == 5
+    assert body["briefing"]["readiness"]["blocked_criteria_ids"] == [
+        "idempotent_ticks",
+        "deadletter_cleanly",
+        "session_continuity",
+        "reconstruction_reduced",
+    ]
+    assert body["briefing"]["readiness"]["attention_criteria_ids"] == []
+    assert body["briefing"]["readiness"]["review_criteria_ids"] == [
+        "idempotent_ticks",
+        "deadletter_cleanly",
+        "session_continuity",
+        "reconstruction_reduced",
+    ]
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
     assert mission_readiness_by_id["visible_status"]["status"] == "satisfied"
     assert mission_readiness_by_id["idempotent_ticks"]["status"] == "not_yet_observed"
@@ -419,6 +432,9 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert body["briefing"]["readiness"]["status"] == "review"
     assert body["briefing"]["readiness"]["satisfied"] == 4
     assert body["briefing"]["readiness"]["total"] == 5
+    assert body["briefing"]["readiness"]["blocked_criteria_ids"] == ["deadletter_cleanly"]
+    assert body["briefing"]["readiness"]["attention_criteria_ids"] == []
+    assert body["briefing"]["readiness"]["review_criteria_ids"] == ["deadletter_cleanly"]
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
     assert mission_readiness_by_id["idempotent_ticks"]["status"] == "satisfied"
     assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "not_yet_observed"
@@ -729,6 +745,9 @@ def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_p
     assert body["briefing"]["failed_preview"][0]["current_task"]["operation_id"] == operation_id
     assert body["briefing"]["failed_preview"][0]["current_task"]["handoff_action"] == "retry_or_deadletter"
     mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    assert body["briefing"]["readiness"]["blocked_criteria_ids"] == ["idempotent_ticks", "deadletter_cleanly"]
+    assert body["briefing"]["readiness"]["attention_criteria_ids"] == ["deadletter_cleanly"]
+    assert body["briefing"]["readiness"]["review_criteria_ids"] == ["idempotent_ticks"]
     assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "attention"
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["failed_count"] == 1
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_failed_ids"] == [mission_id]

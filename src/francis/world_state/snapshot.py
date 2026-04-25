@@ -1391,6 +1391,17 @@ def _mission_readiness(
         },
     ]
     blocked = [item for item in criteria if item.get("status") != "satisfied"]
+    blocked_criteria_ids = [_safe_str(item.get("id")).strip() for item in blocked if _safe_str(item.get("id")).strip()]
+    attention_criteria_ids = [
+        _safe_str(item.get("id")).strip()
+        for item in blocked
+        if _safe_str(item.get("id")).strip() and _safe_str(item.get("status")).strip() == "attention"
+    ]
+    review_criteria_ids = [
+        _safe_str(item.get("id")).strip()
+        for item in blocked
+        if _safe_str(item.get("id")).strip() and _safe_str(item.get("status")).strip() in {"review", "not_yet_observed"}
+    ]
     if not blocked:
         status = "ready"
         next_action = "Stage 3 mission criteria are satisfied for the current local state."
@@ -1407,6 +1418,9 @@ def _mission_readiness(
         "criteria": criteria,
         "satisfied": len(criteria) - len(blocked),
         "total": len(criteria),
+        "blocked_criteria_ids": blocked_criteria_ids,
+        "attention_criteria_ids": attention_criteria_ids,
+        "review_criteria_ids": review_criteria_ids,
         "next_action": next_action,
     }
 

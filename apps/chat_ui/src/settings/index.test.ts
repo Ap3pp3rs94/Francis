@@ -574,6 +574,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               status: "attention",
               satisfied: 4,
               total: 5,
+              blocked_criteria_ids: ["deadletter_cleanly"],
+              attention_criteria_ids: ["deadletter_cleanly"],
+              review_criteria_ids: [],
               next_action: "Repair mission continuity evidence before treating Stage 3 as complete.",
               criteria: [
                 {
@@ -778,6 +781,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
       "manual_cleanup",
     );
     assert.equal(worldState.overview?.mission_briefing?.readiness?.status, "attention");
+    assert.deepEqual(worldState.overview?.mission_briefing?.readiness?.blocked_criteria_ids, ["deadletter_cleanly"]);
+    assert.deepEqual(worldState.overview?.mission_briefing?.readiness?.attention_criteria_ids, ["deadletter_cleanly"]);
+    assert.equal(worldState.overview?.mission_briefing?.readiness?.review_criteria_ids, undefined);
     assert.equal(worldState.overview?.mission_briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
     assert.deepEqual(
       missionReadinessEvidenceLines(worldState.overview?.mission_briefing?.readiness?.criteria?.[0], 3),
@@ -1256,6 +1262,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
             status: "review",
             satisfied: 4,
             total: 5,
+            blocked_criteria_ids: ["deadletter_cleanly"],
+            attention_criteria_ids: [],
+            review_criteria_ids: ["deadletter_cleanly"],
             next_action: "Exercise mission tick and deadletter paths, then inspect the continuity briefing again.",
             criteria: [
               {
@@ -1401,6 +1410,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.readiness?.stage, "Stage 3 - Missions");
     assert.equal(briefing.briefing?.readiness?.status, "review");
     assert.equal(briefing.briefing?.readiness?.satisfied, 4);
+    assert.deepEqual(briefing.briefing?.readiness?.blocked_criteria_ids, ["deadletter_cleanly"]);
+    assert.equal(briefing.briefing?.readiness?.attention_criteria_ids, undefined);
+    assert.deepEqual(briefing.briefing?.readiness?.review_criteria_ids, ["deadletter_cleanly"]);
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.evidence?.deadlettered_count, 0);
     assert.deepEqual(briefing.briefing?.focus?.[0]?.dependency_ids, ["msn_dependency"]);

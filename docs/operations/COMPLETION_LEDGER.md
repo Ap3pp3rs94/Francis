@@ -353,6 +353,20 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is readiness closure blocker disclosure. This advances the active
+`Phase 2 / P8_MEMORY -> P1_INTERFACE` line by making Stage 3 readiness summaries
+name their own unresolved closure criteria:
+
+- `src/francis/world_state/snapshot.py` now includes `blocked_criteria_ids`,
+  `attention_criteria_ids`, and `review_criteria_ids` in the mission readiness
+  summary.
+- `apps/chat_ui/src/settings/index.ts` preserves those arrays through the
+  readiness parser, and `apps/chat_ui/src/App.tsx` renders them in the shared
+  readiness evidence panel.
+- Readiness closure now remains explicit even when a compact UI card only shows
+  a bounded number of criterion details.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is recovery-review readiness evidence context. This advances the
 active `Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by making
 failed-mission readiness evidence cite bounded review outcomes instead of only
@@ -1607,6 +1621,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 readiness closure blocker disclosure slice:
+
+- `python -m pytest tests/test_api_continuity.py::test_continuity_briefing_reports_idle_operator_start_state tests/test_api_continuity.py::test_continuity_briefing_surfaces_handoff_and_recent_completion tests/test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery -q`
+  Result: `3 passed`
+- `python -m ruff check src/francis/world_state/snapshot.py tests/test_api_continuity.py`
+  Result: `passed`
+- `cd apps/chat_ui; npm test -- settings`
+  Result: `24 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 recovery-review readiness evidence context slice:
 
