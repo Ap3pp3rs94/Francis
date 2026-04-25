@@ -6514,7 +6514,12 @@ function SystemPanel(props: {
                             ) : null}
                           </div>
                         ) : null}
-                        {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id || item.stage?.latest_event || item.stage?.latest_ts) ? (
+                        {(item.stage?.approval_id ||
+                          item.stage?.operation_id ||
+                          item.stage?.trace_id ||
+                          item.stage?.latest_event ||
+                          item.stage?.latest_receipt_status ||
+                          item.stage?.latest_ts) ? (
                           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                             {item.stage?.approval_id ? (
                               <>
@@ -6536,9 +6541,27 @@ function SystemPanel(props: {
                                 {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id) ? " / " : ""}latest <code>{item.stage.latest_event}</code>
                               </>
                             ) : null}
+                            {item.stage?.latest_receipt_status ? (
+                              <>
+                                {(item.stage?.approval_id ||
+                                item.stage?.operation_id ||
+                                item.stage?.trace_id ||
+                                item.stage?.latest_event)
+                                  ? " / "
+                                  : ""}
+                                receipt_status <code>{item.stage.latest_receipt_status}</code>
+                              </>
+                            ) : null}
                             {item.stage?.latest_ts ? (
                               <>
-                                {(item.stage?.approval_id || item.stage?.operation_id || item.stage?.trace_id || item.stage?.latest_event) ? " / " : ""}at <code>{toLocaleTime(item.stage.latest_ts)}</code>
+                                {(item.stage?.approval_id ||
+                                item.stage?.operation_id ||
+                                item.stage?.trace_id ||
+                                item.stage?.latest_event ||
+                                item.stage?.latest_receipt_status)
+                                  ? " / "
+                                  : ""}
+                                at <code>{toLocaleTime(item.stage.latest_ts)}</code>
                               </>
                             ) : null}
                           </div>
@@ -10310,7 +10333,12 @@ function OperationsPanel(props: {
                                     ) : null}
                                   </div>
                                 ) : null}
-                                {(stage?.approval_id || stage?.operation_id || stage?.trace_id || stage?.latest_event || stageLatestAt) ? (
+                                {(stage?.approval_id ||
+                                  stage?.operation_id ||
+                                  stage?.trace_id ||
+                                  stage?.latest_event ||
+                                  stage?.latest_receipt_status ||
+                                  stageLatestAt) ? (
                                   <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
                                     {stage?.approval_id ? (
                                       <>
@@ -10333,9 +10361,27 @@ function OperationsPanel(props: {
                                         <code>{stage.latest_event}</code>
                                       </>
                                     ) : null}
+                                    {stage?.latest_receipt_status ? (
+                                      <>
+                                        {(stage?.approval_id ||
+                                        stage?.operation_id ||
+                                        stage?.trace_id ||
+                                        stage?.latest_event)
+                                          ? " / "
+                                          : ""}
+                                        receipt_status <code>{stage.latest_receipt_status}</code>
+                                      </>
+                                    ) : null}
                                     {stageLatestAt ? (
                                       <>
-                                        {(stage?.approval_id || stage?.operation_id || stage?.trace_id || stage?.latest_event) ? " / " : ""}at{" "}
+                                        {(stage?.approval_id ||
+                                        stage?.operation_id ||
+                                        stage?.trace_id ||
+                                        stage?.latest_event ||
+                                        stage?.latest_receipt_status)
+                                          ? " / "
+                                          : ""}
+                                        at{" "}
                                         <code>{stageLatestAt}</code>
                                       </>
                                     ) : null}

@@ -503,6 +503,21 @@ As of `2026-04-20`, the strongest truthful CI posture is:
 ## 3. High-confidence current slice
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is trace receipt-status continuity in the mission loop. This
+advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY ->
+P1_INTERFACE` line by carrying the latest run-ledger receipt status into the
+operator-visible loop contract:
+
+- `src/francis/api/routes/missions.py` now includes
+  `latest_receipt_status` on the loop trace stage when a real run-ledger receipt
+  supplies that status.
+- `apps/chat_ui/src/missions/index.ts` preserves that field through the mission
+  detail parser.
+- `apps/chat_ui/src/App.tsx` renders the receipt status in both the mission
+  inspector loop and the operation detail mission bridge, without changing
+  execution behavior or inventing memory state.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is the positive ready-state continuity contract. This advances the
 active `Phase 2 / P7_EXECUTION -> P8_MEMORY` line by proving the mission
 readiness model can reach a fully satisfied state from real API paths:
@@ -2233,6 +2248,21 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission loop trace receipt-status slice:
+
+- `pytest tests/test_api_missions.py::test_mission_linked_governance_hold_updates_blocked_state -q`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\missions\index.test.ts`
+  Result: `11 passed`
+- `cd apps\chat_ui; npm test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 operation detail receipt-handle visibility slice:
 

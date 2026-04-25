@@ -852,6 +852,7 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert loop_state["gate"]["next_step"] == "raise_trust_or_reduce_risk"
     assert loop_state["execute"]["next_step"] == "raise_trust_or_reduce_risk"
     assert loop_state["trace"]["latest_event"] == run_ledger[0]["name"]
+    assert loop_state["trace"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert loop_state["trace"]["latest_ts"]
     assert loop_state["memory"]["latest_event"] == fetched_body["history"][-1]["event"]
     assert loop_state["memory"]["latest_ts"] == fetched_body["history"][-1]["ts"]

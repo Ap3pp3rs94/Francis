@@ -1165,6 +1165,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           operation_id: "tsk_loop",
           trace_id: "trace_loop",
           latest_event: "governance_hold",
+          latest_receipt_status: "queued",
           latest_ts: "2024-03-09T16:00:01Z",
         },
         memory: {
@@ -1199,6 +1200,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.execute?.next_step, "review_pending_approval");
     assert.equal(response.loop_state?.trace?.trace_id, "trace_loop");
     assert.equal(response.loop_state?.trace?.latest_event, "governance_hold");
+    assert.equal(response.loop_state?.trace?.latest_receipt_status, "queued");
     assert.equal(response.loop_state?.trace?.latest_ts, "2024-03-09T16:00:01Z");
     assert.equal(response.loop_state?.memory?.latest_event, "advance_receipt");
     assert.equal(response.loop_state?.memory?.latest_ts, "2026-04-15T12:05:00Z");

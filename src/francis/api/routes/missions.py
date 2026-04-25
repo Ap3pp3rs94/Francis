@@ -475,6 +475,7 @@ def _loop_stage(
     operation_id: str = "",
     trace_id: str = "",
     latest_event: str = "",
+    latest_receipt_status: str = "",
     latest_ts: str = "",
     next_step: str = "",
 ) -> dict[str, Any]:
@@ -496,6 +497,8 @@ def _loop_stage(
         payload["trace_id"] = trace_id
     if latest_event:
         payload["latest_event"] = latest_event
+    if latest_receipt_status:
+        payload["latest_receipt_status"] = latest_receipt_status
     if latest_ts:
         payload["latest_ts"] = latest_ts
     if next_step:
@@ -682,6 +685,7 @@ def _mission_loop_state(
     ledger_count = len(run_ledger)
     latest_trace_receipt = run_ledger[0] if run_ledger else {}
     latest_trace_event = _safe_str(latest_trace_receipt.get("name")).strip()
+    latest_trace_status = _safe_str(latest_trace_receipt.get("status")).strip()
     latest_trace_ts = _stage_timestamp(latest_trace_receipt.get("ts"))
     if trace_count or audit_count or ledger_count:
         trace_parts: list[str] = []
@@ -698,6 +702,7 @@ def _mission_loop_state(
             operation_id=latest_operation_id,
             trace_id=latest_trace_id,
             latest_event=latest_trace_event,
+            latest_receipt_status=latest_trace_status,
             latest_ts=latest_trace_ts,
         )
     else:
