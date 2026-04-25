@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MissionsClient, presentMissionQueue } from "./index.ts";
+import { MissionsClient, missionCurrentTaskId, presentMissionQueue } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -109,6 +109,38 @@ test("presentMissionQueue prioritizes review-required missions and reports hidde
   assert.equal(presentation.hiddenTotal, 2);
   assert.equal(presentation.hiddenReviewRequired, 0);
   assert.equal(presentation.hiddenEligible, 2);
+});
+
+test("missionCurrentTaskId prefers explicit current-task sources before linked-task fallback", () => {
+  const mission = {
+    linked_task_ids: ["tsk_old", "tsk_older"],
+    last_task_id: "tsk_mission_current",
+    meta: { last_task_id: "tsk_meta_current" },
+  };
+
+  assert.equal(
+    missionCurrentTaskId(
+      mission,
+      { last_task_id: "tsk_queue_current", action_target_id: "tsk_action_current", last_advance_operation_id: "tsk_advance_current" },
+      { operation_id: "tsk_handoff_current" },
+    ),
+    "tsk_queue_current",
+  );
+  assert.equal(missionCurrentTaskId(mission, undefined, { operation_id: "tsk_handoff_current" }), "tsk_handoff_current");
+  assert.equal(missionCurrentTaskId(mission), "tsk_mission_current");
+  assert.equal(missionCurrentTaskId({ linked_task_ids: ["tsk_old"], meta: { last_task_id: "tsk_meta_current" } }), "tsk_meta_current");
+  assert.equal(
+    missionCurrentTaskId({ linked_task_ids: ["tsk_old"] }, { action_target_id: "tsk_action_current" }),
+    "tsk_action_current",
+  );
+  assert.equal(
+    missionCurrentTaskId(
+      { linked_task_ids: ["tsk_old"] },
+      { action_target_id: "msn_dependency", last_advance_operation_id: "tsk_advance_current" },
+    ),
+    "tsk_advance_current",
+  );
+  assert.equal(missionCurrentTaskId({ linked_task_ids: [" ", "tsk_old"] }, { action_target_id: "msn_dependency" }), "tsk_old");
 });
 
 test("MissionsClient.list requests the bounded mission list route and parses mission records", async () => {

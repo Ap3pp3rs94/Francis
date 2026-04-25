@@ -3,7 +3,7 @@ import type { ChatMessage } from "./chat";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
-import { MissionsApiError, MissionsClient, presentMissionQueue } from "./missions";
+import { MissionsApiError, MissionsClient, missionCurrentTaskId, presentMissionQueue } from "./missions";
 import type { MissionDetail, MissionLoopState, MissionQueueItem } from "./missions";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationRecord } from "./operations";
@@ -128,53 +128,6 @@ function safeNumber(v: unknown, fallback = 0): number {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
-}
-
-type MissionTargetLike = {
-  linked_task_ids?: unknown[];
-  last_task_id?: unknown;
-  meta?: Record<string, unknown>;
-};
-
-type MissionQueueTargetLike = {
-  action_target_id?: unknown;
-  last_task_id?: unknown;
-  last_advance_operation_id?: unknown;
-};
-
-function firstLinkedTaskId(mission: MissionTargetLike | null | undefined): string {
-  if (!mission || !Array.isArray(mission.linked_task_ids)) return "";
-  for (const taskId of mission.linked_task_ids) {
-    const cleaned = safeString(taskId).trim();
-    if (cleaned) return cleaned;
-  }
-  return "";
-}
-
-function missionCurrentTaskId(
-  mission: MissionTargetLike | null | undefined,
-  queueItem?: MissionQueueTargetLike,
-  handoff?: { operation_id?: unknown },
-): string {
-  const queueLastTaskId = safeString(queueItem?.last_task_id).trim();
-  if (queueLastTaskId) return queueLastTaskId;
-
-  const handoffOperationId = safeString(handoff?.operation_id).trim();
-  if (handoffOperationId) return handoffOperationId;
-
-  const missionLastTaskId = safeString(mission?.last_task_id).trim();
-  if (missionLastTaskId) return missionLastTaskId;
-
-  const metaLastTaskId = isRecord(mission?.meta) ? safeString(mission.meta.last_task_id).trim() : "";
-  if (metaLastTaskId) return metaLastTaskId;
-
-  const actionTargetId = safeString(queueItem?.action_target_id).trim();
-  if (actionTargetId.startsWith("tsk_")) return actionTargetId;
-
-  const lastAdvanceOperationId = safeString(queueItem?.last_advance_operation_id).trim();
-  if (lastAdvanceOperationId) return lastAdvanceOperationId;
-
-  return firstLinkedTaskId(mission);
 }
 
 function operationDetailId(detail: OperationDetail | null | undefined): string {

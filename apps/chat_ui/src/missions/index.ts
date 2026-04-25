@@ -246,6 +246,22 @@ export type MissionQueuePresentation = {
   hiddenEligible: number;
 };
 
+export type MissionTaskTarget = {
+  linked_task_ids?: unknown[];
+  last_task_id?: unknown;
+  meta?: Record<string, unknown>;
+};
+
+export type MissionQueueTaskTarget = {
+  action_target_id?: unknown;
+  last_task_id?: unknown;
+  last_advance_operation_id?: unknown;
+};
+
+export type MissionTaskHandoffTarget = {
+  operation_id?: unknown;
+};
+
 export class MissionsApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -804,6 +820,41 @@ function missionQueueSeverityRank(item: MissionQueueItem): number {
   if (missionQueueHasPendingApproval(item)) return 0;
   if (missionQueueHasUnresolvedDependency(item)) return 1;
   return 2;
+}
+
+function firstLinkedMissionTaskId(mission: MissionTaskTarget | null | undefined): string {
+  if (!mission || !Array.isArray(mission.linked_task_ids)) return "";
+  for (const taskId of mission.linked_task_ids) {
+    const cleaned = safeString(taskId).trim();
+    if (cleaned) return cleaned;
+  }
+  return "";
+}
+
+export function missionCurrentTaskId(
+  mission: MissionTaskTarget | null | undefined,
+  queueItem?: MissionQueueTaskTarget,
+  handoff?: MissionTaskHandoffTarget,
+): string {
+  const queueLastTaskId = safeString(queueItem?.last_task_id).trim();
+  if (queueLastTaskId) return queueLastTaskId;
+
+  const handoffOperationId = safeString(handoff?.operation_id).trim();
+  if (handoffOperationId) return handoffOperationId;
+
+  const missionLastTaskId = safeString(mission?.last_task_id).trim();
+  if (missionLastTaskId) return missionLastTaskId;
+
+  const metaLastTaskId = isRecord(mission?.meta) ? safeString(mission.meta.last_task_id).trim() : "";
+  if (metaLastTaskId) return metaLastTaskId;
+
+  const actionTargetId = safeString(queueItem?.action_target_id).trim();
+  if (actionTargetId.startsWith("tsk_")) return actionTargetId;
+
+  const lastAdvanceOperationId = safeString(queueItem?.last_advance_operation_id).trim();
+  if (lastAdvanceOperationId) return lastAdvanceOperationId;
+
+  return firstLinkedMissionTaskId(mission);
 }
 
 export function presentMissionQueue(items: MissionQueueItem[], limit = 4): MissionQueuePresentation {

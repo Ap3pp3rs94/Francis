@@ -247,6 +247,13 @@ handoff operation, or queue actionability targets before falling back to the
 first linked task, so operators are routed to the active mission task rather
 than an older linked operation.
 
+As of `2026-04-25`, that ORB chat UI current-task routing rule is now a shared
+mission client contract with direct TypeScript coverage. The tested selector
+preserves the precedence order from queue `last_task_id`, loop handoff
+operation, mission/meta `last_task_id`, task-shaped action targets, last
+advance operation, and finally linked-task fallback, reducing the chance that a
+future UI edit silently reintroduces stale mission routing.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
