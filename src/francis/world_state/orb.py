@@ -312,12 +312,15 @@ def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
     headline = _safe_str(continuity.get("headline")).strip()
     focus_items = [item for item in _as_list(continuity.get("focus")) if isinstance(item, dict)]
     recently_completed = [item for item in _as_list(continuity.get("recently_completed")) if isinstance(item, dict)]
+    failed_preview = [item for item in _as_list(continuity.get("failed_preview")) if isinstance(item, dict)]
     deadletter_preview = [item for item in _as_list(continuity.get("deadletter_preview")) if isinstance(item, dict)]
 
     focus_item = dict(focus_items[0]) if focus_items else {}
     if focus_item:
         status = _safe_str(focus_item.get("status")).strip().lower()
         state = "operator_action_required" if status in {"blocked", "failed", "deadlettered"} else "continuity_ready"
+    elif failed_preview:
+        state = "failed_recovery"
     elif deadletter_preview:
         state = "deadletter_review"
     elif recently_completed:
@@ -330,6 +333,7 @@ def _handback_state(continuity: dict[str, Any]) -> dict[str, Any]:
         "headline": headline,
         "focus": focus_item,
         "recently_completed_count": len(recently_completed),
+        "failed_count": len(failed_preview),
         "deadletter_count": len(deadletter_preview),
     }
 

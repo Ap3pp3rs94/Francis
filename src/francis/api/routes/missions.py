@@ -780,15 +780,17 @@ def mission_queue(limit: int = 50, include_terminal: bool = False) -> dict[str, 
     try:
         safe_limit = max(1, min(int(limit), 5000))
         items = mission_store.mission_queue_items(limit=safe_limit, include_terminal=include_terminal)
+        failed = mission_store.failed_queue_items(limit=min(safe_limit, 20))
         deadletter = mission_store.deadletter_queue_items(limit=min(safe_limit, 20))
         return {
             "ok": True,
             "items": items,
             "total": len(items),
+            "failed": failed,
             "deadletter": deadletter,
         }
     except Exception as exc:
-        return {"ok": False, "items": [], "total": 0, "deadletter": [], "error": str(exc)}
+        return {"ok": False, "items": [], "total": 0, "failed": [], "deadletter": [], "error": str(exc)}
 
 
 @router.post("/tick")
@@ -828,6 +830,7 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
         return {
             "ok": False,
             "items": [],
+            "failed": [],
             "deadletter": [],
             "total": 0,
             "applied": 0,
@@ -859,6 +862,7 @@ def run_queue_once(payload: MissionRunOnceIn) -> dict[str, object]:
         return {
             "ok": False,
             "items": [],
+            "failed": [],
             "deadletter": [],
             "total": 0,
             "applied": 0,

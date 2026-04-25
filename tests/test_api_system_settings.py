@@ -697,6 +697,18 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert dead.status_code == 200
     dead_id = str(dead.json()["mission_id"])
 
+    failed = client.post(
+        "/missions/create",
+        json={
+            "objective": "Failed mission recovery preview",
+            "summary": "Mission should appear before it is deadlettered.",
+            "priority": 8,
+            "requester_id": "test.system.queue",
+        },
+    )
+    assert failed.status_code == 200
+    failed_id = str(failed.json()["mission_id"])
+
     installed = client.post(
         "/plugins/install",
         json={
@@ -733,6 +745,26 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert blocked_run.status_code == 200
     assert blocked_run.json()["status"] == "blocked"
 
+    failed_operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.revise",
+            "reason": "failed mission recovery",
+            "mission_id": failed_id,
+            "input": {"reason": "simulate failure for recovery projection"},
+        },
+    )
+    assert failed_operation.status_code == 200
+    failed_operation_id = str(failed_operation.json()["operation_id"])
+
+    failed_run = client.post(f"/operations/{failed_operation_id}/run", json={"worker_id": "test.system.queue"})
+    assert failed_run.status_code == 200
+    assert failed_run.json()["status"] == "failed"
+
+    failed_tick = client.post(f"/missions/{failed_id}/tick", json={"actor": "test.system.queue"})
+    assert failed_tick.status_code == 200
+    assert failed_tick.json()["mission"]["status"] == "failed"
+
     deadlettered = client.post(
         f"/missions/{dead_id}/deadletter",
         json={"reason": "manual_cleanup", "actor": "test.system.queue"},
@@ -765,6 +797,16 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert ready_item["latest_activity"] == {}
     assert ready_item["current_task"]["source"] == "mission"
     assert ready_item["current_task"]["handoff_action"] == "create_first_operation"
+    failed_items = body["overview"]["failed_missions"]
+    assert failed_items
+    assert failed_items[0]["id"] == failed_id
+    assert failed_items[0]["recommended_action"] == "retry_or_deadletter"
+    assert failed_items[0]["recovery"]["source_status"] == "failed"
+    assert failed_items[0]["recovery"]["action"] == "retry_or_deadletter"
+    assert failed_items[0]["recovery"]["target_id"] == failed_operation_id
+    assert failed_items[0]["recovery"]["operator_required"] is True
+    assert failed_items[0]["recovery"]["automatic_retry"] is False
+    assert failed_items[0]["current_task"]["operation_id"] == failed_operation_id
     deadletter_items = body["overview"]["deadletter_missions"]
     assert deadletter_items
     assert deadletter_items[0]["id"] == dead_id

@@ -246,12 +246,13 @@ def run_queue_once(
             )
 
     queue_items = mission_store.mission_queue_items(limit=safe_limit, include_terminal=False)
+    failed_items = mission_store.failed_queue_items(limit=min(safe_limit, 20))
     deadletter_items = mission_store.deadletter_queue_items(limit=min(safe_limit, 20))
     counts = {
         "queued": 0,
         "active": 0,
         "blocked": 0,
-        "failed": 0,
+        "failed": len(failed_items),
         "deadlettered": len(deadletter_items),
     }
     for item in queue_items:
@@ -262,6 +263,7 @@ def run_queue_once(
     return {
         "ok": not errors,
         "items": queue_items,
+        "failed": failed_items,
         "deadletter": deadletter_items,
         "total": len(queue_items),
         "applied": tick_applied + advanced,

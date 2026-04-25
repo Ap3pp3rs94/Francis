@@ -1057,10 +1057,11 @@ def _attach_mission_history_summary(
 def _mission_readiness(
     mission_status_counts: dict[str, Any],
     mission_queue: list[dict[str, Any]],
+    failed_missions: list[dict[str, Any]],
     deadletter_missions: list[dict[str, Any]],
     recent_missions: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    histories = _mission_history_map(mission_queue, deadletter_missions, recent_missions)
+    histories = _mission_history_map(mission_queue, failed_missions, deadletter_missions, recent_missions)
     mission_ids = sorted(histories.keys())
     mission_total = sum(int(value or 0) for value in mission_status_counts.values())
     tick_events = [
@@ -1073,6 +1074,8 @@ def _mission_readiness(
     expected_status_keys = {"queued", "active", "blocked", "completed", "failed", "deadlettered", "cancelled"}
     visible_status = bool(expected_status_keys.intersection(mission_status_counts.keys()))
 
+    failed_count = int(mission_status_counts.get("failed") or 0)
+    failed_ids = [str(item.get("id") or "").strip() for item in failed_missions if isinstance(item, dict)]
     deadlettered_count = int(mission_status_counts.get("deadlettered") or 0)
     deadletter_ids = [str(item.get("id") or "").strip() for item in deadletter_missions if isinstance(item, dict)]
     deadletter_missing_reason = [
@@ -1092,7 +1095,9 @@ def _mission_readiness(
         )
         if not has_deadletter_transition:
             deadletter_missing_history.append(mission_id)
-    if deadlettered_count <= 0:
+    if failed_count > 0:
+        deadletter_status = "attention"
+    elif deadlettered_count <= 0:
         deadletter_status = "not_yet_observed"
     elif deadletter_missing_reason or deadletter_missing_history:
         deadletter_status = "attention"
@@ -1130,6 +1135,16 @@ def _mission_readiness(
             or str(item.get("operator_hint") or "").strip()
         )
     ]
+    failed_context_ids = [
+        str(item.get("id") or "").strip()
+        for item in failed_missions
+        if isinstance(item, dict)
+        and (
+            str(item.get("recommended_action") or "").strip()
+            or str(item.get("operator_hint") or "").strip()
+            or bool(item.get("recovery") if isinstance(item.get("recovery"), dict) else {})
+        )
+    ]
     dependency_context_ids = [
         str(item.get("id") or "").strip()
         for item in mission_queue
@@ -1144,7 +1159,13 @@ def _mission_readiness(
     reconstruction_context_ids = sorted(
         {
             item
-            for item in [*focus_context_ids, *completed_context_ids, *deadletter_context_ids, *dependency_context_ids]
+            for item in [
+                *focus_context_ids,
+                *completed_context_ids,
+                *failed_context_ids,
+                *deadletter_context_ids,
+                *dependency_context_ids,
+            ]
             if item
         }
     )
@@ -1170,11 +1191,17 @@ def _mission_readiness(
             "label": "Failures deadletter cleanly",
             "status": deadletter_status,
             "detail": (
-                "Deadlettered missions carry a reason and a status transition in mission history."
-                if deadletter_status == "satisfied"
-                else "Deadletter a blocked/failed mission and verify reason plus history before treating this criterion as complete."
+                "Failed missions are waiting for an explicit retry or deadletter decision."
+                if failed_count > 0
+                else (
+                    "Deadlettered missions carry a reason and a status transition in mission history."
+                    if deadletter_status == "satisfied"
+                    else "Deadletter a blocked/failed mission and verify reason plus history before treating this criterion as complete."
+                )
             ),
             "evidence": {
+                "failed_count": failed_count,
+                "sampled_failed_ids": failed_ids,
                 "deadlettered_count": deadlettered_count,
                 "sampled_deadletter_ids": deadletter_ids,
                 "missing_reason_ids": deadletter_missing_reason,
@@ -1255,12 +1282,14 @@ def _mission_readiness(
 def _mission_briefing(
     mission_status_counts: dict[str, Any],
     mission_queue: list[dict[str, Any]],
+    failed_missions: list[dict[str, Any]],
     deadletter_missions: list[dict[str, Any]],
     recent_missions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     blocked = int(mission_status_counts.get("blocked") or 0)
     queued = int(mission_status_counts.get("queued") or 0)
     active = int(mission_status_counts.get("active") or 0)
+    failed = int(mission_status_counts.get("failed") or 0)
     completed = int(mission_status_counts.get("completed") or 0)
     deadlettered = int(mission_status_counts.get("deadlettered") or 0)
     dependency_waiting = sum(
@@ -1271,7 +1300,9 @@ def _mission_briefing(
     )
 
     headline_parts: list[str] = []
-    if blocked > 0:
+    if failed > 0:
+        headline_parts.append(f"{failed} failed mission(s) need recovery or deadletter decision.")
+    elif blocked > 0:
         headline_parts.append(f"{blocked} blocked mission(s) need operator action.")
     elif dependency_waiting > 0:
         headline_parts.append(f"{dependency_waiting} mission(s) are waiting on declared dependencies.")
@@ -1375,6 +1406,42 @@ def _mission_briefing(
         if len(recently_completed) >= 2:
             break
 
+    failed_preview: list[dict[str, Any]] = []
+    for item in failed_missions[:2]:
+        if not isinstance(item, dict):
+            continue
+        recovery = dict(item.get("recovery") or {}) if isinstance(item.get("recovery"), dict) else {}
+        failed_preview.append(
+            {
+                "id": str(item.get("id") or "").strip(),
+                "status": str(item.get("status") or "").strip(),
+                "objective": str(item.get("objective") or "").strip(),
+                "reason": str(recovery.get("reason") or item.get("operator_hint") or "").strip(),
+                "recommended_action": str(item.get("recommended_action") or "").strip(),
+                "operator_hint": str(item.get("operator_hint") or "").strip(),
+                "action_target_id": str(item.get("action_target_id") or "").strip(),
+                "recovery": recovery,
+                **_mission_hold_projection(item),
+                "last_task_id": str(item.get("last_task_id") or "").strip(),
+                "last_task_status": str(item.get("last_task_status") or "").strip(),
+                "last_task_result_status": str(item.get("last_task_result_status") or "").strip(),
+                "last_task_gate": str(item.get("last_task_gate") or "").strip(),
+                "current_task": dict(item.get("current_task") or {})
+                if isinstance(item.get("current_task"), dict)
+                else {},
+                "history_count": int(item.get("history_count") or 0),
+                "latest_history_event": str(item.get("latest_history_event") or "").strip(),
+                "latest_history_ts": str(item.get("latest_history_ts") or "").strip(),
+                "history_tail": list(item.get("history_tail") or [])
+                if isinstance(item.get("history_tail"), list)
+                else [],
+                "updated_at": str(item.get("updated_at") or "").strip(),
+                "latest_activity": dict(item.get("latest_activity") or {})
+                if isinstance(item.get("latest_activity"), dict)
+                else {},
+            }
+        )
+
     deadletter_preview: list[dict[str, Any]] = []
     for item in deadletter_missions[:2]:
         if not isinstance(item, dict):
@@ -1413,12 +1480,14 @@ def _mission_briefing(
             "blocked": blocked,
             "queued": queued,
             "active": active,
+            "failed": failed,
             "completed": completed,
             "deadlettered": deadlettered,
             "dependency_waiting": dependency_waiting,
         },
         "focus": focus_items,
         "recently_completed": recently_completed,
+        "failed_preview": failed_preview,
         "deadletter_preview": deadletter_preview,
     }
 
@@ -1437,34 +1506,40 @@ def mission_continuity_snapshot(
     approvals_path = data_dir() / "approvals" / "pending"
     recent_missions = mission_summary["recent"] if isinstance(mission_summary.get("recent"), list) else []
     mission_queue = mission_store.mission_queue_items(limit=queue_limit, include_terminal=False)
+    failed_missions = mission_store.failed_queue_items(limit=deadletter_limit)
     deadletter_missions = mission_store.deadletter_queue_items(limit=deadletter_limit)
 
     activity_cache: dict[str, dict[str, Any] | None] = {}
     recent_missions = _attach_mission_activity(recent_missions, log_limit=activity_log_limit, cache=activity_cache)
     mission_queue = _attach_mission_activity(mission_queue, log_limit=activity_log_limit, cache=activity_cache)
+    failed_missions = _attach_mission_activity(failed_missions, log_limit=activity_log_limit, cache=activity_cache)
     deadletter_missions = _attach_mission_activity(
         deadletter_missions, log_limit=activity_log_limit, cache=activity_cache
     )
-    histories = _mission_history_map(mission_queue, deadletter_missions, recent_missions)
+    histories = _mission_history_map(mission_queue, failed_missions, deadletter_missions, recent_missions)
     recent_missions = _attach_mission_history_summary(recent_missions, histories)
     mission_queue = _attach_mission_history_summary(mission_queue, histories)
+    failed_missions = _attach_mission_history_summary(failed_missions, histories)
     deadletter_missions = _attach_mission_history_summary(deadletter_missions, histories)
     pending_approval_projection = _mission_pending_approval_projection(
-        [*recent_missions, *mission_queue, *deadletter_missions],
+        [*recent_missions, *mission_queue, *failed_missions, *deadletter_missions],
         approvals_path,
     )
     recent_missions = _attach_mission_pending_approval_projection(recent_missions, pending_approval_projection)
     mission_queue = _attach_mission_pending_approval_projection(mission_queue, pending_approval_projection)
+    failed_missions = _attach_mission_pending_approval_projection(failed_missions, pending_approval_projection)
     deadletter_missions = _attach_mission_pending_approval_projection(deadletter_missions, pending_approval_projection)
     mission_briefing = _mission_briefing(
         mission_status_counts,
         mission_queue,
+        failed_missions,
         deadletter_missions,
         recent_missions,
     )
     mission_readiness = _mission_readiness(
         mission_status_counts,
         mission_queue,
+        failed_missions,
         deadletter_missions,
         recent_missions,
     )
@@ -1474,6 +1549,7 @@ def mission_continuity_snapshot(
         "mission_status_counts": mission_status_counts,
         "recent_missions": recent_missions,
         "mission_queue": mission_queue,
+        "failed_missions": failed_missions,
         "deadletter_missions": deadletter_missions,
         "mission_briefing": mission_briefing,
         "mission_readiness": mission_readiness,
@@ -1917,6 +1993,7 @@ def snapshot() -> dict[str, Any]:
     )
     recent_missions = continuity["recent_missions"] if isinstance(continuity.get("recent_missions"), list) else []
     mission_queue = continuity["mission_queue"] if isinstance(continuity.get("mission_queue"), list) else []
+    failed_missions = continuity["failed_missions"] if isinstance(continuity.get("failed_missions"), list) else []
     deadletter_missions = (
         continuity["deadletter_missions"] if isinstance(continuity.get("deadletter_missions"), list) else []
     )
@@ -1958,6 +2035,7 @@ def snapshot() -> dict[str, Any]:
             "queued_missions": int(mission_status_counts.get("queued") or 0),
             "active_missions": int(mission_status_counts.get("active") or 0),
             "blocked_missions": int(mission_status_counts.get("blocked") or 0),
+            "failed_missions": int(mission_status_counts.get("failed") or 0),
             "deadlettered_missions": int(mission_status_counts.get("deadlettered") or 0),
             "active_incidents": len(incidents),
             "generated_plugins": _count_json_entries(plugins_root),
@@ -1969,6 +2047,7 @@ def snapshot() -> dict[str, Any]:
             "mission_status_counts": mission_status_counts,
             "recent_missions": recent_missions,
             "mission_queue": mission_queue,
+            "failed_missions": failed_missions,
             "deadletter_missions": deadletter_missions,
             "mission_briefing": mission_briefing,
             "incidents": incidents,

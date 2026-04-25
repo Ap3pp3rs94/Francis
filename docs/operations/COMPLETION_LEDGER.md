@@ -75,6 +75,14 @@ the fact that automatic retry is not enabled. Mission detail, world-state
 deadletter lists, continuity deadletter previews, and ORB deadletter cards can
 show this recovery posture without implying a reopen or retry mutation path.
 
+As of `2026-04-25`, failed-but-not-deadlettered missions are visible as their
+own recovery queue. World-state snapshots expose `failed_missions`, continuity
+briefings expose `failed_preview`, mission queue-run responses preserve a
+bounded `failed` list, and ORB surfaces show failed mission recovery posture
+separately from deadletter review. Stage 3 readiness now treats sampled failed
+missions as attention-worthy until an explicit retry or deadletter decision is
+made.
+
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
 return the current mission history, linked operations, run-ledger projection, and
@@ -1443,6 +1451,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 failed mission recovery visibility slice:
+
+- `pytest tests/test_api_system_settings.py::test_system_world_state_projects_mission_queue_and_deadletter_preview tests/test_api_continuity.py::test_continuity_briefing_surfaces_failed_mission_recovery tests/test_api_missions.py::test_mission_run_once_advances_safe_queue_actions -q`
+  Result: `3 passed`
+- `cd apps/chat_ui && npm test`
+  Result: `21 passed`
+- `cd apps/chat_ui && npm run build`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest live validation for the `2026-04-21` Stage 2 Observer transition check:
 

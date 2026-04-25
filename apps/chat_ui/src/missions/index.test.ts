@@ -470,7 +470,7 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
       applied: 2,
       advanced: 1,
       processed: 3,
-      counts: { queued: 1, blocked: 1, deadlettered: 1 },
+      counts: { queued: 1, blocked: 1, failed: 1, deadlettered: 1 },
       items: [
         {
           id: "mission_blocked",
@@ -526,6 +526,26 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
               details: { status: "blocked" },
             },
           ],
+        },
+      ],
+      failed: [
+        {
+          id: "mission_failed",
+          status: "failed",
+          objective: "Review failed work",
+          recommended_action: "retry_or_deadletter",
+          action_target_id: "tsk_failed",
+          operator_hint: "The latest linked task failed. Retry the work or deadletter the mission.",
+          recovery: {
+            source_status: "failed",
+            action: "retry_or_deadletter",
+            target_id: "tsk_failed",
+            reason: "The latest linked task failed. Retry the work or deadletter the mission.",
+            next_step: "Review the failed linked task, then retry through existing governed operation paths or deadletter explicitly.",
+            operator_required: true,
+            automatic_retry: false,
+            read_only: true,
+          },
         },
       ],
       deadletter: [
@@ -686,6 +706,11 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.advanced, 1);
     assert.equal(response.processed, 3);
     assert.equal(response.counts?.blocked, 1);
+    assert.equal(response.counts?.failed, 1);
+    assert.equal(response.failed[0]?.recovery?.action, "retry_or_deadletter");
+    assert.equal(response.failed[0]?.recovery?.source_status, "failed");
+    assert.equal(response.failed[0]?.recovery?.target_id, "tsk_failed");
+    assert.equal(response.failed[0]?.recovery?.automatic_retry, false);
     assert.equal(response.deadletter[0]?.recovery?.action, "review_deadletter");
     assert.equal(response.deadletter[0]?.recovery?.source_status, "deadlettered");
     assert.equal(response.deadletter[0]?.recovery?.target_id, "tsk_dead");

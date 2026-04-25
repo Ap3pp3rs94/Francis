@@ -288,6 +288,7 @@ export type MissionRunOnceResult = {
 export type MissionRunOnceResponse = {
   ok: boolean;
   items: MissionQueueItem[];
+  failed: MissionQueueItem[];
   deadletter: MissionQueueItem[];
   total?: number;
   applied?: number;
@@ -916,6 +917,7 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
     return {
       ok: false,
       items: [],
+      failed: [],
       deadletter: [],
       error: typeof json === "string" ? json : "invalid_mission_run_once_payload",
     };
@@ -926,6 +928,9 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
     : [];
   const deadletter = Array.isArray(json.deadletter)
     ? json.deadletter.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
+    : [];
+  const failed = Array.isArray(json.failed)
+    ? json.failed.map(parseMissionQueueItem).filter((item): item is MissionQueueItem => item !== undefined)
     : [];
   const results = Array.isArray(json.results)
     ? json.results.map(parseMissionRunOnceResult).filter((item): item is MissionRunOnceResult => item !== null)
@@ -944,6 +949,7 @@ function parseMissionRunOnceResponse(json: unknown): MissionRunOnceResponse {
   return {
     ok: safeBoolean(json.ok, false),
     items,
+    failed,
     deadletter,
     total: safeNumber(json.total, 0) || undefined,
     applied: safeNumber(json.applied, 0) || undefined,

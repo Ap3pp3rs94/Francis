@@ -116,6 +116,7 @@ export type WorldStateCounts = {
   queued_missions?: number;
   active_missions?: number;
   blocked_missions?: number;
+  failed_missions?: number;
   deadlettered_missions?: number;
   active_incidents?: number;
   generated_plugins?: number;
@@ -342,6 +343,7 @@ export type WorldStateOverview = {
   mission_status_counts: Record<string, number>;
   recent_missions: WorldStateMissionSummary[];
   mission_queue: WorldStateMissionQueueItem[];
+  failed_missions: WorldStateMissionQueueItem[];
   deadletter_missions: WorldStateMissionQueueItem[];
   incidents: WorldStateIncidentSummary[];
 };
@@ -566,6 +568,12 @@ export type ContinuityBriefingDeadletterItem = {
   latest_activity?: Record<string, unknown>;
 };
 
+export type ContinuityBriefingFailedItem = ContinuityBriefingDeadletterItem & {
+  status?: string;
+  operator_hint?: string;
+  action_target_id?: string;
+};
+
 export type ObserverAnomalySummary = {
   score?: number;
   level?: string;
@@ -637,6 +645,7 @@ export type ContinuityBriefingPayload = {
   counts?: Record<string, number>;
   focus?: ContinuityBriefingFocusItem[];
   recently_completed?: ContinuityBriefingCompletedItem[];
+  failed_preview?: ContinuityBriefingFailedItem[];
   deadletter_preview?: ContinuityBriefingDeadletterItem[];
   readiness?: MissionReadinessSummary;
   observer?: {
@@ -1647,6 +1656,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
     queued_missions: safeNumber(countsRaw.queued_missions, 0),
     active_missions: safeNumber(countsRaw.active_missions, 0),
     blocked_missions: safeNumber(countsRaw.blocked_missions, 0),
+    failed_missions: safeNumber(countsRaw.failed_missions, 0),
     deadlettered_missions: safeNumber(countsRaw.deadlettered_missions, 0),
     active_incidents: safeNumber(countsRaw.active_incidents, 0),
     generated_plugins: safeNumber(countsRaw.generated_plugins, 0),
@@ -1666,6 +1676,9 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
   const recentTasksRaw = Array.isArray(overviewRaw.recent_tasks) ? (overviewRaw.recent_tasks as unknown[]) : [];
   const recentMissionsRaw = Array.isArray(overviewRaw.recent_missions) ? (overviewRaw.recent_missions as unknown[]) : [];
   const missionQueueRaw = Array.isArray(overviewRaw.mission_queue) ? (overviewRaw.mission_queue as unknown[]) : [];
+  const failedMissionsRaw = Array.isArray(overviewRaw.failed_missions)
+    ? (overviewRaw.failed_missions as unknown[])
+    : [];
   const deadletterMissionsRaw = Array.isArray(overviewRaw.deadletter_missions)
     ? (overviewRaw.deadletter_missions as unknown[])
     : [];
@@ -1724,6 +1737,53 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
       .map(parseWorldStateMissionSummary)
       .filter((item): item is WorldStateMissionSummary => item !== null),
     mission_queue: missionQueueRaw
+      .filter(isRecord)
+      .map((item) => ({
+        id: safeString(item.id, ""),
+        status: safeString(item.status, ""),
+        objective: safeString(item.objective, ""),
+        summary: safeString(item.summary, ""),
+        next_step: safeString(item.next_step, ""),
+        owner_id: safeString(item.owner_id, ""),
+        priority: safeNumber(item.priority, 0),
+        risk_tier: safeString(item.risk_tier, ""),
+        dependency_ids: safeStringArray(item.dependency_ids),
+        dependency_count: safeNumber(item.dependency_count, 0),
+        dependency_state: parseWorldStateMissionDependencyState(item.dependency_state),
+        escalation_path: safeString(item.escalation_path, ""),
+        linked_task_count: safeNumber(item.linked_task_count, 0),
+        linked_task_ids: Array.isArray(item.linked_task_ids)
+          ? item.linked_task_ids.map((taskId) => safeString(taskId, "")).filter(Boolean)
+          : [],
+        last_task_id: safeString(item.last_task_id, ""),
+        last_task_status: safeString(item.last_task_status, ""),
+        last_task_result_status: safeString(item.last_task_result_status, ""),
+        last_task_gate: safeString(item.last_task_gate, ""),
+        last_task_approval_id: safeString(item.last_task_approval_id, ""),
+        last_task_previous_approval_id: safeString(item.last_task_previous_approval_id, ""),
+        last_task_previous_approval_status: safeString(item.last_task_previous_approval_status, ""),
+        last_task_approval_status: safeString(item.last_task_approval_status, ""),
+        last_task_approval_replacement_kind: safeString(item.last_task_approval_replacement_kind, ""),
+        last_task_approval_replacement_reason: safeString(item.last_task_approval_replacement_reason, ""),
+        last_task_approval_replacement_changed_keys: safeStringArray(
+          item.last_task_approval_replacement_changed_keys,
+        ),
+        recommended_action: safeString(item.recommended_action, ""),
+        operator_hint: safeString(item.operator_hint, ""),
+        action_target_id: safeString(item.action_target_id, ""),
+        advance: parseWorldStateMissionAdvanceProjection(item.advance),
+        recovery: parseWorldStateMissionRecoveryProjection(item.recovery),
+        current_task: parseWorldStateMissionCurrentTask(item.current_task),
+        deadletter_reason: safeString(item.deadletter_reason, ""),
+        history_count: safeNumber(item.history_count, 0),
+        latest_history_event: safeString(item.latest_history_event, ""),
+        latest_history_ts: safeString(item.latest_history_ts, ""),
+        history_tail: parseMissionHistoryPreviewEntries(item.history_tail),
+        updated_at: safeString(item.updated_at, ""),
+        latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
+      }))
+      .filter((item) => item.id),
+    failed_missions: failedMissionsRaw
       .filter(isRecord)
       .map((item) => ({
         id: safeString(item.id, ""),
@@ -2190,6 +2250,18 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
   };
 }
 
+function parseContinuityFailedItem(raw: unknown): ContinuityBriefingFailedItem | null {
+  if (!isRecord(raw)) return null;
+  const item = parseContinuityDeadletterItem(raw);
+  if (!item) return null;
+  return {
+    ...item,
+    status: safeString(raw["status"], ""),
+    operator_hint: safeString(raw["operator_hint"], ""),
+    action_target_id: safeString(raw["action_target_id"], ""),
+  };
+}
+
 function parseWorldStateIncidentSummary(raw: unknown): WorldStateIncidentSummary | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw["id"], "").trim();
@@ -2530,6 +2602,9 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
       recently_completed: (Array.isArray(briefingRaw["recently_completed"]) ? briefingRaw["recently_completed"] : [])
         .map(parseContinuityCompletedItem)
         .filter((item): item is ContinuityBriefingCompletedItem => item !== null),
+      failed_preview: (Array.isArray(briefingRaw["failed_preview"]) ? briefingRaw["failed_preview"] : [])
+        .map(parseContinuityFailedItem)
+        .filter((item): item is ContinuityBriefingFailedItem => item !== null),
       deadletter_preview: (Array.isArray(briefingRaw["deadletter_preview"]) ? briefingRaw["deadletter_preview"] : [])
         .map(parseContinuityDeadletterItem)
         .filter((item): item is ContinuityBriefingDeadletterItem => item !== null),
@@ -2581,6 +2656,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
     Boolean(snapshot.briefing?.focus?.length) ||
     Boolean(snapshot.briefing?.counts && Object.keys(snapshot.briefing.counts).length > 0) ||
     Boolean(snapshot.briefing?.recently_completed?.length) ||
+    Boolean(snapshot.briefing?.failed_preview?.length) ||
     Boolean(snapshot.briefing?.deadletter_preview?.length) ||
     Boolean(snapshot.briefing?.readiness?.status) ||
     Boolean(snapshot.briefing?.observer?.headline) ||

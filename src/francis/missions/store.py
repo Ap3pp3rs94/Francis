@@ -20,6 +20,7 @@ __all__ = [
     "create_mission",
     "deadletter_mission",
     "deadletter_queue_items",
+    "failed_queue_items",
     "mission_queue_item",
     "mission_queue_items",
     "record_advance_receipt",
@@ -1260,6 +1261,12 @@ def deadletter_queue_items(repo_root: Path | None = None, *, limit: int = 50) ->
     return [_queue_item(record, repo_root) for record in records[: max(0, int(limit))]]
 
 
+def failed_queue_items(repo_root: Path | None = None, *, limit: int = 50) -> list[dict[str, Any]]:
+    records = list_missions(repo_root, limit=10_000, status=MissionStatus.FAILED.value)
+    records.sort(key=lambda record: (-_parse_ts(record.updated_at), record.mission_id))
+    return [_queue_item(record, repo_root) for record in records[: max(0, int(limit))]]
+
+
 def run_queue_once(
     repo_root: Path | None = None,
     *,
@@ -1276,12 +1283,13 @@ def run_queue_once(
             note=note or "mission_queue_run_once",
         )
         queue_items = mission_queue_items(repo_root, limit=safe_limit, include_terminal=False)
+        failed_items = failed_queue_items(repo_root, limit=min(safe_limit, 20))
         deadletter_items = deadletter_queue_items(repo_root, limit=min(safe_limit, 20))
         counts = {
             "queued": 0,
             "active": 0,
             "blocked": 0,
-            "failed": 0,
+            "failed": len(failed_items),
             "deadlettered": len(deadletter_items),
         }
         for item in queue_items:
@@ -1291,6 +1299,7 @@ def run_queue_once(
         return {
             "ok": not errors,
             "items": queue_items,
+            "failed": failed_items,
             "deadletter": deadletter_items,
             "total": len(queue_items),
             "applied": applied_count,

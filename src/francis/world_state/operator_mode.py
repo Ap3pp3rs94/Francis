@@ -478,6 +478,10 @@ def snapshot() -> dict[str, Any]:
             if isinstance(continuity.get("mission_briefing"), dict)
             and isinstance(continuity.get("mission_briefing", {}).get("recently_completed"), list)
             else [],
+            "failed_preview": continuity.get("mission_briefing", {}).get("failed_preview")
+            if isinstance(continuity.get("mission_briefing"), dict)
+            and isinstance(continuity.get("mission_briefing", {}).get("failed_preview"), list)
+            else [],
             "deadletter_preview": continuity.get("mission_briefing", {}).get("deadletter_preview")
             if isinstance(continuity.get("mission_briefing"), dict)
             and isinstance(continuity.get("mission_briefing", {}).get("deadletter_preview"), list)

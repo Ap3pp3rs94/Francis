@@ -328,6 +328,33 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
               ],
             },
           ],
+          failed_missions: [
+            {
+              id: "mission_failed",
+              status: "failed",
+              objective: "Failed mission with recovery posture",
+              recommended_action: "retry_or_deadletter",
+              operator_hint: "The latest linked task failed. Retry the work or deadletter the mission.",
+              action_target_id: "tsk_failed",
+              recovery: {
+                source_status: "failed",
+                action: "retry_or_deadletter",
+                target_id: "tsk_failed",
+                reason: "The latest linked task failed. Retry the work or deadletter the mission.",
+                next_step: "Review the failed linked task before retrying or deadlettering.",
+                operator_required: true,
+                automatic_retry: false,
+                read_only: true,
+              },
+              current_task: {
+                mission_id: "mission_failed",
+                source: "mission_meta",
+                operation_id: "tsk_failed",
+                task_status: "failed",
+                handoff_action: "retry_or_deadletter",
+              },
+            },
+          ],
           deadletter_missions: [
             {
               id: "mission_dead",
@@ -515,6 +542,11 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_event, "mission_ticked");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_history_ts, "2026-04-14T07:45:00Z");
     assert.equal(worldState.overview?.mission_queue?.[0]?.history_tail?.[1]?.event, "mission_ticked");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.id, "mission_failed");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.action, "retry_or_deadletter");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.source_status, "failed");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.target_id, "tsk_failed");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.current_task?.operation_id, "tsk_failed");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.id, "mission_dead");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.action, "review_deadletter");
     assert.equal(worldState.overview?.deadletter_missions?.[0]?.recovery?.target_id, "tsk_dead");
@@ -1214,7 +1246,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
       subsystem: "continuity_briefing",
       generated_at: 1_710_001_234,
       briefing: {
-        counts: { queued: 2, deadlettered: 1 },
+        counts: { queued: 2, failed: 1, deadlettered: 1 },
         readiness: {
           stage: "Stage 3 - Missions",
           status: "review",
@@ -1301,6 +1333,34 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             },
           },
         ],
+        failed_preview: [
+          {
+            id: "mission_failed",
+            status: "failed",
+            objective: "Recover failed sync",
+            reason: "worker_failed",
+            recommended_action: "retry_or_deadletter",
+            operator_hint: "The latest linked task failed. Retry the work or deadletter the mission.",
+            action_target_id: "tsk_failed",
+            recovery: {
+              source_status: "failed",
+              action: "retry_or_deadletter",
+              target_id: "tsk_failed",
+              reason: "worker_failed",
+              next_step: "Review the failed linked task before retrying or deadlettering.",
+              operator_required: true,
+              automatic_retry: false,
+              read_only: true,
+            },
+            current_task: {
+              mission_id: "mission_failed",
+              source: "mission_meta",
+              operation_id: "tsk_failed",
+              task_status: "failed",
+              handoff_action: "retry_or_deadletter",
+            },
+          },
+        ],
         deadletter_preview: [
           {
             id: "mission_dead",
@@ -1372,7 +1432,7 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     const briefing = await client.getContinuityBriefing({ timeoutMs: 50 });
 
     assert.equal(briefing.ok, true);
-    assert.deepEqual(briefing.briefing?.counts, { queued: 2, deadlettered: 1 });
+    assert.deepEqual(briefing.briefing?.counts, { queued: 2, failed: 1, deadlettered: 1 });
     assert.equal(briefing.briefing?.readiness?.status, "review");
     assert.equal(briefing.briefing?.readiness?.satisfied, 0);
     assert.equal(briefing.briefing?.readiness?.total, 5);
@@ -1383,6 +1443,11 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_count, 4);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_history_event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.target_id, "tsk_failed");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.current_task?.operation_id, "tsk_failed");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.action, "review_deadletter");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.recovery?.target_id, "tsk_dead_current");

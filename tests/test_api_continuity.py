@@ -648,6 +648,71 @@ def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_p
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["missing_history_ids"] == []
 
 
+def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Recover a failed mission before deadletter",
+            "summary": "Failed missions should remain visible before explicit deadletter.",
+            "requester_id": "test.continuity.failed",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    operation = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.revise",
+            "reason": "failed recovery visibility",
+            "mission_id": mission_id,
+            "input": {"reason": "simulate failed operation"},
+        },
+    )
+    assert operation.status_code == 200
+    operation_id = str(operation.json()["operation_id"])
+
+    failed_operation = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.continuity.failed"})
+    assert failed_operation.status_code == 200
+    assert failed_operation.json()["status"] == "failed"
+
+    ticked = client.post(f"/missions/{mission_id}/tick", json={"actor": "test.continuity.failed"})
+    assert ticked.status_code == 200
+    assert ticked.json()["mission"]["status"] == "failed"
+
+    response = client.get("/continuity/briefing")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["briefing"]["counts"]["failed"] == 1
+    assert body["briefing"]["failed_preview"][0]["id"] == mission_id
+    assert body["briefing"]["failed_preview"][0]["status"] == "failed"
+    assert body["briefing"]["failed_preview"][0]["recommended_action"] == "retry_or_deadletter"
+    assert body["briefing"]["failed_preview"][0]["recovery"]["source_status"] == "failed"
+    assert body["briefing"]["failed_preview"][0]["recovery"]["target_id"] == operation_id
+    assert body["briefing"]["failed_preview"][0]["recovery"]["automatic_retry"] is False
+    assert body["briefing"]["failed_preview"][0]["current_task"]["operation_id"] == operation_id
+    assert body["briefing"]["failed_preview"][0]["current_task"]["handoff_action"] == "retry_or_deadletter"
+    mission_readiness_by_id = {item["id"]: item for item in body["briefing"]["readiness"]["criteria"]}
+    assert mission_readiness_by_id["deadletter_cleanly"]["status"] == "attention"
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["failed_count"] == 1
+    assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_failed_ids"] == [mission_id]
+
+
 def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

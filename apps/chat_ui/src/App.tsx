@@ -3202,6 +3202,7 @@ function SystemPanel(props: {
   const shiftBriefingCounts = shiftBriefing?.counts ?? {};
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
+  const shiftBriefingFailed = shiftBriefing?.failed_preview ?? [];
   const shiftBriefingDeadletter = shiftBriefing?.deadletter_preview ?? [];
   const shiftBriefingDeadletterPresentation = useMemo(
     () => presentMissionDeadletterItems(shiftBriefingDeadletter, 2),
@@ -3238,6 +3239,7 @@ function SystemPanel(props: {
   const recentMissions = overview?.recent_missions ?? [];
   const missionQueue = overview?.mission_queue ?? [];
   const missionQueuePresentation = useMemo(() => presentMissionQueue(missionQueue, 4), [missionQueue]);
+  const failedPreview = overview?.failed_missions ?? [];
   const deadletterPreview = overview?.deadletter_missions ?? [];
   const deadletterPreviewPresentation = useMemo(() => presentMissionDeadletterItems(deadletterPreview, 2), [deadletterPreview]);
   const incidents = overview?.incidents ?? [];
@@ -3249,6 +3251,7 @@ function SystemPanel(props: {
   const queuedMissions = safeNumber(counts?.queued_missions, safeNumber(missionStatusCounts.queued, 0));
   const activeMissions = safeNumber(counts?.active_missions, safeNumber(missionStatusCounts.active, 0));
   const blockedMissions = safeNumber(counts?.blocked_missions, safeNumber(missionStatusCounts.blocked, 0));
+  const failedMissions = safeNumber(counts?.failed_missions, safeNumber(missionStatusCounts.failed, 0));
   const deadletteredMissions = safeNumber(
     counts?.deadlettered_missions,
     safeNumber(missionStatusCounts.deadlettered, 0),
@@ -3257,6 +3260,7 @@ function SystemPanel(props: {
   const activeIncidents = safeNumber(counts?.active_incidents, incidents.length);
   const shiftBriefingBlocked = safeNumber(shiftBriefingCounts["blocked"], 0);
   const shiftBriefingQueued = safeNumber(shiftBriefingCounts["queued"], 0);
+  const shiftBriefingFailedCount = safeNumber(shiftBriefingCounts["failed"], 0);
   const shiftBriefingCompletedCount = safeNumber(shiftBriefingCounts["completed"], 0);
   const shiftBriefingDeadletterCount = safeNumber(shiftBriefingCounts["deadlettered"], 0);
   const servicesRaw =
@@ -3286,7 +3290,7 @@ function SystemPanel(props: {
   const missionFeedDeclared = declaredMissionCount > 0 || recentMissions.length > 0;
   const queueLead = missionQueuePresentation.lead ?? null;
   const leadMission =
-    recentMissions.find((mission) => ["deadlettered", "blocked"].includes(safeString(mission.status).trim().toLowerCase())) ??
+    recentMissions.find((mission) => ["failed", "deadlettered", "blocked"].includes(safeString(mission.status).trim().toLowerCase())) ??
     recentMissions.find((mission) => safeString(mission.status).trim().toLowerCase() === "active") ??
     recentMissions.find((mission) => safeString(mission.status).trim().toLowerCase() === "queued") ??
     recentMissions[0] ??
@@ -3312,6 +3316,7 @@ function SystemPanel(props: {
     { label: "Active missions", value: activeMissions, tone: activeMissions > 0 ? "running" : "clear" },
     { label: "Queued missions", value: queuedMissions, tone: queuedMissions > 0 ? "pending" : "clear" },
     { label: "Blocked missions", value: blockedMissions, tone: blockedMissions > 0 ? "blocked" : "clear" },
+    { label: "Failed missions", value: failedMissions, tone: failedMissions > 0 ? "failed" : "clear" },
     { label: "Deadlettered", value: deadletteredMissions, tone: deadletteredMissions > 0 ? "failed" : "clear" },
     {
       label: "Pending approvals",
@@ -4138,6 +4143,7 @@ function SystemPanel(props: {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <span style={badgeStyle(shiftBriefingBlocked > 0 ? "blocked" : "clear")}>blocked {shiftBriefingBlocked}</span>
             <span style={badgeStyle(shiftBriefingQueued > 0 ? "queued" : "clear")}>queued {shiftBriefingQueued}</span>
+            <span style={badgeStyle(shiftBriefingFailedCount > 0 ? "failed" : "clear")}>failed {shiftBriefingFailedCount}</span>
             <span style={badgeStyle(shiftBriefingCompletedCount > 0 ? "completed" : "clear")}>
               completed {shiftBriefingCompletedCount}
             </span>
@@ -4716,7 +4722,7 @@ function SystemPanel(props: {
           )}
         </div>
 
-        {shiftBriefingCompleted.length > 0 || shiftBriefingDeadletter.length > 0 ? (
+        {shiftBriefingCompleted.length > 0 || shiftBriefingFailed.length > 0 || shiftBriefingDeadletter.length > 0 ? (
           <div
             style={{
               display: "grid",
@@ -4817,6 +4823,82 @@ function SystemPanel(props: {
                         </button>
                       </div>
                     </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Failed Mission Recovery</div>
+              <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                {shiftBriefingFailed.length === 0 ? (
+                  <div style={{ fontSize: 11, color: THEME.muted }}>No failed missions waiting for recovery.</div>
+                ) : (
+                  shiftBriefingFailed.slice(0, 2).map((item) => {
+                    const failedCurrentTask = item.current_task;
+                    const recovery = item.recovery;
+                    const recoveryAction = safeString(recovery?.action).trim() || safeString(item.recommended_action).trim();
+                    const recoveryTargetId =
+                      safeString(recovery?.target_id).trim() ||
+                      safeString(item.action_target_id).trim() ||
+                      safeString(failedCurrentTask?.operation_id).trim() ||
+                      safeString(item.last_task_id).trim();
+                    const recoveryReason = safeString(recovery?.reason).trim() || safeString(item.reason).trim();
+                    const recoveryNextStep = safeString(recovery?.next_step).trim();
+                    const failedTaskStatus =
+                      safeString(failedCurrentTask?.task_status).trim() ||
+                      safeString(failedCurrentTask?.operation_status).trim() ||
+                      safeString(item.last_task_status).trim();
+                    const failedTaskResult =
+                      safeString(failedCurrentTask?.result_status).trim() ||
+                      safeString(item.last_task_result_status).trim();
+                    return (
+                      <div key={`shift-failed-${item.id}`}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600 }}>{item.objective || item.id}</div>
+                          <span style={badgeStyle(item.status || "failed")}>{item.status || "failed"}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+                          recovery=<code>{recoveryAction || "retry_or_deadletter"}</code>
+                          {recoveryTargetId ? (
+                            <>
+                              {" / "}target=<code>{recoveryTargetId}</code>
+                            </>
+                          ) : null}
+                          {" / "}automatic_retry=<code>{recovery?.automatic_retry ? "true" : "false"}</code>
+                        </div>
+                        {recoveryReason ? (
+                          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{recoveryReason}</div>
+                        ) : null}
+                        {recoveryNextStep ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                        ) : null}
+                        {failedTaskStatus || failedTaskResult ? (
+                          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                            {failedTaskStatus ? (
+                              <>
+                                task_status=<code>{failedTaskStatus}</code>
+                              </>
+                            ) : null}
+                            {failedTaskResult ? (
+                              <>
+                                {failedTaskStatus ? " / " : ""}result=<code>{failedTaskResult}</code>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {recoveryTargetId.startsWith("tsk_") ? (
+                            <button style={buttonStyle} onClick={() => props.onOpenOperation(recoveryTargetId)}>
+                              Open failed task
+                            </button>
+                          ) : null}
+                          <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                            Inspect
+                          </button>
+                        </div>
+                      </div>
                     );
                   })
                 )}
@@ -6809,6 +6891,91 @@ function SystemPanel(props: {
                 </div>
               ))}
             </div>
+          </>
+        ) : null}
+
+        {failedPreview.length > 0 ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12 }}>Failed Mission Recovery</div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+              showing=<code>{String(Math.min(failedPreview.length, 2))}/{String(failedPreview.length)}</code>
+            </div>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {failedPreview.slice(0, 2).map((item) => {
+                const failedCurrentTask = item.current_task;
+                const recovery = item.recovery;
+                const recoveryAction = safeString(recovery?.action).trim() || safeString(item.recommended_action).trim();
+                const recoveryTargetId =
+                  safeString(recovery?.target_id).trim() ||
+                  safeString(item.action_target_id).trim() ||
+                  safeString(failedCurrentTask?.operation_id).trim() ||
+                  safeString(item.last_task_id).trim();
+                const recoveryReason = safeString(recovery?.reason).trim() || safeString(item.operator_hint).trim();
+                const recoveryNextStep = safeString(recovery?.next_step).trim();
+                const failedTaskStatus =
+                  safeString(failedCurrentTask?.task_status).trim() ||
+                  safeString(failedCurrentTask?.operation_status).trim() ||
+                  safeString(item.last_task_status).trim();
+                const failedTaskResult =
+                  safeString(failedCurrentTask?.result_status).trim() ||
+                  safeString(item.last_task_result_status).trim();
+                return (
+                  <div
+                    key={`mission-failed-${item.id}`}
+                    style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{item.objective || item.id}</div>
+                      <span style={badgeStyle(item.status || "failed")}>{item.status || "failed"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+                      recovery=<code>{recoveryAction || "retry_or_deadletter"}</code>
+                      {recoveryTargetId ? (
+                        <>
+                          {" / "}target=<code>{recoveryTargetId}</code>
+                        </>
+                      ) : null}
+                      {" / "}automatic_retry=<code>{recovery?.automatic_retry ? "true" : "false"}</code>
+                    </div>
+                    {recoveryReason ? (
+                      <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 4 }}>{recoveryReason}</div>
+                    ) : null}
+                    {recoveryNextStep ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{recoveryNextStep}</div>
+                    ) : null}
+                    {failedTaskStatus || failedTaskResult ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {failedTaskStatus ? (
+                          <>
+                            task_status=<code>{failedTaskStatus}</code>
+                          </>
+                        ) : null}
+                        {failedTaskResult ? (
+                          <>
+                            {failedTaskStatus ? " / " : ""}result=<code>{failedTaskResult}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      {recoveryTargetId.startsWith("tsk_") ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(recoveryTargetId)}>
+                          Open failed task
+                        </button>
+                      ) : null}
+                      <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
+                        Inspect
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {failedPreview.length > 2 ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>
+                Hidden from this bounded view: <code>{String(failedPreview.length - 2)}</code>
+              </div>
+            ) : null}
           </>
         ) : null}
 
