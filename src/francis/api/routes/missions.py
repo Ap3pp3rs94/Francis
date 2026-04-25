@@ -729,6 +729,18 @@ class MissionDeadletterIn(BaseModel):
     note: str | None = None
 
 
+class MissionReplaceIn(BaseModel):
+    objective: str = ""
+    summary: str = ""
+    next_step: str = ""
+    owner_id: str = ""
+    priority: int | None = None
+    risk_tier: str = ""
+    actor: str | None = None
+    note: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.post("/create")
 def create_mission(payload: MissionCreateIn) -> dict[str, object]:
     blocked_reason = _mission_write_posture_guard("declaring a mission")
@@ -967,6 +979,55 @@ def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[st
             "mission": _serialize_mission(record),
             **_mission_detail_projection(record),
             "message": "deadlettered",
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.post("/{mission_id}/replace")
+def replace_mission(mission_id: str, payload: MissionReplaceIn) -> dict[str, object]:
+    blocked_reason = _mission_write_posture_guard("declaring a replacement mission")
+    if blocked_reason:
+        return {"ok": False, "error": blocked_reason, "status": "blocked"}
+    try:
+        replacement, source, err = mission_store.create_replacement_mission(
+            mission_id,
+            objective=payload.objective,
+            summary=payload.summary,
+            next_step=payload.next_step,
+            owner_id=payload.owner_id,
+            priority=payload.priority,
+            risk_tier=payload.risk_tier,
+            actor=_safe_str(payload.actor).strip() or None,
+            note=_safe_str(payload.note).strip() or None,
+            meta=dict(payload.meta or {}),
+        )
+        if not replacement:
+            return {
+                "ok": False,
+                "error": err or "replacement_failed",
+                "source_mission": _serialize_mission(source),
+            }
+        if err:
+            return {
+                "ok": False,
+                "error": err,
+                "status": replacement.status.value,
+                "replacement_mission_id": replacement.mission_id,
+                "source_mission": _serialize_mission(source),
+                "mission": _serialize_mission(replacement),
+                **_mission_detail_projection(replacement),
+            }
+        _, source_queue_item, _ = mission_store.mission_queue_item(mission_id)
+        return {
+            "ok": True,
+            "status": replacement.status.value,
+            "replacement_mission_id": replacement.mission_id,
+            "source_mission": _serialize_mission(source),
+            "source_queue_item": source_queue_item or {},
+            "mission": _serialize_mission(replacement),
+            **_mission_detail_projection(replacement),
+            "message": "replacement_declared",
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}

@@ -224,6 +224,13 @@ def test_mission_mutation_routes_are_blocked_in_observe_mode(monkeypatch, tmp_pa
     assert advanced_body["status"] == "blocked"
     assert "Observe mode keeps Francis read-only." in advanced_body["error"]
 
+    replaced = client.post(f"/missions/{mission_id}/replace", json={"actor": "tests"})
+    assert replaced.status_code == 200
+    replaced_body = replaced.json()
+    assert replaced_body["ok"] is False
+    assert replaced_body["status"] == "blocked"
+    assert "Observe mode keeps Francis read-only." in replaced_body["error"]
+
     tick_all = client.post("/missions/tick", json={"actor": "tests", "limit": 10})
     assert tick_all.status_code == 200
     tick_all_body = tick_all.json()
@@ -710,6 +717,122 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert ticked_body["mission"]["status"] == "deadlettered"
     assert ticked_body["loop_state"]["active_stage"] == "deadletter"
     assert ticked_body["loop_state"]["handoff"]["action"] == "review_deadletter"
+
+    replacement = client.post(
+        f"/missions/{mission_id}/replace",
+        json={
+            "actor": "test.missions.deadletter",
+            "note": "declare replacement after deadletter receipts",
+        },
+    )
+    assert replacement.status_code == 200
+    replacement_body = replacement.json()
+    assert replacement_body["ok"] is True
+    replacement_id = str(replacement_body["replacement_mission_id"])
+    assert replacement_body["source_mission"]["status"] == "deadlettered"
+    assert replacement_body["source_queue_item"]["recovery"]["last_review_outcome"] == "replacement_declared"
+    assert replacement_body["source_queue_item"]["recovery"]["last_review_target_id"] == replacement_id
+    assert replacement_body["mission"]["status"] == "queued"
+    assert replacement_body["mission"]["linked_task_ids"] == []
+    assert replacement_body["mission"]["meta"]["replacement_for_status"] == "deadlettered"
+    assert replacement_body["mission"]["meta"]["replacement_source_action"] == "review_deadletter"
+    assert replacement_body["linked_operations"] == []
+
+
+def test_mission_replace_declares_bounded_replacement_from_failed_source(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Recover failed mission with replacement",
+            "summary": "Source work failed and should not be reopened automatically.",
+            "next_step": "Review failed task receipts before replacing.",
+            "requester_id": "test.missions.replace",
+            "owner_id": "stage3.owner",
+            "priority": 7,
+            "risk_tier": "high",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    failed = client.patch(
+        f"/missions/{mission_id}",
+        json={
+            "status": "failed",
+            "actor": "test.missions.replace",
+            "note": "simulate terminal failed source",
+            "meta": {
+                "last_task_id": "tsk_failed_replacement",
+                "last_task_status": "failed",
+                "last_task_result_status": "failed",
+                "last_task_reason": "source operation failed with bounded receipts",
+                "last_task_next_step": "retry or replace explicitly",
+            },
+        },
+    )
+    assert failed.status_code == 200
+    assert failed.json()["mission"]["status"] == "failed"
+
+    replaced = client.post(
+        f"/missions/{mission_id}/replace",
+        json={
+            "objective": "Replacement mission after failed source",
+            "actor": "test.missions.replace",
+            "note": "declare replacement after failed receipts",
+            "meta": {"operator_decision": "replace_source"},
+        },
+    )
+    assert replaced.status_code == 200
+    body = replaced.json()
+    assert body["ok"] is True
+    assert body["status"] == "queued"
+    replacement_id = str(body["replacement_mission_id"])
+    assert replacement_id.startswith("msn_")
+    assert body["message"] == "replacement_declared"
+
+    assert body["source_mission"]["id"] == mission_id
+    assert body["source_mission"]["status"] == "failed"
+    assert body["source_mission"]["meta"]["last_recovery_action"] == "retry_or_deadletter"
+    assert body["source_mission"]["meta"]["last_recovery_outcome"] == "replacement_declared"
+    assert body["source_mission"]["meta"]["last_recovery_target_id"] == replacement_id
+    assert body["source_queue_item"]["recovery"]["last_review_outcome"] == "replacement_declared"
+    assert body["source_queue_item"]["recovery"]["last_review_target_id"] == replacement_id
+    assert body["source_queue_item"]["recovery"]["automatic_retry"] is False
+
+    replacement = body["mission"]
+    assert replacement["id"] == replacement_id
+    assert replacement["status"] == "queued"
+    assert replacement["linked_task_ids"] == []
+    assert replacement["meta"]["operator_decision"] == "replace_source"
+    assert replacement["meta"]["replacement_for_mission_id"] == mission_id
+    assert replacement["meta"]["replacement_for_status"] == "failed"
+    assert replacement["meta"]["replacement_source_action"] == "retry_or_deadletter"
+    assert replacement["meta"]["replacement_source_target_id"] == "tsk_failed_replacement"
+    assert replacement["meta"]["replacement_declared_by"] == "test.missions.replace"
+    assert body["linked_operations"] == []
+    assert body["run_ledger"] == []
+
+    history_events = [str(item.get("event")) for item in body["history"]]
+    assert history_events[-1] == "replacement_declared"
+    assert body["history"][-1]["details"]["source_mission_id"] == mission_id
+    assert body["history"][-1]["details"]["automatic_retry"] is False
+    assert body["history"][-1]["details"]["source_reopened"] is False
+
+    source = client.get(f"/missions/{mission_id}")
+    assert source.status_code == 200
+    source_body = source.json()
+    assert source_body["mission"]["status"] == "failed"
+    assert source_body["queue_item"]["recovery"]["last_review_target_id"] == replacement_id
+    assert source_body["history"][-1]["event"] == "recovery_review"
 
 
 def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Path) -> None:

@@ -204,6 +204,24 @@ export type MissionCreateResponse = {
   error?: string;
 };
 
+export type MissionReplaceRequest = {
+  objective?: string;
+  summary?: string;
+  next_step?: string;
+  owner_id?: string;
+  priority?: number;
+  risk_tier?: string;
+  actor?: string;
+  note?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type MissionReplaceResponse = MissionCreateResponse & {
+  replacement_mission_id?: string;
+  source_mission?: MissionRecord;
+  source_queue_item?: MissionQueueItem;
+};
+
 export type MissionQueueItem = MissionRecord & {
   recommended_action?: string;
   action_target_id?: string;
@@ -891,6 +909,28 @@ function parseMissionCreateResponse(json: unknown): MissionCreateResponse {
   };
 }
 
+function parseMissionReplaceResponse(json: unknown): MissionReplaceResponse {
+  if (!isRecord(json)) {
+    return {
+      ok: false,
+      error: typeof json === "string" ? json : "invalid_mission_replace_payload",
+    };
+  }
+
+  return {
+    ok: safeBoolean(json.ok, false),
+    mission_id: safeString(json.mission_id, "") || safeString(json.replacement_mission_id, "") || undefined,
+    replacement_mission_id: safeString(json.replacement_mission_id, "") || undefined,
+    status: safeString(json.status, "") || undefined,
+    mission: parseMissionRecord(json.mission),
+    source_mission: parseMissionRecord(json.source_mission),
+    source_queue_item: parseMissionQueueItem(json.source_queue_item),
+    ...parseMissionDetailParts(json, safeString(json.replacement_mission_id, "") || safeString(json.mission_id, "")),
+    message: safeString(json.message, "") || undefined,
+    error: safeString(json.error, "") || undefined,
+  };
+}
+
 function parseMissionAdvanceResponse(json: unknown): MissionAdvanceResponse {
   if (!isRecord(json)) {
     return {
@@ -1179,6 +1219,10 @@ export class MissionsClient {
     return `${this.missionUrl(missionId)}/advance`;
   }
 
+  private replaceUrl(missionId: string): string {
+    return `${this.missionUrl(missionId)}/replace`;
+  }
+
   private runOnceUrl(): string {
     return `${this.baseUrl}/missions/run_once`;
   }
@@ -1225,6 +1269,23 @@ export class MissionsClient {
       },
     });
     return parseMissionAdvanceResponse(json);
+  }
+
+  async replace(
+    missionId: string,
+    req?: MissionReplaceRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<MissionReplaceResponse> {
+    const json = await fetchJson(this.replaceUrl(missionId), {
+      method: "POST",
+      body: JSON.stringify(req ?? {}),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return parseMissionReplaceResponse(json);
   }
 
   async runOnce(

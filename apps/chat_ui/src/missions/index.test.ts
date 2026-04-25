@@ -454,6 +454,104 @@ test("MissionsClient.advance posts a bounded mission-advance request and preserv
   }
 });
 
+test("MissionsClient.replace posts a bounded replacement declaration and preserves source/replacement envelopes", async () => {
+  const requests: Array<{ path: string; method: string; body: unknown }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const path = new URL(url).pathname;
+    requests.push({
+      path,
+      method: (init?.method ?? "GET").toUpperCase(),
+      body: jsonRequestBody(init),
+    });
+
+    return jsonResponse({
+      ok: true,
+      status: "queued",
+      replacement_mission_id: "msn_replacement",
+      message: "replacement_declared",
+      source_mission: {
+        id: "msn_failed",
+        status: "failed",
+        objective: "Original failed mission",
+        meta: {
+          last_recovery_action: "retry_or_deadletter",
+          last_recovery_outcome: "replacement_declared",
+          last_recovery_target_id: "msn_replacement",
+        },
+      },
+      source_queue_item: {
+        id: "msn_failed",
+        status: "failed",
+        objective: "Original failed mission",
+        recommended_action: "retry_or_deadletter",
+        recovery: {
+          source_status: "failed",
+          action: "retry_or_deadletter",
+          target_id: "tsk_failed",
+          last_review_outcome: "replacement_declared",
+          last_review_target_id: "msn_replacement",
+          automatic_retry: false,
+        },
+      },
+      mission: {
+        id: "msn_replacement",
+        status: "queued",
+        objective: "Replacement mission",
+        meta: {
+          replacement_for_mission_id: "msn_failed",
+          replacement_source_action: "retry_or_deadletter",
+        },
+      },
+      history: [
+        { ts: "2026-04-25T12:00:00Z", mission_id: "msn_replacement", event: "created", details: {} },
+        {
+          ts: "2026-04-25T12:01:00Z",
+          mission_id: "msn_replacement",
+          event: "replacement_declared",
+          details: { source_mission_id: "msn_failed", automatic_retry: false },
+        },
+      ],
+      linked_operations: [],
+      run_ledger: [],
+    });
+  });
+
+  try {
+    const client = new MissionsClient("http://127.0.0.1:8000");
+    const response = await client.replace(
+      "msn_failed",
+      { actor: "chat_ui.orb", note: "declare_replacement_from_test" },
+      { timeoutMs: 50 },
+    );
+
+    assert.deepEqual(requests, [
+      {
+        path: "/missions/msn_failed/replace",
+        method: "POST",
+        body: {
+          actor: "chat_ui.orb",
+          note: "declare_replacement_from_test",
+        },
+      },
+    ]);
+    assert.equal(response.ok, true);
+    assert.equal(response.mission_id, "msn_replacement");
+    assert.equal(response.replacement_mission_id, "msn_replacement");
+    assert.equal(response.message, "replacement_declared");
+    assert.equal(response.source_mission?.id, "msn_failed");
+    assert.equal(response.source_mission?.meta?.last_recovery_outcome, "replacement_declared");
+    assert.equal(response.source_queue_item?.recovery?.last_review_target_id, "msn_replacement");
+    assert.equal(response.source_queue_item?.recovery?.automatic_retry, false);
+    assert.equal(response.mission?.id, "msn_replacement");
+    assert.equal(response.mission?.meta?.replacement_for_mission_id, "msn_failed");
+    assert.equal(response.history?.[1]?.event, "replacement_declared");
+    assert.equal(response.linked_operations?.length, 0);
+    assert.equal(response.run_ledger?.length, 0);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("MissionsClient.runOnce posts the bounded mission queue request and preserves queue outcomes", async () => {
   const requests: Array<{ path: string; method: string; body: unknown }> = [];
   const restoreFetch = installFetch(async (url, init) => {

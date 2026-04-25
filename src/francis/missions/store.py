@@ -19,6 +19,7 @@ __all__ = [
     "MissionCreateRequest",
     "MissionRecord",
     "create_mission",
+    "create_replacement_mission",
     "deadletter_mission",
     "deadletter_queue_items",
     "failed_queue_items",
@@ -796,6 +797,122 @@ def create_mission(
         return record, None
     except Exception as exc:
         return None, f"create_failed:{type(exc).__name__}"
+
+
+def create_replacement_mission(
+    source_mission_id: str,
+    repo_root: Path | None = None,
+    *,
+    objective: str = "",
+    summary: str = "",
+    next_step: str = "",
+    owner_id: str = "",
+    priority: int | None = None,
+    risk_tier: str = "",
+    actor: str | None = None,
+    note: str | None = None,
+    meta: dict[str, Any] | None = None,
+) -> tuple[MissionRecord | None, MissionRecord | None, str | None]:
+    source, err = read_mission(source_mission_id, repo_root)
+    if not source:
+        return None, None, err
+    if source.status not in {MissionStatus.FAILED, MissionStatus.DEADLETTERED}:
+        return None, source, "invalid_replacement_source_status"
+    if meta is not None and not _is_jsonable(meta):
+        return None, source, "meta_not_json_serializable"
+
+    source_queue_item = _queue_item(source, repo_root)
+    recovery = source_queue_item.get("recovery") if isinstance(source_queue_item.get("recovery"), dict) else {}
+    source_meta = dict(source.meta) if isinstance(source.meta, dict) else {}
+    default_action = "review_deadletter" if source.status == MissionStatus.DEADLETTERED else "retry_or_deadletter"
+    recovery_action = str(
+        recovery.get("action") or source_queue_item.get("recommended_action") or default_action
+    ).strip()
+    if recovery_action not in RECOVERY_REVIEW_ACTIONS:
+        recovery_action = default_action
+    recovery_target_id = _first_text(
+        recovery.get("target_id"),
+        source_queue_item.get("action_target_id"),
+        source_meta.get("last_task_id"),
+        source_meta.get("last_advance_operation_id"),
+    )
+    replacement_reason = _first_text(
+        source.deadletter_reason,
+        recovery.get("reason"),
+        source_meta.get("last_task_reason"),
+        source.next_step,
+        "Operator declared replacement mission.",
+    )
+    cleaned_actor = str(actor or "").strip()
+    cleaned_note = str(note or "").strip()
+
+    replacement_meta = dict(meta or {})
+    replacement_meta.update(
+        {
+            "replacement_for_mission_id": source.mission_id,
+            "replacement_for_status": source.status.value,
+            "replacement_source_objective": source.objective,
+            "replacement_source_action": recovery_action,
+            "replacement_source_target_id": recovery_target_id or None,
+            "replacement_reason": replacement_reason,
+            "replacement_declared_by": cleaned_actor or None,
+            "replacement_note": cleaned_note or None,
+        }
+    )
+
+    replacement, create_err = create_mission(
+        MissionCreateRequest(
+            objective=str(objective or "").strip() or f"Replacement for: {source.objective}",
+            summary=str(summary or "").strip()
+            or f"Replacement declared from {source.status.value} mission {source.mission_id}. {source.summary}".strip(),
+            next_step=str(next_step or "").strip()
+            or "Declare the first bounded operation for this replacement mission.",
+            requester_id=cleaned_actor or source.requester_id or "api",
+            owner_id=str(owner_id or "").strip() or source.owner_id or cleaned_actor or source.requester_id or "api",
+            priority=source.priority if priority is None else priority,
+            risk_tier=str(risk_tier or "").strip() or source.risk_tier or "medium",
+            status=MissionStatus.QUEUED,
+            meta=replacement_meta,
+        ),
+        repo_root,
+    )
+    if not replacement:
+        return None, source, create_err or "replacement_create_failed"
+
+    try:
+        _append_history(
+            replacement.mission_id,
+            "replacement_declared",
+            {
+                "source_mission_id": source.mission_id,
+                "source_status": source.status.value,
+                "source_action": recovery_action,
+                "source_target_id": recovery_target_id or None,
+                "reason": replacement_reason,
+                "actor": cleaned_actor or None,
+                "note": cleaned_note or None,
+                "automatic_retry": False,
+                "source_reopened": False,
+            },
+            repo_root,
+        )
+    except Exception as exc:
+        return replacement, source, f"history_failed:{type(exc).__name__}"
+
+    reviewed_source, review_err = record_recovery_review_receipt(
+        source.mission_id,
+        repo_root,
+        action=recovery_action,
+        outcome="replacement_declared",
+        actor=cleaned_actor or None,
+        note=cleaned_note or None,
+        target_id=replacement.mission_id,
+        message=f"Replacement mission {replacement.mission_id} declared.",
+        source_status=source.status.value,
+    )
+    if not reviewed_source:
+        return replacement, source, review_err or "replacement_receipt_failed"
+    return replacement, reviewed_source, review_err
 
 
 def read_mission(mission_id: str, repo_root: Path | None = None) -> tuple[MissionRecord | None, str | None]:

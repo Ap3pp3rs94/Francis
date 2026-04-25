@@ -2893,7 +2893,7 @@ function SystemPanel(props: {
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
   const [missionDetailError, setMissionDetailError] = useState<string | null>(null);
-  const [missionActionBusy, setMissionActionBusy] = useState<"" | "run" | "cancel" | "advance">("");
+  const [missionActionBusy, setMissionActionBusy] = useState<"" | "run" | "cancel" | "advance" | "replace">("");
   const [missionActionTargetId, setMissionActionTargetId] = useState("");
   const [missionActionNotice, setMissionActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [missionActionResult, setMissionActionResult] = useState<{
@@ -3591,7 +3591,8 @@ function SystemPanel(props: {
   const selectedMissionRecoveryTargetId = safeString(selectedMissionRecovery?.target_id).trim();
   const selectedMissionRecoveryReason = safeString(selectedMissionRecovery?.reason).trim();
   const selectedMissionRecoveryNextStep = safeString(selectedMissionRecovery?.next_step).trim();
-  const selectedMissionRecoverySourceStatus = safeString(selectedMissionRecovery?.source_status).trim();
+  const selectedMissionRecoverySourceStatus = safeString(selectedMissionRecovery?.source_status).trim().toLowerCase();
+  const selectedMissionReplacementEligible = ["failed", "deadlettered"].includes(selectedMissionRecoverySourceStatus);
   const selectedMissionAdvanceLabel =
     selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
   const selectedMissionActionTargetId = missionRecoveryTargetId(
@@ -3626,6 +3627,8 @@ function SystemPanel(props: {
   const selectedMissionLastRecoveryAt = mixedLocaleTime(selectedMissionQueueItem?.last_recovery_at);
   const missionAdvanceBlockedReason = executionBlockedReason(props.operatorMode, "advancing mission continuity");
   const canAdvanceMission = missionAdvanceBlockedReason.length === 0;
+  const missionReplaceBlockedReason = executionBlockedReason(props.operatorMode, "declaring replacement mission");
+  const canReplaceMission = missionReplaceBlockedReason.length === 0;
   const missionQueueRunBlockedReason = executionBlockedReason(props.operatorMode, "running the mission queue");
   const canRunMissionQueue = missionQueueRunBlockedReason.length === 0;
   const inspectMission = useCallback((missionId: string) => {
@@ -3719,6 +3722,54 @@ function SystemPanel(props: {
       }
     },
     [canAdvanceMission, loadMissionDetail, missionError, missionsClient, refresh],
+  );
+
+  const replaceMission = useCallback(
+    async (missionId: string) => {
+      const cleaned = missionId.trim();
+      if (!cleaned || !canReplaceMission) return;
+      setMissionActionBusy("replace");
+      setMissionActionTargetId(cleaned);
+      setMissionActionNotice(null);
+      setMissionActionResult(null);
+      try {
+        const response = await missionsClient.replace(cleaned, {
+          actor: "chat_ui.orb",
+          note: "declare_replacement_from_orb_panel",
+        });
+        await refresh();
+        const replacementId = safeString(response.replacement_mission_id).trim() || safeString(response.mission?.id).trim();
+        if (replacementId) {
+          setSelectedMissionId(replacementId);
+          await loadMissionDetail(replacementId);
+        } else {
+          await loadMissionDetail(cleaned);
+        }
+        if (!response.ok) {
+          setMissionActionNotice({
+            tone: "error",
+            text: response.error || response.message || "Replacement mission declaration failed.",
+          });
+          return;
+        }
+
+        setMissionActionResult({
+          missionId: replacementId || cleaned,
+        });
+        setMissionActionNotice({
+          tone: "info",
+          text: replacementId
+            ? `Replacement mission ${replacementId} declared. Source mission remains failed/deadlettered.`
+            : "Replacement mission declared. Source mission remains failed/deadlettered.",
+        });
+      } catch (err) {
+        setMissionActionNotice({ tone: "error", text: missionError(err) });
+      } finally {
+        setMissionActionBusy("");
+        setMissionActionTargetId("");
+      }
+    },
+    [canReplaceMission, loadMissionDetail, missionError, missionsClient, refresh],
   );
 
   const runMissionQueueOnce = useCallback(async () => {
@@ -6148,6 +6199,22 @@ function SystemPanel(props: {
                       ) : null}
                       {selectedMissionRecoveryNextStep ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{selectedMissionRecoveryNextStep}</div>
+                      ) : null}
+                      {selectedMissionReplacementEligible ? (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {missionReplaceBlockedReason ? (
+                            <span style={{ fontSize: 11, color: "#ffcf9d", alignSelf: "center" }}>{missionReplaceBlockedReason}</span>
+                          ) : null}
+                          <button
+                            style={buttonStyle}
+                            onClick={() => void replaceMission(selectedMissionContextId)}
+                            disabled={!canReplaceMission || missionActionBusy !== "" || missionQueueRunBusy}
+                          >
+                            {missionActionBusy === "replace" && missionActionTargetId === selectedMissionContextId
+                              ? "Declaring replacement."
+                              : "Declare replacement mission"}
+                          </button>
+                        </div>
                       ) : null}
                       {selectedMissionLastRecoveryAction ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>

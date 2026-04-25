@@ -91,6 +91,13 @@ mission, retrying automatically, or implying hidden autonomy. World-state,
 continuity, mission clients, and ORB recovery cards can surface the latest
 review action, outcome, target, actor, and timestamp.
 
+As of `2026-04-25`, failed or deadlettered missions can declare a bounded
+replacement mission from the recovery surface. The source mission remains in its
+terminal recovery state, receives a `recovery_review` receipt with outcome
+`replacement_declared`, and the new queued mission carries explicit replacement
+metadata linking it to the source mission, action, target, actor, and reason. No
+linked task is retried or run automatically by this path.
+
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
 return the current mission history, linked operations, run-ledger projection, and
@@ -1459,6 +1466,23 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 replacement mission declaration slice:
+
+- `pytest tests/test_api_missions.py::test_mission_deadletter_endpoint_moves_blocked_mission_cleanly tests/test_api_missions.py::test_mission_replace_declares_bounded_replacement_from_failed_source tests/test_api_missions.py::test_mission_mutation_routes_are_blocked_in_observe_mode -q`
+  Result: `3 passed`
+- `cd apps/chat_ui; npm test -- missions`
+  Result: `22 passed`
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check src/francis/missions/store.py src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src/francis/missions/store.py src/francis/api/routes/missions.py tests/test_api_missions.py`
+  Result: `3 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 failed mission recovery visibility slice:
 
