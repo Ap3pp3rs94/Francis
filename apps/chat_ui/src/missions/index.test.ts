@@ -621,6 +621,21 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
           history_count: 3,
           linked_operation_count: 1,
           run_ledger_count: 2,
+          receipt_summary: {
+            linked_operation_count: 1,
+            run_ledger_count: 2,
+            history_count: 3,
+            current_operation_id: "tsk_ready",
+            current_operation_status: "queued",
+            current_gate: "approvals_gate",
+            current_approval_id: "apr_ready",
+            current_trace_id: "trace_ready",
+            latest_run_event: "governance_hold",
+            latest_run_status: "queued",
+            latest_run_ts: "2026-04-15T12:20:00Z",
+            latest_history_event: "advance_receipt",
+            latest_history_ts: "2026-04-15T12:20:00Z",
+          },
           message: "operation_created",
         },
       ],
@@ -697,6 +712,9 @@ test("MissionsClient.runOnce posts the bounded mission queue request and preserv
     assert.equal(response.results?.[0]?.history_count, 3);
     assert.equal(response.results?.[0]?.linked_operation_count, 1);
     assert.equal(response.results?.[0]?.run_ledger_count, 2);
+    assert.equal(response.results?.[0]?.receipt_summary?.current_operation_id, "tsk_ready");
+    assert.equal(response.results?.[0]?.receipt_summary?.current_gate, "approvals_gate");
+    assert.equal(response.results?.[0]?.receipt_summary?.latest_run_event, "governance_hold");
   } finally {
     restoreFetch();
   }
@@ -794,6 +812,21 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
         latest_receipt_ts: "2024-03-09T16:00:01Z",
         last_advance_operation_id: "tsk_loop",
       },
+      receipt_summary: {
+        linked_operation_count: 1,
+        run_ledger_count: 1,
+        history_count: 2,
+        current_operation_id: "tsk_loop",
+        current_operation_status: "queued",
+        current_gate: "approvals_gate",
+        current_approval_id: "apr_loop",
+        current_trace_id: "trace_loop",
+        latest_run_event: "governance_hold",
+        latest_run_status: "queued",
+        latest_run_ts: "2024-03-09T16:00:01Z",
+        latest_history_event: "advance_receipt",
+        latest_history_ts: "2026-04-15T12:05:00Z",
+      },
       loop_state: {
         summary: "The mission is waiting on a governance decision before it can continue.",
         active_stage: "gate",
@@ -888,6 +921,16 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.current_task?.trace_id, "trace_loop");
     assert.equal(response.current_task?.latest_receipt_event, "governance_hold");
     assert.equal(response.current_task?.latest_receipt_ts, "2024-03-09T16:00:01Z");
+    assert.equal(response.receipt_summary?.linked_operation_count, 1);
+    assert.equal(response.receipt_summary?.run_ledger_count, 1);
+    assert.equal(response.receipt_summary?.history_count, 2);
+    assert.equal(response.receipt_summary?.current_operation_id, "tsk_loop");
+    assert.equal(response.receipt_summary?.current_operation_status, "queued");
+    assert.equal(response.receipt_summary?.current_gate, "approvals_gate");
+    assert.equal(response.receipt_summary?.current_approval_id, "apr_loop");
+    assert.equal(response.receipt_summary?.current_trace_id, "trace_loop");
+    assert.equal(response.receipt_summary?.latest_run_event, "governance_hold");
+    assert.equal(response.receipt_summary?.latest_history_event, "advance_receipt");
   } finally {
     restoreFetch();
   }

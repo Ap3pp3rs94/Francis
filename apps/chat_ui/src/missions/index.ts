@@ -122,6 +122,22 @@ export type MissionCurrentTask = {
   last_advance_operation_id?: string;
 };
 
+export type MissionReceiptSummary = {
+  linked_operation_count?: number;
+  run_ledger_count?: number;
+  history_count?: number;
+  current_operation_id?: string;
+  current_operation_status?: string;
+  current_gate?: string;
+  current_approval_id?: string;
+  current_trace_id?: string;
+  latest_run_event?: string;
+  latest_run_status?: string;
+  latest_run_ts?: string;
+  latest_history_event?: string;
+  latest_history_ts?: string;
+};
+
 export type MissionDetail = {
   ok: boolean;
   mission?: MissionRecord;
@@ -131,6 +147,7 @@ export type MissionDetail = {
   loop_state?: MissionLoopState;
   current_task?: MissionCurrentTask;
   queue_item?: MissionQueueItem;
+  receipt_summary?: MissionReceiptSummary;
   error?: string;
 };
 
@@ -249,6 +266,7 @@ export type MissionRunOnceResult = {
   loop_state?: MissionLoopState;
   current_task?: MissionCurrentTask;
   handoff?: MissionLoopHandoff;
+  receipt_summary?: MissionReceiptSummary;
   history_count?: number;
   linked_operation_count?: number;
   run_ledger_count?: number;
@@ -664,6 +682,36 @@ function parseMissionCurrentTask(raw: unknown): MissionCurrentTask | undefined {
   return task;
 }
 
+function parseMissionReceiptSummary(raw: unknown): MissionReceiptSummary | undefined {
+  if (!isRecord(raw)) return undefined;
+  const summary: MissionReceiptSummary = {
+    linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
+    run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,
+    history_count: safeNumber(raw.history_count, 0) || undefined,
+    current_operation_id: safeString(raw.current_operation_id, "") || undefined,
+    current_operation_status: safeString(raw.current_operation_status, "") || undefined,
+    current_gate: safeString(raw.current_gate, "") || undefined,
+    current_approval_id: safeString(raw.current_approval_id, "") || undefined,
+    current_trace_id: safeString(raw.current_trace_id, "") || undefined,
+    latest_run_event: safeString(raw.latest_run_event, "") || undefined,
+    latest_run_status: safeString(raw.latest_run_status, "") || undefined,
+    latest_run_ts: safeString(raw.latest_run_ts, "") || undefined,
+    latest_history_event: safeString(raw.latest_history_event, "") || undefined,
+    latest_history_ts: safeString(raw.latest_history_ts, "") || undefined,
+  };
+  if (
+    !summary.linked_operation_count &&
+    !summary.run_ledger_count &&
+    !summary.history_count &&
+    !summary.current_operation_id &&
+    !summary.latest_run_event &&
+    !summary.latest_history_event
+  ) {
+    return undefined;
+  }
+  return summary;
+}
+
 function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
   if (!isRecord(json)) {
     return {
@@ -711,13 +759,14 @@ function parseMissionDetail(json: unknown, idHint = ""): MissionDetail {
     loop_state: parseMissionLoopState(json.loop_state),
     current_task: parseMissionCurrentTask(json.current_task),
     queue_item: parseMissionQueueItem(json.queue_item),
+    receipt_summary: parseMissionReceiptSummary(json.receipt_summary),
     error: safeString(json.error, "") || undefined,
   };
 }
 
 function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""): Pick<
   MissionDetail,
-  "history" | "linked_operations" | "run_ledger" | "loop_state" | "current_task" | "queue_item"
+  "history" | "linked_operations" | "run_ledger" | "loop_state" | "current_task" | "queue_item" | "receipt_summary"
 > {
   const parsed = parseMissionDetail(json, missionId);
   return {
@@ -727,6 +776,7 @@ function parseMissionDetailParts(json: Record<string, unknown>, missionId = ""):
     loop_state: parsed.loop_state,
     current_task: parsed.current_task,
     queue_item: parsed.queue_item,
+    receipt_summary: parsed.receipt_summary,
   };
 }
 
@@ -813,6 +863,7 @@ function parseMissionRunOnceResult(raw: unknown): MissionRunOnceResult | null {
     loop_state: parseMissionLoopState(raw.loop_state),
     current_task: parseMissionCurrentTask(raw.current_task),
     handoff: parseMissionLoopHandoff(raw.handoff),
+    receipt_summary: parseMissionReceiptSummary(raw.receipt_summary),
     history_count: safeNumber(raw.history_count, 0) || undefined,
     linked_operation_count: safeNumber(raw.linked_operation_count, 0) || undefined,
     run_ledger_count: safeNumber(raw.run_ledger_count, 0) || undefined,

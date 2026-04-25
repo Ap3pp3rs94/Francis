@@ -306,6 +306,32 @@ def _mission_current_task_projection(
     return payload
 
 
+def _mission_receipt_summary(
+    record: mission_store.MissionRecord,
+    linked_operations: list[dict[str, Any]],
+    run_ledger: list[dict[str, Any]],
+    history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    latest_detail = _current_operation_detail(record, linked_operations)
+    latest_receipt = run_ledger[0] if run_ledger and isinstance(run_ledger[0], dict) else {}
+    latest_history = history[-1] if history and isinstance(history[-1], dict) else {}
+    return {
+        "linked_operation_count": len(linked_operations),
+        "run_ledger_count": len(run_ledger),
+        "history_count": len(history),
+        "current_operation_id": _operation_id(latest_detail),
+        "current_operation_status": _operation_status(latest_detail),
+        "current_gate": _operation_gate(latest_detail),
+        "current_approval_id": _operation_approval_id(latest_detail),
+        "current_trace_id": _operation_trace_id(latest_detail),
+        "latest_run_event": _safe_str(latest_receipt.get("name")).strip(),
+        "latest_run_status": _safe_str(latest_receipt.get("status")).strip(),
+        "latest_run_ts": _stage_timestamp(latest_receipt.get("ts")),
+        "latest_history_event": _safe_str(latest_history.get("event")).strip(),
+        "latest_history_ts": _stage_timestamp(latest_history.get("ts")),
+    }
+
+
 def _loop_stage(
     status: str,
     detail: str,
@@ -621,6 +647,7 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
             record, linked_operations, run_ledger, loop_state, queue_payload
         ),
         "queue_item": queue_payload,
+        "receipt_summary": _mission_receipt_summary(record, linked_operations, run_ledger, history),
     }
 
 
@@ -640,6 +667,7 @@ def _mission_queue_result_projection(mission_id: str) -> dict[str, Any]:
         "loop_state": loop_state,
         "current_task": detail.get("current_task") if isinstance(detail.get("current_task"), dict) else {},
         "handoff": loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {},
+        "receipt_summary": detail.get("receipt_summary") if isinstance(detail.get("receipt_summary"), dict) else {},
         "history_count": len(detail.get("history")) if isinstance(detail.get("history"), list) else 0,
         "linked_operation_count": len(detail.get("linked_operations"))
         if isinstance(detail.get("linked_operations"), list)

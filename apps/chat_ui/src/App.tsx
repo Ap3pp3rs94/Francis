@@ -3540,6 +3540,15 @@ function SystemPanel(props: {
     missionLoopHandoff,
     selectedMissionCurrentTask,
   );
+  const missionReceiptSummary = missionDetail?.receipt_summary;
+  const missionReceiptOperationId =
+    safeString(missionReceiptSummary?.current_operation_id).trim() || selectedMissionCurrentTaskId;
+  const missionReceiptApprovalId =
+    safeString(missionReceiptSummary?.current_approval_id).trim() || safeString(selectedMissionCurrentTask?.approval_id).trim();
+  const missionReceiptTraceId =
+    safeString(missionReceiptSummary?.current_trace_id).trim() || safeString(selectedMissionCurrentTask?.trace_id).trim();
+  const missionReceiptLatestRunAt = mixedLocaleTime(missionReceiptSummary?.latest_run_ts);
+  const missionReceiptLatestHistoryAt = mixedLocaleTime(missionReceiptSummary?.latest_history_ts);
   const missionLoopStages = missionLoopState
     ? ([
         { key: "plan", label: "Plan", stage: missionLoopState.plan },
@@ -5590,6 +5599,110 @@ function SystemPanel(props: {
                   {primaryMissionRecoverySummary}
                 </div>
               </div>
+
+              {missionReceiptSummary ? (
+                <div style={{ ...summaryCardStyle(), marginTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>Continuity Receipts</div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        Compact receipt posture for this mission from linked operations, run ledger, and local mission history.
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={badgeStyle(missionReceiptSummary.current_operation_status || "mission")}>
+                        {missionReceiptSummary.current_operation_status || "mission"}
+                      </span>
+                      {missionReceiptSummary.current_gate ? (
+                        <span style={badgeStyle(missionReceiptSummary.current_gate)}>{missionReceiptSummary.current_gate}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                    linked_ops=<code>{String(missionReceiptSummary.linked_operation_count ?? missionLinkedOperations.length)}</code>
+                    {" / "}run_receipts=<code>{String(missionReceiptSummary.run_ledger_count ?? missionRunLedger.length)}</code>
+                    {" / "}history_receipts=<code>{String(missionReceiptSummary.history_count ?? missionHistory.length)}</code>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    {missionReceiptOperationId ? (
+                      <>
+                        current_task=<code>{missionReceiptOperationId}</code>
+                      </>
+                    ) : (
+                      <>
+                        current_task=<code>unset</code>
+                      </>
+                    )}
+                    {missionReceiptApprovalId ? (
+                      <>
+                        {" / "}approval=<code>{missionReceiptApprovalId}</code>
+                      </>
+                    ) : null}
+                    {missionReceiptTraceId ? (
+                      <>
+                        {" / "}trace=<code>{missionReceiptTraceId}</code>
+                      </>
+                    ) : null}
+                  </div>
+                  {(missionReceiptSummary.latest_run_event || missionReceiptLatestRunAt || missionReceiptSummary.latest_history_event || missionReceiptLatestHistoryAt) ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      {missionReceiptSummary.latest_run_event ? (
+                        <>
+                          latest_run=<code>{missionReceiptSummary.latest_run_event}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptSummary.latest_run_status ? (
+                        <>
+                          {missionReceiptSummary.latest_run_event ? " / " : ""}run_status=<code>{missionReceiptSummary.latest_run_status}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptLatestRunAt ? (
+                        <>
+                          {(missionReceiptSummary.latest_run_event || missionReceiptSummary.latest_run_status) ? " / " : ""}run_at=<code>{missionReceiptLatestRunAt}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptSummary.latest_history_event ? (
+                        <>
+                          {(missionReceiptSummary.latest_run_event || missionReceiptSummary.latest_run_status || missionReceiptLatestRunAt) ? " / " : ""}history=<code>{missionReceiptSummary.latest_history_event}</code>
+                        </>
+                      ) : null}
+                      {missionReceiptLatestHistoryAt ? (
+                        <>
+                          {(missionReceiptSummary.latest_run_event ||
+                          missionReceiptSummary.latest_run_status ||
+                          missionReceiptLatestRunAt ||
+                          missionReceiptSummary.latest_history_event)
+                            ? " / "
+                            : ""}
+                          history_at=<code>{missionReceiptLatestHistoryAt}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {(missionReceiptApprovalId || missionReceiptOperationId) ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      {missionReceiptApprovalId ? (
+                        <button
+                          style={buttonStyle}
+                          onClick={() =>
+                            props.onOpenApprovals(missionReceiptApprovalId, {
+                              missionId: selectedMission.id,
+                              operationId: missionReceiptOperationId || undefined,
+                            })
+                          }
+                        >
+                          Review approval
+                        </button>
+                      ) : null}
+                      {missionReceiptOperationId ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(missionReceiptOperationId)}>
+                          Open receipt task
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {missionLoopStages.length > 0 ? (
                 <div style={{ ...summaryCardStyle(), marginTop: 10 }}>

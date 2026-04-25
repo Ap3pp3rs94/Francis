@@ -325,6 +325,15 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     run_ledger = fetched_body["run_ledger"]
     assert any(item["operation_id"] == operation_id and item["status"] == "running" for item in run_ledger)
     assert any(item["operation_id"] == operation_id and item["status"] == "succeeded" for item in run_ledger)
+    receipt_summary = fetched_body["receipt_summary"]
+    assert receipt_summary["linked_operation_count"] == 1
+    assert receipt_summary["run_ledger_count"] >= 2
+    assert receipt_summary["history_count"] >= 2
+    assert receipt_summary["current_operation_id"] == operation_id
+    assert receipt_summary["current_operation_status"] == "succeeded"
+    assert receipt_summary["latest_run_event"] == run_ledger[0]["name"]
+    assert receipt_summary["latest_run_status"] == run_ledger[0]["status"]
+    assert receipt_summary["latest_history_event"] == fetched_body["history"][-1]["event"]
     loop_state = fetched_body["loop_state"]
     assert loop_state["active_stage"] == "memory"
     assert loop_state["handoff"]["stage"] == "memory"
@@ -417,6 +426,15 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     run_ledger = fetched_body["run_ledger"]
     assert any(item["operation_id"] == operation_id and item["name"] == "governance_hold" for item in run_ledger)
     assert any(item["operation_id"] == operation_id and item["status"] == "blocked" for item in run_ledger)
+    receipt_summary = fetched_body["receipt_summary"]
+    assert receipt_summary["linked_operation_count"] == 1
+    assert receipt_summary["run_ledger_count"] >= 1
+    assert receipt_summary["history_count"] >= 1
+    assert receipt_summary["current_operation_id"] == operation_id
+    assert receipt_summary["current_operation_status"] == "blocked"
+    assert receipt_summary["current_gate"] == "trust_gate"
+    assert receipt_summary["latest_run_event"] == run_ledger[0]["name"]
+    assert receipt_summary["latest_history_event"] == fetched_body["history"][-1]["event"]
     loop_state = fetched_body["loop_state"]
     assert loop_state["active_stage"] == "gate"
     assert loop_state["handoff"]["stage"] == "gate"
