@@ -504,6 +504,10 @@ export type ContinuityBriefingFocusItem = {
   last_advance_applied?: boolean;
   last_advance_at?: string;
   deadletter_reason?: string;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
+  history_tail?: MissionHistoryPreviewEntry[];
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
 };
@@ -516,6 +520,10 @@ export type ContinuityBriefingCompletedItem = {
   last_advance_action?: string;
   last_advance_outcome?: string;
   current_task?: WorldStateMissionCurrentTask;
+  history_count?: number;
+  latest_history_event?: string;
+  latest_history_ts?: string;
+  history_tail?: MissionHistoryPreviewEntry[];
   latest_activity?: Record<string, unknown>;
 };
 
@@ -2069,6 +2077,10 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     last_advance_applied: safeBoolean(raw["last_advance_applied"], false),
     last_advance_at: safeString(raw["last_advance_at"], ""),
     deadletter_reason: safeString(raw["deadletter_reason"], ""),
+    history_count: safeNumber(raw["history_count"], 0),
+    latest_history_event: safeString(raw["latest_history_event"], ""),
+    latest_history_ts: safeString(raw["latest_history_ts"], ""),
+    history_tail: parseMissionHistoryPreviewEntries(raw["history_tail"]),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
   };
@@ -2089,6 +2101,10 @@ function parseContinuityCompletedItem(raw: unknown): ContinuityBriefingCompleted
     last_advance_action: safeString(raw["last_advance_action"], ""),
     last_advance_outcome: safeString(raw["last_advance_outcome"], ""),
     current_task: parseWorldStateMissionCurrentTask(raw["current_task"]),
+    history_count: safeNumber(raw["history_count"], 0),
+    latest_history_event: safeString(raw["latest_history_event"], ""),
+    latest_history_ts: safeString(raw["latest_history_ts"], ""),
+    history_tail: parseMissionHistoryPreviewEntries(raw["history_tail"]),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
   };
 }

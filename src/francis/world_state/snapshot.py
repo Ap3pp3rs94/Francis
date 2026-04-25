@@ -1330,6 +1330,12 @@ def _mission_briefing(
                 "last_advance_applied": bool(item.get("last_advance_applied")),
                 "last_advance_at": str(item.get("last_advance_at") or "").strip(),
                 "deadletter_reason": str(item.get("deadletter_reason") or "").strip(),
+                "history_count": int(item.get("history_count") or 0),
+                "latest_history_event": str(item.get("latest_history_event") or "").strip(),
+                "latest_history_ts": str(item.get("latest_history_ts") or "").strip(),
+                "history_tail": list(item.get("history_tail") or [])
+                if isinstance(item.get("history_tail"), list)
+                else [],
                 "updated_at": str(item.get("updated_at") or "").strip(),
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
@@ -1355,6 +1361,12 @@ def _mission_briefing(
                 **_mission_hold_projection(item),
                 "last_advance_action": str(item.get("last_advance_action") or "").strip(),
                 "last_advance_outcome": str(item.get("last_advance_outcome") or "").strip(),
+                "history_count": int(item.get("history_count") or 0),
+                "latest_history_event": str(item.get("latest_history_event") or "").strip(),
+                "latest_history_ts": str(item.get("latest_history_ts") or "").strip(),
+                "history_tail": list(item.get("history_tail") or [])
+                if isinstance(item.get("history_tail"), list)
+                else [],
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
                 else {},
@@ -1433,6 +1445,8 @@ def mission_continuity_snapshot(
         deadletter_missions, log_limit=activity_log_limit, cache=activity_cache
     )
     histories = _mission_history_map(mission_queue, deadletter_missions, recent_missions)
+    recent_missions = _attach_mission_history_summary(recent_missions, histories)
+    mission_queue = _attach_mission_history_summary(mission_queue, histories)
     deadletter_missions = _attach_mission_history_summary(deadletter_missions, histories)
     pending_approval_projection = _mission_pending_approval_projection(
         [*recent_missions, *mission_queue, *deadletter_missions],

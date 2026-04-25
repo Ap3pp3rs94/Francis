@@ -926,6 +926,21 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               last_task_approval_id: "apr_focus_exact",
               last_task_previous_approval_id: "apr_focus_previous",
               last_task_approval_status: "pending",
+              history_count: 3,
+              latest_history_event: "mission_ticked",
+              latest_history_ts: "2026-04-14T06:30:00Z",
+              history_tail: [
+                {
+                  event: "created",
+                  ts: "2026-04-14T06:20:00Z",
+                  details: { status: "queued" },
+                },
+                {
+                  event: "mission_ticked",
+                  ts: "2026-04-14T06:30:00Z",
+                  details: { from: "queued", to: "blocked" },
+                },
+              ],
               current_task: {
                 mission_id: "mission_alpha",
                 source: "mission_meta",
@@ -1105,6 +1120,10 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.operation_id, "tsk_focus");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.approval_id, "apr_focus_exact");
     assert.equal(briefing.briefing?.focus?.[0]?.current_task?.handoff_action, "review_pending_approval");
+    assert.equal(briefing.briefing?.focus?.[0]?.history_count, 3);
+    assert.equal(briefing.briefing?.focus?.[0]?.latest_history_event, "mission_ticked");
+    assert.equal(briefing.briefing?.focus?.[0]?.latest_history_ts, "2026-04-14T06:30:00Z");
+    assert.equal(briefing.briefing?.focus?.[0]?.history_tail?.[1]?.event, "mission_ticked");
     assert.equal(briefing.briefing?.focus?.[0]?.advance?.eligible, false);
     assert.equal(briefing.briefing?.focus?.[0]?.advance?.action, "resume");
     assert.equal(briefing.briefing?.focus?.[0]?.advance?.target_id, "msn_dependency");
@@ -1210,6 +1229,21 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             id: "mission_done",
             objective: "Finish overnight hardening",
             updated_at: "2026-04-14T07:00:00Z",
+            history_count: 4,
+            latest_history_event: "status_changed",
+            latest_history_ts: "2026-04-14T07:00:00Z",
+            history_tail: [
+              {
+                event: "advance_receipt",
+                ts: "2026-04-14T06:59:00Z",
+                details: { operation_id: "tsk_done" },
+              },
+              {
+                event: "status_changed",
+                ts: "2026-04-14T07:00:00Z",
+                details: { from: "active", to: "completed" },
+              },
+            ],
             current_task: {
               mission_id: "mission_done",
               source: "mission_meta",
@@ -1289,6 +1323,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.operation_id, "tsk_done");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.handoff_action, "review_completion");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.history_count, 4);
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_history_event, "status_changed");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_id, "tsk_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.operation_id, "tsk_dead_current");

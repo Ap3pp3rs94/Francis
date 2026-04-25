@@ -4531,6 +4531,8 @@ function SystemPanel(props: {
                 safeString(item.deadletter_reason).trim() ||
                 "Mission continuity exists, but the next-step note is still blank.";
               const latestActivity = latestActivitySummary(item.latest_activity);
+              const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
+              const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
               return (
                 <div
                   key={`shift-focus-${item.id}`}
@@ -4623,6 +4625,39 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
+                  {(item.history_count || item.latest_history_event || latestHistoryAt) ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      receipts=<code>{String(item.history_count || 0)}</code>
+                      {item.latest_history_event ? (
+                        <>
+                          {" / "}latest_receipt=<code>{item.latest_history_event}</code>
+                        </>
+                      ) : null}
+                      {latestHistoryAt ? (
+                        <>
+                          {" / "}receipt_at=<code>{latestHistoryAt}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {historyTail.length > 0 ? (
+                    <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                      {historyTail.map((entry, historyIndex) => (
+                        <div
+                          key={`shift-focus-history-${item.id}-${entry.ts || "unknown"}-${entry.event || historyIndex}`}
+                          style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#101010" }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.event || "receipt"}</div>
+                            <div style={{ fontSize: 11, color: THEME.muted }}>{mixedLocaleTime(entry.ts) || entry.ts || "unknown time"}</div>
+                          </div>
+                          {entry.details && Object.keys(entry.details).length > 0 ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{prettyData(entry.details)}</div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                     {approvalId ? (
                       <button
@@ -4689,6 +4724,8 @@ function SystemPanel(props: {
                       safeString(completedCurrentTask?.task_status).trim() ||
                       safeString(completedCurrentTask?.operation_status).trim();
                     const completedTaskResult = safeString(completedCurrentTask?.result_status).trim();
+                    const completedLatestHistoryAt = mixedLocaleTime(item.latest_history_ts);
+                    const completedHistoryTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
                     return (
                     <div key={`shift-complete-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4719,6 +4756,39 @@ function SystemPanel(props: {
                               {(completedOperationId || completedTaskStatus) ? " / " : ""}result=<code>{completedTaskResult}</code>
                             </>
                           ) : null}
+                        </div>
+                      ) : null}
+                      {(item.history_count || item.latest_history_event || completedLatestHistoryAt) ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          receipts=<code>{String(item.history_count || 0)}</code>
+                          {item.latest_history_event ? (
+                            <>
+                              {" / "}latest_receipt=<code>{item.latest_history_event}</code>
+                            </>
+                          ) : null}
+                          {completedLatestHistoryAt ? (
+                            <>
+                              {" / "}receipt_at=<code>{completedLatestHistoryAt}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {completedHistoryTail.length > 0 ? (
+                        <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                          {completedHistoryTail.map((entry, historyIndex) => (
+                            <div
+                              key={`shift-complete-history-${item.id}-${entry.ts || "unknown"}-${entry.event || historyIndex}`}
+                              style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#101010" }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                                <div style={{ fontSize: 11, fontWeight: 600 }}>{entry.event || "receipt"}</div>
+                                <div style={{ fontSize: 11, color: THEME.muted }}>{mixedLocaleTime(entry.ts) || entry.ts || "unknown time"}</div>
+                              </div>
+                              {entry.details && Object.keys(entry.details).length > 0 ? (
+                                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{prettyData(entry.details)}</div>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ) : null}
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
