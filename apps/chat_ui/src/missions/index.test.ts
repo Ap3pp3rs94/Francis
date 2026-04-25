@@ -953,6 +953,7 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
           status: "failed",
           gate: "runtime_gate",
           next_step: "inspect_task",
+          trace_id: "trace_error",
           error: "advance_failed",
         },
       ],
@@ -984,6 +985,7 @@ test("MissionsClient.runOnce preserves bounded queue error records for UI action
     assert.equal(response.errors?.[0]?.approval_id, "apr_error");
     assert.equal(response.errors?.[0]?.gate, "runtime_gate");
     assert.equal(response.errors?.[0]?.next_step, "inspect_task");
+    assert.equal(response.errors?.[0]?.trace_id, "trace_error");
     assert.equal(response.errors?.[0]?.error, "advance_failed");
     assert.equal(response.counts?.failed, 1);
     assert.equal(response.status, "failed");

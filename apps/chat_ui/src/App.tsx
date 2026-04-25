@@ -3156,6 +3156,7 @@ function SystemPanel(props: {
       status?: string;
       gate?: string;
       nextStep?: string;
+      traceId?: string;
       error?: string;
       message?: string;
     }>;
@@ -4088,6 +4089,7 @@ function SystemPanel(props: {
           status: safeString(item.status).trim(),
           gate: safeString(item.gate).trim(),
           nextStep: safeString(item.next_step).trim(),
+          traceId: safeString(item.trace_id).trim() || safeString(item.traceId).trim(),
           error: safeString(item.error).trim(),
           message: safeString(item.message).trim(),
         })),
@@ -7361,7 +7363,7 @@ function SystemPanel(props: {
                             </div>
                           </div>
                           <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>{errorDetail}</div>
-                          {item.operationId || item.approvalId || item.gate || item.nextStep ? (
+                          {item.operationId || item.approvalId || item.gate || item.nextStep || item.traceId ? (
                             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                               {item.operationId ? (
                                 <>
@@ -7382,6 +7384,12 @@ function SystemPanel(props: {
                                 <>
                                   {(item.operationId || item.approvalId || item.gate) ? " / " : ""}next=
                                   <code>{item.nextStep}</code>
+                                </>
+                              ) : null}
+                              {item.traceId ? (
+                                <>
+                                  {(item.operationId || item.approvalId || item.gate || item.nextStep) ? " / " : ""}
+                                  trace=<code>{item.traceId}</code>
                                 </>
                               ) : null}
                             </div>

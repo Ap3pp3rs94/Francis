@@ -459,6 +459,7 @@ def test_mission_run_once_error_records_preserve_advance_context(monkeypatch, tm
             "approval_id": "apr_failed_context",
             "gate": "approvals_gate",
             "next_step": "review_pending_approval",
+            "trace_id": "trace_failed_context",
             "message": "Approval review is required before execution can continue.",
             "error": "advance_failed_context",
         }
@@ -480,6 +481,7 @@ def test_mission_run_once_error_records_preserve_advance_context(monkeypatch, tm
     assert error["approval_id"] == "apr_failed_context"
     assert error["gate"] == "approvals_gate"
     assert error["next_step"] == "review_pending_approval"
+    assert error["trace_id"] == "trace_failed_context"
     assert error["message"] == "Approval review is required before execution can continue."
 
 

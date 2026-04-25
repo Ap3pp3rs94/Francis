@@ -35,6 +35,7 @@ def _queue_run_error_record(mission_id: str, action: str, outcome: dict[str, obj
         "approval_id": outcome.get("approval_id"),
         "gate": outcome.get("gate"),
         "next_step": outcome.get("next_step"),
+        "trace_id": outcome.get("trace_id"),
         "message": outcome.get("message"),
     }
     for key, value in fields.items():

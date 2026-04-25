@@ -796,6 +796,21 @@ the UI already knows how to render:
   attached to the immediate queue-run result.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission queue-run failure trace visibility. This advances the
+active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE` line by
+keeping failed advance traces attached to immediate queue-run error cards:
+
+- `src/francis/missions/runtime.py` now preserves `trace_id` on top-level
+  queue-run error records when a failed advance outcome returns one.
+- `apps/chat_ui/src/App.tsx` now carries and renders the queue-run error trace
+  id beside the operation, approval, gate, and next-step context.
+- Backend and UI client tests now prove the trace handle is not dropped from the
+  bounded `/missions/run_once` error contract.
+- No queue selection, mission mutation, approval decision, shell, policy, or
+  memory-write behavior changed; this only keeps an existing trace handle
+  visible when the runtime returns it.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -2014,6 +2029,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run failure trace visibility slice:
+
+- `pytest tests/test_api_missions.py::test_mission_run_once_error_records_preserve_advance_context tests/test_api_missions.py::test_mission_run_once_reports_failed_status_for_runtime_errors tests/test_api_missions.py::test_mission_run_once_advances_safe_queue_actions -q`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run failure context parity slice:
 
