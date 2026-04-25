@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from francis.chat.continuity.ledger import tail as continuity_tail
 from francis.governance.approval_projection import approval_projection_fields
 from francis.kernel.feature_flags import list_flags
 from francis.kernel.paths import data_dir, repo_root
@@ -96,6 +98,85 @@ def _first_text(*values: Any) -> str:
         if text:
             return text
     return ""
+
+
+def _mission_memory_receipt_index(*, limit: int = 1000) -> dict[str, list[dict[str, Any]]]:
+    try:
+        entries = continuity_tail(limit=max(1, min(int(limit), 10_000)))
+    except Exception:
+        return {}
+
+    receipts: dict[str, list[dict[str, Any]]] = {}
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+        if _safe_str(meta.get("subsystem")).strip() != "operations.runtime":
+            continue
+        if _safe_str(meta.get("domain")).strip() != "operations":
+            continue
+        if _safe_str(meta.get("scope")).strip() != "mission.loop":
+            continue
+        if _safe_str(meta.get("operation_status")).strip().lower() != "succeeded":
+            continue
+
+        mission_id = _safe_str(meta.get("mission_id")).strip()
+        operation_id = _first_text(meta.get("operation_id"), meta.get("task_id"))
+        if not mission_id or not operation_id:
+            continue
+
+        role = _safe_str(item.get("role")).strip() or "unknown"
+        content = _safe_str(item.get("content")).strip()
+        ts_raw = item.get("ts")
+        digest = hashlib.sha1(f"{ts_raw}:{role}:{content}".encode("utf-8", errors="ignore")).hexdigest()[:12]
+        receipt = {
+            "id": f"ledger_{digest}",
+            "source": "continuity.ledger",
+            "ts": _parse_ts(ts_raw),
+            "mission_id": mission_id,
+            "operation_id": operation_id,
+            "trace_id": _safe_str(meta.get("trace_id")).strip(),
+            "run_id": _safe_str(meta.get("run_id")).strip(),
+            "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
+            "operation_status": "succeeded",
+            "capability": _safe_str(meta.get("capability")).strip(),
+            "domain": "operations",
+            "scope": "mission.loop",
+        }
+        receipts.setdefault(mission_id, []).append({key: value for key, value in receipt.items() if value != ""})
+
+    for mission_id, items in list(receipts.items()):
+        items.sort(key=lambda value: (float(value.get("ts") or 0.0), _safe_str(value.get("id"))), reverse=True)
+        receipts[mission_id] = items[:5]
+    return receipts
+
+
+def _attach_mission_memory_receipts(
+    items: list[dict[str, Any]], receipt_index: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        mission_id = _safe_str(item.get("id")).strip()
+        receipts = [dict(receipt) for receipt in receipt_index.get(mission_id, []) if isinstance(receipt, dict)]
+        enriched_item = dict(item)
+        enriched_item["memory_receipts"] = receipts
+        enriched_item["memory_receipt_count"] = len(receipts)
+        enriched_item["latest_memory_receipt"] = dict(receipts[0]) if receipts else {}
+        enriched.append(enriched_item)
+    return enriched
+
+
+def _mission_memory_projection(item: dict[str, Any]) -> dict[str, Any]:
+    receipts = [dict(receipt) for receipt in item.get("memory_receipts", []) if isinstance(receipt, dict)]
+    return {
+        "memory_receipt_count": int(item.get("memory_receipt_count") or len(receipts)),
+        "latest_memory_receipt": dict(item.get("latest_memory_receipt") or {})
+        if isinstance(item.get("latest_memory_receipt"), dict)
+        else {},
+        "memory_receipts": receipts,
+    }
 
 
 def _observer_anomaly_projection(raw: Any) -> dict[str, Any]:
@@ -1183,9 +1264,16 @@ def _mission_readiness(
     failed_missions: list[dict[str, Any]],
     deadletter_missions: list[dict[str, Any]],
     recent_missions: list[dict[str, Any]],
+    mission_memory_receipts: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
     histories = _mission_history_map(mission_queue, failed_missions, deadletter_missions, recent_missions)
     mission_ids = sorted(histories.keys())
+    sampled_mission_ids = set(mission_ids)
+    sampled_memory_receipts = {
+        mission_id: list(receipts)
+        for mission_id, receipts in mission_memory_receipts.items()
+        if mission_id in sampled_mission_ids
+    }
     mission_total = sum(int(value or 0) for value in mission_status_counts.values())
     tick_events = [
         event
@@ -1196,6 +1284,26 @@ def _mission_readiness(
     missions_with_history = sorted(mission_id for mission_id, history in histories.items() if history)
     expected_status_keys = {"queued", "active", "blocked", "completed", "failed", "deadlettered", "cancelled"}
     visible_status = bool(expected_status_keys.intersection(mission_status_counts.keys()))
+    memory_receipt_mission_ids = sorted(
+        mission_id for mission_id, receipts in sampled_memory_receipts.items() if mission_id and receipts
+    )
+    memory_receipt_operation_ids = sorted(
+        {
+            _safe_str(receipt.get("operation_id")).strip()
+            for receipts in sampled_memory_receipts.values()
+            for receipt in receipts
+            if isinstance(receipt, dict) and _safe_str(receipt.get("operation_id")).strip()
+        }
+    )
+    memory_receipt_trace_ids = sorted(
+        {
+            _safe_str(receipt.get("trace_id")).strip()
+            for receipts in sampled_memory_receipts.values()
+            for receipt in receipts
+            if isinstance(receipt, dict) and _safe_str(receipt.get("trace_id")).strip()
+        }
+    )
+    memory_receipt_count = sum(len(receipts) for receipts in sampled_memory_receipts.values())
 
     failed_count = int(mission_status_counts.get("failed") or 0)
     failed_recovery = _failed_recovery_readiness_evidence(failed_count, failed_missions, histories)
@@ -1286,6 +1394,7 @@ def _mission_readiness(
         .lower()
         in {"waiting", "blocked"}
     ]
+    memory_context_ids = memory_receipt_mission_ids
     reconstruction_context_ids = sorted(
         {
             item
@@ -1295,6 +1404,7 @@ def _mission_readiness(
                 *failed_context_ids,
                 *deadletter_context_ids,
                 *dependency_context_ids,
+                *memory_context_ids,
             ]
             if item
         }
@@ -1383,6 +1493,10 @@ def _mission_readiness(
                 "mission_count": mission_total,
                 "sampled_mission_ids": mission_ids,
                 "missions_with_history": missions_with_history,
+                "missions_with_memory_receipts": memory_receipt_mission_ids,
+                "memory_receipt_count": memory_receipt_count,
+                "memory_receipt_operation_ids": memory_receipt_operation_ids,
+                "memory_receipt_trace_ids": memory_receipt_trace_ids,
             },
         },
         {
@@ -1400,6 +1514,7 @@ def _mission_readiness(
                 "mission_count": mission_total,
                 "context_mission_ids": reconstruction_context_ids,
                 "dependency_context_ids": sorted({item for item in dependency_context_ids if item}),
+                "memory_context_ids": memory_context_ids,
             },
         },
     ]
@@ -1444,6 +1559,7 @@ def _mission_briefing(
     failed_missions: list[dict[str, Any]],
     deadletter_missions: list[dict[str, Any]],
     recent_missions: list[dict[str, Any]],
+    mission_memory_receipts: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
     blocked = int(mission_status_counts.get("blocked") or 0)
     queued = int(mission_status_counts.get("queued") or 0)
@@ -1532,6 +1648,7 @@ def _mission_briefing(
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
                 else {},
+                **_mission_memory_projection(item),
             }
         )
 
@@ -1563,6 +1680,7 @@ def _mission_briefing(
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
                 else {},
+                **_mission_memory_projection(item),
             }
         )
         if len(recently_completed) >= 2:
@@ -1603,6 +1721,7 @@ def _mission_briefing(
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
                 else {},
+                **_mission_memory_projection(item),
             }
         )
 
@@ -1637,8 +1756,24 @@ def _mission_briefing(
                 "latest_activity": dict(item.get("latest_activity") or {})
                 if isinstance(item.get("latest_activity"), dict)
                 else {},
+                **_mission_memory_projection(item),
             }
         )
+
+    displayed_mission_ids = {
+        _safe_str(item.get("id")).strip()
+        for items in (mission_queue, failed_missions, deadletter_missions, recent_missions)
+        for item in items
+        if isinstance(item, dict) and _safe_str(item.get("id")).strip()
+    }
+    memory_receipts = [
+        dict(receipt)
+        for mission_id, receipts in mission_memory_receipts.items()
+        if mission_id in displayed_mission_ids
+        for receipt in receipts
+        if isinstance(receipt, dict)
+    ]
+    memory_receipts.sort(key=lambda value: (float(value.get("ts") or 0.0), _safe_str(value.get("id"))), reverse=True)
 
     return {
         "headline": " ".join(part for part in headline_parts if part).strip(),
@@ -1655,6 +1790,7 @@ def _mission_briefing(
         "recently_completed": recently_completed,
         "failed_preview": failed_preview,
         "deadletter_preview": deadletter_preview,
+        "memory_receipts": memory_receipts[:5],
     }
 
 
@@ -1687,6 +1823,11 @@ def mission_continuity_snapshot(
     mission_queue = _attach_mission_history_summary(mission_queue, histories)
     failed_missions = _attach_mission_history_summary(failed_missions, histories)
     deadletter_missions = _attach_mission_history_summary(deadletter_missions, histories)
+    mission_memory_receipts = _mission_memory_receipt_index()
+    recent_missions = _attach_mission_memory_receipts(recent_missions, mission_memory_receipts)
+    mission_queue = _attach_mission_memory_receipts(mission_queue, mission_memory_receipts)
+    failed_missions = _attach_mission_memory_receipts(failed_missions, mission_memory_receipts)
+    deadletter_missions = _attach_mission_memory_receipts(deadletter_missions, mission_memory_receipts)
     approval_projection = _mission_approval_projection(
         [*recent_missions, *mission_queue, *failed_missions, *deadletter_missions],
         approvals_root,
@@ -1701,6 +1842,7 @@ def mission_continuity_snapshot(
         failed_missions,
         deadletter_missions,
         recent_missions,
+        mission_memory_receipts,
     )
     mission_readiness = _mission_readiness(
         mission_status_counts,
@@ -1708,6 +1850,7 @@ def mission_continuity_snapshot(
         failed_missions,
         deadletter_missions,
         recent_missions,
+        mission_memory_receipts,
     )
     mission_briefing["readiness"] = mission_readiness
 

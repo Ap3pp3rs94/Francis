@@ -748,9 +748,26 @@ def test_continuity_briefing_reports_ready_stage3_mission_posture(monkeypatch, t
     assert mission_readiness_by_id["idempotent_ticks"]["evidence"]["mission_ticked_count"] >= 1
     assert completed_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_history"]
     assert deadlettered_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_history"]
+    assert completed_id in mission_readiness_by_id["session_continuity"]["evidence"]["missions_with_memory_receipts"]
+    assert mission_readiness_by_id["session_continuity"]["evidence"]["memory_receipt_count"] >= 1
     assert completed_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["context_mission_ids"]
     assert deadlettered_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["context_mission_ids"]
+    assert completed_id in mission_readiness_by_id["reconstruction_reduced"]["evidence"]["memory_context_ids"]
     assert mission_readiness_by_id["deadletter_cleanly"]["evidence"]["sampled_deadletter_ids"] == [deadlettered_id]
+    memory_receipts = body["briefing"]["memory_receipts"]
+    completed_receipts = [
+        item
+        for item in memory_receipts
+        if item.get("mission_id") == completed_id and item.get("operation_status") == "succeeded"
+    ]
+    assert completed_receipts
+    assert completed_receipts[0]["source"] == "continuity.ledger"
+    assert completed_receipts[0]["operation_id"]
+
+    recently_completed = body["briefing"]["recently_completed"]
+    completed_projection = next(item for item in recently_completed if item["id"] == completed_id)
+    assert completed_projection["memory_receipt_count"] >= 1
+    assert completed_projection["latest_memory_receipt"]["mission_id"] == completed_id
 
 
 def test_continuity_briefing_surfaces_failed_mission_recovery(monkeypatch, tmp_path: Path) -> None:

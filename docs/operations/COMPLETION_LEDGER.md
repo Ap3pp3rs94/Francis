@@ -193,6 +193,13 @@ after an actual mission-linked operation returns the `succeeded` operation
 status, preserving the execution -> trace -> memory link without inventing
 memory state for blocked, failed, unlinked, or merely queued work.
 
+As of `2026-04-25`, the mission continuity/world-state projection now carries
+those completed mission operation receipts as bounded memory evidence. Stage 3
+mission readiness evidence exposes sampled missions with memory receipts,
+receipt-backed operation and trace ids, and memory-backed reconstruction context;
+mission briefing/recent-completion payloads expose the latest receipt without
+changing readiness status semantics or creating new execution behavior.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
@@ -2310,6 +2317,17 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 mission continuity memory receipt projection slice:
+
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `2 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\world_state\snapshot.py tests\test_api_continuity.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_continuity.py::test_continuity_briefing_reports_ready_stage3_mission_posture -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_missions.py tests/test_api_continuity.py tests/test_api_system_settings.py -q`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 completed mission operation memory receipt slice:
 
