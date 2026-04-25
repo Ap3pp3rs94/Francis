@@ -151,6 +151,38 @@ def _operation_next_step(detail: dict[str, Any]) -> str:
     return _safe_str(governance.get("next_step")).strip() or _safe_str(output_governance.get("next_step")).strip()
 
 
+def _operation_id(detail: dict[str, Any]) -> str:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    return _safe_str(operation.get("id")).strip()
+
+
+def _operation_sort_ts(detail: dict[str, Any]) -> float:
+    operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
+    try:
+        return float(operation.get("ts") or 0)
+    except Exception:
+        return 0.0
+
+
+def _current_operation_detail(
+    record: mission_store.MissionRecord,
+    linked_operations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not linked_operations:
+        return {}
+
+    meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    last_task_id = _safe_str(meta.get("last_task_id")).strip()
+    if last_task_id:
+        for detail in linked_operations:
+            if _operation_id(detail) == last_task_id:
+                return detail
+
+    ranked = [(_operation_sort_ts(detail), index, detail) for index, detail in enumerate(linked_operations)]
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return ranked[0][2]
+
+
 def _loop_stage(
     status: str,
     detail: str,
@@ -228,7 +260,7 @@ def _mission_loop_state(
     run_ledger: list[dict[str, Any]],
     history: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    latest_detail = linked_operations[0] if linked_operations else {}
+    latest_detail = _current_operation_detail(record, linked_operations)
     latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
     latest_operation_id = _safe_str(latest_operation.get("id")).strip()
     latest_operation_status = _operation_status(latest_detail)

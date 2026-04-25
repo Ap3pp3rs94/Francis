@@ -434,6 +434,91 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert transition_events[-1]["details"]["mission_status_after"] == "blocked"
 
 
+def test_mission_loop_state_uses_current_task_when_multiple_operations_are_linked(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Keep loop state pinned to the current blocked operation",
+            "summary": "Older queued work must not hide the latest governance hold.",
+            "requester_id": "test.missions.current_task",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    first = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "older queued operation",
+            "mission_id": mission_id,
+            "input": {"goal": "Older queued work should remain visible but not current."},
+        },
+    )
+    assert first.status_code == 200
+    first_operation_id = str(first.json()["operation_id"])
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    second = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "newer blocked operation",
+            "mission_id": mission_id,
+            "input": {"id": plugin_id, "action": "deploy", "input": {"target": "prod"}},
+        },
+    )
+    assert second.status_code == 200
+    second_operation_id = str(second.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{second_operation_id}/run", json={"worker_id": "test.missions.current_task"})
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["linked_task_ids"] == [first_operation_id, second_operation_id]
+    assert fetched_body["mission"]["meta"]["last_task_id"] == second_operation_id
+
+    loop_state = fetched_body["loop_state"]
+    assert loop_state["active_stage"] == "gate"
+    assert loop_state["handoff"]["action"] == "raise_trust_or_reduce_risk"
+    assert loop_state["handoff"]["operation_id"] == second_operation_id
+    assert loop_state["gate"]["operation_id"] == second_operation_id
+    assert loop_state["execute"]["operation_id"] == second_operation_id
+    assert loop_state["plan"]["operation_id"] == second_operation_id
+    assert loop_state["plan"]["count"] == 2
+
+
 def test_mission_tick_reconciles_pending_link_and_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

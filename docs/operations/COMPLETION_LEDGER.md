@@ -227,6 +227,13 @@ explain the Phase 2 truth, canonical reading order, contribution surfaces, and
 proposal-to-receipt flow without changing runtime behavior or overstating
 scaffolded capability.
 
+As of `2026-04-25`, mission detail loop-state projection now pins the active
+operation to mission continuity truth. When multiple operations are linked, the
+handoff prefers `last_task_id` from the mission record before falling back to
+newest operation timestamp, so older queued work no longer hides a newer
+governance hold in the operator-facing `plan -> gate -> execute -> trace ->
+memory` projection.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`
