@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -126,6 +127,71 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert fetched_body["mission"]["deadletter_reason"] == "approval_timeout"
     fetched_events = [str(item.get("event")) for item in fetched_body["history"]]
     assert fetched_events.count("status_changed") >= 2
+
+
+def test_mission_record_projection_refreshes_decided_approval_status(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    approval_id = "apr_projection_approved"
+    approval_dir = data_root / "approvals" / "approved"
+    approval_dir.mkdir(parents=True, exist_ok=True)
+    (approval_dir / f"{approval_id}.json").write_text(
+        json.dumps(
+            {
+                "id": approval_id,
+                "action": "plugin.run",
+                "reason": "projection approved",
+                "status": "approved",
+                "payload": {"plugin_id": "builtin.echo", "action": "deploy"},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    created = client.post(
+        "/missions/create",
+        json={
+            "objective": "Approved approval status should project on the mission record.",
+            "summary": "Mission record projection should not depend on stale pending meta.",
+            "status": "blocked",
+            "linked_task_ids": ["tsk_projection_approved"],
+            "requester_id": "test.missions.approval_projection",
+            "meta": {
+                "last_task_id": "tsk_projection_approved",
+                "last_task_status": "accepted",
+                "last_task_result_status": "needs_approval",
+                "last_task_gate": "approvals_gate",
+                "last_task_approval_id": approval_id,
+                "last_task_approval_status": "pending",
+                "last_task_next_step": "approve_exact_action",
+            },
+        },
+    )
+    assert created.status_code == 200
+    mission_id = str(created.json()["mission_id"])
+
+    fetched = client.get(f"/missions/{mission_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["mission"]["last_task_approval_id"] == approval_id
+    assert fetched_body["mission"]["last_task_approval_status"] == "approved"
+    assert fetched_body["queue_item"]["last_task_approval_status"] == "approved"
+    assert fetched_body["queue_item"]["recommended_action"] == "run_linked_operation"
+    assert fetched_body["queue_item"]["advance"]["eligible"] is True
+
+    listed = client.get("/missions/list?limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == mission_id)
+    assert listed_item["last_task_approval_id"] == approval_id
+    assert listed_item["last_task_approval_status"] == "approved"
 
 
 def test_mission_deadletter_reason_and_notes_redact_secret_text(monkeypatch, tmp_path: Path) -> None:

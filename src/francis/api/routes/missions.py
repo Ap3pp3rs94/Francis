@@ -47,16 +47,53 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
-def _mission_current_task_fields(record: mission_store.MissionRecord) -> dict[str, str]:
+def _mission_current_task_fields(
+    record: mission_store.MissionRecord,
+    queue_item: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
+    queue_payload = queue_item if isinstance(queue_item, dict) else {}
+    replacement_changed_keys = queue_payload.get("last_task_approval_replacement_changed_keys")
+    if not isinstance(replacement_changed_keys, list):
+        replacement_changed_keys = meta.get("last_task_approval_replacement_changed_keys")
     return {
-        "last_task_id": _safe_str(meta.get("last_task_id")).strip(),
-        "last_task_status": _safe_str(meta.get("last_task_status")).strip(),
-        "last_task_result_status": _safe_str(meta.get("last_task_result_status")).strip(),
-        "last_task_reason": _safe_str(meta.get("last_task_reason")).strip(),
-        "last_task_gate": _safe_str(meta.get("last_task_gate")).strip(),
-        "last_task_next_step": _safe_str(meta.get("last_task_next_step")).strip(),
-        "last_advance_operation_id": _safe_str(meta.get("last_advance_operation_id")).strip(),
+        "last_task_id": _first_text(queue_payload.get("last_task_id"), meta.get("last_task_id")),
+        "last_task_status": _first_text(queue_payload.get("last_task_status"), meta.get("last_task_status")),
+        "last_task_result_status": _first_text(
+            queue_payload.get("last_task_result_status"), meta.get("last_task_result_status")
+        ),
+        "last_task_reason": _first_text(queue_payload.get("last_task_reason"), meta.get("last_task_reason")),
+        "last_task_gate": _first_text(queue_payload.get("last_task_gate"), meta.get("last_task_gate")),
+        "last_task_next_step": _first_text(queue_payload.get("last_task_next_step"), meta.get("last_task_next_step")),
+        "last_task_approval_id": _first_text(
+            queue_payload.get("last_task_approval_id"), meta.get("last_task_approval_id")
+        ),
+        "last_task_previous_approval_id": _first_text(
+            queue_payload.get("last_task_previous_approval_id"), meta.get("last_task_previous_approval_id")
+        ),
+        "last_task_previous_approval_status": _first_text(
+            queue_payload.get("last_task_previous_approval_status"),
+            meta.get("last_task_previous_approval_status"),
+        ),
+        "last_task_approval_status": _first_text(
+            queue_payload.get("last_task_approval_status"), meta.get("last_task_approval_status")
+        ),
+        "last_task_approval_replacement_kind": _first_text(
+            queue_payload.get("last_task_approval_replacement_kind"),
+            meta.get("last_task_approval_replacement_kind"),
+        ),
+        "last_task_approval_replacement_reason": _first_text(
+            queue_payload.get("last_task_approval_replacement_reason"),
+            meta.get("last_task_approval_replacement_reason"),
+        ),
+        "last_task_approval_replacement_changed_keys": [
+            _safe_str(key).strip()
+            for key in (replacement_changed_keys if isinstance(replacement_changed_keys, list) else [])
+            if _safe_str(key).strip()
+        ][:8],
+        "last_advance_operation_id": _first_text(
+            queue_payload.get("last_advance_operation_id"), meta.get("last_advance_operation_id")
+        ),
     }
 
 
@@ -74,11 +111,14 @@ def _mission_replacement_lineage_fields(record: mission_store.MissionRecord) -> 
     }
 
 
-def _serialize_mission(record: mission_store.MissionRecord | None) -> dict[str, Any]:
+def _serialize_mission(
+    record: mission_store.MissionRecord | None,
+    queue_item: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if record is None:
         return {}
     meta = dict(record.meta) if isinstance(record.meta, dict) else {}
-    current_task_fields = _mission_current_task_fields(record)
+    current_task_fields = _mission_current_task_fields(record, queue_item)
     replacement_lineage_fields = _mission_replacement_lineage_fields(record)
     return {
         "id": record.mission_id,
@@ -678,7 +718,7 @@ def _mission_queue_result_projection(mission_id: str) -> dict[str, Any]:
     loop_state = detail.get("loop_state") if isinstance(detail.get("loop_state"), dict) else {}
     queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
     return {
-        "mission": _serialize_mission(record),
+        "mission": _serialize_mission(record, queue_item),
         "queue_item": queue_item,
         "loop_state": loop_state,
         "current_task": detail.get("current_task") if isinstance(detail.get("current_task"), dict) else {},
@@ -781,12 +821,14 @@ def create_mission(payload: MissionCreateIn) -> dict[str, object]:
         )
         if not record:
             return {"ok": False, "error": err or "create_failed"}
+        detail = _mission_detail_projection(record)
+        queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
         return {
             "ok": True,
             "mission_id": record.mission_id,
             "status": record.status.value,
-            "mission": _serialize_mission(record),
-            **_mission_detail_projection(record),
+            "mission": _serialize_mission(record, queue_item),
+            **detail,
             "message": "created",
         }
     except Exception as exc:
@@ -798,7 +840,11 @@ def list_missions(limit: int = 200, status: str | None = None) -> dict[str, obje
     try:
         safe_limit = max(1, min(int(limit), 5000))
         records = mission_store.list_missions(limit=safe_limit, status=status.strip().lower() if status else None)
-        return {"items": [_serialize_mission(record) for record in records], "total": len(records), "limit": safe_limit}
+        items: list[dict[str, Any]] = []
+        for record in records:
+            _, queue_item, _ = mission_store.mission_queue_item(record.mission_id)
+            items.append(_serialize_mission(record, queue_item if isinstance(queue_item, dict) else None))
+        return {"items": items, "total": len(records), "limit": safe_limit}
     except Exception as exc:
         return {"items": [], "total": 0, "limit": 0, "error": str(exc)}
 
@@ -908,10 +954,12 @@ def get_mission(mission_id: str) -> dict[str, object]:
         record, err = mission_store.read_mission(mission_id)
         if not record:
             return {"ok": False, "error": err or "not_found"}
+        detail = _mission_detail_projection(record)
+        queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
         return {
             "ok": True,
-            "mission": _serialize_mission(record),
-            **_mission_detail_projection(record),
+            "mission": _serialize_mission(record, queue_item),
+            **detail,
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
@@ -940,11 +988,13 @@ def patch_mission(mission_id: str, payload: MissionPatchIn) -> dict[str, object]
         )
         if not record:
             return {"ok": False, "error": err or "update_failed"}
+        detail = _mission_detail_projection(record)
+        queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
         return {
             "ok": True,
             "status": record.status.value,
-            "mission": _serialize_mission(record),
-            **_mission_detail_projection(record),
+            "mission": _serialize_mission(record, queue_item),
+            **detail,
             "message": "updated",
         }
     except Exception as exc:
@@ -964,11 +1014,13 @@ def tick_mission(mission_id: str, payload: MissionTickIn) -> dict[str, object]:
         )
         if not record:
             return {"ok": False, "applied": False, "error": err or "tick_failed"}
+        detail = _mission_detail_projection(record)
+        queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
         return {
             "ok": True,
             "applied": applied,
-            "mission": _serialize_mission(record),
-            **_mission_detail_projection(record),
+            "mission": _serialize_mission(record, queue_item),
+            **detail,
             "message": "ticked" if applied else "no_change",
         }
     except Exception as exc:
@@ -989,11 +1041,13 @@ def deadletter_mission(mission_id: str, payload: MissionDeadletterIn) -> dict[st
         )
         if not record:
             return {"ok": False, "error": err or "deadletter_failed"}
+        detail = _mission_detail_projection(record)
+        queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
         return {
             "ok": True,
             "status": record.status.value,
-            "mission": _serialize_mission(record),
-            **_mission_detail_projection(record),
+            "mission": _serialize_mission(record, queue_item),
+            **detail,
             "message": "deadlettered",
         }
     except Exception as exc:
@@ -1025,24 +1079,30 @@ def replace_mission(mission_id: str, payload: MissionReplaceIn) -> dict[str, obj
                 "source_mission": _serialize_mission(source),
             }
         if err:
+            detail = _mission_detail_projection(replacement)
+            queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
             return {
                 "ok": False,
                 "error": err,
                 "status": replacement.status.value,
                 "replacement_mission_id": replacement.mission_id,
                 "source_mission": _serialize_mission(source),
-                "mission": _serialize_mission(replacement),
-                **_mission_detail_projection(replacement),
+                "mission": _serialize_mission(replacement, queue_item),
+                **detail,
             }
         _, source_queue_item, _ = mission_store.mission_queue_item(mission_id)
+        detail = _mission_detail_projection(replacement)
+        queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
         return {
             "ok": True,
             "status": replacement.status.value,
             "replacement_mission_id": replacement.mission_id,
-            "source_mission": _serialize_mission(source),
+            "source_mission": _serialize_mission(
+                source, source_queue_item if isinstance(source_queue_item, dict) else None
+            ),
             "source_queue_item": source_queue_item or {},
-            "mission": _serialize_mission(replacement),
-            **_mission_detail_projection(replacement),
+            "mission": _serialize_mission(replacement, queue_item),
+            **detail,
             "message": "replacement_declared",
         }
     except Exception as exc:
@@ -1067,8 +1127,10 @@ def advance_mission(mission_id: str, payload: MissionAdvanceIn) -> dict[str, obj
         )
         mission_record = result.pop("mission_record", None)
         if isinstance(mission_record, mission_store.MissionRecord):
-            result["mission"] = _serialize_mission(mission_record)
-            result.update(_mission_detail_projection(mission_record))
+            detail = _mission_detail_projection(mission_record)
+            queue_item = detail.get("queue_item") if isinstance(detail.get("queue_item"), dict) else {}
+            result["mission"] = _serialize_mission(mission_record, queue_item)
+            result.update(detail)
         return result
     except Exception as exc:
         return {"ok": False, "applied": False, "error": str(exc)}

@@ -655,6 +655,24 @@ see what happened after a source mission declared replacement work:
   and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is mission-record approved-gate projection parity. This advances
+the active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY ->
+P1_INTERFACE` line by keeping mission detail and list payloads aligned with the
+fresh queue-derived approval posture:
+
+- `src/francis/api/routes/missions.py` now serializes approval id, decided
+  approval status, prior approval status, replacement evidence, and advance
+  operation context from the queue-derived mission posture when available.
+- Mission create, get, list, patch, tick, deadletter, replacement, and advance
+  responses now avoid stale `pending` approval status when the local approval
+  record has already moved to `approved`, `rejected`, or `emergency`.
+- `tests/test_api_missions.py` now proves `GET /missions/{id}` and
+  `/missions/list` expose an approved exact-action gate as `approved` while the
+  queue recommends the existing governed `run_linked_operation` handoff.
+- No background autonomy path was added; the API only projects already-recorded
+  governed approval state.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is approved-gate mission re-entry. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 turning a decided exact-action approval into a truthful bounded rerun handoff
