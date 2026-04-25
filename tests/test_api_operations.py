@@ -954,6 +954,79 @@ def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monke
         assert mirror_branch_after.stdout.strip()
 
 
+def test_operations_git_push_seals_https_userinfo_remote_and_redacts_projection(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+
+    _git(repo_root, "init")
+    _git(repo_root, "config", "user.name", "Francis Tests")
+    _git(repo_root, "config", "user.email", "francis-tests@example.com")
+    _git(repo_root, "checkout", "-b", "main")
+    (repo_root / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo_root, "add", "README.md")
+    _git(repo_root, "commit", "-m", "Initial commit")
+
+    raw_userinfo = "francis-userinfo-secret123"
+    redacted_remote = "https://[REDACTED:secret]@example.invalid/owner/repo.git"
+    _git(repo_root, "remote", "add", "origin", f"https://{raw_userinfo}@example.invalid/owner/repo.git")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "git.push",
+            "reason": "push userinfo credential remote",
+            "input": {"cwd": str(repo_root), "remote": "origin"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push_userinfo"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    pending_text = json.dumps(pending_body, sort_keys=True)
+    assert raw_userinfo not in pending_text
+
+    approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert approval_id
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    approval_text = approval_path.read_text(encoding="utf-8")
+    assert raw_userinfo not in approval_text
+    approval_payload = json.loads(approval_text)
+    sealed_remote = approval_payload["payload"]["remote_url"]
+    assert sealed_remote["kind"] == "sealed_secret"
+    assert sealed_remote["redacted"] == redacted_remote
+    assert str(sealed_remote["digest"]).startswith("hmac-sha256:")
+
+    request_artifact = data_root / "artifacts" / "git_push" / approval_id / "request.json"
+    request_artifact_text = request_artifact.read_text(encoding="utf-8")
+    assert raw_userinfo not in request_artifact_text
+    assert redacted_remote in request_artifact_text
+
+    listed = client.get("/approvals/list?status=pending&limit=20")
+    assert listed.status_code == 200
+    listed_item = next(item for item in listed.json()["items"] if item["id"] == approval_id)
+    listed_text = json.dumps(listed_item, sort_keys=True)
+    assert raw_userinfo not in listed_text
+    assert "hmac-sha256:" not in listed_text
+    assert listed_item["payload"]["remote_url"] == redacted_remote
+
+
 def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     monkeypatch,
     tmp_path: Path,

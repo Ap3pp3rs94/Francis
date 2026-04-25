@@ -21,11 +21,13 @@ _SENSITIVE_META_KEY_RE = re.compile(
 )
 _SECRET_TEXT_RE = re.compile(
     r"(?i)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})"
+    r"|\b(?:https?|git\+https)://[^\s/@]+@"
     r"|\bsk-[A-Za-z0-9]{20,}\b"
     r"|\bghp_[A-Za-z0-9]{30,}\b"
     r"|\bAKIA[0-9A-Z]{16}\b"
     r"|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b"
 )
+_URL_USERINFO_RE = re.compile(r"\b((?:https?|git\+https)://)([^\s/@]+@)", re.IGNORECASE)
 
 
 def _safe_str(value: Any) -> str:
@@ -43,6 +45,7 @@ def redact_secret_text(value: str) -> str:
         lambda match: f"{match.group(1)}={REDACTED_SECRET}",
         value,
     )
+    out = _URL_USERINFO_RE.sub(lambda match: f"{match.group(1)}{REDACTED_SECRET}@", out)
     out = re.sub(r"-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----", REDACTED_SECRET, out, flags=re.I)
     out = re.sub(r"\bsk-[A-Za-z0-9]{20,}\b", REDACTED_SECRET, out)
     out = re.sub(r"\bghp_[A-Za-z0-9]{30,}\b", REDACTED_SECRET, out)

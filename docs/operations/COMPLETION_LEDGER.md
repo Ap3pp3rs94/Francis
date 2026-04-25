@@ -148,6 +148,13 @@ mismatch, result, stdout, and stderr artifacts persist redacted views instead of
 raw secret-like remote credentials. Raw task/result records may still retain live
 execution data locally, but operation API projections redact those values.
 
+As of `2026-04-25`, the shared governance redaction contract also treats HTTPS
+URL userinfo as secret-bearing material. Credential-style remotes such as
+`https://token@host/repo.git` are sealed and rendered as
+`https://[REDACTED:secret]@host/repo.git` in git-push approval records,
+artifacts, operation projections, and approval list projections while retaining
+HMAC-backed exact-action protection in the persisted approval payload.
+
 As of `2026-04-25`, approval API read projections redact sealed-secret internals.
 Persisted approval records can retain HMAC-backed sealed values for exact-action
 matching, but `/approvals/request`, `/approvals/list`, and `/approvals/decision`
