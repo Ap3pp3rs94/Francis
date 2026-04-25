@@ -362,6 +362,10 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 last_review_target_id: "tsk_failed",
                 last_review_actor: "chat_ui.orb",
                 last_reviewed_at: "2026-04-14T08:10:00Z",
+                replacement_mission_id: "mission_replacement",
+                replacement_status: "queued",
+                replacement_objective: "Replacement mission",
+                replacement_next_step: "Declare the first bounded operation.",
               },
               last_recovery_action: "retry_or_deadletter",
               last_recovery_outcome: "requires_operator",
@@ -577,6 +581,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.target_id, "tsk_failed");
     assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.last_review_action, "retry_or_deadletter");
     assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.last_review_outcome, "requires_operator");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.replacement_mission_id, "mission_replacement");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.replacement_status, "queued");
+    assert.equal(worldState.overview?.failed_missions?.[0]?.recovery?.replacement_objective, "Replacement mission");
     assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_action, "retry_or_deadletter");
     assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_outcome, "requires_operator");
     assert.equal(worldState.overview?.failed_missions?.[0]?.last_recovery_actor, "chat_ui.orb");
@@ -1400,6 +1407,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               last_review_target_id: "tsk_failed",
               last_review_actor: "chat_ui.orb",
               last_reviewed_at: "2026-04-14T08:10:00Z",
+              replacement_mission_id: "mission_replacement",
+              replacement_status: "active",
+              replacement_last_task_id: "tsk_replacement",
+              replacement_last_task_status: "running",
             },
             last_recovery_action: "retry_or_deadletter",
             last_recovery_outcome: "requires_operator",
@@ -1504,6 +1515,9 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.target_id, "tsk_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.last_review_action, "retry_or_deadletter");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.last_review_outcome, "requires_operator");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.replacement_mission_id, "mission_replacement");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.replacement_status, "active");
+    assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.replacement_last_task_id, "tsk_replacement");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.last_recovery_action, "retry_or_deadletter");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.last_recovery_outcome, "requires_operator");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.last_recovery_source_status, "failed");

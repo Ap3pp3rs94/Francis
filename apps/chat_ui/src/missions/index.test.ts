@@ -491,6 +491,10 @@ test("MissionsClient.replace posts a bounded replacement declaration and preserv
           last_review_outcome: "replacement_declared",
           last_review_target_id: "msn_replacement",
           automatic_retry: false,
+          replacement_mission_id: "msn_replacement",
+          replacement_status: "queued",
+          replacement_objective: "Replacement mission",
+          replacement_next_step: "Declare the first bounded operation.",
         },
       },
       mission: {
@@ -548,6 +552,10 @@ test("MissionsClient.replace posts a bounded replacement declaration and preserv
     assert.equal(response.source_mission?.meta?.last_recovery_outcome, "replacement_declared");
     assert.equal(response.source_queue_item?.recovery?.last_review_target_id, "msn_replacement");
     assert.equal(response.source_queue_item?.recovery?.automatic_retry, false);
+    assert.equal(response.source_queue_item?.recovery?.replacement_mission_id, "msn_replacement");
+    assert.equal(response.source_queue_item?.recovery?.replacement_status, "queued");
+    assert.equal(response.source_queue_item?.recovery?.replacement_objective, "Replacement mission");
+    assert.equal(response.source_queue_item?.recovery?.replacement_next_step, "Declare the first bounded operation.");
     assert.equal(response.mission?.id, "msn_replacement");
     assert.equal(response.mission?.replacement_for_mission_id, "msn_failed");
     assert.equal(response.mission?.replacement_source_action, "retry_or_deadletter");

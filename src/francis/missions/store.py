@@ -507,6 +507,7 @@ def _advance_projection(recommended_action: str, action_target_id: str, operator
 
 def _recovery_projection(
     record: "MissionRecord",
+    repo_root: Path | None = None,
     *,
     recommended_action: str,
     action_target_id: str,
@@ -530,7 +531,7 @@ def _recovery_projection(
             "deadletter the mission explicitly."
         )
 
-    return {
+    projection = {
         "source_status": status,
         "action": str(recommended_action or "").strip() or "review_mission",
         "target_id": target_id,
@@ -544,6 +545,36 @@ def _recovery_projection(
         "last_review_target_id": str(meta.get("last_recovery_target_id") or "").strip(),
         "last_review_actor": str(meta.get("last_recovery_actor") or "").strip(),
         "last_reviewed_at": str(meta.get("last_recovery_at") or "").strip(),
+    }
+    projection.update(_replacement_followthrough_projection(meta, repo_root))
+    return projection
+
+
+def _replacement_followthrough_projection(meta: dict[str, Any], repo_root: Path | None = None) -> dict[str, Any]:
+    outcome = str(meta.get("last_recovery_outcome") or "").strip()
+    replacement_id = str(meta.get("last_recovery_target_id") or "").strip()
+    if outcome != "replacement_declared" or not replacement_id.startswith("msn_"):
+        return {}
+
+    replacement, err = read_mission(replacement_id, repo_root)
+    if not replacement:
+        return {
+            "replacement_mission_id": replacement_id,
+            "replacement_status": "missing",
+            "replacement_error": err or "not_found",
+            "replacement_next_step": "Replacement mission reference is missing; inspect local mission storage before declaring more work.",
+        }
+
+    replacement_meta = dict(replacement.meta) if isinstance(replacement.meta, dict) else {}
+    return {
+        "replacement_mission_id": replacement.mission_id,
+        "replacement_status": replacement.status.value,
+        "replacement_objective": replacement.objective,
+        "replacement_next_step": replacement.next_step,
+        "replacement_last_task_id": str(replacement_meta.get("last_task_id") or "").strip(),
+        "replacement_last_task_status": str(replacement_meta.get("last_task_status") or "").strip(),
+        "replacement_updated_at": replacement.updated_at,
+        "replacement_terminal": replacement.status in _TERMINAL_STATUSES,
     }
 
 
@@ -671,6 +702,7 @@ def _queue_item(record: "MissionRecord", repo_root: Path | None = None) -> dict[
         "advance": _advance_projection(recommended_action, action_target_id, operator_hint),
         "recovery": _recovery_projection(
             record,
+            repo_root,
             recommended_action=recommended_action,
             action_target_id=action_target_id,
             operator_hint=operator_hint,

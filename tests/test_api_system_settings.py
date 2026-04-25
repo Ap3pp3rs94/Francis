@@ -830,6 +830,9 @@ def test_system_world_state_projects_mission_queue_and_deadletter_preview(monkey
     assert failed_items[0]["recovery"]["target_id"] == failed_operation_id
     assert failed_items[0]["recovery"]["last_review_outcome"] == "replacement_declared"
     assert failed_items[0]["recovery"]["last_review_target_id"] == replacement_id
+    assert failed_items[0]["recovery"]["replacement_mission_id"] == replacement_id
+    assert failed_items[0]["recovery"]["replacement_status"] == "queued"
+    assert failed_items[0]["recovery"]["replacement_objective"] == "Replacement mission from failed preview"
     assert failed_items[0]["recovery"]["operator_required"] is True
     assert failed_items[0]["recovery"]["automatic_retry"] is False
     assert failed_items[0]["current_task"]["operation_id"] == failed_operation_id

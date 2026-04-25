@@ -732,6 +732,8 @@ def test_mission_deadletter_endpoint_moves_blocked_mission_cleanly(monkeypatch, 
     assert replacement_body["source_mission"]["status"] == "deadlettered"
     assert replacement_body["source_queue_item"]["recovery"]["last_review_outcome"] == "replacement_declared"
     assert replacement_body["source_queue_item"]["recovery"]["last_review_target_id"] == replacement_id
+    assert replacement_body["source_queue_item"]["recovery"]["replacement_mission_id"] == replacement_id
+    assert replacement_body["source_queue_item"]["recovery"]["replacement_status"] == "queued"
     assert replacement_body["mission"]["status"] == "queued"
     assert replacement_body["mission"]["linked_task_ids"] == []
     assert replacement_body["mission"]["meta"]["replacement_for_status"] == "deadlettered"
@@ -806,6 +808,8 @@ def test_mission_replace_declares_bounded_replacement_from_failed_source(monkeyp
     assert body["source_mission"]["meta"]["last_recovery_target_id"] == replacement_id
     assert body["source_queue_item"]["recovery"]["last_review_outcome"] == "replacement_declared"
     assert body["source_queue_item"]["recovery"]["last_review_target_id"] == replacement_id
+    assert body["source_queue_item"]["recovery"]["replacement_mission_id"] == replacement_id
+    assert body["source_queue_item"]["recovery"]["replacement_status"] == "queued"
     assert body["source_queue_item"]["recovery"]["automatic_retry"] is False
 
     replacement = body["mission"]
@@ -837,7 +841,32 @@ def test_mission_replace_declares_bounded_replacement_from_failed_source(monkeyp
     source_body = source.json()
     assert source_body["mission"]["status"] == "failed"
     assert source_body["queue_item"]["recovery"]["last_review_target_id"] == replacement_id
+    assert source_body["queue_item"]["recovery"]["replacement_mission_id"] == replacement_id
+    assert source_body["queue_item"]["recovery"]["replacement_status"] == "queued"
     assert source_body["history"][-1]["event"] == "recovery_review"
+
+    completed_replacement = client.patch(
+        f"/missions/{replacement_id}",
+        json={
+            "status": "completed",
+            "actor": "test.missions.replace",
+            "note": "replacement completed",
+            "meta": {
+                "last_task_id": "tsk_replacement_followthrough",
+                "last_task_status": "completed",
+            },
+        },
+    )
+    assert completed_replacement.status_code == 200
+
+    source_after_replacement = client.get(f"/missions/{mission_id}")
+    assert source_after_replacement.status_code == 200
+    followthrough = source_after_replacement.json()["queue_item"]["recovery"]
+    assert followthrough["replacement_mission_id"] == replacement_id
+    assert followthrough["replacement_status"] == "completed"
+    assert followthrough["replacement_last_task_id"] == "tsk_replacement_followthrough"
+    assert followthrough["replacement_last_task_status"] == "completed"
+    assert followthrough["replacement_terminal"] is True
 
 
 def test_mission_run_once_advances_safe_queue_actions(monkeypatch, tmp_path: Path) -> None:

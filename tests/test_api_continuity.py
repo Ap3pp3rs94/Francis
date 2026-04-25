@@ -795,6 +795,10 @@ def test_continuity_briefing_focus_preserves_replacement_lineage(monkeypatch, tm
     assert focus_item["replacement_source_target_id"] == "tsk_replacement_source"
     assert focus_item["replacement_declared_by"] == "test.continuity.replacement"
     assert focus_item["linked_task_count"] == 0
+    source_preview = next(item for item in body["briefing"]["failed_preview"] if item["id"] == source_id)
+    assert source_preview["recovery"]["last_review_outcome"] == "replacement_declared"
+    assert source_preview["recovery"]["replacement_mission_id"] == replacement_id
+    assert source_preview["recovery"]["replacement_status"] == "queued"
 
 
 def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch, tmp_path: Path) -> None:

@@ -3607,6 +3607,13 @@ function SystemPanel(props: {
   const selectedMissionRecoveryReason = safeString(selectedMissionRecovery?.reason).trim();
   const selectedMissionRecoveryNextStep = safeString(selectedMissionRecovery?.next_step).trim();
   const selectedMissionRecoverySourceStatus = safeString(selectedMissionRecovery?.source_status).trim().toLowerCase();
+  const selectedMissionRecoveryReplacementId = safeString(selectedMissionRecovery?.replacement_mission_id).trim();
+  const selectedMissionRecoveryReplacementStatus = safeString(selectedMissionRecovery?.replacement_status).trim();
+  const selectedMissionRecoveryReplacementLastTaskId = safeString(selectedMissionRecovery?.replacement_last_task_id).trim();
+  const selectedMissionRecoveryReplacementLastTaskStatus = safeString(selectedMissionRecovery?.replacement_last_task_status).trim();
+  const selectedMissionRecoveryReplacementNextStep = safeString(selectedMissionRecovery?.replacement_next_step).trim();
+  const selectedMissionRecoveryReplacementUpdatedAt = mixedLocaleTime(selectedMissionRecovery?.replacement_updated_at);
+  const selectedMissionRecoveryReplacementError = safeString(selectedMissionRecovery?.replacement_error).trim();
   const selectedMissionReplacementEligible = ["failed", "deadlettered"].includes(selectedMissionRecoverySourceStatus);
   const selectedMissionAdvanceLabel =
     selectedMissionAdvanceAction === "create_first_operation" ? "Create operation" : "Advance mission once";
@@ -6249,6 +6256,52 @@ function SystemPanel(props: {
                       ) : null}
                       {selectedMissionRecoveryNextStep ? (
                         <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{selectedMissionRecoveryNextStep}</div>
+                      ) : null}
+                      {selectedMissionRecoveryReplacementId ? (
+                        <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#111819", marginTop: 8 }}>
+                          <div style={{ fontSize: 11, color: "#cce7e2" }}>
+                            replacement=<code>{selectedMissionRecoveryReplacementId}</code>
+                            {selectedMissionRecoveryReplacementStatus ? (
+                              <>
+                                {" / "}status=<code>{selectedMissionRecoveryReplacementStatus}</code>
+                              </>
+                            ) : null}
+                            {selectedMissionRecoveryReplacementLastTaskId ? (
+                              <>
+                                {" / "}last_task=<code>{selectedMissionRecoveryReplacementLastTaskId}</code>
+                              </>
+                            ) : null}
+                            {selectedMissionRecoveryReplacementLastTaskStatus ? (
+                              <>
+                                {" / "}task_status=<code>{selectedMissionRecoveryReplacementLastTaskStatus}</code>
+                              </>
+                            ) : null}
+                            {selectedMissionRecoveryReplacementUpdatedAt ? (
+                              <>
+                                {" / "}updated=<code>{selectedMissionRecoveryReplacementUpdatedAt}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          {selectedMissionRecoveryReplacementError ? (
+                            <div style={{ fontSize: 11, color: "#ffb0b0", marginTop: 4 }}>
+                              replacement_error=<code>{selectedMissionRecoveryReplacementError}</code>
+                            </div>
+                          ) : null}
+                          {selectedMissionRecoveryReplacementNextStep ? (
+                            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                              {selectedMissionRecoveryReplacementNextStep}
+                            </div>
+                          ) : null}
+                          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                            <button
+                              style={buttonStyle}
+                              onClick={() => inspectMission(selectedMissionRecoveryReplacementId)}
+                              disabled={!selectedMissionRecoveryReplacementId}
+                            >
+                              Open replacement
+                            </button>
+                          </div>
+                        </div>
                       ) : null}
                       {selectedMissionReplacementEligible ? (
                         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

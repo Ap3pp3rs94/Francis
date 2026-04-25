@@ -104,6 +104,12 @@ surfaces, continuity focus items, and the selected ORB mission inspector can
 surface the replacement source mission id, source status, recovery action,
 source target, reason, actor, and note as bounded fields.
 
+As of `2026-04-25`, source mission recovery surfaces also carry read-only
+replacement follow-through. When a failed or deadlettered mission has declared a
+replacement, its recovery projection can show the replacement mission id, live
+status, objective, next step, latest task, update time, terminal posture, or a
+missing-reference error without reopening the source or implying automatic retry.
+
 As of `2026-04-21`, mission mutation responses now carry post-action
 continuity envelopes. Create, update, tick, deadletter, and advance responses can
 return the current mission history, linked operations, run-ledger projection, and
@@ -340,6 +346,22 @@ As of `2026-04-20`, the strongest truthful CI posture is:
   unrelated GitHub blocker from the active Stage 2 observer follow-up line
 
 ## 3. High-confidence current slice
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is replacement follow-through visibility. This advances the active
+`Phase 2 / P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by letting operators
+see what happened after a source mission declared replacement work:
+
+- `src/francis/missions/store.py` now enriches failed/deadlettered recovery
+  projections with read-only replacement mission status, objective, next step,
+  latest task, terminal posture, and missing-reference truth.
+- `apps/chat_ui/src/missions/index.ts` and `apps/chat_ui/src/settings/index.ts`
+  now preserve those fields through mission and world-state/continuity clients.
+- `apps/chat_ui/src/App.tsx` now shows replacement follow-through in the
+  selected mission recovery panel and routes to the replacement mission.
+- `tests/test_api_missions.py`, `tests/test_api_system_settings.py`,
+  `tests/test_api_continuity.py`, `apps/chat_ui/src/missions/index.test.ts`,
+  and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
 As of `2026-04-24`, the highest-confidence surface newly advanced in the current
 documentation/productization line is public GitHub discoverability. This does not

@@ -307,6 +307,15 @@ export type WorldStateMissionRecoveryProjection = {
   last_review_target_id?: string;
   last_review_actor?: string;
   last_reviewed_at?: string;
+  replacement_mission_id?: string;
+  replacement_status?: string;
+  replacement_objective?: string;
+  replacement_next_step?: string;
+  replacement_last_task_id?: string;
+  replacement_last_task_status?: string;
+  replacement_updated_at?: string;
+  replacement_terminal?: boolean;
+  replacement_error?: string;
 };
 
 export type MissionHistoryPreviewEntry = {
@@ -2200,6 +2209,15 @@ function parseWorldStateMissionRecoveryProjection(raw: unknown): WorldStateMissi
     last_review_target_id: safeString(raw["last_review_target_id"], ""),
     last_review_actor: safeString(raw["last_review_actor"], ""),
     last_reviewed_at: safeString(raw["last_reviewed_at"], ""),
+    replacement_mission_id: safeString(raw["replacement_mission_id"], ""),
+    replacement_status: safeString(raw["replacement_status"], ""),
+    replacement_objective: safeString(raw["replacement_objective"], ""),
+    replacement_next_step: safeString(raw["replacement_next_step"], ""),
+    replacement_last_task_id: safeString(raw["replacement_last_task_id"], ""),
+    replacement_last_task_status: safeString(raw["replacement_last_task_status"], ""),
+    replacement_updated_at: safeString(raw["replacement_updated_at"], ""),
+    replacement_terminal: safeBoolean(raw["replacement_terminal"], false),
+    replacement_error: safeString(raw["replacement_error"], ""),
   };
   if (
     !projection.source_status &&
@@ -2214,7 +2232,16 @@ function parseWorldStateMissionRecoveryProjection(raw: unknown): WorldStateMissi
     !projection.last_review_outcome &&
     !projection.last_review_target_id &&
     !projection.last_review_actor &&
-    !projection.last_reviewed_at
+    !projection.last_reviewed_at &&
+    !projection.replacement_mission_id &&
+    !projection.replacement_status &&
+    !projection.replacement_objective &&
+    !projection.replacement_next_step &&
+    !projection.replacement_last_task_id &&
+    !projection.replacement_last_task_status &&
+    !projection.replacement_updated_at &&
+    !projection.replacement_terminal &&
+    !projection.replacement_error
   ) {
     return undefined;
   }
