@@ -36,6 +36,8 @@ def test_missions_create_list_get_update(monkeypatch, tmp_path: Path) -> None:
     assert created_body["history"][0]["details"]["dependency_count"] == 2
     assert created_body["loop_state"]["active_stage"] == "plan"
     assert created_body["loop_state"]["handoff"]["action"] == "link_operation"
+    assert created_body["loop_state"]["interface"]["status"] == "available"
+    assert created_body["loop_state"]["interface"]["next_step"] == "Link an operation and advance the mission state."
     assert created_body["mission"]["owner_id"] == "stage3.owner"
     assert created_body["mission"]["dependency_ids"] == ["approval_policy", "workspace_ready"]
     assert created_body["mission"]["dependency_count"] == 2
@@ -618,6 +620,10 @@ def test_mission_linked_operation_run_updates_history_and_status(monkeypatch, tm
     assert loop_state["handoff"]["operation_id"] == operation_id
     assert loop_state["handoff"]["latest_event"] == fetched_body["history"][-1]["event"]
     assert loop_state["handoff"]["latest_ts"] == fetched_body["history"][-1]["ts"]
+    assert loop_state["interface"]["status"] == "available"
+    assert loop_state["interface"]["operation_id"] == operation_id
+    assert loop_state["interface"]["latest_event"] == receipt_summary["latest_run_event"]
+    assert loop_state["interface"]["latest_receipt_status"] == receipt_summary["latest_run_status"]
     history_events = [str(item.get("event")) for item in fetched_body["history"]]
     assert "linked_task_transition" in history_events
     transition_events = [item for item in fetched_body["history"] if item.get("event") == "linked_task_transition"]
@@ -854,6 +860,11 @@ def test_mission_linked_governance_hold_updates_blocked_state(monkeypatch, tmp_p
     assert loop_state["trace"]["latest_event"] == run_ledger[0]["name"]
     assert loop_state["trace"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert loop_state["trace"]["latest_ts"]
+    assert loop_state["interface"]["status"] == "available"
+    assert loop_state["interface"]["operation_id"] == operation_id
+    assert loop_state["interface"]["gate"] == "trust_gate"
+    assert loop_state["interface"]["next_step"] == "raise_trust_or_reduce_risk"
+    assert loop_state["interface"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert fetched_body["current_task"]["latest_receipt_status"] == run_ledger[0]["status"]
     assert loop_state["memory"]["latest_event"] == fetched_body["history"][-1]["event"]
     assert loop_state["memory"]["latest_ts"] == fetched_body["history"][-1]["ts"]

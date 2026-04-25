@@ -3954,6 +3954,7 @@ function SystemPanel(props: {
         { key: "execute", label: "Execute", stage: missionLoopState.execute },
         { key: "trace", label: "Trace", stage: missionLoopState.trace },
         { key: "memory", label: "Memory", stage: missionLoopState.memory },
+        { key: "interface", label: "Interface", stage: missionLoopState.interface },
       ] as const).filter((item) => item.stage)
     : [];
   const primaryMissionOperation = missionCurrentOperation(missionLinkedOperations, selectedMissionCurrentTaskId);
@@ -9495,6 +9496,7 @@ function OperationsPanel(props: {
     { key: "execute", label: "Execute", stage: selectedMissionLoopState?.execute },
     { key: "trace", label: "Trace", stage: selectedMissionLoopState?.trace },
     { key: "memory", label: "Memory", stage: selectedMissionLoopState?.memory },
+    { key: "interface", label: "Interface", stage: selectedMissionLoopState?.interface },
   ].filter((item) => item.stage);
   const selectedMissionLatestRunAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_run_ts);
   const selectedMissionLatestHistoryAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_history_ts);

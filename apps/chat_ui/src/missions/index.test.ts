@@ -1178,6 +1178,20 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           latest_event: "advance_receipt",
           latest_ts: "2026-04-15T12:05:00Z",
         },
+        interface: {
+          status: "available",
+          detail: "Mission detail API exposes operator interface context through handoff, current_task, receipt_summary.",
+          count: 3,
+          gate: "approvals_gate",
+          next_step: "review_pending_approval",
+          approval_id: "apr_loop",
+          approval_status: "pending",
+          operation_id: "tsk_loop",
+          trace_id: "trace_loop",
+          latest_event: "governance_hold",
+          latest_receipt_status: "queued",
+          latest_ts: "2024-03-09T16:00:01Z",
+        },
       },
     });
   });
@@ -1207,6 +1221,10 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.trace?.latest_ts, "2024-03-09T16:00:01Z");
     assert.equal(response.loop_state?.memory?.latest_event, "advance_receipt");
     assert.equal(response.loop_state?.memory?.latest_ts, "2026-04-15T12:05:00Z");
+    assert.equal(response.loop_state?.interface?.status, "available");
+    assert.equal(response.loop_state?.interface?.operation_id, "tsk_loop");
+    assert.equal(response.loop_state?.interface?.approval_id, "apr_loop");
+    assert.equal(response.loop_state?.interface?.latest_receipt_status, "queued");
     assert.equal(response.queue_item?.recommended_action, "review_pending_approval");
     assert.equal(response.queue_item?.action_target_id, "tsk_loop");
     assert.equal(response.queue_item?.advance?.eligible, false);

@@ -465,6 +465,65 @@ def _mission_receipt_summary(
     }
 
 
+def _mission_interface_stage(
+    loop_state: dict[str, Any],
+    current_task: dict[str, Any],
+    receipt_summary: dict[str, Any],
+) -> dict[str, Any]:
+    handoff = loop_state.get("handoff") if isinstance(loop_state.get("handoff"), dict) else {}
+    surfaces: list[str] = []
+    if handoff.get("stage") or handoff.get("action"):
+        surfaces.append("handoff")
+    if any(
+        _safe_str(current_task.get(key)).strip()
+        for key in ("operation_id", "gate", "approval_id", "trace_id", "handoff_action", "next_step")
+    ):
+        surfaces.append("current_task")
+    if any(
+        [
+            int(receipt_summary.get("linked_operation_count") or 0) > 0,
+            int(receipt_summary.get("run_ledger_count") or 0) > 0,
+            int(receipt_summary.get("history_count") or 0) > 0,
+            _safe_str(receipt_summary.get("current_operation_id")).strip(),
+            _safe_str(receipt_summary.get("latest_run_event")).strip(),
+            _safe_str(receipt_summary.get("latest_history_event")).strip(),
+        ]
+    ):
+        surfaces.append("receipt_summary")
+
+    if not surfaces:
+        return _loop_stage(
+            "pending",
+            "No operator interface handoff is available for this mission yet.",
+            count=0,
+        )
+
+    return _loop_stage(
+        "available",
+        "Mission detail API exposes operator interface context through " + ", ".join(surfaces) + ".",
+        count=len(surfaces),
+        gate=_first_text(current_task.get("gate"), handoff.get("gate"), receipt_summary.get("current_gate")),
+        approval_id=_first_text(
+            current_task.get("approval_id"), handoff.get("approval_id"), receipt_summary.get("current_approval_id")
+        ),
+        approval_status=_first_text(current_task.get("approval_status"), handoff.get("approval_status")),
+        operation_id=_first_text(
+            current_task.get("operation_id"), handoff.get("operation_id"), receipt_summary.get("current_operation_id")
+        ),
+        trace_id=_first_text(
+            current_task.get("trace_id"), handoff.get("trace_id"), receipt_summary.get("current_trace_id")
+        ),
+        latest_event=_first_text(receipt_summary.get("latest_run_event"), receipt_summary.get("latest_history_event")),
+        latest_receipt_status=_first_text(
+            receipt_summary.get("latest_run_status"), current_task.get("latest_receipt_status")
+        ),
+        latest_ts=_first_text(
+            receipt_summary.get("latest_run_ts"), receipt_summary.get("latest_history_ts"), handoff.get("latest_ts")
+        ),
+        next_step=_first_text(current_task.get("next_step"), handoff.get("next_step")),
+    )
+
+
 def _loop_stage(
     status: str,
     detail: str,
@@ -853,16 +912,17 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
     _, queue_item, _ = mission_store.mission_queue_item(record.mission_id)
     queue_payload = queue_item or {}
     loop_state = _mission_loop_state(record, linked_operations, run_ledger, history, queue_payload)
+    current_task = _mission_current_task_projection(record, linked_operations, run_ledger, loop_state, queue_payload)
+    receipt_summary = _mission_receipt_summary(record, linked_operations, run_ledger, history)
+    loop_state["interface"] = _mission_interface_stage(loop_state, current_task, receipt_summary)
     return {
         "history": history,
         "linked_operations": linked_operations,
         "run_ledger": run_ledger,
         "loop_state": loop_state,
-        "current_task": _mission_current_task_projection(
-            record, linked_operations, run_ledger, loop_state, queue_payload
-        ),
+        "current_task": current_task,
         "queue_item": queue_payload,
-        "receipt_summary": _mission_receipt_summary(record, linked_operations, run_ledger, history),
+        "receipt_summary": receipt_summary,
     }
 
 

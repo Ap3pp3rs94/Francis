@@ -143,6 +143,7 @@ export type MissionLoopState = {
   execute?: MissionLoopStage;
   trace?: MissionLoopStage;
   memory?: MissionLoopStage;
+  interface?: MissionLoopStage;
 };
 
 export type MissionCurrentTask = {
@@ -798,6 +799,7 @@ function parseMissionLoopState(raw: unknown): MissionLoopState | undefined {
     execute: parseMissionLoopStage(raw.execute),
     trace: parseMissionLoopStage(raw.trace),
     memory: parseMissionLoopStage(raw.memory),
+    interface: parseMissionLoopStage(raw.interface),
   };
 
   if (
@@ -808,7 +810,8 @@ function parseMissionLoopState(raw: unknown): MissionLoopState | undefined {
     !state.gate &&
     !state.execute &&
     !state.trace &&
-    !state.memory
+    !state.memory &&
+    !state.interface
   ) {
     return undefined;
   }

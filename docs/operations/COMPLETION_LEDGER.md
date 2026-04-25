@@ -207,6 +207,14 @@ latest receipt, mission, operation, trace, run, artifact, domain, and scope
 fields, and readiness evidence now prioritizes memory receipt ids without
 claiming synthesized memory when the backend does not return receipts.
 
+As of `2026-04-25`, mission loop detail includes an explicit read-only
+`interface` stage after `plan -> gate -> execute -> trace -> memory`. The stage
+is backed only by fields already returned by the mission detail API: loop
+handoff, current task, and receipt summary. The chat UI mission parser preserves
+that stage and the existing mission loop grids render it alongside the other
+loop stages, so operators can see when backend interface context is available
+without inventing UI-only state.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
