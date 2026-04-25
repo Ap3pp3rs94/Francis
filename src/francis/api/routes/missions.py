@@ -232,7 +232,27 @@ def _operation_approval_id(detail: dict[str, Any]) -> str:
 def _operation_trace_id(detail: dict[str, Any]) -> str:
     operation = detail.get("operation") if isinstance(detail.get("operation"), dict) else {}
     meta = operation.get("meta") if isinstance(operation.get("meta"), dict) else {}
-    return _safe_str(operation.get("trace_id")).strip() or _safe_str(meta.get("trace_id")).strip()
+    output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
+    receipt = output.get("receipt") if isinstance(output.get("receipt"), dict) else {}
+    sandbox = (
+        output.get("sandbox")
+        if isinstance(output.get("sandbox"), dict)
+        else receipt.get("sandbox")
+        if isinstance(receipt.get("sandbox"), dict)
+        else {}
+    )
+    audit = receipt.get("audit_event") if isinstance(receipt.get("audit_event"), dict) else {}
+    sandbox_audit = sandbox.get("audit_event") if isinstance(sandbox.get("audit_event"), dict) else {}
+    return (
+        _safe_str(operation.get("trace_id")).strip()
+        or _safe_str(meta.get("trace_id")).strip()
+        or _safe_str(output.get("trace_id")).strip()
+        or _safe_str(output.get("traceId")).strip()
+        or _safe_str(receipt.get("trace_id")).strip()
+        or _safe_str(sandbox.get("trace_id")).strip()
+        or _safe_str(audit.get("trace_id")).strip()
+        or _safe_str(sandbox_audit.get("trace_id")).strip()
+    )
 
 
 def _operation_next_step(detail: dict[str, Any]) -> str:

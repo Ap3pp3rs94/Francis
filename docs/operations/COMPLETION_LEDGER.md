@@ -829,6 +829,26 @@ cards:
   reachable when returned.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is operation receipt trace projection. This advances the active
+`Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE` line by making
+receipt-backed plugin execution traces visible through operation and mission
+read models:
+
+- `src/francis/operations/runtime.py` and `src/francis/api/routes/operations.py`
+  now project trace ids from operation result receipts, sandbox receipts, and
+  audit events onto `operation.trace_id` and `operation.meta.trace_id`.
+- `src/francis/api/routes/missions.py` now recognizes those same receipt-backed
+  trace sources when deriving mission current-task, receipt-summary, and loop
+  trace state.
+- `src/francis/missions/runtime.py` now carries receipt-backed operation traces
+  through mission advance handoffs when the operation result includes them.
+- API tests now prove plugin operation traces survive create/run/get/list
+  projections and reach mission receipt-summary, current-task, and loop trace
+  surfaces.
+- No queue selection, mission mutation, approval decision, shell, policy, or
+  memory-write behavior changed; this only exposes existing receipt trace ids.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
 showing the loop-level approval posture in the operator mission inspector:
@@ -2047,6 +2067,19 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 operation receipt trace projection slice:
+
+- `pytest tests/test_api_operations.py::test_operations_plugin_run_action_executes tests/test_api_missions.py::test_mission_linked_plugin_run_surfaces_operation_trace tests/test_api_missions.py::test_mission_run_once_results_preserve_advance_trace -q`
+  Result: `3 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `25 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission queue-run result trace visibility slice:
 

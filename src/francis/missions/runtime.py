@@ -76,6 +76,20 @@ def _operation_handoff(operation: Any) -> dict[str, object]:
         or _safe_str(operation_meta.get("trace_id")).strip()
         or _safe_str(operation_output.get("trace_id")).strip()
     )
+    output_receipt = operation_output.get("receipt") if isinstance(operation_output.get("receipt"), dict) else {}
+    output_sandbox = (
+        operation_output.get("sandbox")
+        if isinstance(operation_output.get("sandbox"), dict)
+        else output_receipt.get("sandbox")
+        if isinstance(output_receipt.get("sandbox"), dict)
+        else {}
+    )
+    trace_id = (
+        trace_id
+        or _safe_str(operation_output.get("traceId")).strip()
+        or _safe_str(output_receipt.get("trace_id")).strip()
+        or _safe_str(output_sandbox.get("trace_id")).strip()
+    )
     message = (
         _safe_str(operation_meta.get("result_message")).strip() or _safe_str(operation_output.get("message")).strip()
     )

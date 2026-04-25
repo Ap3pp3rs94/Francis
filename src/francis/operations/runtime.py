@@ -297,6 +297,27 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
 
     result_obj = task.get("result") if isinstance(task.get("result"), dict) else {}
     output = redact_operation_value(result_obj.get("data"))
+    output_trace = output if isinstance(output, dict) else {}
+    output_receipt = output_trace.get("receipt") if isinstance(output_trace.get("receipt"), dict) else {}
+    output_sandbox = (
+        output_trace.get("sandbox")
+        if isinstance(output_trace.get("sandbox"), dict)
+        else output_receipt.get("sandbox")
+        if isinstance(output_receipt.get("sandbox"), dict)
+        else {}
+    )
+    output_audit = output_receipt.get("audit_event") if isinstance(output_receipt.get("audit_event"), dict) else {}
+    output_sandbox_audit = (
+        output_sandbox.get("audit_event") if isinstance(output_sandbox.get("audit_event"), dict) else {}
+    )
+    trace_id = (
+        _safe_str(output_trace.get("trace_id")).strip()
+        or _safe_str(output_trace.get("traceId")).strip()
+        or _safe_str(output_receipt.get("trace_id")).strip()
+        or _safe_str(output_sandbox.get("trace_id")).strip()
+        or _safe_str(output_audit.get("trace_id")).strip()
+        or _safe_str(output_sandbox_audit.get("trace_id")).strip()
+    )
     result_status = _result_status(task)
     governance = _result_governance(task)
     approval_id = _result_approval_id(task)
@@ -319,6 +340,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         "status": op_status,
         "level": "error" if op_status in {"failed", "blocked"} else "warning" if governance else "info",
         "actor": _safe_str(task.get("requester_id")).strip() or "unknown",
+        "trace_id": trace_id or None,
         "duration_ms": None,
         "input": redact_operation_value(task.get("inputs")),
         "output": output,
@@ -336,6 +358,7 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
             "result_status": result_status or None,
             "result_message": result_message or None,
             "approval_id": approval_id or None,
+            "trace_id": trace_id or None,
             "mission_id": mission_id or None,
             "governance": redact_operation_value(governance) if governance else None,
             "orb_plane": orb_plane,

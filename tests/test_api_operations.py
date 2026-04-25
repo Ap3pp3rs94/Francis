@@ -364,6 +364,21 @@ def test_operations_plugin_run_action_executes(monkeypatch, tmp_path: Path) -> N
     assert isinstance(output, dict)
     assert output["ok"] is True
     assert str(output["output"]) == "Plugin response: hello from operation"
+    trace_id = str(output["receipt"].get("trace_id") or "")
+    assert trace_id.startswith("trace_")
+    assert run_body["operation"]["trace_id"] == trace_id
+    assert run_body["operation"]["meta"]["trace_id"] == trace_id
+
+    fetched = client.get(f"/operations/{operation_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["operation"]["trace_id"] == trace_id
+    assert fetched_body["operation"]["meta"]["trace_id"] == trace_id
+
+    listed = client.get("/operations/list")
+    assert listed.status_code == 200
+    listed_operation = next(item for item in listed.json()["items"] if item["id"] == operation_id)
+    assert listed_operation["trace_id"] == trace_id
 
 
 def test_operations_tool_run_action_executes(monkeypatch, tmp_path: Path) -> None:
