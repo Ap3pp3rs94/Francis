@@ -886,6 +886,21 @@ directly instead of requiring raw JSON inspection:
   mission queue behavior changed; this is a read-only operator visibility
   improvement for existing receipt handles.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is operation detail recovery guidance visibility. This
+advances the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P1_INTERFACE`
+line by making important operation failures actionable in the operator console:
+
+- `apps/chat_ui/src/App.tsx` now derives recovery guidance from existing
+  operation truth: governance next step, gate, approval id, artifact directory,
+  trace id, and captured error state.
+- The Operation Detail panel now renders a `Recovery` line beside explicit
+  errors, and for blocked/denied/failed/error states when there is no raw error
+  string.
+- No operation mutation, approval decision, execution, shell, policy, memory, or
+  mission queue behavior changed; this is a read-only operator actionability
+  improvement for existing failure context.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by

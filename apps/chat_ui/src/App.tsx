@@ -225,6 +225,45 @@ function operationArtifactDir(record: OperationRecord | null | undefined): strin
   );
 }
 
+function operationRecoveryGuidance(record: OperationRecord | null | undefined): string {
+  if (!record) return "";
+  const output = operationOutputRecord(record);
+  const governance = operationGovernance(record);
+  const status = safeString(record.status).trim().toLowerCase();
+  const gate =
+    safeString(governance.gate).trim() ||
+    operationMetaString(record, "gate") ||
+    safeString(output.gate).trim();
+  const nextStep =
+    safeString(governance.next_step).trim() ||
+    operationMetaString(record, "next_step") ||
+    safeString(output.next_step).trim();
+  const approvalId = operationApprovalId(record);
+  const artifactDir = operationArtifactDir(record);
+  const traceId = operationTraceId(record);
+  const errorText = safeString(record.error).trim() || safeString(output.error).trim();
+
+  if (nextStep) {
+    return gate ? `Next step: ${nextStep} through ${gate}.` : `Next step: ${nextStep}.`;
+  }
+  if (approvalId) {
+    return `Review approval ${approvalId} before rerunning this operation.`;
+  }
+  if (gate) {
+    return `Resolve gate ${gate} before rerunning this operation.`;
+  }
+  if (artifactDir) {
+    return `Inspect artifact ${artifactDir} for captured failure output before retrying.`;
+  }
+  if (traceId) {
+    return `Inspect trace ${traceId} and the audit trail before retrying.`;
+  }
+  if (["blocked", "denied", "error", "failed"].includes(status) || errorText) {
+    return "Inspect the audit trail and captured output, then retry only after the failure cause is resolved.";
+  }
+  return "";
+}
+
 function truncateText(value: string, maxChars = 180): string {
   const cleaned = safeString(value).trim();
   if (!cleaned) return "";
@@ -9203,6 +9242,14 @@ function OperationsPanel(props: {
   const selectedTraceId = operationTraceId(selectedOperation);
   const selectedRunId = operationRunId(selectedOperation);
   const selectedArtifactDir = operationArtifactDir(selectedOperation);
+  const selectedErrorText =
+    selectedOperation?.error !== undefined
+      ? safeString(selectedOperation.error, JSON.stringify(selectedOperation.error))
+      : "";
+  const selectedRecoveryGuidance = operationRecoveryGuidance(selectedOperation);
+  const showSelectedRecoveryGuidance =
+    selectedRecoveryGuidance.length > 0 &&
+    (selectedErrorText.length > 0 || ["blocked", "denied", "error", "failed"].includes(selectedStatus));
   const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
   const hasGovernance =
     Object.keys(selectedGovernance).length > 0 || Boolean(selectedApprovalId) || Boolean(selectedOrbPlane);
@@ -9965,7 +10012,7 @@ function OperationsPanel(props: {
                   ) : null}
                 </div>
               ) : null}
-              {selectedOperation.error ? (
+              {selectedErrorText ? (
                 <div
                   style={{
                     border: `1px solid ${THEME.errorBorder}`,
@@ -9976,7 +10023,28 @@ function OperationsPanel(props: {
                     fontSize: 12,
                   }}
                 >
-                  <b>Error:</b> {safeString(selectedOperation.error, JSON.stringify(selectedOperation.error))}
+                  <div>
+                    <b>Error:</b> {selectedErrorText}
+                  </div>
+                  {selectedRecoveryGuidance ? (
+                    <div style={{ marginTop: 8 }}>
+                      <b>Recovery:</b> {selectedRecoveryGuidance}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {!selectedErrorText && showSelectedRecoveryGuidance ? (
+                <div
+                  style={{
+                    border: `1px solid ${THEME.errorBorder}`,
+                    background: THEME.errorBg,
+                    color: "#ffaaaa",
+                    padding: 10,
+                    borderRadius: 10,
+                    fontSize: 12,
+                  }}
+                >
+                  <b>Recovery:</b> {selectedRecoveryGuidance}
                 </div>
               ) : null}
               {selectedLogs.length > 0 ? (
