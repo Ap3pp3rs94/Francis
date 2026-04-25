@@ -299,6 +299,71 @@ def test_web_learning_request_redacts_sensitive_approval_metadata(monkeypatch, t
     assert raw_password not in persisted_text
 
 
+def test_web_learning_request_seals_sensitive_payload_without_weakening_exact_approval(
+    monkeypatch, tmp_path: Path
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    raw_password = "learnsecret123"
+    different_password = "learnsecret456"
+    pending = client.post(
+        "/web_learning/request",
+        json={
+            "url": "https://example.org/sealed",
+            "reason": "approval_path",
+            "actor": "operator:sealed",
+            "bytes": 128,
+            "title": f"Operator note password={raw_password}",
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "web_learning" / "approvals" / approval_id / "request.json"
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    sealed_title = approval_payload["payload"]["payload"]["title"]
+    assert sealed_title["kind"] == "sealed_secret"
+    assert sealed_title["redacted"] == "Operator note password=[REDACTED:secret]"
+    assert str(sealed_title["digest"]).startswith("hmac-sha256:")
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["payload"]["title"] == sealed_title
+    assert raw_password not in approval_path.read_text(encoding="utf-8")
+    assert raw_password not in artifact_path.read_text(encoding="utf-8")
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    mismatched = client.post(
+        "/web_learning/request",
+        json={
+            "url": "https://example.org/sealed",
+            "reason": "approval_path",
+            "actor": "operator:sealed",
+            "bytes": 128,
+            "title": f"Operator note password={different_password}",
+            "approval_id": approval_id,
+        },
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    assert str(mismatched_body["approval_id"]) != approval_id
+
+
 def test_web_learning_request_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

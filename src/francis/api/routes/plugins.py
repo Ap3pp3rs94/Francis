@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
-from francis.governance.redaction import redact_governed_metadata
+from francis.governance.redaction import redact_governed_metadata, seal_governed_approval_value
 from francis.kernel.paths import data_dir, repo_root
 from francis.plugin_factory.spec_builder import build_plugin
 from francis.plugin_system import (
@@ -536,22 +536,7 @@ def _plugin_run_approval_id(payload: "PluginRunIn") -> str:
 
 
 def _normalize_approval_value(value: Any) -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, dict):
-        normalized: dict[str, Any] = {}
-        for key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
-            normalized_key = _safe_str(key).strip()
-            if not normalized_key:
-                continue
-            normalized[normalized_key] = _normalize_approval_value(value.get(key))
-        return normalized
-    if isinstance(value, (list, tuple)):
-        return [_normalize_approval_value(item) for item in value]
-    try:
-        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
-    except Exception:
-        return _safe_str(value)
+    return seal_governed_approval_value(value)
 
 
 def _plugin_approval_meta(meta: Any) -> dict[str, Any]:

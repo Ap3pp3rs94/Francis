@@ -390,6 +390,91 @@ def test_plugins_run_redacts_sensitive_approval_metadata(monkeypatch, tmp_path: 
     assert raw_password not in persisted_text
 
 
+def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/risky",
+            "capabilities": [
+                {
+                    "id": "acme.deploy",
+                    "kind": "tool",
+                    "name": "deploy",
+                    "action": "deploy",
+                    "description": "Critical deployment action.",
+                    "meta": {"risk_tier": "critical", "required_trust": 5},
+                }
+            ],
+        },
+    )
+    assert installed.status_code == 200
+    plugin_id = str(installed.json()["plugin_id"])
+
+    raised = client.post("/trust/set", json={"level": 6, "reason": "approval input sealing"})
+    assert raised.status_code == 200
+    assert raised.json()["ok"] is True
+
+    raw_key = "sk-" + ("i" * 32)
+    different_key = "sk-" + ("j" * 32)
+    pending = client.post(
+        "/plugins/run",
+        json={
+            "id": plugin_id,
+            "action": "deploy",
+            "input": {"target": "prod", "api_key": raw_key, "token_count": 3},
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "plugins" / "approvals" / approval_id / "request.json"
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    sealed_key = approval_payload["payload"]["input"]["api_key"]
+    assert sealed_key["kind"] == "sealed_secret"
+    assert sealed_key["redacted"] == "[REDACTED:secret]"
+    assert str(sealed_key["digest"]).startswith("hmac-sha256:")
+    assert approval_payload["payload"]["input"]["target"] == "prod"
+    assert approval_payload["payload"]["input"]["token_count"] == 3
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["input"]["api_key"] == sealed_key
+    assert raw_key not in approval_path.read_text(encoding="utf-8")
+    assert raw_key not in artifact_path.read_text(encoding="utf-8")
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    mismatched = client.post(
+        "/plugins/run",
+        json={
+            "id": plugin_id,
+            "action": "deploy",
+            "approval_id": approval_id,
+            "input": {"target": "prod", "api_key": different_key, "token_count": 3},
+        },
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    assert str(mismatched_body["approval_id"]) != approval_id
+
+
 def test_plugins_tool_run_requires_matching_approval_payload(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

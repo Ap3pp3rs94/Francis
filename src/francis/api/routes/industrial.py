@@ -15,7 +15,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
-from francis.governance.redaction import redact_governed_metadata
+from francis.governance.redaction import redact_governed_metadata, seal_governed_approval_value
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -426,22 +426,7 @@ def _approval_id_from_payload(payload: dict[str, Any]) -> str:
 
 
 def _normalize_approval_value(value: Any) -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, dict):
-        normalized: dict[str, Any] = {}
-        for key in sorted(value, key=lambda item: _safe_str(item).strip().lower()):
-            normalized_key = _safe_str(key).strip()
-            if not normalized_key:
-                continue
-            normalized[normalized_key] = _normalize_approval_value(value.get(key))
-        return normalized
-    if isinstance(value, (list, tuple)):
-        return [_normalize_approval_value(item) for item in value]
-    try:
-        return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
-    except Exception:
-        return _safe_str(value)
+    return seal_governed_approval_value(value)
 
 
 def _approval_meta(meta: Any) -> dict[str, Any]:
@@ -1241,7 +1226,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
             return {"ok": False, "error": "target_kind_required"}
 
         reason = _safe_str(payload.get("reason")).strip() or "requested"
-        params = _normalize_meta(payload.get("params"))
+        params = _normalize_approval_value(_normalize_meta(payload.get("params")))
         dry_run = bool(payload.get("dry_run", True))
         risk = _safe_str(params.get("risk")).strip().lower() or "medium"
         registry = _load_registry()
@@ -1589,7 +1574,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
         risk = _safe_str(payload.get("risk")).strip()
         domain = _safe_str(payload.get("domain")).strip()
         actor = _safe_str(payload.get("actor")).strip()
-        params = _normalize_meta(payload.get("params"))
+        params = _normalize_approval_value(_normalize_meta(payload.get("params")))
         meta = redact_governed_metadata(payload.get("meta"))
         approval_action = "industrial.intervention.request"
         approval_id = _approval_id_from_payload(payload)
@@ -1871,7 +1856,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
         reason = _safe_str(payload.get("reason")).strip() or "requested"
         domain = _safe_str(payload.get("domain")).strip()
         actor = _safe_str(payload.get("actor")).strip()
-        params = _normalize_meta(payload.get("params"))
+        params = _normalize_approval_value(_normalize_meta(payload.get("params")))
         meta = redact_governed_metadata(payload.get("meta"))
         request_id = _new_id("iexec", f"{target_kind}_{target_id}")
         approval_action = "industrial.intervention.execute"
@@ -2268,7 +2253,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
         approval_id = supplied_approval_id
         status = "pending"
         reason = _safe_str(payload.get("reason")).strip() or "requested"
-        params = _normalize_meta(payload.get("params"))
+        params = _normalize_approval_value(_normalize_meta(payload.get("params")))
 
         if action == "validate_safety":
             validation_id = _new_id("validation", f"twin_{twin_id}")

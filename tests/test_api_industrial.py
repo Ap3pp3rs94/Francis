@@ -527,6 +527,93 @@ def test_industrial_intervention_request_redacts_sensitive_approval_metadata(mon
     assert raw_password not in persisted_text
 
 
+def test_industrial_intervention_request_seals_sensitive_params_without_weakening_exact_approval(
+    monkeypatch, tmp_path: Path
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    asset_created = client.post(
+        "/industrial/assets", json={"name": "Compressor Param Secret", "asset_type": "compressor", "risk": "high"}
+    )
+    assert asset_created.status_code == 200
+    asset_id = str(asset_created.json()["id"])
+
+    raw_key = "sk-" + ("k" * 32)
+    different_key = "sk-" + ("m" * 32)
+    pending = client.post(
+        "/industrial/interventions/request",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "action": "dispatch_crew",
+            "reason": "operator_request",
+            "dry_run": False,
+            "risk": "high",
+            "actor": "operator:params",
+            "params": {"crew": "alpha", "api_key": raw_key, "token_count": 5},
+        },
+    )
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["ok"] is True
+    approval_id = str(pending_body["approval_id"])
+
+    approval_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    artifact_path = data_root / "artifacts" / "industrial" / "approvals" / approval_id / "request.json"
+    registry_path = data_root / "industrial" / "_registry.json"
+    approval_payload = json.loads(approval_path.read_text(encoding="utf-8"))
+    sealed_key = approval_payload["payload"]["payload"]["params"]["api_key"]
+    assert sealed_key["kind"] == "sealed_secret"
+    assert sealed_key["redacted"] == "[REDACTED:secret]"
+    assert str(sealed_key["digest"]).startswith("hmac-sha256:")
+    assert approval_payload["payload"]["payload"]["params"]["crew"] == "alpha"
+    assert approval_payload["payload"]["payload"]["params"]["token_count"] == 5
+
+    artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert artifact_payload["request"]["payload"]["params"]["api_key"] == sealed_key
+
+    persisted_text = "\n".join(
+        [
+            approval_path.read_text(encoding="utf-8"),
+            artifact_path.read_text(encoding="utf-8"),
+            registry_path.read_text(encoding="utf-8"),
+        ]
+    )
+    assert raw_key not in persisted_text
+
+    approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    mismatched = client.post(
+        "/industrial/interventions/request",
+        json={
+            "target_kind": "asset",
+            "target_id": asset_id,
+            "action": "dispatch_crew",
+            "reason": "operator_request",
+            "dry_run": False,
+            "risk": "high",
+            "actor": "operator:params",
+            "params": {"crew": "alpha", "api_key": different_key, "token_count": 5},
+            "approval_id": approval_id,
+        },
+    )
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["ok"] is False
+    assert mismatched_body["status"] == "needs_approval"
+    assert mismatched_body["error"] == "approval_payload_mismatch"
+    assert str(mismatched_body["approval_id"]) != approval_id
+
+
 def test_industrial_execute_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

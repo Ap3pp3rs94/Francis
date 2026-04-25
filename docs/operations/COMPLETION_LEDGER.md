@@ -71,6 +71,13 @@ rules, and focused API tests prove sensitive metadata is removed from approval
 records, approval artifacts, and relevant local registries while non-sensitive
 audit fields remain available.
 
+As of `2026-04-25`, governed exact-action approval payloads can seal
+secret-like action values without dropping exact-match protection. Plugin run
+inputs, industrial intervention params, and web-learning request payload fields
+replace inline secret-like values with redacted HMAC-backed sealed values before
+approval records or artifacts are written. Replays with different secret values
+still produce `approval_payload_mismatch` instead of reusing the prior approval.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt
