@@ -395,6 +395,7 @@ def _loop_stage(
     count: int | None = None,
     gate: str = "",
     approval_id: str = "",
+    approval_status: str = "",
     operation_id: str = "",
     trace_id: str = "",
     latest_event: str = "",
@@ -411,6 +412,8 @@ def _loop_stage(
         payload["gate"] = gate
     if approval_id:
         payload["approval_id"] = approval_id
+    if approval_status:
+        payload["approval_status"] = approval_status
     if operation_id:
         payload["operation_id"] = operation_id
     if trace_id:
@@ -431,6 +434,7 @@ def _loop_handoff(
     *,
     gate: str = "",
     approval_id: str = "",
+    approval_status: str = "",
     operation_id: str = "",
     trace_id: str = "",
     latest_event: str = "",
@@ -446,6 +450,8 @@ def _loop_handoff(
         payload["gate"] = gate
     if approval_id:
         payload["approval_id"] = approval_id
+    if approval_status:
+        payload["approval_status"] = approval_status
     if operation_id:
         payload["operation_id"] = operation_id
     if trace_id:
@@ -542,6 +548,7 @@ def _mission_loop_state(
             "Governance is actively holding the current linked operation through " + ", ".join(gate_bits) + ".",
             gate=latest_gate,
             approval_id=latest_approval_id,
+            approval_status=queue_approval_status,
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )
@@ -551,6 +558,7 @@ def _mission_loop_state(
             f"Approval {latest_approval_id} is approved; governance no longer holds the linked operation.",
             gate=latest_gate,
             approval_id=latest_approval_id,
+            approval_status=queue_approval_status,
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )
@@ -584,6 +592,7 @@ def _mission_loop_state(
             operation_id=latest_operation_id,
             gate=latest_gate,
             approval_id=latest_approval_id,
+            approval_status=queue_approval_status,
             next_step=latest_next_step,
         )
     else:
@@ -693,6 +702,7 @@ def _mission_loop_state(
             "Review the active governance hold before the linked operation can continue.",
             gate=latest_gate,
             approval_id=latest_approval_id,
+            approval_status=queue_approval_status,
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )
@@ -706,6 +716,7 @@ def _mission_loop_state(
             or "Approval is approved; rerun the linked operation through the governed mission runtime.",
             gate=latest_gate,
             approval_id=latest_approval_id,
+            approval_status=queue_approval_status,
             operation_id=latest_operation_id,
             next_step=latest_next_step,
         )

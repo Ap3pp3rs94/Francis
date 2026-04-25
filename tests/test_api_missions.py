@@ -189,9 +189,12 @@ def test_mission_record_projection_refreshes_decided_approval_status(monkeypatch
     assert fetched_body["loop_state"]["active_stage"] == "execute"
     assert fetched_body["loop_state"]["handoff"]["action"] == "run_linked_operation"
     assert fetched_body["loop_state"]["handoff"]["approval_id"] == approval_id
+    assert fetched_body["loop_state"]["handoff"]["approval_status"] == "approved"
     assert fetched_body["loop_state"]["handoff"]["operation_id"] == "tsk_projection_approved"
     assert fetched_body["loop_state"]["gate"]["status"] == "clear"
     assert fetched_body["loop_state"]["gate"]["approval_id"] == approval_id
+    assert fetched_body["loop_state"]["gate"]["approval_status"] == "approved"
+    assert fetched_body["loop_state"]["execute"]["approval_status"] == "approved"
     assert fetched_body["current_task"]["approval_status"] == "approved"
     assert fetched_body["current_task"]["handoff_action"] == "run_linked_operation"
 

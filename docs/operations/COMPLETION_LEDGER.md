@@ -655,6 +655,22 @@ see what happened after a source mission declared replacement work:
   and `apps/chat_ui/src/settings/index.test.ts` now prove the contract.
 
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
+Stage 3 line is loop-state approval-status contract parity. This advances the
+active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE`
+line by making the mission loop contract carry approval posture directly:
+
+- `src/francis/api/routes/missions.py` now includes `approval_status` on
+  approval-aware loop stages and handoffs, sourced from the refreshed queue
+  posture rather than stale mission meta.
+- `apps/chat_ui/src/missions/index.ts` now preserves `approval_status` through
+  `MissionLoopStage` and `MissionLoopHandoff` parsing so UI callers do not need
+  to reconstruct the active gate state from sibling queue fields.
+- `tests/test_api_missions.py` and `apps/chat_ui/src/missions/index.test.ts`
+  now prove the pending and approved approval-status loop contracts.
+- No execution behavior changed; this is a truthful contract/read-model
+  improvement for the existing governed loop.
+
+As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is approved-gate loop-state handoff parity. This advances the
 active `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE`
 line by making mission detail loop state agree with the queue-derived approval

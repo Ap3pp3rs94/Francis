@@ -112,6 +112,7 @@ export type MissionLoopStage = {
   gate?: string;
   next_step?: string;
   approval_id?: string;
+  approval_status?: string;
   operation_id?: string;
   trace_id?: string;
   latest_event?: string;
@@ -125,6 +126,7 @@ export type MissionLoopHandoff = {
   gate?: string;
   next_step?: string;
   approval_id?: string;
+  approval_status?: string;
   operation_id?: string;
   trace_id?: string;
   latest_event?: string;
@@ -713,6 +715,7 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
     approval_id: safeString(raw.approval_id, "") || undefined,
+    approval_status: safeString(raw.approval_status, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
     latest_event: safeString(raw.latest_event, "") || undefined,
@@ -724,6 +727,7 @@ function parseMissionLoopStage(raw: unknown): MissionLoopStage | undefined {
     !stage.detail &&
     !stage.operation_id &&
     !stage.approval_id &&
+    !stage.approval_status &&
     !stage.trace_id &&
     !stage.latest_event &&
     !stage.latest_ts &&
@@ -744,6 +748,7 @@ function parseMissionLoopHandoff(raw: unknown): MissionLoopHandoff | undefined {
     gate: safeString(raw.gate, "") || undefined,
     next_step: safeString(raw.next_step, "") || undefined,
     approval_id: safeString(raw.approval_id, "") || undefined,
+    approval_status: safeString(raw.approval_status, "") || undefined,
     operation_id: safeString(raw.operation_id, "") || undefined,
     trace_id: safeString(raw.trace_id, "") || undefined,
     latest_event: safeString(raw.latest_event, "") || undefined,
@@ -756,6 +761,7 @@ function parseMissionLoopHandoff(raw: unknown): MissionLoopHandoff | undefined {
     !handoff.detail &&
     !handoff.operation_id &&
     !handoff.approval_id &&
+    !handoff.approval_status &&
     !handoff.trace_id &&
     !handoff.latest_event &&
     !handoff.latest_ts &&

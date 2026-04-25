@@ -1034,6 +1034,7 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           gate: "approvals_gate",
           next_step: "review_pending_approval",
           approval_id: "apr_loop",
+          approval_status: "pending",
           operation_id: "tsk_loop",
         },
         plan: { status: "ready", detail: "1 linked operation(s) declared for this mission.", count: 1, operation_id: "tsk_loop" },
@@ -1043,12 +1044,15 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
           gate: "approvals_gate",
           next_step: "review_pending_approval",
           approval_id: "apr_loop",
+          approval_status: "pending",
           operation_id: "tsk_loop",
         },
         execute: {
           status: "queued",
           detail: "The latest linked operation is currently queued.",
           operation_id: "tsk_loop",
+          approval_id: "apr_loop",
+          approval_status: "pending",
           next_step: "review_pending_approval",
         },
         trace: {
@@ -1082,10 +1086,13 @@ test("MissionsClient.get preserves the mission loop state used by the ORB missio
     assert.equal(response.loop_state?.handoff?.stage, "gate");
     assert.equal(response.loop_state?.handoff?.action, "review_pending_approval");
     assert.equal(response.loop_state?.handoff?.approval_id, "apr_loop");
+    assert.equal(response.loop_state?.handoff?.approval_status, "pending");
     assert.equal(response.loop_state?.handoff?.operation_id, "tsk_loop");
     assert.equal(response.loop_state?.gate?.status, "needs_approval");
     assert.equal(response.loop_state?.gate?.approval_id, "apr_loop");
+    assert.equal(response.loop_state?.gate?.approval_status, "pending");
     assert.equal(response.loop_state?.gate?.next_step, "review_pending_approval");
+    assert.equal(response.loop_state?.execute?.approval_status, "pending");
     assert.equal(response.loop_state?.execute?.next_step, "review_pending_approval");
     assert.equal(response.loop_state?.trace?.trace_id, "trace_loop");
     assert.equal(response.loop_state?.trace?.latest_event, "governance_hold");
