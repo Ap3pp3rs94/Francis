@@ -200,6 +200,13 @@ receipt-backed operation and trace ids, and memory-backed reconstruction context
 mission briefing/recent-completion payloads expose the latest receipt without
 changing readiness status semantics or creating new execution behavior.
 
+As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
+mission memory contract and the Shift Briefing renders only the returned
+continuity-backed memory receipts. The browser parser keeps receipt count,
+latest receipt, mission, operation, trace, run, artifact, domain, and scope
+fields, and readiness evidence now prioritizes memory receipt ids without
+claiming synthesized memory when the backend does not return receipts.
+
 As of `2026-04-25`, supervised execution approval and artifact surfaces no
 longer persist raw secret-like command text or command output. Approval payloads
 seal secret-bearing commands with HMAC-backed values so exact-action matching is
@@ -2317,6 +2324,13 @@ the same `Phase 2 / P3_GOVERNANCE -> P2_IDENTITY` line:
   context instead of falling back to the older plugin-only summary logic.
 
 ## 4. Latest validation evidence
+
+Latest targeted validation for the `2026-04-25` Stage 3 Shift Briefing memory receipt interface slice:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `31 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
 
 Latest targeted validation for the `2026-04-25` Stage 3 mission continuity memory receipt projection slice:
 

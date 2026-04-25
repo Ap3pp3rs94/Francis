@@ -37,6 +37,7 @@ import type {
   ContinuityLedgerEntry,
   ContinuityLedgerSnapshot,
   MissionReadinessSummary,
+  MissionMemoryReceipt,
   ObserverAnomalySummary,
   ObserverEventsSnapshot,
   ObserverScanReceiptSummary,
@@ -245,6 +246,16 @@ function memoryTimelineEventReferenceLine(event: MemoryTimelineEvent): string {
   if (refs?.approval_id) parts.push(`approval ${refs.approval_id}`);
   if (refs?.run_id) parts.push(`run ${refs.run_id}`);
   if (refs?.artifact_dir) parts.push(`artifact ${refs.artifact_dir}`);
+  return parts.join(" / ");
+}
+
+function missionMemoryReceiptReferenceLine(receipt: MissionMemoryReceipt): string {
+  const parts: string[] = [];
+  if (receipt.mission_id) parts.push(`mission ${receipt.mission_id}`);
+  if (receipt.operation_id) parts.push(`task ${receipt.operation_id}`);
+  if (receipt.trace_id) parts.push(`trace ${receipt.trace_id}`);
+  if (receipt.run_id) parts.push(`run ${receipt.run_id}`);
+  if (receipt.artifact_dir) parts.push(`artifact ${receipt.artifact_dir}`);
   return parts.join(" / ");
 }
 
@@ -3555,6 +3566,7 @@ function SystemPanel(props: {
   const shiftBriefingCounts = shiftBriefing?.counts ?? {};
   const shiftBriefingFocus = shiftBriefing?.focus ?? [];
   const shiftBriefingCompleted = shiftBriefing?.recently_completed ?? [];
+  const shiftBriefingMemoryReceipts = shiftBriefing?.memory_receipts ?? [];
   const shiftBriefingFailed = shiftBriefing?.failed_preview ?? [];
   const shiftBriefingFailedPresentation = useMemo(
     () => presentMissionRecoveryItems(shiftBriefingFailed, 2),
@@ -3621,6 +3633,7 @@ function SystemPanel(props: {
   const shiftBriefingFailedCount = safeNumber(shiftBriefingCounts["failed"], 0);
   const shiftBriefingCompletedCount = safeNumber(shiftBriefingCounts["completed"], 0);
   const shiftBriefingDeadletterCount = safeNumber(shiftBriefingCounts["deadlettered"], 0);
+  const shiftBriefingMemoryReceiptCount = shiftBriefingMemoryReceipts.length;
   const servicesRaw =
     worldState?.services && typeof worldState.services === "object" && !Array.isArray(worldState.services)
       ? worldState.services
@@ -4614,6 +4627,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(shiftBriefingCompletedCount > 0 ? "completed" : "clear")}>
               completed {shiftBriefingCompletedCount}
             </span>
+            <span style={badgeStyle(shiftBriefingMemoryReceiptCount > 0 ? "memory" : "clear")}>
+              memory receipts {shiftBriefingMemoryReceiptCount}
+            </span>
             <span style={badgeStyle(shiftBriefingDeadletterCount > 0 ? "deadlettered" : "clear")}>
               deadlettered {shiftBriefingDeadletterCount}
             </span>
@@ -4639,6 +4655,81 @@ function SystemPanel(props: {
           detailCards
           marginTop={10}
         />
+
+        {shiftBriefingMemoryReceipts.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Memory Evidence</div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Completed mission operation receipts from continuity.
+                </div>
+              </div>
+              <span style={badgeStyle("memory")}>receipts {shiftBriefingMemoryReceiptCount}</span>
+            </div>
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {shiftBriefingMemoryReceipts.slice(0, 3).map((receipt, receiptIndex) => {
+                const receiptReferenceLine = missionMemoryReceiptReferenceLine(receipt);
+                const receiptAt = mixedLocaleTime(receipt.ts);
+                const receiptOperationId = safeString(receipt.operation_id).trim();
+                const receiptMissionId = safeString(receipt.mission_id).trim();
+                return (
+                  <div
+                    key={`shift-memory-receipt-${receipt.id || receiptMissionId || "unknown"}-${receiptOperationId || receiptIndex}`}
+                    style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#101010" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ fontSize: 11, fontWeight: 600 }}>{receipt.id || receiptOperationId || "memory receipt"}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {receipt.operation_status ? <span style={badgeStyle(receipt.operation_status)}>{receipt.operation_status}</span> : null}
+                        {receipt.source ? <span style={badgeStyle(receipt.source)}>{receipt.source}</span> : null}
+                      </div>
+                    </div>
+                    {receiptReferenceLine ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{receiptReferenceLine}</div>
+                    ) : null}
+                    {receipt.capability || receipt.domain || receipt.scope || receiptAt ? (
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                        {receipt.capability ? (
+                          <>
+                            capability=<code>{receipt.capability}</code>
+                          </>
+                        ) : null}
+                        {receipt.domain ? (
+                          <>
+                            {receipt.capability ? " / " : ""}domain=<code>{receipt.domain}</code>
+                          </>
+                        ) : null}
+                        {receipt.scope ? (
+                          <>
+                            {(receipt.capability || receipt.domain) ? " / " : ""}scope=<code>{receipt.scope}</code>
+                          </>
+                        ) : null}
+                        {receiptAt ? (
+                          <>
+                            {(receipt.capability || receipt.domain || receipt.scope) ? " / " : ""}at=<code>{receiptAt}</code>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      {receiptOperationId ? (
+                        <button style={buttonStyle} onClick={() => props.onOpenOperation(receiptOperationId)}>
+                          Open task
+                        </button>
+                      ) : null}
+                      {receiptMissionId ? (
+                        <button style={buttonStyle} onClick={() => inspectMission(receiptMissionId)}>
+                          Inspect mission
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {(continuityOperatorSurface || continuityOrbSurface) && !continuityBriefingError ? (
           <div

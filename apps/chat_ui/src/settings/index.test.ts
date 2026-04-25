@@ -96,6 +96,34 @@ test("presentMissionReadinessCriteria prioritizes actionable readiness evidence"
   ]);
 });
 
+test("missionReadinessEvidenceLines prioritizes receipt-backed memory evidence", () => {
+  assert.deepEqual(
+    missionReadinessEvidenceLines(
+      {
+        id: "session_continuity",
+        evidence: {
+          mission_count: 1,
+          sampled_mission_ids: ["msn_done"],
+          missions_with_history: ["msn_done"],
+          missions_with_memory_receipts: ["msn_done"],
+          memory_receipt_count: 1,
+          memory_receipt_operation_ids: ["tsk_done"],
+          memory_receipt_trace_ids: ["trace_done"],
+        },
+      },
+      6,
+    ),
+    [
+      "sampled mission ids=msn_done",
+      "missions with history=msn_done",
+      "missions with memory receipts=msn_done",
+      "memory receipt count=1",
+      "memory receipt operation ids=tsk_done",
+      "memory receipt trace ids=trace_done",
+    ],
+  );
+});
+
 test("presentMissionDeadletterItems normalizes reason fields and prioritizes actionable recent deadletters", () => {
   const presentation = presentMissionDeadletterItems(
     [
@@ -380,6 +408,33 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
                 latest_receipt_event: "created",
                 latest_receipt_status: "queued",
               },
+              memory_receipt_count: 1,
+              latest_memory_receipt: {
+                id: "ledger_alpha",
+                source: "continuity.ledger",
+                ts: 1_710_000_700,
+                mission_id: "mission_alpha",
+                operation_id: "tsk_alpha",
+                trace_id: "trace_alpha",
+                run_id: "run_alpha",
+                operation_status: "succeeded",
+                domain: "operations",
+                scope: "mission.loop",
+              },
+              memory_receipts: [
+                {
+                  id: "ledger_alpha",
+                  source: "continuity.ledger",
+                  ts: 1_710_000_700,
+                  mission_id: "mission_alpha",
+                  operation_id: "tsk_alpha",
+                  trace_id: "trace_alpha",
+                  run_id: "run_alpha",
+                  operation_status: "succeeded",
+                  domain: "operations",
+                  scope: "mission.loop",
+                },
+              ],
               replacement_for_mission_id: "mission_failed_source",
               replacement_for_status: "failed",
               replacement_source_action: "retry_or_deadletter",
@@ -570,6 +625,19 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
           mission_briefing: {
             headline: "1 failed mission needs recovery review.",
             counts: { failed: 1, queued: 1 },
+            memory_receipts: [
+              {
+                id: "ledger_alpha",
+                source: "continuity.ledger",
+                ts: 1_710_000_700,
+                mission_id: "mission_alpha",
+                operation_id: "tsk_alpha",
+                trace_id: "trace_alpha",
+                operation_status: "succeeded",
+                domain: "operations",
+                scope: "mission.loop",
+              },
+            ],
             readiness: {
               stage: "Stage 3 - Missions",
               status: "attention",
@@ -704,6 +772,9 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.operation_id, "tsk_alpha");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_event, "created");
     assert.equal(worldState.overview?.recent_missions?.[0]?.current_task?.latest_receipt_status, "queued");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipt_count, 1);
+    assert.equal(worldState.overview?.recent_missions?.[0]?.latest_memory_receipt?.id, "ledger_alpha");
+    assert.equal(worldState.overview?.recent_missions?.[0]?.memory_receipts?.[0]?.trace_id, "trace_alpha");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.name, "governance_hold");
     assert.equal(worldState.overview?.mission_queue?.[0]?.latest_activity?.gate, "trust_gate");
     assert.equal(worldState.overview?.recent_missions?.[0]?.replacement_for_mission_id, "mission_failed_source");
@@ -787,6 +858,7 @@ test("SettingsClient uses compatibility aliases for operator-critical read surfa
     assert.deepEqual(worldState.overview?.mission_briefing?.readiness?.attention_criteria_ids, ["deadletter_cleanly"]);
     assert.equal(worldState.overview?.mission_briefing?.readiness?.review_criteria_ids, undefined);
     assert.equal(worldState.overview?.mission_briefing?.readiness?.criteria?.[0]?.id, "deadletter_cleanly");
+    assert.equal(worldState.overview?.mission_briefing?.memory_receipts?.[0]?.operation_id, "tsk_alpha");
     assert.deepEqual(
       missionReadinessEvidenceLines(worldState.overview?.mission_briefing?.readiness?.criteria?.[0], 3),
       [
@@ -1568,6 +1640,50 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
               result_status: "completed",
               handoff_action: "review_completion",
             },
+            memory_receipt_count: 1,
+            latest_memory_receipt: {
+              id: "ledger_done",
+              source: "continuity.ledger",
+              ts: 1_744_636_800,
+              mission_id: "mission_done",
+              operation_id: "tsk_done",
+              trace_id: "trace_done",
+              run_id: "run_done",
+              operation_status: "succeeded",
+              capability: "plugin.run",
+              domain: "operations",
+              scope: "mission.loop",
+            },
+            memory_receipts: [
+              {
+                id: "ledger_done",
+                source: "continuity.ledger",
+                ts: 1_744_636_800,
+                mission_id: "mission_done",
+                operation_id: "tsk_done",
+                trace_id: "trace_done",
+                run_id: "run_done",
+                operation_status: "succeeded",
+                capability: "plugin.run",
+                domain: "operations",
+                scope: "mission.loop",
+              },
+            ],
+          },
+        ],
+        memory_receipts: [
+          {
+            id: "ledger_done",
+            source: "continuity.ledger",
+            ts: 1_744_636_800,
+            mission_id: "mission_done",
+            operation_id: "tsk_done",
+            trace_id: "trace_done",
+            run_id: "run_done",
+            operation_status: "succeeded",
+            capability: "plugin.run",
+            domain: "operations",
+            scope: "mission.loop",
           },
         ],
         failed_preview: [
@@ -1699,6 +1815,10 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_count, 4);
     assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_history_event, "status_changed");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.history_tail?.[1]?.event, "status_changed");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipt_count, 1);
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.latest_memory_receipt?.operation_id, "tsk_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.memory_receipts?.[0]?.trace_id, "trace_done");
+    assert.equal(briefing.briefing?.memory_receipts?.[0]?.id, "ledger_done");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.id, "mission_failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.status, "failed");
     assert.equal(briefing.briefing?.failed_preview?.[0]?.recovery?.action, "retry_or_deadletter");

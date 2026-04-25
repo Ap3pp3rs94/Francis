@@ -244,6 +244,9 @@ export type WorldStateMissionSummary = {
   terminal?: boolean;
   current_task?: WorldStateMissionCurrentTask;
   latest_activity?: Record<string, unknown>;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+  memory_receipts?: MissionMemoryReceipt[];
 };
 
 export type WorldStateMissionCurrentTask = {
@@ -325,6 +328,21 @@ export type MissionHistoryPreviewEntry = {
   details?: Record<string, unknown>;
 };
 
+export type MissionMemoryReceipt = {
+  id?: string;
+  source?: string;
+  ts?: UnixSeconds;
+  mission_id?: string;
+  operation_id?: string;
+  trace_id?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  operation_status?: string;
+  capability?: string;
+  domain?: string;
+  scope?: string;
+};
+
 export type WorldStateMissionQueueItem = {
   id: string;
   status?: string;
@@ -362,6 +380,9 @@ export type WorldStateMissionQueueItem = {
   latest_history_event?: string;
   latest_history_ts?: string;
   history_tail?: MissionHistoryPreviewEntry[];
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+  memory_receipts?: MissionMemoryReceipt[];
   last_recovery_action?: string;
   last_recovery_outcome?: string;
   last_recovery_target_id?: string;
@@ -593,6 +614,9 @@ export type ContinuityBriefingFocusItem = {
   last_recovery_at?: string;
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+  memory_receipts?: MissionMemoryReceipt[];
 };
 
 export type ContinuityBriefingCompletedItem = {
@@ -616,6 +640,9 @@ export type ContinuityBriefingCompletedItem = {
   latest_history_ts?: string;
   history_tail?: MissionHistoryPreviewEntry[];
   latest_activity?: Record<string, unknown>;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+  memory_receipts?: MissionMemoryReceipt[];
 };
 
 export type ContinuityBriefingDeadletterItem = {
@@ -642,6 +669,9 @@ export type ContinuityBriefingDeadletterItem = {
   history_tail?: MissionHistoryPreviewEntry[];
   updated_at?: string;
   latest_activity?: Record<string, unknown>;
+  memory_receipt_count?: number;
+  latest_memory_receipt?: MissionMemoryReceipt;
+  memory_receipts?: MissionMemoryReceipt[];
 };
 
 export type ContinuityBriefingFailedItem = ContinuityBriefingDeadletterItem & {
@@ -733,6 +763,7 @@ export type ContinuityBriefingPayload = {
   recently_completed?: ContinuityBriefingCompletedItem[];
   failed_preview?: ContinuityBriefingFailedItem[];
   deadletter_preview?: ContinuityBriefingDeadletterItem[];
+  memory_receipts?: MissionMemoryReceipt[];
   readiness?: MissionReadinessSummary;
   observer?: {
     headline?: string;
@@ -1244,8 +1275,13 @@ export function missionReadinessEvidenceLines(
     "mission_ticked_count",
     "sampled_mission_ids",
     "missions_with_history",
+    "missions_with_memory_receipts",
+    "memory_receipt_count",
+    "memory_receipt_operation_ids",
+    "memory_receipt_trace_ids",
     "context_mission_ids",
     "dependency_context_ids",
+    "memory_context_ids",
     "queue_count",
     "recent_count",
     "mission_count",
@@ -1284,6 +1320,68 @@ function parseMissionHistoryPreviewEntries(raw: unknown, limit = 2): MissionHist
     .map(parseMissionHistoryPreviewEntry)
     .filter((item): item is MissionHistoryPreviewEntry => item !== null)
     .slice(0, safeLimit);
+}
+
+function parseMissionMemoryReceipt(raw: unknown): MissionMemoryReceipt | null {
+  if (!isRecord(raw)) return null;
+
+  const receipt: MissionMemoryReceipt = {
+    id: safeString(raw["id"], "").trim(),
+    source: safeString(raw["source"], "").trim(),
+    ts: normalizeUnixSeconds(raw["ts"]),
+    mission_id: safeString(raw["mission_id"], "").trim(),
+    operation_id: safeString(raw["operation_id"], "").trim(),
+    trace_id: safeString(raw["trace_id"], "").trim(),
+    run_id: safeString(raw["run_id"], "").trim(),
+    artifact_dir: safeString(raw["artifact_dir"], "").trim(),
+    operation_status: safeString(raw["operation_status"], "").trim(),
+    capability: safeString(raw["capability"], "").trim(),
+    domain: safeString(raw["domain"], "").trim(),
+    scope: safeString(raw["scope"], "").trim(),
+  };
+
+  if (!receipt.id) delete receipt.id;
+  if (!receipt.source) delete receipt.source;
+  if (!receipt.ts) delete receipt.ts;
+  if (!receipt.mission_id) delete receipt.mission_id;
+  if (!receipt.operation_id) delete receipt.operation_id;
+  if (!receipt.trace_id) delete receipt.trace_id;
+  if (!receipt.run_id) delete receipt.run_id;
+  if (!receipt.artifact_dir) delete receipt.artifact_dir;
+  if (!receipt.operation_status) delete receipt.operation_status;
+  if (!receipt.capability) delete receipt.capability;
+  if (!receipt.domain) delete receipt.domain;
+  if (!receipt.scope) delete receipt.scope;
+
+  return receipt.id || receipt.mission_id || receipt.operation_id || receipt.trace_id ? receipt : null;
+}
+
+function parseMissionMemoryReceipts(raw: unknown, limit = 5): MissionMemoryReceipt[] {
+  if (!Array.isArray(raw)) return [];
+  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : raw.length;
+  return raw
+    .map(parseMissionMemoryReceipt)
+    .filter((item): item is MissionMemoryReceipt => item !== null)
+    .slice(0, safeLimit);
+}
+
+function parseMissionMemoryFields(raw: Record<string, unknown>) {
+  const receipts = parseMissionMemoryReceipts(raw["memory_receipts"]);
+  const latestMemoryReceipt = parseMissionMemoryReceipt(raw["latest_memory_receipt"]) ?? receipts[0];
+  const count = safeNumber(raw["memory_receipt_count"], Number.NaN);
+  const out: {
+    memory_receipt_count?: number;
+    latest_memory_receipt?: MissionMemoryReceipt;
+    memory_receipts?: MissionMemoryReceipt[];
+  } = {};
+  if (Number.isFinite(count)) {
+    out.memory_receipt_count = count;
+  } else if (receipts.length > 0) {
+    out.memory_receipt_count = receipts.length;
+  }
+  if (latestMemoryReceipt) out.latest_memory_receipt = latestMemoryReceipt;
+  if (receipts.length > 0) out.memory_receipts = receipts;
+  return out;
 }
 
 function summarizeMissionHistoryTail(historyTail: MissionHistoryPreviewEntry[] | undefined): string | undefined {
@@ -1864,6 +1962,7 @@ function parseWorldStateMissionSummary(raw: unknown): WorldStateMissionSummary |
     terminal: safeBoolean(raw.terminal, false),
     current_task: parseWorldStateMissionCurrentTask(raw.current_task),
     latest_activity: isRecord(raw.latest_activity) ? (raw.latest_activity as Record<string, unknown>) : undefined,
+    ...parseMissionMemoryFields(raw),
   };
 }
 
@@ -2056,6 +2155,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         ...parseMissionReplacementLineageFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
+        ...parseMissionMemoryFields(item),
       }))
       .filter((item) => item.id),
     failed_missions: failedMissionsRaw
@@ -2105,6 +2205,7 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         ...parseMissionReplacementLineageFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
+        ...parseMissionMemoryFields(item),
       }))
       .filter((item) => item.id),
     deadletter_missions: deadletterMissionsRaw
@@ -2154,12 +2255,14 @@ function parseWorldStateSnapshot(raw: unknown): WorldStateSnapshot {
         ...parseMissionReplacementLineageFields(item),
         updated_at: safeString(item.updated_at, ""),
         latest_activity: isRecord(item.latest_activity) ? (item.latest_activity as Record<string, unknown>) : undefined,
+        ...parseMissionMemoryFields(item),
       }))
       .filter((item) => item.id),
     mission_briefing: missionBriefingRaw
       ? {
           headline: safeString(missionBriefingRaw.headline, ""),
           counts: parseNumberMap(missionBriefingRaw.counts),
+          memory_receipts: parseMissionMemoryReceipts(missionBriefingRaw.memory_receipts),
           readiness: parseObserverReadinessSummary(missionBriefingRaw.readiness),
         }
       : undefined,
@@ -2531,6 +2634,7 @@ function parseContinuityFocusItem(raw: unknown): ContinuityBriefingFocusItem | n
     history_tail: parseMissionHistoryPreviewEntries(raw["history_tail"]),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
+    ...parseMissionMemoryFields(raw),
   };
 
   return item;
@@ -2555,6 +2659,7 @@ function parseContinuityCompletedItem(raw: unknown): ContinuityBriefingCompleted
     latest_history_ts: safeString(raw["latest_history_ts"], ""),
     history_tail: parseMissionHistoryPreviewEntries(raw["history_tail"]),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
+    ...parseMissionMemoryFields(raw),
   };
 }
 
@@ -2590,6 +2695,7 @@ function parseContinuityDeadletterItem(raw: unknown): ContinuityBriefingDeadlett
     ...parseMissionRecoveryReviewFields(raw),
     updated_at: safeString(raw["updated_at"], ""),
     latest_activity: isRecord(raw["latest_activity"]) ? (raw["latest_activity"] as Record<string, unknown>) : undefined,
+    ...parseMissionMemoryFields(raw),
   };
 }
 
@@ -2960,6 +3066,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
       deadletter_preview: (Array.isArray(briefingRaw["deadletter_preview"]) ? briefingRaw["deadletter_preview"] : [])
         .map(parseContinuityDeadletterItem)
         .filter((item): item is ContinuityBriefingDeadletterItem => item !== null),
+      memory_receipts: parseMissionMemoryReceipts(briefingRaw["memory_receipts"]),
       readiness: parseObserverReadinessSummary(briefingRaw["readiness"]),
       observer: isRecord(briefingRaw["observer"])
         ? {
