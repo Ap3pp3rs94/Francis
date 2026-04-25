@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from francis.governance import approvals as approval_store
 from francis.governance.redaction import (
+    redact_governed_display_value,
     redact_governed_metadata,
     redact_governed_value,
     seal_governed_approval_value,
@@ -607,7 +608,7 @@ def _request_plugin_approval(
         request_body["previous_status"] = previous_status
     if isinstance(previous_record, dict):
         request_body["previous_approval"] = previous_record
-    _atomic_write_json(art / "request.json", request_body)
+    _atomic_write_display_json(art / "request.json", request_body)
     return approval_id, art
 
 
@@ -730,6 +731,11 @@ def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _atomic_write_display_json(path: Path, obj: dict[str, Any]) -> None:
+    display_obj = redact_governed_display_value(obj)
+    _atomic_write_json(path, display_obj if isinstance(display_obj, dict) else {})
 
 
 def _load_registry() -> dict[str, Any]:
@@ -2069,7 +2075,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     previous_status=approval_status,
                     previous_record=approval_record,
                 )
-                _atomic_write_json(
+                _atomic_write_display_json(
                     art / "error.json",
                     {
                         "kind": "plugin.run.error",
@@ -2174,7 +2180,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     previous_status=approval_status,
                     previous_record=approval_record,
                 )
-                _atomic_write_json(
+                _atomic_write_display_json(
                     art / "mismatch.json",
                     {
                         "kind": "plugin.run.mismatch",
@@ -2186,7 +2192,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                         "approval_record": approval_record,
                     },
                 )
-                _atomic_write_json(
+                _atomic_write_display_json(
                     _plugin_approval_artifact_dir(approval_id) / "mismatch.json",
                     {
                         "kind": "plugin.run.mismatch",

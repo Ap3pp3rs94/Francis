@@ -450,9 +450,12 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
     assert approval_payload["payload"]["input"]["token_count"] == 3
 
     artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
-    assert artifact_payload["request"]["input"]["api_key"] == sealed_key
+    artifact_text = artifact_path.read_text(encoding="utf-8")
+    assert artifact_payload["request"]["input"]["api_key"] == "[REDACTED:secret]"
+    assert artifact_payload["approval"]["payload"]["input"]["api_key"] == "[REDACTED:secret]"
     assert raw_key not in approval_path.read_text(encoding="utf-8")
-    assert raw_key not in artifact_path.read_text(encoding="utf-8")
+    assert raw_key not in artifact_text
+    assert "hmac-sha256:" not in artifact_text
 
     approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
     assert approved.status_code == 200
@@ -475,6 +478,17 @@ def test_plugins_run_seals_sensitive_input_without_weakening_exact_approval(monk
     assert str(mismatched_body["approval_id"]) != approval_id
 
     refreshed_approval_id = str(mismatched_body["approval_id"])
+    refreshed_artifact_dir = data_root / "artifacts" / "plugins" / "approvals" / refreshed_approval_id
+    refreshed_request_text = (refreshed_artifact_dir / "request.json").read_text(encoding="utf-8")
+    refreshed_mismatch_text = (refreshed_artifact_dir / "mismatch.json").read_text(encoding="utf-8")
+    original_mismatch_text = (
+        data_root / "artifacts" / "plugins" / "approvals" / approval_id / "mismatch.json"
+    ).read_text(encoding="utf-8")
+    for artifact_text in (refreshed_request_text, refreshed_mismatch_text, original_mismatch_text):
+        assert raw_key not in artifact_text
+        assert different_key not in artifact_text
+        assert "hmac-sha256:" not in artifact_text
+
     approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
     assert approved_refreshed.status_code == 200
     assert approved_refreshed.json()["ok"] is True

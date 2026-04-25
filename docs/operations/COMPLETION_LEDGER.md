@@ -167,6 +167,12 @@ denied, error, mismatch, plan, and result artifacts can still show the bounded
 action shape, but they no longer expose `hmac-sha256:` proof material. Persisted
 approval records remain the exact-action matching source of truth.
 
+As of `2026-04-25`, plugin approval receipt artifacts follow the same display
+redaction boundary. Plugin approval request, error, and mismatch artifacts can
+show the plugin id, action, changed payload shape, and redacted input values, but
+they no longer expose sealed HMAC proof material. The persisted approval store
+continues to hold sealed payloads for exact-action replay protection.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt
