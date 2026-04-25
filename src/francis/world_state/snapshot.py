@@ -902,6 +902,17 @@ def _mission_current_activity(
     return latest
 
 
+def _mission_default_handoff_action(item: dict[str, Any]) -> str:
+    status = _safe_str(item.get("status")).strip().lower()
+    if status == "completed":
+        return "review_completion"
+    if status == "deadlettered":
+        return "review_deadletter"
+    if status == "failed":
+        return "retry_or_deadletter"
+    return ""
+
+
 def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
     existing = item.get("current_task") if isinstance(item.get("current_task"), dict) else {}
     latest_activity = item.get("latest_activity") if isinstance(item.get("latest_activity"), dict) else {}
@@ -959,7 +970,9 @@ def _mission_current_task_projection(item: dict[str, Any]) -> dict[str, Any]:
         ),
         "approval_id": _first_text(existing.get("approval_id"), item.get("last_task_approval_id")),
         "approval_status": _first_text(item.get("last_task_approval_status"), existing.get("approval_status")),
-        "handoff_action": _first_text(existing.get("handoff_action"), item.get("recommended_action")),
+        "handoff_action": _first_text(
+            existing.get("handoff_action"), item.get("recommended_action"), _mission_default_handoff_action(item)
+        ),
         "latest_receipt_event": _first_text(existing.get("latest_receipt_event"), latest_activity.get("name")),
         "latest_receipt_ts": _first_text(existing.get("latest_receipt_ts"), latest_activity.get("ts")),
         "last_advance_operation_id": _first_text(

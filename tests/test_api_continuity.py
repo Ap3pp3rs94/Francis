@@ -388,8 +388,10 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
         json={"actor": "test.continuity.briefing", "worker_id": "test.continuity.briefing"},
     )
     assert second_advance.status_code == 200
-    assert second_advance.json()["ok"] is True
-    assert second_advance.json()["applied"] is True
+    second_advance_body = second_advance.json()
+    assert second_advance_body["ok"] is True
+    assert second_advance_body["applied"] is True
+    completed_operation_id = str(second_advance_body["operation_id"])
 
     response = client.get("/continuity/briefing")
     assert response.status_code == 200
@@ -401,6 +403,9 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     assert "blocked mission" in body["briefing"]["headline"].lower()
     assert body["briefing"]["focus"][0]["id"] == blocked_id
     assert body["briefing"]["focus"][0]["recommended_action"] == "raise_trust_or_reduce_risk"
+    assert body["briefing"]["focus"][0]["current_task"]["operation_id"] == blocked_operation_id
+    assert body["briefing"]["focus"][0]["current_task"]["gate"] == "trust_gate"
+    assert body["briefing"]["focus"][0]["current_task"]["latest_receipt_event"] == "governance_hold"
     assert body["briefing"]["focus"][0]["latest_activity"]["name"] == "governance_hold"
     assert body["briefing"]["focus"][0]["latest_activity"]["status"] == "blocked"
     assert body["briefing"]["observer"]["counts"]["active"] >= 1
@@ -457,6 +462,8 @@ def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch,
     recent_completed = body["briefing"]["recently_completed"]
     assert recent_completed
     assert recent_completed[0]["id"] == completed_id
+    assert recent_completed[0]["current_task"]["operation_id"] == completed_operation_id
+    assert recent_completed[0]["current_task"]["handoff_action"] == "review_completion"
 
 
 def test_continuity_briefing_surfaces_dependency_blocker_context(monkeypatch, tmp_path: Path) -> None:
@@ -614,6 +621,9 @@ def test_continuity_briefing_marks_clean_deadletter_readiness(monkeypatch, tmp_p
     assert body["briefing"]["deadletter_preview"][0]["last_task_status"] == "accepted"
     assert body["briefing"]["deadletter_preview"][0]["last_task_result_status"] == "blocked"
     assert body["briefing"]["deadletter_preview"][0]["last_task_gate"] == "trust_gate"
+    assert body["briefing"]["deadletter_preview"][0]["current_task"]["operation_id"] == operation_id
+    assert body["briefing"]["deadletter_preview"][0]["current_task"]["gate"] == "trust_gate"
+    assert body["briefing"]["deadletter_preview"][0]["current_task"]["handoff_action"] == "review_deadletter"
     assert body["briefing"]["deadletter_preview"][0]["history_count"] >= 1
     assert body["briefing"]["deadletter_preview"][0]["latest_history_event"] in {"status_changed", "continuity_updated"}
     assert body["briefing"]["deadletter_preview"][0]["latest_history_ts"]
@@ -718,6 +728,10 @@ def test_continuity_briefing_surfaces_exact_pending_approval_context(monkeypatch
     assert focus_item["advance"]["target_id"] == operation_id
     assert focus_item["last_task_approval_id"] == approval_id
     assert focus_item["last_task_approval_status"] == "pending"
+    assert focus_item["current_task"]["operation_id"] == operation_id
+    assert focus_item["current_task"]["approval_id"] == approval_id
+    assert focus_item["current_task"]["approval_status"] == "pending"
+    assert focus_item["current_task"]["handoff_action"] == "review_pending_approval"
     assert focus_item["operator_hint"] == f"Approval {approval_id} is pending before the mission can continue."
 
     recent_item = next(item for item in body["recent_missions"] if item["id"] == blocked_id)
@@ -853,6 +867,10 @@ def test_continuity_briefing_deadletter_preview_preserves_pending_approval_linka
     assert deadletter_item["last_task_previous_approval_id"] == first_approval_id
     assert deadletter_item["last_task_previous_approval_status"] == "approved"
     assert deadletter_item["last_task_approval_status"] == "pending"
+    assert deadletter_item["current_task"]["operation_id"] == operation_id
+    assert deadletter_item["current_task"]["approval_id"] == approval_id
+    assert deadletter_item["current_task"]["approval_status"] == "pending"
+    assert deadletter_item["current_task"]["handoff_action"] == "review_deadletter"
     assert deadletter_item["last_task_approval_replacement_kind"] == "plugin.run.mismatch"
     assert deadletter_item["last_task_approval_replacement_reason"] == "approval_payload_mismatch"
     assert deadletter_item["last_task_approval_replacement_changed_keys"] == ["input"]

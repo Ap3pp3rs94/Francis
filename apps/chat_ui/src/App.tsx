@@ -3330,9 +3330,11 @@ function SystemPanel(props: {
   }> = [];
 
   if (queueLead) {
-    const queueTargetId = missionRecoveryTargetId(queueLead, queueLead);
-    const queueOperationTargetId = missionCurrentTaskId(queueLead, queueLead);
-    const queueApprovalId = safeString(queueLead.last_task_approval_id).trim();
+    const queueCurrentTask = queueLead.current_task;
+    const queueTargetId = missionRecoveryTargetId(queueLead, queueLead, undefined, queueCurrentTask);
+    const queueOperationTargetId = missionCurrentTaskId(queueLead, queueLead, undefined, queueCurrentTask);
+    const queueApprovalId =
+      safeString(queueCurrentTask?.approval_id).trim() || safeString(queueLead.last_task_approval_id).trim();
     const queueTargetIsMission = queueTargetId.startsWith("msn_");
     const queueTargetIsOperation = queueTargetId.startsWith("tsk_");
     returnToWorkItems.push({
@@ -3364,10 +3366,13 @@ function SystemPanel(props: {
             : undefined,
     });
   } else if (leadMission) {
-    const linkedTaskId = missionCurrentTaskId(leadMission);
+    const leadMissionCurrentTask = leadMission.current_task;
+    const linkedTaskId = missionCurrentTaskId(leadMission, undefined, undefined, leadMissionCurrentTask);
     const missionDetail =
+      safeString(leadMissionCurrentTask?.next_step).trim() ||
       safeString(leadMission.last_task_next_step).trim() ||
       safeString(leadMission.next_step).trim() ||
+      safeString(leadMissionCurrentTask?.reason).trim() ||
       safeString(leadMission.last_task_reason).trim() ||
       safeString(leadMission.summary).trim() ||
       safeString(leadMission.deadletter_reason).trim() ||
@@ -4482,10 +4487,17 @@ function SystemPanel(props: {
             </div>
           ) : (
             shiftBriefingFocus.slice(0, 3).map((item) => {
-              const targetId = missionRecoveryTargetId(item, item);
-              const targetOperationId = missionCurrentTaskId(item, item);
+              const currentTask = item.current_task;
+              const targetId = missionRecoveryTargetId(item, item, undefined, currentTask);
+              const targetOperationId = missionCurrentTaskId(item, item, undefined, currentTask);
               const targetIsMission = targetId.startsWith("msn_");
               const targetIsOperation = targetId.startsWith("tsk_");
+              const currentTaskId = safeString(currentTask?.operation_id).trim();
+              const currentTaskStatus =
+                safeString(currentTask?.task_status).trim() || safeString(currentTask?.operation_status).trim();
+              const currentTaskResult = safeString(currentTask?.result_status).trim();
+              const currentTaskGate = safeString(currentTask?.gate).trim();
+              const currentTaskSource = safeString(currentTask?.source).trim();
               const dependencyState = item.dependency_state;
               const dependencyStatus = safeString(dependencyState?.status).trim();
               const dependencyIds = Array.isArray(item.dependency_ids)
@@ -4505,9 +4517,12 @@ function SystemPanel(props: {
               const briefingAdvanceLabel =
                 advanceAction === "create_first_operation" ? "Create operation" : "Advance once";
               const escalationPath = safeString(item.escalation_path).trim();
-              const approvalId = safeString(item.last_task_approval_id).trim();
-              const approvalStatus = safeString(item.last_task_approval_status).trim();
+              const approvalId = safeString(currentTask?.approval_id).trim() || safeString(item.last_task_approval_id).trim();
+              const approvalStatus =
+                safeString(currentTask?.approval_status).trim() || safeString(item.last_task_approval_status).trim();
               const focusDetail =
+                safeString(currentTask?.reason).trim() ||
+                safeString(currentTask?.next_step).trim() ||
                 safeString(item.operator_hint).trim() ||
                 safeString(item.next_step).trim() ||
                 safeString(item.last_advance_message).trim() ||
@@ -4558,6 +4573,35 @@ function SystemPanel(props: {
                       {approvalStatus ? (
                         <>
                           {" / "}status=<code>{approvalStatus}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {currentTaskId || currentTaskStatus || currentTaskResult || currentTaskGate ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                      {currentTaskId ? (
+                        <>
+                          current_task=<code>{currentTaskId}</code>
+                        </>
+                      ) : null}
+                      {currentTaskStatus ? (
+                        <>
+                          {currentTaskId ? " / " : ""}task_status=<code>{currentTaskStatus}</code>
+                        </>
+                      ) : null}
+                      {currentTaskResult ? (
+                        <>
+                          {(currentTaskId || currentTaskStatus) ? " / " : ""}result=<code>{currentTaskResult}</code>
+                        </>
+                      ) : null}
+                      {currentTaskGate ? (
+                        <>
+                          {(currentTaskId || currentTaskStatus || currentTaskResult) ? " / " : ""}gate=<code>{currentTaskGate}</code>
+                        </>
+                      ) : null}
+                      {currentTaskSource ? (
+                        <>
+                          {" / "}source=<code>{currentTaskSource}</code>
                         </>
                       ) : null}
                     </div>
@@ -4637,7 +4681,15 @@ function SystemPanel(props: {
                 {shiftBriefingCompleted.length === 0 ? (
                   <div style={{ fontSize: 11, color: THEME.muted }}>No recent completions recorded.</div>
                 ) : (
-                  shiftBriefingCompleted.slice(0, 2).map((item) => (
+                  shiftBriefingCompleted.slice(0, 2).map((item) => {
+                    const completedCurrentTask = item.current_task;
+                    const completedOperationId =
+                      safeString(completedCurrentTask?.operation_id).trim() || safeString(item.last_task_id).trim();
+                    const completedTaskStatus =
+                      safeString(completedCurrentTask?.task_status).trim() ||
+                      safeString(completedCurrentTask?.operation_status).trim();
+                    const completedTaskResult = safeString(completedCurrentTask?.result_status).trim();
+                    return (
                     <div key={`shift-complete-${item.id}`}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                         <div style={{ fontSize: 11, fontWeight: 600 }}>{item.objective || item.id}</div>
@@ -4650,13 +4702,38 @@ function SystemPanel(props: {
                           action <code>{item.last_advance_action}</code>
                         </div>
                       ) : null}
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                      {completedOperationId || completedTaskStatus || completedTaskResult ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                          {completedOperationId ? (
+                            <>
+                              current_task=<code>{completedOperationId}</code>
+                            </>
+                          ) : null}
+                          {completedTaskStatus ? (
+                            <>
+                              {completedOperationId ? " / " : ""}task_status=<code>{completedTaskStatus}</code>
+                            </>
+                          ) : null}
+                          {completedTaskResult ? (
+                            <>
+                              {(completedOperationId || completedTaskStatus) ? " / " : ""}result=<code>{completedTaskResult}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                        {completedOperationId ? (
+                          <button style={buttonStyle} onClick={() => props.onOpenOperation(completedOperationId)}>
+                            Open current task
+                          </button>
+                        ) : null}
                         <button style={buttonStyle} onClick={() => inspectMission(item.id)}>
                           Inspect
                         </button>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -4671,14 +4748,29 @@ function SystemPanel(props: {
                   <div style={{ fontSize: 11, color: THEME.muted }}>No deadlettered missions waiting for review.</div>
                 ) : (
                   shiftBriefingDeadletterPresentation.visible.map((item) => {
+                    const deadletterCurrentTask = item.current_task;
                     const latestActivity = latestActivitySummary(item.latest_activity);
                     const updatedAt = mixedLocaleTime(item.updated_at);
                     const latestHistoryAt = mixedLocaleTime(item.latest_history_ts);
                     const historyTail = Array.isArray(item.history_tail) ? item.history_tail.slice(-2) : [];
-                    const approvalId = safeString(item.last_task_approval_id).trim();
+                    const deadletterOperationId =
+                      safeString(deadletterCurrentTask?.operation_id).trim() || safeString(item.last_task_id).trim();
+                    const deadletterTaskStatus =
+                      safeString(deadletterCurrentTask?.task_status).trim() ||
+                      safeString(deadletterCurrentTask?.operation_status).trim() ||
+                      safeString(item.last_task_status).trim();
+                    const deadletterTaskResult =
+                      safeString(deadletterCurrentTask?.result_status).trim() ||
+                      safeString(item.last_task_result_status).trim();
+                    const deadletterTaskGate =
+                      safeString(deadletterCurrentTask?.gate).trim() || safeString(item.last_task_gate).trim();
+                    const approvalId =
+                      safeString(deadletterCurrentTask?.approval_id).trim() || safeString(item.last_task_approval_id).trim();
                     const previousApprovalId = safeString(item.last_task_previous_approval_id).trim();
                     const previousApprovalStatus = safeString(item.last_task_previous_approval_status).trim();
-                    const approvalStatus = safeString(item.last_task_approval_status).trim();
+                    const approvalStatus =
+                      safeString(deadletterCurrentTask?.approval_status).trim() ||
+                      safeString(item.last_task_approval_status).trim();
                     const replacementKind = safeString(item.last_task_approval_replacement_kind).trim();
                     const replacementReason = safeString(item.last_task_approval_replacement_reason).trim();
                     const replacementChangedKeys = Array.isArray(item.last_task_approval_replacement_changed_keys)
@@ -4702,24 +4794,24 @@ function SystemPanel(props: {
                             {" / "}updated=<code>{updatedAt}</code>
                           </>
                         ) : null}
-                        {item.last_task_id ? (
+                        {deadletterOperationId ? (
                           <>
-                            {" / "}last_task=<code>{item.last_task_id}</code>
+                            {" / "}current_task=<code>{deadletterOperationId}</code>
                           </>
                         ) : null}
-                        {item.last_task_status ? (
+                        {deadletterTaskStatus ? (
                           <>
-                            {" / "}task_status=<code>{item.last_task_status}</code>
+                            {" / "}task_status=<code>{deadletterTaskStatus}</code>
                           </>
                         ) : null}
-                        {item.last_task_result_status ? (
+                        {deadletterTaskResult ? (
                           <>
-                            {" / "}result=<code>{item.last_task_result_status}</code>
+                            {" / "}result=<code>{deadletterTaskResult}</code>
                           </>
                         ) : null}
-                        {item.last_task_gate ? (
+                        {deadletterTaskGate ? (
                           <>
-                            {" / "}gate=<code>{item.last_task_gate}</code>
+                            {" / "}gate=<code>{deadletterTaskGate}</code>
                           </>
                         ) : null}
                         {approvalId ? (
@@ -4826,7 +4918,7 @@ function SystemPanel(props: {
                             onClick={() =>
                               props.onOpenApprovals(approvalId, {
                                 missionId: item.id,
-                                operationId: safeString(item.last_task_id).trim() || undefined,
+                                operationId: deadletterOperationId || undefined,
                                 source: "deadletter",
                                 reviewKind: replacementKind || undefined,
                                 reviewReason: replacementReason || undefined,
@@ -4843,7 +4935,7 @@ function SystemPanel(props: {
                             onClick={() =>
                               props.onOpenApprovals(previousApprovalId, {
                                 missionId: item.id,
-                                operationId: safeString(item.last_task_id).trim() || undefined,
+                                operationId: deadletterOperationId || undefined,
                                 source: "deadletter",
                                 reviewKind: replacementKind || undefined,
                                 reviewReason: replacementReason || undefined,
@@ -4854,9 +4946,9 @@ function SystemPanel(props: {
                             {item.previous_approval_review_label || "Open previous approval"}
                           </button>
                         ) : null}
-                        {item.last_task_id ? (
-                          <button style={buttonStyle} onClick={() => props.onOpenOperation(item.last_task_id || "")}>
-                            Open last task
+                        {deadletterOperationId ? (
+                          <button style={buttonStyle} onClick={() => props.onOpenOperation(deadletterOperationId)}>
+                            Open current task
                           </button>
                         ) : null}
                         <button style={buttonStyle} onClick={() => inspectMission(item.id)}>

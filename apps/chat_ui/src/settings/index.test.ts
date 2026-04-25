@@ -926,6 +926,17 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
               last_task_approval_id: "apr_focus_exact",
               last_task_previous_approval_id: "apr_focus_previous",
               last_task_approval_status: "pending",
+              current_task: {
+                mission_id: "mission_alpha",
+                source: "mission_meta",
+                operation_id: "tsk_focus",
+                task_status: "accepted",
+                result_status: "pending",
+                gate: "approvals_gate",
+                approval_id: "apr_focus_exact",
+                approval_status: "pending",
+                handoff_action: "review_pending_approval",
+              },
             },
           ],
           readiness: {
@@ -1091,6 +1102,9 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_id, "apr_focus_exact");
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_previous_approval_id, "apr_focus_previous");
     assert.equal(briefing.briefing?.focus?.[0]?.last_task_approval_status, "pending");
+    assert.equal(briefing.briefing?.focus?.[0]?.current_task?.operation_id, "tsk_focus");
+    assert.equal(briefing.briefing?.focus?.[0]?.current_task?.approval_id, "apr_focus_exact");
+    assert.equal(briefing.briefing?.focus?.[0]?.current_task?.handoff_action, "review_pending_approval");
     assert.equal(briefing.briefing?.focus?.[0]?.advance?.eligible, false);
     assert.equal(briefing.briefing?.focus?.[0]?.advance?.action, "resume");
     assert.equal(briefing.briefing?.focus?.[0]?.advance?.target_id, "msn_dependency");
@@ -1196,6 +1210,14 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             id: "mission_done",
             objective: "Finish overnight hardening",
             updated_at: "2026-04-14T07:00:00Z",
+            current_task: {
+              mission_id: "mission_done",
+              source: "mission_meta",
+              operation_id: "tsk_done",
+              task_status: "completed",
+              result_status: "completed",
+              handoff_action: "review_completion",
+            },
           },
         ],
         deadletter_preview: [
@@ -1215,6 +1237,17 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
             last_task_approval_replacement_kind: "plugin.run.mismatch",
             last_task_approval_replacement_reason: "approval_payload_mismatch",
             last_task_approval_replacement_changed_keys: ["input"],
+            current_task: {
+              mission_id: "mission_dead",
+              source: "mission_meta",
+              operation_id: "tsk_dead_current",
+              task_status: "accepted",
+              result_status: "blocked",
+              gate: "approvals_gate",
+              approval_id: "apr_dead_exact",
+              approval_status: "pending",
+              handoff_action: "review_deadletter",
+            },
             history_count: 5,
             latest_history_event: "continuity_updated",
             latest_history_ts: "2026-04-14T08:01:00Z",
@@ -1254,8 +1287,13 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.readiness?.total, 5);
     assert.equal(briefing.briefing?.readiness?.criteria?.[0]?.id, "idempotent_ticks");
     assert.equal(briefing.briefing?.recently_completed?.[0]?.id, "mission_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.operation_id, "tsk_done");
+    assert.equal(briefing.briefing?.recently_completed?.[0]?.current_task?.handoff_action, "review_completion");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.id, "mission_dead");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_id, "tsk_dead");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.operation_id, "tsk_dead_current");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.approval_id, "apr_dead_exact");
+    assert.equal(briefing.briefing?.deadletter_preview?.[0]?.current_task?.handoff_action, "review_deadletter");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_status, "accepted");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_result_status, "blocked");
     assert.equal(briefing.briefing?.deadletter_preview?.[0]?.last_task_gate, "approvals_gate");
