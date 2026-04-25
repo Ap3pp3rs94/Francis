@@ -2179,6 +2179,15 @@ export default function App() {
     setPanel("system");
   }, []);
 
+  const openContinuityLedger = useCallback(() => {
+    setPanel("system");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById("francis-continuity-ledger")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }, []);
+
   const openMissionPanel = useCallback((missionId: string) => {
     const cleaned = missionId.trim();
     if (!cleaned) return;
@@ -2370,6 +2379,14 @@ export default function App() {
         run: () => openOrbPanel(),
       },
       {
+        id: "nav.continuity-ledger",
+        label: "Open Continuity Ledger",
+        description: "Inspect raw local continuity receipts without treating them as synthesized memory.",
+        group: "Navigation",
+        keywords: "continuity ledger receipts memory trace audit",
+        run: () => openContinuityLedger(),
+      },
+      {
         id: "nav.plugins",
         label: "Open Plugins",
         description: "Inspect plugins, tools, and governance outcomes.",
@@ -2437,6 +2454,7 @@ export default function App() {
   }, [
     createNewChat,
     openApprovalsPanel,
+    openContinuityLedger,
     openMissionFeed,
     openTakeoverFeed,
     openTelemetryStatus,
@@ -2669,6 +2687,7 @@ export default function App() {
                     operatorMode={operatorMode}
                     onOpenApprovals={openApprovalsPanel}
                     onOpenMission={openMissionPanel}
+                    onOpenContinuityLedger={openContinuityLedger}
                   />
                 ) : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
@@ -2730,6 +2749,7 @@ export default function App() {
                   operatorMode={operatorMode}
                   onOpenApprovals={openApprovalsPanel}
                   onOpenMission={openMissionPanel}
+                  onOpenContinuityLedger={openContinuityLedger}
                 />
               ) : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
@@ -6305,7 +6325,13 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
-                  {(missionReceiptApprovalId || missionReceiptOperationId) ? (
+                  {(missionReceiptApprovalId ||
+                    missionReceiptOperationId ||
+                    missionReceiptTraceId ||
+                    missionReceiptRunId ||
+                    missionReceiptArtifactDir ||
+                    missionReceiptSummary.run_ledger_count ||
+                    missionReceiptSummary.history_count) ? (
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                       {missionReceiptApprovalId ? (
                         <button
@@ -6325,6 +6351,9 @@ function SystemPanel(props: {
                           Open receipt task
                         </button>
                       ) : null}
+                      <button style={buttonStyle} onClick={() => scrollOrbSection("francis-continuity-ledger")}>
+                        Open continuity ledger
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -9093,6 +9122,7 @@ function OperationsPanel(props: {
   operatorMode: OperatorModeSnapshot | null;
   onOpenApprovals: (approvalId?: string, returnContext?: ApprovalReturnContext) => void;
   onOpenMission: (missionId: string) => void;
+  onOpenContinuityLedger: () => void;
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
@@ -9284,6 +9314,14 @@ function OperationsPanel(props: {
   ].filter((item) => item.stage);
   const selectedMissionLatestRunAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_run_ts);
   const selectedMissionLatestHistoryAt = mixedLocaleTime(selectedMissionReceiptSummary?.latest_history_ts);
+  const selectedReceiptEvidenceAvailable = Boolean(
+    selectedTraceId ||
+      selectedRunId ||
+      selectedArtifactDir ||
+      selectedMissionLoopState ||
+      selectedMissionReceiptSummary?.run_ledger_count ||
+      selectedMissionReceiptSummary?.history_count,
+  );
   const selectedLogs = Array.isArray(detail?.logs) ? detail.logs : [];
   const hasGovernance =
     Object.keys(selectedGovernance).length > 0 || Boolean(selectedApprovalId) || Boolean(selectedOrbPlane);
@@ -10397,6 +10435,11 @@ function OperationsPanel(props: {
                 {selectedMissionId ? (
                   <button style={buttonStyle} onClick={() => props.onOpenMission(selectedMissionId)}>
                     Open mission flow
+                  </button>
+                ) : null}
+                {selectedReceiptEvidenceAvailable ? (
+                  <button style={buttonStyle} onClick={props.onOpenContinuityLedger}>
+                    Open ORB ledger
                   </button>
                 ) : null}
               </div>

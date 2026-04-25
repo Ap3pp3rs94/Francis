@@ -998,6 +998,22 @@ by mission detail:
   policy, or memory-write behavior changed; this only makes existing loop
   receipt evidence visible from operation inspection.
 
+As of `2026-04-25`, the highest-confidence surface newly advanced in the
+current Stage 3 line is active-flow receipt ledger reachability. This advances
+the active `Phase 2 / P7_EXECUTION -> P9_OBSERVABILITY -> P8_MEMORY ->
+P1_INTERFACE` line by letting operators jump from active task and mission
+receipt contexts to the existing ORB continuity ledger:
+
+- `apps/chat_ui/src/App.tsx` now exposes `Open ORB ledger` from Operation Detail
+  when the selected operation or linked mission bridge carries real trace, run,
+  artifact, loop, or receipt evidence.
+- The selected mission `Continuity Receipts` card now exposes `Open continuity
+  ledger` when mission receipt evidence exists, and the command palette includes
+  the same direct ledger navigation.
+- No ledger write, memory write, trace generation, mission mutation, operation
+  mutation, approval decision, execution, shell, or policy behavior changed; this
+  only routes existing read-only receipt surfaces together.
+
 As of `2026-04-25`, the highest-confidence surface newly advanced in the current
 Stage 3 line is visible loop approval status. This advances the active
 `Phase 2 / P3_GOVERNANCE -> P7_EXECUTION -> P8_MEMORY -> P1_INTERFACE` line by
