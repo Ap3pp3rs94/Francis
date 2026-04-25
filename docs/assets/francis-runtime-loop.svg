@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 430" role="img" aria-labelledby="title desc">
+  <title id="title">Francis governed runtime loop</title>
+  <desc id="desc">A bounded ORB flow from interface, cognition, governance, identity, execution, observability, and memory back to interface.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#244a64" />
+    </marker>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f6fbff" />
+      <stop offset="100%" stop-color="#eef4ed" />
+    </linearGradient>
+    <style>
+      .bg { fill: url(#panel); }
+      .frame { fill: none; stroke: #9fb4bf; stroke-width: 1.5; }
+      .node { fill: #ffffff; stroke: #244a64; stroke-width: 2; }
+      .gate { fill: #fff6df; stroke: #9a6a00; stroke-width: 2; }
+      .receipt { fill: #eef7f1; stroke: #2f6f4e; stroke-width: 2; }
+      .text { fill: #142430; font-family: "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 700; }
+      .small { fill: #385160; font-family: "Segoe UI", Arial, sans-serif; font-size: 12px; }
+      .label { fill: #244a64; font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; font-weight: 700; }
+      .line { stroke: #244a64; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .softline { stroke: #6c8794; stroke-width: 1.8; fill: none; marker-end: url(#arrow); stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+  <rect class="bg" x="12" y="12" width="956" height="406" rx="24" />
+  <rect class="frame" x="28" y="28" width="924" height="374" rx="18" />
+  <text class="text" x="48" y="62">Francis ORB Runtime Spine</text>
+  <text class="small" x="48" y="84">Proposal is not permission. Side effects require scope, policy, traceability, and operator-visible receipts.</text>
+
+  <rect class="node" x="50" y="130" width="132" height="76" rx="14" />
+  <text class="text" x="73" y="160">P1 Interface</text>
+  <text class="small" x="74" y="182">operator intent</text>
+
+  <rect class="node" x="225" y="130" width="132" height="76" rx="14" />
+  <text class="text" x="244" y="160">P4 Cognition</text>
+  <text class="small" x="251" y="182">plan proposal</text>
+
+  <rect class="gate" x="400" y="130" width="132" height="76" rx="14" />
+  <text class="text" x="414" y="160">P3 Governance</text>
+  <text class="small" x="423" y="182">policy gate</text>
+
+  <rect class="gate" x="575" y="130" width="132" height="76" rx="14" />
+  <text class="text" x="598" y="160">P2 Identity</text>
+  <text class="small" x="606" y="182">scope and trust</text>
+
+  <rect class="node" x="750" y="130" width="132" height="76" rx="14" />
+  <text class="text" x="773" y="160">P7 Execution</text>
+  <text class="small" x="784" y="182">bounded action</text>
+
+  <rect class="receipt" x="575" y="275" width="132" height="76" rx="14" />
+  <text class="text" x="586" y="305">P9 Observe</text>
+  <text class="small" x="594" y="327">logs and receipts</text>
+
+  <rect class="receipt" x="400" y="275" width="132" height="76" rx="14" />
+  <text class="text" x="418" y="305">P8 Memory</text>
+  <text class="small" x="425" y="327">continuity state</text>
+
+  <path class="line" d="M182 168 H220" />
+  <path class="line" d="M357 168 H395" />
+  <path class="line" d="M532 168 H570" />
+  <path class="line" d="M707 168 H745" />
+  <path class="line" d="M816 206 V250 C816 272 752 313 712 313" />
+  <path class="line" d="M575 313 H537" />
+  <path class="softline" d="M400 313 H116 C80 313 80 224 116 210" />
+
+  <text class="label" x="390" y="112">authority boundary</text>
+  <text class="label" x="735" y="256">receipts</text>
+  <text class="label" x="161" y="304">handoff back to operator</text>
+</svg>

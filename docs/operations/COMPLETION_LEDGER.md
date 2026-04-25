@@ -221,6 +221,12 @@ description, topics, discussions setting, and `roadmap` label now present Franci
 as a Phase 2 local-first governed AI operator layer without claiming finished
 autonomy.
 
+As of `2026-04-24`, first-time GitHub readers now have a bounded repository
+orientation path. `docs/START_HERE.md` and the static ORB runtime loop diagram
+explain the Phase 2 truth, canonical reading order, contribution surfaces, and
+proposal-to-receipt flow without changing runtime behavior or overstating
+scaffolded capability.
+
 As of `2026-04-20`, the strongest truthful CI posture is:
 
 - feature-branch pushes no longer create duplicate GitHub `push` + `pull_request`

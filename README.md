@@ -10,6 +10,8 @@ Francis is a local-first, policy-guarded, auditable operator layer for a persona
 
 Francis is not a chatbot wrapper, demo UI, generic agent loop, or dashboard with a model attached. The project goal is a governed operating layer where cognition, approval, execution, observability, and memory are separated by explicit contracts.
 
+New here? Start with [docs/START_HERE.md](docs/START_HERE.md) for the truthful first-reader path through roadmap, shipped state, runtime model, and contribution surfaces.
+
 ## Why Watch Francis
 
 Most AI tooling optimizes for prompts, agents, or dashboards. Francis is being built around a different target: a governed local operator layer that can carry missions across sessions without hiding authority, faking progress, or treating model output as permission.
@@ -38,6 +40,8 @@ Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md)
 ## ORB Runtime Model
 
 Francis is organized around ORB planes. A request should move through explicit stages:
+
+![Francis governed runtime loop](docs/assets/francis-runtime-loop.svg)
 
 ```text
 P1_INTERFACE -> P4_COGNITION -> P3_GOVERNANCE -> P2_IDENTITY
