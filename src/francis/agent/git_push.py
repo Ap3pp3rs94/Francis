@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.governance import approvals
+from francis.governance.redaction import redact_governed_value, redact_secret_text, seal_governed_approval_value
 from francis.kernel.paths import data_dir, repo_root
 
 
@@ -34,7 +35,13 @@ def _artifact_dir(run_id: str) -> Path:
 
 def _write_json(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    redacted = redact_governed_value(obj)
+    path.write_text(json.dumps(redacted, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+
+def _write_redacted_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(redact_secret_text(value or ""), encoding="utf-8")
 
 
 def _find_approval(approval_id: str) -> tuple[str, dict[str, Any] | None]:
@@ -116,6 +123,17 @@ def _approval_payload(
     }
 
 
+def _approval_contract_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "objective": seal_governed_approval_value(payload.get("objective"), key="objective"),
+        "git_root": seal_governed_approval_value(payload.get("git_root"), key="git_root"),
+        "remote": seal_governed_approval_value(payload.get("remote"), key="remote"),
+        "remote_url": seal_governed_approval_value(payload.get("remote_url"), key="remote_url"),
+        "branch": seal_governed_approval_value(payload.get("branch"), key="branch"),
+        "set_upstream": bool(payload.get("set_upstream")),
+    }
+
+
 def _request_approval(
     *,
     objective: str,
@@ -160,15 +178,7 @@ def _approval_matches_request(approval_record: dict[str, Any] | None, expected_p
     if not isinstance(payload, dict):
         return False
 
-    approved_payload = _approval_payload(
-        objective=_safe_str(payload.get("objective")),
-        git_root=Path(_safe_str(payload.get("git_root")) or expected_payload["git_root"]),
-        remote=_safe_str(payload.get("remote")),
-        remote_url=_safe_str(payload.get("remote_url")),
-        branch=_safe_str(payload.get("branch")),
-        set_upstream=bool(payload.get("set_upstream")),
-    )
-    return approved_payload == expected_payload
+    return payload == expected_payload
 
 
 def run_git_push(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -233,7 +243,7 @@ def run_git_push(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
             "remote": remote,
         }
 
-    request_payload = _approval_payload(
+    raw_request_payload = _approval_payload(
         objective=objective,
         git_root=git_root,
         remote=remote,
@@ -241,6 +251,7 @@ def run_git_push(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
         branch=current_branch,
         set_upstream=set_upstream,
     )
+    request_payload = _approval_contract_payload(raw_request_payload)
     approval_id = _safe_str(inputs.get("approval_id")).strip()
 
     if not approval_id:
@@ -408,8 +419,8 @@ def run_git_push(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
     )
 
     proc = _git(push_args, cwd=git_root, timeout_sec=120)
-    (art / "stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
-    (art / "stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+    _write_redacted_text(art / "stdout.txt", proc.stdout or "")
+    _write_redacted_text(art / "stderr.txt", proc.stderr or "")
     _write_json(
         art / "result.json",
         {

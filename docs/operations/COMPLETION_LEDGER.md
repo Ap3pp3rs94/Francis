@@ -141,6 +141,13 @@ preserved, while request, plan, mismatch, result, stdout, and stderr artifacts
 store redacted views. Raw task inputs still remain in local task records for the
 approved execution path and API projections continue to return redacted views.
 
+As of `2026-04-25`, git push approval and artifact surfaces share that execution
+redaction posture. Credential-bearing remote URLs are sealed in approval payloads
+so approval replay still rejects changed remotes, while git push request, plan,
+mismatch, result, stdout, and stderr artifacts persist redacted views instead of
+raw secret-like remote credentials. Raw task/result records may still retain live
+execution data locally, but operation API projections redact those values.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt

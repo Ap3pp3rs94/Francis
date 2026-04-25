@@ -835,6 +835,125 @@ def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch,
     assert mirror_branch_after.stdout.strip()
 
 
+def test_operations_git_push_seals_secret_remote_url_and_redacts_artifacts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    origin_secret = "gitpushoriginsecret123"
+    mirror_secret = "gitpushmirrorsecret123"
+    origin_root = tmp_path / f"password={origin_secret}.git"
+    mirror_root = tmp_path / f"password={mirror_secret}.git"
+    repo_root.mkdir()
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+
+    _git(repo_root, "init")
+    _git(repo_root, "config", "user.name", "Francis Tests")
+    _git(repo_root, "config", "user.email", "francis-tests@example.com")
+    _git(repo_root, "checkout", "-b", "main")
+    (repo_root / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo_root, "add", "README.md")
+    _git(repo_root, "commit", "-m", "Initial commit")
+    _git(repo_root, "init", "--bare", str(origin_root))
+    _git(repo_root, "init", "--bare", str(mirror_root))
+    _git(repo_root, "remote", "add", "origin", str(origin_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "git.push",
+            "reason": "push credential-bearing remote",
+            "input": {"cwd": str(repo_root), "remote": "origin"},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    pending = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push_secret"})
+    assert pending.status_code == 200
+    pending_body = pending.json()
+    assert pending_body["status"] == "queued"
+    first_approval_id = str(pending_body["operation"]["meta"]["approval_id"])
+    assert first_approval_id
+
+    approval_path = data_root / "approvals" / "pending" / f"{first_approval_id}.json"
+    approval_text = approval_path.read_text(encoding="utf-8")
+    assert origin_secret not in approval_text
+    approval_payload = json.loads(approval_text)
+    sealed_remote = approval_payload["payload"]["remote_url"]
+    assert sealed_remote["kind"] == "sealed_secret"
+    assert sealed_remote["redacted"].endswith("password=[REDACTED:secret]")
+    assert str(sealed_remote["digest"]).startswith("hmac-sha256:")
+
+    request_artifact = data_root / "artifacts" / "git_push" / first_approval_id / "request.json"
+    assert origin_secret not in request_artifact.read_text(encoding="utf-8")
+
+    approved = client.post("/approvals/decision", json={"id": first_approval_id, "action": "approve"})
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+
+    _git(repo_root, "remote", "set-url", "origin", str(mirror_root))
+
+    mismatched = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push_secret"})
+    assert mismatched.status_code == 200
+    mismatched_body = mismatched.json()
+    assert mismatched_body["status"] == "queued"
+    mismatch_output = mismatched_body["operation"]["output"]
+    assert isinstance(mismatch_output, dict)
+    assert mismatch_output["error"] == "approval_payload_mismatch"
+    refreshed_approval_id = str(mismatch_output["approval_id"])
+    assert refreshed_approval_id != first_approval_id
+
+    refreshed_art = Path(str(mismatch_output["artifact_dir"]))
+    mismatch_artifact_text = (refreshed_art / "mismatch.json").read_text(encoding="utf-8")
+    assert origin_secret not in mismatch_artifact_text
+    assert mirror_secret not in mismatch_artifact_text
+    refreshed_approval_text = (data_root / "approvals" / "pending" / f"{refreshed_approval_id}.json").read_text(
+        encoding="utf-8"
+    )
+    assert mirror_secret not in refreshed_approval_text
+
+    approved_refreshed = client.post("/approvals/decision", json={"id": refreshed_approval_id, "action": "approve"})
+    assert approved_refreshed.status_code == 200
+    assert approved_refreshed.json()["ok"] is True
+
+    executed = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push_secret"})
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["ok"] is True
+    assert executed_body["status"] == "succeeded"
+    executed_text = json.dumps(executed_body, sort_keys=True)
+    assert origin_secret not in executed_text
+    assert mirror_secret not in executed_text
+    output = executed_body["operation"]["output"]
+    assert isinstance(output, dict)
+    assert output["status"] == "success"
+    assert output["exit_code"] == 0
+
+    art = Path(str(output["artifact_dir"]))
+    for artifact_name in ("plan.json", "result.json", "stdout.txt", "stderr.txt"):
+        artifact_text = (art / artifact_name).read_text(encoding="utf-8")
+        assert origin_secret not in artifact_text
+        assert mirror_secret not in artifact_text
+
+    mirror_branch_after = subprocess.run(
+        ["git", "--git-dir", str(mirror_root), "rev-parse", "refs/heads/main"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert mirror_branch_after.returncode == 0
+    assert mirror_branch_after.stdout.strip()
+
+
 def test_operations_supervised_exec_seals_secret_command_and_redacts_artifacts(
     monkeypatch,
     tmp_path: Path,
