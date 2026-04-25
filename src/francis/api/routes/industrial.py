@@ -15,7 +15,11 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
-from francis.governance.redaction import redact_governed_metadata, seal_governed_approval_value
+from francis.governance.redaction import (
+    redact_governed_metadata,
+    redact_governed_value,
+    seal_governed_approval_value,
+)
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
@@ -70,6 +74,11 @@ def _parse_list(value: Any) -> list[str]:
 
 def _normalize_meta(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _redacted_runtime_params(value: Any) -> dict[str, Any]:
+    redacted = redact_governed_value(_normalize_meta(value))
+    return redacted if isinstance(redacted, dict) else {}
 
 
 def _validate_id(value: str, field: str = "id") -> str:
@@ -1227,6 +1236,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
 
         reason = _safe_str(payload.get("reason")).strip() or "requested"
         params = _normalize_approval_value(_normalize_meta(payload.get("params")))
+        runtime_params = _redacted_runtime_params(payload.get("params"))
         dry_run = bool(payload.get("dry_run", True))
         risk = _safe_str(params.get("risk")).strip().lower() or "medium"
         registry = _load_registry()
@@ -1311,7 +1321,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                             "violations": violations,
                             "meta": {
                                 "reason": reason,
-                                "params": params,
+                                "params": runtime_params,
                                 "dry_run": dry_run,
                                 "request_id": request_id,
                                 "approval_id": refreshed_id,
@@ -1356,7 +1366,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                             "violations": violations,
                             "meta": {
                                 "reason": reason,
-                                "params": params,
+                                "params": runtime_params,
                                 "dry_run": dry_run,
                                 "request_id": request_id,
                                 "approval_id": approval_id,
@@ -1437,7 +1447,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                             "violations": violations,
                             "meta": {
                                 "reason": reason,
-                                "params": params,
+                                "params": runtime_params,
                                 "dry_run": dry_run,
                                 "request_id": request_id,
                                 "approval_id": refreshed_id,
@@ -1486,7 +1496,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
                 "violations": violations,
                 "meta": {
                     "reason": reason,
-                    "params": params,
+                    "params": runtime_params,
                     "dry_run": dry_run,
                     "request_id": request_id,
                     "approval_id": approval_id,
@@ -1575,6 +1585,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
         domain = _safe_str(payload.get("domain")).strip()
         actor = _safe_str(payload.get("actor")).strip()
         params = _normalize_approval_value(_normalize_meta(payload.get("params")))
+        runtime_params = _redacted_runtime_params(payload.get("params"))
         meta = redact_governed_metadata(payload.get("meta"))
         approval_action = "industrial.intervention.request"
         approval_id = _approval_id_from_payload(payload)
@@ -1632,7 +1643,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
                 "request_id": request_id,
                 "approval_id": approval_id,
                 "previous_approval_id": "",
-                "params": params,
+                "params": runtime_params,
                 "meta": meta,
             }
             if record_idx >= 0:
@@ -1678,7 +1689,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
                 "request_id": request_id,
                 "approval_id": refreshed_id,
                 "previous_approval_id": approval_id,
-                "params": params,
+                "params": runtime_params,
                 "meta": meta,
             }
             if record_idx >= 0:
@@ -1779,7 +1790,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
                 "request_id": request_id,
                 "approval_id": refreshed_id,
                 "previous_approval_id": approval_id,
-                "params": params,
+                "params": runtime_params,
                 "meta": meta,
             }
             if record_idx >= 0:
@@ -1818,7 +1829,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
             "previous_approval_id": _safe_str(request_record.get("previous_approval_id")).strip()
             if isinstance(request_record, dict)
             else "",
-            "params": params,
+            "params": runtime_params,
             "meta": meta,
         }
         if record_idx >= 0:
@@ -1857,6 +1868,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
         domain = _safe_str(payload.get("domain")).strip()
         actor = _safe_str(payload.get("actor")).strip()
         params = _normalize_approval_value(_normalize_meta(payload.get("params")))
+        runtime_params = _redacted_runtime_params(payload.get("params"))
         meta = redact_governed_metadata(payload.get("meta"))
         request_id = _new_id("iexec", f"{target_kind}_{target_id}")
         approval_action = "industrial.intervention.execute"
@@ -1922,7 +1934,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
                     "request_id": request_id,
                     "approval_id": approval_id,
                     "result_id": "",
-                    "params": params,
+                    "params": runtime_params,
                     "meta": meta,
                 }
                 interventions.append(intervention)
@@ -2085,7 +2097,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
             "request_id": request_id,
             "approval_id": approval_id,
             "result_id": result_id,
-            "params": params,
+            "params": runtime_params,
             "meta": meta,
         }
         if record_idx >= 0:
@@ -2254,6 +2266,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
         status = "pending"
         reason = _safe_str(payload.get("reason")).strip() or "requested"
         params = _normalize_approval_value(_normalize_meta(payload.get("params")))
+        runtime_params = _redacted_runtime_params(payload.get("params"))
 
         if action == "validate_safety":
             validation_id = _new_id("validation", f"twin_{twin_id}")
@@ -2271,7 +2284,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "status": "warn",
                         "risk": "medium",
                         "summary": "Digital twin safety validation requested.",
-                        "meta": {"reason": reason, "params": params},
+                        "meta": {"reason": reason, "params": runtime_params},
                     },
                 ),
             )
@@ -2307,7 +2320,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                     "request_id": request_id,
                     "approval_id": approval_id,
                     "previous_approval_id": "",
-                    "params": params,
+                    "params": runtime_params,
                 }
                 if action_idx >= 0:
                     actions[action_idx] = record
@@ -2334,7 +2347,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "request_id": request_id,
                         "approval_id": refreshed_id,
                         "previous_approval_id": approval_id,
-                        "params": params,
+                        "params": runtime_params,
                     }
                     if action_idx >= 0:
                         actions[action_idx] = record
@@ -2384,7 +2397,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip()
                         if isinstance(action_record, dict)
                         else "",
-                        "params": params,
+                        "params": runtime_params,
                     }
                     if action_idx >= 0:
                         actions[action_idx] = record
@@ -2461,7 +2474,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                         "request_id": request_id,
                         "approval_id": refreshed_id,
                         "previous_approval_id": approval_id,
-                        "params": params,
+                        "params": runtime_params,
                     }
                     if action_idx >= 0:
                         actions[action_idx] = record
@@ -2501,7 +2514,7 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
                     "previous_approval_id": _safe_str(action_record.get("previous_approval_id")).strip()
                     if isinstance(action_record, dict)
                     else "",
-                    "params": params,
+                    "params": runtime_params,
                 }
                 if action_idx >= 0:
                     actions[action_idx] = record

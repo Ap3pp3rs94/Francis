@@ -587,6 +587,13 @@ def test_industrial_intervention_request_seals_sensitive_params_without_weakenin
         ]
     )
     assert raw_key not in persisted_text
+    registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    records = [
+        item for item in registry_payload.get("interventions", []) if str(item.get("approval_id")) == approval_id
+    ]
+    assert len(records) == 1
+    assert records[0]["params"]["api_key"] == "[REDACTED:secret]"
+    assert "hmac-sha256" not in json.dumps(records[0]["params"], sort_keys=True)
 
     approved = client.post("/approvals/decision", json={"id": approval_id, "action": "approve"})
     assert approved.status_code == 200
@@ -612,6 +619,19 @@ def test_industrial_intervention_request_seals_sensitive_params_without_weakenin
     assert mismatched_body["status"] == "needs_approval"
     assert mismatched_body["error"] == "approval_payload_mismatch"
     assert str(mismatched_body["approval_id"]) != approval_id
+
+    registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry_text = json.dumps(registry_payload, sort_keys=True)
+    assert raw_key not in registry_text
+    assert different_key not in registry_text
+    refreshed_records = [
+        item
+        for item in registry_payload.get("interventions", [])
+        if str(item.get("approval_id")) == str(mismatched_body["approval_id"])
+    ]
+    assert len(refreshed_records) == 1
+    assert refreshed_records[0]["params"]["api_key"] == "[REDACTED:secret]"
+    assert "hmac-sha256" not in json.dumps(refreshed_records[0]["params"], sort_keys=True)
 
 
 def test_industrial_execute_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
@@ -834,6 +854,7 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
     asset_created = client.post("/industrial/assets", json={"name": "Boiler A", "asset_type": "boiler", "risk": "high"})
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
+    raw_key = "sk-" + ("s" * 32)
 
     pending = client.post(
         "/industrial/safety/validate",
@@ -842,7 +863,7 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
             "target_id": asset_id,
             "reason": "preflight",
             "dry_run": False,
-            "params": {"risk": "high", "window": "short"},
+            "params": {"risk": "high", "window": "short", "api_key": raw_key},
         },
     )
     assert pending.status_code == 200
@@ -865,7 +886,7 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
             "target_id": asset_id,
             "reason": "preflight",
             "dry_run": False,
-            "params": {"risk": "high", "window": "extended"},
+            "params": {"risk": "high", "window": "extended", "api_key": raw_key},
             "approval_id": approval_id,
         },
     )
@@ -893,7 +914,7 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
             "target_id": asset_id,
             "reason": "preflight",
             "dry_run": False,
-            "params": {"risk": "high", "window": "extended"},
+            "params": {"risk": "high", "window": "extended", "api_key": raw_key},
             "approval_id": refreshed_approval_id,
         },
     )
@@ -911,6 +932,9 @@ def test_industrial_safety_validate_refreshes_mismatched_approval(monkeypatch, t
     assert validation["status"] == "pass"
     assert validation["meta"]["approval_id"] == refreshed_approval_id
     assert validation["meta"]["previous_approval_id"] == approval_id
+    assert validation["meta"]["params"]["api_key"] == "[REDACTED:secret]"
+    assert raw_key not in json.dumps(registry, sort_keys=True)
+    assert "hmac-sha256" not in json.dumps(validation["meta"]["params"], sort_keys=True)
 
 
 def test_industrial_safety_validate_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:
@@ -1020,6 +1044,7 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
     )
     assert asset_created.status_code == 200
     asset_id = str(asset_created.json()["id"])
+    raw_key = "sk-" + ("d" * 32)
 
     pending = client.post(
         "/industrial/digital_twins/action",
@@ -1027,7 +1052,7 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
             "twin_id": asset_id,
             "action": "request_control",
             "reason": "operator_request",
-            "params": {"mode": "manual"},
+            "params": {"mode": "manual", "api_key": raw_key},
         },
     )
     assert pending.status_code == 200
@@ -1049,7 +1074,7 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
             "twin_id": asset_id,
             "action": "request_control",
             "reason": "operator_request",
-            "params": {"mode": "override"},
+            "params": {"mode": "override", "api_key": raw_key},
             "approval_id": approval_id,
         },
     )
@@ -1076,7 +1101,7 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
             "twin_id": asset_id,
             "action": "request_control",
             "reason": "operator_request",
-            "params": {"mode": "override"},
+            "params": {"mode": "override", "api_key": raw_key},
             "approval_id": refreshed_approval_id,
         },
     )
@@ -1094,6 +1119,9 @@ def test_industrial_digital_twin_action_refreshes_mismatched_approval(monkeypatc
     assert actions[0]["status"] == "approved"
     assert actions[0]["approval_id"] == refreshed_approval_id
     assert actions[0]["previous_approval_id"] == approval_id
+    assert actions[0]["params"]["api_key"] == "[REDACTED:secret]"
+    assert raw_key not in json.dumps(registry, sort_keys=True)
+    assert "hmac-sha256" not in json.dumps(actions[0]["params"], sort_keys=True)
 
 
 def test_industrial_digital_twin_action_refreshes_missing_approval(monkeypatch, tmp_path: Path) -> None:

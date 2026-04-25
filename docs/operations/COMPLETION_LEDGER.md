@@ -92,6 +92,13 @@ actors, sources, and reasons are still used for policy checks and exact approval
 matching, but operator-facing runtime state stores the governed redacted values
 so approved learn requests do not replay inline tokens or passwords.
 
+As of `2026-04-25`, industrial safety, intervention, and digital-twin runtime
+records separate exact approval payloads from operator-facing registry state.
+Approval requests still receive HMAC-sealed params for replay mismatch
+protection, while `safety_validations`, `interventions`, and
+`digital_twin_actions` persist redacted params without raw secrets or approval
+digests in the runtime registry.
+
 As of `2026-04-21`, Stage 2 Observer has a receipt-backed transition posture for
 the current local state. A live `POST /system/observer/scan` returned readiness
 `ready` with `5/5` criteria satisfied and receipt
