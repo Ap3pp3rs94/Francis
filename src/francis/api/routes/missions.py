@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from francis.api.routes._operator_posture import posture_write_guard
 from francis.governance.redaction import redact_secret_text
+from francis.memory.mission_receipts import mission_operation_receipts
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
@@ -442,14 +443,18 @@ def _mission_receipt_summary(
     linked_operations: list[dict[str, Any]],
     run_ledger: list[dict[str, Any]],
     history: list[dict[str, Any]],
+    memory_receipts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     latest_detail = _current_operation_detail(record, linked_operations)
     latest_receipt = run_ledger[0] if run_ledger and isinstance(run_ledger[0], dict) else {}
     latest_history = history[-1] if history and isinstance(history[-1], dict) else {}
+    receipt_items = [dict(item) for item in memory_receipts or [] if isinstance(item, dict)]
     return {
         "linked_operation_count": len(linked_operations),
         "run_ledger_count": len(run_ledger),
         "history_count": len(history),
+        "memory_receipt_count": len(receipt_items),
+        "latest_memory_receipt": dict(receipt_items[0]) if receipt_items else {},
         "current_operation_id": _operation_id(latest_detail),
         "current_operation_status": _operation_status(latest_detail),
         "current_gate": _operation_gate(latest_detail),
@@ -484,6 +489,7 @@ def _mission_interface_stage(
             int(receipt_summary.get("linked_operation_count") or 0) > 0,
             int(receipt_summary.get("run_ledger_count") or 0) > 0,
             int(receipt_summary.get("history_count") or 0) > 0,
+            int(receipt_summary.get("memory_receipt_count") or 0) > 0,
             _safe_str(receipt_summary.get("current_operation_id")).strip(),
             _safe_str(receipt_summary.get("latest_run_event")).strip(),
             _safe_str(receipt_summary.get("latest_history_event")).strip(),
@@ -610,6 +616,7 @@ def _mission_loop_state(
     run_ledger: list[dict[str, Any]],
     history: list[dict[str, Any]],
     queue_item: dict[str, Any] | None = None,
+    memory_receipts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     latest_detail = _current_operation_detail(record, linked_operations)
     latest_operation = latest_detail.get("operation") if isinstance(latest_detail.get("operation"), dict) else {}
@@ -774,20 +781,33 @@ def _mission_loop_state(
         )
 
     history_count = len(history)
+    receipt_items = [dict(item) for item in memory_receipts or [] if isinstance(item, dict)]
+    memory_receipt_count = len(receipt_items)
+    latest_memory_receipt = receipt_items[0] if receipt_items else {}
     latest_history_event = ""
     latest_history_ts = ""
     if history:
         latest_history = history[-1] if isinstance(history[-1], dict) else {}
         latest_history_event = _safe_str(latest_history.get("event")).strip()
         latest_history_ts = _stage_timestamp(latest_history.get("ts"))
-    if history_count:
+    if history_count or memory_receipt_count:
+        memory_parts: list[str] = []
+        if history_count:
+            memory_parts.append(f"{history_count} mission history receipt(s)")
+        if memory_receipt_count:
+            memory_parts.append(f"{memory_receipt_count} completed-operation memory receipt(s)")
         memory_stage = _loop_stage(
             "recorded",
-            f"{history_count} mission continuity receipt(s) are stored in local history.",
-            count=history_count,
+            "Mission continuity is backed by " + ", ".join(memory_parts) + ".",
+            count=history_count + memory_receipt_count,
+            operation_id=_first_text(latest_memory_receipt.get("operation_id"), latest_operation_id),
+            trace_id=_first_text(latest_memory_receipt.get("trace_id"), latest_trace_id),
             latest_event=latest_history_event,
             latest_ts=latest_history_ts,
         )
+        if memory_receipt_count:
+            memory_stage["memory_receipt_count"] = memory_receipt_count
+            memory_stage["latest_memory_receipt"] = dict(latest_memory_receipt)
     else:
         memory_stage = _loop_stage(
             "pending",
@@ -909,16 +929,20 @@ def _mission_detail_projection(record: mission_store.MissionRecord, *, log_limit
     linked_operations = _linked_operation_details(record, log_limit=log_limit)
     history = mission_store.read_history(record.mission_id)
     run_ledger = _mission_run_ledger(record.mission_id, linked_operations)
+    memory_receipts = mission_operation_receipts(record.mission_id)
     _, queue_item, _ = mission_store.mission_queue_item(record.mission_id)
     queue_payload = queue_item or {}
-    loop_state = _mission_loop_state(record, linked_operations, run_ledger, history, queue_payload)
+    loop_state = _mission_loop_state(record, linked_operations, run_ledger, history, queue_payload, memory_receipts)
     current_task = _mission_current_task_projection(record, linked_operations, run_ledger, loop_state, queue_payload)
-    receipt_summary = _mission_receipt_summary(record, linked_operations, run_ledger, history)
+    receipt_summary = _mission_receipt_summary(record, linked_operations, run_ledger, history, memory_receipts)
     loop_state["interface"] = _mission_interface_stage(loop_state, current_task, receipt_summary)
     return {
         "history": history,
         "linked_operations": linked_operations,
         "run_ledger": run_ledger,
+        "memory_receipts": memory_receipts,
+        "memory_receipt_count": len(memory_receipts),
+        "latest_memory_receipt": dict(memory_receipts[0]) if memory_receipts else {},
         "loop_state": loop_state,
         "current_task": current_task,
         "queue_item": queue_payload,

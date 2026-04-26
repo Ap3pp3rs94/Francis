@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import hashlib
+from datetime import UTC, datetime
+from typing import Any
+
+from francis.chat.continuity.ledger import tail as continuity_tail
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value)
+    except Exception:
+        return ""
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _parse_ts(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return 0.0
+        try:
+            return float(text)
+        except Exception:
+            pass
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt.timestamp()
+        except Exception:
+            return 0.0
+    return 0.0
+
+
+def mission_operation_receipt_index(
+    *,
+    limit: int = 1000,
+    per_mission_limit: int = 5,
+) -> dict[str, list[dict[str, Any]]]:
+    try:
+        entries = continuity_tail(limit=max(1, min(int(limit), 10_000)))
+    except Exception:
+        return {}
+
+    receipts: dict[str, list[dict[str, Any]]] = {}
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+        if _safe_str(meta.get("subsystem")).strip() != "operations.runtime":
+            continue
+        if _safe_str(meta.get("domain")).strip() != "operations":
+            continue
+        if _safe_str(meta.get("scope")).strip() != "mission.loop":
+            continue
+        if _safe_str(meta.get("operation_status")).strip().lower() != "succeeded":
+            continue
+
+        mission_id = _safe_str(meta.get("mission_id")).strip()
+        operation_id = _first_text(meta.get("operation_id"), meta.get("task_id"))
+        if not mission_id or not operation_id:
+            continue
+
+        role = _safe_str(item.get("role")).strip() or "unknown"
+        content = _safe_str(item.get("content")).strip()
+        ts_raw = item.get("ts")
+        digest = hashlib.sha1(f"{ts_raw}:{role}:{content}".encode("utf-8", errors="ignore")).hexdigest()[:12]
+        receipt = {
+            "id": f"ledger_{digest}",
+            "source": "continuity.ledger",
+            "ts": _parse_ts(ts_raw),
+            "mission_id": mission_id,
+            "operation_id": operation_id,
+            "trace_id": _safe_str(meta.get("trace_id")).strip(),
+            "run_id": _safe_str(meta.get("run_id")).strip(),
+            "artifact_dir": _safe_str(meta.get("artifact_dir")).strip(),
+            "operation_status": "succeeded",
+            "capability": _safe_str(meta.get("capability")).strip(),
+            "domain": "operations",
+            "scope": "mission.loop",
+        }
+        receipts.setdefault(mission_id, []).append({key: value for key, value in receipt.items() if value != ""})
+
+    safe_per_mission_limit = max(1, min(int(per_mission_limit), 100))
+    for mission_id, items in list(receipts.items()):
+        items.sort(key=lambda value: (float(value.get("ts") or 0.0), _safe_str(value.get("id"))), reverse=True)
+        receipts[mission_id] = items[:safe_per_mission_limit]
+    return receipts
+
+
+def mission_operation_receipts(
+    mission_id: Any,
+    *,
+    limit: int = 1000,
+    per_mission_limit: int = 5,
+) -> list[dict[str, Any]]:
+    cleaned = _safe_str(mission_id).strip()
+    if not cleaned:
+        return []
+    return [
+        dict(receipt)
+        for receipt in mission_operation_receipt_index(
+            limit=limit,
+            per_mission_limit=per_mission_limit,
+        ).get(cleaned, [])
+        if isinstance(receipt, dict)
+    ]

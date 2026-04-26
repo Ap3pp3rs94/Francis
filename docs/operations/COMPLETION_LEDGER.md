@@ -242,6 +242,13 @@ receipt-backed operation and trace ids, and memory-backed reconstruction context
 mission briefing/recent-completion payloads expose the latest receipt without
 changing readiness status semantics or creating new execution behavior.
 
+As of `2026-04-26`, mission detail projections carry the same completed-operation
+memory receipts without requiring a world-state or briefing lookup. The
+`GET /missions/{mission_id}` route returns bounded receipt-backed memory
+evidence, latest receipt handles, and receipt-summary counts derived from
+continuity-ledger entries for completed mission-linked operation runs; the memory
+loop stage exposes those receipts only when real mission and operation ids exist.
+
 As of `2026-04-25`, the chat UI settings client preserves that receipt-backed
 mission memory contract and the Shift Briefing renders only the returned
 continuity-backed memory receipts. The browser parser keeps receipt count,
