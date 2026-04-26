@@ -303,6 +303,10 @@ def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tm
         "run_id": "run-ledger-memory",
         "artifact_dir": "D:/francis/data/artifacts/ledger-memory",
     }
+    assert item["loop"] == {
+        "run_id": "run-ledger-memory",
+        "artifact_dir": "D:/francis/data/artifacts/ledger-memory",
+    }
 
     operation_listed = client.get("/memory/timeline/list?operation_id=tsk-ledger-memory")
     assert operation_listed.status_code == 200
@@ -434,6 +438,7 @@ def test_memory_timeline_finds_completed_mission_operation_receipt(monkeypatch, 
     assert receipt["provenance"]["scope"] == "mission.loop"
     assert receipt["references"]["trace_id"] == trace_id
     assert receipt["references"]["run_id"] == run_id
+    assert receipt["loop"]["run_id"] == run_id
     assert receipt["payload"]["meta"]["subsystem"] == "operations.runtime"
     assert receipt["payload"]["meta"]["operation_status"] == "succeeded"
 

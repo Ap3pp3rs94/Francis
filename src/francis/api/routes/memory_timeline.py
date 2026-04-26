@@ -235,15 +235,25 @@ def _loop_projection(meta: dict[str, Any]) -> dict[str, Any]:
         "handoff_approval_id",
         "handoff_operation_id",
         "handoff_trace_id",
+        "handoff_run_id",
+        "handoff_artifact_dir",
         "handoff_next_step",
         "current_task_source",
         "current_task_operation_id",
         "current_task_gate",
+        "current_task_run_id",
+        "current_task_artifact_dir",
         "current_task_next_step",
     ):
         value = _safe_str(meta.get(key)).strip()
         if value:
             out[key] = value
+
+    if out or _safe_str(meta.get("scope")).strip() == "mission.loop":
+        for key in ("run_id", "artifact_dir"):
+            value = _safe_str(meta.get(key)).strip()
+            if value:
+                out[key] = value
 
     for key in ("linked_operation_count", "run_ledger_count", "memory_receipt_count"):
         value = _meta_int(meta, key)

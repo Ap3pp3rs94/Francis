@@ -314,6 +314,14 @@ current-task source/next step, and receipt counts when those values are already
 present in redacted ledger metadata. This is a read-model projection only; no
 execution, approval, policy, or memory-write behavior is changed.
 
+As of `2026-04-26`, memory timeline loop projections also preserve real
+`run_id` and `artifact_dir` handles from mission-loop continuity metadata. The
+backend includes those handles in the structured `loop` object for
+mission-loop receipts, and the chat UI memory timeline client now preserves the
+typed loop projection instead of dropping it during parsing. This keeps memory
+evidence aligned with the same run/artifact handles exposed by mission and
+operation loop surfaces without adding new execution or inspection behavior.
+
 As of `2026-04-26`, mission advance receipts preserve the identity of the real
 operation they just created or ran. The mission record, queue item, current-task
 projection, and `advance_receipt` history entry now carry the existing
@@ -3098,6 +3106,23 @@ Latest targeted validation for the `2026-04-26` Stage 3 mission loop artifact in
   Result: `passed`
 - `git diff --check`
   Result: `passed`
+
+Latest targeted validation for the `2026-04-26` Stage 3 memory timeline loop handle projection slice:
+
+- `.\.venv\Scripts\python.exe -m ruff format --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `2 files left unchanged`
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\memory_timeline.py tests\test_api_memory_timeline.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_memory_timeline.py -q`
+  Result: `6 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `45 passed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py tests\test_api_memory_timeline.py -q`
+  Result: `failed once in tests/test_api_missions.py::test_mission_deadletter_endpoint_moves_blocked_mission_cleanly; isolated rerun of that test passed`
 
 Latest targeted validation for the `2026-04-25` continuity-ledger memory reference projection slice:
 

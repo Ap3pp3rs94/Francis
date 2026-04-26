@@ -90,6 +90,20 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
             until: "2026-05-01T00:00:00Z",
             ttl_seconds: 86400,
           },
+          loop: {
+            ingress_plane: "P1_INTERFACE",
+            active_stage: "memory",
+            handoff_stage: "memory",
+            handoff_action: "review_continuity",
+            handoff_trace_id: "trace_memory_context",
+            handoff_run_id: "run_memory_context",
+            handoff_artifact_dir: "D:/francis/data/artifacts/memory-context",
+            run_id: "run_memory_context",
+            artifact_dir: "D:/francis/data/artifacts/memory-context",
+            linked_operation_count: 1,
+            run_ledger_count: 1,
+            memory_receipt_count: 1,
+          },
           meta: {
             source: "unit_test",
             retention_policy: "mission_trace",
@@ -151,6 +165,20 @@ test("MemoryTimelineClient.list preserves provenance and retention context", asy
       run_id: "run_memory_context",
       artifact_dir: "D:/francis/data/artifacts/memory-context",
     });
+    assert.deepEqual(response.items[0]?.loop, {
+      ingress_plane: "P1_INTERFACE",
+      active_stage: "memory",
+      handoff_stage: "memory",
+      handoff_action: "review_continuity",
+      handoff_trace_id: "trace_memory_context",
+      handoff_run_id: "run_memory_context",
+      handoff_artifact_dir: "D:/francis/data/artifacts/memory-context",
+      run_id: "run_memory_context",
+      artifact_dir: "D:/francis/data/artifacts/memory-context",
+      linked_operation_count: 1,
+      run_ledger_count: 1,
+      memory_receipt_count: 1,
+    });
     assert.equal(response.items[0]?.meta?.source, "unit_test");
   } finally {
     restoreFetch();
@@ -171,6 +199,10 @@ test("MemoryTimelineClient derives context from explicit meta when top-level con
           mission_id: "mission_meta_context",
           operation_id: "tsk_meta_context",
           trace_id: "trace_meta_context",
+          run_id: "run_meta_context",
+          artifact_dir: "D:/francis/data/artifacts/meta-context",
+          active_stage: "memory",
+          run_ledger_count: "1",
           retention_policy: "continuity_tail",
           ttl_seconds: 3600,
         },
@@ -196,6 +228,14 @@ test("MemoryTimelineClient derives context from explicit meta when top-level con
       mission_id: "mission_meta_context",
       operation_id: "tsk_meta_context",
       trace_id: "trace_meta_context",
+      run_id: "run_meta_context",
+      artifact_dir: "D:/francis/data/artifacts/meta-context",
+    });
+    assert.deepEqual(response.item?.loop, {
+      active_stage: "memory",
+      run_id: "run_meta_context",
+      artifact_dir: "D:/francis/data/artifacts/meta-context",
+      run_ledger_count: 1,
     });
   } finally {
     restoreFetch();

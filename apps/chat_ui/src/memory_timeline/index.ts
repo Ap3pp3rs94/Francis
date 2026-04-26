@@ -139,6 +139,31 @@ export type MemoryTimelineReferences = {
   artifact_dir?: string;
 };
 
+export type MemoryTimelineLoop = {
+  ingress_plane?: string;
+  active_stage?: string;
+  handoff_stage?: string;
+  handoff_action?: string;
+  handoff_gate?: string;
+  handoff_approval_id?: string;
+  handoff_operation_id?: string;
+  handoff_trace_id?: string;
+  handoff_run_id?: string;
+  handoff_artifact_dir?: string;
+  handoff_next_step?: string;
+  current_task_source?: string;
+  current_task_operation_id?: string;
+  current_task_gate?: string;
+  current_task_run_id?: string;
+  current_task_artifact_dir?: string;
+  current_task_next_step?: string;
+  run_id?: string;
+  artifact_dir?: string;
+  linked_operation_count?: number;
+  run_ledger_count?: number;
+  memory_receipt_count?: number;
+};
+
 export type MemoryTimelineEvent = {
   id: string;
   ts: number; // unix seconds
@@ -175,6 +200,7 @@ export type MemoryTimelineEvent = {
   provenance?: MemoryTimelineProvenance;
   retention?: MemoryTimelineRetention;
   references?: MemoryTimelineReferences;
+  loop?: MemoryTimelineLoop;
 
   meta?: Record<string, unknown>;
 };
@@ -239,6 +265,14 @@ function safeString(v: unknown, fallback = ""): string {
 
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function safeOptionalNumber(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v !== "string") return undefined;
+
+  const parsed = Number(v.trim());
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
 }
 
 function safeStringArray(v: unknown): string[] | undefined {
@@ -459,6 +493,46 @@ function parseReferences(raw: unknown, fallback: Record<string, unknown>): Memor
   return Object.keys(r).length ? r : undefined;
 }
 
+function parseLoop(raw: unknown, fallback: Record<string, unknown>): MemoryTimelineLoop | undefined {
+  const sourceRecord = isRecord(raw) ? raw : {};
+  const loop: MemoryTimelineLoop = {};
+
+  const stringKeys = [
+    "ingress_plane",
+    "active_stage",
+    "handoff_stage",
+    "handoff_action",
+    "handoff_gate",
+    "handoff_approval_id",
+    "handoff_operation_id",
+    "handoff_trace_id",
+    "handoff_run_id",
+    "handoff_artifact_dir",
+    "handoff_next_step",
+    "current_task_source",
+    "current_task_operation_id",
+    "current_task_gate",
+    "current_task_run_id",
+    "current_task_artifact_dir",
+    "current_task_next_step",
+    "run_id",
+    "artifact_dir",
+  ] as const;
+
+  for (const key of stringKeys) {
+    const value = safeString(sourceRecord[key], safeString(fallback[key], ""));
+    if (value) loop[key] = value;
+  }
+
+  const numberKeys = ["linked_operation_count", "run_ledger_count", "memory_receipt_count"] as const;
+  for (const key of numberKeys) {
+    const value = safeOptionalNumber(sourceRecord[key] ?? fallback[key]);
+    if (value !== undefined) loop[key] = value;
+  }
+
+  return Object.keys(loop).length ? loop : undefined;
+}
+
 function parseEvent(raw: unknown): MemoryTimelineEvent | null {
   if (!isRecord(raw)) return null;
 
@@ -534,6 +608,9 @@ function parseEvent(raw: unknown): MemoryTimelineEvent | null {
 
   const references = parseReferences(raw.references, { ...raw, ...(isRecord(raw.meta) ? raw.meta : {}) });
   if (references) e.references = references;
+
+  const loop = parseLoop(raw.loop, { ...raw, ...(isRecord(raw.meta) ? raw.meta : {}) });
+  if (loop) e.loop = loop;
 
   return e;
 }
