@@ -385,6 +385,14 @@ memory timeline client can request the same bounded filter. This makes
 approval-gated mission memory evidence reachable by the real approval handle
 without broad timeline searches, payload inspection, or new memory writes.
 
+As of `2026-04-26`, selected-operation memory evidence can now request that
+same bounded approval-handle lookup from the interface. The selected operation
+panel passes the real selected mission/operation approval id into
+`buildMemoryEvidenceQueries`, and the helper can also follow approval ids from
+terminal receipt references. This is bounded memory evidence lookup only; it
+does not create approval decisions, execute operations, inspect payloads, write
+memory, or synthesize evidence.
+
 As of `2026-04-26`, memory timeline retrieval can also filter terminal
 operation receipts by `operation_status`. The API promotes the existing
 receipt-backed status from event metadata onto public timeline events,
@@ -3552,6 +3560,19 @@ Latest targeted validation for the `2026-04-26` Stage 3 world-state approval inc
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_system_settings.py::test_system_world_state_surfaces_exact_pending_approval_for_blocked_mission -q`
   Result: `passed`
 - `$env:PYTHONPATH='src'; python -m pytest tests\test_api_missions.py tests\test_api_continuity.py tests\test_api_system_settings.py -q`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Latest targeted validation for the `2026-04-26` memory evidence approval-handle lookup slice:
+
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_evidence\index.test.ts`
+  Result: `7 passed`
+- `cd apps\chat_ui; node --test --experimental-strip-types src\memory_timeline\index.test.ts`
+  Result: `2 passed`
+- `cd apps\chat_ui; npm run test`
+  Result: `65 passed`
+- `cd apps\chat_ui; npm run build`
   Result: `passed`
 - `git diff --check`
   Result: `passed`

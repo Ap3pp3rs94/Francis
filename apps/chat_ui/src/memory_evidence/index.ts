@@ -12,21 +12,25 @@ export type MemoryEvidenceQuery = {
 export type MemoryEvidenceReceiptReference = {
   mission_id?: string;
   operation_id?: string;
+  approval_id?: string;
   operation_status?: string;
   trace_id?: string;
   run_id?: string;
   artifact_dir?: string;
   handoff_operation_id?: string;
+  handoff_approval_id?: string;
   handoff_trace_id?: string;
   handoff_run_id?: string;
   handoff_artifact_dir?: string;
   current_task_operation_id?: string;
+  current_task_approval_id?: string;
   current_task_trace_id?: string;
   current_task_run_id?: string;
   current_task_artifact_dir?: string;
   references?: {
     mission_id?: string;
     operation_id?: string;
+    approval_id?: string;
     trace_id?: string;
     run_id?: string;
     artifact_dir?: string;
@@ -36,6 +40,7 @@ export type MemoryEvidenceReceiptReference = {
 export type MemoryEvidenceQueryInput = {
   missionId?: string;
   operationId?: string;
+  approvalId?: string;
   fallbackOperationId?: string;
   operationStatus?: string | string[];
   traceId?: string;
@@ -50,7 +55,7 @@ function cleanId(value: string | undefined): string {
 
 function receiptReferenceId(
   receipt: MemoryEvidenceReceiptReference | undefined,
-  key: "mission_id" | "operation_id" | "trace_id" | "run_id" | "artifact_dir",
+  key: "mission_id" | "operation_id" | "approval_id" | "trace_id" | "run_id" | "artifact_dir",
 ): string {
   if (!receipt) return "";
   if (key === "operation_id") {
@@ -59,6 +64,14 @@ function receiptReferenceId(
       cleanId(receipt.current_task_operation_id) ||
       cleanId(receipt.handoff_operation_id) ||
       cleanId(receipt.references?.operation_id)
+    );
+  }
+  if (key === "approval_id") {
+    return (
+      cleanId(receipt.approval_id) ||
+      cleanId(receipt.current_task_approval_id) ||
+      cleanId(receipt.handoff_approval_id) ||
+      cleanId(receipt.references?.approval_id)
     );
   }
   if (key === "trace_id") {
@@ -113,6 +126,7 @@ export function buildMemoryEvidenceQueries(input: MemoryEvidenceQueryInput): Mem
   const receipt = input.receipt;
   const missionId = cleanId(input.missionId) || receiptReferenceId(receipt, "mission_id");
   const operationId = cleanId(input.operationId) || receiptReferenceId(receipt, "operation_id");
+  const approvalId = cleanId(input.approvalId) || receiptReferenceId(receipt, "approval_id");
   const fallbackOperationId = cleanId(input.fallbackOperationId);
   const operationStatus = terminalOperationStatus(input.operationStatus) || terminalOperationStatus(receipt?.operation_status);
   const traceId = cleanId(input.traceId) || receiptReferenceId(receipt, "trace_id");
@@ -124,6 +138,7 @@ export function buildMemoryEvidenceQueries(input: MemoryEvidenceQueryInput): Mem
   if (missionId) push(`mission=${missionId}`, withOperationStatus({ mission_id: missionId }));
   if (operationId) push(`task=${operationId}`, withOperationStatus({ operation_id: operationId }));
   else if (fallbackOperationId) push(`task=${fallbackOperationId}`, withOperationStatus({ operation_id: fallbackOperationId }));
+  if (approvalId) push(`approval=${approvalId}`, withOperationStatus({ approval_id: approvalId }));
   if (traceId) push(`trace=${traceId}`, withOperationStatus({ trace_id: traceId }));
   if (runId) push(`run=${runId}`, withOperationStatus({ run_id: runId }));
   if (artifactDir) push(`artifact=${artifactDir}`, withOperationStatus({ artifact_dir: artifactDir }));

@@ -10173,6 +10173,7 @@ function OperationsPanel(props: {
       buildMemoryEvidenceQueries({
         missionId: selectedMissionId,
         operationId: selectedMemoryEvidenceOperationId,
+        approvalId: selectedMissionBridgeApprovalId || selectedApprovalId,
         fallbackOperationId: selectedOperation?.id,
         operationStatus: [
           selectedMissionCurrentTaskStatus,
@@ -10190,9 +10191,11 @@ function OperationsPanel(props: {
       selectedMissionCurrentTaskResultStatus,
       selectedMissionCurrentTaskStatus,
       selectedMissionEvidenceReceipt,
+      selectedMissionBridgeApprovalId,
       selectedMemoryEvidenceOperationId,
       selectedMissionMemoryTraceId,
       selectedOperation?.id,
+      selectedApprovalId,
       selectedRunId,
       selectedStatus,
     ],

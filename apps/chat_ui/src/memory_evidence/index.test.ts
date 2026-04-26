@@ -97,6 +97,7 @@ test("buildMemoryEvidenceQueries falls back to terminal receipt references", () 
       references: {
         mission_id: "mission_receipt",
         operation_id: "task_receipt",
+        approval_id: "apr_receipt",
         trace_id: "trace_receipt",
         run_id: "run_receipt",
         artifact_dir: "D:/francis/data/artifacts/receipt",
@@ -112,6 +113,10 @@ test("buildMemoryEvidenceQueries falls back to terminal receipt references", () 
     {
       label: "task=task_receipt",
       filters: { operation_id: "task_receipt", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
+      label: "approval=apr_receipt",
+      filters: { approval_id: "apr_receipt", operation_status: "succeeded", limit: 8, include_payload: false },
     },
     {
       label: "trace=trace_receipt",
@@ -137,8 +142,10 @@ test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () 
   const queries = buildMemoryEvidenceQueries({
     receipt: {
       mission_id: "mission_completed",
+      approval_id: "apr_legacy",
       operation_status: "succeeded",
       current_task_operation_id: "task_completed",
+      current_task_approval_id: "apr_completed",
       current_task_trace_id: "trace_completed",
       current_task_run_id: "run_completed",
       current_task_artifact_dir: "D:/francis/data/artifacts/completed",
@@ -161,6 +168,10 @@ test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () 
       filters: { operation_id: "task_completed", operation_status: "succeeded", limit: 8, include_payload: false },
     },
     {
+      label: "approval=apr_legacy",
+      filters: { approval_id: "apr_legacy", operation_status: "succeeded", limit: 8, include_payload: false },
+    },
+    {
       label: "trace=trace_completed",
       filters: { trace_id: "trace_completed", operation_status: "succeeded", limit: 8, include_payload: false },
     },
@@ -176,6 +187,26 @@ test("buildMemoryEvidenceQueries follows completed handoff receipt handles", () 
         limit: 8,
         include_payload: false,
       },
+    },
+  ]);
+});
+
+test("buildMemoryEvidenceQueries prefers explicit approval id for bounded approval evidence", () => {
+  const queries = buildMemoryEvidenceQueries({
+    approvalId: " apr_selected ",
+    operationStatus: "needs_approval",
+    receipt: {
+      handoff_approval_id: "apr_handoff",
+      references: {
+        approval_id: "apr_reference",
+      },
+    },
+  });
+
+  assert.deepEqual(queries, [
+    {
+      label: "approval=apr_selected",
+      filters: { approval_id: "apr_selected", limit: 8, include_payload: false },
     },
   ]);
 });
